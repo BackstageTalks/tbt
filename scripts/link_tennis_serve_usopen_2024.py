@@ -1,9 +1,12 @@
 """Link the CC BY 4.0 CVPRW 2026 tennis serve metadata to BlinQ history.
 
-The source is the small metadata.parquet (5,966 serves / 113 US Open 2024
-matches) from jasnwag/tennis_serve_dataset. Output is a private research
-sidecar only. Same-match serve outcomes are post-match observations and are
-never promoted directly to pre-match model features.
+The source is metadata.parquet (5,966 serves / 113 US Open 2024 matches)
+from jasnwag/tennis_serve_dataset. This linker is built against the REAL
+published parquet schema, not the earlier README example schema.
+
+Output is a private research sidecar only. Same-match serve outcomes are
+post-match observations and are never promoted directly to pre-match model
+features. Future feature use must be chronological and strictly lagged.
 """
 from __future__ import annotations
 
@@ -27,6 +30,28 @@ SOURCE = "jasnwag/tennis_serve_dataset"
 LICENSE = "CC BY 4.0"
 SOURCE_EVENT = "US Open 2024"
 
+REQUIRED_COLUMNS = {
+    "match_id",
+    "server",
+    "returner",
+    "gender",
+    "height_cm",
+    "point_number",
+    "point_winner",
+    "serve_number",
+    "speed_kmh",
+    "serve_width",
+    "serve_depth",
+    "return_depth",
+    "n_frames",
+    "duration_sec",
+    "quality_label",
+    "ace",
+    "rally_count",
+    "set_no",
+    "game_no",
+}
+
 
 def _num(value: Any) -> float | None:
     try:
@@ -43,20 +68,13 @@ def _int(value: Any) -> int | None:
         return None
 
 
-def _round(value: Any) -> str:
-    text = norm_text(value)
-    aliases = {
-        "final": "f", "f": "f",
-        "semifinal": "sf", "semifinals": "sf", "semi final": "sf", "sf": "sf",
-        "quarterfinal": "qf", "quarterfinals": "qf", "quarter final": "qf", "qf": "qf",
-        "round of 16": "r16", "r16": "r16",
-        "round of 32": "r32", "r32": "r32",
-        "round of 64": "r64", "r64": "r64",
-        "round of 128": "r128", "r128": "r128",
-        "first round": "r128", "second round": "r64", "third round": "r32",
-        "fourth round": "r16",
-    }
-    return aliases.get(text, text)
+def _mean(values: list[float]) -> float | None:
+    return (sum(values) / len(values)) if values else None
+
+
+def _counter(series: pd.Series) -> dict[str, int]:
+    values = [norm_text(x) for x in series.dropna().tolist()]
+    return dict(Counter(x for x in values if x))
 
 
 def _canonical_index(matches):
@@ -75,33 +93,46 @@ def _canonical_index(matches):
 
 
 def _source_matches(frame: pd.DataFrame):
-    required = {
-        "match_id", "server", "player1", "player2", "Speed_KMH",
-        "SetNo", "GameNo", "PointNumber", "ServeNumber", "ServeResult",
-        "round", "ElapsedTime",
-    }
-    missing = sorted(required - set(map(str, frame.columns)))
+    missing = sorted(REQUIRED_COLUMNS - set(map(str, frame.columns)))
     if missing:
         raise ValueError(f"Missing serve metadata columns: {missing}")
 
     for source_match_id, group in frame.groupby("match_id", dropna=False, sort=False):
         if pd.isna(source_match_id):
             continue
-        p1_values = [str(x).strip() for x in group["player1"].dropna().unique() if str(x).strip()]
-        p2_values = [str(x).strip() for x in group["player2"].dropna().unique() if str(x).strip()]
-        if len(p1_values) != 1 or len(p2_values) != 1:
+
+        participants = {
+            norm_text(value): str(value).strip()
+            for column in ("server", "returner")
+            for value in group[column].dropna().tolist()
+            if str(value).strip()
+        }
+        if len(participants) != 2:
             yield {
                 "source_match_id": str(source_match_id),
                 "invalid_identity": True,
+                "participants": sorted(participants.values()),
                 "rows": group,
             }
             continue
-        rounds = [str(x).strip() for x in group["round"].dropna().unique() if str(x).strip()]
+
+        genders = {
+            str(value).strip().upper()
+            for value in group["gender"].dropna().tolist()
+            if str(value).strip()
+        }
+        source_tour = ""
+        if genders == {"M"}:
+            source_tour = "atp"
+        elif genders == {"F"}:
+            source_tour = "wta"
+
+        players = sorted(participants.items())
         yield {
             "source_match_id": str(source_match_id),
-            "player1": p1_values[0],
-            "player2": p2_values[0],
-            "round": rounds[0] if len(rounds) == 1 else "",
+            "player_a": players[0][1],
+            "player_b": players[1][1],
+            "source_tour": source_tour,
             "rows": group,
         }
 
@@ -109,46 +140,79 @@ def _source_matches(frame: pd.DataFrame):
 def _aggregate_player(rows: pd.DataFrame, player_name: str) -> dict[str, Any]:
     target = norm_text(player_name)
     selected = rows[rows["server"].map(norm_text) == target]
+
     speeds = [
-        value for value in (_num(x) for x in selected["Speed_KMH"].tolist())
+        value
+        for value in (_num(x) for x in selected["speed_kmh"].tolist())
         if value is not None and 40 <= value <= 280
     ]
     first = [
-        _num(speed)
-        for speed, serve_no in zip(selected["Speed_KMH"], selected["ServeNumber"])
-        if _int(serve_no) == 1 and _num(speed) is not None
+        value
+        for speed, serve_no in zip(selected["speed_kmh"], selected["serve_number"])
+        if _int(serve_no) == 1
+        for value in [_num(speed)]
+        if value is not None and 40 <= value <= 280
     ]
-    first = [x for x in first if x is not None and 40 <= x <= 280]
     second = [
-        _num(speed)
-        for speed, serve_no in zip(selected["Speed_KMH"], selected["ServeNumber"])
-        if _int(serve_no) == 2 and _num(speed) is not None
+        value
+        for speed, serve_no in zip(selected["speed_kmh"], selected["serve_number"])
+        if _int(serve_no) == 2
+        for value in [_num(speed)]
+        if value is not None and 40 <= value <= 280
     ]
-    second = [x for x in second if x is not None and 40 <= x <= 280]
-
-    results = Counter(norm_text(x) for x in selected["ServeResult"].dropna().tolist())
-    sets = {_int(x) for x in selected["SetNo"].dropna().tolist()}
+    quality = [
+        value
+        for value in (_num(x) for x in selected["quality_label"].tolist())
+        if value is not None
+    ]
+    rallies = [
+        value
+        for value in (_num(x) for x in selected["rally_count"].tolist())
+        if value is not None and value >= 0
+    ]
+    durations = [
+        value
+        for value in (_num(x) for x in selected["duration_sec"].tolist())
+        if value is not None and value >= 0
+    ]
+    heights = {
+        value
+        for value in (_int(x) for x in selected["height_cm"].tolist())
+        if value is not None and 130 <= value <= 230
+    }
+    sets = {
+        value
+        for value in (_int(x) for x in selected["set_no"].dropna().tolist())
+        if value is not None
+    }
     games = {
         (_int(s), _int(g))
-        for s, g in zip(selected["SetNo"], selected["GameNo"])
+        for s, g in zip(selected["set_no"], selected["game_no"])
         if _int(s) is not None and _int(g) is not None
     }
-
-    def mean(values):
-        return (sum(values) / len(values)) if values else None
+    ace_count = int(sum((_int(x) or 0) == 1 for x in selected["ace"]))
 
     return {
         "serve_rows": int(len(selected)),
+        "height_cm": next(iter(heights)) if len(heights) == 1 else None,
         "speed_observations": len(speeds),
-        "speed_kmh_mean": mean(speeds),
+        "speed_kmh_mean": _mean(speeds),
         "speed_kmh_median": median(speeds) if speeds else None,
         "speed_kmh_max": max(speeds) if speeds else None,
-        "first_serve_speed_kmh_mean": mean(first),
-        "second_serve_speed_kmh_mean": mean(second),
-        "serve_number_1_rows": int(sum(_int(x) == 1 for x in selected["ServeNumber"])),
-        "serve_number_2_rows": int(sum(_int(x) == 2 for x in selected["ServeNumber"])),
-        "serve_result_counts": dict(results),
-        "sets_observed": len({x for x in sets if x is not None}),
+        "first_serve_speed_kmh_mean": _mean(first),
+        "second_serve_speed_kmh_mean": _mean(second),
+        "serve_number_1_rows": int(sum(_int(x) == 1 for x in selected["serve_number"])),
+        "serve_number_2_rows": int(sum(_int(x) == 2 for x in selected["serve_number"])),
+        "ace_count": ace_count,
+        "ace_rate_per_serve_row": (ace_count / len(selected)) if len(selected) else None,
+        "quality_label_mean": _mean(quality),
+        "rally_count_mean": _mean(rallies),
+        "rally_count_median": median(rallies) if rallies else None,
+        "serve_duration_sec_mean": _mean(durations),
+        "serve_width_counts": _counter(selected["serve_width"]),
+        "serve_depth_counts": _counter(selected["serve_depth"]),
+        "opponent_return_depth_counts": _counter(selected["return_depth"]),
+        "sets_observed": len(sets),
         "service_games_observed": len(games),
     }
 
@@ -169,25 +233,33 @@ def link(frame: pd.DataFrame, matches) -> tuple[list[dict[str, Any]], dict[str, 
         counts["source_serve_rows"] += int(len(rows))
         if source.get("invalid_identity"):
             counts["invalid_source_identity"] += 1
+            review.append({
+                "source_match_id": source["source_match_id"],
+                "reason": "invalid_source_identity",
+                "participants": source.get("participants", []),
+            })
             continue
 
-        p1, p2 = source["player1"], source["player2"]
-        pair = tuple(sorted((norm_text(p1), norm_text(p2))))
+        player_a = source["player_a"]
+        player_b = source["player_b"]
+        pair = tuple(sorted((norm_text(player_a), norm_text(player_b))))
         candidates = list(index.get(pair, []))
-        if source.get("round") and len(candidates) > 1:
-            sr = _round(source["round"])
-            exact = [m for m in candidates if _round(m.round_name) == sr]
-            if exact:
-                candidates = exact
+
+        source_tour = source.get("source_tour") or ""
+        if source_tour:
+            candidates = [
+                match for match in candidates
+                if str(match.tour or "").lower() == source_tour
+            ]
 
         if not candidates:
             counts["unmatched"] += 1
             review.append({
                 "source_match_id": source["source_match_id"],
                 "reason": "unmatched",
-                "player1": p1,
-                "player2": p2,
-                "round": source.get("round"),
+                "player_a": player_a,
+                "player_b": player_b,
+                "source_tour": source_tour,
             })
             continue
         if len(candidates) != 1:
@@ -201,18 +273,24 @@ def link(frame: pd.DataFrame, matches) -> tuple[list[dict[str, Any]], dict[str, 
 
         match = candidates[0]
         mp1, mp2 = norm_text(match.player1_name), norm_text(match.player2_name)
-        if norm_text(p1) == mp1 and norm_text(p2) == mp2:
-            source_for_canonical = ((p1, match.player1_name), (p2, match.player2_name))
-        elif norm_text(p1) == mp2 and norm_text(p2) == mp1:
-            source_for_canonical = ((p2, match.player1_name), (p1, match.player2_name))
-        else:
+        source_names = {norm_text(player_a): player_a, norm_text(player_b): player_b}
+        if mp1 not in source_names or mp2 not in source_names:
             counts["orientation_failed"] += 1
             continue
 
-        player1_agg = _aggregate_player(rows, source_for_canonical[0][0])
-        player2_agg = _aggregate_player(rows, source_for_canonical[1][0])
+        player1_agg = _aggregate_player(rows, source_names[mp1])
+        player2_agg = _aggregate_player(rows, source_names[mp2])
+        if not player1_agg["serve_rows"] or not player2_agg["serve_rows"]:
+            counts["missing_player_serve_rows"] += 1
+            review.append({
+                "source_match_id": source["source_match_id"],
+                "reason": "missing_player_serve_rows",
+                "match_id": str(match.match_id),
+            })
+            continue
+
         row = {
-            "schema": 1,
+            "schema": 2,
             "match_id": str(match.match_id),
             "source_match_id": source["source_match_id"],
             "tour": str(match.tour or "").lower(),
@@ -228,8 +306,14 @@ def link(frame: pd.DataFrame, matches) -> tuple[list[dict[str, Any]], dict[str, 
             "source": SOURCE,
             "source_event": SOURCE_EVENT,
             "license": LICENSE,
-            "evidence": "exact normalized player pair + US Open 2024 + unique canonical match; round used only as disambiguator",
-            "feature_policy": "research_post_match_only; eligible only for lagged chronological player-state experiments",
+            "evidence": (
+                "exact normalized participant pair reconstructed from server+returner; "
+                "US Open 2024; gender->tour consistency when available; unique canonical match"
+            ),
+            "feature_policy": (
+                "research_post_match_only; same-match fields forbidden as pre-match features; "
+                "eligible only for strictly lagged chronological player-state experiments"
+            ),
         }
         output.append(row)
         counts["linked_matches"] += 1
@@ -246,17 +330,21 @@ def link(frame: pd.DataFrame, matches) -> tuple[list[dict[str, Any]], dict[str, 
         raise RuntimeError(f"Duplicate canonical links: {duplicates[:10]}")
 
     report = {
-        "schema": 1,
+        "schema": 2,
         "status": "verified",
         "source": SOURCE,
         "license": LICENSE,
         "source_rows": int(len(frame)),
+        "actual_source_columns": list(map(str, frame.columns)),
         "counts": dict(counts),
         "identity_safety": identity_safety,
         "production_mutated": False,
         "canonical_history_mutated": False,
         "model_promoted": False,
-        "feature_policy": "same-match serve metadata is post-match; sidecar only; future use must be strictly lagged",
+        "feature_policy": (
+            "same-match serve metadata is post-match; sidecar only; "
+            "future model use must be chronological and strictly lagged"
+        ),
         "review": review[:500],
     }
     return output, report
@@ -278,7 +366,9 @@ def main() -> None:
     with gzip.open(out / "usopen-2024-serve-metadata.jsonl.gz", "wt", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
-    (out / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    (out / "report.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     print(json.dumps({
         "source_rows": report["source_rows"],
         "linked_matches": (report["counts"] or {}).get("linked_matches", 0),
