@@ -13,7 +13,7 @@ assert.ok(app.includes('data-simple-banner-field="social_${network}_link"'),'dyn
 assert.ok(app.includes("content[`social_${network}_link`]||legacy"),'legacy social URL remains backward compatible');
 for(const token of ['function bannerSocialIcon(network)','function heroSocialLinksHtml(content={},preview=false,standalone=false)','hero-slide-hitarea','hero-social-standalone'])assert.ok(app.includes(token)||css.includes(token),token);
 assert.ok(css.includes('.hero-social-link{'),'social links must be styled');
-assert.ok(app.includes("href.replace(/^https:\\/\\//i,''"),'visible social hyperlink should show the supplied URL without protocol');
+assert.ok(app.includes("content[`social_${network}_text`]||networkLabel"),'social link uses editable display text');
 for(const effect of ['fade-down','slide-up','slide-down','zoom-in','zoom-out','blur-in','diagonal-wipe','vertical-wipe','curtain-open','mosaic-grid','parallax','ken-burns','reveal-left','reveal-right','flip-in','tilt-in','focus-pulse','soft-glitch'])assert.ok(app.includes("'"+effect+"'"),effect);
 for(const token of ['creative-effect-mosaic-grid','creative-effect-soft-glitch','creative-effect-vertical-wipe','creative-effect-curtain-open','creative-effect-ken-burns','creative-effect-flip-in','creative-effect-tilt-in','creative-effect-focus-pulse','creativeRevealLeft','creativeRevealRight','creativeBlurIn'])assert.ok(css.includes(token),token);
 assert.ok(app.includes('bannerCreativeClasses(c)} is-active'), 'admin preview must render the selected effect');
