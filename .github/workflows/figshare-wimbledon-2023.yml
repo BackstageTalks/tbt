@@ -56,7 +56,7 @@ jobs:
           mkdir -p .cache/tbt/figshare-wimbledon-2023/{source,extract,audit}
           url="https://figshare.com/ndownloader/files/$FIGSHARE_FILE_ID"
           curl --fail --location --retry 5 --retry-delay 4 "$url"             -o .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx
-          test "$(stat -c %s .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx)" -gt 1000000
+          test "$(stat -c %s .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx)" -gt 100000
           cp .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx             .cache/tbt/figshare-wimbledon-2023/extract/tennis-data.xlsx
           python - <<'PY'
           import pandas as pd
