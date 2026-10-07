@@ -780,7 +780,8 @@ jobs:
           for attempt in 1 2 3; do
             if python scripts/confirm_prediction_publication.py \
               --data-repository "$TBT_DATA_REPOSITORY" \
-              --deployed-feed api/data/feed.json; then
+              --deployed-feed api/data/feed.json \
+              --require-prepared-evidence; then
               break
             fi
             if [[ "$attempt" == "3" ]]; then
