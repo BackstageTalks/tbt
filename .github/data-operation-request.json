@@ -2,12 +2,12 @@
   "schema": 1,
   "mode": "statistics",
   "promote": false,
-  "purpose": "Use approved provider-day headroom before the 2026-10-07 reset. Run the highest-value remaining serve/return statistics gap fill at up to 6 requests/second, max 9000 billable attempts, while the shared global budget remains authoritative at the 90% provider-day hard stop. Do not promote a model or mutate current predictions.",
+  "purpose": "Use maximum approved provider-day headroom before the 19:10 Europe/Bratislava reset. Fill highest-value statistics gaps first at the guarded batch rate. Shared global budget must hard-stop at 90% provider usage and preserve the 10% reserve. No model promotion or current prediction mutation.",
   "requested_on": "2026-10-07",
   "requested_at_utc": "2026-10-07T15:52:00Z",
-  "max_requests": 9000,
+  "max_requests": 10000,
   "start": "2022-01-01",
   "end": "2026-10-06",
-  "training_scope": "approved_headroom_statistics_closeout_no_model_promotion",
+  "training_scope": "pre_reset_maximum_safe_statistics_gapfill_no_model_promotion",
   "historical_match_winner_odds_as_model_feature": false
 }
