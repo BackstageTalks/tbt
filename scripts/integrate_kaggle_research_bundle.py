@@ -315,8 +315,13 @@ def integrate_wta(
     files = [_file_meta(cross_path, cross.rows)]
     for ranking_type, path in (("singles", singles_path), ("doubles", doubles_path)):
         target = out / f"wta-rankings-{ranking_type}.jsonl.gz"
-        writer = JsonlGzipWriter(target)
+        conflict_target = out / f"wta-rankings-{ranking_type}-conflicts.jsonl.gz"
+
+        # First pass establishes one signature per player/date and identifies
+        # every conflicting key. Conflicting snapshots are excluded wholesale:
+        # source row order must never decide which historical rank survives.
         seen: dict[tuple[str, str], tuple[Any, ...]] = {}
+        conflict_keys: set[tuple[str, str]] = set()
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
             reader = csv.DictReader(handle)
             required = {"ranking", "playerId", "points", "tournamentsPlayed", "movement", "rankedAt"}
@@ -343,13 +348,58 @@ def integrate_wta(
                 )
                 key = (pid, ranked.isoformat())
                 previous = seen.get(key)
-                if previous is not None:
-                    if previous != signature:
-                        counts[f"{ranking_type}_snapshot_conflicts"] += 1
-                    else:
-                        counts[f"{ranking_type}_duplicate_rows"] += 1
+                if previous is None:
+                    seen[key] = signature
+                elif previous == signature:
+                    counts[f"{ranking_type}_duplicate_rows"] += 1
+                else:
+                    conflict_keys.add(key)
+                    counts[f"{ranking_type}_conflict_observations"] += 1
+
+        counts[f"{ranking_type}_conflicting_snapshot_keys"] = len(conflict_keys)
+
+        writer = JsonlGzipWriter(target)
+        conflict_writer = JsonlGzipWriter(conflict_target)
+        emitted: set[tuple[str, str]] = set()
+        conflict_rows_seen: set[tuple[tuple[str, str], tuple[Any, ...]]] = set()
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                pid = _clean_text(row.get("playerId"))
+                mapped = source_players.get(pid)
+                if mapped is None:
                     continue
-                seen[key] = signature
+                ranked = _parse_date(row.get("rankedAt"))
+                rank = _int(row.get("ranking"))
+                if ranked is None or rank is None or rank <= 0:
+                    continue
+                signature = (
+                    rank,
+                    _int(row.get("points")),
+                    _int(row.get("tournamentsPlayed")),
+                    _int(row.get("movement")),
+                )
+                key = (pid, ranked.isoformat())
+                if key in conflict_keys:
+                    conflict_key = (key, signature)
+                    if conflict_key not in conflict_rows_seen:
+                        conflict_rows_seen.add(conflict_key)
+                        conflict_writer.write({
+                            "schema": 1,
+                            "ranking_type": ranking_type,
+                            "ranked_at": ranked.isoformat(),
+                            "ranking": rank,
+                            "points": signature[1],
+                            "tournaments_played": signature[2],
+                            "movement": signature[3],
+                            **mapped,
+                            "quarantine_reason": "conflicting_same_player_same_ranked_at",
+                        })
+                    counts[f"{ranking_type}_conflict_rows_excluded"] += 1
+                    continue
+                if key in emitted:
+                    continue
+                emitted.add(key)
                 writer.write({
                     "schema": 1,
                     "ranking_type": ranking_type,
@@ -363,9 +413,9 @@ def integrate_wta(
                 })
                 counts[f"{ranking_type}_sidecar_rows"] += 1
         writer.close()
-        if counts[f"{ranking_type}_snapshot_conflicts"]:
-            raise ValueError(f"WTA {ranking_type} ranking snapshot conflicts detected")
+        conflict_writer.close()
         files.append(_file_meta(target, writer.rows))
+        files.append(_file_meta(conflict_target, conflict_writer.rows))
 
     return {
         "status": "integrated_research_sidecar",
