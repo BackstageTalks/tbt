@@ -513,6 +513,44 @@ class RapidTennisClient:
             enrichment=True,
         )
 
+    def events_for_status_day(
+        self,
+        day: date,
+        target_event_ids: set[str] | None = None,
+        max_category_requests: int = 8,
+    ) -> Any:
+        """Bounded daily schedule/results lookup for runtime settlement.
+
+        The odds-by-date endpoint is a pre-match market surface and may drop
+        events after markets close. Calendar categories plus category/date
+        events remain the provider's schedule/results contract, so use those
+        for post-start settlement. Stop early once every requested event ID is
+        found and cap category calls so this optimization cannot inflate the
+        shared daily quota beyond the existing near fallback budget.
+        """
+        targets = {str(value) for value in (target_event_ids or set()) if str(value)}
+        found: list[dict[str, Any]] = []
+        found_ids: set[str] = set()
+        category_limit = max(0, min(12, int(max_category_requests)))
+        category_calls = 0
+        for category in self.calendar_categories(day):
+            category_id = self._category_id(category)
+            if category_id is None:
+                continue
+            if category_calls >= category_limit:
+                break
+            category_calls += 1
+            for event in self.category_events(category_id, day):
+                if not isinstance(event, dict):
+                    continue
+                found.append(event)
+                event_id = first_present(event, "id", "eventId", "event_id")
+                if event_id not in (None, ""):
+                    found_ids.add(str(event_id))
+            if targets and targets.issubset(found_ids):
+                break
+        return {"events": found}
+
     def event_statistics(self, event_id: str | int) -> Any:
         """Post-match event statistics; coverage is provider/event dependent."""
         return self._get(
