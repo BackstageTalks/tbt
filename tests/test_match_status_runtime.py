@@ -292,6 +292,41 @@ def test_near_404_fails_fast_without_fabricating_any_result():
     assert snapshot["provider_requests"] == 4
 
 
+class _DailyStatusProvider(_NearFallbackProvider):
+    def __init__(self, daily_events):
+        super().__init__({})
+        self.daily_events = daily_events
+        self.daily_calls = []
+
+    def events_with_odds_for_status_day(self, day):
+        self.request_count += 1
+        self.daily_calls.append(day.isoformat())
+        return {"events": list(self.daily_events)}
+
+
+def test_daily_exact_event_lookup_resolves_same_day_rows_in_one_request():
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    first = _row("101", "11", (now-timedelta(hours=2)).isoformat())
+    second = _row("102", "22", (now-timedelta(hours=1)).isoformat())
+    event1 = _event("101", winner_code=1)
+    event2 = _event("102", winner_code=2)
+    provider = _DailyStatusProvider([event1, event2])
+
+    snapshot = scan_match_statuses(
+        {"upcoming": [first, second]}, provider,
+        {"preferred_route": "near"}, now=now, max_checks=10, max_near_checks=10,
+    )
+
+    assert provider.daily_calls == ["2026-09-24"]
+    assert provider.near_calls == []
+    assert snapshot["statuses"]["101"]["status"] == "win"
+    assert snapshot["statuses"]["102"]["status"] == "win"
+    assert snapshot["newly_resolved"] == 2
+    assert snapshot["daily_attempts"] == 1
+    assert snapshot["daily_matches"] == 2
+    assert snapshot["provider_requests"] == 2  # live + one daily listing
+
+
 def test_near_fallback_checks_second_player_when_first_players_near_event_misses_target():
     now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
     row = _row("101", "11", (now-timedelta(hours=2)).isoformat())
