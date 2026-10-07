@@ -16,13 +16,15 @@ rolling 24-hour window.
 | LIVE Radar | 3,000 |
 | Match Status | 2,500 |
 | Refresh (including presentation enrichment) | 5,500 |
-| History, manual statistics and other enrichment | 2,500 |
+| History/backfill opportunistic ceiling | 13,500 |
 | **Combined, hard** | **13,500** |
 | **Provider reserve kept untouched** | **1,500** |
 | **Provider plan** | **15,000** |
 
-The four purpose caps sum exactly to the 13,500 BlinQ ceiling. A workload can
-stop earlier because both its own purpose cap and the global cap are enforced.
+LIVE, Match Status and Refresh retain bounded purpose allocations. History/backfill
+may opportunistically use any provider-day headroom left by those workloads, up to
+the same 13,500 global ceiling. The global ceiling is always authoritative, so the
+1,500 provider reserve remains untouched.
 
 An API request is reserved **before every billable upstream attempt, including
 retries**. Cancelled, timed-out or ambiguous requests are never refunded:
@@ -42,7 +44,8 @@ The authoritative values live in
 - `PROVIDER_RESERVE = 1500`
 - `GLOBAL_CEILING = 13500`
 - reset: `19:10 Europe/Bratislava`
-- `PURPOSE_CAPS = {live: 3000, match: 2500, refresh: 5500, history: 2500}`
+- `PURPOSE_CAPS = {live: 3000, match: 2500, refresh: 5500, history: 13500}`
+  (`history` is opportunistic; the shared 13,500 global ceiling still applies)
 
 CI contains a documentation contract test so future edits must keep this file
 synchronized with those runtime constants.
@@ -60,7 +63,8 @@ synchronized with those runtime constants.
    external scheduler at its configured cadence. LIVE Radar uses the **live**
    allocation.
 5. Refresh jobs use the **refresh** allocation. History/statistics/autofill jobs
-   use the **history** allocation.
+   use the **history** class, which can consume otherwise-unused global headroom
+   but can never exceed the 13,500 global ceiling.
 6. The Ops journal records 80% and 95% threshold crossings for both the global
    budget and the active purpose cap.
 
