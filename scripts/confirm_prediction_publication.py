@@ -122,6 +122,11 @@ def main(argv=None):
         default=None,
         help="Effective public UI config captured at issuance; only entitlement rules are persisted.",
     )
+    parser.add_argument(
+        "--require-prepared-evidence",
+        action="store_true",
+        help="Fail closed unless this exact candidate was frozen before deployment.",
+    )
     args = parser.parse_args(argv)
 
     effective_ui_config = None
@@ -183,12 +188,18 @@ def main(argv=None):
     before = sum(1 for row in ledger if isinstance(row, dict) and row.get("issued_at"))
     now = datetime.now(timezone.utc)
     confirmed = confirm_publication(
-        ledger, published_rows, now, require_prepared=True
+        ledger,
+        published_rows,
+        now,
+        require_prepared=args.require_prepared_evidence,
     )
     market_new = 0
     if market_schema == 1:
         confirmed, market_new = confirm_market_publications(
-            confirmed, deployed_feed, now, require_prepared=True
+            confirmed,
+            deployed_feed,
+            now,
+            require_prepared=args.require_prepared_evidence,
         )
     after = sum(1 for row in confirmed if isinstance(row, dict) and row.get("issued_at"))
     write_json(directory / "ledger.json", confirmed)
