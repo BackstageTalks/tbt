@@ -335,7 +335,7 @@ def main() -> None:
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    source_rows, source_counts, tour_values = parse_source(source_path)
+    source_file_sha256 = sha256(source_path)\n    source_rows, source_counts, tour_values = parse_source(source_path)
     matches, identity = sanitize_history_identities(load_partitions(Path(args.history_dir)))
     if identity.get("quarantined_rows"):
         raise SystemExit("Canonical identity quarantine is non-empty")
