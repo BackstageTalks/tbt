@@ -72,7 +72,10 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: tbt-history-data-writer
+  # Current-day publication is read-only with respect to canonical history, so it
+  # must not queue behind long history imports. True history writers keep the
+  # shared writer lock.
+  group: ${{ (github.event_name == 'workflow_dispatch' && (inputs.mode == 'current-refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current') && 'tbt-current-publication') || 'tbt-history-data-writer' }}
   # Explicit replacement markers may cancel a stale writer; ordinary writers never cancel each other.
   cancel-in-progress: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '[replace-current-refresh]') || contains(github.event.head_commit.message, '[replace-stale-data-run]')) }}
 jobs:
@@ -84,7 +87,7 @@ jobs:
     # not block ordinary application deploys. The workflow-level history lock
     # still serializes all shared history writers.
     concurrency:
-      group: ${{ ((github.event_name == 'push' || inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current') && 'tbt-production-deploy') || format('tbt-data-pipeline-{0}', github.run_id) }}
+      group: ${{ ((github.event_name == 'push' || inputs.mode == 'refresh' || inputs.mode == 'current-refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current') && 'tbt-production-deploy') || format('tbt-data-pipeline-{0}', github.run_id) }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 210
@@ -93,7 +96,7 @@ jobs:
       RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
       BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
       BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
-      BLINQ_SHARED_API_BUDGET_PURPOSE: ${{ (github.event_name == 'push' || inputs.mode == 'refresh') && 'refresh' || 'history' }}
+      BLINQ_SHARED_API_BUDGET_PURPOSE: ${{ (github.event_name == 'push' || inputs.mode == 'refresh' || inputs.mode == 'current-refresh') && 'refresh' || 'history' }}
       PROPL: ${{ secrets.PROPL }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       MODE: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[current-refresh]') && 'current-refresh') || inputs.mode || (github.event_name == 'push' && 'refresh') }}
@@ -419,7 +422,7 @@ jobs:
           retention-days: 14
 
       - name: Save morning refresh budget evidence
-        if: env.MODE == 'refresh' && env.MORNING_REFRESH == 'true'
+        if: (env.MODE == 'refresh' || env.MODE == 'current-refresh') && env.MORNING_REFRESH == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: blinq-morning-refresh-report-${{ github.run_id }}
@@ -628,7 +631,7 @@ jobs:
     if: >-
       needs.pipeline.result == 'success' &&
       ((github.event_name == 'push' && (contains(github.event.head_commit.message, '[refresh-now]') || contains(github.event.head_commit.message, '[deploy-current]'))) ||
-       inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current')
+       inputs.mode == 'refresh' || inputs.mode == 'current-refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Only the short public publication window shares the production lock.
