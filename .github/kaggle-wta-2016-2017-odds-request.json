@@ -21,5 +21,6 @@
   "result_policy": "Source result and winner flag are identity-validation evidence only and are never introduced as same-match model features.",
   "api_requests": 0,
   "model_promotion": false,
-  "requested_at_utc": "2026-10-07T01:44:00Z"
+  "requested_at_utc": "2026-10-07T07:06:00Z",
+  "retry_reason": "Final production write retry after previous queued push run was cancelled before execution."
 }
