@@ -1664,6 +1664,22 @@ def main():
         "odds": odds_report or {},
         "settled": len(feed["results"]),
         "model": model.version,
+        "comparator": {
+            "available": isinstance(comparator_artifact, dict),
+            "model_version": (
+                (comparator_artifact.get("model") or {}).get("model_version")
+                if isinstance(comparator_artifact, dict) else None
+            ),
+            "players": (
+                (comparator_artifact.get("source") or {}).get("players", 0)
+                if isinstance(comparator_artifact, dict) else 0
+            ),
+            "active_window_days": (
+                (comparator_artifact.get("source") or {}).get("active_window_days")
+                if isinstance(comparator_artifact, dict) else None
+            ),
+            "provider_requests_per_user_compare": 0,
+        },
         "shadow": {
             "enabled": shadow_enabled,
             "challenger_model": challenger_version or None,
