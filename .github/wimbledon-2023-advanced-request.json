@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "requested_at_utc": "2026-10-07T09:48:00Z",
+  "action": "link_wimbledon_2023_advanced_point_sidecar",
+  "source": {
+    "doi": "10.6084/m9.figshare.25511917",
+    "license": "CC BY 4.0",
+    "private_asset": "tbt-research-sources-v1/figshare-wimbledon-2023-ccby4.xlsx",
+    "rows": 774
+  },
+  "link_policy": "2023 + Wimbledon + exact normalized full-name player pair + source/canonical winner; unique canonical candidate only; no fuzzy matching",
+  "feature_policy": "advanced point observations remain private post-match sidecar; any future pre-match signal must be derived as strictly lagged chronological player state; no model promotion"
+}
