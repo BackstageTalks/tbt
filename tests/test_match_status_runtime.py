@@ -1113,13 +1113,12 @@ def test_match_status_worker_uses_higher_bounded_throughput():
     )[1].split(
         '@app.route(route="v1/internal/account-inactivity-worker"', 1
     )[0]
-    assert 'BLINQ_MATCH_STATUS_REQUEST_LIMIT", "24"' in block
-    assert 'min(24, int(os.getenv("BLINQ_MATCH_STATUS_REQUEST_LIMIT"' in block
+    assert 'client.request_limit = 24' in block
     assert 'BLINQ_MATCH_STATUS_MAX_CHECKS", "20"' in block
     assert 'min(20, int(os.getenv("BLINQ_MATCH_STATUS_MAX_CHECKS"' in block
-    assert 'BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS", "20"' in block
-    assert 'min(20, int(os.getenv("BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS"' in block
+    assert 'max_near_checks=20' in block
     assert 'max_wall_seconds=22.0' in block
+    assert 'reserve_shared_api_budget("match")' in block
 
 
 def test_production_status_queue_ignores_generic_upcoming_board():
