@@ -3755,9 +3755,16 @@
     const copy=c.show_copy===false?'':`<div class="admin-hero-preview-copy">${eyebrow?`<small>${bannerLineHtml(eyebrow)}</small>`:''}${headline?`<strong>${bannerLineHtml(headline)}</strong>`:''}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b>${bannerLineHtml(c.button_text)} →</b>`:''}</div>`;
     const clampSize=(value,min,max,fallback)=>value!=null&&Number.isFinite(Number(value))?Math.max(min,Math.min(max,Number(value))):fallback;
     const previewWidth=mode==='mobile'?370:1396;
-    const headlineSize=clampSize(c.headline_size,12,72,36),textSize=clampSize(c.text_size,9,32,14),eyebrowSize=clampSize(c.eyebrow_size,7,18,10);
-    const mobileHeadline=Math.min(headlineSize,headlineSize*.75+6),mobileText=Math.max(9,Math.min(24,textSize*.78));
-    const previewStyle=bannerCreativeStyle(c).replace(/"$/,`;--preview-headline-ratio:${100*(mode==='mobile'?mobileHeadline:headlineSize)/previewWidth};--preview-text-ratio:${100*(mode==='mobile'?mobileText:textSize)/previewWidth};--preview-eyebrow-ratio:${100*eyebrowSize/previewWidth};--preview-gap-ratio:${700/previewWidth}"`);
+    const desktopHeadline=clampSize(c.desktop_headline_size??c.headline_size,12,72,36);
+    const mobileHeadline=clampSize(c.mobile_headline_size??c.desktop_headline_size??c.headline_size,12,72,30);
+    const desktopText=clampSize(c.desktop_text_size??c.text_size,9,32,14);
+    const mobileText=clampSize(c.mobile_text_size??c.desktop_text_size??c.text_size,9,32,12);
+    const desktopEyebrow=clampSize(c.desktop_eyebrow_size??c.eyebrow_size,7,18,10);
+    const mobileEyebrow=clampSize(c.mobile_eyebrow_size??c.desktop_eyebrow_size??c.eyebrow_size,7,18,9);
+    const previewHeadline=mode==='mobile'?mobileHeadline:desktopHeadline;
+    const previewText=mode==='mobile'?mobileText:desktopText;
+    const previewEyebrow=mode==='mobile'?mobileEyebrow:desktopEyebrow;
+    const previewStyle=bannerCreativeStyle(c).replace(/"$/,`;--preview-headline-ratio:${100*previewHeadline/previewWidth};--preview-text-ratio:${100*previewText/previewWidth};--preview-eyebrow-ratio:${100*previewEyebrow/previewWidth};--preview-gap-ratio:${700/previewWidth}"`);
     return `<div class="lean-admin-preview ${mode}${bannerCreativeClasses(c)} is-active" ${previewStyle} data-preview-slot="${escapeHtml(entry.id)}"><img src="${escapeHtml(img)}" alt="" loading="lazy">${copy}</div>`;
   }
   function syncAdminHeroPreview(){
