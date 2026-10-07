@@ -76,19 +76,28 @@ def main():
               h.setSelectedElement('HERO_BANNER_2');
               const preview=()=>document.querySelector('[data-admin-preview-card="desktop"] .lean-admin-preview');
               const heading=()=>parseFloat(getComputedStyle(document.querySelector('[data-admin-preview-card="desktop"] .admin-hero-preview-copy strong')).fontSize);
-              const small=document.querySelector('[data-simple-banner-field="headline_size"]');
+              const small=document.querySelector('[data-simple-banner-field="desktop_headline_size"]');
               small.value='24';small.dispatchEvent(new Event('change',{bubbles:true}));
               const first=heading();
-              const big=document.querySelector('[data-simple-banner-field="headline_size"]');
+              const big=document.querySelector('[data-simple-banner-field="desktop_headline_size"]');
               big.value='72';big.dispatchEvent(new Event('change',{bubbles:true}));
               const second=heading();
+              const mobileSize=document.querySelector('[data-simple-banner-field="mobile_headline_size"]');
+              mobileSize.value='18';mobileSize.dispatchEvent(new Event('change',{bubbles:true}));
+              const mobileHeading=parseFloat(getComputedStyle(document.querySelector('[data-admin-preview-card="mobile"] .admin-hero-preview-copy strong')).fontSize);
+              const socialX=document.querySelector('[data-simple-banner-field="desktop_social_x"]');
+              socialX.value='61';socialX.dispatchEvent(new Event('input',{bubbles:true}));
+              const socialY=document.querySelector('[data-simple-banner-field="mobile_social_y"]');
+              socialY.value='22';socialY.dispatchEvent(new Event('input',{bubbles:true}));
               const note=h.renderUpgradeTierCard('pro',s.ui.plans.pro,0,false,-1);
               const custom=h.renderUpgradeTierCard('pro',{...s.ui.plans.pro,note:'Vlastná poznámka'},0,false,-1);
               return {
                 selected:s.selectedElement,pinned:s.adminPreviewPinnedId,paused:s.adminPreviewPaused,
                 previewSlot:preview()?.dataset.previewSlot,
                 previewStyle:preview()?.getAttribute('style'),
-                first,second,
+                first,second,mobileHeading,
+                desktopSocialX:s.ui.elements.HERO_BANNER_2.content.desktop_social_x,
+                mobileSocialY:s.ui.elements.HERO_BANNER_2.content.mobile_social_y,
                 obsoleteNote:note.includes('Full core predictions and tournaments.'),
                 customNote:custom.includes('Vlastná poznámka')
               };
@@ -97,6 +106,8 @@ def main():
             assert edited['paused'] and edited['previewSlot']=='HERO_BANNER_2',edited
             assert '--creative-headline-size:72px' in edited['previewStyle'],edited
             assert edited['second']>edited['first'],edited
+            assert edited['mobileHeading']<edited['second'],edited
+            assert str(edited['desktopSocialX'])=='61' and str(edited['mobileSocialY'])=='22',edited
             assert not edited['obsoleteNote'] and edited['customNote'],edited
             assert not errors,errors
             print('PASS: live carousel, text, grayscale and no hidden accent')
