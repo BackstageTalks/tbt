@@ -892,6 +892,43 @@ def scan_match_statuses(
              if _provider_event_id(candidate) == eid),
             None,
         )
+        # The near endpoint only returns the closest previous/next event for one
+        # player. If player1 has already played again, the target event can fall
+        # out of that tiny window even though it is still the closest event for
+        # player2. Try the other participant before leaving a finished match
+        # permanently pending. The existing near/request caps still bound cost.
+        if event is None and near_used:
+            player2_id = _player_id(row, "player2")
+            if (
+                player2_id
+                and player2_id != player_id
+                and near_attempts < max_near_checks
+                and callable(near_method)
+            ):
+                try:
+                    if player2_id in near_cache:
+                        second_payload = near_cache[player2_id]
+                    else:
+                        near_attempts += 1
+                        nominal_requests += 1
+                        second_payload = near_method(player2_id)
+                        near_cache[player2_id] = second_payload
+                    successful_history += 1
+                    event = next(
+                        (candidate for candidate in _provider_rows(second_payload)
+                         if _provider_event_id(candidate) == eid),
+                        None,
+                    )
+                except Exception as exc:
+                    error_code = _provider_error_code(exc)
+                    provider_errors[error_code] = provider_errors.get(error_code, 0) + 1
+                    if type(exc).__name__ == "SharedBudgetExhausted":
+                        budget_paused = True
+                        next_due_id = eid
+                        break
+                    if type(exc).__name__ == "RequestBudgetExceeded":
+                        next_due_id = eid
+                        break
         if event is None:
             unmatched += 1
             continue
