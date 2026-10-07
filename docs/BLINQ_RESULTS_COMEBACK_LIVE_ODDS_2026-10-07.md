@@ -9,3 +9,5 @@ Release note for 2026-10-07.
 - The highest observed LIVE price is persisted as display/research evidence and carried into settled Results as an inline `MAX x.xx` value when it exceeds the immutable published pre-match price.
 - ROI, units, model selection and training data continue to use the original published pre-match odds.
 - No additional provider request is introduced by the LIVE max-odds tracking path.
+
+- Public section label renamed from `Short Odds` to `Comebacks`; internal `prime` keys and logic are unchanged.
