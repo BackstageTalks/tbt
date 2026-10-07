@@ -51,9 +51,9 @@ jobs:
           request=.github/livetennisapi-paid-history-request.json
           test "$(jq -r .action "$request")" = "collect_paid_history_quality_gaps"
           test "$(jq -r .promote_model "$request")" = "false"
-          test "$(jq -r .expected_min_daily "$request")" -eq 1000
-          test "$(jq -r .max_calls "$request")" -le 700
-          test "$(jq -r .daily_reserve "$request")" -ge 200
+          test "$(jq -r .expected_min_daily "$request")" -eq 100
+          test "$(jq -r .max_calls "$request")" -le 70
+          test "$(jq -r .daily_reserve "$request")" -ge 20
 
       - name: Download canonical history
         shell: bash
