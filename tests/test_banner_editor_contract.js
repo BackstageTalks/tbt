@@ -33,6 +33,12 @@ assert.ok(css.includes('var(--creative-mobile-text-size'),'mobile subtitle uses 
 assert.ok(css.includes('var(--hero-social-mobile-x,4%)'),'mobile social buttons have independent positioning');
 assert.ok(css.includes('var(--hero-social-size,11px)'),'desktop social font size is configurable');
 assert.ok(css.includes('var(--hero-social-mobile-size,10px)'),'mobile social font size is configurable');
+assert.ok(app.includes('data-simple-banner-field="desktop_social_layout"'),'desktop social layout selector exists');
+assert.ok(app.includes('data-simple-banner-field="mobile_social_layout"'),'mobile social layout selector exists');
+assert.ok(app.includes("--hero-social-direction:"),'desktop social direction variable exists');
+assert.ok(app.includes("--hero-social-mobile-direction:"),'mobile social direction variable exists');
+assert.ok(css.includes('flex-direction:var(--hero-social-direction,row)'),'desktop social layout is applied');
+assert.ok(css.includes('flex-direction:var(--hero-social-mobile-direction,row)'),'mobile social layout is applied');
 assert.ok(app.includes('function adminPreviewEntry(entries=activeAdminBanners())'), 'selected unpublished banner can be previewed');
 assert.ok(app.includes('state.adminPreviewPinnedId=id'), 'font edits pin the selected creative');
 for(let i=1;i<=5;i++)assert.equal(ui.elements['HERO_BANNER_'+i].content.accent_text,'');
