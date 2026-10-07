@@ -75,6 +75,8 @@ from tbt.services.admin_storage import (
     set_project_member_payment,
     save_live_worker_status,
     load_live_worker_status,
+    save_live_odds_peak,
+    load_live_odds_peak,
     save_match_status_snapshot,
     load_match_status_snapshot,
     save_account_worker_status,
@@ -1135,7 +1137,7 @@ def _public_live_radar_payload(result: dict) -> dict:
     set2_priced=int(result.get("set2_priced") or sum(1 for row in candidate_rows if isinstance(row.get("second_set_odds"),(int,float)) and float(row.get("second_set_odds"))>1.0))
     raw_set2_eligible=result.get("set2_eligible")
     set2_eligible=int(raw_set2_eligible) if isinstance(raw_set2_eligible,(int,float)) else sum(1 for row in candidate_rows if set2_push_eligible(row))
-    public_candidate=lambda x:{k:x.get(k) for k in ("event_id","favorite","opponent","first_set","second_set","stage","reason","tournament","second_set_probability","second_set_model","second_set_quality","second_set_samples","second_set_odds","second_set_fair_probability","second_set_edge","second_set_ev","second_set_market") if k in x}
+    public_candidate=lambda x:{k:x.get(k) for k in ("event_id","favorite","opponent","first_set","second_set","stage","reason","tournament","second_set_probability","second_set_model","second_set_quality","second_set_samples","second_set_odds","second_set_fair_probability","second_set_edge","second_set_ev","second_set_market","live_match_odds","live_match_odds_observed_at","max_live_odds","max_live_odds_at","live_odds_observations") if k in x}
     return {
         "ok": True,
         "scanned_at": result.get("scanned_at"),
@@ -1288,6 +1290,41 @@ def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
                         except Exception as exc:
                             logging.info("Set-2 odds unavailable for %s: %s",eid,exc.__class__.__name__)
                     scan=attach_second_set_odds(scan,odds_payloads,live_events)
+                    # Reuse the same already-budgeted provider payloads to persist
+                    # the highest Match Winner price observed after the favourite
+                    # lost set 1. No additional provider/API request is made here.
+                    peak_by_event={}
+                    for candidate in scan.get("candidates") or []:
+                        if not isinstance(candidate,dict):
+                            continue
+                        eid=str(candidate.get("event_id") or "").strip()
+                        live_price=candidate.get("live_match_odds")
+                        if not eid or not isinstance(live_price,(int,float)) or float(live_price)<=1.0:
+                            continue
+                        try:
+                            peak=save_live_odds_peak(
+                                eid,float(live_price),
+                                observed_at=str(candidate.get("live_match_odds_observed_at") or scan.get("scanned_at") or ""),
+                                first_set=str(candidate.get("first_set") or ""),
+                            )
+                        except AdminStorageUnavailable:
+                            scan["live_odds_peak_storage_unavailable"]=True
+                            break
+                        except ValueError:
+                            continue
+                        peak_by_event[eid]=peak
+                        candidate["max_live_odds"]=peak.get("max_live_odds")
+                        candidate["max_live_odds_at"]=peak.get("max_live_odds_at")
+                        candidate["live_odds_observations"]=peak.get("observations")
+                    if peak_by_event:
+                        for signal in scan.get("signals") or []:
+                            if not isinstance(signal,dict):
+                                continue
+                            peak=peak_by_event.get(str(signal.get("event_id") or "").strip())
+                            if peak:
+                                signal["max_live_odds"]=peak.get("max_live_odds")
+                                signal["max_live_odds_at"]=peak.get("max_live_odds_at")
+                                signal["live_odds_observations"]=peak.get("observations")
             finally:
                 try:client.close()
                 except Exception:pass
@@ -1492,6 +1529,32 @@ def internal_match_status_worker(req):
                 client.close()
             except Exception:
                 pass
+        # Attach only persisted provider evidence collected by LIVE Radar.
+        # This remains display metadata; settlement P/L still uses the immutable
+        # publication odds from the issued pick.
+        for settled in snapshot.get("settled_events") or []:
+            if not isinstance(settled,dict):
+                continue
+            eid=str(settled.get("event_id") or "").strip()
+            if not eid:
+                continue
+            try:
+                peak=load_live_odds_peak(eid)
+            except AdminStorageUnavailable:
+                peak=None
+            if not peak:
+                continue
+            status_row=(snapshot.get("statuses") or {}).get(eid)
+            if isinstance(status_row,dict):
+                for key in ("max_live_odds","max_live_odds_at","live_odds_observations","live_odds_scope"):
+                    source_key={"live_odds_observations":"observations","live_odds_scope":"scope"}.get(key,key)
+                    value=peak.get(source_key)
+                    if value not in (None,""):
+                        status_row[key]=value
+            for key in ("max_live_odds","max_live_odds_at"):
+                value=peak.get(key)
+                if value not in (None,""):
+                    settled[key]=value
         saved = save_match_status_snapshot(snapshot)
         live_results = {"saved": 0, "comeback": 0, "set2": 0}
         try:
