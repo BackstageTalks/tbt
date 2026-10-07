@@ -1,1 +1,1 @@
-Performance validation: daily current-refresh fast path after PR #332. 2026-10-07 07:28 UTC.
+Performance validation retry: daily current-refresh fast path after PR #332; writer lock is free. 2026-10-07 08:50 UTC.
