@@ -373,6 +373,125 @@ def _all_matches_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
 
 
 
+KAGGLE_HWAITT_SURFACE_MAP = {
+    "1": "hard",
+    "2": "clay",
+    "3": "hard",   # indoor hard collapses to canonical hard for identity evidence
+    "4": "carpet",
+    "5": "grass",
+}
+
+
+def _kaggle_hwaitt_surface(value: object) -> str:
+    try:
+        key = str(int(float(str(value).strip())))
+    except (TypeError, ValueError):
+        return "unknown"
+    return KAGGLE_HWAITT_SURFACE_MAP.get(key, "unknown")
+
+
+def _kaggle_hwaitt_player_stats(row: dict[str, object], side: str) -> dict[str, float]:
+    """Extract only raw current-match statistics from Kaggle Tennis 2011-2019.
+
+    Deliberately excludes *_A, *_L5, *_CUR result/model fields and the separate
+    *_picks.csv model outputs. The returned current-match statistics are used
+    only as historical observations; FeatureBuilder snapshots point-in-time
+    features before applying the current match result.
+    """
+    result: dict[str, float] = {}
+
+    for field, key in (
+        ("aces", f"Aces_{side}"),
+        ("double_faults", f"DoubleFaults_{side}"),
+    ):
+        value = _num(row.get(key))
+        if value is not None and value >= 0 and float(value).is_integer():
+            result[field] = float(value)
+
+    serves_total = _num(row.get(f"ServesTotal_{side}"))
+    first_in = _num(row.get(f"Serve1st_{side}"))
+    first_won = _num(row.get(f"Serve1stWon_{side}"))
+    second_won = _num(row.get(f"Serve2ndWon_{side}"))
+
+    first_rate = _rate(first_won, first_in)
+    second_den = None if serves_total is None or first_in is None else serves_total - first_in
+    second_rate = _rate(second_won, second_den)
+    service_rate = None
+    if (
+        first_won is not None
+        and second_won is not None
+        and serves_total is not None
+        and serves_total > 0
+    ):
+        service_rate = _rate(first_won + second_won, serves_total)
+
+    return_rate = _rate(
+        row.get(f"ReceivingPointsWon_{side}"),
+        row.get(f"ReceivingPointsTotal_{side}"),
+    )
+    break_return_rate = _rate(
+        row.get(f"BreakPointsConverted_{side}"),
+        row.get(f"BreakPointsTotal_{side}"),
+    )
+
+    for field, value in (
+        ("first_serve_win", first_rate),
+        ("second_serve_win", second_rate),
+        ("service_points_won", service_rate),
+        ("return_points_won", return_rate),
+        ("break_point_return_win", break_return_rate),
+    ):
+        if value is not None:
+            result[field] = float(value)
+    return result
+
+
+def _kaggle_hwaitt_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
+    """Read the CC BY-NC 4.0 Kaggle Tennis 2011-2019 ATP/WTA match tables."""
+    for raw_path in paths:
+        path = Path(raw_path)
+        tour = _tour_from_path(path.name)
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            for idx, row in enumerate(csv.DictReader(handle), start=2):
+                try:
+                    day = datetime.strptime(str(row.get("GameD") or "").strip(), "%Y-%m-%d").date()
+                except ValueError:
+                    continue
+                player_a = str(row.get("Name_1") or "").strip()
+                player_b = str(row.get("Name_2") or "").strip()
+                if not player_a or not player_b or _norm_name(player_a) == _norm_name(player_b):
+                    continue
+
+                result = _num(row.get("GRes_CUR_1"))
+                if result not in {0.0, 1.0}:
+                    continue
+                winner = player_a if result == 1.0 else player_b
+
+                stats_a = _kaggle_hwaitt_player_stats(row, "1")
+                stats_b = _kaggle_hwaitt_player_stats(row, "2")
+                if not stats_a and not stats_b:
+                    continue
+
+                yield OfflineMatch(
+                    source=f"kaggle-hwaitt:{path.name}",
+                    source_match_id=(
+                        f"{tour}:{day.isoformat()}:{_norm_name(player_a)}:"
+                        f"{_norm_name(player_b)}:{idx}"
+                    ),
+                    tour=tour,
+                    event_date=day,
+                    player_a=player_a,
+                    player_b=player_b,
+                    winner=winner,
+                    tournament=str(row.get("TName") or "").strip(),
+                    surface=_kaggle_hwaitt_surface(row.get("Surface")),
+                    round_name="",
+                    best_of=None,
+                    stats_a=stats_a,
+                    stats_b=stats_b,
+                )
+
+
 _CHARTING_MATCH_HEADERS = [
     "match_id", "Player 1", "Player 2", "Pl 1 hand", "Pl 2 hand",
     "Date", "Tournament", "Round", "Time", "Court", "Surface", "Umpire",
@@ -891,6 +1010,7 @@ def main() -> None:
     ap.add_argument("--history-dir", required=True)
     ap.add_argument("--source-csv", action="append", default=[])
     ap.add_argument("--all-matches-csv", action="append", default=[])
+    ap.add_argument("--kaggle-hwaitt-csv", action="append", default=[])
     ap.add_argument("--charting-zip", default="")
     ap.add_argument("--livetennisapi-reconstructed-csv", action="append", default=[])
     ap.add_argument("--livetennisapi-derived-csv", action="append", default=[])
@@ -911,6 +1031,7 @@ def main() -> None:
 
     sources: list[OfflineMatch] = list(_sackmann_rows(args.source_csv))
     sources.extend(_all_matches_rows(args.all_matches_csv))
+    sources.extend(_kaggle_hwaitt_rows(args.kaggle_hwaitt_csv))
     if args.charting_zip:
         sources.extend(_charting_rows(args.charting_zip))
     sources.extend(_livetennisapi_reconstructed_rows(args.livetennisapi_reconstructed_csv))
