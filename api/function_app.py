@@ -101,6 +101,7 @@ from tbt.providers.rapidapi import RapidTennisClient
 from tbt.providers.shared_budget import (
     reserve as reserve_shared_api_budget,
     status as shared_api_budget_status,
+    PURPOSE_CAPS,
     SharedBudgetExhausted,
     SharedBudgetUnavailable,
 )
@@ -2288,12 +2289,48 @@ def admin_diagnostics(req):
         worker_age_seconds = None
         worker_healthy = False
         raw_worker_time = str(worker_status.get("updated_at") or worker_status.get("scanned_at") or "").strip()
+        worker_next_due_at = None
         if raw_worker_time:
             try:
                 worker_moment = datetime.fromisoformat(raw_worker_time.replace("Z", "+00:00"))
                 if worker_moment.tzinfo is None: worker_moment = worker_moment.replace(tzinfo=timezone.utc)
-                worker_age_seconds = max(0, int((datetime.now(timezone.utc)-worker_moment.astimezone(timezone.utc)).total_seconds()))
+                worker_moment = worker_moment.astimezone(timezone.utc)
+                worker_age_seconds = max(0, int((datetime.now(timezone.utc)-worker_moment).total_seconds()))
                 worker_healthy = bool(worker_configured and worker_age_seconds <= 180 and not worker_status.get("last_error"))
+                worker_next_due_at = datetime.fromtimestamp(
+                    worker_moment.timestamp() + 300, tz=timezone.utc
+                ).isoformat()
+            except ValueError:
+                pass
+
+        try:
+            match_status_snapshot = load_match_status_snapshot() or {}
+        except AdminStorageUnavailable:
+            match_status_snapshot = {}
+        match_status_age_seconds = None
+        match_status_healthy = False
+        match_status_next_due_at = None
+        raw_match_status_time = str(match_status_snapshot.get("updated_at") or "").strip()
+        if raw_match_status_time:
+            try:
+                match_status_moment = datetime.fromisoformat(
+                    raw_match_status_time.replace("Z", "+00:00")
+                )
+                if match_status_moment.tzinfo is None:
+                    match_status_moment = match_status_moment.replace(tzinfo=timezone.utc)
+                match_status_moment = match_status_moment.astimezone(timezone.utc)
+                match_status_age_seconds = max(
+                    0,
+                    int((datetime.now(timezone.utc) - match_status_moment).total_seconds()),
+                )
+                match_status_healthy = bool(
+                    worker_configured
+                    and match_status_age_seconds <= 2700
+                    and not match_status_snapshot.get("degraded")
+                )
+                match_status_next_due_at = datetime.fromtimestamp(
+                    match_status_moment.timestamp() + 1800, tz=timezone.utc
+                ).isoformat()
             except ValueError:
                 pass
         feed_health = {"ready": False, "stale": True, "generated_at": None, "upcoming": 0, "results": 0, "model_version": None}
@@ -2317,6 +2354,7 @@ def admin_diagnostics(req):
             "info_storage": bool(storage_services.get("premium_info")),
             "live_data": bool(feed_health.get("ready") and not feed_health.get("stale")),
             "live_worker": bool(worker_healthy),
+            "match_status_worker": bool(match_status_healthy),
         }
         provider_health = {
             "configured": bool(str(getattr(settings, "rapidapi_key", "") or "").strip()),
@@ -2329,8 +2367,7 @@ def admin_diagnostics(req):
                 {"name": name, "percent": int(100 * spent / cap)}
                 for name, spent, cap in (
                     ("global", api_budget["global_spent"], api_budget["global_limit"]),
-                    *((kind, used, {"live": 2500, "match": 1000,
-                                     "refresh": 2500, "history": 8500}[kind])
+                    *((kind, used, PURPOSE_CAPS[kind])
                       for kind, used in api_budget["spent"].items()),
                 )
                 if spent * 100 >= cap * 80
@@ -2367,6 +2404,8 @@ def admin_diagnostics(req):
             problems.append("live_worker_token_missing")
         elif not worker_healthy:
             problems.append("live_worker_stale")
+        if worker_configured and not match_status_healthy:
+            problems.append("match_status_worker_stale")
         if inactivity.get("enabled"):
             if not account_worker_configured:
                 problems.append("account_worker_token_missing")
@@ -2390,13 +2429,36 @@ def admin_diagnostics(req):
             "live_worker": {
                 "configured": worker_configured,
                 "healthy": worker_healthy,
+                "scheduler_owner": "external",
+                "expected_cadence_seconds": 300,
                 "age_seconds": worker_age_seconds,
+                "next_due_at": worker_next_due_at,
+                "overdue": bool(worker_age_seconds is None or worker_age_seconds > 300),
                 "scanned_at": worker_status.get("scanned_at"),
                 "live_events": int(worker_status.get("live_events") or 0),
                 "candidates": int(worker_status.get("candidates") or 0),
                 "signals": int(worker_status.get("signals") or 0),
                 "new_alerts": int(worker_status.get("new_alerts") or 0),
                 "last_error": str(worker_status.get("last_error") or "")[:160],
+            },
+            "match_status_worker": {
+                "configured": worker_configured,
+                "healthy": match_status_healthy,
+                "scheduler_owner": "external",
+                "expected_cadence_seconds": 1800,
+                "age_seconds": match_status_age_seconds,
+                "next_due_at": match_status_next_due_at,
+                "overdue": bool(
+                    match_status_age_seconds is None or match_status_age_seconds > 1800
+                ),
+                "updated_at": match_status_snapshot.get("updated_at"),
+                "tracked": int(match_status_snapshot.get("tracked") or 0),
+                "due": int(match_status_snapshot.get("due") or 0),
+                "checked": int(match_status_snapshot.get("checked") or 0),
+                "provider_requests": int(match_status_snapshot.get("provider_requests") or 0),
+                "budget_paused": bool(match_status_snapshot.get("budget_paused")),
+                "degraded": bool(match_status_snapshot.get("degraded")),
+                "provider_errors": match_status_snapshot.get("provider_errors") or {},
             },
             "account_inactivity": {
                 "policy": inactivity,
