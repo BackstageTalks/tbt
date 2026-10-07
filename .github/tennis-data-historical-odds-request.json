@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "purpose": "Integrate operator-supplied historical Tennis-Data Match Winner prices into private BlinQ canonical history, preserve full bookmaker context in a sidecar, and publish a validated ATP player-profile research sidecar.",
+  "source_policy": "public pinned mirrors are used only as deterministic transport and must match the exact operator-provided file SHA-256",
+  "sources": {
+    "archive_atp": {
+      "mirror_repository": "0xsimulacra/MLT",
+      "mirror_commit": "cb2e4002058d75288e0ee09925b6aacb81f4900f",
+      "path": "df_atp.csv",
+      "expected_rows": 54908,
+      "expected_sha256": "94a2ca9e705a491eaf506799968c391beeeb18fcd56be793f54dd42b3cdee9cc"
+    },
+    "archive_wta": {
+      "mirror_repository": "0xsimulacra/MLT",
+      "mirror_commit": "cb2e4002058d75288e0ee09925b6aacb81f4900f",
+      "path": "df_wta.csv",
+      "expected_rows": 32053,
+      "expected_sha256": "7823f0cf650bbe95fa794aa172c5085c0d4860e64f3af23b2fbde92e84b3b920"
+    },
+    "enriched_atp_2007_2022": {
+      "mirror_repository": "com-480-data-visualization/datavis-project-2022-plot-twist",
+      "mirror_commit": "49d954bf03a1ffdbf2a7f2b9cffaa27e2b242284",
+      "path": "data/tennis_data.csv",
+      "expected_rows": 36120,
+      "expected_bytes": 10565714,
+      "expected_sha256": "94582c71d0de8258061ce29514d9e59e5ab7e38fa48f50ea2986ecd0fd32e83f",
+      "odds_import_window": "2020-01-01..2022-02-27",
+      "profile_context_window": "2007-01-01..2022-02-27"
+    }
+  },
+  "duplicate_policy": "df_atp.csv.zip is byte-identical to archive df_atp.csv and is intentionally not imported twice; enriched ATP 2007-2019 odds overlap archive ATP and are used only for profile context, while only 2020-2022 odds are added from the enriched file.",
+  "price_semantics": "historical_two_way_unspecified_timestamp",
+  "orientation_policy": "Winner/Loser source orientation is used only for identity linking; every persisted quote is canonical player1/player2",
+  "player_profile_policy": "country/hand/year_pro/height/weight are range-validated, identity-linked to canonical player IDs, conflicting fields are dropped, and the result remains research-only pending ablation",
+  "redundant_fields_policy": "WPts/LPts are not promoted because BlinQ already has stronger point-in-time ATP/WTA ranking-history sources; post-match set scores are not introduced as same-match features",
+  "model_feature_policy": "odds benchmark-only; player profile research-only; no automatic model promotion",
+  "api_requests": 0,
+  "model_promotion": false,
+  "requested_at_utc": "2026-10-07T00:10:00Z"
+}
