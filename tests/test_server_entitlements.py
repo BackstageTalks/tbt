@@ -235,6 +235,52 @@ def _stable_random_cfg(plan: str, visible_rows: int) -> dict:
     }
 
 
+def test_rookie_prime_random_sample_is_always_from_ranked_top_five():
+    cfg = _stable_random_cfg("rookie", 1)
+    payload = feed(12)
+
+    top_five_ids = {row["event_id"] for row in payload["prime_picks"][:5]}
+    outside_ids = {row["event_id"] for row in payload["prime_picks"][5:]}
+
+    for i in range(50):
+        access = {"status": "active", "plan": "rookie", "id": f"top5-user-{i}"}
+        data, manifest = filter_feed_for_access(payload, access, cfg)
+        assert len(data["prime_picks"]) == 1
+        chosen = data["prime_picks"][0]["event_id"]
+        assert chosen in top_five_ids
+        assert chosen not in outside_ids
+        active = [
+            idx for idx, state in enumerate(manifest["sections"]["prime"]["slot_states"])
+            if state == "active"
+        ]
+        assert active and active[0] < 5
+
+
+def test_rookie_prime_migrates_old_out_of_top_five_allocation():
+    from tbt.services.entitlements import _row_access_key
+
+    cfg = _stable_random_cfg("rookie", 1)
+    payload = feed(12)
+    old_pick = payload["prime_picks"][8]
+    access = {
+        "status": "active",
+        "plan": "rookie",
+        "id": "old-prime-allocation",
+        "_daily_allocations": {"prime": [_row_access_key(old_pick)]},
+    }
+
+    data, manifest = filter_feed_for_access(payload, access, cfg)
+    assert len(data["prime_picks"]) == 1
+    assert data["prime_picks"][0]["event_id"] in {
+        row["event_id"] for row in payload["prime_picks"][:5]
+    }
+    assert data["prime_picks"][0]["event_id"] != old_pick["event_id"]
+    assert [
+        idx for idx, state in enumerate(manifest["sections"]["prime"]["slot_states"])
+        if state == "active"
+    ][0] < 5
+
+
 def test_rookie_empty_daily_allocation_can_fill_later_without_rerolling():
     now = datetime(2026, 9, 22, 8, 0, tzinfo=timezone.utc)
     access = {"status": "active", "plan": "rookie", "id": "rookie-fill"}
