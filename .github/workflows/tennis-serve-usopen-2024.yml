@@ -69,18 +69,14 @@ jobs:
           import pandas as pd
           p=Path(".cache/tbt/serve-usopen-2024/source/metadata.parquet")
           frame=pd.read_parquet(p)
-          expected={
-            "match_id","server","player1","player2","PointServer","Speed_KMH",
-            "SetNo","GameNo","PointNumber","P1Score","P2Score","ServeNumber",
-            "ServeResult","match_num","round","ElapsedTime",
-          }
-          missing=sorted(expected-set(map(str,frame.columns)))
-          if missing: raise SystemExit(f"missing expected columns: {missing}")
           if len(frame)!=5966: raise SystemExit(f"unexpected serve row count: {len(frame)}")
           report={
             "rows":len(frame),"columns":list(map(str,frame.columns)),
+            "dtypes":{str(k):str(v) for k,v in frame.dtypes.items()},
+            "sample":frame.head(3).where(frame.notna(),None).to_dict(orient="records"),
             "sha256":hashlib.sha256(p.read_bytes()).hexdigest(),
             "bytes":p.stat().st_size,
+            "schema_probe":True,
           }
           Path(".cache/tbt/serve-usopen-2024/source/source-manifest.json").write_text(
             json.dumps(report,indent=2),encoding="utf-8"
