@@ -2,6 +2,7 @@ from pathlib import Path
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from threading import Lock
+import gzip
 import hashlib
 import hmac
 import logging
@@ -129,7 +130,7 @@ from tbt.services.auth_email import send_blinq_action_email, claim_auth_email_sl
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-COMPARATOR = Path(__file__).parent / "data/comparator.json"
+COMPARATOR = Path(__file__).parent / "data/comparator.json.gz"
 RELEASE = "7.3.6"
 API_VERSION = "3.10.0"
 
@@ -241,7 +242,8 @@ def _load_comparator_artifact() -> dict:
         cached = _COMPARATOR_ARTIFACT_CACHE
         if cached is not None and cached[0] == mtime:
             return cached[1]
-        payload = json.loads(COMPARATOR.read_text(encoding="utf-8"))
+        with gzip.open(COMPARATOR, "rt", encoding="utf-8") as handle:
+            payload = json.load(handle)
         if not isinstance(payload, dict) or int(payload.get("schema") or 0) != 1:
             raise ValueError("invalid comparator artifact")
         _COMPARATOR_ARTIFACT_CACHE = (mtime, payload)
