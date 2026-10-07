@@ -143,6 +143,33 @@ def test_probability_first_odds_buckets_match_product_policy():
     assert meta['top_daily_rule']['value_priority_exclusion'] is True
 
 
+def test_prime_display_ranking_blends_probability_and_relative_odds_without_changing_pool():
+    rows = [
+        row('elite-low-price', .90, 1.08, 4.00, depth=1.0),
+        row('strong-tiny-price', .86, 1.02, 5.00, depth=1.0),
+        row('strong-better-price', .85, 1.49, 2.80, depth=1.0),
+        row('mid-price', .84, 1.20, 3.80, depth=1.0),
+        row('weak-high-price', .74, 1.44, 2.90, depth=1.0),
+    ]
+    sections = select_market_sections(rows)
+    ids = [x['event_id'] for x in sections['prime_picks']]
+
+    # All eligible short-price rows remain available to Comeback Radar.
+    assert set(ids) == {x['event_id'] for x in rows}
+    # Probability stays dominant at large confidence gaps.
+    assert ids.index('elite-low-price') < ids.index('weak-high-price')
+    # But among similarly strong predictions, a much better price can rank higher.
+    assert ids.index('strong-better-price') < ids.index('strong-tiny-price')
+
+    rule = sections['market_selection']['prime_rule']
+    assert rule['display_ranking_only'] is True
+    assert rule['eligibility_pool_unchanged'] is True
+    assert rule['display_weights'] == {
+        'probability_percentile': .75,
+        'odds_percentile': .25,
+    }
+
+
 def test_prime_top_core68_fallback65_and_value65_policy():
     rows = [
         row('p649-prime', .649, 1.40, 3.10, depth=1.0),
