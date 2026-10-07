@@ -223,6 +223,13 @@ def _refresh_history(provider, matches, history_dir, history_store, start, end):
         if (provider_id := _provider_event_id(match)) is not None
     }
     skipped_days: set[str] = set()
+    # Persist canonical history once per refresh instead of rewriting/uploading
+    # the same year after every ATP/WTA calendar response. A normal seven-day
+    # refresh used to serialize and upload the current-year partition up to
+    # sixteen times even though only the final merged state is externally useful.
+    # Keep every provider/identity check unchanged, collect the affected years,
+    # then publish one atomic bundle at the end.
+    affected_years: set[int] = set()
     day = start
     while day <= end:
         day_failed = False
@@ -256,30 +263,14 @@ def _refresh_history(provider, matches, history_dir, history_store, start, end):
                 matches, incoming, day=day, tour=tour
             )
 
-            affected_years = {
+            affected_years.update(
                 match.scheduled_at.astimezone(timezone.utc).year
                 for match in accepted_incoming
-            }
+            )
             for match in accepted_incoming:
                 provider_id = _provider_event_id(match)
                 if provider_id is not None and provider_id in provider_years:
                     affected_years.add(provider_years[provider_id])
-
-            written = []
-            removed = []
-            for year in sorted(affected_years):
-                path, was_removed = sync_year_partition(matches, history_dir, year)
-                if path is not None:
-                    written.append(path)
-                elif was_removed:
-                    removed.append(f"history-{year}.parquet")
-
-            if written or removed:
-                bundle = written + [history_dir / "history_manifest.json"]
-                if removed:
-                    history_store.upload_bundle(bundle, remove_names=removed)
-                else:
-                    history_store.upload_bundle(bundle)
 
             for match in accepted_incoming:
                 provider_id = _provider_event_id(match)
@@ -293,6 +284,23 @@ def _refresh_history(provider, matches, history_dir, history_store, start, end):
             # error in this run.
             pass
         day += timedelta(days=1)
+
+    written = []
+    removed = []
+    for year in sorted(affected_years):
+        path, was_removed = sync_year_partition(matches, history_dir, year)
+        if path is not None:
+            written.append(path)
+        elif was_removed:
+            removed.append(f"history-{year}.parquet")
+
+    if written or removed:
+        bundle = written + [history_dir / "history_manifest.json"]
+        if removed:
+            history_store.upload_bundle(bundle, remove_names=removed)
+        else:
+            history_store.upload_bundle(bundle)
+
     provider._tbt_skipped_history_days = skipped_days
     return matches
 
