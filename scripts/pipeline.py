@@ -1634,6 +1634,7 @@ def main():
         doubles_matches=doubles_completed, doubles_upcoming=doubles_upcoming,
         prior_feed=prior_feed, prior_snapshot=prior_snapshot,
         settlement_matches=settlement_history,
+        comparator_artifact=comparator_artifact,
         betting_day_start_hour=args.betting_day_start_hour,
         morning_refresh=args.morning_refresh,
     )
