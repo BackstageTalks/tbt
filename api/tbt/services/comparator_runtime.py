@@ -85,11 +85,16 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
 
 
 def _resolve(artifact: Mapping, value: str, *, tour: str) -> dict:
-    key = normalize_player_name(value)
+    raw = str(value or "").strip()
+    key = normalize_player_name(raw)
     matches = []
     for player in _players(artifact):
         if str(player.get("tour") or "").lower() != tour:
             continue
+        # Search results submit canonical IDs. Direct typed names remain
+        # supported, but never with fuzzy identity promotion.
+        if raw and str(player.get("player_id") or "") == raw:
+            return player
         names = [str(player.get("name") or "")] + [
             str(alias) for alias in (player.get("aliases") or []) if alias
         ]
