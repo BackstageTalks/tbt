@@ -205,3 +205,49 @@ def test_batch_provider_rate_rejects_values_above_six_rps(monkeypatch):
     monkeypatch.setenv("BLINQ_RAPIDAPI_MAX_RPS", "6.1")
     with pytest.raises(ConfigurationError):
         RapidTennisClient(Settings(rapidapi_key="test"))
+
+
+def test_provider_header_guard_stops_at_configured_reserve(monkeypatch):
+    monkeypatch.setenv("BLINQ_PROVIDER_REQUEST_RESERVE", "1500")
+    monkeypatch.setenv("BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER", "true")
+    client = RapidTennisClient(Settings(rapidapi_key="test"))
+    calls = []
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(
+        lambda req: (
+            calls.append(req.url)
+            or httpx.Response(
+                200,
+                headers={"x-ratelimit-requests-remaining": "1500"},
+                json={"events": []},
+            )
+        )
+    ))
+    client._throttle = lambda: None
+    client.request_limit = 10000
+    try:
+        assert client.live_events() == []
+        assert client.request_count == 1
+        with pytest.raises(RequestBudgetExceeded, match="keeping 1500"):
+            client.live_events()
+        assert client.request_count == 1
+        assert len(calls) == 1
+    finally:
+        client.close()
+
+
+def test_provider_header_guard_fails_closed_when_remaining_header_missing(monkeypatch):
+    monkeypatch.setenv("BLINQ_PROVIDER_REQUEST_RESERVE", "1500")
+    monkeypatch.setenv("BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER", "true")
+    client = RapidTennisClient(Settings(rapidapi_key="test"))
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(
+        lambda req: httpx.Response(200, json={"events": []})
+    ))
+    client._throttle = lambda: None
+    try:
+        with pytest.raises(RequestBudgetExceeded, match="remaining header missing"):
+            client.live_events()
+        assert client.request_count == 1
+    finally:
+        client.close()
