@@ -25,7 +25,7 @@ on:
         type: string
         default: ''
       max_requests:
-        description: Per-run Tennis RapidAPI hard cap, including retries (maximum 1000).
+        description: Per-run Tennis RapidAPI hard cap, including retries (maximum 10000).
         type: number
         default: 1000
       market_odds_max_events:
@@ -120,8 +120,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if ! [[ "$MAX_REQUESTS" =~ ^[0-9]+$ ]] || (( 10#$MAX_REQUESTS < 1 || 10#$MAX_REQUESTS > 1000 )); then
-            echo "::error::MAX_REQUESTS must be 1..1000; refusing provider run."
+          if ! [[ "$MAX_REQUESTS" =~ ^[0-9]+$ ]] || (( 10#$MAX_REQUESTS < 1 || 10#$MAX_REQUESTS > 10000 )); then
+            echo "::error::MAX_REQUESTS must be 1..10000; refusing provider run."
             exit 1
           fi
 
@@ -140,8 +140,8 @@ jobs:
           promote="$(jq -r '.promote // false' "$request")"
           [[ "$promote" == "true" || "$promote" == "false" ]] || { echo "Invalid promote flag"; exit 1; }
           max_requests="$(jq -r '.max_requests // 1000' "$request")"
-          [[ "$max_requests" =~ ^[0-9]+$ ]] && (( 10#$max_requests >= 1 && 10#$max_requests <= 1000 )) || {
-            echo "Invalid max_requests: $max_requests (expected 1..1000)"; exit 1;
+          [[ "$max_requests" =~ ^[0-9]+$ ]] && (( 10#$max_requests >= 1 && 10#$max_requests <= 10000 )) || {
+            echo "Invalid max_requests: $max_requests (expected 1..10000)"; exit 1;
           }
           start_date="$(jq -r '.start // empty' "$request")"
           end_date="$(jq -r '.end // empty' "$request")"
