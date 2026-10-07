@@ -1,0 +1,268 @@
+name: BlinQ Kaggle research bundle integration
+
+on:
+  pull_request:
+    paths:
+      - ".github/kaggle-research-bundle-request.json"
+      - ".github/workflows/kaggle-research-bundle.yml"
+      - "scripts/integrate_kaggle_research_bundle.py"
+      - "tests/test_kaggle_research_bundle.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/kaggle-research-bundle-request.json"
+      - ".github/workflows/kaggle-research-bundle.yml"
+      - "scripts/integrate_kaggle_research_bundle.py"
+      - "tests/test_kaggle_research_bundle.py"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run or write"
+        required: true
+        default: "dry-run"
+        type: choice
+        options: [dry-run, write]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('tbt-kaggle-research-pr-{0}', github.ref) || 'tbt-research-sidecar-writer' }}
+  cancel-in-progress: false
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      REQUEST_FILE: .github/kaggle-research-bundle-request.json
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve controlled mode
+        id: mode
+        env:
+          DISPATCH_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            mode="dry-run"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            mode="$DISPATCH_MODE"
+            [[ -n "$mode" ]] || mode="dry-run"
+          else
+            mode="$(jq -r '.mode // "dry-run"' "$REQUEST_FILE")"
+          fi
+          case "$mode" in dry-run|write) ;; *) exit 1;; esac
+          test "$(jq -r '.provider_api_requests' "$REQUEST_FILE")" = "0"
+          test "$(jq -r '.model_promotion' "$REQUEST_FILE")" = "false"
+          test "$(jq -r '.canonical_match_mutation' "$REQUEST_FILE")" = "false"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "BUNDLE_MODE=$mode" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and test
+        run: |
+          set -euo pipefail
+          python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
+          python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
+          python -m compileall -q scripts/integrate_kaggle_research_bundle.py
+          python -m pytest tests/test_kaggle_research_bundle.py -q
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download and verify four exact Kaggle archives
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/kaggle-research
+          download_source() {
+            local key="$1"
+            local target=".cache/tbt/kaggle-research/$key"
+            mkdir -p "$target/source"
+            local slug sha
+            slug="$(jq -r --arg k "$key" '.sources[$k].slug' "$REQUEST_FILE")"
+            sha="$(jq -r --arg k "$key" '.sources[$k].archive_sha256' "$REQUEST_FILE")"
+            curl --fail --location --retry 6 --retry-delay 3 \
+              "https://www.kaggle.com/api/v1/datasets/download/$slug" \
+              -o "$target/source.zip"
+            test "$(sha256sum "$target/source.zip" | awk '{print $1}')" = "$sha"
+            unzip -q "$target/source.zip" -d "$target/source"
+          }
+          download_source wta_rankings
+          download_source livetennis_pbp
+          download_source pinnacle_sample
+          download_source wimbledon_2024
+
+          test "$(python -c 'import csv; print(sum(1 for _ in csv.DictReader(open(".cache/tbt/kaggle-research/wta_rankings/source/players.csv",encoding="utf-8-sig"))))')" = "9759"
+          test "$(python -c 'import csv; print(sum(1 for _ in csv.DictReader(open(".cache/tbt/kaggle-research/wta_rankings/source/rankings_single.csv",encoding="utf-8-sig"))))')" = "1738366"
+          test "$(python -c 'import csv; print(sum(1 for _ in csv.DictReader(open(".cache/tbt/kaggle-research/wta_rankings/source/rankings_doubles.csv",encoding="utf-8-sig"))))')" = "1698727"
+          test "$(python -c 'import csv; print(sum(1 for _ in csv.DictReader(open(".cache/tbt/kaggle-research/livetennis_pbp/source/matches.csv",encoding="utf-8-sig"))))')" = "173571"
+          test "$(python -c 'import csv; print(sum(1 for _ in csv.DictReader(open(".cache/tbt/kaggle-research/livetennis_pbp/source/players.csv",encoding="utf-8-sig"))))')" = "32678"
+          live_points="$(find .cache/tbt/kaggle-research/livetennis_pbp/source -type f -name 'points_sample_2026-06_final.csv' | head -n1)"
+          test -s "$live_points"
+          test "$(python -c 'import csv,sys; print(sum(1 for _ in csv.DictReader(open(sys.argv[1],encoding="utf-8-sig"))))' "$live_points")" = "951064"
+          test "$(python -c 'import csv; print(sum(1 for _ in csv.DictReader(open(".cache/tbt/kaggle-research/pinnacle_sample/source/Tennis_GrandSlam_Premium_SAMPLE.csv",encoding="utf-8-sig"))))')" = "175"
+          test "$(python -c 'import csv; print(sum(1 for _ in csv.DictReader(open(".cache/tbt/kaggle-research/pinnacle_sample/source/Tennis_GrandSlam_Pure_SAMPLE.csv",encoding="utf-8-sig"))))')" = "20"
+          test "$(python -c 'import csv; print(sum(1 for _ in csv.DictReader(open(".cache/tbt/kaggle-research/wimbledon_2024/source/wimbledon_2024.csv",encoding="utf-8-sig"))))')" = "48155"
+          test "$(python -c 'import csv; print(sum(1 for _ in csv.DictReader(open(".cache/tbt/kaggle-research/wimbledon_2024/source/wimbledon_2024_match_level.csv",encoding="utf-8-sig"))))')" = "252"
+          echo "LIVE_POINTS=$live_points" >> "$GITHUB_ENV"
+
+      - name: Download checksum-verified canonical history
+        run: |
+          set -euo pipefail
+          python -c 'import os; from pathlib import Path; from release_store import ReleaseStore; ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",Path(".cache/tbt/kaggle-research/history")).download(require_bundle_manifest=True)'
+
+      - name: Build all four leakage-safe sidecars
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/kaggle-research/out
+          python scripts/integrate_kaggle_research_bundle.py \
+            --history-dir .cache/tbt/kaggle-research/history \
+            --wta-players .cache/tbt/kaggle-research/wta_rankings/source/players.csv \
+            --wta-singles .cache/tbt/kaggle-research/wta_rankings/source/rankings_single.csv \
+            --wta-doubles .cache/tbt/kaggle-research/wta_rankings/source/rankings_doubles.csv \
+            --live-players .cache/tbt/kaggle-research/livetennis_pbp/source/players.csv \
+            --live-matches .cache/tbt/kaggle-research/livetennis_pbp/source/matches.csv \
+            --live-points "$LIVE_POINTS" \
+            --pinnacle-premium .cache/tbt/kaggle-research/pinnacle_sample/source/Tennis_GrandSlam_Premium_SAMPLE.csv \
+            --pinnacle-pure .cache/tbt/kaggle-research/pinnacle_sample/source/Tennis_GrandSlam_Pure_SAMPLE.csv \
+            --wimbledon-points .cache/tbt/kaggle-research/wimbledon_2024/source/wimbledon_2024.csv \
+            --wimbledon-matches .cache/tbt/kaggle-research/wimbledon_2024/source/wimbledon_2024_match_level.csv \
+            --out-dir .cache/tbt/kaggle-research/out
+
+      - name: Validate bundle report
+        run: |
+          set -euo pipefail
+          r=.cache/tbt/kaggle-research/out/report.json
+          test "$(jq -r '.status' "$r")" = "ready_to_publish_research_sidecars"
+          test "$(jq -r '.canonical_match_mutated' "$r")" = "false"
+          test "$(jq -r '.provider_api_requests' "$r")" = "0"
+          test "$(jq -r '.model_promoted' "$r")" = "false"
+          test "$(jq -r '.identity_safety.quarantined_rows' "$r")" = "0"
+
+          test "$(jq -r '.wta_rankings.counts.players_safe_mapped // 0' "$r")" -gt 0
+          test "$(jq -r '.wta_rankings.counts.singles_sidecar_rows // 0' "$r")" -gt 0
+          test "$(jq -r '.wta_rankings.counts.doubles_sidecar_rows // 0' "$r")" -gt 0
+          test "$(jq -r '.wta_rankings.counts.singles_snapshot_conflicts // 0' "$r")" = "0"
+          test "$(jq -r '.wta_rankings.counts.doubles_snapshot_conflicts // 0' "$r")" = "0"
+
+          test "$(jq -r '.livetennis_pbp.counts.point_source_matches // 0' "$r")" -gt 0
+          test "$(jq -r '.livetennis_pbp.counts.matches_safe_mapped // 0' "$r")" -gt 0
+          test "$(jq -r '.livetennis_pbp.counts.points_sidecar_rows // 0' "$r")" -gt 0
+
+          test "$(jq -r '.pinnacle_sample.counts.pure_sidecar_rows // 0' "$r")" -gt 0
+          test "$(jq -r '.pinnacle_sample.counts.premium_sidecar_rows // 0' "$r")" -gt 0
+          test "$(jq -r '.pinnacle_sample.counts.source_match_mapping_conflicts // 0' "$r")" = "0"
+
+          test "$(jq -r '.wimbledon_2024.counts.match_sidecar_rows // 0' "$r")" -gt 0
+          test "$(jq -r '.wimbledon_2024.counts.point_sidecar_rows // 0' "$r")" -gt 0
+
+      - name: Publish private sidecar release
+        if: ${{ steps.mode.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          tag="$(jq -r '.output.release_tag' "$REQUEST_FILE")"
+          if ! gh release view "$tag" -R "$TBT_DATA_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" -R "$TBT_DATA_REPOSITORY" \
+              --title "BlinQ Kaggle research integration 2026-10-07" \
+              --notes "Leakage-safe research/candidate sidecars for WTA rankings, LiveTennis PBP, Pinnacle market path and Wimbledon 2024."
+          fi
+          for file in .cache/tbt/kaggle-research/out/*.jsonl.gz; do
+            test -s "$file" || continue
+            gh release upload "$tag" "$file" -R "$TBT_DATA_REPOSITORY" --clobber
+          done
+          cp .cache/tbt/kaggle-research/out/report.json /tmp/kaggle-research-report.json
+          gh release upload "$tag" /tmp/kaggle-research-report.json -R "$TBT_DATA_REPOSITORY" --clobber
+
+      - name: Read back release and verify checksums
+        if: ${{ steps.mode.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          tag="$(jq -r '.output.release_tag' "$REQUEST_FILE")"
+          rm -rf .cache/tbt/kaggle-research/readback
+          mkdir -p .cache/tbt/kaggle-research/readback
+          gh release download "$tag" -R "$TBT_DATA_REPOSITORY" -D .cache/tbt/kaggle-research/readback
+          python -c 'import json,hashlib; from pathlib import Path; r=json.loads(Path(".cache/tbt/kaggle-research/out/report.json").read_text()); root=Path(".cache/tbt/kaggle-research/readback"); bad=[]; [(bad.append(f["name"]) if (not (root/f["name"]).is_file() or hashlib.sha256((root/f["name"]).read_bytes()).hexdigest()!=f["sha256"]) else None) for f in r["files"]]; assert not bad, f"sidecar checksum mismatch: {bad}"; print(json.dumps({"verified_files":len(r["files"])},indent=2))'
+
+      - name: Persist integration audit and update four backup manifests
+        if: ${{ steps.mode.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          audit_path="$(jq -r '.output.audit_path' "$REQUEST_FILE")"
+          encoded="$(base64 -w0 .cache/tbt/kaggle-research/out/report.json)"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$audit_path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$audit_path" \
+              -f message="Integrate Kaggle research bundle run $GITHUB_RUN_ID" -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$audit_path" \
+              -f message="Integrate Kaggle research bundle run $GITHUB_RUN_ID" -f content="$encoded" >/dev/null
+          fi
+
+          update_manifest() {
+            local path="$1" section="$2"
+            local sha
+            sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha)"
+            gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .content | tr -d '\n' | base64 -d > /tmp/source-manifest.json
+            jq \
+              --arg section "$section" \
+              --arg run "$GITHUB_RUN_ID" \
+              --arg commit "$GITHUB_SHA" \
+              --arg tag "$(jq -r '.output.release_tag' "$REQUEST_FILE")" \
+              --slurpfile report .cache/tbt/kaggle-research/out/report.json \
+              '.promotion_status="integrated_research_sidecar"
+               | .integration={
+                   status:"success",
+                   layer:"research_sidecar",
+                   github_run_id:$run,
+                   commit:$commit,
+                   release_tag:$tag,
+                   provider_api_requests:0,
+                   model_promoted:false,
+                   canonical_match_mutated:false,
+                   result:$report[0][$section]
+                 }' /tmp/source-manifest.json > /tmp/source-manifest-updated.json
+            local encoded2
+            encoded2="$(base64 -w0 /tmp/source-manifest-updated.json)"
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
+              -f message="Mark $section Kaggle source integrated run $GITHUB_RUN_ID" \
+              -f content="$encoded2" -f sha="$sha" >/dev/null
+          }
+
+          update_manifest "backup/kaggle/2026-10-07/bwandowando_womens-tennis-association-rankings/manifest.json" "wta_rankings"
+          update_manifest "backup/kaggle/2026-10-07/livetennisapi_tennis-point-by-point-dataset-atp-to-itf/manifest.json" "livetennis_pbp"
+          update_manifest "backup/kaggle/2026-10-07/oliviersportsdata_tennis-grand-slam-pinnacle-pure/manifest.json" "pinnacle_sample"
+          update_manifest "backup/kaggle/2026-10-07/rewantbhriguvanshi_wimbledon-2024-point-and-match-level-statistics/manifest.json" "wimbledon_2024"
+
+      - name: Verify persisted manifest readback
+        if: ${{ steps.mode.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          for path in \
+            "backup/kaggle/2026-10-07/bwandowando_womens-tennis-association-rankings/manifest.json" \
+            "backup/kaggle/2026-10-07/livetennisapi_tennis-point-by-point-dataset-atp-to-itf/manifest.json" \
+            "backup/kaggle/2026-10-07/oliviersportsdata_tennis-grand-slam-pinnacle-pure/manifest.json" \
+            "backup/kaggle/2026-10-07/rewantbhriguvanshi_wimbledon-2024-point-and-match-level-statistics/manifest.json"
+          do
+            test "$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .content | tr -d '\n' | base64 -d | jq -r '.promotion_status')" = "integrated_research_sidecar"
+            test "$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .content | tr -d '\n' | base64 -d | jq -r '.integration.status')" = "success"
+          done
+
+      - name: Upload compact evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kaggle-research-bundle-${{ github.run_id }}
+          path: .cache/tbt/kaggle-research/out/report.json
+          if-no-files-found: warn
+          retention-days: 30
