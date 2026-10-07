@@ -659,10 +659,16 @@ def scan_match_statuses(
             continue
         old = prior_pending.get(eid)
         old = old if isinstance(old, dict) else {}
+        previous_side = str(old.get("n") or "").strip()
+        if previous_side not in {"1", "2"}:
+            # Older snapshots did not persist which participant had last been
+            # queried. If the row was already checked, start with player2 on
+            # the next run so a tight near-call cap cannot starve that side.
+            previous_side = "2" if str(old.get("c") or "").strip() else "1"
         compact = {
             "t": scheduled.isoformat(), "s": selection,
             "a": player1, "b": player2, "c": str(old.get("c") or "")[:64],
-            "p": "1",
+            "p": "1", "n": previous_side,
         }
         # Keep postponed fixtures in the queue, without querying future starts.
         if eid in prior_pending:
@@ -808,7 +814,11 @@ def scan_match_statuses(
             break
         next_due_id = ordered[(position + 1) % len(ordered)][1]
 
-        player_id = _player_id(row, "player1")
+        pending_state = pending.get(eid) if isinstance(pending.get(eid), dict) else {}
+        near_side = str(pending_state.get("n") or "1")
+        primary_key = "player2" if near_side == "2" else "player1"
+        secondary_key = "player1" if primary_key == "player2" else "player2"
+        player_id = _player_id(row, primary_key)
         checked += 1
         previous_checked_at = ""
         if eid in pending:
@@ -898,21 +908,21 @@ def scan_match_statuses(
         # player2. Try the other participant before leaving a finished match
         # permanently pending. The existing near/request caps still bound cost.
         if event is None and near_used:
-            player2_id = _player_id(row, "player2")
+            second_player_id = _player_id(row, secondary_key)
             if (
-                player2_id
-                and player2_id != player_id
+                second_player_id
+                and second_player_id != player_id
                 and near_attempts < max_near_checks
                 and callable(near_method)
             ):
                 try:
-                    if player2_id in near_cache:
-                        second_payload = near_cache[player2_id]
+                    if second_player_id in near_cache:
+                        second_payload = near_cache[second_player_id]
                     else:
                         near_attempts += 1
                         nominal_requests += 1
-                        second_payload = near_method(player2_id)
-                        near_cache[player2_id] = second_payload
+                        second_payload = near_method(second_player_id)
+                        near_cache[second_player_id] = second_payload
                     successful_history += 1
                     event = next(
                         (candidate for candidate in _provider_rows(second_payload)
@@ -930,6 +940,12 @@ def scan_match_statuses(
                         next_due_id = eid
                         break
         if event is None:
+            if eid in pending:
+                # Rotate the primary participant for the next scheduler run.
+                # This guarantees both sides eventually get queried even when
+                # BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS equals the due-row count,
+                # without increasing the per-run API ceiling.
+                pending[eid]["n"] = "1" if primary_key == "player2" else "2"
             unmatched += 1
             continue
         matched_events += 1
