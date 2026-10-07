@@ -292,6 +292,32 @@ def test_near_404_fails_fast_without_fabricating_any_result():
     assert snapshot["provider_requests"] == 4
 
 
+def test_near_fallback_checks_second_player_when_first_players_near_event_misses_target():
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    row = _row("101", "11", (now-timedelta(hours=2)).isoformat())
+    row["player1"] = {"id": "11"}
+    row["player2"] = {"id": "22"}
+
+    unrelated = _event("999")
+    unrelated["homeTeam"] = {"id": "11"}
+    unrelated["awayTeam"] = {"id": "33"}
+    target = _event("101", winner_code=2)
+    target["homeTeam"] = {"id": "11"}
+    target["awayTeam"] = {"id": "22"}
+
+    provider = _NearFallbackProvider({"11": unrelated, "22": target})
+    snapshot = scan_match_statuses(
+        {"upcoming": [row]}, provider,
+        {"preferred_route": "near"}, now=now, max_checks=10, max_near_checks=10,
+    )
+
+    assert provider.near_calls == ["11", "22"]
+    assert snapshot["statuses"]["101"]["status"] == "loss"
+    assert snapshot["newly_resolved"] == 1
+    assert snapshot["matched_events"] == 1
+    assert snapshot["unmatched"] == 0
+
+
 def test_near_mismatched_event_is_not_scored():
     now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
     bad = _event()
