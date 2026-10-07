@@ -117,6 +117,7 @@ def _summary(buckets: list[list[int]], slot: int) -> dict[str, Any]:
         "global_spent": total,
         "global_remaining": global_remaining,
         "reserved_provider_headroom": PROVIDER_RESERVE,
+        "purpose_limits": dict(PURPOSE_CAPS),
         "spent": spent,
         "remaining": {name: min(global_remaining, max(0, PURPOSE_CAPS[name] - spent[name]))
                       for name in PURPOSE_CAPS},
