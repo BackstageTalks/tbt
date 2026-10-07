@@ -413,11 +413,12 @@
   }
   function heroSocialLinksHtml(content={},preview=false,standalone=false){
     const links=['telegram','youtube','instagram','facebook','x','tiktok'].map(network=>{
-      const href=safeExternalUrl(content[`social_${network}`]);
+      const legacy=content[`social_${network}`];
+      const href=safeExternalUrl(content[`social_${network}_link`]||legacy);
       if(!href)return '';
-      const label=bannerSocialLabel(network);
-      const display=href.replace(/^https:\/\//i,'').replace(/\/$/,'');
-      return `<a class="hero-social-link social-${network}" href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="${escapeHtml(label)}" title="${escapeHtml(href)}" ${preview?'tabindex="-1"':''}>${bannerSocialIcon(network)}<span>${escapeHtml(display)}</span></a>`;
+      const networkLabel=bannerSocialLabel(network);
+      const text=String(content[`social_${network}_text`]||networkLabel).trim()||networkLabel;
+      return `<a class="hero-social-link social-${network}" href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="${escapeHtml(networkLabel)}" title="${escapeHtml(href)}" ${preview?'tabindex="-1"':''}>${bannerSocialIcon(network)}<span>${escapeHtml(text)}</span></a>`;
     }).filter(Boolean).join('');
     return links?`<div class="hero-social-links${standalone?' hero-social-standalone':''}" aria-label="Sociálne siete">${links}</div>`:'';
   }
@@ -3819,7 +3820,7 @@
         <div class="admin-banner-social-editor span-2">
           <div class="admin-form-section-title"><strong>Sociálne odkazy</strong><span>Ikona + aktívny modrý hyperlink. Prázdny link sa nezobrazí.</span></div>
           <div class="admin-banner-social-grid">
-            ${['telegram','youtube','instagram','facebook','x','tiktok'].map(network=>`<label><span>${bannerSocialLabel(network)}</span><input data-simple-banner-field="social_${network}" value="${escapeHtml(c[`social_${network}`]||'')}" placeholder="https://..."></label>`).join('')}
+            ${['telegram','youtube','instagram','facebook','x','tiktok'].map(network=>`<div class="admin-banner-social-row"><strong>${bannerSocialLabel(network)}</strong><label><span>Text</span><input data-simple-banner-field="social_${network}_text" value="${escapeHtml(c[`social_${network}_text`]||bannerSocialLabel(network))}" placeholder="${bannerSocialLabel(network)}"></label><label><span>Link</span><input data-simple-banner-field="social_${network}_link" value="${escapeHtml(c[`social_${network}_link`]||c[`social_${network}`]||'')}" placeholder="https://..."></label></div>`).join('')}
           </div>
         </div>
       </div></div>
