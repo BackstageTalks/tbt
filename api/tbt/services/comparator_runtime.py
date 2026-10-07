@@ -238,6 +238,11 @@ def compare_from_artifact(
     model = artifact.get("model")
     if not isinstance(model, dict):
         raise RuntimeComparatorError("missing portable model")
+    model_features = set(model.get("feature_names") or [])
+    if model_features & set(ATP_RANK_HISTORY_FEATURE_NAMES) and not isinstance(atp_rank_state, dict):
+        raise RuntimeComparatorError("missing ATP rank-history state")
+    if model_features & set(WTA_RANK_HISTORY_FEATURE_NAMES) and not isinstance(wta_rank_state, dict):
+        raise RuntimeComparatorError("missing WTA rank-history state")
     missing = [name for name in model.get("feature_names") or [] if name not in features]
     if missing:
         raise RuntimeComparatorError("missing model features: " + ", ".join(missing))
