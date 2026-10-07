@@ -6,6 +6,7 @@ import math
 import numpy as np
 
 from tbt.schemas import MatchRecord
+from tbt.services.engine import predict
 from tbt.services.comparator import (
     AmbiguousPlayerError,
     ComparatorError,
@@ -146,3 +147,34 @@ def test_comparator_rejects_invalid_context():
         pass
     else:
         raise AssertionError("unsupported surface must be rejected")
+
+
+def test_prediction_context_is_returned_for_comparator_artifact_build():
+    upcoming = MatchRecord(
+        match_id="future-a-b",
+        tour="atp",
+        scheduled_at=BASE + timedelta(hours=2),
+        player1_id="a",
+        player1_name="Alpha One",
+        player2_id="b",
+        player2_name="Beta Two",
+        surface="hard",
+        player1_rank=10,
+        player2_rank=40,
+        status="upcoming",
+        best_of=3,
+    )
+    rows, context = predict(
+        FakeModel(),
+        history(),
+        [upcoming],
+        now=BASE,
+        return_context=True,
+    )
+    assert len(rows) == 1
+    assert context["cutoff"] == BASE.replace(hour=0, minute=0, second=0, microsecond=0)
+    assert context["builder"].player_key("atp", "a") in context["builder"].players
+    assert context["builder"].player_key("atp", "b") in context["builder"].players
+    assert context["replay_history"]
+
+# Integration revalidation: presentation enrichment is non-blocking on current main.
