@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "requested_at": "2026-10-07T10:47:00+02:00",
+  "action": "collect_wikidata_tennis_identity_sidecar",
+  "source": "Wikidata structured data (CC0)",
+  "properties": {
+    "atp_player_id": "P536",
+    "wta_player_id": "P597",
+    "world_tennis_id": "P8618",
+    "legacy_itf_id": "P599",
+    "tennis_abstract_id": "P10028",
+    "birth_date": "P569",
+    "country": "P27/P298",
+    "playing_hand": "P741"
+  },
+  "policy": "research sidecar only; exact-name fail-closed canonical links; ATP/WTA tour-specific ID required; no fuzzy matching; no canonical mutation; no model promotion"
+}
