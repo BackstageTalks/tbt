@@ -24,6 +24,7 @@ PLAYER_PROFILE_ASSET = "player_profiles.json"
 PLAYER_PHOTO_ASSET = "player_photos.zip"
 TOURNAMENT_PROFILE_ASSET = "tournament_profiles.json"
 TOURNAMENT_LOGO_ASSET = "tournament_logos.zip"
+COMPARATOR_ASSET = "comparator.json"
 
 
 def _prediction_asset_state(store: ReleaseStore) -> str:
@@ -408,6 +409,42 @@ def _attach_player_assets(payload: dict, repository: str) -> dict:
     return payload
 
 
+
+def _deploy_comparator_artifact(source: Path) -> dict:
+    target = ROOT / "api/data/comparator.json"
+    if not source.is_file():
+        target.unlink(missing_ok=True)
+        return {"available": False, "reason": "release_asset_missing"}
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        target.unlink(missing_ok=True)
+        raise ValueError("Invalid comparator JSON artifact") from exc
+    if (
+        not isinstance(payload, dict)
+        or int(payload.get("schema") or 0) != 1
+        or not isinstance(payload.get("model"), dict)
+        or int((payload.get("model") or {}).get("schema") or 0) != 1
+        or not isinstance(payload.get("feature_state"), dict)
+        or not isinstance(payload.get("players"), list)
+        or not payload.get("generated_at")
+        or not payload.get("cutoff_utc")
+    ):
+        target.unlink(missing_ok=True)
+        raise ValueError("Comparator artifact failed serving schema validation")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps(payload, ensure_ascii=False, allow_nan=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    return {
+        "available": True,
+        "players": len(payload["players"]),
+        "model_version": str((payload.get("model") or {}).get("model_version") or ""),
+        "generated_at": payload.get("generated_at"),
+        "cutoff_utc": payload.get("cutoff_utc"),
+    }
+
 def main() -> None:
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -422,10 +459,14 @@ def main() -> None:
         store = ReleaseStore(repository, "tbt-predictions-v1", cache)
         state = _prediction_asset_state(store)
         if state == "complete":
+            assets = store._asset_names()
+            optional = (COMPARATOR_ASSET,) if COMPARATOR_ASSET in assets else ()
             store.download(
-                extra_names=("feed.json", "ledger.json"),
+                extra_names=("feed.json", "ledger.json", *optional),
                 required_names=("feed.json", "ledger.json"),
             )
+            comparator_status = _deploy_comparator_artifact(cache / COMPARATOR_ASSET)
+            print("Comparator serving artifact:", json.dumps(comparator_status, ensure_ascii=False))
             payload = read_feed(cache / "feed.json")
             ledger = json.loads((cache / "ledger.json").read_text(encoding="utf-8"))
             validate_publication_candidate(payload, ledger)
@@ -449,6 +490,10 @@ def main() -> None:
         json.dumps(payload, ensure_ascii=False, allow_nan=False),
         encoding="utf-8",
     )
+    comparator_target = ROOT / "api/data/comparator.json"
+    if not os.getenv("GH_TOKEN") or not comparator_target.is_file():
+        # Never package a checked-in/stale comparator snapshot.
+        comparator_target.unlink(missing_ok=True)
     print(
         "Serving snapshot ready:",
         payload.get("ready", False),
