@@ -239,6 +239,8 @@ class WTARankHistory:
         # historical maximum are ignored rather than allowed to rewrite history.
         historical_max_date = base_max_date
         current_seen = {}
+        current_rows = {}
+        ambiguous_current_keys = set()
         for path in current_paths:
             for row in parsed_rows(path):
                 source_date = row["date"]
@@ -246,15 +248,25 @@ class WTARankHistory:
                     continue
                 key = (row["sackmann_player_id"], source_date)
                 signature = (row["rank"], row["points"])
+                if key in ambiguous_current_keys:
+                    continue
                 previous = current_seen.get(key)
                 if previous is not None:
                     if previous != signature:
-                        raise ValueError(
-                            f"Conflicting pinned WTA current rank row for "
-                            f"{key[0]} on {source_date}"
+                        ambiguous_current_keys.add(key)
+                        current_seen.pop(key, None)
+                        current_rows.pop(key, None)
+                        logger.warning(
+                            "Quarantining conflicting pinned WTA current rank "
+                            "row for %s on %s: previous=%s incoming=%s",
+                            key[0], source_date, previous, signature,
                         )
                     continue
                 current_seen[key] = signature
+                current_rows[key] = row
+
+        for key, row in current_rows.items():
+            if key not in ambiguous_current_keys:
                 add_pinned(row, source_kind="current")
 
         if not historical_paths and not current_paths:
