@@ -586,7 +586,7 @@ def _select_authorized_rows(
         elif visible_count > 0 and source:
             # Pure-function fallback for tests/legacy callers. Production feed
             # requests persist the allocation in account metadata first.
-            pool=source[:min(len(source),10)]
+            pool=_stable_random_pool(source,access=access,section=section)
             ordered=_stable_order(pool,access=access,section=section)
             allocated_keys={_row_access_key(row) for row in ordered[:min(visible_count,len(pool))]}
 
