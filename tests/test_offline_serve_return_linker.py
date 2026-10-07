@@ -60,7 +60,7 @@ def write_source(path: Path, **overrides):
         writer.writerow(row)
 
 
-def run_linker(tmp_path: Path, matches: list[MatchRecord], source: Path | None = None, charting: Path | None = None):
+def run_linker(tmp_path: Path, matches: list[MatchRecord], source: Path | None = None, charting: Path | None = None, kaggle_hwaitt: Path | None = None):
     history = tmp_path / "history"
     history.mkdir()
     write_year_partition(matches, history, 2024)
@@ -74,6 +74,8 @@ def run_linker(tmp_path: Path, matches: list[MatchRecord], source: Path | None =
         cmd += ["--source-csv", str(source)]
     if charting is not None:
         cmd += ["--charting-zip", str(charting)]
+    if kaggle_hwaitt is not None:
+        cmd += ["--kaggle-hwaitt-csv", str(kaggle_hwaitt)]
     subprocess.run(cmd, cwd=ROOT, check=True)
     report = json.loads((out / "report.json").read_text())
     staged = [json.loads(x) for x in (out / "auto_linked.jsonl").read_text().splitlines() if x.strip()]
@@ -237,3 +239,75 @@ def test_charting_round_conflict_still_fails_closed(tmp_path):
     assert report["counts"]["weak_evidence"] == 1
     assert review[0]["reason"] == "weak_evidence"
     assert "round_conflict" in review[0]["evidence"]
+
+
+def write_hwaitt_source(path: Path, **overrides):
+    fields = [
+        "ID", "GameD", "TName", "Name_1", "Name_2", "GRes_CUR_1", "Surface",
+        "Aces_1", "DoubleFaults_1", "Serve1st_1", "ServesTotal_1",
+        "Serve1stWon_1", "Serve2ndWon_1", "ReceivingPointsWon_1",
+        "ReceivingPointsTotal_1", "BreakPointsConverted_1", "BreakPointsTotal_1",
+        "Aces_2", "DoubleFaults_2", "Serve1st_2", "ServesTotal_2",
+        "Serve1stWon_2", "Serve2ndWon_2", "ReceivingPointsWon_2",
+        "ReceivingPointsTotal_2", "BreakPointsConverted_2", "BreakPointsTotal_2",
+        "Aces_A_1", "Aces_L5_1", "Result_CUR_1",
+    ]
+    row = {
+        "ID": "1", "GameD": "2024-01-05", "TName": "Brisbane",
+        "Name_1": "Roman Safiullin", "Name_2": "Matteo Arnaldi",
+        "GRes_CUR_1": "1.0", "Surface": "1.0",
+        "Aces_1": "9", "DoubleFaults_1": "3", "Serve1st_1": "43",
+        "ServesTotal_1": "73", "Serve1stWon_1": "36", "Serve2ndWon_1": "14",
+        "ReceivingPointsWon_1": "26", "ReceivingPointsTotal_1": "69",
+        "BreakPointsConverted_1": "3", "BreakPointsTotal_1": "8",
+        "Aces_2": "3", "DoubleFaults_2": "2", "Serve1st_2": "37",
+        "ServesTotal_2": "69", "Serve1stWon_2": "27", "Serve2ndWon_2": "16",
+        "ReceivingPointsWon_2": "23", "ReceivingPointsTotal_2": "73",
+        "BreakPointsConverted_2": "3", "BreakPointsTotal_2": "10",
+        # Deliberately dangerous/derived fields: parser must ignore all of them.
+        "Aces_A_1": "999", "Aces_L5_1": "888", "Result_CUR_1": "7-6 6-2",
+    }
+    row.update({k: str(v) for k, v in overrides.items()})
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerow(row)
+
+
+def test_hwaitt_raw_match_stats_link_without_derived_feature_leakage(tmp_path):
+    source = tmp_path / "atp.csv"
+    write_hwaitt_source(source)
+    report, staged, review, quarantine = run_linker(
+        tmp_path, [canonical()], kaggle_hwaitt=source
+    )
+    assert report["api_requests"] == 0
+    assert report["counts"]["identity_linked"] == 1
+    assert report["counts"]["staged_matches"] == 1
+    assert report["quality_ready_projected_added"] == 1
+    assert not review
+    assert not quarantine
+
+    stats = staged[0]["incoming_stats"]
+    assert stats["p1_aces"] == 9.0
+    assert stats["p1_double_faults"] == 3.0
+    assert stats["p1_first_serve_win"] == 36 / 43
+    assert stats["p1_second_serve_win"] == 14 / (73 - 43)
+    assert stats["p1_service_points_won"] == (36 + 14) / 73
+    assert stats["p1_return_points_won"] == 26 / 69
+    assert stats["p1_break_point_return_win"] == 3 / 8
+    assert stats["p2_return_points_won"] == 23 / 73
+    assert 999.0 not in stats.values()
+    assert 888.0 not in stats.values()
+    assert all("_A" not in key and "_L5" not in key and "CUR" not in key for key in stats)
+
+
+def test_hwaitt_winner_conflict_fails_closed(tmp_path):
+    source = tmp_path / "atp.csv"
+    write_hwaitt_source(source, GRes_CUR_1="0.0")
+    report, staged, review, quarantine = run_linker(
+        tmp_path, [canonical()], kaggle_hwaitt=source
+    )
+    assert not staged
+    assert not quarantine
+    assert report["counts"]["weak_evidence"] == 1
+    assert "winner_conflict" in review[0]["evidence"]
