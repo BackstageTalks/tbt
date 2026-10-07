@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import math
 import os
@@ -670,8 +671,10 @@ def _publish_predictions(
         store.directory / "daily_offer_snapshot.json",
     ]
     if isinstance(comparator_artifact, dict):
-        write_json(store.directory / "comparator.json", clean(comparator_artifact))
-        bundle.append(store.directory / "comparator.json")
+        comparator_path = store.directory / "comparator.json.gz"
+        with gzip.open(comparator_path, "wt", encoding="utf-8", compresslevel=6) as handle:
+            json.dump(clean(comparator_artifact), handle, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        bundle.append(comparator_path)
     store.upload_bundle(bundle)
     return feed
 
