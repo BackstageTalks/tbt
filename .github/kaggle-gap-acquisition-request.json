@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "mode": "audit-backup-only",
+  "purpose": "Download, audit, and permanently back up high-value Kaggle tennis gap candidates before any canonical mutation.",
+  "safety": {
+    "canonical_mutation": false,
+    "provider_api_requests": 0,
+    "model_promotion": false,
+    "fail_closed_on_ambiguous_identity": true
+  },
+  "backup": {
+    "repository": "BackstageTalks/tbt-data",
+    "root": "backup/kaggle/2026-10-07",
+    "raw_chunk_bytes": 12582912,
+    "persist_raw_archives": true,
+    "persist_audit": true
+  },
+  "sources": [
+    {
+      "slug": "alimoh89/tennis-results-and-betting-odds-20142025",
+      "grade": "A/B",
+      "license_status": "review_required_other",
+      "intended_use": "historical match-winner/game-handicap/total-games market gap audit"
+    },
+    {
+      "slug": "bwandowando/womens-tennis-association-rankings",
+      "grade": "A/B",
+      "license_status": "Apache-2.0",
+      "intended_use": "weekly WTA singles/doubles ranking coverage audit"
+    },
+    {
+      "slug": "livetennisapi/tennis-point-by-point-dataset-atp-to-itf",
+      "grade": "A",
+      "license_status": "CC-BY-NC-4.0",
+      "intended_use": "timestamped observed PBP and player crosswalk research"
+    },
+    {
+      "slug": "oliviersportsdata/tennis-grand-slam-pinnacle-pure",
+      "grade": "A",
+      "license_status": "CC-BY-NC-4.0",
+      "intended_use": "Pinnacle pre-match price-path research sample"
+    },
+    {
+      "slug": "rewantbhriguvanshi/wimbledon-2024-point-and-match-level-statistics",
+      "grade": "B",
+      "license_status": "Apache-2.0",
+      "intended_use": "serve-speed/rally/net/break-point provenance audit"
+    }
+  ],
+  "requested_at_utc": "2026-10-07T10:45:00Z"
+}
