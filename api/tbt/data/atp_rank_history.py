@@ -274,6 +274,66 @@ class ATPRankHistory:
         return out
 
 
+    def export_state(self, players, *, as_of_date, lookback_days: int = 140) -> dict:
+        """Export only the recent weekly state needed for current serving.
+
+        Twelve-week momentum needs a snapshot around 84 days ago plus the
+        allowed 21-day lookup age. 140 days leaves margin for weekends/holidays
+        without shipping the full historical archive to the web artifact.
+        Career-best is already cumulative in each retained row.
+        """
+        start = as_of_date - timedelta(days=max(120, int(lookback_days)))
+        names = {
+            _norm_name(row.get("name"))
+            for row in players
+            if isinstance(row, dict) and str(row.get("tour") or "").lower() == "atp"
+        }
+        histories = {}
+        for key in sorted(name for name in names if name):
+            dates = self._dates.get(key) or []
+            rows = []
+            for idx, source_date in enumerate(dates):
+                if source_date < start or source_date > as_of_date:
+                    continue
+                rows.append([
+                    source_date.isoformat(),
+                    int(self._ranks[key][idx]),
+                    self._points[key][idx],
+                    int(self._career_best[key][idx]),
+                ])
+            if rows:
+                histories[key] = rows
+        return {
+            "schema": 1,
+            "as_of_date": as_of_date.isoformat(),
+            "lookback_days": max(120, int(lookback_days)),
+            "players": histories,
+        }
+
+    @classmethod
+    def from_state(cls, state: dict) -> "ATPRankHistory":
+        if not isinstance(state, dict) or int(state.get("schema") or 0) != 1:
+            raise ValueError("Invalid ATP rank-history state")
+        obj = cls.__new__(cls)
+        obj._dates, obj._ranks, obj._points, obj._career_best = {}, {}, {}, {}
+        for key, rows in (state.get("players") or {}).items():
+            if not isinstance(rows, list):
+                raise ValueError("Invalid ATP rank-history player state")
+            dates, ranks, points, bests = [], [], [], []
+            for row in rows:
+                if not isinstance(row, list) or len(row) != 4:
+                    raise ValueError("Invalid ATP rank-history snapshot")
+                dates.append(datetime.fromisoformat(str(row[0])).date())
+                ranks.append(int(row[1]))
+                points.append(None if row[2] is None else int(row[2]))
+                bests.append(int(row[3]))
+            obj._dates[str(key)] = dates
+            obj._ranks[str(key)] = ranks
+            obj._points[str(key)] = points
+            obj._career_best[str(key)] = bests
+        return obj
+
+
 def coverage_summary(rows: Iterable[dict[str, float]]) -> dict[str, float | int]:
     materialized = list(rows)
     count = len(materialized)
