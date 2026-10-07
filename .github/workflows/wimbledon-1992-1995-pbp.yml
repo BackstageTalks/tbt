@@ -1,0 +1,140 @@
+name: Acquire and audit Wimbledon 1992-1995 PBP
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/wimbledon-1992-1995-pbp-request.json"
+      - ".github/workflows/wimbledon-1992-1995-pbp.yml"
+      - "scripts/audit_figshare_wimbledon_2023.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-research-sidecar-writer
+  cancel-in-progress: false
+
+jobs:
+  acquire-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      RELEASE_TAG: tbt-research-sources-v1
+      FIGSHARE_FILE_ID: "39016655"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and test isolated auditor
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest openpyxl
+          python -m pytest tests/test_figshare_wimbledon_2023.py -q
+          python -m compileall -q scripts/audit_figshare_wimbledon_2023.py
+
+      - name: Verify private research destination
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download exact CC BY 4.0 historical Wimbledon workbook
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/wimbledon-historical-pbp
+          mkdir -p .cache/tbt/wimbledon-historical-pbp/{source,extract,audit}
+          url="https://uvaauas.figshare.com/ndownloader/files/$FIGSHARE_FILE_ID"
+          curl --fail --location --retry 5 --retry-delay 4 "$url"             -o .cache/tbt/wimbledon-historical-pbp/source/wimbledon-1992-1995-v3.xlsx
+          test "$(stat -c %s .cache/tbt/wimbledon-historical-pbp/source/wimbledon-1992-1995-v3.xlsx)" -gt 10000000
+          cp .cache/tbt/wimbledon-historical-pbp/source/wimbledon-1992-1995-v3.xlsx             .cache/tbt/wimbledon-historical-pbp/extract/wimbledon-1992-1995.xlsx
+          python - <<'PY'
+          import pandas as pd
+          p=".cache/tbt/wimbledon-historical-pbp/source/wimbledon-1992-1995-v3.xlsx"
+          sheets=pd.ExcelFile(p).sheet_names
+          if len(sheets)<2: raise SystemExit(f"unexpected workbook sheets: {sheets}")
+          print("sheets:", sheets)
+          PY
+
+      - name: Audit actual workbook schema
+        run: |
+          set -euo pipefail
+          python scripts/audit_figshare_wimbledon_2023.py             --source-dir .cache/tbt/wimbledon-historical-pbp/extract             --out .cache/tbt/wimbledon-historical-pbp/audit/report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path(".cache/tbt/wimbledon-historical-pbp/audit/report.json")
+          r=json.loads(p.read_text())
+          r["source"]="Analyzing Wimbledon - The Power of Statistics"
+          r["doi"]="10.21942/uva.21983555"
+          r["version"]=3
+          r["license"]="CC BY 4.0"
+          r["expected_historical_scope"]={
+            "years":"1992-1995",
+            "mens_matches":256,
+            "mens_points":59466,
+            "womens_matches":223,
+            "womens_points":29417,
+          }
+          p.write_text(json.dumps(r,ensure_ascii=False,indent=2),encoding="utf-8")
+          if int(r.get("table_count") or 0) < 2: raise SystemExit("too few workbook tables")
+          if int(r.get("tabular_rows_total") or 0) < 80000: raise SystemExit("historical PBP workbook unexpectedly small")
+          if r.get("production_mutated") is not False or r.get("model_promoted") is not False:
+              raise SystemExit("research isolation policy violation")
+          print(json.dumps({
+            "tables":r.get("table_count"),
+            "rows":r.get("tabular_rows_total"),
+            "point_candidates":len(r.get("point_table_candidates") or []),
+          },indent=2))
+          PY
+
+      - name: Preserve raw workbook and attribution
+        run: |
+          set -euo pipefail
+          cp .cache/tbt/wimbledon-historical-pbp/source/wimbledon-1992-1995-v3.xlsx             .cache/tbt/wimbledon-historical-pbp/wimbledon-1992-1995-pbp-ccby4.xlsx
+          cat > .cache/tbt/wimbledon-historical-pbp/LICENSE-NOTE.txt <<'EOF'
+          Source: "Data used in the book Analyzing Wimbledon - The Power of Statistics"
+          Authors: F. Klaassen, Jan R. Magnus
+          DOI: 10.21942/uva.21983555
+          Version: 3
+          Figshare file id: 39016655
+          License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+          Declared scope: Wimbledon singles 1992-1995, 256 men's matches / 59,466 points,
+          223 women's matches / 29,417 points, match-level data, plus three famous recent matches.
+          BlinQ storage: private research snapshot; no canonical DB/model mutation in acquisition.
+          EOF
+          if ! gh release view "$RELEASE_TAG" -R "$TBT_DATA_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" -R "$TBT_DATA_REPOSITORY"               --title "BlinQ research source bundles"               --notes "Private research-only source snapshots. No production model mutation."
+          fi
+          gh release upload "$RELEASE_TAG" -R "$TBT_DATA_REPOSITORY" --clobber             .cache/tbt/wimbledon-historical-pbp/wimbledon-1992-1995-pbp-ccby4.xlsx             .cache/tbt/wimbledon-historical-pbp/LICENSE-NOTE.txt
+
+      - name: Persist source audit
+        run: |
+          set -euo pipefail
+          path="audit/wimbledon-1992-1995-pbp-source-latest.json"
+          file=.cache/tbt/wimbledon-historical-pbp/audit/report.json
+          encoded="$(base64 -w0 "$file")"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit CC BY Wimbledon 1992-1995 PBP source"               -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit CC BY Wimbledon 1992-1995 PBP source"               -f content="$encoded" >/dev/null
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wimbledon-1992-1995-pbp-${{ github.run_id }}
+          path: .cache/tbt/wimbledon-historical-pbp/audit/report.json
+          if-no-files-found: warn
+          retention-days: 14
