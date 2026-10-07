@@ -397,6 +397,31 @@
   function bannerLineHtml(value){
     return escapeHtml(String(value||'')).replace(/\r?\n/g,'<br>');
   }
+  function bannerSocialLabel(network){
+    return ({telegram:'Telegram',youtube:'YouTube',instagram:'Instagram',facebook:'Facebook',x:'X / Twitter',tiktok:'TikTok'})[network]||network;
+  }
+  function bannerSocialIcon(network){
+    const icons={
+      telegram:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.7 3.4 18.5 19c-.24 1.1-.88 1.38-1.79.86l-4.87-3.59-2.35 2.26c-.26.26-.48.48-.98.48l.35-4.96 9.02-8.15c.39-.35-.09-.55-.61-.2L6.1 12.72l-4.8-1.5c-1.04-.33-1.06-1.04.22-1.54L20.3 2.45c.87-.32 1.63.2 1.4.95Z"/></svg>',
+      youtube:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8ZM9.6 15.6V8.4l6.2 3.6-6.2 3.6Z"/></svg>',
+      instagram:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 2h9.6A5.2 5.2 0 0 1 22 7.2v9.6a5.2 5.2 0 0 1-5.2 5.2H7.2A5.2 5.2 0 0 1 2 16.8V7.2A5.2 5.2 0 0 1 7.2 2Zm0 1.9a3.3 3.3 0 0 0-3.3 3.3v9.6a3.3 3.3 0 0 0 3.3 3.3h9.6a3.3 3.3 0 0 0 3.3-3.3V7.2a3.3 3.3 0 0 0-3.3-3.3H7.2Zm10.1 1.4a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4ZM12 6.9A5.1 5.1 0 1 1 12 17a5.1 5.1 0 0 1 0-10.2Zm0 1.9a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z"/></svg>',
+      facebook:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.7 22v-9h3l.5-3.5h-3.5V7.3c0-1 .3-1.7 1.8-1.7h1.9V2.5c-.3 0-1.5-.1-2.8-.1-2.8 0-4.7 1.7-4.7 4.8v2.7H6.8V13h3.1v9h3.8Z"/></svg>',
+      x:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.8 7.8L23.2 22H17l-4.9-6.4L6.5 22H3.4l7.2-8.2L.8 2H7.1l4.4 5.8L18.9 2Zm-1.1 17.8h1.7L6.2 4H4.4l13.4 15.8Z"/></svg>',
+      tiktok:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.7 2c.4 2.2 1.7 3.6 3.9 4.1v3.1a8.4 8.4 0 0 1-3.9-1.1v6.3a7 7 0 1 1-6-6.9v3.2a3.8 3.8 0 1 0 2.8 3.7V2h3.2Z"/></svg>'
+    };
+    return icons[network]||'';
+  }
+  function heroSocialLinksHtml(content={},preview=false,standalone=false){
+    const links=['telegram','youtube','instagram','facebook','x','tiktok'].map(network=>{
+      const legacy=content[`social_${network}`];
+      const href=safeExternalUrl(content[`social_${network}_link`]||legacy);
+      if(!href)return '';
+      const networkLabel=bannerSocialLabel(network);
+      const text=String(content[`social_${network}_text`]||networkLabel).trim()||networkLabel;
+      return `<a class="hero-social-link social-${network}" href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="${escapeHtml(networkLabel)}" title="${escapeHtml(href)}" ${preview?'tabindex="-1"':''}>${bannerSocialIcon(network)}<span>${escapeHtml(text)}</span></a>`;
+    }).filter(Boolean).join('');
+    return links?`<div class="hero-social-links${standalone?' hero-social-standalone':''}" aria-label="Sociálne siete">${links}</div>`:'';
+  }
   async function loadEditablePresentationConfig(){
     try{
       const [tiers,banners,theme,siteContent]=await Promise.all([getJSON('/config/membership-tiers.json',{timeoutMs:3000}),getJSON('/config/banners.json',{timeoutMs:3000}),getJSON('/config/site-theme.json',{timeoutMs:3000}),getJSON('/config/site-content.json',{timeoutMs:3000})]);
@@ -891,19 +916,20 @@
     return mobile&&!mobile.startsWith('#')?`<picture class="hero-slide-picture"><source media="(max-width: 900px)" srcset="${escapeHtml(mobile)}">${img}</picture>`:img;
   }
   function heroSlideHtml(item,index){
-    const rawContent=resolvedBannerContent(item,index),c={...rawContent,eyebrow:publicText(rawContent.eyebrow||''),headline:publicText(rawContent.headline||''),accent_text:publicText(rawContent.accent_text||''),text:publicText(rawContent.text||''),button_text:publicText(rawContent.button_text||'')},route=c.route||'',href=safeLink(c.link,route?`#${route}`:'#predictions'),external=isExternalLink(href);
+    const rawContent=resolvedBannerContent(item,index),c={...rawContent,eyebrow:publicText(rawContent.eyebrow||''),headline:publicText(rawContent.headline||''),accent_text:publicText(rawContent.accent_text||''),text:publicText(rawContent.text||''),button_text:publicText(rawContent.button_text||'')},route=c.route||'',rawLink=String(c.link||'').trim(),href=rawLink?safeLink(rawLink,route?`#${route}`:'#predictions'):'',external=isExternalLink(href);
     const theme=String(c.theme||'violet').replace(/[^a-z0-9_-]/gi,'');
     const showCopy=c.show_copy!==false;
     const sponsored=c.sponsored?'<span class="sponsored-label hero-sponsored">SPONSORED</span>':'';
     const image=heroImageHtml(c,index);
     const art=image?'':`<div class="dashboard-hero-ball" aria-hidden="true"><i></i><b></b></div>`;
-    // Do not render the obsolete, uneditable accent_text from saved banner revisions.
     const title=String(c.headline||'').trim();
     const titleHtml=title?`<h2><strong>${bannerLineHtml(title)}</strong></h2>`:'';
     const heroEyebrow=Object.prototype.hasOwnProperty.call(c,'eyebrow')?String(c.eyebrow||'').trim():'BLINQ';
     const subtitle=String(c.text||'').trim();
-    const copy=showCopy?`<div class="dashboard-hero-copy">${heroEyebrow?`<small>${bannerLineHtml(heroEyebrow)}</small>`:''}${titleHtml}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b class="hero-slide-cta">${bannerLineHtml(c.button_text)} →</b>`:''}</div>`:'';
-    return `<a class="dashboard-hero hero-slide theme-${escapeHtml(theme)}${bannerCreativeClasses(c)}${index===state.heroIndex?' is-active':''}${showCopy?'':' hero-image-only'}" ${bannerCreativeStyle(c)} href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''} ${route&&!external?`data-route="${escapeHtml(route)}"`:''} data-hero-index="${index}" data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} aria-hidden="${index===state.heroIndex?'false':'true'}">${sponsored}${image}${copy}${art}</a>`;
+    const social=heroSocialLinksHtml(c,false,!showCopy);
+    const copy=showCopy?`<div class="dashboard-hero-copy">${heroEyebrow?`<small>${bannerLineHtml(heroEyebrow)}</small>`:''}${titleHtml}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b class="hero-slide-cta">${bannerLineHtml(c.button_text)} →</b>`:''}${social}</div>`:social;
+    const hit=href?`<a class="hero-slide-hitarea" href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''} ${route&&!external?`data-route="${escapeHtml(route)}"`:''} aria-label="${escapeHtml(c.button_text||c.headline||'Otvoriť banner')}"></a>`:'';
+    return `<div class="dashboard-hero hero-slide theme-${escapeHtml(theme)}${bannerCreativeClasses(c)}${index===state.heroIndex?' is-active':''}${showCopy?'':' hero-image-only'}" ${bannerCreativeStyle(c)} data-hero-index="${index}" data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} aria-hidden="${index===state.heroIndex?'false':'true'}">${hit}${sponsored}${image}${copy}${art}</div>`;
   }
   function clearHeroRotation(){
     if(state.heroTimer){clearInterval(state.heroTimer);state.heroTimer=null;}
@@ -3698,7 +3724,8 @@
     const eyebrow=Object.prototype.hasOwnProperty.call(c,'eyebrow')?String(c.eyebrow||'').trim():'BLINQ';
     const headline=String(c.headline||'').trim();
     const subtitle=String(c.text||'').trim();
-    const copy=c.show_copy===false?'':`<div class="admin-hero-preview-copy">${eyebrow?`<small>${bannerLineHtml(eyebrow)}</small>`:''}${headline?`<strong>${bannerLineHtml(headline)}</strong>`:''}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b>${bannerLineHtml(c.button_text)} →</b>`:''}</div>`;
+    const social=heroSocialLinksHtml(c,true,c.show_copy===false);
+    const copy=c.show_copy===false?social:`<div class="admin-hero-preview-copy">${eyebrow?`<small>${bannerLineHtml(eyebrow)}</small>`:''}${headline?`<strong>${bannerLineHtml(headline)}</strong>`:''}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b>${bannerLineHtml(c.button_text)} →</b>`:''}${social}</div>`;
     const clampSize=(value,min,max,fallback)=>value!=null&&Number.isFinite(Number(value))?Math.max(min,Math.min(max,Number(value))):fallback;
     const previewWidth=mode==='mobile'?370:1396;
     const headlineSize=clampSize(c.headline_size,12,72,36),textSize=clampSize(c.text_size,9,32,14),eyebrowSize=clampSize(c.eyebrow_size,7,18,10);
@@ -3789,7 +3816,13 @@
         <label class="span-2">Nadpis <small>(Enter = ručné zalomenie)</small><textarea rows="2" data-simple-banner-field="headline">${escapeHtml(c.headline||'')}</textarea></label>
         <label class="span-2">Podnadpis<textarea rows="3" data-simple-banner-field="text">${escapeHtml(c.text||'')}</textarea></label>
         <label>Text tlačidla<input data-simple-banner-field="button_text" value="${escapeHtml(c.button_text||'')}"></label>
-        <label>Odkaz<input data-simple-banner-field="link" value="${escapeHtml(c.link||'')}"></label>
+        <label>Odkaz bannera<input data-simple-banner-field="link" value="${escapeHtml(c.link||'')}" placeholder="https://..."></label>
+        <div class="admin-banner-social-editor span-2">
+          <div class="admin-form-section-title"><strong>Sociálne odkazy</strong><span>Ikona + aktívny modrý hyperlink. Prázdny link sa nezobrazí.</span></div>
+          <div class="admin-banner-social-grid">
+            ${['telegram','youtube','instagram','facebook','x','tiktok'].map(network=>`<div class="admin-banner-social-row"><strong>${bannerSocialLabel(network)}</strong><label><span>Text</span><input data-simple-banner-field="social_${network}_text" value="${escapeHtml(c[`social_${network}_text`]||bannerSocialLabel(network))}" placeholder="${bannerSocialLabel(network)}"></label><label><span>Link</span><input data-simple-banner-field="social_${network}_link" value="${escapeHtml(c[`social_${network}_link`]||c[`social_${network}`]||'')}" placeholder="https://..."></label></div>`).join('')}
+          </div>
+        </div>
       </div></div>
       <div class="admin-form-section admin-banner-typography"><div class="admin-form-section-title"><strong>Veľkosť a farba textu</strong><span>Jednoduchá škála od čiernej po bielu. Platí pre desktop aj mobil, náhľad reaguje hneď.</span></div><div class="admin-banner-type-grid">
         <label><span>Nadpis · veľkosť</span><select data-simple-banner-field="headline_size">${sizes([12,14,16,18,20,24,28,32,36,40,44,48,56,64,72],c.headline_size,36)}</select></label>
