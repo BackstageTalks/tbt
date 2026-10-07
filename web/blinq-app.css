@@ -9338,7 +9338,13 @@ body#blinqPremium .admin-banner-copy-editor textarea[data-simple-banner-field="h
 body#blinqPremium .results-model-heading{display:block;font-size:10px;font-weight:500;line-height:1.4;color:#a5bfb5;letter-spacing:0;text-transform:none}
 body#blinqPremium .result-projection-value{display:block;font-weight:750;font-variant-numeric:tabular-nums;color:#d8eee4}
 body#blinqPremium .result-projection-label{display:block;margin-top:4px;font-size:10px;color:#a5bfb5;font-weight:500}
-body#blinqPremium .result-comeback{display:block;margin-top:4px;font-size:9px;line-height:1.25;font-weight:800;letter-spacing:.045em;color:#f1bf55;white-space:normal}
+body#blinqPremium .result-comeback-icon{
+  display:inline-grid!important;place-items:center!important;flex:0 0 13px!important;
+  width:13px!important;height:13px!important;margin-right:1px!important;
+  color:#ff7a1a!important;font-size:12px!important;line-height:1!important;font-weight:900!important;
+  filter:drop-shadow(0 0 4px rgba(255,122,26,.22));
+  transform:translateY(-.5px);
+}
 body#blinqPremium:is(.blinq-home,.blinq-route) .reference-topbar .header-actions :is(button#bqm-projects,button#insightBell.insight-bell){background:rgba(17,46,37,.55)!important;border:1px solid rgba(96,159,135,.25)!important;border-radius:11px!important;box-shadow:none!important}
 body#blinqPremium .reference-topbar #bqm-projects{color:#b694f5!important}
 @media(min-width:901px){
