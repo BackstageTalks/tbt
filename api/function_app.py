@@ -1464,7 +1464,12 @@ def internal_match_status_worker(req):
         # An earlier run hit the HTTP gateway after ~45s. This worker uses
         # short batches and a bounded latency/request budget; all other users
         # of RapidTennisClient retain their existing retry policy.
-        client.request_limit = max(8, min(24, int(os.getenv("BLINQ_MATCH_STATUS_REQUEST_LIMIT", "24"))))
+        # Match Status is isolated behind the shared daily quota guard. Give
+        # it the full bounded per-run allowance so a finished fixture can query
+        # both participants when the compact /near route misses on the first one.
+        # Worst case remains 24 provider calls/run; the shared budget can still
+        # pause the worker before the daily account quota is exhausted.
+        client.request_limit = 24
         client.retry_attempts = 1
         client.client.timeout = 4.0
         try:
@@ -1476,10 +1481,10 @@ def internal_match_status_worker(req):
                     1,
                     min(20, int(os.getenv("BLINQ_MATCH_STATUS_MAX_CHECKS", "20"))),
                 ),
-                max_near_checks=max(
-                    1,
-                    min(20, int(os.getenv("BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS", "20"))),
-                ),
+                # Allow both sides of the current unresolved cohort to
+                # be checked in one run. 20 near calls + one live call stays
+                # below the hard client cap of 24.
+                max_near_checks=20,
                 max_wall_seconds=22.0,
             )
         finally:
