@@ -32,10 +32,10 @@ def test_auth_login_hides_signup_only_telegram_field():
 
 
 def test_short_odds_public_labels_replace_prime_in_results_and_cards():
-    assert "prime:'Short Odds'" in APP
-    assert "key==='prime'?'Short Odds Prediction'" in APP
-    assert "publicText('Short Odds rule')" in APP
-    assert "No Short Odds predictions available yet" in APP
+    assert "prime:'Comebacks'" in APP
+    assert "key==='prime'?'Comebacks Prediction'" in APP
+    assert "publicText('Comebacks rule')" in APP
+    assert "No Comebacks predictions available yet" in APP
     assert "Načítavam Prime predikcie" not in APP
     assert "Pravidlo Prime" not in APP
     assert "Prime predikcia" not in APP
