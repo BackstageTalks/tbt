@@ -18,6 +18,8 @@ for(const effect of ['fade-down','slide-up','slide-down','zoom-in','zoom-out','b
 for(const token of ['creative-effect-mosaic-grid','creative-effect-soft-glitch','creative-effect-vertical-wipe','creative-effect-curtain-open','creative-effect-ken-burns','creative-effect-flip-in','creative-effect-tilt-in','creative-effect-focus-pulse','creativeRevealLeft','creativeRevealRight','creativeBlurIn'])assert.ok(css.includes(token),token);
 assert.ok(app.includes('bannerCreativeClasses(c)} is-active'), 'admin preview must render the selected effect');
 assert.ok(app.includes('function stageAdminHeroPreviewReplay()'), 'Spustiť must replay the selected effect');
+assert.ok(app.indexOf('admin-hero-preview-stage') < app.indexOf('admin-banner-image-editor'),'live preview must come before graphic controls');
+assert.ok(app.indexOf('admin-banner-image-editor') < app.indexOf('admin-hero-selected-head'),'graphic controls must sit directly before the selected-banner editor sections');
 assert.ok(app.includes("const title=String(c.headline||'').trim();"));
 assert.ok(!app.includes("const accent=String(c.accent_text||'').trim();"));
 assert.ok(css.includes('var(--creative-headline-size,36px)'));
