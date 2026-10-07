@@ -161,9 +161,13 @@ jobs:
           expected=int(imported.get("quality_ready_after") or 0)
           if expected and quality < expected:
               raise SystemExit(f"Persisted quality regressed below expected minimum: {quality} < {expected}")
+          stop_reason=str(collector.get("stop_reason") or "")
+          status=("verified_provider_plan_blocked"
+                  if stop_reason.startswith("provider_plan_blocked:")
+                  else "verified")
           report={
               "schema":1,
-              "status":"verified",
+              "status":status,
               "generated_at":datetime.now(timezone.utc).isoformat(),
               "source":"Live Tennis API paid history",
               "canonical_rows":len(safe),
@@ -180,7 +184,7 @@ jobs:
               json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8"
           )
           print(json.dumps({
-              "status":"verified",
+              "status":status,
               "quality_ready_after":quality,
               "quality_ready_added":report["quality_ready_added"],
               "stop_reason":collector.get("stop_reason"),
