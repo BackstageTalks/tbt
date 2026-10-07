@@ -154,11 +154,8 @@ def test_prime_display_ranking_blends_probability_and_relative_odds_without_chan
     sections = select_market_sections(rows)
     ids = [x['event_id'] for x in sections['prime_picks']]
 
-    # All eligible short-price rows remain available to Comeback Radar.
     assert set(ids) == {x['event_id'] for x in rows}
-    # Probability stays dominant at large confidence gaps.
     assert ids.index('elite-low-price') < ids.index('weak-high-price')
-    # But among similarly strong predictions, a much better price can rank higher.
     assert ids.index('strong-better-price') < ids.index('strong-tiny-price')
 
     rule = sections['market_selection']['prime_rule']
@@ -168,7 +165,6 @@ def test_prime_display_ranking_blends_probability_and_relative_odds_without_chan
         'probability_percentile': .75,
         'odds_percentile': .25,
     }
-
 
 def test_prime_top_core68_fallback65_and_value65_policy():
     rows = [
