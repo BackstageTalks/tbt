@@ -1,0 +1,151 @@
+name: BlinQ Kaggle gap audit and backup
+
+on:
+  pull_request:
+    paths:
+      - ".github/kaggle-gap-acquisition-request.json"
+      - ".github/workflows/kaggle-gap-audit-backup.yml"
+      - "scripts/audit_and_backup_kaggle_gap_candidates.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/kaggle-gap-acquisition-request.json"
+      - ".github/workflows/kaggle-gap-audit-backup.yml"
+      - "scripts/audit_and_backup_kaggle_gap_candidates.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: blinq-kaggle-gap-audit-backup
+  cancel-in-progress: false
+
+jobs:
+  audit_backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      REQUEST_FILE: .github/kaggle-gap-acquisition-request.json
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate fail-closed request
+        run: |
+          set -euo pipefail
+          test "$(jq -r '.mode' "$REQUEST_FILE")" = "audit-backup-only"
+          test "$(jq -r '.safety.canonical_mutation' "$REQUEST_FILE")" = "false"
+          test "$(jq -r '.safety.provider_api_requests' "$REQUEST_FILE")" = "0"
+          test "$(jq -r '.safety.model_promotion' "$REQUEST_FILE")" = "false"
+          test "$(jq -r '.backup.persist_raw_archives' "$REQUEST_FILE")" = "true"
+          python -m compileall -q scripts/audit_and_backup_kaggle_gap_candidates.py
+
+      - name: Verify private backup destination
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download audit and build exact backup
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/kaggle-gap
+          python scripts/audit_and_backup_kaggle_gap_candidates.py \
+            --request "$REQUEST_FILE" \
+            --workdir .cache/tbt/kaggle-gap/work \
+            --out-audit .cache/tbt/kaggle-gap/audit.json \
+            --out-backup .cache/tbt/kaggle-gap/backup
+
+      - name: Validate audit safety contract
+        run: |
+          set -euo pipefail
+          test "$(jq -r '.canonical_mutated' .cache/tbt/kaggle-gap/audit.json)" = "false"
+          test "$(jq -r '.provider_api_requests' .cache/tbt/kaggle-gap/audit.json)" = "0"
+          test "$(jq -r '.model_promoted' .cache/tbt/kaggle-gap/audit.json)" = "false"
+          test "$(jq -r '.summary.downloaded' .cache/tbt/kaggle-gap/audit.json)" -gt 0
+
+      - name: Persist permanent backup to tbt-data
+        run: |
+          set -euo pipefail
+          BACKUP_ROOT="$(jq -r '.backup.root' "$REQUEST_FILE")"
+          rm -rf .cache/tbt/tbt-data-backup
+          gh repo clone "$TBT_DATA_REPOSITORY" .cache/tbt/tbt-data-backup -- --depth=1
+          cd .cache/tbt/tbt-data-backup
+          git config user.name "BlinQ Data Bot"
+          git config user.email "blinq-data-bot@users.noreply.github.com"
+          mkdir -p "$BACKUP_ROOT"
+          cp -a ../kaggle-gap/backup/. "$BACKUP_ROOT/"
+          mkdir -p audit
+          cp ../kaggle-gap/audit.json audit/kaggle-gap-download-audit-latest.json
+          git add "$BACKUP_ROOT" audit/kaggle-gap-download-audit-latest.json
+          if git diff --cached --quiet; then
+            echo "Backup already identical; nothing to commit."
+            exit 0
+          fi
+          git commit -m "backup: persist Kaggle gap sources and audit"
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            git fetch origin main
+            git rebase origin/main
+          done
+          echo "Failed to persist backup after retries" >&2
+          exit 1
+
+      - name: Verify persisted backup hashes
+        run: |
+          set -euo pipefail
+          BACKUP_ROOT="$(jq -r '.backup.root' "$REQUEST_FILE")"
+          rm -rf .cache/tbt/tbt-data-verify
+          gh repo clone "$TBT_DATA_REPOSITORY" .cache/tbt/tbt-data-verify -- --depth=1
+          python - <<'PY'
+import hashlib, json, os
+from pathlib import Path
+
+repo = Path(".cache/tbt/tbt-data-verify")
+cfg = json.loads(Path(".github/kaggle-gap-acquisition-request.json").read_text())
+root = repo / cfg["backup"]["root"]
+index = json.loads((root / "backup-index.json").read_text())
+
+for source in index["sources"]:
+    if not source.get("download_ok"):
+        continue
+    safe = source["slug"].replace("/", "__").replace(":", "_")
+    manifest = json.loads((root / safe / "manifest.json").read_text())
+    parts = manifest["archive"]["parts"]
+    h = hashlib.sha256()
+    total = 0
+    for part in parts:
+        p = root / safe / "raw" / part["file"]
+        data = p.read_bytes()
+        if hashlib.sha256(data).hexdigest() != part["sha256"]:
+            raise SystemExit(f"Chunk hash mismatch: {p}")
+        h.update(data)
+        total += len(data)
+    if total != manifest["archive"]["bytes"]:
+        raise SystemExit(f"Archive byte mismatch: {source['slug']}")
+    if h.hexdigest() != manifest["archive"]["sha256"]:
+        raise SystemExit(f"Archive SHA mismatch: {source['slug']}")
+print(json.dumps({"verified_sources": sum(1 for s in index["sources"] if s.get("download_ok")), "backup_root": str(root)}, indent=2))
+PY
+
+      - name: Upload audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-kaggle-gap-audit-${{ github.run_id }}
+          path: |
+            .cache/tbt/kaggle-gap/audit.json
+            .cache/tbt/kaggle-gap/backup/backup-index.json
+          if-no-files-found: warn
+          retention-days: 30
