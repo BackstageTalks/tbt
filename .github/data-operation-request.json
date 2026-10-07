@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "mode": "comparator-build",
+  "mode": "deploy-current",
   "promote": false,
-  "purpose": "Build and persist the Match Comparator serving artifact from canonical history, the production champion and verified priors only. Zero provider/API requests. Then deploy the current verified prediction generation with the comparator artifact.",
+  "purpose": "Deploy the current verified BlinQ application revision with per-membership Admin access controls. Deployment-only: reuse immutable prediction candidate, no Tennis provider/API calls, no model promotion, no canonical history mutation.",
   "requested_on": "2026-10-07",
-  "requested_at_utc": "2026-10-07T17:55:00Z",
+  "requested_at_utc": "2026-10-07T19:07:00Z",
   "max_requests": 1,
   "start": "",
   "end": "",
-  "training_scope": "comparator_serving_artifact_only",
+  "training_scope": "deployment_only",
   "historical_match_winner_odds_as_model_feature": false
 }
