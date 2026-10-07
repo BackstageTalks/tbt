@@ -6,6 +6,7 @@ No orders, bets, predictions, UI updates, or production data mutations.
 """
 import base64
 import gzip
+import hashlib
 import json
 import os
 import sys
@@ -221,16 +222,64 @@ def today_usage(folder):
                 raise RuntimeError("Unrecognized existing CLV snapshot filename") from None
     return total
 
+def _git_blob_sha(payload):
+    header = f"blob {len(payload)}\\0".encode("ascii")
+    return hashlib.sha1(header + payload).hexdigest()
+
+
 def save_snapshot(folder, record):
+    """Persist once to the private research tree, with an artifact-safe fallback.
+
+    The local gzip is created before the first GitHub mutation. A transient or
+    ambiguous 5xx therefore cannot destroy the paid snapshot. After a failed
+    PUT, the exact Git blob SHA is read back before retrying, so an ambiguous
+    success is never uploaded twice under a different identity.
+    """
     now = datetime.now(timezone.utc)
     run_id = os.getenv("GITHUB_RUN_ID") or str(int(time.time()))
     name = now.strftime("%H%M%S") + "-" + run_id + "-calls-" + str(api_calls) + ".json.gz"
-    payload = gzip.compress(json.dumps(record, ensure_ascii=False,
-                                       separators=(",", ":")).encode("utf-8"))
+    payload = gzip.compress(
+        json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+    local = Path("reports") / "propline_clv_snapshot.json.gz"
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_bytes(payload)
+
     path = folder + "/" + name
-    github(path, method="PUT", data={"message": "research: isolated PropLine CLV snapshots",
-                                    "content": base64.b64encode(payload).decode("ascii")})
-    return path
+    expected_sha = _git_blob_sha(payload)
+    encoded = base64.b64encode(payload).decode("ascii")
+    last_error = None
+    for attempt in range(1, 6):
+        try:
+            github(
+                path,
+                method="PUT",
+                data={
+                    "message": "research: isolated PropLine CLV snapshots",
+                    "content": encoded,
+                },
+            )
+            return path, str(local), attempt
+        except RuntimeError as exc:
+            last_error = exc
+            # A gateway may return 5xx after GitHub committed the blob. Verify
+            # exact content before retrying rather than creating uncertainty.
+            try:
+                existing = github(path, missing_ok=True)
+            except RuntimeError:
+                existing = None
+            if (
+                isinstance(existing, dict)
+                and str(existing.get("sha") or "") == expected_sha
+                and int(existing.get("size") or -1) == len(payload)
+            ):
+                return path, str(local), attempt
+            if attempt < 5:
+                time.sleep(2 ** attempt)
+    raise RuntimeError(
+        "GitHub CLV persistence failed after 5 verified attempts; "
+        f"local artifact preserved at {local}: {last_error}"
+    )
 
 def main():
     now = datetime.now(timezone.utc)
@@ -285,8 +334,29 @@ def main():
     Path("reports").mkdir(exist_ok=True)
     Path("reports/propline_clv_snapshot.json").write_text(
         json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-    # Always archive even partial data; a failed persistence step fails the workflow.
-    path = save_snapshot(folder, report)
+    # Always create a local gzip before attempting the private permanent write.
+    # Actions uploads it even if GitHub Contents is temporarily unavailable.
+    try:
+        path, local_path, attempts = save_snapshot(folder, report)
+        report["persistence"] = {
+            "status": "tbt_data_verified",
+            "path": path,
+            "attempts": attempts,
+            "local_artifact": local_path,
+        }
+    except RuntimeError as exc:
+        report["persistence"] = {
+            "status": "artifact_only",
+            "local_artifact": "reports/propline_clv_snapshot.json.gz",
+            "error": str(exc),
+        }
+        Path("reports/propline_clv_snapshot.json").write_text(
+            json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        raise
+    Path("reports/propline_clv_snapshot.json").write_text(
+        json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
     print(f"CLV snapshot: {len(report['events'])} events, {api_calls} calls, "
           f"daily local calls={already+api_calls}/{DAILY_LIMIT}; archived {path}")
     if "error" in report:
