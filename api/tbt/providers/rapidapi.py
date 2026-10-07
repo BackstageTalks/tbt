@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import time
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -86,6 +87,22 @@ class RapidTennisClient:
             timeout=cfg.request_timeout_seconds
         )
         self._last_request_at = 0.0
+        raw_max_rps = os.getenv("BLINQ_RAPIDAPI_MAX_RPS", "").strip()
+        if raw_max_rps:
+            try:
+                max_rps = float(raw_max_rps)
+            except ValueError as exc:
+                raise ConfigurationError(
+                    "BLINQ_RAPIDAPI_MAX_RPS must be a number in (0, 6]"
+                ) from exc
+            if not math.isfinite(max_rps) or max_rps <= 0 or max_rps > 6:
+                raise ConfigurationError(
+                    "BLINQ_RAPIDAPI_MAX_RPS must be a number in (0, 6]"
+                )
+            self._min_request_interval = 1.0 / max_rps
+        else:
+            # Preserve the historical ~1.5 rps default for runtime/live callers.
+            self._min_request_interval = 0.66
         self.request_count = 0
         self.request_limit = 15000
         # Latency-sensitive workers may opt out of retries without affecting batch jobs.
@@ -133,10 +150,13 @@ class RapidTennisClient:
             time.monotonic()
             - self._last_request_at
         )
+        # Some bounded runtime tests/workers construct the client via __new__
+        # and intentionally skip __init__. Preserve the legacy throttle there.
+        interval = getattr(self, "_min_request_interval", 0.66)
 
-        if elapsed < 0.66:
+        if elapsed < interval:
             time.sleep(
-                0.66 - elapsed
+                interval - elapsed
             )
 
     @staticmethod
