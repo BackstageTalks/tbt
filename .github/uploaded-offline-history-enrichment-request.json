@@ -1,5 +1,7 @@
 {
   "mode": "write",
   "api_requests": 0,
-  "source": "user_uploaded_plus_pinned_offline"
+  "source": "user_uploaded_plus_pinned_offline",
+  "requested_at_utc": "2026-10-07T00:26:00Z",
+  "purpose": "Import uploaded ATP qualification data plus pinned ATP/Futures/Challenger and Match Charting serve-return enrichment into canonical history with fail-closed identity checks."
 }
