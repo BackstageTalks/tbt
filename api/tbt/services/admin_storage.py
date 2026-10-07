@@ -1057,6 +1057,13 @@ def validate_ui_config(payload: object) -> dict:
     for section_id in ("statistics", "radar", "history"):
         if str(detail_sections.get(section_id) or "").lower() not in detail_levels:
             raise ValueError(f"Invalid match detail minimum level for {section_id}")
+    comparator = dashboard.get("comparator") or {}
+    if not isinstance(comparator, dict):
+        raise ValueError("Invalid comparator access configuration")
+    comparator_plans = comparator.get("plans") or {}
+    for plan_id in ("trial", "expired", *detail_levels):
+        if not isinstance(comparator_plans.get(plan_id), bool):
+            raise ValueError(f"Invalid comparator access for {plan_id}")
     results_windows = dashboard.get("results_history_window") or {}
     allowed_result_windows = {"24h", "48h", "3d", "7d", "14d", "30d", "all"}
     if not isinstance(results_windows, dict):
