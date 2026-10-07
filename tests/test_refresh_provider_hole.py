@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -47,3 +48,58 @@ def test_refresh_keeps_current_day_fail_closed(tmp_path):
             provider, [], tmp_path, _Store(),
             date(2026, 9, 21), date(2026, 9, 23),
         )
+
+
+def test_refresh_batches_partition_persistence_across_all_days(monkeypatch, tmp_path):
+    class Provider:
+        def matches_for_day(self, tour, day, historical):
+            return [SimpleNamespace(
+                is_completed=True,
+                scheduled_at=datetime.combine(
+                    day, datetime.min.time(), tzinfo=timezone.utc
+                ),
+            )]
+
+    accepted = []
+
+    def merge(matches, incoming, *, day, tour):
+        row = SimpleNamespace(
+            scheduled_at=datetime.combine(
+                day, datetime.min.time(), tzinfo=timezone.utc
+            ),
+        )
+        accepted.append((day, tour))
+        return [*matches, row], [row]
+
+    sync_calls = []
+
+    def sync(matches, history_dir, year):
+        sync_calls.append(year)
+        path = history_dir / f"history-{year}.parquet"
+        path.write_bytes(b"test")
+        (history_dir / "history_manifest.json").write_text(
+            "{}", encoding="utf-8"
+        )
+        return path, False
+
+    class Store:
+        def __init__(self):
+            self.calls = []
+
+        def upload_bundle(self, bundle, **kwargs):
+            self.calls.append(([str(path) for path in bundle], kwargs))
+
+    monkeypatch.setattr(pipeline, "_merge_refresh_batch_safely", merge)
+    monkeypatch.setattr(pipeline, "_provider_event_id", lambda match: None)
+    monkeypatch.setattr(pipeline, "sync_year_partition", sync)
+
+    store = Store()
+    pipeline._refresh_history(
+        Provider(), [], tmp_path, store,
+        date(2026, 9, 21), date(2026, 9, 23),
+    )
+
+    assert len(accepted) == 6
+    assert sync_calls == [2026]
+    assert len(store.calls) == 1
+    assert store.calls[0][0][-1].endswith("history_manifest.json")

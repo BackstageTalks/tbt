@@ -278,78 +278,300 @@ def build_ace_market_calibration(history, cutoff: datetime) -> dict[str, Any]:
     """Walk-forward backtest Aces/DF and build conservative empirical calibration.
 
     Every example is predicted from matches strictly earlier than that example,
-    so the calibration has no same/future-match leakage.  A chronological 70/30
+    so the calibration has no same/future-match leakage. A chronological 70/30
     split decides whether calibration improves Brier score before it is enabled.
+
+    The walk-forward state below is mathematically equivalent to repeatedly
+    rescanning every player's prior matches, but maintains exponentially-decayed
+    weighted moments incrementally. Daily refresh therefore stays linear in
+    history size instead of growing toward quadratic work as the archive grows.
     """
     if cutoff.tzinfo is None:
         raise ValueError("build_ace_market_calibration requires timezone-aware cutoff")
-    histories: dict[str, list[dict[str, Any]]] = defaultdict(list)
+
+    class _DecayMoments:
+        __slots__ = ("weight", "mean", "m2", "count", "when")
+
+        def __init__(self) -> None:
+            self.weight = 0.0
+            self.mean = 0.0
+            self.m2 = 0.0
+            self.count = 0
+            self.when: datetime | None = None
+
+        def _advance(self, now: datetime) -> None:
+            if self.when is None:
+                self.when = now
+                return
+            seconds = (now - self.when).total_seconds()
+            if seconds > 0 and self.weight > 0:
+                factor = 0.5 ** ((seconds / 86400.0) / 120.0)
+                self.weight *= factor
+                self.m2 *= factor
+            if seconds >= 0:
+                self.when = now
+
+        def add(self, value: float | None, now: datetime) -> None:
+            if value is None:
+                return
+            self._advance(now)
+            value = float(value)
+            if self.weight <= 0:
+                self.weight = 1.0
+                self.mean = value
+                self.m2 = 0.0
+                self.count = 1
+                return
+            new_weight = self.weight + 1.0
+            delta = value - self.mean
+            new_mean = self.mean + delta / new_weight
+            self.m2 += delta * (value - new_mean)
+            self.mean = new_mean
+            self.weight = new_weight
+            self.count += 1
+
+        def stats(self, now: datetime) -> tuple[float | None, float | None, int]:
+            if self.count <= 0 or self.weight <= 0:
+                return None, None, 0
+            self._advance(now)
+            variance = max(0.0, self.m2 / self.weight)
+            return self.mean, variance, self.count
+
+    moments: dict[tuple[Any, ...], _DecayMoments] = {}
+
+    def state(key: tuple[Any, ...]) -> _DecayMoments:
+        value = moments.get(key)
+        if value is None:
+            value = _DecayMoments()
+            moments[key] = value
+        return value
+
+    def stats(key: tuple[Any, ...], when: datetime) -> tuple[float | None, float | None, int]:
+        value = moments.get(key)
+        return value.stats(when) if value is not None else (None, None, 0)
+
+    def add_player_sample(
+        player_id: str,
+        *,
+        field: str,
+        value: float | None,
+        when: datetime,
+        surface: str,
+        best_of: int | None,
+    ) -> None:
+        if value is None:
+            return
+        state((player_id, field)).add(value, when)
+        state((player_id, field, "surface", surface)).add(value, when)
+        if best_of:
+            state((player_id, field, "best_of", best_of)).add(value, when)
+
+    def projection(
+        player_id: str,
+        opponent_id: str,
+        market: str,
+        when: datetime,
+        *,
+        baseline: float,
+        surface: str,
+        best_of: int | None,
+    ) -> dict[str, Any] | None:
+        own_field = f"own_{market}"
+        allowance_field = f"opponent_{market}"
+        own_mean, own_var, own_n = stats((player_id, own_field), when)
+        if own_mean is None or own_n < 6:
+            return None
+
+        surface_n = 0
+        if surface and surface != "unknown":
+            surface_mean, _, surface_n = stats(
+                (player_id, own_field, "surface", surface), when
+            )
+            if surface_mean is not None and surface_n >= 4:
+                own_mean = 0.75 * own_mean + 0.25 * surface_mean
+
+        best_n = 0
+        if best_of:
+            best_mean, _, best_n = stats(
+                (player_id, own_field, "best_of", best_of), when
+            )
+            if best_mean is not None and best_n >= 4:
+                own_mean = 0.82 * own_mean + 0.18 * best_mean
+
+        own_estimate = _shrink(own_mean, own_n, baseline)
+        allowed_mean, allowed_var, allowed_n = stats(
+            (opponent_id, allowance_field), when
+        )
+        if allowed_mean is None:
+            allowed_estimate = baseline
+            allowed_var = None
+            allowed_n = 0
+        else:
+            allowed_estimate = _shrink(allowed_mean, allowed_n, baseline)
+
+        base_opponent_weight = 0.30 if market == "aces" else 0.10
+        allowance_reliability = min(1.0, allowed_n / 12.0)
+        opponent_weight = base_opponent_weight * allowance_reliability
+        estimate = (
+            (1.0 - opponent_weight) * own_estimate
+            + opponent_weight * allowed_estimate
+        )
+        own_var = float(own_var or 0.0)
+        allowed_var = float(allowed_var if allowed_var is not None else own_var)
+        variance = (
+            ((1.0 - opponent_weight) ** 2) * own_var
+            + (opponent_weight ** 2) * allowed_var
+        )
+        return {
+            "estimate": max(0.0, estimate),
+            "variance": max(0.0, variance),
+            "samples": own_n,
+            "surface_samples": surface_n,
+            "best_of_samples": best_n,
+            "opponent_allowance_samples": allowed_n,
+            "opponent_weight": opponent_weight,
+        }
+
     sums = {"aces": 0.0, "double_faults": 0.0}
     counts = {"aces": 0, "double_faults": 0}
-    examples: dict[str, list[tuple[float, int]]] = {"aces": [], "double_faults": []}
+    examples: dict[str, list[tuple[float, int]]] = {
+        "aces": [],
+        "double_faults": [],
+    }
     fallback = {"aces": 4.0, "double_faults": 2.5}
-    rows = sorted((m for m in history if m.scheduled_at < cutoff), key=lambda m: m.scheduled_at)
+    rows = sorted(
+        (m for m in history if m.scheduled_at < cutoff),
+        key=lambda m: m.scheduled_at,
+    )
     for match in rows:
         if str(match.status or "").strip().lower() in EXCLUDED_STATUSES:
             continue
-        stats = match.stats if isinstance(match.stats, dict) else {}
+        match_stats = match.stats if isinstance(match.stats, dict) else {}
         actuals = {
-            "aces": (_number(stats.get("p1_aces")), _number(stats.get("p2_aces"))),
-            "double_faults": (_number(stats.get("p1_double_faults")), _number(stats.get("p2_double_faults"))),
+            "aces": (
+                _number(match_stats.get("p1_aces")),
+                _number(match_stats.get("p2_aces")),
+            ),
+            "double_faults": (
+                _number(match_stats.get("p1_double_faults")),
+                _number(match_stats.get("p2_double_faults")),
+            ),
         }
         surface = str(match.surface or "unknown").lower()
         best_of = match.best_of
         p1_id, p2_id = str(match.player1_id), str(match.player2_id)
         when = match.scheduled_at.astimezone(timezone.utc)
+
         for market in ("aces", "double_faults"):
             a1, a2 = actuals[market]
             if a1 is None or a2 is None:
                 continue
-            baseline = sums[market] / counts[market] if counts[market] else fallback[market]
-            q1 = _projection(p1_id, p2_id, market, histories, baseline, when, surface=surface, best_of=best_of)
-            q2 = _projection(p2_id, p1_id, market, histories, baseline, when, surface=surface, best_of=best_of)
+            baseline = (
+                sums[market] / counts[market]
+                if counts[market]
+                else fallback[market]
+            )
+            q1 = projection(
+                p1_id, p2_id, market, when,
+                baseline=baseline, surface=surface, best_of=best_of,
+            )
+            q2 = projection(
+                p2_id, p1_id, market, when,
+                baseline=baseline, surface=surface, best_of=best_of,
+            )
             if q1 is not None and q2 is not None:
                 conf, _, _, gap = _predictive_confidence(market, q1, q2)
                 min_gap = 0.85 if market == "aces" else 0.45
                 if gap >= min_gap and conf >= 0.5 and a1 != a2:
                     selected_p1 = float(q1["estimate"]) > float(q2["estimate"])
                     hit = int((a1 > a2) if selected_p1 else (a2 > a1))
-                    examples[market].append((max(0.5, min(0.99, float(conf))), hit))
-        common = {"scheduled_at": when, "surface": surface, "best_of": best_of}
-        a1, a2 = actuals["aces"]; d1, d2 = actuals["double_faults"]
-        histories[p1_id].append({**common, "own_aces": a1, "opponent_aces": a2, "own_double_faults": d1, "opponent_double_faults": d2})
-        histories[p2_id].append({**common, "own_aces": a2, "opponent_aces": a1, "own_double_faults": d2, "opponent_double_faults": d1})
+                    examples[market].append(
+                        (max(0.5, min(0.99, float(conf))), hit)
+                    )
+
+        values_by_player = {
+            p1_id: {
+                "own_aces": actuals["aces"][0],
+                "opponent_aces": actuals["aces"][1],
+                "own_double_faults": actuals["double_faults"][0],
+                "opponent_double_faults": actuals["double_faults"][1],
+            },
+            p2_id: {
+                "own_aces": actuals["aces"][1],
+                "opponent_aces": actuals["aces"][0],
+                "own_double_faults": actuals["double_faults"][1],
+                "opponent_double_faults": actuals["double_faults"][0],
+            },
+        }
+        for player_id, player_values in values_by_player.items():
+            for field, value in player_values.items():
+                add_player_sample(
+                    player_id,
+                    field=field,
+                    value=value,
+                    when=when,
+                    surface=surface,
+                    best_of=best_of,
+                )
+
         for market, pair in actuals.items():
             for value in pair:
                 if value is not None:
-                    sums[market] += float(value); counts[market] += 1
+                    sums[market] += float(value)
+                    counts[market] += 1
 
-    out = {"schema": 1, "method": "walk_forward_isotonic_conservative", "cutoff_utc": cutoff.isoformat()}
+    out = {
+        "schema": 1,
+        "method": "walk_forward_isotonic_conservative",
+        "cutoff_utc": cutoff.isoformat(),
+    }
     for market in ("aces", "double_faults"):
         ex = examples[market]
         split = max(1, int(len(ex) * 0.70)) if ex else 0
         train, valid = ex[:split], ex[split:]
         train_points = _pav_points(train) if len(train) >= 80 else []
-        raw_brier = sum((p - y) ** 2 for p, y in valid) / len(valid) if valid else None
+        raw_brier = (
+            sum((p - y) ** 2 for p, y in valid) / len(valid)
+            if valid else None
+        )
         calibrated_brier = (
-            sum((min(p, _mapped_probability(p, train_points)) - y) ** 2 for p, y in valid) / len(valid)
+            sum(
+                (min(p, _mapped_probability(p, train_points)) - y) ** 2
+                for p, y in valid
+            ) / len(valid)
             if valid and train_points else None
         )
         applied = bool(
-            len(train) >= 80 and len(valid) >= 30 and train_points
-            and calibrated_brier is not None and raw_brier is not None
+            len(train) >= 80
+            and len(valid) >= 30
+            and train_points
+            and calibrated_brier is not None
+            and raw_brier is not None
             and calibrated_brier <= raw_brier + 0.0025
         )
         points = _pav_points(ex) if applied else []
         out[market] = {
-            "applied": applied, "examples": len(ex), "train_n": len(train), "validation_n": len(valid),
-            "hit_rate": round(sum(y for _, y in ex) / len(ex), 4) if ex else None,
-            "mean_raw_confidence": round(sum(p for p, _ in ex) / len(ex), 4) if ex else None,
-            "validation_raw_brier": round(raw_brier, 6) if raw_brier is not None else None,
-            "validation_calibrated_brier": round(calibrated_brier, 6) if calibrated_brier is not None else None,
+            "applied": applied,
+            "examples": len(ex),
+            "train_n": len(train),
+            "validation_n": len(valid),
+            "hit_rate": (
+                round(sum(y for _, y in ex) / len(ex), 4) if ex else None
+            ),
+            "mean_raw_confidence": (
+                round(sum(p for p, _ in ex) / len(ex), 4) if ex else None
+            ),
+            "validation_raw_brier": (
+                round(raw_brier, 6) if raw_brier is not None else None
+            ),
+            "validation_calibrated_brier": (
+                round(calibrated_brier, 6)
+                if calibrated_brier is not None else None
+            ),
             "points": points,
         }
     return out
+
 
 def _card(
     row: dict[str, Any],

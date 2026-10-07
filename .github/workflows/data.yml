@@ -158,7 +158,13 @@ jobs:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: api/requirements-train.txt
-      - run: python -m pip install -r api/requirements-train.txt
+      - name: Install data-pipeline dependencies
+        if: env.MODE != 'deploy-current'
+        run: python -m pip install -r api/requirements-train.txt
+      - name: Reuse current candidate without duplicate pipeline assembly
+        if: env.MODE == 'deploy-current'
+        run: echo "Deployment job will assemble and verify the immutable serving snapshot once."
+
       - name: Execute selected operation
         shell: bash
         run: |
@@ -266,8 +272,8 @@ jobs:
             python scripts/rebuild_results_history.py \
               --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == deploy-current ]]; then
-            python scripts/init_shadow_release.py \
-              --data-repository "$TBT_DATA_REPOSITORY"
+            # Deployment-only reruns do not mutate or evaluate model/shadow state.
+            # The deploy job below validates the immutable prediction candidate.
             echo "Reusing current private prediction candidate; no Tennis RapidAPI calls."
           elif [[ "$MODE" == production-preflight ]]; then
             python scripts/download_production_preflight_inputs.py
@@ -327,30 +333,6 @@ jobs:
                 --report .cache/tbt/production/leakage_audit_report.json
             fi
             python scripts/pipeline.py "${args[@]}"
-          fi
-
-      - name: Update model promotion readiness
-        if: env.MODE == 'refresh' || env.MODE == 'train'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/model_promotion_readiness.py \
-            --data-repository "$TBT_DATA_REPOSITORY" \
-            --minimum-gate-rows 200 \
-            --target-rows 1000 \
-            --minimum-days 3 \
-            --out .cache/tbt/model-readiness/readiness.json
-          path="audit/model-promotion-readiness-latest.json"
-          existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
-          encoded="$(base64 -w0 .cache/tbt/model-readiness/readiness.json)"
-          if [[ -n "$existing_sha" ]]; then
-            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
-              -f message="Update BlinQ model promotion readiness" \
-              -f content="$encoded" -f sha="$existing_sha" >/dev/null
-          else
-            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
-              -f message="Update BlinQ model promotion readiness" \
-              -f content="$encoded" >/dev/null
           fi
 
       - name: Persist training decision audit
@@ -614,13 +596,57 @@ jobs:
             --max-tournament-logo-requests "$BLINQ_ENRICH_LOGO_CAP"
 
       - name: Prepare refreshed serving feed and cached player assets
-        if: env.MODE == 'refresh' || env.MODE == 'current-refresh' || env.MODE == 'results-rebuild' || env.MODE == 'deploy-current'
+        if: env.MODE == 'refresh' || env.MODE == 'current-refresh' || env.MODE == 'results-rebuild'
         shell: bash
         run: |
           set -euo pipefail
           python scripts/prepare_feed.py
           test -s api/data/feed.json
           python scripts/verify_presentation_feed.py api/data/feed.json --summary
+
+  readiness:
+    name: Update model promotion readiness
+    needs: pipeline
+    if: >-
+      needs.pipeline.result == 'success' &&
+      (inputs.mode == 'refresh' || inputs.mode == 'train' ||
+       (github.event_name == 'push' && contains(github.event.head_commit.message, '[refresh-now]')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - run: python -m pip install -r api/requirements-train.txt
+      - name: Recompute governed unseen-data readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/model_promotion_readiness.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --minimum-gate-rows 200 \
+            --target-rows 1000 \
+            --minimum-days 3 \
+            --out .cache/tbt/model-readiness/readiness.json
+          path="audit/model-promotion-readiness-latest.json"
+          existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          encoded="$(base64 -w0 .cache/tbt/model-readiness/readiness.json)"
+          if [[ -n "$existing_sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
+              -f message="Update BlinQ model promotion readiness" \
+              -f content="$encoded" -f sha="$existing_sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
+              -f message="Update BlinQ model promotion readiness" \
+              -f content="$encoded" >/dev/null
+          fi
 
   deploy:
     name: Deploy current prediction generation

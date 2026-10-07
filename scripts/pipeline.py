@@ -223,76 +223,93 @@ def _refresh_history(provider, matches, history_dir, history_store, start, end):
         if (provider_id := _provider_event_id(match)) is not None
     }
     skipped_days: set[str] = set()
+    # Persist canonical history once per refresh instead of rewriting/uploading
+    # the same year after every ATP/WTA calendar response. Keep all provider and
+    # identity checks unchanged, collect affected years, then publish one bundle.
+    # If a later provider call fails unexpectedly, flush the already-validated
+    # earlier rows once before propagating the error so refresh still checkpoints
+    # useful work without N repeated rewrites of the same partition.
+    affected_years: set[int] = set()
+
+    def persist_pending() -> None:
+        if not affected_years:
+            return
+        written = []
+        removed = []
+        for year in sorted(affected_years):
+            path, was_removed = sync_year_partition(matches, history_dir, year)
+            if path is not None:
+                written.append(path)
+            elif was_removed:
+                removed.append(f"history-{year}.parquet")
+        if written or removed:
+            bundle = written + [history_dir / "history_manifest.json"]
+            if removed:
+                history_store.upload_bundle(bundle, remove_names=removed)
+            else:
+                history_store.upload_bundle(bundle)
+        affected_years.clear()
+
     day = start
-    while day <= end:
-        day_failed = False
-        for tour in ("atp", "wta"):
-            try:
-                incoming = [
-                    match
-                    for match in provider.matches_for_day(
-                        tour, day, historical=True
-                    )
-                    if match.is_completed
-                ]
-            except ProviderError as exc:
-                # A historical provider hole must not destroy an otherwise valid
-                # refresh. Do not apply this to today: current-day discovery is
-                # required before we are allowed to publish a new betting feed.
-                if day >= end:
-                    raise
-                skipped_days.add(day.isoformat())
-                day_failed = True
-                print(json.dumps({
-                    "warning": "historical_provider_day_skipped",
-                    "day": day.isoformat(),
-                    "tour": tour,
-                    "reason": str(exc)[:300],
-                    "policy": "preserve_existing_history_and_retry_next_refresh",
-                }, ensure_ascii=False), flush=True)
-                break
+    try:
+        while day <= end:
+            day_failed = False
+            for tour in ("atp", "wta"):
+                try:
+                    incoming = [
+                        match
+                        for match in provider.matches_for_day(
+                            tour, day, historical=True
+                        )
+                        if match.is_completed
+                    ]
+                except ProviderError as exc:
+                    # A historical provider hole must not destroy an otherwise valid
+                    # refresh. Do not apply this to today: current-day discovery is
+                    # required before we are allowed to publish a new betting feed.
+                    if day >= end:
+                        raise
+                    skipped_days.add(day.isoformat())
+                    day_failed = True
+                    print(json.dumps({
+                        "warning": "historical_provider_day_skipped",
+                        "day": day.isoformat(),
+                        "tour": tour,
+                        "reason": str(exc)[:300],
+                        "policy": "preserve_existing_history_and_retry_next_refresh",
+                    }, ensure_ascii=False), flush=True)
+                    break
 
-            matches, accepted_incoming = _merge_refresh_batch_safely(
-                matches, incoming, day=day, tour=tour
-            )
+                matches, accepted_incoming = _merge_refresh_batch_safely(
+                    matches, incoming, day=day, tour=tour
+                )
 
-            affected_years = {
-                match.scheduled_at.astimezone(timezone.utc).year
-                for match in accepted_incoming
-            }
-            for match in accepted_incoming:
-                provider_id = _provider_event_id(match)
-                if provider_id is not None and provider_id in provider_years:
-                    affected_years.add(provider_years[provider_id])
+                affected_years.update(
+                    match.scheduled_at.astimezone(timezone.utc).year
+                    for match in accepted_incoming
+                )
+                for match in accepted_incoming:
+                    provider_id = _provider_event_id(match)
+                    if provider_id is not None and provider_id in provider_years:
+                        affected_years.add(provider_years[provider_id])
 
-            written = []
-            removed = []
-            for year in sorted(affected_years):
-                path, was_removed = sync_year_partition(matches, history_dir, year)
-                if path is not None:
-                    written.append(path)
-                elif was_removed:
-                    removed.append(f"history-{year}.parquet")
+                for match in accepted_incoming:
+                    provider_id = _provider_event_id(match)
+                    if provider_id is not None:
+                        provider_years[provider_id] = (
+                            match.scheduled_at.astimezone(timezone.utc).year
+                        )
+            if day_failed:
+                # The same calendar discovery powers ATP, WTA and doubles. Avoid
+                # spending another request on a date that just returned a provider
+                # error in this run.
+                pass
+            day += timedelta(days=1)
+    except Exception:
+        persist_pending()
+        raise
 
-            if written or removed:
-                bundle = written + [history_dir / "history_manifest.json"]
-                if removed:
-                    history_store.upload_bundle(bundle, remove_names=removed)
-                else:
-                    history_store.upload_bundle(bundle)
-
-            for match in accepted_incoming:
-                provider_id = _provider_event_id(match)
-                if provider_id is not None:
-                    provider_years[provider_id] = (
-                        match.scheduled_at.astimezone(timezone.utc).year
-                    )
-        if day_failed:
-            # The same calendar discovery powers ATP, WTA and doubles. Avoid
-            # spending another request on a date that just returned a provider
-            # error in this run.
-            pass
-        day += timedelta(days=1)
+    persist_pending()
     provider._tbt_skipped_history_days = skipped_days
     return matches
 
