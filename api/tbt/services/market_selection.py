@@ -411,7 +411,6 @@ def _prime_display_rank(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
     )
     return ranked
 
-
 def _top_rank_key(card: dict[str, Any]) -> tuple[float, float, int, int, float]:
     """Confidence-first Top Bets ranking.
 
