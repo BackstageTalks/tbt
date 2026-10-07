@@ -31,7 +31,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('tbt-alimoh89-pr-{0}', github.ref) || 'tbt-history-data-writer' }}
+  group: ${{ github.event_name == 'pull_request' && format('tbt-alimoh89-pr-{0}', github.ref) || 'tbt-alimoh-market-write-2026-10-07' }}
   cancel-in-progress: false
 
 jobs:
