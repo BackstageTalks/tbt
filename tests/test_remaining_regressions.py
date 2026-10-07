@@ -426,6 +426,11 @@ def test_all_holdout_decisions_persist_before_promotion(monkeypatch, tmp_path, p
     monkeypatch.setattr(pipeline, 'ROOT', tmp_path)
     monkeypatch.setattr(pipeline, 'ReleaseStore', Store)
     monkeypatch.setattr(pipeline, 'load_partitions', lambda path: [])
+    monkeypatch.setattr(
+        pipeline,
+        'load_rank_feature_inputs',
+        lambda *args, **kwargs: SimpleNamespace(atp=None, wta=None, report={}),
+    )
     candidate_model = SimpleNamespace(
         version='candidate',
         metadata={'evaluation_end': '2025-02-01T00:00Z'},
