@@ -206,7 +206,14 @@ jobs:
           for f in "${sources[@]}"; do
             args+=(--source-csv "$f")
           done
-          for f in .cache/tbt/uploaded-quali/2024_atp_quali.csv .cache/tbt/uploaded-quali/2025_atp_quali.csv .cache/tbt/uploaded-quali/2026_atp_quali.csv; do args+=(--source-csv "$f"); done\n          python scripts/link_offline_serve_return.py             --history-dir .cache/tbt/offline-enrichment/history             "${args[@]}"             --charting-zip .cache/tbt/offline-sources/charting-root.zip             --out-dir .cache/tbt/offline-enrichment/link
+          for f in .cache/tbt/uploaded-quali/2024_atp_quali.csv .cache/tbt/uploaded-quali/2025_atp_quali.csv .cache/tbt/uploaded-quali/2026_atp_quali.csv; do
+            args+=(--source-csv "$f")
+          done
+          python scripts/link_offline_serve_return.py \
+            --history-dir .cache/tbt/offline-enrichment/history \
+            "${args[@]}" \
+            --charting-zip .cache/tbt/offline-sources/charting-root.zip \
+            --out-dir .cache/tbt/offline-enrichment/link
 
       - name: Validate linker report
         shell: bash
