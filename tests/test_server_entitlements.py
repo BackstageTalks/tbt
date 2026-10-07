@@ -317,7 +317,7 @@ def test_free_pick_remains_visible_and_stable_during_metadata_read_failure():
     assert first_manifest["sections"]["prime"]["slot_states"] == second_manifest["sections"]["prime"]["slot_states"]
 
 
-def test_known_allocated_free_pick_is_never_replaced_by_fallback():
+def test_known_out_of_window_free_pick_migrates_to_current_top_five():
     from tbt.services.entitlements import _row_access_key
     cfg = _stable_random_cfg("rookie", 1)
     payload = feed(10)
@@ -328,13 +328,19 @@ def test_known_allocated_free_pick_is_never_replaced_by_fallback():
         "_daily_allocations": {"prime": [_row_access_key(chosen)]},
     }
     data, manifest = filter_feed_for_access(payload, account, cfg)
-    assert [item["event_id"] for item in data["prime_picks"]] == [chosen["event_id"]]
+    top_five = {item["event_id"] for item in payload["prime_picks"][:5]}
+    assert len(data["prime_picks"]) == 1
+    assert data["prime_picks"][0]["event_id"] in top_five
+    assert data["prime_picks"][0]["event_id"] != chosen["event_id"]
     assert manifest["sections"]["prime"]["returned"] == 1
-    # If the selected event disappears, never silently allocate a second.
+
     payload["prime_picks"] = payload["prime_picks"][:8]
-    missing, missing_manifest = filter_feed_for_access(payload, account, cfg)
-    assert missing["prime_picks"] == []
-    assert missing_manifest["sections"]["prime"]["returned"] == 0
+    migrated, migrated_manifest = filter_feed_for_access(payload, account, cfg)
+    assert len(migrated["prime_picks"]) == 1
+    assert migrated["prime_picks"][0]["event_id"] in {
+        item["event_id"] for item in payload["prime_picks"][:5]
+    }
+    assert migrated_manifest["sections"]["prime"]["returned"] == 1
 
 
 def test_paid_plan_does_not_gain_unpersisted_rows_on_read_outage():
