@@ -13,6 +13,7 @@ from morning_clock import morning_selection_now, morning_publication_delay
 from download_tennis_history import read_json, write_json
 from history_download_budget import LocalRequestBudget, reserve_allocation
 from release_store import ReleaseStore
+from rank_feature_inputs import load_rank_feature_inputs
 from tbt.config import settings
 from tbt.errors import ProviderError
 from tbt.data.history_snapshot import (
@@ -22,6 +23,8 @@ from tbt.data.history_snapshot import (
 )
 from tbt.data.history_safety import sanitize_history_identities, merge_trusted_history_batch
 from tbt.data.atp_leaderboards import ATPLeaderboardPriors
+from tbt.data.atp_rank_history import ATP_RANK_HISTORY_FEATURE_NAMES
+from tbt.data.wta_rank_history import WTA_RANK_HISTORY_FEATURE_NAMES
 from tbt.data.wta_season_stats import WTASeasonPriors
 from tbt.models.artifact import load_model, save_model
 from tbt.providers.rapidapi import RapidTennisClient
@@ -71,6 +74,14 @@ def clean(value):
     if isinstance(value, list):
         return [clean(v) for v in value]
     return value
+
+
+_RANK_FEATURE_NAMES = set(ATP_RANK_HISTORY_FEATURE_NAMES) | set(WTA_RANK_HISTORY_FEATURE_NAMES)
+
+
+def _model_requires_rank_history(model) -> bool:
+    names = set(getattr(model, "feature_names", None) or ())
+    return bool(names & _RANK_FEATURE_NAMES)
 
 
 
@@ -798,12 +809,33 @@ def main():
                 "reason": str(exc)[:300],
             }), flush=True)
 
+    atp_rank_history = None
+    wta_rank_history = None
+    rank_feature_input_report = {}
+    if args.mode in {"train", "backtest"}:
+        # Candidate evaluation must consume the exact same private rank-history
+        # sources that a future serving artifact will require. The loader makes
+        # zero provider calls and verifies the acquired research asset hashes.
+        rank_inputs = load_rank_feature_inputs(
+            args.data_repository,
+            cache / "rank-feature-inputs",
+            matches,
+        )
+        atp_rank_history = rank_inputs.atp
+        wta_rank_history = rank_inputs.wta
+        rank_feature_input_report = rank_inputs.report
+        print(json.dumps({"rank_feature_inputs": rank_feature_input_report}, ensure_ascii=False), flush=True)
+
     model_dir = cache / "model"
     if args.mode == "backtest":
         report = clean(walk_forward_backtest(
-            matches, atp_leaderboards=atp_leaderboards,
-            wta_season_stats=wta_season_stats
+            matches,
+            atp_leaderboards=atp_leaderboards,
+            atp_rank_history=atp_rank_history,
+            wta_rank_history=wta_rank_history,
+            wta_season_stats=wta_season_stats,
         ))
+        report["rank_feature_input_bundle"] = clean(rank_feature_input_report)
         path = cache / "backtest.json"
         write_json(path, report)
         store = ReleaseStore(args.data_repository, "tbt-reports-v1", cache / "reports")
@@ -840,9 +872,12 @@ def main():
             production_model=champion,
             promotion_history=promotion_history,
             atp_leaderboards=atp_leaderboards,
+            atp_rank_history=atp_rank_history,
+            wta_rank_history=wta_rank_history,
             wta_season_stats=wta_season_stats,
         )
         report = clean(result.report)
+        report["rank_feature_input_bundle"] = clean(rank_feature_input_report)
         governance = report.get("evaluation_governance") or {}
         fingerprint = str(governance.get("holdout_fingerprint") or "")
         eligibility_reason = governance.get("eligibility_reason")
@@ -1022,6 +1057,23 @@ def main():
         challenger_version = ""
         shadow_store = None
         shadow_enabled = False
+
+    # Do not make today's legacy champion depend on new research assets. Load
+    # rank history only when the persisted production or shadow artifact opts
+    # into these features. Once promoted, both TRAIN and REFRESH use this exact
+    # same loader and source hashes.
+    if _model_requires_rank_history(model) or (
+        shadow_enabled and _model_requires_rank_history(challenger_model)
+    ):
+        rank_inputs = load_rank_feature_inputs(
+            args.data_repository,
+            cache / "rank-feature-inputs",
+            matches,
+        )
+        atp_rank_history = rank_inputs.atp
+        wta_rank_history = rank_inputs.wta
+        rank_feature_input_report = rank_inputs.report
+        print(json.dumps({"rank_feature_inputs": rank_feature_input_report}, ensure_ascii=False), flush=True)
 
     prediction_dir = cache / "predictions"
     prediction_store = ReleaseStore(
@@ -1225,6 +1277,8 @@ def main():
         predictions = predict(
             model, matches, upcoming, now=prediction_now,
             atp_leaderboards=atp_leaderboards,
+            atp_rank_history=atp_rank_history,
+            wta_rank_history=wta_rank_history,
             wta_season_stats=wta_season_stats,
         )
 
@@ -1236,6 +1290,8 @@ def main():
                 predict(
                     challenger_model, matches, upcoming, now=prediction_now,
                     atp_leaderboards=atp_leaderboards,
+                    atp_rank_history=atp_rank_history,
+                    wta_rank_history=wta_rank_history,
                     wta_season_stats=wta_season_stats,
                 )
                 if shadow_enabled else []
