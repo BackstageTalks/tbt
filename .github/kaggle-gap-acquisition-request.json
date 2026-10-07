@@ -47,5 +47,7 @@
       "intended_use": "serve-speed/rally/net/break-point provenance audit"
     }
   ],
-  "requested_at_utc": "2026-10-07T10:45:00Z"
+  "requested_at_utc": "2026-10-07T10:45:00Z",
+  "validation_reason": "Post-merge pull-request validation of public Kaggle download and audit path before canonical work.",
+  "validation_requested_at_utc": "2026-10-07T11:03:00Z"
 }
