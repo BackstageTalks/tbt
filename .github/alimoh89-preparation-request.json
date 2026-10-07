@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "mode": "prepare-license-gated",
+  "mode": "write",
   "source": {
     "platform": "Kaggle",
     "slug": "alimoh89/tennis-results-and-betting-odds-20142025",
@@ -8,17 +8,21 @@
     "expected_archive_sha256": "24ccc91e97a29f998dd7df0401d6b2b001fb9e9ef418105e298c2507ec6a0603",
     "expected_file_sha256": "8bc187158931957d92ffaa5dc7e5a3e4bd58b30023e8c470bcb85521a58bee16",
     "expected_rows": 300059,
-    "license_status": "review_required_other"
+    "license_status": "operator_confirmed_compatible_for_noncommercial_blinq_use"
   },
   "safety": {
-    "canonical_mutation": false,
+    "canonical_mutation": true,
     "provider_api_requests": 0,
     "model_promotion": false,
-    "persist_row_level_output": false,
+    "persist_row_level_output": true,
     "fail_closed_on_identity_ambiguity": true
   },
   "output": {
-    "audit_path": "audit/alimoh89-preparation-latest.json"
+    "audit_path": "audit/alimoh89-preparation-latest.json",
+    "sidecar_release_tag": "blinq-alimoh89-markets-2026-10-07",
+    "sidecar_manifest_path": "research/historical_market/alimoh89_2014_2025/manifest.json",
+    "backup_manifest_path": "backup/kaggle/2026-10-07/alimoh89_tennis-results-and-betting-odds-20142025/manifest.json"
   },
-  "requested_at_utc": "2026-10-07T11:48:00Z"
+  "requested_at_utc": "2026-10-07T11:48:00Z",
+  "confirmed_at_utc": "2026-10-07T12:46:00Z"
 }

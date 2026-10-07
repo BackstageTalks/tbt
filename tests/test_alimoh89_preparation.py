@@ -2,6 +2,7 @@ from pathlib import Path
 
 from scripts.prepare_alimoh89_markets import (
     FORBIDDEN_MODEL_COLUMNS,
+    canonical_market_history,
     extract_markets,
     infer_tour,
     orient_markets,
@@ -42,3 +43,47 @@ def test_postmatch_columns_are_explicitly_forbidden():
     assert "completed" in FORBIDDEN_MODEL_COLUMNS
     assert "set1_score_a" in FORBIDDEN_MODEL_COLUMNS
     assert "total_games" in FORBIDDEN_MODEL_COLUMNS
+
+
+def test_canonical_market_uses_one_coherent_bookmaker():
+    oriented = {
+        "bookmakers": {
+            "bet365": {
+                "money_open": {"player1": 1.8, "player2": 2.1},
+                "money_final": {"player1": 1.7, "player2": 2.2},
+            },
+            "betfair": {
+                "money_open": {"player1": 1.9, "player2": 2.0},
+                "money_final": {"player1": 1.85, "player2": 2.05},
+            },
+        },
+        "best": {
+            "money_open": {"player1": 1.95, "player2": 2.15},
+            "money_final": {"player1": 1.9, "player2": 2.25},
+        },
+    }
+    marker = canonical_market_history(
+        oriented,
+        source_match_id_value="m1",
+        source_file_sha256="a" * 64,
+    )
+    assert marker is not None
+    assert marker["source"].endswith(":bet365")
+    assert marker["opening"]["player1_odds"] == 1.8
+    assert marker["opening"]["player2_odds"] == 2.1
+    assert marker["closing"]["player1_odds"] == 1.7
+    assert marker["model_feature_policy"] == "opening_only_candidate; closing_validation_only"
+
+
+def test_canonical_market_requires_opening_market():
+    marker = canonical_market_history(
+        {
+            "bookmakers": {
+                "bet365": {"money_final": {"player1": 1.7, "player2": 2.2}}
+            },
+            "best": {},
+        },
+        source_match_id_value="m2",
+        source_file_sha256="b" * 64,
+    )
+    assert marker is None

@@ -26,6 +26,7 @@ from tbt.data.history_safety import sanitize_history_identities
 from tbt.data.history_snapshot import load_partitions
 from tbt.data.offline_odds import (
     decimal_odds,
+    fair_market,
     legacy_name_matches,
     norm_round,
     norm_surface,
@@ -319,6 +320,95 @@ def candidate_ok(src: SourceRow, match) -> tuple[bool, list[str], int]:
     accepted = score >= (9 if delta == 0 else 8)
     return accepted, evidence, score
 
+def _signature(match) -> dict[str, str]:
+    return {
+        "tour": str(match.tour or "").lower(),
+        "scheduled_date_utc": match.scheduled_at.date().isoformat(),
+        "player1_id": str(match.player1_id),
+        "player1_name": str(match.player1_name),
+        "player2_id": str(match.player2_id),
+        "player2_name": str(match.player2_name),
+        "surface": str(match.surface or ""),
+        "tournament": str(match.tournament or ""),
+        "round_name": str(match.round_name or ""),
+        "winner_id": str(match.winner_id or ""),
+    }
+
+
+def _fair_pair(pair: dict[str, float] | None) -> dict[str, float] | None:
+    if not isinstance(pair, dict):
+        return None
+    try:
+        p1 = float(pair["player1"])
+        p2 = float(pair["player2"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    fair = fair_market(p1, p2)
+    return {
+        "player1_odds": p1,
+        "player2_odds": p2,
+        "player1_implied_probability": float(fair["player1_implied_probability"]),
+        "player2_implied_probability": float(fair["player2_implied_probability"]),
+        "raw_overround": float(fair["raw_overround"]),
+    }
+
+
+def canonical_market_history(
+    oriented: dict[str, Any],
+    *,
+    source_match_id_value: str,
+    source_file_sha256: str,
+) -> dict[str, Any] | None:
+    # Canonical history must use a coherent two-way market from one bookmaker.
+    # Never pair independently selected "best" quotes from different books.
+    priority = ("bet365", "betfair", "ladbrokes", "unibet")
+    selected_book = None
+    opening = closing = None
+
+    for book in priority:
+        item = oriented.get("bookmakers", {}).get(book) or {}
+        candidate_open = _fair_pair(item.get("money_open"))
+        candidate_close = _fair_pair(item.get("money_final"))
+        if candidate_open is not None and candidate_close is not None:
+            selected_book = book
+            opening, closing = candidate_open, candidate_close
+            break
+
+    if selected_book is None:
+        for book in priority:
+            item = oriented.get("bookmakers", {}).get(book) or {}
+            candidate_open = _fair_pair(item.get("money_open"))
+            if candidate_open is not None:
+                selected_book = book
+                opening = candidate_open
+                closing = _fair_pair(item.get("money_final"))
+                break
+
+    if selected_book is None or opening is None:
+        return None
+
+    marker: dict[str, Any] = {
+        "schema": 1,
+        "status": "linked",
+        "source": f"{SOURCE_LABEL}:{selected_book}",
+        "source_match_id": str(source_match_id_value),
+        "source_file_sha256": str(source_file_sha256),
+        "price_kind": "historical_open_close",
+        "closing_semantics": "last_recorded_before_match",
+        "model_feature_policy": "opening_only_candidate; closing_validation_only",
+        "opening": opening,
+    }
+    if closing is not None:
+        marker["closing"] = closing
+    return marker
+
+
+def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+
 def write_gz(path: Path, rows: list[dict[str, Any]]) -> None:
     with gzip.open(path, "wt", encoding="utf-8", compresslevel=6) as handle:
         for row in rows:
@@ -353,6 +443,8 @@ def main() -> None:
     quarantine: list[dict[str, Any]] = []
     linked_canonical: set[str] = set()
     market_counts = Counter()
+    canonical_market_stage: list[dict[str, Any]] = []
+    sidecars_by_year: dict[int, list[dict[str, Any]]] = defaultdict(list)
 
     for src in source_rows:
         pair = tuple(sorted((norm_text(src.player_a), norm_text(src.player_b))))
@@ -409,7 +501,7 @@ def main() -> None:
         for key in oriented["best"]:
             market_counts[f"best:{key}"] += 1
 
-        staging.append({
+        rich_row = {
             "schema": 1,
             "match_id": mid,
             "scheduled_date_utc": match.scheduled_at.date().isoformat(),
@@ -420,7 +512,7 @@ def main() -> None:
             "identity_evidence": evidence,
             "markets": oriented,
             "feature_policy": {
-                "allowed_after_license_review": [
+                "prematch_candidate": [
                     "opening_moneyline",
                     "opening_handicap_price_on_recorded_line",
                     "opening_total_price_on_recorded_line",
@@ -432,11 +524,50 @@ def main() -> None:
                 ],
                 "forbidden_source_columns": sorted(FORBIDDEN_MODEL_COLUMNS),
             },
-            "license_gate": "blocked_pending_rights_confirmation",
-        })
+            "license_status": "operator_confirmed_compatible_for_noncommercial_blinq_use",
+        }
+        staging.append(rich_row)
+        sidecars_by_year[int(match.scheduled_at.year)].append(rich_row)
+
+        existing_history = (
+            (match.provider_payload or {}).get("_tbt_market_history")
+            if isinstance(match.provider_payload, dict)
+            else None
+        )
+        marker = canonical_market_history(
+            oriented,
+            source_match_id_value=src.source_match_id,
+            source_file_sha256=source_file_sha256,
+        )
+        if existing_history:
+            counts["existing_market_history_preserved"] += 1
+        elif marker is None:
+            counts["no_coherent_opening_moneyline"] += 1
+        else:
+            canonical_market_stage.append({
+                "schema": 1,
+                "match_id": mid,
+                "canonical": _signature(match),
+                "incoming_market_history": marker,
+                "source": {
+                    "source_slug": SOURCE_SLUG,
+                    "row_number": src.row_number,
+                    "identity_evidence": evidence,
+                },
+                "import_ready": True,
+            })
+            counts["canonical_market_stage_rows"] += 1
+            if marker.get("closing") is not None:
+                counts["canonical_market_open_close_rows"] += 1
+            else:
+                counts["canonical_market_opening_only_rows"] += 1
+
         counts["linked_matches"] += 1
 
     write_gz(out / "staging.jsonl.gz", staging)
+    write_jsonl(out / "canonical_market_stage.jsonl", canonical_market_stage)
+    for year, rows in sorted(sidecars_by_year.items()):
+        write_gz(out / f"market-sidecar-{year}.jsonl.gz", rows)
     write_gz(out / "review.jsonl.gz", review)
     write_gz(out / "quarantine.jsonl.gz", quarantine)
 
@@ -447,7 +578,7 @@ def main() -> None:
             "slug": SOURCE_SLUG,
             "file": source_path.name,
             "file_sha256": source_file_sha256,
-            "license_status": "review_required_other",
+            "license_status": "operator_confirmed_compatible_for_noncommercial_blinq_use",
         },
         "canonical_rows": len(matches),
         "identity_safety": identity,
@@ -455,13 +586,17 @@ def main() -> None:
         "source_tour_values": tour_values,
         "market_counts": dict(market_counts),
         "staged_rows": len(staging),
+        "canonical_market_stage_rows": len(canonical_market_stage),
+        "sidecar_years": {
+            str(year): len(rows) for year, rows in sorted(sidecars_by_year.items())
+        },
         "review_rows": len(review),
         "quarantine_rows": len(quarantine),
         "canonical_mutated": False,
         "provider_api_requests": 0,
         "model_promoted": False,
         "persist_row_level_output": False,
-        "license_gate": "blocked_pending_rights_confirmation",
+        "license_gate": "unlocked_operator_confirmation",
         "ready_after_license": (
             len(staging) > 0
             and counts.get("duplicate_canonical_links", 0) == 0
@@ -471,7 +606,7 @@ def main() -> None:
             "winner_orientation": "identity_validation_only",
             "score_result_fields": "excluded",
             "recorded_final_markets": "research_only_not_prematch_feature",
-            "opening_markets": "eligible_only_after_license_and_timestamp/provenance review",
+            "opening_markets": "prematch_candidate_from_source_opening_fields; coherent_single_bookmaker_only_in_canonical",
         },
     }
     (out / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
