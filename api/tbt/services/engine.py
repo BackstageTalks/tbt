@@ -234,7 +234,7 @@ def _presentation_player_profile(builder, match, *, player1):
     }
 
 
-def predict(model, history, upcoming, now=None, atp_leaderboards=None, wta_season_stats=None):
+def predict(model, history, upcoming, now=None, atp_leaderboards=None, wta_season_stats=None, *, return_context=False):
     now = now or datetime.now(timezone.utc)
     # Match completion timestamps are unavailable. Use previous UTC days only,
     # matching the conservative whole-day training protocol. Validate the exact
@@ -248,7 +248,10 @@ def predict(model, history, upcoming, now=None, atp_leaderboards=None, wta_seaso
     future = sorted((m for m in upcoming if not m.is_completed and m.scheduled_at > now
                      and m.status in {"upcoming", "notstarted", "scheduled"}), key=lambda m: (m.scheduled_at, m.match_id))
     if not future:
-        return []
+        empty = []
+        if return_context:
+            return empty, {"builder": builder, "cutoff": cutoff, "replay_history": replay_history}
+        return empty
     persisted_feature_names = getattr(model, "feature_names", None)
     feature_names = list(
         persisted_feature_names
