@@ -409,6 +409,8 @@ def predict(
             "stats_available": bool(f["stats_known_both"]), "signals": signals,
             "model_version": model.version, "created_at": now.isoformat(),
             "issued_at": None, "publication_status": "pending", "result": None})
+    if return_context:
+        return rows, {"builder": builder, "cutoff": cutoff, "replay_history": replay_history}
     return rows
 
 
