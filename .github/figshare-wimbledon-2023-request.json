@@ -1,11 +1,14 @@
 {
   "schema": 1,
-  "requested_at_utc": "2026-10-07T09:20:00Z",
+  "requested_at_utc": "2026-10-07T09:27:00Z",
   "action": "acquire_and_audit_figshare_wimbledon_2023",
   "source": {
     "title": "Tennis Data",
     "doi": "10.6084/m9.figshare.25511917",
-    "download": "https://figshare.com/ndownloader/articles/25511917/versions/1",
+    "version": 1,
+    "figshare_file_id": "45381565",
+    "download": "https://figshare.com/ndownloader/files/45381565",
+    "encoding": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "license": "CC BY 4.0"
   },
   "policy": "private research snapshot only; inspect actual schema before any canonical linking; no fuzzy identity; no current-match/post-match fields as pre-match model features; no model promotion"
