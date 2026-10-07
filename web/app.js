@@ -366,9 +366,18 @@
   function bannerCreativeStyle(c={}){
     const n=(v,min,max,fallback)=>{const x=Number(v);return Number.isFinite(x)&&v!==''?Math.max(min,Math.min(max,x)):fallback;};
     const vars=[
-      `--creative-headline-size:${n(c.headline_size,12,72,36)}px`,
-      `--creative-text-size:${n(c.text_size,9,28,14)}px`,
-      `--creative-eyebrow-size:${n(c.eyebrow_size,7,18,10)}px`,
+      `--creative-headline-size:${n(c.desktop_headline_size??c.headline_size,12,72,36)}px`,
+      `--creative-text-size:${n(c.desktop_text_size??c.text_size,9,28,14)}px`,
+      `--creative-eyebrow-size:${n(c.desktop_eyebrow_size??c.eyebrow_size,7,18,10)}px`,
+      `--creative-mobile-headline-size:${n(c.mobile_headline_size??c.desktop_headline_size??c.headline_size,12,72,30)}px`,
+      `--creative-mobile-text-size:${n(c.mobile_text_size??c.desktop_text_size??c.text_size,9,28,12)}px`,
+      `--creative-mobile-eyebrow-size:${n(c.mobile_eyebrow_size??c.desktop_eyebrow_size??c.eyebrow_size,7,18,9)}px`,
+      `--hero-social-x:${n(c.desktop_social_x,0,100,3)}%`,
+      `--hero-social-y:${n(c.desktop_social_y,0,100,76)}%`,
+      `--hero-social-mobile-x:${n(c.mobile_social_x,0,100,4)}%`,
+      `--hero-social-mobile-y:${n(c.mobile_social_y,0,100,76)}%`,
+      `--hero-social-size:${n(c.desktop_social_size,7,22,11)}px`,
+      `--hero-social-mobile-size:${n(c.mobile_social_size,7,22,10)}px`,
       `--creative-delay:${n(c.animation_delay_ms,0,5000,80)}ms`,
       `--hero-img-x:${n(c.desktop_image_x,0,100,50)}%`,
       `--hero-img-y:${n(c.desktop_image_y,0,100,50)}%`,
@@ -926,10 +935,10 @@
     const titleHtml=title?`<h2><strong>${bannerLineHtml(title)}</strong></h2>`:'';
     const heroEyebrow=Object.prototype.hasOwnProperty.call(c,'eyebrow')?String(c.eyebrow||'').trim():'BLINQ';
     const subtitle=String(c.text||'').trim();
-    const social=heroSocialLinksHtml(c,false,!showCopy);
-    const copy=showCopy?`<div class="dashboard-hero-copy">${heroEyebrow?`<small>${bannerLineHtml(heroEyebrow)}</small>`:''}${titleHtml}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b class="hero-slide-cta">${bannerLineHtml(c.button_text)} →</b>`:''}${social}</div>`:social;
+    const social=heroSocialLinksHtml(c,false,true);
+    const copy=showCopy?`<div class="dashboard-hero-copy">${heroEyebrow?`<small>${bannerLineHtml(heroEyebrow)}</small>`:''}${titleHtml}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b class="hero-slide-cta">${bannerLineHtml(c.button_text)} →</b>`:''}</div>`:'';
     const hit=href?`<a class="hero-slide-hitarea" href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''} ${route&&!external?`data-route="${escapeHtml(route)}"`:''} aria-label="${escapeHtml(c.button_text||c.headline||'Otvoriť banner')}"></a>`:'';
-    return `<div class="dashboard-hero hero-slide theme-${escapeHtml(theme)}${bannerCreativeClasses(c)}${index===state.heroIndex?' is-active':''}${showCopy?'':' hero-image-only'}" ${bannerCreativeStyle(c)} data-hero-index="${index}" data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} aria-hidden="${index===state.heroIndex?'false':'true'}">${hit}${sponsored}${image}${copy}${art}</div>`;
+    return `<div class="dashboard-hero hero-slide theme-${escapeHtml(theme)}${bannerCreativeClasses(c)}${index===state.heroIndex?' is-active':''}${showCopy?'':' hero-image-only'}" ${bannerCreativeStyle(c)} data-hero-index="${index}" data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} aria-hidden="${index===state.heroIndex?'false':'true'}">${hit}${sponsored}${image}${copy}${social}${art}</div>`;
   }
   function clearHeroRotation(){
     if(state.heroTimer){clearInterval(state.heroTimer);state.heroTimer=null;}
@@ -3742,8 +3751,8 @@
     const eyebrow=Object.prototype.hasOwnProperty.call(c,'eyebrow')?String(c.eyebrow||'').trim():'BLINQ';
     const headline=String(c.headline||'').trim();
     const subtitle=String(c.text||'').trim();
-    const social=heroSocialLinksHtml(c,true,c.show_copy===false);
-    const copy=c.show_copy===false?social:`<div class="admin-hero-preview-copy">${eyebrow?`<small>${bannerLineHtml(eyebrow)}</small>`:''}${headline?`<strong>${bannerLineHtml(headline)}</strong>`:''}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b>${bannerLineHtml(c.button_text)} →</b>`:''}${social}</div>`;
+    const social=heroSocialLinksHtml(c,true,true);
+    const copy=c.show_copy===false?'':`<div class="admin-hero-preview-copy">${eyebrow?`<small>${bannerLineHtml(eyebrow)}</small>`:''}${headline?`<strong>${bannerLineHtml(headline)}</strong>`:''}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b>${bannerLineHtml(c.button_text)} →</b>`:''}</div>`;
     const clampSize=(value,min,max,fallback)=>value!=null&&Number.isFinite(Number(value))?Math.max(min,Math.min(max,Number(value))):fallback;
     const previewWidth=mode==='mobile'?370:1396;
     const headlineSize=clampSize(c.headline_size,12,72,36),textSize=clampSize(c.text_size,9,32,14),eyebrowSize=clampSize(c.eyebrow_size,7,18,10);
@@ -3842,12 +3851,15 @@
           </div>
         </div>
       </div></div>
-      <div class="admin-form-section admin-banner-typography"><div class="admin-form-section-title"><strong>Veľkosť a farba textu</strong><span>Jednoduchá škála od čiernej po bielu. Platí pre desktop aj mobil, náhľad reaguje hneď.</span></div><div class="admin-banner-type-grid">
-        <label><span>Nadpis · veľkosť</span><select data-simple-banner-field="headline_size">${sizes([12,14,16,18,20,24,28,32,36,40,44,48,56,64,72],c.headline_size,36)}</select></label>
+      <div class="admin-form-section admin-banner-typography"><div class="admin-form-section-title"><strong>Veľkosť a farba textu</strong><span>Desktop a mobil sa nastavujú samostatne; farby zostávajú spoločné.</span></div><div class="admin-banner-type-grid">
+        <label><span>Desktop · nadpis</span><select data-simple-banner-field="desktop_headline_size">${sizes([12,14,16,18,20,24,28,32,36,40,44,48,56,64,72],c.desktop_headline_size??c.headline_size,36)}</select></label>
+        <label><span>Mobil · nadpis</span><select data-simple-banner-field="mobile_headline_size">${sizes([12,14,16,18,20,24,28,32,36,40,44,48,56,64,72],c.mobile_headline_size??c.desktop_headline_size??c.headline_size,30)}</select></label>
+        <label><span>Desktop · podnadpis</span><select data-simple-banner-field="desktop_text_size">${sizes([9,10,11,12,14,16,18,20,24,28],c.desktop_text_size??c.text_size,14)}</select></label>
+        <label><span>Mobil · podnadpis</span><select data-simple-banner-field="mobile_text_size">${sizes([9,10,11,12,14,16,18,20,24,28],c.mobile_text_size??c.desktop_text_size??c.text_size,12)}</select></label>
+        <label><span>Desktop · popiska</span><select data-simple-banner-field="desktop_eyebrow_size">${sizes([7,8,9,10,11,12,14,16,18],c.desktop_eyebrow_size??c.eyebrow_size,10)}</select></label>
+        <label><span>Mobil · popiska</span><select data-simple-banner-field="mobile_eyebrow_size">${sizes([7,8,9,10,11,12,14,16,18],c.mobile_eyebrow_size??c.desktop_eyebrow_size??c.eyebrow_size,9)}</select></label>
         <label><span>Nadpis · farba</span><select data-simple-banner-field="headline_color">${bannerColorOptions(c.headline_color)}</select></label>
-        <label><span>Podnadpis · veľkosť</span><select data-simple-banner-field="text_size">${sizes([10,12,14,16,18,20,24,28],c.text_size,14)}</select></label>
         <label><span>Podnadpis · farba</span><select data-simple-banner-field="text_color">${bannerColorOptions(c.text_color)}</select></label>
-        <label><span>Popiska · veľkosť</span><select data-simple-banner-field="eyebrow_size">${sizes([8,10,12,14,16,18],c.eyebrow_size,10)}</select></label>
         <label><span>Popiska · farba</span><select data-simple-banner-field="eyebrow_color">${bannerColorOptions(c.eyebrow_color)}</select></label>
       </div></div>
       <div class="admin-form-section admin-banner-image-editor"><div class="admin-form-section-title"><strong>Grafické podklady · Banner ${escapeHtml(selectedId.split('_').pop())}</strong><span>Odporúčaný pomer zodpovedá reálnemu zobrazeniu: desktop pri 1440 px ≈ 1422×232, mobil pri 390 px ≈ 390×178. Pri image_fit=cover sa iný pomer oreže.</span></div><div class="admin-form-grid">
@@ -3858,8 +3870,10 @@
           <fieldset><legend>Mobil · poloha obrázka</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_image_x" value="${Number.isFinite(Number(c.mobile_image_x))?Number(c.mobile_image_x):50}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_image_y" value="${Number.isFinite(Number(c.mobile_image_y))?Number(c.mobile_image_y):50}"></label></fieldset>
           <fieldset><legend>Desktop · text</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_text_x" value="${Number.isFinite(Number(c.desktop_text_x))?Number(c.desktop_text_x):3}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_text_y" value="${Number.isFinite(Number(c.desktop_text_y))?Number(c.desktop_text_y):50}"></label><label>Šírka %<input type="number" min="18" max="96" step="1" data-simple-banner-field="desktop_text_width" value="${Number.isFinite(Number(c.desktop_text_width))?Number(c.desktop_text_width):42}"></label></fieldset>
           <fieldset><legend>Mobil · text</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_text_x" value="${Number.isFinite(Number(c.mobile_text_x))?Number(c.mobile_text_x):4}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_text_y" value="${Number.isFinite(Number(c.mobile_text_y))?Number(c.mobile_text_y):50}"></label><label>Šírka %<input type="number" min="22" max="96" step="1" data-simple-banner-field="mobile_text_width" value="${Number.isFinite(Number(c.mobile_text_width))?Number(c.mobile_text_width):70}"></label></fieldset>
+          <fieldset><legend>Desktop · sociálne tlačidlá</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_social_x" value="${Number.isFinite(Number(c.desktop_social_x))?Number(c.desktop_social_x):3}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_social_y" value="${Number.isFinite(Number(c.desktop_social_y))?Number(c.desktop_social_y):76}"></label><label>Písmo px<input type="number" min="7" max="22" step="1" data-simple-banner-field="desktop_social_size" value="${Number.isFinite(Number(c.desktop_social_size))?Number(c.desktop_social_size):11}"></label></fieldset>
+          <fieldset><legend>Mobil · sociálne tlačidlá</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_social_x" value="${Number.isFinite(Number(c.mobile_social_x))?Number(c.mobile_social_x):4}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_social_y" value="${Number.isFinite(Number(c.mobile_social_y))?Number(c.mobile_social_y):76}"></label><label>Písmo px<input type="number" min="7" max="22" step="1" data-simple-banner-field="mobile_social_size" value="${Number.isFinite(Number(c.mobile_social_size))?Number(c.mobile_social_size):10}"></label></fieldset>
         </div>
-        <p class="admin-banner-layout-help span-2">X/Y posúva výrez obrázka a blok textu nezávisle pre desktop a mobil. Šírka textu riadi automatické zalomenie; Enter v nadpise vytvorí pevný riadok.</p>
+        <p class="admin-banner-layout-help span-2">X/Y posúva výrez obrázka, blok textu aj sociálne tlačidlá nezávisle pre desktop a mobil. Šírka textu riadi zalomenie; Enter v nadpise vytvorí pevný riadok.</p>
         <label class="admin-toggle-line span-2"><input type="checkbox" data-simple-banner-field="show_copy" ${c.show_copy!==false?'checked':''}><span>Zobraziť text nad obrázkom</span></label>
       </div></div>
       <div class="admin-form-section admin-page-background-editor" data-simple-banner="HERO_BANNER_1"><div class="admin-form-section-title"><strong>Pozadie hlavnej stránky</strong><span>Predvolené je rovnaké zelené tenisové pozadie ako pri prihlásení a loadingu, bez watermarku.</span></div><div class="admin-form-grid">
