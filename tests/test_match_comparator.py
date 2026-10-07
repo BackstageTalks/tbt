@@ -176,3 +176,5 @@ def test_prediction_context_is_returned_for_comparator_artifact_build():
     assert context["builder"].player_key("atp", "a") in context["builder"].players
     assert context["builder"].player_key("atp", "b") in context["builder"].players
     assert context["replay_history"]
+
+# Integration revalidation: presentation enrichment is non-blocking on current main.
