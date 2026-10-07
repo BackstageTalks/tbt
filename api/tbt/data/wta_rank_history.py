@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import bisect
 import csv
+import gzip
 import logging
 import math
 import re
@@ -280,7 +281,9 @@ class WTARankHistory:
         supplement_seen = {}
         supplement_rows = []
         for path in supplement_csvs:
-            with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:
+            supplement_path = Path(path)
+            opener = gzip.open if supplement_path.suffix.casefold() == ".gz" else open
+            with opener(supplement_path, "rt", encoding="utf-8-sig", newline="") as handle:
                 for raw in csv.DictReader(handle):
                     ranking_type = str(raw.get("ranking_type") or "singles").strip().lower()
                     if ranking_type != "singles":
