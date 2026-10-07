@@ -17,7 +17,7 @@ concurrency:
 jobs:
   finalize:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 240
     env:
       PYTHONPATH: api:scripts
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
@@ -82,7 +82,7 @@ jobs:
         run: |
           set -euo pipefail
           request=.github/research-source-integration-request.json
-          python scripts/extract_open_meteo_pre_match_forecasts.py             --history-dir .cache/tbt/research-finalize/history-readback             --from-date "$(jq -r .open_meteo_from "$request")"             --to-date "$(jq -r .open_meteo_to "$request")"             --max-requests "$(jq -r .open_meteo_max_requests "$request")"             --workers 8             --requests-per-minute 360             --out .cache/tbt/research-finalize/work/openmeteo-pre-match.csv             --report .cache/tbt/research-finalize/audit/openmeteo-pre-match-report.json
+          python scripts/extract_open_meteo_pre_match_forecasts_bulk.py             --history-dir .cache/tbt/research-finalize/history-readback             --from-date "$(jq -r .open_meteo_from "$request")"             --to-date "$(jq -r .open_meteo_to "$request")"             --max-requests "$(jq -r .open_meteo_max_requests "$request")"             --bulk-size 20             --workers 4             --requests-per-minute 120             --retries 3             --timeout-seconds 45             --out .cache/tbt/research-finalize/work/openmeteo-pre-match.csv             --report .cache/tbt/research-finalize/audit/openmeteo-pre-match-report.json
           test "$(jq -r '.matched_rows' .cache/tbt/research-finalize/audit/openmeteo-pre-match-report.json)" -gt 0
 
       - name: Download verified training priors and PBP provenance
