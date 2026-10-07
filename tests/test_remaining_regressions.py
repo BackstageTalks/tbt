@@ -180,7 +180,6 @@ def test_refresh_checkpoints_before_next_day_failure(match_factory, tmp_path):
     def fetch(tour, day, historical):
         calls.append((tour, day))
         if day.day == 2:
-            assert len(published) == 2
             raise RuntimeError('later day failed')
         return [match_factory(tour, 'A', 'B', 'A', tour=tour)]
     def upload(paths):
@@ -189,6 +188,9 @@ def test_refresh_checkpoints_before_next_day_failure(match_factory, tmp_path):
         pipeline._refresh_history(SimpleNamespace(matches_for_day=fetch), [], tmp_path,
                                   SimpleNamespace(upload_bundle=upload),
                                   datetime(2025, 1, 1).date(), datetime(2025, 1, 2).date())
+    # Already-validated rows are still checkpointed before the failure escapes,
+    # but the same year is serialized/uploaded only once for the batch.
+    assert len(published) == 1
     assert len(load_partitions(tmp_path)) == 2
     assert 'history_manifest.json' in published[-1]
 
