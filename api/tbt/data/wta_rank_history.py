@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import bisect
 import csv
+import logging
 import math
 import re
 import unicodedata
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Iterable
 
 from .player_identity import load_crosswalk
+
+logger = logging.getLogger(__name__)
 
 WTA_RANK_HISTORY_FEATURE_NAMES = [
     "wta_hist_rank_advantage",
