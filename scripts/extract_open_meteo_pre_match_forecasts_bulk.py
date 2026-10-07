@@ -159,38 +159,42 @@ def main() -> None:
         raise SystemExit("Canonical identity quarantine is non-empty")
 
     eligible = _eligible(matches, start, end)
-    batches: dict[tuple[float, float, int], list[Any]] = defaultdict(list)
+    # Group by venue-month instead of venue-year. This preserves the exact
+    # 24-hour lead-time semantics for each match while keeping every API payload
+    # bounded to roughly one month of hourly values.
+    batches: dict[tuple[float, float, int, int], list[Any]] = defaultdict(list)
     for match, (lat, lon) in eligible:
-        batches[(lat, lon, match.scheduled_at.year)].append(match)
-    if len(batches) > args.max_requests:
-        raise SystemExit(
-            f"Need {len(batches)} venue-year source batches but cap is {args.max_requests}; "
-            "refusing an implicit partial extraction"
-        )
+        scheduled = match.scheduled_at.astimezone(timezone.utc)
+        batches[(lat, lon, scheduled.year, scheduled.month)].append(match)
 
     descriptors = []
-    for (lat, lon, year), group in sorted(batches.items()):
+    for (lat, lon, year, month), group in sorted(batches.items()):
         days = [m.scheduled_at.astimezone(timezone.utc).date() for m in group]
         descriptors.append({
             "lat": lat,
             "lon": lon,
             "year": year,
+            "month": month,
             "start": min(days),
             "end": max(days),
             "group": group,
         })
 
-    # Keep common date windows tight so bulk requests do not pull unnecessary
-    # multi-month grids. Month buckets are then chunked by a small location cap.
     buckets: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
     for row in descriptors:
-        buckets[(row["start"].year, row["start"].month)].append(row)
+        buckets[(row["year"], row["month"])].append(row)
 
     chunks: list[list[dict[str, Any]]] = []
     for key in sorted(buckets):
         rows = sorted(buckets[key], key=lambda r: (r["start"], r["lat"], r["lon"]))
         for idx in range(0, len(rows), args.bulk_size):
             chunks.append(rows[idx:idx + args.bulk_size])
+
+    if len(chunks) > args.max_requests:
+        raise SystemExit(
+            f"Need {len(chunks)} bulk Open-Meteo requests but cap is {args.max_requests}; "
+            "refusing an implicit partial extraction"
+        )
 
     min_interval_seconds = 60.0 / float(args.requests_per_minute)
 
@@ -260,7 +264,7 @@ def main() -> None:
         "to_date": end.isoformat(),
         "canonical_rows": len(matches),
         "eligible_outdoor_resolved_matches": eligible_count,
-        "venue_year_batches": len(descriptors),
+        "venue_month_batches": len(descriptors),
         "bulk_http_requests": len(chunks),
         "open_meteo_requests": len(chunks),
         "bulk_size": args.bulk_size,
@@ -286,7 +290,7 @@ def main() -> None:
     allowed_failures = max(10, int(len(descriptors) * 0.02))
     if len(failed_batches) > allowed_failures:
         raise SystemExit(
-            f"Open-Meteo bulk extraction failed too many venue-year batches: "
+            f"Open-Meteo bulk extraction failed too many venue-month batches: "
             f"{len(failed_batches)} > {allowed_failures}"
         )
 
