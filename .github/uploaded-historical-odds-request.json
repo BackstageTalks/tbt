@@ -6,5 +6,7 @@
   "expected_file_lines": 32951,
   "expected_source_rows": 32907,
   "tour": "wta",
-  "source_label": "operator_uploaded_wta_2013_2026_avg_ps_b365_bfe"
+  "source_label": "operator_uploaded_wta_2013_2026_avg_ps_b365_bfe",
+  "requested_at_utc": "2026-10-07T00:25:00Z",
+  "purpose": "Import uploaded WTA historical odds safely: preserve existing canonical market markers on conflicts and add only verified non-conflicting rows."
 }
