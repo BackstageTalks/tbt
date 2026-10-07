@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: tbt-research-source-finalize
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   finalize:
