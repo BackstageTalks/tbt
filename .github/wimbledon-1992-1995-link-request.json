@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "requested_at_utc": "2026-10-07T09:38:00Z",
+  "action": "link_and_integrate_wimbledon_1992_1995_point_data",
+  "source": {
+    "doi": "10.21942/uva.21983555",
+    "version": 3,
+    "license": "CC BY 4.0",
+    "private_asset": "tbt-research-sources-v1/wimbledon-1992-1995-pbp-ccby4.xlsx"
+  },
+  "link_policy": "year + Wimbledon + tour + exact initial/surname pair + winner; exact round when canonical round exists, otherwise both ranks exact; no fuzzy matching; source point aggregates must reconcile with match aggregates",
+  "import_policy": "existing canonical stats are never overwritten on conflict; strict identity signature revalidated at import; changed year partitions published then fully read back; raw PBP remains private sidecar",
+  "feature_policy": "post-match historical statistics only; no same-match or future leakage; no model promotion"
+}
