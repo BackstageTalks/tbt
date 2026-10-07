@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - ".github/workflows/research-source-finalize.yml"
+      - ".github/research-source-integration-request.json"
   workflow_dispatch:
 
 permissions:
@@ -229,17 +229,40 @@ jobs:
           print(json.dumps(report,ensure_ascii=False,indent=2))
           PY
 
-          for item in             "research/source-acquisition/latest.json:.cache/tbt/research-finalize/audit/source-acquisition-updated.json:Update BlinQ research source acquisition manifest"             "audit/research-source-integration-latest.json:.cache/tbt/research-finalize/audit/research-source-integration-latest.json:Verify BlinQ research source integration"
-          do
-            IFS=: read -r path file message <<< "$item"
-            encoded="$(base64 -w0 "$file")"
+          upload_json_file() {
+            local path="$1"
+            local file="$2"
+            local message="$3"
+            local sha
             sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
-            if [[ -n "$sha" ]]; then
-              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"                 -f message="$message" -f content="$encoded" -f sha="$sha" >/dev/null
-            else
-              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"                 -f message="$message" -f content="$encoded" >/dev/null
-            fi
-          done
+            PATH_TO_UPLOAD="$file" TARGET_SHA="$sha" COMMIT_MESSAGE="$message" python - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+
+          payload = {
+              "message": os.environ["COMMIT_MESSAGE"],
+              "content": base64.b64encode(
+                  Path(os.environ["PATH_TO_UPLOAD"]).read_bytes()
+              ).decode(),
+          }
+          if os.environ.get("TARGET_SHA"):
+              payload["sha"] = os.environ["TARGET_SHA"]
+          Path("/tmp/research-finalizer-upload.json").write_text(
+              json.dumps(payload), encoding="utf-8"
+          )
+          PY
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
+              --input /tmp/research-finalizer-upload.json >/dev/null
+          }
+
+          upload_json_file \
+            "research/source-acquisition/latest.json" \
+            ".cache/tbt/research-finalize/audit/source-acquisition-updated.json" \
+            "Update BlinQ research source acquisition manifest"
+          upload_json_file \
+            "audit/research-source-integration-latest.json" \
+            ".cache/tbt/research-finalize/audit/research-source-integration-latest.json" \
+            "Verify BlinQ research source integration"
 
       - name: Final persisted training DB readback
         shell: bash
