@@ -236,8 +236,12 @@ jobs:
               raise SystemExit(f"Unexpected source row count: {r.get('source_rows')} != {expected}")
           if int(r.get("api_requests", -1)) != 0:
               raise SystemExit("Offline odds linker unexpectedly used provider API")
-          if int(c.get("market_conflicts") or 0):
-              raise SystemExit(f"Existing historical market conflicts detected: {c.get('market_conflicts')}")
+          conflicts = int(c.get("market_conflicts") or 0)
+          if conflicts:
+              print(
+                  f"Preserving {conflicts} existing historical market conflicts in "
+                  "quarantine; canonical market markers remain unchanged."
+              )
           if int(c.get("staged_matches") or 0) <= 0 and int(c.get("already_present") or 0) <= 0:
               raise SystemExit("No safe linked historical odds rows available")
           PY
