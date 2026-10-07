@@ -17,8 +17,17 @@ def test_results_desktop_names_wrap_instead_of_ellipsis():
 
 def test_short_odds_comeback_badge_is_fail_closed():
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-    assert "function resultComebackHtml(publication,outcome)" in app
+    assert "function resultComebackIcon(publication,outcome)" in app
     assert "section!=='prime'" in app
     assert "first_set_outcome||''" in app
-    assert "result-comeback" in app
+    assert "result-comeback-icon" in app
     assert "↻" in app
+
+
+def test_player_fallback_handles_itf_women_and_is_eager():
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert "womenEvent=" in app
+    assert "w(?:15|25|35|50|75|100)" in app
+    assert "row?.tournament" in app
+    assert 'class="player-avatar-fallback"' in app
+    assert 'loading="eager"' in app
