@@ -675,7 +675,10 @@ def _publish_predictions(
         with gzip.open(comparator_path, "wt", encoding="utf-8", compresslevel=6) as handle:
             json.dump(clean(comparator_artifact), handle, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
         bundle.append(comparator_path)
-    store.upload_bundle(bundle)
+    store.upload_bundle(
+        bundle,
+        remove_names=("comparator.json.gz",) if not isinstance(comparator_artifact, dict) else (),
+    )
     return feed
 
 
