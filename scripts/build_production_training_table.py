@@ -252,6 +252,15 @@ def main() -> None:
         help="Sackmann WTA ranking CSV; may be supplied multiple times.",
     )
     parser.add_argument(
+        "--wta-rank-history-supplement-csv",
+        action="append",
+        default=[],
+        help=(
+            "Strict official WTA singles ranking supplement; every snapshot must "
+            "be later than the pinned Sackmann source. May be supplied multiple times."
+        ),
+    )
+    parser.add_argument(
         "--wta-rank-history-crosswalk",
         default="",
         help="Fail-closed BlinQ player_id -> Sackmann player_id crosswalk JSON.",
@@ -412,6 +421,7 @@ def main() -> None:
             args.wta_rank_history_players_csv,
             args.wta_rank_history_csv,
             crosswalk_path=args.wta_rank_history_crosswalk or None,
+            supplement_csvs=args.wta_rank_history_supplement_csv or (),
         )
         for match_id in frame["match_id"]:
             original = source[match_id]
@@ -535,6 +545,8 @@ def main() -> None:
         "historical_policy": "latest_weekly_snapshot_strictly_before_match_date",
         "players_csv": str(args.wta_rank_history_players_csv or ""),
         "ranking_csvs": list(args.wta_rank_history_csv or []),
+        "supplement_csvs": list(args.wta_rank_history_supplement_csv or []),
+        "supplement_policy": "strictly_after_pinned_source_max_date_no_overlap",
         "identity_crosswalk": str(args.wta_rank_history_crosswalk or ""),
     }
     report.setdefault("candidate_feature_groups", {})["wta_rank_history"] = {
