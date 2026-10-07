@@ -31,3 +31,14 @@ def test_player_fallback_handles_itf_women_and_is_eager():
     assert "row?.tournament" in app
     assert 'class="player-avatar-fallback"' in app
     assert 'loading="eager"' in app
+
+
+def test_results_live_max_odds_stays_inline_and_informational():
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
+    assert "function resultLiveMaxOddsHtml(publication,publishedOdds)" in app
+    assert "result.max_live_odds" in app
+    assert "MAX " in app
+    assert "ROI uses the published pre-match price" in app
+    assert ".result-live-max" in css
+    assert "display:inline!important" in css
