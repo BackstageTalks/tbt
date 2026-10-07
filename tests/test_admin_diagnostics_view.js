@@ -60,8 +60,9 @@ const healthy = {
       },
     },
   },
-  services: { info_storage: true, live_data: true },
-  live_worker: { configured: true, healthy: true, age_seconds: 55 },
+  services: { info_storage: true, live_data: true, match_status_worker: true },
+  live_worker: { configured: true, healthy: true, age_seconds: 55, scheduler_owner: 'external', expected_cadence_seconds: 300 },
+  match_status_worker: { configured: true, healthy: true, age_seconds: 65, scheduler_owner: 'external', expected_cadence_seconds: 1800 },
   account_inactivity: {
     policy: { enabled: true },
     worker: { configured: true, healthy: true },
@@ -69,10 +70,13 @@ const healthy = {
   },
   provider: { configured: true },
   api_budget: {
-    available: true, window: 'rolling_24h_conservative_5min',
-    global_spent: 18, global_limit: 12000, global_remaining: 11982,
+    available: true, window: 'provider_day_19_10_europe_bratislava',
+    global_spent: 18, global_limit: 13500, global_remaining: 13482,
+    reserved_provider_headroom: 1500,
+    next_reset_utc: '2026-09-27T17:10:00+00:00',
+    purpose_limits: { live: 3000, match: 2500, refresh: 5500, history: 13500 },
     spent: { live: 6, match: 12, refresh: 0, history: 0 },
-    remaining: { live: 2494, match: 238, refresh: 750, history: 8500 },
+    remaining: { live: 2994, match: 2488, refresh: 5500, history: 13482 },
   },
   feed: {
     ready: true, stale: false, generated_at: '2026-09-27T10:32:00Z',
@@ -83,12 +87,15 @@ const healthy = {
 
 const allGood = render(healthy);
 assert.match(allGood, /Všetky kontroly v poriadku/);
-assert.match(allGood, /<b>12<\/b> v poriadku/);
+assert.match(allGood, /<b>13<\/b> v poriadku/);
 assert.match(allGood, /admin-health-ok-details" open/);
-assert.match(allGood, /API ROZPOČET · LIVE RADAR/);
+assert.match(allGood, /API ROZPOČET · PROVIDER DEŇ/);
 assert.match(allGood, /LIVE využité/);
-assert.match(allGood, /6 \/ 2\s?500/);
+assert.match(allGood, /6 \/ 3\s?000/);
 assert.match(allGood, /Spolu rezervované/);
+assert.match(allGood, /Provider rezerva/);
+assert.match(allGood, /MATCH STATUS/);
+assert.match(allGood, /30m cadence/);
 assert.match(allGood, /Obnoviť diagnostiku/);
 assert.match(allGood, /PREZENTAČNÁ COVERAGE · FOTO & KURZY/);
 assert.match(allGood, /20\/20 priced · 0 missing/);
@@ -98,10 +105,11 @@ assert.ok(!allGood.includes('Treba skontrolovať'));
 const warnings = structuredClone(healthy);
 warnings.assets.tournament_logos = { ok: false, deployed_assets: 104, provider_or_proxy_refs: 147, total: 147, fallback_needed: 43 };
 warnings.live_worker = { configured: true, healthy: false, age_seconds: 500 };
+warnings.match_status_worker = { configured: true, healthy: false, age_seconds: 4000 };
 const degraded = render(warnings);
 assert.match(degraded, /Funguje s upozorneniami/);
 assert.match(degraded, /<b>10<\/b> v poriadku/);
-assert.match(degraded, /<b>2<\/b> na kontrolu/);
+assert.match(degraded, /<b>3<\/b> na kontrolu/);
 assert.match(degraded, /Treba skontrolovať/);
 assert.match(degraded, /Chýbajúce logá majú náhradný obrázok/);
 const missingOdds = structuredClone(healthy);
@@ -115,6 +123,7 @@ assert.match(oddsWarning, /18\/20 priced · 2 missing/);
 assert.match(oddsWarning, /market refresh/);
 
 assert.match(degraded, /Over externý cron, zhodný GitHub Secret/);
+assert.match(degraded, /Over externý 30-minútový cron/);
 assert.match(degraded, /<details class="admin-health-ok-details">/);
 assert.ok(!degraded.includes('TBT_LIVE_RADAR_ENABLED'), 'obsolete internal GitHub timers must not be recommended');
 
