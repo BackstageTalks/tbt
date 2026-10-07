@@ -1,0 +1,276 @@
+name: BlinQ Sackmann WTA stats enrichment
+
+on:
+  pull_request:
+    paths:
+      - ".github/sackmann-wta-stats-request.json"
+      - ".github/workflows/sackmann-wta-stats-enrichment.yml"
+      - "scripts/link_offline_serve_return.py"
+      - "scripts/import_offline_linked_serve_return.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/sackmann-wta-stats-request.json"
+      - ".github/workflows/sackmann-wta-stats-enrichment.yml"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run or write"
+        required: true
+        default: "dry-run"
+        type: choice
+        options: [dry-run, write]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('tbt-sackmann-wta-pr-{0}', github.ref) || 'tbt-history-data-writer' }}
+  cancel-in-progress: false
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      SOURCE_REPO: Aneeshers/tennis-sackmann-archive
+      SOURCE_SHA: 83733587353df8a41f2fd4f516147d5aa83f5a8d
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve controlled mode
+        id: request
+        env:
+          DISPATCH_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            mode="dry-run"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            mode="${DISPATCH_MODE:-dry-run}"
+          else
+            mode="$(jq -r '.mode // "dry-run"' .github/sackmann-wta-stats-request.json)"
+          fi
+          case "$mode" in dry-run|write) ;; *) exit 1;; esac
+          test "$(jq -r '.source.license' .github/sackmann-wta-stats-request.json)" = "CC BY-NC-SA 4.0"
+          test "$(jq -r '.api_requests' .github/sackmann-wta-stats-request.json)" = "0"
+          test "$(jq -r '.model_promotion' .github/sackmann-wta-stats-request.json)" = "false"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "WTA_MODE=$mode" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and test strict linker/importer
+        run: |
+          set -euo pipefail
+          python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
+          python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
+          python -m pytest tests/test_offline_serve_return_linker.py tests/test_offline_linked_serve_return_importer.py -q
+
+      - name: Verify private destination
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download pinned open-licensed WTA archive
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/sackmann-wta/source
+          curl --fail --location --retry 5 --retry-delay 3             "https://github.com/$SOURCE_REPO/archive/$SOURCE_SHA.zip"             -o .cache/tbt/sackmann-wta/source.zip
+          unzip -q .cache/tbt/sackmann-wta/source.zip -d .cache/tbt/sackmann-wta/source
+          ROOT="$(find .cache/tbt/sackmann-wta/source -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          test -d "$ROOT/wta"
+          test -s "$ROOT/LICENSE"
+          grep -qi "Attribution-NonCommercial-ShareAlike 4.0" "$ROOT/LICENSE"
+          echo "SOURCE_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Build exact WTA source inventory
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,re,json
+          from pathlib import Path
+          root=Path(os.environ["SOURCE_ROOT"])/"wta"
+          files=[]
+          for p in sorted(root.glob("wta_matches*.csv")):
+              if re.fullmatch(r"wta_matches_\d{4}\.csv",p.name) or re.fullmatch(r"wta_matches_qual_itf_\d{4}\.csv",p.name):
+                  files.append(p)
+          if len(files) != 118:
+              raise SystemExit(f"Expected 118 WTA match files, got {len(files)}")
+          Path(".cache/tbt/sackmann-wta/sources.txt").write_text(
+              "\n".join(map(str,files))+"\n",encoding="utf-8"
+          )
+          print(json.dumps({"source_files":len(files),"first":files[0].name,"last":files[-1].name},indent=2))
+          PY
+
+      - name: Download checksum-verified canonical history
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          d=Path(".cache/tbt/sackmann-wta/history")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",d).download(require_bundle_manifest=True)
+          PY
+
+      - name: Link WTA serve-return stats
+        run: |
+          set -euo pipefail
+          mapfile -t sources < .cache/tbt/sackmann-wta/sources.txt
+          args=()
+          for f in "${sources[@]}"; do args+=(--source-csv "$f"); done
+          python scripts/link_offline_serve_return.py             --history-dir .cache/tbt/sackmann-wta/history             "${args[@]}"             --out-dir .cache/tbt/sackmann-wta/link
+
+      - name: Validate linker
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/sackmann-wta/link/report.json").read_text())
+          c=r.get("counts") or {}
+          if r.get("api_requests") != 0: raise SystemExit("API usage")
+          if int(c.get("identity_linked") or 0) <= 0: raise SystemExit("No safely linked WTA stats")
+          if int(c.get("staged_matches") or 0) <= 0 and int(c.get("already_present") or 0) <= 0:
+              raise SystemExit("No canonical WTA coverage")
+          print(json.dumps({
+              "canonical_rows":r.get("canonical_rows"),
+              "source_rows":r.get("source_rows"),
+              "identity_linked":c.get("identity_linked",0),
+              "staged_matches":c.get("staged_matches",0),
+              "already_present":c.get("already_present",0),
+              "stat_conflict_matches":c.get("stat_conflict_matches",0),
+              "unmatched":c.get("unmatched",0),
+              "weak_evidence":c.get("weak_evidence",0),
+              "ambiguous":c.get("ambiguous",0),
+              "quality_ready_before":r.get("quality_ready_before"),
+              "quality_ready_projected_after":r.get("quality_ready_projected_after"),
+              "quality_ready_projected_added":r.get("quality_ready_projected_added"),
+              "staged_field_counts":r.get("staged_field_counts")
+          },indent=2))
+          PY
+
+      - name: Dry-run strict importer
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/sackmann-wta/link/auto_linked.jsonl             --history-dir .cache/tbt/sackmann-wta/history             --out-dir .cache/tbt/sackmann-wta/dry-run
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/sackmann-wta/dry-run/report.json").read_text())
+          c=r.get("counts") or {}
+          for key in ("identity_missing","identity_changed","invalid_stats","stat_conflicts"):
+              if int(c.get(key) or 0): raise SystemExit(f"{key}={c.get(key)}")
+          print(json.dumps(r,indent=2))
+          PY
+
+      - name: Write verified WTA enrichment
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/sackmann-wta/link/auto_linked.jsonl             --history-dir .cache/tbt/sackmann-wta/history             --out-dir .cache/tbt/sackmann-wta/write             --write-partitions             --write-history-dir .cache/tbt/sackmann-wta/history
+
+      - name: Publish changed history and verify local identity
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          d=Path(".cache/tbt/sackmann-wta/history")
+          report=json.loads(Path(".cache/tbt/sackmann-wta/write/report.json").read_text())
+          c=report.get("counts") or {}
+          for key in ("identity_missing","identity_changed","invalid_stats","stat_conflicts"):
+              if int(c.get(key) or 0): raise SystemExit(f"{key}={c.get(key)}")
+          matches,safety=sanitize_history_identities(load_partitions(d))
+          if safety.get("quarantined_rows"): raise SystemExit("Identity quarantine after WTA write")
+          years=[int(y) for y in report.get("changed_years") or []]
+          if years:
+              paths=[d/f"history-{y:04d}.parquet" for y in years]+[d/"history_manifest.json"]
+              ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",d).upload_bundle(paths)
+          print(json.dumps({"rows":len(matches),"changed_years":years},indent=2))
+          PY
+
+      - name: Verify persisted readback
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          d=Path(".cache/tbt/sackmann-wta/verify")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",d).download(require_bundle_manifest=True)
+          matches,safety=sanitize_history_identities(load_partitions(d))
+          if safety.get("quarantined_rows"): raise SystemExit("Persisted WTA identity quarantine")
+          print(f"Persisted WTA readback verified: {len(matches)} rows")
+          PY
+
+      - name: Persist audit
+        if: always()
+        continue-on-error: true
+        env:
+          JOB_STATUS: ${{ job.status }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from datetime import datetime,timezone
+          from pathlib import Path
+          def read(p):
+              p=Path(p)
+              if not p.is_file(): return None
+              try: return json.loads(p.read_text())
+              except Exception as e: return {"read_error":str(e)}
+          audit={
+              "schema":1,"generated_at_utc":datetime.now(timezone.utc).isoformat(),
+              "job_status":os.environ.get("JOB_STATUS"),"mode":os.environ.get("WTA_MODE"),
+              "run_id":os.environ.get("RUN_ID"),"run_sha":os.environ.get("RUN_SHA"),
+              "source_repository":os.environ.get("SOURCE_REPO"),"source_commit":os.environ.get("SOURCE_SHA"),
+              "license":"CC BY-NC-SA 4.0",
+              "link_report":read(".cache/tbt/sackmann-wta/link/report.json"),
+              "dry_run_report":read(".cache/tbt/sackmann-wta/dry-run/report.json"),
+              "write_report":read(".cache/tbt/sackmann-wta/write/report.json"),
+              "api_requests":0,"model_promoted":False
+          }
+          Path("/tmp/sackmann-wta-audit.json").write_text(json.dumps(audit,indent=2),encoding="utf-8")
+          PY
+          path="audit/sackmann-wta-stats-latest.json"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          content="$(base64 -w0 /tmp/sackmann-wta-audit.json)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Audit WTA Sackmann stats run $RUN_ID" -f content="$content" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Audit WTA Sackmann stats run $RUN_ID" -f content="$content" >/dev/null
+          fi
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-sackmann-wta-${{ github.run_id }}
+          path: |
+            .cache/tbt/sackmann-wta/link/report.json
+            .cache/tbt/sackmann-wta/link/review.jsonl
+            .cache/tbt/sackmann-wta/link/quarantine.jsonl
+            .cache/tbt/sackmann-wta/dry-run/report.json
+            .cache/tbt/sackmann-wta/write/report.json
+          if-no-files-found: warn
+          retention-days: 14
