@@ -123,14 +123,15 @@ class WTARankHistory:
                 if name:
                     player_names[pid] = name
 
-        rows = []
-        for path in ranking_csvs:
+        def parsed_rows(path):
             with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:
-                for row in csv.DictReader(handle):
-                    pid = _positive_int(row.get("player") or row.get("player_id"))
+                for raw in csv.DictReader(handle):
+                    pid = _positive_int(raw.get("player") or raw.get("player_id"))
                     if pid is None or pid not in player_names:
                         continue
-                    raw_date = str(row.get("ranking_date") or row.get("date") or "").strip()
+                    raw_date = str(
+                        raw.get("ranking_date") or raw.get("date") or ""
+                    ).strip()
                     try:
                         source_date = datetime.strptime(raw_date, "%Y%m%d").date()
                     except ValueError:
@@ -138,35 +139,97 @@ class WTARankHistory:
                             source_date = datetime.fromisoformat(raw_date).date()
                         except ValueError:
                             continue
-                    rows.append({
+                    rank = _positive_int(raw.get("ranking") or raw.get("rank"))
+                    if rank is None:
+                        continue
+                    yield {
                         "date": source_date,
-                        "rank": row.get("ranking") or row.get("rank"),
-                        "points": row.get("ranking_points") or row.get("points"),
+                        "rank": rank,
+                        "points": _positive_int(
+                            raw.get("ranking_points") or raw.get("points")
+                        ),
                         "name": player_names[pid],
                         "sackmann_player_id": str(pid),
-                    })
-        # Supplemental official WTA rankings may only extend the pinned
-        # Sackmann source. They may never overlap/overwrite a pinned weekly
-        # snapshot silently: an overlap is either an exact duplicate (ignored)
-        # or a hard conflict (refused). This keeps source precedence explicit.
+                    }
+
+        # Sackmann's pinned mirror ships immutable decade files plus a
+        # wta_rankings_current.csv convenience snapshot. The current file
+        # intentionally overlaps older dates and can contain retrospective
+        # corrections. Historical training must never let that convenience
+        # file rewrite an already-pinned decade snapshot.
+        paths = [Path(path) for path in ranking_csvs]
+        historical_paths = [
+            path for path in paths
+            if path.name.casefold() != "wta_rankings_current.csv"
+        ]
+        current_paths = [
+            path for path in paths
+            if path.name.casefold() == "wta_rankings_current.csv"
+        ]
+
+        rows = []
         base_by_key = {}
         base_max_date = None
-        for row in rows:
+
+        def add_pinned(row, *, source_kind):
+            nonlocal base_max_date
             sid = str(row.get("sackmann_player_id") or "").strip()
             source_date = row.get("date")
             if not sid or source_date is None:
-                continue
+                return
             key = (sid, source_date)
             signature = (
                 _positive_int(row.get("rank")),
                 _positive_int(row.get("points")),
             )
             previous = base_by_key.get(key)
-            if previous is not None and previous != signature:
-                raise ValueError(f"Conflicting pinned WTA rank row for {sid} on {source_date}")
+            if previous is not None:
+                if previous != signature:
+                    raise ValueError(
+                        f"Conflicting pinned WTA {source_kind} rank row for "
+                        f"{sid} on {source_date}"
+                    )
+                return
             base_by_key[key] = signature
+            rows.append(row)
             if base_max_date is None or source_date > base_max_date:
                 base_max_date = source_date
+
+        # Non-current decade files are authoritative for their historical range.
+        for path in historical_paths:
+            for row in parsed_rows(path):
+                add_pinned(row, source_kind="historical")
+
+        # If current is the only supplied source, it remains a valid pinned
+        # archive. Otherwise it is extension-only: rows at/before the immutable
+        # historical maximum are ignored rather than allowed to rewrite history.
+        historical_max_date = base_max_date
+        current_seen = {}
+        for path in current_paths:
+            for row in parsed_rows(path):
+                source_date = row["date"]
+                if historical_max_date is not None and source_date <= historical_max_date:
+                    continue
+                key = (row["sackmann_player_id"], source_date)
+                signature = (row["rank"], row["points"])
+                previous = current_seen.get(key)
+                if previous is not None:
+                    if previous != signature:
+                        raise ValueError(
+                            f"Conflicting pinned WTA current rank row for "
+                            f"{key[0]} on {source_date}"
+                        )
+                    continue
+                current_seen[key] = signature
+                add_pinned(row, source_kind="current")
+
+        if not historical_paths and not current_paths:
+            raise ValueError("No WTA ranking CSVs supplied")
+
+        # Supplemental official WTA rankings may only extend the pinned
+        # Sackmann source. They may never overlap/overwrite a pinned weekly
+        # snapshot silently: an overlap is either an exact duplicate (ignored)
+        # or a hard conflict (refused). This keeps source precedence explicit.
 
         supplement_seen = {}
         supplement_rows = []
