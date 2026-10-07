@@ -43,7 +43,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: propline-clv-snapshot
-          path: reports/propline_clv_snapshot.json
+          path: |
+            reports/propline_clv_snapshot.json
+            reports/propline_clv_snapshot.json.gz
           if-no-files-found: warn
           retention-days: 14
 
