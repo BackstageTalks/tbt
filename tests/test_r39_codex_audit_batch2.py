@@ -114,12 +114,13 @@ def test_b11_durable_allocation_survives_reorder_append_and_remove_without_new_u
         existing_allocations=state["sections"],
         now=now,
     )
-    # Same-day allocations are append-only per section. Daily/Prime were
-    # already full and must remain unchanged; Value was empty on first access,
-    # so the newly published row is allowed to fill its still-open Rookie slot.
+    # Daily remains durable. PRIME is the explicit exception: ROOKIE/FREE must
+    # migrate an older allocation when re-ranking moves it outside the current
+    # displayed top five. Value may fill its still-open slot.
     assert changed2 is True
     assert state2["sections"]["daily"] == state["sections"]["daily"]
-    assert state2["sections"]["prime"] == state["sections"]["prime"]
+    assert len(state2["sections"]["prime"]) == 1
+    assert state2["sections"]["prime"] != state["sections"]["prime"]
     assert len(state["sections"]["value"]) == 0
     assert len(state2["sections"]["value"]) == 1
 
