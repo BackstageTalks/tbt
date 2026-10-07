@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -114,3 +115,25 @@ def test_conflicting_duplicate_supplement_key_fails_closed(tmp_path):
             [rankings],
             supplement_csvs=[supplement],
         )
+
+
+def test_compressed_official_supplement_is_supported(tmp_path):
+    players, rankings, _ = _write_sources(tmp_path)
+    supplement = tmp_path / "official.csv.gz"
+    with gzip.open(supplement, "wt", encoding="utf-8", newline="") as handle:
+        handle.write(
+            "ranking_date,ranking_type,sackmann_player_id,wta_player_id,player_name,"
+            "rank,points,tournaments_played,movement_source,identity_evidence,source\n"
+            "2026-06-15,singles,1,101,Alpha One,10,1800,18,-3,exact_name_dob,wta_official\n"
+            "2026-06-15,singles,2,102,Beta Two,30,1000,17,2,exact_name_dob,wta_official\n"
+        )
+    history = WTARankHistory.from_sackmann(
+        players,
+        [rankings],
+        canonical_to_sackmann={"c1": "1", "c2": "2"},
+        supplement_csvs=[supplement],
+    )
+    values = history.features_for_match(_match(22))
+    assert values["wta_hist_known_both"] == 1.0
+    assert values["wta_hist_rank_advantage"] > 0.0
+    assert values["wta_hist_points_advantage"] > 0.0
