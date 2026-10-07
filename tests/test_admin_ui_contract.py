@@ -167,8 +167,8 @@ def test_hero_manager_uses_current_desktop_mobile_creative_contract():
     assert "data-admin-hero-seconds" in app_js
     assert 'data-simple-banner-field="image_url"' in app_js
     assert 'data-simple-banner-field="mobile_image_url"' in app_js
-    assert "1920×640" in app_js
-    assert "1080×720" in app_js
+    assert "1920×313" in app_js
+    assert "1080×493" in app_js
     assert "data-campaign-image" not in app_js
 
 
