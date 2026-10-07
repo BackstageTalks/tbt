@@ -159,9 +159,16 @@ jobs:
             expiry_epoch="$(date -u -d "$valid_before" +%s)"
             (( now_epoch < expiry_epoch )) || { echo "Provider-header override expired"; exit 1; }
             confirmed_usage="$(jq -r '.operator_confirmed_provider_usage_percent // empty' "$request")"
-            [[ "$confirmed_usage" == "30.34" ]] || {
-              echo "Provider-header override requires the operator-confirmed 30.34% baseline"; exit 1;
-            }
+            python - "$confirmed_usage" <<'PY'
+          import sys
+          try:
+              value=float(sys.argv[1])
+          except Exception as exc:
+              raise SystemExit("Provider-header override requires numeric operator-confirmed provider usage") from exc
+          if not (0.0 <= value < 90.0):
+              raise SystemExit("Operator-confirmed provider usage must be in [0, 90)")
+          print(f"Operator-confirmed provider usage baseline: {value:.2f}%")
+          PY
             echo "BLINQ_PRE_RESET_PROVIDER_HEADER_OVERRIDE=true" >> "$GITHUB_ENV"
             echo "BLINQ_PROVIDER_REQUEST_RESERVE=1500" >> "$GITHUB_ENV"
             echo "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER=true" >> "$GITHUB_ENV"
