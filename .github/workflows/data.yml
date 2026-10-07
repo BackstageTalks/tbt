@@ -158,7 +158,9 @@ jobs:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: api/requirements-train.txt
-      - run: python -m pip install -r api/requirements-train.txt
+      - name: Install data-pipeline dependencies
+        if: env.MODE != 'deploy-current'
+        run: python -m pip install -r api/requirements-train.txt
       - name: Execute selected operation
         shell: bash
         run: |
@@ -266,8 +268,8 @@ jobs:
             python scripts/rebuild_results_history.py \
               --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == deploy-current ]]; then
-            python scripts/init_shadow_release.py \
-              --data-repository "$TBT_DATA_REPOSITORY"
+            # Deployment-only reruns do not mutate or evaluate model/shadow state.
+            # The deploy job below validates the immutable prediction candidate.
             echo "Reusing current private prediction candidate; no Tennis RapidAPI calls."
           elif [[ "$MODE" == production-preflight ]]; then
             python scripts/download_production_preflight_inputs.py
@@ -590,7 +592,7 @@ jobs:
             --max-tournament-logo-requests "$BLINQ_ENRICH_LOGO_CAP"
 
       - name: Prepare refreshed serving feed and cached player assets
-        if: env.MODE == 'refresh' || env.MODE == 'current-refresh' || env.MODE == 'results-rebuild' || env.MODE == 'deploy-current'
+        if: env.MODE == 'refresh' || env.MODE == 'current-refresh' || env.MODE == 'results-rebuild'
         shell: bash
         run: |
           set -euo pipefail
