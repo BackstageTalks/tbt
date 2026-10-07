@@ -25,7 +25,7 @@ def test_shared_api_budget_documentation_matches_runtime_contract():
         "live": "LIVE Radar",
         "match": "Match Status",
         "refresh": "Refresh (including presentation enrichment)",
-        "history": "History, manual statistics and other enrichment",
+        "history": "History/backfill opportunistic ceiling",
     }
     for purpose, cap in PURPOSE_CAPS.items():
         assert f"| {labels[purpose]} | {cap:,} |" in text
