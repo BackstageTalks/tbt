@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "requested_at_utc": "2026-10-07T09:25:00Z",
+  "action": "acquire_and_link_usopen_2024_serve_metadata",
+  "source": {
+    "repository": "jasnwag/tennis_serve_dataset",
+    "license": "CC BY 4.0",
+    "metadata_file": "metadata.parquet",
+    "google_drive_file_id": "1rBJH3qZbp1ln5vlxUMc0QRx18LiPqvXK",
+    "expected_rows": 5966,
+    "event": "US Open 2024"
+  },
+  "policy": "download metadata only; private research sidecar; exact player-pair + event/year linking; no fuzzy identity; no canonical mutation; same-match serve observations are post-match and may only be used later as strictly lagged player-state inputs"
+}

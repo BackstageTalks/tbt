@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "requested_at_utc": "2026-10-07T09:31:00Z",
+  "action": "acquire_and_audit_wimbledon_1992_1995_point_by_point",
+  "source": {
+    "title": "Data used in the book Analyzing Wimbledon - The Power of Statistics",
+    "authors": ["F. Klaassen", "Jan R. Magnus"],
+    "doi": "10.21942/uva.21983555",
+    "version": 3,
+    "figshare_file_id": "39016655",
+    "download": "https://uvaauas.figshare.com/ndownloader/files/39016655",
+    "license": "CC BY 4.0",
+    "declared_scope": "Wimbledon 1992-1995: 256 men's matches / 59,466 points; 223 women's matches / 29,417 points; match-level data; plus three recent famous matches"
+  },
+  "policy": "private research snapshot first; inspect actual workbook schema; later canonical linking only exact/fail-closed; no fuzzy identity; no model promotion before chronological leakage-safe ablation"
+}

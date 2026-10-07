@@ -1,0 +1,129 @@
+name: Acquire and audit Figshare Wimbledon 2023
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/figshare-wimbledon-2023-request.json"
+      - ".github/workflows/figshare-wimbledon-2023.yml"
+      - "scripts/audit_figshare_wimbledon_2023.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-research-sidecar-writer
+  cancel-in-progress: false
+
+jobs:
+  acquire-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      RELEASE_TAG: tbt-research-sources-v1
+      FIGSHARE_FILE_ID: "45381565"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and test isolated auditor
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest openpyxl
+          python -m pytest tests/test_figshare_wimbledon_2023.py -q
+          python -m compileall -q scripts/audit_figshare_wimbledon_2023.py
+
+      - name: Verify private research destination
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download the exact CC BY 4.0 Figshare XLSX
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/figshare-wimbledon-2023
+          mkdir -p .cache/tbt/figshare-wimbledon-2023/{source,extract,audit}
+          url="https://figshare.com/ndownloader/files/$FIGSHARE_FILE_ID"
+          curl --fail --location --retry 5 --retry-delay 4 "$url"             -o .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx
+          test "$(stat -c %s .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx)" -gt 1000000
+          cp .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx             .cache/tbt/figshare-wimbledon-2023/extract/tennis-data.xlsx
+          python - <<'PY'
+          import pandas as pd
+          p=".cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx"
+          sheets=pd.ExcelFile(p).sheet_names
+          if not sheets:
+              raise SystemExit("Figshare XLSX contains no sheets")
+          print("sheets:", sheets)
+          PY
+
+      - name: Audit actual extracted schema
+        run: |
+          set -euo pipefail
+          python scripts/audit_figshare_wimbledon_2023.py             --source-dir .cache/tbt/figshare-wimbledon-2023/extract             --out .cache/tbt/figshare-wimbledon-2023/audit/report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/figshare-wimbledon-2023/audit/report.json").read_text())
+          if r.get("license")!="CC BY 4.0": raise SystemExit("license marker mismatch")
+          if r.get("production_mutated") is not False: raise SystemExit("production mutation flag")
+          if r.get("canonical_history_mutated") is not False: raise SystemExit("canonical mutation flag")
+          if r.get("model_promoted") is not False: raise SystemExit("model promotion flag")
+          if int(r.get("table_count") or 0) <= 0: raise SystemExit("no tabular data")
+          if int(r.get("tabular_rows_total") or 0) <= 0: raise SystemExit("no rows")
+          print(json.dumps({
+            "files":r.get("file_count"),
+            "tables":r.get("table_count"),
+            "rows":r.get("tabular_rows_total"),
+            "point_candidates":len(r.get("point_table_candidates") or []),
+          },indent=2))
+          PY
+
+      - name: Preserve raw source and attribution in private research release
+        run: |
+          set -euo pipefail
+          cp .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx             .cache/tbt/figshare-wimbledon-2023/figshare-wimbledon-2023-ccby4.xlsx
+          cat > .cache/tbt/figshare-wimbledon-2023/LICENSE-NOTE.txt <<'EOF'
+          Source: Figshare "Tennis Data", DOI 10.6084/m9.figshare.25511917
+          Version: 1
+          Figshare file id: 45381565
+          Author shown by source: Ray Ring
+          License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+          Source page: https://figshare.com/articles/dataset/Tennis_Data/25511917
+          BlinQ storage: private research snapshot; no canonical DB or model feature mutation.
+          EOF
+          if ! gh release view "$RELEASE_TAG" -R "$TBT_DATA_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" -R "$TBT_DATA_REPOSITORY"               --title "BlinQ research source bundles"               --notes "Private research-only source snapshots. No production model mutation."
+          fi
+          gh release upload "$RELEASE_TAG" -R "$TBT_DATA_REPOSITORY" --clobber             .cache/tbt/figshare-wimbledon-2023/figshare-wimbledon-2023-ccby4.xlsx             .cache/tbt/figshare-wimbledon-2023/LICENSE-NOTE.txt
+
+      - name: Persist audit to private data repo
+        run: |
+          set -euo pipefail
+          path="audit/figshare-wimbledon-2023-latest.json"
+          file=.cache/tbt/figshare-wimbledon-2023/audit/report.json
+          encoded="$(base64 -w0 "$file")"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit Figshare Wimbledon 2023 research data"               -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit Figshare Wimbledon 2023 research data"               -f content="$encoded" >/dev/null
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: figshare-wimbledon-2023-${{ github.run_id }}
+          path: .cache/tbt/figshare-wimbledon-2023/audit/report.json
+          if-no-files-found: warn
+          retention-days: 14
