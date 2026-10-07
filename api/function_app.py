@@ -117,10 +117,19 @@ from tbt.services.live_comeback import (
     settle_radar_results,
 )
 from tbt.services.match_status import event_ids_from_feed, runtime_settled_results, scan_match_statuses
+from tbt.services.comparator_runtime import (
+    RuntimeComparatorError,
+    RuntimeArtifactStale,
+    RuntimePlayerNotFound,
+    RuntimeAmbiguousPlayer,
+    compare_from_artifact,
+    search_players,
+)
 from tbt.services.auth_email import send_blinq_action_email, claim_auth_email_slot
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
+COMPARATOR = Path(__file__).parent / "data/comparator.json"
 RELEASE = "7.3.6"
 API_VERSION = "3.10.0"
 
@@ -160,6 +169,16 @@ _LIVE_RADAR_LAST_PUBLISHED_SCAN: str | None = None
 _LIVE_ODDS_CACHE: dict[str, tuple[float, object]] = {}
 _LIVE_ODDS_CACHE_LOCK = Lock()
 _LIVE_ODDS_CACHE_SECONDS = 120.0
+
+_COMPARATOR_ARTIFACT_CACHE: tuple[float, dict] | None = None
+_COMPARATOR_ARTIFACT_CACHE_LOCK = Lock()
+_COMPARATOR_RESULT_CACHE: dict[str, tuple[float, dict]] = {}
+_COMPARATOR_RESULT_CACHE_LOCK = Lock()
+_COMPARATOR_RESULT_TTL_SECONDS = 5 * 60
+_COMPARATOR_RATE_WINDOW_SECONDS = 60.0
+_COMPARATOR_RATE_MAX_REQUESTS = 60
+_COMPARATOR_RATE_BUCKETS = defaultdict(deque)
+_COMPARATOR_RATE_LOCK = Lock()
 
 
 def _banner_event_allowed(payload):
@@ -211,6 +230,56 @@ def _auth_email_request_allowed(req) -> bool:
             for stale_key in stale:
                 _AUTH_EMAIL_RATE_BUCKETS.pop(stale_key, None)
     return True
+
+
+
+def _load_comparator_artifact() -> dict:
+    global _COMPARATOR_ARTIFACT_CACHE
+    stat = COMPARATOR.stat()
+    mtime = float(stat.st_mtime)
+    with _COMPARATOR_ARTIFACT_CACHE_LOCK:
+        cached = _COMPARATOR_ARTIFACT_CACHE
+        if cached is not None and cached[0] == mtime:
+            return cached[1]
+        payload = json.loads(COMPARATOR.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict) or int(payload.get("schema") or 0) != 1:
+            raise ValueError("invalid comparator artifact")
+        _COMPARATOR_ARTIFACT_CACHE = (mtime, payload)
+        return payload
+
+
+def _comparator_request_allowed(user) -> bool:
+    key = str((user or {}).get("id") or "")[:256]
+    if not key:
+        return False
+    now = time.monotonic()
+    cutoff = now - _COMPARATOR_RATE_WINDOW_SECONDS
+    with _COMPARATOR_RATE_LOCK:
+        bucket = _COMPARATOR_RATE_BUCKETS[key]
+        while bucket and bucket[0] < cutoff:
+            bucket.popleft()
+        if len(bucket) >= _COMPARATOR_RATE_MAX_REQUESTS:
+            return False
+        bucket.append(now)
+        if len(_COMPARATOR_RATE_BUCKETS) > 10000:
+            stale = [k for k, values in list(_COMPARATOR_RATE_BUCKETS.items())[:2000]
+                     if not values or values[-1] < cutoff]
+            for stale_key in stale:
+                _COMPARATOR_RATE_BUCKETS.pop(stale_key, None)
+    return True
+
+
+def _comparator_user(req):
+    user = _verified_user(req)
+    if not user:
+        return None, response({"error": "unauthorized"}, 401)
+    if not bool(user.get("email_verified", False)):
+        return None, response({"error": "email_not_verified"}, 403)
+    if is_suspended(user):
+        return None, response({"error": "account_suspended"}, 403)
+    if not _comparator_request_allowed(user):
+        return None, response({"error": "rate_limited"}, 429)
+    return user, None
 
 
 def response(payload, status=200):
@@ -321,6 +390,97 @@ def _admin_account_row(user, profile=None):
 @app.route(route="health", methods=["GET"])
 def health(req):
     return response({"ok": True, "version": API_VERSION, "release": RELEASE, "auth": auth_provider(settings)})
+
+
+
+@app.route(route="v1/comparator/players", methods=["GET"])
+def comparator_players(req):
+    _, denied = _comparator_user(req)
+    if denied:
+        return denied
+    query = str(req.params.get("q") or "").strip()[:80]
+    tour = str(req.params.get("tour") or "").strip().lower()
+    if len(query) < 2:
+        return response({"players": [], "query": query, "tour": tour})
+    try:
+        artifact = _load_comparator_artifact()
+        players = search_players(artifact, query, tour=tour, limit=12)
+        return response({
+            "players": players,
+            "query": query,
+            "tour": tour,
+            "generated_at": artifact.get("generated_at"),
+            "model_version": (artifact.get("model") or {}).get("model_version"),
+        })
+    except FileNotFoundError:
+        return response({"error": "comparator_unavailable"}, 503)
+    except (ValueError, RuntimeComparatorError) as exc:
+        logging.warning("Comparator player search unavailable: %s", exc)
+        return response({"error": "comparator_unavailable"}, 503)
+
+
+@app.route(route="v1/comparator/compare", methods=["POST"])
+def comparator_compare(req):
+    _, denied = _comparator_user(req)
+    if denied:
+        return denied
+    try:
+        payload = req.get_json()
+    except ValueError:
+        return response({"error": "invalid_json"}, 400)
+    if not isinstance(payload, dict):
+        return response({"error": "invalid_payload"}, 400)
+
+    player1 = str(payload.get("player1_id") or payload.get("player1") or "").strip()[:120]
+    player2 = str(payload.get("player2_id") or payload.get("player2") or "").strip()[:120]
+    tour = str(payload.get("tour") or "").strip().lower()
+    surface = str(payload.get("surface") or "").strip().lower()
+    try:
+        best_of = int(payload.get("best_of") or 3)
+    except (TypeError, ValueError):
+        return response({"error": "invalid_match_format"}, 400)
+    if not player1 or not player2:
+        return response({"error": "players_required"}, 400)
+
+    try:
+        artifact = _load_comparator_artifact()
+        model_version = str((artifact.get("model") or {}).get("model_version") or "")
+        generated_at = str(artifact.get("generated_at") or "")
+        cache_key = "|".join((generated_at, model_version, tour, surface, str(best_of), player1, player2))
+        now_mono = time.monotonic()
+        with _COMPARATOR_RESULT_CACHE_LOCK:
+            cached = _COMPARATOR_RESULT_CACHE.get(cache_key)
+            if cached and now_mono - cached[0] <= _COMPARATOR_RESULT_TTL_SECONDS:
+                return response({**cached[1], "cache": "hit"})
+        result = compare_from_artifact(
+            artifact,
+            player1=player1,
+            player2=player2,
+            tour=tour,
+            surface=surface,
+            best_of=best_of,
+        )
+        with _COMPARATOR_RESULT_CACHE_LOCK:
+            _COMPARATOR_RESULT_CACHE[cache_key] = (now_mono, result)
+            if len(_COMPARATOR_RESULT_CACHE) > 2000:
+                cutoff = now_mono - _COMPARATOR_RESULT_TTL_SECONDS
+                for key, item in list(_COMPARATOR_RESULT_CACHE.items())[:500]:
+                    if item[0] < cutoff:
+                        _COMPARATOR_RESULT_CACHE.pop(key, None)
+        return response({**result, "cache": "miss"})
+    except RuntimePlayerNotFound:
+        return response({"error": "player_not_found"}, 404)
+    except RuntimeAmbiguousPlayer:
+        return response({"error": "ambiguous_player"}, 409)
+    except RuntimeArtifactStale:
+        return response({"error": "comparator_stale"}, 503)
+    except RuntimeComparatorError as exc:
+        return response({"error": exc.code}, 400)
+    except FileNotFoundError:
+        return response({"error": "comparator_unavailable"}, 503)
+    except Exception as exc:
+        logging.exception("Comparator evaluation failed")
+        return response({"error": "comparator_unavailable"}, 503)
 
 
 @app.route(route="v1/media/{media_id}", methods=["GET"])
