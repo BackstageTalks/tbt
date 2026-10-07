@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "purpose": "Integrate leakage-safe raw match serve/return statistics from Kaggle Tennis 2011-2019 into private canonical history.",
+  "source": {
+    "name": "Tennis 2011-2019",
+    "url": "https://www.kaggle.com/datasets/hwaitt/tennis-20112019",
+    "license": "CC BY-NC 4.0",
+    "attribution": "Nikolay Kashavkin, Tennis 2011-2019, Kaggle",
+    "atp_rows": 216981,
+    "wta_rows": 134810,
+    "atp_sha256": "c2d0b8545443dee0e143f293a3c80f54bd9b3c87e5eae0b49739f51c1d62b507",
+    "wta_sha256": "1467b2efd02288502f518662fe3ad3e1c9121e7e59a0e65f690f6ec779591548"
+  },
+  "source_policy": "Only raw current-match Aces, Double Faults, serve, return and break-point-return counts/rates are imported. *_A, *_L5, *_CUR result/model features and *_picks.csv are forbidden.",
+  "feature_policy": "Historical match observations only; same-match values update state after point-in-time feature snapshot.",
+  "api_requests": 0,
+  "model_promotion": false,
+  "requested_at_utc": "2026-10-07T00:40:00Z"
+}
