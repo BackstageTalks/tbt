@@ -3765,7 +3765,7 @@
     const previewText=mode==='mobile'?mobileText:desktopText;
     const previewEyebrow=mode==='mobile'?mobileEyebrow:desktopEyebrow;
     const previewStyle=bannerCreativeStyle(c).replace(/"$/,`;--preview-headline-ratio:${100*previewHeadline/previewWidth};--preview-text-ratio:${100*previewText/previewWidth};--preview-eyebrow-ratio:${100*previewEyebrow/previewWidth};--preview-gap-ratio:${700/previewWidth}"`);
-    return `<div class="lean-admin-preview ${mode}${bannerCreativeClasses(c)} is-active" ${previewStyle} data-preview-slot="${escapeHtml(entry.id)}"><img src="${escapeHtml(img)}" alt="" loading="lazy">${copy}</div>`;
+    return `<div class="lean-admin-preview ${mode}${bannerCreativeClasses(c)} is-active" ${previewStyle} data-preview-slot="${escapeHtml(entry.id)}"><img src="${escapeHtml(img)}" alt="" loading="lazy">${copy}${social}</div>`;
   }
   function syncAdminHeroPreview(){
     const stage=document.querySelector('#adminHeroLivePreview');

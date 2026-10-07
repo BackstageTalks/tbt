@@ -45,6 +45,19 @@ def main():
             assert first['preview']==0,first
             assert 'Prvý banner' in first['desktop'] and 'Prvý banner' in first['mobile'],first
             assert first['colors']==3,first
+            page.evaluate("""() => {
+              const s=bannerHarness.state;
+              const c=s.ui.elements.HERO_BANNER_1.content;
+              c.social_telegram_text='Telegram';
+              c.social_telegram_link='https://t.me/example';
+              bannerHarness.state.adminPreviewIndex=0;
+              bannerHarness.syncAdminHeroPreview();
+            }""")
+            social=page.evaluate("""() => ({
+              desktop:document.querySelector('[data-admin-preview-card="desktop"] .hero-social-link.social-telegram')?.textContent.trim(),
+              mobile:document.querySelector('[data-admin-preview-card="mobile"] .hero-social-link.social-telegram')?.textContent.trim()
+            })""")
+            assert social['desktop']=='Telegram' and social['mobile']=='Telegram',social
             page.wait_for_timeout(3300)
             second=page.evaluate('''() => ({selected:bannerHarness.state.selectedElement,
                 preview:bannerHarness.state.adminPreviewIndex,
