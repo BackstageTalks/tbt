@@ -108,6 +108,7 @@ class WTARankHistory:
         *,
         crosswalk_path: str | Path | None = None,
         canonical_to_sackmann: dict[str, str] | None = None,
+        supplement_csvs: Iterable[str | Path] = (),
     ):
         player_names: dict[int, str] = {}
         with Path(players_csv).open("r", encoding="utf-8-sig", newline="") as handle:
@@ -144,6 +145,85 @@ class WTARankHistory:
                         "name": player_names[pid],
                         "sackmann_player_id": str(pid),
                     })
+        # Supplemental official WTA rankings may only extend the pinned
+        # Sackmann source. They may never overlap/overwrite a pinned weekly
+        # snapshot silently: an overlap is either an exact duplicate (ignored)
+        # or a hard conflict (refused). This keeps source precedence explicit.
+        base_by_key = {}
+        base_max_date = None
+        for row in rows:
+            sid = str(row.get("sackmann_player_id") or "").strip()
+            source_date = row.get("date")
+            if not sid or source_date is None:
+                continue
+            key = (sid, source_date)
+            signature = (
+                _positive_int(row.get("rank")),
+                _positive_int(row.get("points")),
+            )
+            previous = base_by_key.get(key)
+            if previous is not None and previous != signature:
+                raise ValueError(f"Conflicting pinned WTA rank row for {sid} on {source_date}")
+            base_by_key[key] = signature
+            if base_max_date is None or source_date > base_max_date:
+                base_max_date = source_date
+
+        supplement_seen = {}
+        supplement_rows = []
+        for path in supplement_csvs:
+            with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:
+                for raw in csv.DictReader(handle):
+                    ranking_type = str(raw.get("ranking_type") or "singles").strip().lower()
+                    if ranking_type != "singles":
+                        continue
+                    sid = str(raw.get("sackmann_player_id") or "").strip()
+                    if not sid:
+                        continue
+                    raw_date = str(
+                        raw.get("ranking_date") or raw.get("date") or ""
+                    ).strip()
+                    try:
+                        source_date = datetime.fromisoformat(raw_date).date()
+                    except ValueError:
+                        continue
+                    rank = _positive_int(raw.get("rank") or raw.get("ranking"))
+                    points = _positive_int(raw.get("points") or raw.get("ranking_points"))
+                    if rank is None:
+                        continue
+                    signature = (rank, points)
+                    key = (sid, source_date)
+
+                    pinned = base_by_key.get(key)
+                    if pinned is not None:
+                        if pinned != signature:
+                            raise ValueError(
+                                f"WTA ranking supplement conflicts with pinned source for "
+                                f"{sid} on {source_date}"
+                            )
+                        continue
+                    if base_max_date is not None and source_date <= base_max_date:
+                        raise ValueError(
+                            "WTA ranking supplement must be strictly later than the "
+                            f"pinned source max date {base_max_date}; got {source_date}"
+                        )
+                    previous = supplement_seen.get(key)
+                    if previous is not None:
+                        if previous != signature:
+                            raise ValueError(
+                                f"Conflicting WTA ranking supplement row for "
+                                f"{sid} on {source_date}"
+                            )
+                        continue
+                    supplement_seen[key] = signature
+                    supplement_rows.append({
+                        "date": source_date,
+                        "rank": rank,
+                        "points": points,
+                        "name": str(raw.get("player_name") or "").strip(),
+                        "sackmann_player_id": sid,
+                    })
+        rows.extend(supplement_rows)
+
         mapping = dict(canonical_to_sackmann or {})
         if crosswalk_path:
             mapping.update(load_crosswalk(crosswalk_path))
