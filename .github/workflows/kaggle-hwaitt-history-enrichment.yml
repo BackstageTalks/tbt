@@ -1,0 +1,307 @@
+name: BlinQ Kaggle Tennis 2011-2019 enrichment
+
+on:
+  pull_request:
+    paths:
+      - ".github/kaggle-hwaitt-history-request.json"
+      - ".github/workflows/kaggle-hwaitt-history-enrichment.yml"
+      - "scripts/link_offline_serve_return.py"
+      - "scripts/import_offline_linked_serve_return.py"
+      - "tests/test_offline_serve_return_linker.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/kaggle-hwaitt-history-request.json"
+      - ".github/workflows/kaggle-hwaitt-history-enrichment.yml"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run or write"
+        required: true
+        default: "dry-run"
+        type: choice
+        options: [dry-run, write]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('tbt-hwaitt-pr-{0}', github.ref) || 'tbt-history-data-writer' }}
+  cancel-in-progress: false
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      SOURCE_URL: https://www.kaggle.com/datasets/hwaitt/tennis-20112019
+      SOURCE_DOWNLOAD: https://www.kaggle.com/api/v1/datasets/download/hwaitt/tennis-20112019
+      SOURCE_LABEL: kaggle_hwaitt_tennis_2011_2019_cc_by_nc_4
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve controlled mode
+        id: request
+        env:
+          DISPATCH_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            mode="dry-run"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            mode="${DISPATCH_MODE:-dry-run}"
+          else
+            mode="$(jq -r '.mode // "dry-run"' .github/kaggle-hwaitt-history-request.json)"
+          fi
+          case "$mode" in dry-run|write) ;; *) echo "Invalid mode=$mode"; exit 1;; esac
+          if [[ "$mode" == "write" && "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            echo "Write forbidden on pull_request"; exit 1
+          fi
+          test "$(jq -r '.source.license' .github/kaggle-hwaitt-history-request.json)" = "CC BY-NC 4.0"
+          test "$(jq -r '.api_requests' .github/kaggle-hwaitt-history-request.json)" = "0"
+          test "$(jq -r '.model_promotion' .github/kaggle-hwaitt-history-request.json)" = "false"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "HWAITT_MODE=$mode" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and test leakage-safe adapter
+        run: |
+          set -euo pipefail
+          python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
+          python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
+          python -m compileall -q scripts/link_offline_serve_return.py scripts/import_offline_linked_serve_return.py
+          python -m pytest tests/test_offline_serve_return_linker.py tests/test_offline_linked_serve_return_importer.py -q
+
+      - name: Verify private destination
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download public CC BY-NC source
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/hwaitt/source
+          curl --fail --location --retry 5 --retry-delay 3 "$SOURCE_DOWNLOAD" -o .cache/tbt/hwaitt/source.zip
+          unzip -q .cache/tbt/hwaitt/source.zip -d .cache/tbt/hwaitt/source
+          ATP_FILE="$(find .cache/tbt/hwaitt/source -type f -name atp.csv | head -n1)"
+          WTA_FILE="$(find .cache/tbt/hwaitt/source -type f -name wta.csv | head -n1)"
+          test -s "$ATP_FILE" && test -s "$WTA_FILE"
+          echo "ATP_FILE=$ATP_FILE" >> "$GITHUB_ENV"
+          echo "WTA_FILE=$WTA_FILE" >> "$GITHUB_ENV"
+
+      - name: Verify exact operator-supplied bytes and source shape
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv, hashlib, json, os
+          from pathlib import Path
+          request=json.loads(Path(".github/kaggle-hwaitt-history-request.json").read_text())
+          checks=[
+              ("atp", Path(os.environ["ATP_FILE"]), int(request["source"]["atp_rows"]), request["source"]["atp_sha256"]),
+              ("wta", Path(os.environ["WTA_FILE"]), int(request["source"]["wta_rows"]), request["source"]["wta_sha256"]),
+          ]
+          audit={}
+          for tour,path,expected_rows,expected_sha in checks:
+              digest=hashlib.sha256(path.read_bytes()).hexdigest()
+              with path.open("r",encoding="utf-8-sig",newline="") as handle:
+                  rows=sum(1 for _ in csv.reader(handle))-1
+              if rows != expected_rows:
+                  raise SystemExit(f"{tour} rows mismatch {rows} != {expected_rows}")
+              if digest != expected_sha:
+                  raise SystemExit(f"{tour} sha mismatch {digest} != {expected_sha}")
+              audit[tour]={"rows":rows,"bytes":path.stat().st_size,"sha256":digest}
+          Path(".cache/tbt/hwaitt/source-audit.json").write_text(json.dumps(audit,indent=2),encoding="utf-8")
+          print(json.dumps(audit,indent=2))
+          PY
+
+      - name: Download checksum-verified canonical history
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          directory=Path(".cache/tbt/hwaitt/history")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",directory).download(
+              require_bundle_manifest=True
+          )
+          PY
+
+      - name: Link raw match stats to canonical history
+        run: |
+          set -euo pipefail
+          python scripts/link_offline_serve_return.py             --history-dir .cache/tbt/hwaitt/history             --kaggle-hwaitt-csv "$ATP_FILE"             --kaggle-hwaitt-csv "$WTA_FILE"             --out-dir .cache/tbt/hwaitt/link
+
+      - name: Validate linker report
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/hwaitt/link/report.json").read_text())
+          c=r.get("counts") or {}
+          if int(r.get("api_requests",-1)) != 0:
+              raise SystemExit("Unexpected provider API usage")
+          if int(r.get("source_rows") or 0) < 300000:
+              raise SystemExit(f"Unexpectedly low usable source rows: {r.get('source_rows')}")
+          if int(c.get("identity_linked") or 0) <= 0:
+              raise SystemExit("No Hwaitt rows safely linked")
+          if int(c.get("staged_matches") or 0) <= 0 and int(c.get("already_present") or 0) <= 0:
+              raise SystemExit("No safe new or existing canonical coverage")
+          print(json.dumps({
+              "canonical_rows":r.get("canonical_rows"),
+              "source_rows":r.get("source_rows"),
+              "identity_linked":c.get("identity_linked",0),
+              "staged_matches":c.get("staged_matches",0),
+              "already_present":c.get("already_present",0),
+              "stat_conflict_matches":c.get("stat_conflict_matches",0),
+              "unmatched":c.get("unmatched",0),
+              "weak_evidence":c.get("weak_evidence",0),
+              "ambiguous":c.get("ambiguous",0),
+              "quality_ready_before":r.get("quality_ready_before"),
+              "quality_ready_projected_after":r.get("quality_ready_projected_after"),
+              "quality_ready_projected_added":r.get("quality_ready_projected_added"),
+              "staged_field_counts":r.get("staged_field_counts"),
+          },indent=2))
+          PY
+
+      - name: Dry-run strict canonical importer
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/hwaitt/link/auto_linked.jsonl             --history-dir .cache/tbt/hwaitt/history             --out-dir .cache/tbt/hwaitt/dry-run
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/hwaitt/dry-run/report.json").read_text())
+          c=r.get("counts") or {}
+          for key in ("identity_missing","identity_changed","invalid_stats","stat_conflicts"):
+              if int(c.get(key) or 0):
+                  raise SystemExit(f"Strict importer rejected rows: {key}={c.get(key)}")
+          if int(r.get("api_requests",-1)) != 0:
+              raise SystemExit("Importer unexpectedly used provider API")
+          print(json.dumps(r,indent=2))
+          PY
+
+      - name: Write verified stats into local canonical history
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/hwaitt/link/auto_linked.jsonl             --history-dir .cache/tbt/hwaitt/history             --out-dir .cache/tbt/hwaitt/write             --write-partitions             --write-history-dir .cache/tbt/hwaitt/history
+
+      - name: Publish changed canonical history
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          directory=Path(".cache/tbt/hwaitt/history")
+          report=json.loads(Path(".cache/tbt/hwaitt/write/report.json").read_text())
+          c=report.get("counts") or {}
+          for key in ("identity_missing","identity_changed","invalid_stats","stat_conflicts"):
+              if int(c.get(key) or 0):
+                  raise SystemExit(f"Write rejected rows: {key}={c.get(key)}")
+          years=[int(y) for y in report.get("changed_years") or []]
+          matches,safety=sanitize_history_identities(load_partitions(directory))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Identity safety failed before publish")
+          if years:
+              paths=[directory/f"history-{year:04d}.parquet" for year in years]
+              paths.append(directory/"history_manifest.json")
+              ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",directory).upload_bundle(paths)
+          print(json.dumps({"changed_years":years,"rows":len(matches)},indent=2))
+          PY
+
+      - name: Verify persisted readback
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          directory=Path(".cache/tbt/hwaitt/verify")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",directory).download(
+              require_bundle_manifest=True
+          )
+          matches,safety=sanitize_history_identities(load_partitions(directory))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Persisted history identity validation failed")
+          print(f"Persisted readback verified: {len(matches)} rows")
+          PY
+
+      - name: Persist audit
+        if: always()
+        continue-on-error: true
+        env:
+          JOB_STATUS: ${{ job.status }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          def read(path):
+              p=Path(path)
+              if not p.is_file(): return None
+              try: return json.loads(p.read_text())
+              except Exception as exc: return {"read_error":str(exc)}
+          request=read(".github/kaggle-hwaitt-history-request.json")
+          audit={
+              "schema":1,
+              "generated_at_utc":datetime.now(timezone.utc).isoformat(),
+              "job_status":os.environ.get("JOB_STATUS"),
+              "mode":os.environ.get("HWAITT_MODE"),
+              "run_id":os.environ.get("RUN_ID"),
+              "run_sha":os.environ.get("RUN_SHA"),
+              "source":request.get("source") if isinstance(request,dict) else None,
+              "source_policy":request.get("source_policy") if isinstance(request,dict) else None,
+              "source_audit":read(".cache/tbt/hwaitt/source-audit.json"),
+              "link_report":read(".cache/tbt/hwaitt/link/report.json"),
+              "dry_run_report":read(".cache/tbt/hwaitt/dry-run/report.json"),
+              "write_report":read(".cache/tbt/hwaitt/write/report.json"),
+              "api_requests":0,
+              "model_promoted":False,
+          }
+          Path("/tmp/hwaitt-audit.json").write_text(json.dumps(audit,ensure_ascii=False,indent=2),encoding="utf-8")
+          PY
+          path="audit/kaggle-hwaitt-serve-return-latest.json"
+          existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          encoded="$(base64 -w0 /tmp/hwaitt-audit.json)"
+          if [[ -n "$existing_sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit Kaggle Hwaitt enrichment run $RUN_ID"               -f content="$encoded" -f sha="$existing_sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit Kaggle Hwaitt enrichment run $RUN_ID"               -f content="$encoded" >/dev/null
+          fi
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-kaggle-hwaitt-${{ github.run_id }}
+          path: |
+            .cache/tbt/hwaitt/source-audit.json
+            .cache/tbt/hwaitt/link/report.json
+            .cache/tbt/hwaitt/link/review.jsonl
+            .cache/tbt/hwaitt/link/quarantine.jsonl
+            .cache/tbt/hwaitt/dry-run/report.json
+            .cache/tbt/hwaitt/write/report.json
+          if-no-files-found: warn
+          retention-days: 14
