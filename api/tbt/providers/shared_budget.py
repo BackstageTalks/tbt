@@ -24,13 +24,14 @@ GLOBAL_CEILING = PROVIDER_PLAN_LIMIT - PROVIDER_RESERVE
 RESET_TIMEZONE = ZoneInfo("Europe/Bratislava")
 RESET_HOUR = 19
 RESET_MINUTE = 10
-# Hard provider-day allocations prevent any workload class from consuming the
-# entire subscription. Their sum equals the 90% global ceiling.
+# Runtime classes retain bounded allocations. History/backfill may opportunistically
+# use any provider-day capacity that is still available, but GLOBAL_CEILING remains
+# authoritative and always preserves the 10% provider reserve.
 PURPOSE_CAPS = {
     "live": 3000,
     "match": 2500,
     "refresh": 5500,
-    "history": 2500,
+    "history": GLOBAL_CEILING,
 }
 PURPOSE_INDEX = {name: pos + 1 for pos, name in enumerate(PURPOSE_CAPS)}
 TABLE = "BlinQApiBudget"
