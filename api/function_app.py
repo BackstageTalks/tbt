@@ -273,6 +273,34 @@ def _comparator_request_allowed(user) -> bool:
     return True
 
 
+def _comparator_access(account: dict, runtime_ui: dict) -> tuple[bool, str]:
+    if bool((account or {}).get("is_admin")) or str((account or {}).get("role") or "").lower() == "admin":
+        return True, ""
+    status = str((account or {}).get("status") or "expired").lower()
+    plan = "rookie" if status == "trial" else str((account or {}).get("plan") or "expired").lower()
+    if status not in {"active", "lifetime", "trial"}:
+        plan = "expired"
+    defaults = {
+        "trial": True, "expired": False, "rookie": True, "pro": True,
+        "elite": True, "legend": True, "goat": True,
+    }
+    plans = ((((runtime_ui or {}).get("dashboard") or {}).get("comparator") or {}).get("plans") or {})
+    effective = {**defaults, **(plans if isinstance(plans, dict) else {})}
+    normalized = "rookie" if plan == "trial" else plan
+    allowed = bool(effective.get(normalized, False))
+    if allowed:
+        return True, ""
+    hierarchy = ["rookie", "pro", "elite", "legend", "goat"]
+    start = hierarchy.index(normalized) if normalized in hierarchy else 0
+    for candidate in hierarchy[start:]:
+        if bool(effective.get(candidate, False)):
+            return False, candidate
+    for candidate in hierarchy:
+        if bool(effective.get(candidate, False)):
+            return False, candidate
+    return False, "goat"
+
+
 def _comparator_user(req):
     user = _verified_user(req)
     if not user:
@@ -281,6 +309,12 @@ def _comparator_user(req):
         return None, response({"error": "email_not_verified"}, 403)
     if is_suspended(user):
         return None, response({"error": "account_suspended"}, 403)
+    profile = _profile_for(user, required=False)
+    account = public_account(user, cfg=settings, profile=profile)
+    runtime_ui, _, _ = load_effective_ui_config()
+    allowed, required_level = _comparator_access(account, runtime_ui)
+    if not allowed:
+        return None, response({"error": "comparator_access_required", "required_level": required_level}, 403)
     if not _comparator_request_allowed(user):
         return None, response({"error": "rate_limited"}, 429)
     return user, None
