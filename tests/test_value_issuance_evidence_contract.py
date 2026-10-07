@@ -10,6 +10,7 @@ from tbt.services.market_selection import (
 )
 from tbt.services.publication import (
     confirm_market_publications,
+    prepare_market_publication_evidence,
     validate_market_publication_candidate,
 )
 
@@ -60,6 +61,8 @@ def value_row():
             "player2_odds": 1.95,
             "player1_implied_probability": .51,
             "player2_implied_probability": .49,
+            "provider_id": 1,
+            "captured_at": "2026-09-28T08:00:00+00:00",
         },
     }
 
@@ -117,3 +120,46 @@ def test_incomplete_value_evidence_fails_before_deployment(mutate, reason):
     mutate(broken["value_picks"][0])
     with pytest.raises(RuntimeError, match=reason):
         validate_market_publication_candidate(broken, ledger)
+
+
+
+def test_strict_value_confirmation_uses_predeploy_two_way_snapshot():
+    ledger, feed = build()
+    prepared, count = prepare_market_publication_evidence(
+        ledger, feed, datetime(2026, 9, 28, 8, 30, tzinfo=timezone.utc)
+    )
+    assert count == 1
+    publication = next(
+        p for p in prepared[0]["market_publications"] if p["section"] == "value"
+    )
+    assert publication.get("issued_at") is None
+    evidence = publication["prepared_snapshot"]
+    assert evidence["source"] == "pre_deploy_feed"
+    assert evidence["model_version"] == "test-value-evidence"
+    assert evidence["two_way_match_winner"]["player1_odds"] == pytest.approx(1.90)
+    assert evidence["two_way_match_winner"]["player2_odds"] == pytest.approx(1.95)
+    assert evidence["fair_implied_probability"] == pytest.approx(.51)
+
+    issued, confirmed = confirm_market_publications(
+        prepared,
+        feed,
+        datetime(2026, 9, 28, 9, tzinfo=timezone.utc),
+        require_prepared=True,
+    )
+    assert confirmed == 1
+    publication = next(
+        p for p in issued[0]["market_publications"] if p["section"] == "value"
+    )
+    assert publication["issued_snapshot"]["source"] == "pre_deploy_feed_confirmed"
+    assert publication["issued_snapshot"]["commitment_sha256"] == evidence["commitment_sha256"]
+
+
+def test_strict_market_confirmation_refuses_missing_predeploy_evidence():
+    ledger, feed = build()
+    with pytest.raises(RuntimeError, match="pre-deploy market evidence"):
+        confirm_market_publications(
+            ledger,
+            feed,
+            datetime(2026, 9, 28, 9, tzinfo=timezone.utc),
+            require_prepared=True,
+        )
