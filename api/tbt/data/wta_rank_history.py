@@ -187,7 +187,7 @@ class WTARankHistory:
                 if previous != signature:
                     raise ValueError(
                         f"Conflicting pinned WTA {source_kind} rank row for "
-                        f"{sid} on {source_date}"
+                        f"{sid} on {source_date}: previous={previous}, incoming={signature}"
                     )
                 return
             base_by_key[key] = signature
