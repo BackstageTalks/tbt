@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import math
 from typing import Iterable
 
@@ -378,6 +378,21 @@ def build_serving_artifact(
     else:
         replay = list(replay_history)
     directory = PlayerDirectory.from_history(replay)
+    active_since = now - timedelta(days=1825)
+    last_seen: dict[tuple[str, str], datetime] = {}
+    for match in replay:
+        tour_key = str(match.tour or "").strip().lower()
+        for player_id in (str(match.player1_id or ""), str(match.player2_id or "")):
+            if not player_id:
+                continue
+            key = (tour_key, player_id)
+            if key not in last_seen or match.scheduled_at > last_seen[key]:
+                last_seen[key] = match.scheduled_at
+    active_keys = {
+        (tour_key, player_id)
+        for (tour_key, player_id), seen in last_seen.items()
+        if seen >= active_since
+    }
 
     players = [
         {
@@ -387,9 +402,12 @@ def build_serving_artifact(
             "rank": player.rank,
             "aliases": list(player.aliases),
             "matches_seen": player.matches_seen,
+            "last_seen": last_seen.get((player.tour, player.player_id)).isoformat()
+                if last_seen.get((player.tour, player.player_id)) else None,
         }
         for player in directory.players
-        if builder.player_key(player.tour, player.player_id) in builder.players
+        if (player.tour, player.player_id) in active_keys
+        and builder.player_key(player.tour, player.player_id) in builder.players
     ]
 
     feature_names = set(getattr(model, "feature_names", None) or FEATURE_NAMES)
@@ -400,16 +418,39 @@ def build_serving_artifact(
     if requires_wta and wta_season_stats is None:
         raise ComparatorCoverageError("champion requires WTA season priors")
 
+    raw_state = builder.export_state()
+    allowed_state_keys = {
+        builder.player_key(player["tour"], player["player_id"])
+        for player in players
+    }
+    feature_state = {
+        **raw_state,
+        "players": {
+            key: value for key, value in (raw_state.get("players") or {}).items()
+            if key in allowed_state_keys
+        },
+        "h2h": [
+            row for row in (raw_state.get("h2h") or [])
+            if row.get("left") in allowed_state_keys and row.get("right") in allowed_state_keys
+        ],
+        "surface_h2h": [
+            row for row in (raw_state.get("surface_h2h") or [])
+            if row.get("left") in allowed_state_keys and row.get("right") in allowed_state_keys
+        ],
+    }
+
     artifact = {
         "schema": 1,
         "generated_at": now.isoformat(),
         "cutoff_utc": cutoff.isoformat(),
         "model": export_portable_model(model),
-        "feature_state": builder.export_state(),
+        "feature_state": feature_state,
         "players": players,
         "source": {
             "canonical_matches_replayed": len(replay),
             "players": len(players),
+            "active_window_days": 1825,
+            "active_since": active_since.isoformat(),
             "point_in_time": True,
             "canonical_read_only": True,
             "provider_requests_per_user_compare": 0,
