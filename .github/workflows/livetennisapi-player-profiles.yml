@@ -1,0 +1,161 @@
+name: BlinQ Live Tennis public player profiles
+
+on:
+  pull_request:
+    paths:
+      - ".github/livetennisapi-player-profiles-request.json"
+      - ".github/workflows/livetennisapi-player-profiles.yml"
+      - "scripts/link_livetennisapi_player_profiles.py"
+      - "tests/test_livetennisapi_player_profiles.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/livetennisapi-player-profiles-request.json"
+      - ".github/workflows/livetennisapi-player-profiles.yml"
+      - "scripts/link_livetennisapi_player_profiles.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('tbt-liveprofiles-pr-{0}', github.ref) || 'tbt-research-sidecar-writer' }}
+  cancel-in-progress: false
+
+jobs:
+  profiles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and test
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m pytest tests/test_livetennisapi_player_profiles.py -q
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download public sample and canonical history
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/liveprofiles/source
+          base="https://zenodo.org/records/23018680/files"
+          curl -fsSL --retry 5 "$base/matches.csv.gz?download=1" -o .cache/tbt/liveprofiles/source/matches.csv.gz
+          curl -fsSL --retry 5 "$base/players.csv.gz?download=1" -o .cache/tbt/liveprofiles/source/players.csv.gz
+          gzip -t .cache/tbt/liveprofiles/source/*.gz
+          python - <<'PY'
+          import csv,gzip,hashlib,json
+          from pathlib import Path
+          cfg=json.loads(Path(".github/livetennisapi-player-profiles-request.json").read_text())
+          p=Path(".cache/tbt/liveprofiles/source/players.csv.gz")
+          sha=hashlib.sha256(p.read_bytes()).hexdigest()
+          with gzip.open(p,"rt",encoding="utf-8-sig",newline="") as h:
+              rows=sum(1 for _ in csv.DictReader(h))
+          if rows != int(cfg["source"]["players_rows"]): raise SystemExit(f"players rows {rows}")
+          if sha != cfg["source"]["players_sha256"]: raise SystemExit(f"players sha {sha}")
+          print(json.dumps({"players_rows":rows,"players_sha256":sha},indent=2))
+          PY
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          d=Path(".cache/tbt/liveprofiles/history")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",d).download(require_bundle_manifest=True)
+          PY
+
+      - name: Link player profiles fail-closed
+        run: |
+          set -euo pipefail
+          python scripts/link_livetennisapi_player_profiles.py             --history-dir .cache/tbt/liveprofiles/history             --matches .cache/tbt/liveprofiles/source/matches.csv.gz             --players .cache/tbt/liveprofiles/source/players.csv.gz             --source-version zenodo-23018680-v1.0.2             --out-dir .cache/tbt/liveprofiles/link
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/liveprofiles/link/report.json").read_text())
+          c=r.get("counts") or {}
+          if r.get("api_requests") != 0 or r.get("production_mutated") is not False:
+              raise SystemExit("profile linker safety violation")
+          if int(c.get("safe_players") or 0) <= 0:
+              raise SystemExit("no safe linked players")
+          print(json.dumps(c,indent=2))
+          PY
+
+      - name: Publish private research sidecar
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          upload_file() {
+            local src="$1"; local path="$2"; local msg="$3"
+            local sha
+            sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+            SRC="$src" SHA="$sha" MSG="$msg" python - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          payload={"message":os.environ["MSG"],"content":base64.b64encode(Path(os.environ["SRC"]).read_bytes()).decode()}
+          if os.environ.get("SHA"): payload["sha"]=os.environ["SHA"]
+          Path("/tmp/liveprofiles-upload.json").write_text(json.dumps(payload))
+          PY
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" --input /tmp/liveprofiles-upload.json >/dev/null
+          }
+          upload_file .cache/tbt/liveprofiles/link/player-profile-sidecar.jsonl.gz             research/player_profile/livetennisapi-public-2023-2026.jsonl.gz             "Update Live Tennis public player profiles from run $GITHUB_RUN_ID"
+
+      - name: Persist audit
+        if: always()
+        continue-on-error: true
+        env:
+          JOB_STATUS: ${{ job.status }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from datetime import datetime,timezone
+          from pathlib import Path
+          def read(p):
+              p=Path(p)
+              return json.loads(p.read_text()) if p.is_file() else None
+          audit={
+            "schema":1,
+            "generated_at_utc":datetime.now(timezone.utc).isoformat(),
+            "job_status":os.environ.get("JOB_STATUS"),
+            "run_id":os.environ.get("RUN_ID"),
+            "source":"Live Tennis API public sample",
+            "doi":"10.5281/zenodo.23018680",
+            "license":"CC BY-NC 4.0",
+            "raw_redistributed":False,
+            "link_report":read(".cache/tbt/liveprofiles/link/report.json"),
+            "api_requests":0,
+            "model_promoted":False
+          }
+          Path("/tmp/liveprofiles-audit.json").write_text(json.dumps(audit,indent=2))
+          PY
+          path="audit/livetennisapi-player-profiles-latest.json"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          encoded="$(base64 -w0 /tmp/liveprofiles-audit.json)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Audit Live Tennis profiles run $RUN_ID" -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Audit Live Tennis profiles run $RUN_ID" -f content="$encoded" >/dev/null
+          fi
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: livetennis-public-profiles-${{ github.run_id }}
+          path: |
+            .cache/tbt/liveprofiles/link/report.json
+            .cache/tbt/liveprofiles/link/review.jsonl.gz
+          if-no-files-found: warn
+          retention-days: 14
