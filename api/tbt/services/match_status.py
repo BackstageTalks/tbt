@@ -400,7 +400,11 @@ def runtime_settled_results(
                             "return_units": odds if correct else 0.0,
                             "profit_units": (odds - 1.0) if correct else -1.0,
                         })
-                for context_key in ("first_set_outcome", "first_set_score"):
+                for context_key in (
+                    "first_set_outcome", "first_set_score",
+                    "max_live_odds", "max_live_odds_at",
+                    "live_odds_observations", "live_odds_scope",
+                ):
                     context_value = status_row.get(context_key)
                     if context_value not in (None, ""):
                         result[context_key] = deepcopy(context_value)
