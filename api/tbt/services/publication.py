@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from copy import deepcopy
+import hashlib
+import json
 from zoneinfo import ZoneInfo
 
 PUBLICATION_CUTOFF_MINUTES = 5
@@ -118,7 +120,92 @@ def validate_publication_candidate(feed, ledger):
     return upcoming
 
 
-def confirm_publication(ledger, published_rows, now=None):
+def _evidence_hash(value) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def prepare_publication_evidence(ledger, published_rows, now=None, *, feed_generated_at=None):
+    """Freeze prediction evidence before public deployment without issuing it.
+
+    prepared_publication is operational evidence for a deployment attempt.
+    It deliberately does not set issued_at and therefore cannot affect ROI,
+    settlement, Results, or the immutable issued population. A later successful
+    deployment must confirm the exact same commitment.
+    """
+    now = now or datetime.now(timezone.utc)
+    commitments = _index_published_rows(published_rows)
+    rows_by_event = {
+        _prediction_commitment(row)[0]: row
+        for row in published_rows
+        if isinstance(row, dict)
+    }
+    prepared = []
+    seen = set()
+    for source in ledger:
+        if not isinstance(source, dict):
+            raise ValueError("Invalid prediction ledger row")
+        row = dict(source)
+        event_id = str(row.get("event_id") or "").strip()
+        if not event_id or event_id in seen:
+            raise ValueError("Invalid or duplicate prediction ledger event_id")
+        seen.add(event_id)
+        expected = commitments.get(event_id)
+        if expected is None or row.get("issued_at"):
+            prepared.append(row)
+            continue
+        commitment = _prediction_commitment(row)
+        if commitment != expected:
+            raise RuntimeError(
+                f"Prediction evidence mismatch for event {event_id}; refusing deploy"
+            )
+        card = rows_by_event[event_id]
+        p1 = card.get("player1") if isinstance(card.get("player1"), dict) else {}
+        p2 = card.get("player2") if isinstance(card.get("player2"), dict) else {}
+        row["prepared_publication"] = {
+            "schema": 1,
+            "source": "pre_deploy_feed",
+            "prepared_at": now.isoformat(),
+            "feed_generated_at": feed_generated_at,
+            "commitment_sha256": _evidence_hash(commitment),
+            "event_id": event_id,
+            "scheduled_at": card.get("scheduled_at"),
+            "model_version": card.get("model_version"),
+            "winner_id": card.get("winner_id"),
+            "confidence": card.get("confidence"),
+            "data_depth": card.get("data_depth"),
+            "stats_available": (
+                card.get("stats_available")
+                if isinstance(card.get("stats_available"), bool) else None
+            ),
+            "quality": (
+                deepcopy(card.get("quality"))
+                if isinstance(card.get("quality"), dict) else None
+            ),
+            "players": {
+                "player1": {
+                    "id": str(p1.get("id") or ""),
+                    "probability": p1.get("probability"),
+                    "rank": p1.get("rank"),
+                },
+                "player2": {
+                    "id": str(p2.get("id") or ""),
+                    "probability": p2.get("probability"),
+                    "rank": p2.get("rank"),
+                },
+            },
+        }
+        prepared.append(row)
+    return sorted(prepared, key=lambda r: r["scheduled_at"])
+
+
+def confirm_publication(ledger, published_rows, now=None, *, require_prepared=False):
     """Confirm first public availability after a successful deployment.
 
     Confirmation requires the exact immutable prediction commitment that was
@@ -151,6 +238,16 @@ def confirm_publication(ledger, published_rows, now=None):
             raise RuntimeError(
                 f"Deployed prediction does not match ledger commitment for event {event_id}"
             )
+        if require_prepared:
+            prepared_evidence = row.get("prepared_publication")
+            if not isinstance(prepared_evidence, dict):
+                raise RuntimeError(
+                    f"Prediction {event_id} lacks pre-deploy evidence; refusing confirmation"
+                )
+            if prepared_evidence.get("commitment_sha256") != _evidence_hash(commitment):
+                raise RuntimeError(
+                    f"Prediction {event_id} pre-deploy evidence does not match deployed commitment"
+                )
 
         scheduled_at = datetime.fromisoformat(row["scheduled_at"])
         cutoff = scheduled_at - timedelta(minutes=PUBLICATION_CUTOFF_MINUTES)
