@@ -3425,6 +3425,18 @@
       aceDfNormalizedKpis:aceDfCategory,
     };
   }
+  function resultComebackHtml(publication,outcome){
+    if(outcome?.kind!=='win')return '';
+    const section=String(publication?.section||'').trim().toLowerCase();
+    if(section!=='prime')return '';
+    const result=publication?.result&&typeof publication.result==='object'?publication.result:{};
+    if(String(result.first_set_outcome||'').trim().toLowerCase()!=='loss')return '';
+    const score=String(result.first_set_score||'').trim();
+    const labelText=lcopy('COMEBACK','OTOČKA','OBRAT');
+    const detail=score?` · ${escapeHtml(score)}`:'';
+    const title=lcopy('Predicted Short Odds player lost the first set and still won the match.','Predikovaný hráč Short Odds prehral prvý set a napriek tomu vyhral zápas.','Predikovaný hráč Short Odds prohrál první set a přesto vyhrál zápas.');
+    return `<small class="result-comeback" title="${escapeHtml(title)}">↻ ${escapeHtml(labelText)}${detail}</small>`;
+  }
   function renderResults(){
     const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',entries=settledPublishedEntries(rows,category,filters);
     if(!entries.length){state.resultsPage=0;return '<div class="state-card">Zatiaľ nie sú dostupné vyhodnotené publikované predikcie/projekcie pre tento filter.</div>';}
@@ -3499,7 +3511,7 @@
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
         return `<tr class="results-card-row result-${escapeHtml(outcome.kind)} is-projection"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(displayPick)}</strong></td><td class="result-confidence result-projection"><span class="result-projection-value">${escapeHtml(projectionText)}</span><small class="result-projection-label">${escapeHtml(lcopy('Projection','Projekcia','Projekce'))}</small></td><td class="result-odds"${projectionOddsTitle}>${escapeHtml(displayedProjectionOdds)}</td><td class="result-status"><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td class="result-units"><span class="results-units-depth"><b${!hasSettledUnits?projectionOddsTitle:''} class="${Number.isFinite(displayUnits)&&displayUnits>0?'correct':Number.isFinite(displayUnits)&&displayUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b></span></td></tr>`;
       }
-      return `<tr class="results-card-row result-${escapeHtml(outcome.kind)}"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(pickName)}</strong></td><td class="result-confidence">${Number.isFinite(probability)?pct(probability):'—'}</td><td class="result-odds">${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td class="result-status">${resultHtml}</td><td class="result-units ${outcome.kind==='void'?'void':!Number.isFinite(units)?'unit-excluded':units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
+      return `<tr class="results-card-row result-${escapeHtml(outcome.kind)}"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(pickName)}</strong></td><td class="result-confidence">${Number.isFinite(probability)?pct(probability):'—'}</td><td class="result-odds">${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td class="result-status"><span class="results-outcome-stack">${resultHtml}${resultComebackHtml(publication,outcome)}</span></td><td class="result-units ${outcome.kind==='void'?'void':!Number.isFinite(units)?'unit-excluded':units>=0?'correct':'wrong'}>${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
     }).join('');
     const pager=`<div class="results-pagination"><div class="results-pagination-meta"><strong>${startIndex+1}–${endIndex}</strong><span>z ${entries.length}</span></div><label><span>Riadkov</span><select id="resultsPageSize">${allowedSizes.map(size=>`<option value="${size}"${size===pageSize?' selected':''}>${size}</option>`).join('')}</select></label><div class="results-pagination-nav"><button type="button" id="resultsPrevPage" ${state.resultsPage<=0?'disabled':''}>←</button><span>Strana <strong>${state.resultsPage+1}</strong> / ${pages}</span><button type="button" id="resultsNextPage" ${state.resultsPage>=pages-1?'disabled':''}>→</button></div></div>`;
     const head=`<tr><th>Dátum</th><th>Kategória</th><th>Turnaj</th><th>Zápas</th><th>Predikcia</th><th data-mobile-label="BlinQ %">Model / BlinQ %<small class="results-model-heading">${escapeHtml(lcopy('or projection','alebo projekcia','nebo projekce'))}</small></th><th>Kurz</th><th>Výsledok</th><th>Jednotky</th></tr>`;
