@@ -298,9 +298,11 @@ class _DailyStatusProvider(_NearFallbackProvider):
         self.daily_events = daily_events
         self.daily_calls = []
 
-    def events_with_odds_for_status_day(self, day):
+    def events_for_status_day(self, day, target_event_ids=None, max_category_requests=8):
         self.request_count += 1
         self.daily_calls.append(day.isoformat())
+        assert target_event_ids
+        assert max_category_requests <= 8
         return {"events": list(self.daily_events)}
 
 
