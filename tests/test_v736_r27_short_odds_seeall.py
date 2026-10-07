@@ -11,7 +11,7 @@ def test_r27_short_odds_is_public_and_admin_managed():
     assert UI["ui_patch"] == "736-r61"
     prime=UI["dashboard"]["daily_hub"]["tabs"]["prime"]
     assert prime["enabled"] is True
-    assert prime["label"] == "Short Odds"
+    assert prime["label"] == "Comebacks"
     assert prime["plans"]["rookie"]["visible_rows"] == 1
     assert "const tabs=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];" in APP
     assert "if(tab==='prime')return shortOddsDisplayRows(marketRows('prime'));" in APP
