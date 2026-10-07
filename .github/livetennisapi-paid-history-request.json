@@ -1,16 +1,16 @@
 {
   "schema": 1,
   "action": "collect_paid_history_quality_gaps",
-  "requested_at_utc": "2026-10-07T00:15:00Z",
+  "requested_at_utc": "2026-10-07T00:31:00Z",
   "from": "2023-01-01",
   "to": "2026-10-05",
-  "max_calls": 70,
+  "max_calls": 5,
   "daily_reserve": 20,
   "expected_min_daily": 100,
-  "target_new_quality_ready": 25,
-  "max_list_pages_per_tour": 12,
+  "target_new_quality_ready": 1,
+  "max_list_pages_per_tour": 1,
   "tours": "wta,atp,challenger,itf",
   "promote_model": false,
   "raw_public_redistribution": false,
-  "purpose": "Provider /usage reports a 100-request/day entitlement. Use at most 70 billable history calls, preserve at least 20 calls as reserve, and import only exact canonical serve/return quality gaps with fail-closed identity/stat validation."
+  "purpose": "Close out the Live Tennis history path under the actual FREE 100/day key. Probe at most five billable history calls, preserve 20 daily calls, import only exact quality gaps if tape access is entitled, and otherwise record provider_plan_blocked without mutating production."
 }
