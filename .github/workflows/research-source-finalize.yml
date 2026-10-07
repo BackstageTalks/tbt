@@ -82,6 +82,7 @@ jobs:
         run: |
           set -euo pipefail
           request=.github/research-source-integration-request.json
+          # Venue-month bounded multi-location requests keep payloads small.
           python scripts/extract_open_meteo_pre_match_forecasts_bulk.py             --history-dir .cache/tbt/research-finalize/history-readback             --from-date "$(jq -r .open_meteo_from "$request")"             --to-date "$(jq -r .open_meteo_to "$request")"             --max-requests "$(jq -r .open_meteo_max_requests "$request")"             --bulk-size 20             --workers 4             --requests-per-minute 120             --retries 3             --timeout-seconds 45             --out .cache/tbt/research-finalize/work/openmeteo-pre-match.csv             --report .cache/tbt/research-finalize/audit/openmeteo-pre-match-report.json
           test "$(jq -r '.matched_rows' .cache/tbt/research-finalize/audit/openmeteo-pre-match-report.json)" -gt 0
 
