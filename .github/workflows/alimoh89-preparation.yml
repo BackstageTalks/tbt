@@ -22,7 +22,7 @@ permissions:
 
 concurrency:
   group: blinq-alimoh89-preparation
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   prepare:
