@@ -6,6 +6,7 @@ from scripts.collect_livetennisapi_paid_history import (
     _derive_rates,
     _resolve_match,
     _stage_row,
+    _plan_blocked,
 )
 
 
@@ -97,3 +98,9 @@ def test_stage_requires_explicit_complete_tape_and_preserves_orientation():
     staged, reason, _ = _stage_row(_payload(complete=False), match)
     assert staged is None
     assert reason == "complete_basis_not_explicit"
+
+
+def test_provider_plan_block_is_terminal_but_not_a_data_error():
+    assert _plan_blocked(RuntimeError("Live Tennis API plan does not allow /history/matches/1"))
+    assert _plan_blocked(RuntimeError('403 {"error":"upgrade_required"}'))
+    assert not _plan_blocked(RuntimeError("temporary provider timeout"))
