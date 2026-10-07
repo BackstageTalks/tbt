@@ -192,13 +192,24 @@ def test_match_status_pending_roundtrip_and_compressed_large_snapshot(monkeypatc
         "statuses": {},
         "pending": {"101": {"t": "2026-09-25T21:00:00+00:00",
                             "s": "11", "a": "11", "b": "22",
-                            "c": "2026-09-25T23:00:00+00:00"}},
+                            "c": "2026-09-25T23:00:00+00:00", "n": "2"}},
+        "daily_attempts": 1,
+        "daily_matches": 0,
+        "daily_errors": {"ProviderError_HTTP_403": 1},
         "recent_candidates": 1,
         "today_candidates": 1,
     }
     saved = admin_storage.save_match_status_snapshot(first)
     assert saved["pending_count"] == 1
-    assert admin_storage.load_match_status_snapshot()["pending"]["101"]["s"] == "11"
+    assert saved["pending"]["101"]["n"] == "2"
+    assert saved["daily_attempts"] == 1
+    assert saved["daily_matches"] == 0
+    assert saved["daily_errors"] == {"ProviderError_HTTP_403": 1}
+    restored_first = admin_storage.load_match_status_snapshot()
+    assert restored_first["pending"]["101"]["s"] == "11"
+    assert restored_first["pending"]["101"]["n"] == "2"
+    assert restored_first["daily_attempts"] == 1
+    assert restored_first["daily_errors"] == {"ProviderError_HTTP_403": 1}
     huge = dict(first)
     huge["statuses"] = {
         str(i): {"status": "win", "checked_at": "2026-09-25T23:00:00+00:00",

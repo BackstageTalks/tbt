@@ -637,7 +637,7 @@ def save_match_status_snapshot(payload: object) -> dict:
             continue
         key = str(eid or "").strip()[:64]
         entry = {field: str(item.get(field) or "").strip()[:64]
-                 for field in ("t", "s", "a", "b", "c", "p")}
+                 for field in ("t", "s", "a", "b", "c", "p", "n")}
         if key and all(entry[field] for field in ("t", "s", "a", "b")):
             pending[key] = entry
     safe = {
@@ -667,6 +667,13 @@ def save_match_status_snapshot(payload: object) -> dict:
         "matched_events": max(0, int(data.get("matched_events") or 0)),
         "preferred_route": "near" if data.get("preferred_route") == "near" else "history",
         "near_attempts": max(0, int(data.get("near_attempts") or 0)),
+        "daily_attempts": max(0, int(data.get("daily_attempts") or 0)),
+        "daily_matches": max(0, int(data.get("daily_matches") or 0)),
+        "daily_errors": {
+            str(k)[:64]: max(0, int(v))
+            for k, v in list((data.get("daily_errors") or {}).items())[:8]
+            if isinstance(k, str) and k.replace("_", "").isalnum()
+        },
         "unmatched": max(0, int(data.get("unmatched") or 0)),
         "next_due_id": str(data.get("next_due_id") or "")[:64],
         "provider_errors": {
