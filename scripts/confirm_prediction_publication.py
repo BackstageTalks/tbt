@@ -182,10 +182,14 @@ def main(argv=None):
     published_rows = upcoming
     before = sum(1 for row in ledger if isinstance(row, dict) and row.get("issued_at"))
     now = datetime.now(timezone.utc)
-    confirmed = confirm_publication(ledger, published_rows, now)
+    confirmed = confirm_publication(
+        ledger, published_rows, now, require_prepared=True
+    )
     market_new = 0
     if market_schema == 1:
-        confirmed, market_new = confirm_market_publications(confirmed, deployed_feed, now)
+        confirmed, market_new = confirm_market_publications(
+            confirmed, deployed_feed, now, require_prepared=True
+        )
     after = sum(1 for row in confirmed if isinstance(row, dict) and row.get("issued_at"))
     write_json(directory / "ledger.json", confirmed)
     daily_snapshot = build_confirmed_daily_offer_snapshot(
