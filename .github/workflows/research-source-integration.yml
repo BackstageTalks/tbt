@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
           python -m pip install -r api/requirements-train.txt pytest
           python -m compileall -q api scripts
-          python -m pytest tests/test_open_meteo_pre_match_forecasts.py tests/test_slam_pointbypoint_linker.py -q
+          python -m pytest tests/test_open_meteo_pre_match_forecasts.py tests/test_slam_pointbypoint_linker.py tests/test_wta_official_rank_supplement.py -q
           test -n "$GH_TOKEN"
           test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
           request=.github/research-source-integration-request.json
@@ -150,6 +150,20 @@ jobs:
 
           test "$(jq -r '.resolved' .cache/tbt/research-integration/audit/wta-crosswalk-report.json)" -ge 1000
 
+          mkdir -p .cache/tbt/research-integration/source/wta-official
+          gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$TBT_DATA_REPOSITORY/contents/audit/wta-official-ranking-supplement-2026-10-07.json?ref=main" \
+            > .cache/tbt/research-integration/source/wta-official/audit.json
+          gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$TBT_DATA_REPOSITORY/contents/research/wta-official-2026/wta_official_singles_2026_post_sackmann.csv.gz?ref=main" \
+            > .cache/tbt/research-integration/source/wta-official/singles.csv.gz
+          expected="$(jq -r '.singles.gzip_sha256' .cache/tbt/research-integration/source/wta-official/audit.json)"
+          actual="$(sha256sum .cache/tbt/research-integration/source/wta-official/singles.csv.gz | awk '{print $1}')"
+          test -n "$expected" && test "$expected" = "$actual"
+          gzip -dc .cache/tbt/research-integration/source/wta-official/singles.csv.gz \
+            > .cache/tbt/research-integration/source/wta-official/singles.csv
+          test "$(awk 'END{print NR}' .cache/tbt/research-integration/source/wta-official/singles.csv)" -eq 16928
+
       - name: Extract Open-Meteo 24h pre-match forecasts
         shell: bash
         run: |
@@ -187,7 +201,7 @@ jobs:
           for f in .cache/tbt/research-integration/source/wta-rank/wta_rankings_*.csv; do
             wta_args+=(--wta-rank-history-csv "$f")
           done
-          python scripts/build_production_training_table.py             --history-dir .cache/tbt/research-integration/history-readback             --atp-leaderboards-csv .cache/tbt/research-integration/source/atp-leaderboards/atp_leaderboards_1991_2026_52week_career.csv             --atp-rank-history-sqlite .cache/tbt/research-integration/source/atp-weekly/rankings.db             --wta-rank-history-players-csv .cache/tbt/research-integration/source/wta-rank/wta_players.csv             "${wta_args[@]}"             --wta-rank-history-crosswalk .cache/tbt/research-integration/work/wta-sackmann-crosswalk.json             --wta-season-stats-csv .cache/tbt/research-integration/source/wta-season/wta_stats_2010_2026_serving_returning.csv             --pre-match-weather-csv .cache/tbt/research-integration/work/openmeteo-pre-match.csv             --out .cache/tbt/research-integration/training/training_table.parquet             --report .cache/tbt/research-integration/training/training_table_report.json
+          python scripts/build_production_training_table.py             --history-dir .cache/tbt/research-integration/history-readback             --atp-leaderboards-csv .cache/tbt/research-integration/source/atp-leaderboards/atp_leaderboards_1991_2026_52week_career.csv             --atp-rank-history-sqlite .cache/tbt/research-integration/source/atp-weekly/rankings.db             --wta-rank-history-players-csv .cache/tbt/research-integration/source/wta-rank/wta_players.csv             "${wta_args[@]}"             --wta-rank-history-crosswalk .cache/tbt/research-integration/work/wta-sackmann-crosswalk.json             --wta-rank-history-supplement-csv .cache/tbt/research-integration/source/wta-official/singles.csv             --wta-season-stats-csv .cache/tbt/research-integration/source/wta-season/wta_stats_2010_2026_serving_returning.csv             --pre-match-weather-csv .cache/tbt/research-integration/work/openmeteo-pre-match.csv             --out .cache/tbt/research-integration/training/training_table.parquet             --report .cache/tbt/research-integration/training/training_table_report.json
           python scripts/audit_training_leakage.py             --history-dir .cache/tbt/research-integration/history-readback             --report .cache/tbt/research-integration/training/leakage_audit_report.json
 
       - name: Validate candidate feature coverage
@@ -207,6 +221,9 @@ jobs:
               raise SystemExit("WTA rank history missing from integrated training table")
           if float(atp.get("known_both_rate") or 0) <= 0:
               raise SystemExit("ATP rank history missing from integrated training table")
+          supplement=(wta.get("supplement_csvs") or [])
+          if not supplement:
+              raise SystemExit("Official WTA rank supplement missing from training table provenance")
           print(json.dumps({
               "rows":r.get("rows"),
               "pre_match_weather":weather,
