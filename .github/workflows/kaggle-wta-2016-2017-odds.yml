@@ -1,0 +1,416 @@
+name: BlinQ Kaggle WTA 2016-2017 odds integration
+
+on:
+  pull_request:
+    paths:
+      - ".github/kaggle-wta-2016-2017-odds-request.json"
+      - ".github/workflows/kaggle-wta-2016-2017-odds.yml"
+      - "scripts/link_kaggle_wta_2016_2017_odds.py"
+      - "scripts/import_offline_linked_match_winner_odds.py"
+      - "tests/test_kaggle_wta_2016_2017_odds.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/kaggle-wta-2016-2017-odds-request.json"
+      - ".github/workflows/kaggle-wta-2016-2017-odds.yml"
+      - "scripts/link_kaggle_wta_2016_2017_odds.py"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run or write"
+        required: true
+        default: "dry-run"
+        type: choice
+        options: [dry-run, write]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('tbt-kaggle-wta-odds-pr-{0}', github.ref) || 'tbt-history-data-writer' }}
+  cancel-in-progress: false
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      SOURCE_LABEL: operator_kaggle_wta_2016_2017
+      KAGGLE_DATASET: serangu/woman-tennis-2016-2017-years
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve controlled mode
+        id: request
+        env:
+          DISPATCH_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            mode="dry-run"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            mode="${DISPATCH_MODE:-dry-run}"
+          else
+            mode="$(jq -r '.mode // "dry-run"' .github/kaggle-wta-2016-2017-odds-request.json)"
+          fi
+          case "$mode" in dry-run|write) ;; *) echo "Invalid mode=$mode"; exit 1;; esac
+          if [[ "$mode" == "write" && "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            echo "Write forbidden on pull_request"
+            exit 1
+          fi
+          test "$(jq -r '.api_requests' .github/kaggle-wta-2016-2017-odds-request.json)" = "0"
+          test "$(jq -r '.model_promotion' .github/kaggle-wta-2016-2017-odds-request.json)" = "false"
+          test "$(jq -r '.source.license_status' .github/kaggle-wta-2016-2017-odds-request.json)" = "operator_confirmed_compatible_for_noncommercial_blinq_use"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "KAGGLE_WTA_MODE=$mode" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and test strict source adapter
+        run: |
+          set -euo pipefail
+          python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
+          python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
+          python -m compileall -q scripts/link_kaggle_wta_2016_2017_odds.py scripts/import_offline_linked_match_winner_odds.py
+          python -m pytest tests/test_kaggle_wta_2016_2017_odds.py tests/test_offline_match_winner_odds.py -q
+
+      - name: Verify private destination
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download exact public Kaggle source
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/kaggle-wta/source
+          curl --fail --location --retry 6 --retry-delay 3             "https://www.kaggle.com/api/v1/datasets/download/$KAGGLE_DATASET"             -o .cache/tbt/kaggle-wta/source.zip
+          unzip -q .cache/tbt/kaggle-wta/source.zip -d .cache/tbt/kaggle-wta/source
+          SOURCE_FILE="$(find .cache/tbt/kaggle-wta/source -type f -name '2016-2017_orig.csv' | head -n1)"
+          test -n "$SOURCE_FILE" && test -s "$SOURCE_FILE"
+          echo "SOURCE_FILE=$SOURCE_FILE" >> "$GITHUB_ENV"
+
+      - name: Verify exact operator-supplied bytes and source invariants
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv, hashlib, json, os, math
+          from collections import Counter, defaultdict
+          from datetime import datetime
+          from pathlib import Path
+
+          cfg=json.loads(Path(".github/kaggle-wta-2016-2017-odds-request.json").read_text())
+          path=Path(os.environ["SOURCE_FILE"])
+          data=path.read_bytes()
+          sha=hashlib.sha256(data).hexdigest()
+          if sha != cfg["source"]["expected_sha256"]:
+              raise SystemExit(f"SHA mismatch: {sha}")
+          if len(data) != int(cfg["source"]["expected_bytes"]):
+              raise SystemExit(f"Byte-size mismatch: {len(data)}")
+
+          groups=defaultdict(list)
+          rows=0
+          dates=[]
+          with path.open("r",encoding="utf-8-sig",newline="") as handle:
+              reader=csv.DictReader(handle,delimiter=";")
+              required={"date","name_1","name_2","age_1","age_2","rating_1","rating_2","k1","k2","result","player1_is_win?"}
+              missing=sorted(required-set(reader.fieldnames or []))
+              if missing: raise SystemExit(f"Missing columns: {missing}")
+              for row in reader:
+                  rows += 1
+                  day=datetime.strptime(row["date"],"%d.%m.%Y").date()
+                  dates.append(day)
+                  pair=tuple(sorted((row["name_1"].strip(),row["name_2"].strip())))
+                  groups[(row["date"],pair)].append(row)
+          if rows != int(cfg["source"]["expected_rows"]):
+              raise SystemExit(f"Row mismatch: {rows}")
+          if len(groups) != int(cfg["source"]["expected_mirrored_match_groups"]):
+              raise SystemExit(f"Group mismatch: {len(groups)}")
+          if min(dates).isoformat() != "2016-01-01" or max(dates).isoformat() != "2017-12-31":
+              raise SystemExit("Unexpected date range")
+
+          valid=0
+          bad_mirror=0
+          for key,pairrows in groups.items():
+              if len(pairrows) != 2:
+                  bad_mirror += 1
+                  continue
+              a,b=pairrows
+              ok=(
+                  a["name_1"].strip()==b["name_2"].strip()
+                  and a["name_2"].strip()==b["name_1"].strip()
+                  and a["age_1"]==b["age_2"] and a["age_2"]==b["age_1"]
+                  and a["rating_1"]==b["rating_2"] and a["rating_2"]==b["rating_1"]
+                  and a["k1"]==b["k2"] and a["k2"]==b["k1"]
+                  and a["result"]==b["result"]
+                  and {a["player1_is_win?"],b["player1_is_win?"]}=={"0","1"}
+              )
+              if not ok:
+                  bad_mirror += 1
+                  continue
+              try:
+                  o1,o2=float(a["k1"]),float(a["k2"])
+              except ValueError:
+                  continue
+              if math.isfinite(o1) and math.isfinite(o2) and o1>1 and o2>1:
+                  valid += 1
+          if bad_mirror:
+              raise SystemExit(f"Mirror integrity failures: {bad_mirror}")
+          if valid != int(cfg["source"]["expected_valid_two_way_odds_groups"]):
+              raise SystemExit(f"Valid market count mismatch: {valid}")
+
+          audit={
+              "rows":rows,
+              "bytes":len(data),
+              "sha256":sha,
+              "mirrored_match_groups":len(groups),
+              "valid_two_way_odds_groups":valid,
+              "date_min":min(dates).isoformat(),
+              "date_max":max(dates).isoformat(),
+          }
+          Path(".cache/tbt/kaggle-wta/source-audit.json").write_text(json.dumps(audit,indent=2))
+          print(json.dumps(audit,indent=2))
+          PY
+
+      - name: Download checksum-verified canonical history
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          d=Path(".cache/tbt/kaggle-wta/history")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",d).download(
+              require_bundle_manifest=True
+          )
+          PY
+
+      - name: Link deduplicated WTA odds to canonical history
+        run: |
+          set -euo pipefail
+          python scripts/link_kaggle_wta_2016_2017_odds.py             --history-dir .cache/tbt/kaggle-wta/history             --source-csv "$SOURCE_FILE"             --out-dir .cache/tbt/kaggle-wta/link
+
+      - name: Validate link report
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/kaggle-wta/link/report.json").read_text())
+          c=r.get("counts") or {}
+          if r.get("api_requests") != 0 or r.get("production_mutated") is not False:
+              raise SystemExit("Linker safety contract violated")
+          if int(c.get("source_rows") or 0) != 85288:
+              raise SystemExit("Unexpected source row count")
+          if int(c.get("usable_deduplicated_matches") or 0) != 23466:
+              raise SystemExit("Unexpected deduplicated priced match count")
+          if int(c.get("mirror_inconsistent") or 0) or int(c.get("mirror_group_size_invalid") or 0):
+              raise SystemExit("Mirror validation failed")
+          if int(c.get("linked_matches") or 0) <= 0:
+              raise SystemExit("No WTA odds safely linked")
+          if int(c.get("duplicate_canonical_links") or 0):
+              raise SystemExit("Duplicate canonical links detected")
+          print(json.dumps({
+              "usable_source_matches":c.get("usable_deduplicated_matches",0),
+              "linked_matches":c.get("linked_matches",0),
+              "existing_reference_preserved":c.get("existing_reference_preserved",0),
+              "reference_markers_staged":c.get("reference_markers_staged",0),
+              "unmatched":c.get("unmatched",0),
+              "winner_conflict":c.get("winner_conflict",0),
+              "ambiguous":c.get("ambiguous",0),
+              "rank_conflict":c.get("rank_conflict",0),
+              "sidecar_years":r.get("sidecar_years"),
+          },indent=2))
+          PY
+
+      - name: Dry-run strict canonical odds importer
+        run: |
+          set -euo pipefail
+          stage=.cache/tbt/kaggle-wta/link/reference_stage.jsonl
+          mkdir -p .cache/tbt/kaggle-wta/dry-run
+          if [[ -s "$stage" ]]; then
+            python scripts/import_offline_linked_match_winner_odds.py               --stage "$stage"               --history-dir .cache/tbt/kaggle-wta/history               --out-dir .cache/tbt/kaggle-wta/dry-run
+          else
+            printf '%s\n' '{"schema":1,"stage_rows":0,"counts":{},"changed_years":[],"production_mutated":false,"local_partitions_written":false,"api_requests":0}'               > .cache/tbt/kaggle-wta/dry-run/report.json
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/kaggle-wta/dry-run/report.json").read_text())
+          c=r.get("counts") or {}
+          for key in ("identity_missing","identity_changed","invalid_market","market_conflicts"):
+              if int(c.get(key) or 0):
+                  raise SystemExit(f"Strict importer rejected rows: {key}={c.get(key)}")
+          if int(r.get("api_requests",-1)) != 0:
+              raise SystemExit("Importer unexpectedly used provider API")
+          print(json.dumps(r,indent=2))
+          PY
+
+      - name: Write verified odds into local canonical history
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          stage=.cache/tbt/kaggle-wta/link/reference_stage.jsonl
+          mkdir -p .cache/tbt/kaggle-wta/write
+          if [[ -s "$stage" ]]; then
+            python scripts/import_offline_linked_match_winner_odds.py               --stage "$stage"               --history-dir .cache/tbt/kaggle-wta/history               --out-dir .cache/tbt/kaggle-wta/write               --write-partitions               --write-history-dir .cache/tbt/kaggle-wta/history
+          else
+            cp .cache/tbt/kaggle-wta/dry-run/report.json .cache/tbt/kaggle-wta/write/report.json
+          fi
+
+      - name: Publish changed canonical history
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          d=Path(".cache/tbt/kaggle-wta/history")
+          report=json.loads(Path(".cache/tbt/kaggle-wta/write/report.json").read_text())
+          c=report.get("counts") or {}
+          for key in ("identity_missing","identity_changed","invalid_market","market_conflicts"):
+              if int(c.get(key) or 0):
+                  raise SystemExit(f"Write rejected rows: {key}={c.get(key)}")
+          years=[int(y) for y in report.get("changed_years") or []]
+          matches,safety=sanitize_history_identities(load_partitions(d))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Identity quarantine before publish")
+          if years:
+              paths=[d/f"history-{y:04d}.parquet" for y in years]+[d/"history_manifest.json"]
+              ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",d).upload_bundle(paths)
+          print(json.dumps({"rows":len(matches),"changed_years":years},indent=2))
+          PY
+
+      - name: Verify persisted canonical readback
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          verify=Path(".cache/tbt/kaggle-wta/verify")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",verify).download(
+              require_bundle_manifest=True
+          )
+          matches,safety=sanitize_history_identities(load_partitions(verify))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Persisted identity quarantine")
+          by_id={str(m.match_id):m for m in matches}
+          stage=Path(".cache/tbt/kaggle-wta/link/reference_stage.jsonl")
+          staged=[json.loads(line) for line in stage.read_text().splitlines() if line.strip()] if stage.is_file() else []
+          missing=[]
+          for row in staged:
+              m=by_id.get(str(row["match_id"]))
+              marker=(m.provider_payload or {}).get("_tbt_match_winner_odds") if m else None
+              if not isinstance(marker,dict) or marker.get("source") != os.environ["SOURCE_LABEL"]:
+                  missing.append(str(row["match_id"]))
+          if missing:
+              raise SystemExit(f"Persisted readback missing {len(missing)} staged markers")
+          print(json.dumps({"rows":len(matches),"verified_staged":len(staged)},indent=2))
+          PY
+
+      - name: Publish private historical market sidecars
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          upload_file() {
+            local source="$1"
+            local path="$2"
+            local message="$3"
+            local existing_sha
+            existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+            SOURCE_FILE="$source" EXISTING_SHA="$existing_sha" COMMIT_MESSAGE="$message" python - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          payload={
+              "message":os.environ["COMMIT_MESSAGE"],
+              "content":base64.b64encode(Path(os.environ["SOURCE_FILE"]).read_bytes()).decode("ascii"),
+          }
+          if os.environ.get("EXISTING_SHA"):
+              payload["sha"]=os.environ["EXISTING_SHA"]
+          Path("/tmp/kaggle-wta-upload.json").write_text(json.dumps(payload),encoding="utf-8")
+          PY
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               --input /tmp/kaggle-wta-upload.json >/dev/null
+          }
+          for file in .cache/tbt/kaggle-wta/link/market-sidecar-*.jsonl.gz; do
+            test -s "$file" || continue
+            base="$(basename "$file")"
+            upload_file "$file" "research/historical_market/kaggle_wta_2016_2017/$base"               "Update Kaggle WTA 2016-2017 market $base from run $GITHUB_RUN_ID"
+          done
+
+      - name: Persist integration audit
+        if: always()
+        continue-on-error: true
+        env:
+          JOB_STATUS: ${{ job.status }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from datetime import datetime,timezone
+          from pathlib import Path
+          def read(path):
+              p=Path(path)
+              if not p.is_file(): return None
+              try: return json.loads(p.read_text())
+              except Exception as exc: return {"read_error":str(exc)}
+          audit={
+              "schema":1,
+              "generated_at_utc":datetime.now(timezone.utc).isoformat(),
+              "job_status":os.environ.get("JOB_STATUS"),
+              "mode":os.environ.get("KAGGLE_WTA_MODE"),
+              "run_id":os.environ.get("RUN_ID"),
+              "run_sha":os.environ.get("RUN_SHA"),
+              "source":"Kaggle serangu/woman-tennis-2016-2017-years",
+              "license_status":"operator_confirmed_compatible_for_noncommercial_blinq_use",
+              "source_audit":read(".cache/tbt/kaggle-wta/source-audit.json"),
+              "link_report":read(".cache/tbt/kaggle-wta/link/report.json"),
+              "dry_run_report":read(".cache/tbt/kaggle-wta/dry-run/report.json"),
+              "write_report":read(".cache/tbt/kaggle-wta/write/report.json"),
+              "api_requests":0,
+              "model_promoted":False,
+          }
+          Path("/tmp/kaggle-wta-audit.json").write_text(json.dumps(audit,ensure_ascii=False,indent=2))
+          PY
+          path="audit/kaggle-wta-2016-2017-odds-latest.json"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          encoded="$(base64 -w0 /tmp/kaggle-wta-audit.json)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit Kaggle WTA 2016-2017 odds run $RUN_ID"               -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit Kaggle WTA 2016-2017 odds run $RUN_ID"               -f content="$encoded" >/dev/null
+          fi
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-kaggle-wta-odds-${{ github.run_id }}
+          path: |
+            .cache/tbt/kaggle-wta/source-audit.json
+            .cache/tbt/kaggle-wta/link/report.json
+            .cache/tbt/kaggle-wta/link/review.jsonl.gz
+            .cache/tbt/kaggle-wta/link/quarantine.jsonl.gz
+            .cache/tbt/kaggle-wta/dry-run/report.json
+            .cache/tbt/kaggle-wta/write/report.json
+          if-no-files-found: warn
+          retention-days: 14
