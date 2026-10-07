@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "source_policy": "exact_public_archives_from_verified_backup_manifests",
+  "provider_api_requests": 0,
+  "model_promotion": false,
+  "canonical_match_mutation": false,
+  "sources": {
+    "wta_rankings": {
+      "slug": "bwandowando/womens-tennis-association-rankings",
+      "archive_sha256": "23172facec36052474b0e523fe24a5f6e25c5b0c1279d59412203fc69dd2e0f3",
+      "license_status": "Apache-2.0"
+    },
+    "livetennis_pbp": {
+      "slug": "livetennisapi/tennis-point-by-point-dataset-atp-to-itf",
+      "archive_sha256": "c92e12602f975fffa4300c2cc527e61a6ad1246486661608cc6c9f20b35d363b",
+      "license_status": "CC-BY-NC-4.0"
+    },
+    "pinnacle_sample": {
+      "slug": "oliviersportsdata/tennis-grand-slam-pinnacle-pure",
+      "archive_sha256": "3bc70ab4f9884af81def2651b80f116e5c35dae4a34f03b1614666dfa172b8f0",
+      "license_status": "CC-BY-NC-4.0"
+    },
+    "wimbledon_2024": {
+      "slug": "rewantbhriguvanshi/wimbledon-2024-point-and-match-level-statistics",
+      "archive_sha256": "cd464e89a19a0c6440fdd2928d14e375065d2baf96ff01c3c9860077a1803c20",
+      "license_status": "Apache-2.0"
+    }
+  },
+  "output": {
+    "release_tag": "blinq-kaggle-research-integration-2026-10-07",
+    "audit_path": "audit/kaggle-research-bundle-integration-latest.json"
+  },
+  "safety": {
+    "wta_rankings": "point_in_time_candidate_only; source snapshot date must be strictly before match date for future feature use",
+    "livetennis_pbp": "research_only; timestamped observed point states; no pre-match feature promotion",
+    "pinnacle_sample": "research_clv_only; outcome/AI/post-match fields excluded from sidecar",
+    "wimbledon_2024": "research_only; point outcomes/context may be used for retrospective serve/rally research only"
+  }
+}
