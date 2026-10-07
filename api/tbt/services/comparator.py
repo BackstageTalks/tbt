@@ -289,6 +289,11 @@ def compare(
         features.update(wta_season_stats.features_for_match(synthetic, current=True))
 
     feature_names = list(getattr(model, "feature_names", None) or FEATURE_NAMES)
+    feature_set = set(feature_names)
+    if feature_set & set(ATP_RANK_HISTORY_FEATURE_NAMES) and atp_rank_history is None:
+        raise ComparatorCoverageError("model requires ATP rank history")
+    if feature_set & set(WTA_RANK_HISTORY_FEATURE_NAMES) and wta_rank_history is None:
+        raise ComparatorCoverageError("model requires WTA rank history")
     missing = [name for name in feature_names if name not in features]
     if missing:
         raise ComparatorCoverageError("model feature sources unavailable: " + ", ".join(missing))
