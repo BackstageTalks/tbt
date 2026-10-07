@@ -105,7 +105,7 @@ def test_current_file_cannot_rewrite_pinned_historical_decade(tmp_path):
     )
 
 
-def test_conflicting_historical_wta_files_still_fail_closed(tmp_path):
+def test_conflicting_historical_wta_files_quarantine_ambiguous_key(tmp_path):
     players = tmp_path / "wta_players.csv"
     _write_wta_players(players)
     first = tmp_path / "wta_rankings_00s.csv"
@@ -113,13 +113,21 @@ def test_conflicting_historical_wta_files_still_fail_closed(tmp_path):
     first.write_text(
         "ranking_date,ranking,player_id,ranking_points,tours\n"
         "20040510,30,1,1000,0\n"
+        "20040510,10,2,1800,0\n"
     )
     second.write_text(
         "ranking_date,ranking,player_id,ranking_points,tours\n"
         "20040510,25,1,1200,0\n"
     )
-    with pytest.raises(ValueError, match="historical rank row"):
-        WTARankHistory.from_sackmann(players, [first, second])
+    history = WTARankHistory.from_sackmann(players, [first, second])
+    match = SimpleNamespace(
+        tour="wta",
+        scheduled_at=datetime.fromisoformat("2004-05-11T12:00:00+00:00"),
+        player1_name="Alpha One",
+        player2_name="Beta Two",
+    )
+    features = history.features_for_match(match)
+    assert features["wta_hist_known_both"] == 0.0
 
 
 def test_current_only_wta_source_remains_valid(tmp_path):
