@@ -9345,6 +9345,12 @@ body#blinqPremium .result-comeback-icon{
   filter:drop-shadow(0 0 3px rgba(255,122,26,.20));
   transform:translateY(-.5px);
 }
+body#blinqPremium .result-live-max{
+  display:inline!important;margin-left:4px!important;
+  color:#ff8a2a!important;font-size:8px!important;line-height:1!important;
+  font-weight:800!important;letter-spacing:.02em!important;white-space:nowrap!important;
+  vertical-align:baseline!important;
+}
 body#blinqPremium:is(.blinq-home,.blinq-route) .reference-topbar .header-actions :is(button#bqm-projects,button#insightBell.insight-bell){background:rgba(17,46,37,.55)!important;border:1px solid rgba(96,159,135,.25)!important;border-radius:11px!important;box-shadow:none!important}
 body#blinqPremium .reference-topbar #bqm-projects{color:#b694f5!important}
 @media(min-width:901px){
