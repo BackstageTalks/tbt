@@ -169,6 +169,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          case "$MODE" in
+            mega-data|history|statistics|doubles-data|ace-statistics|sg-scores)
+              export BLINQ_RAPIDAPI_MAX_RPS=6
+              echo "Batch provider throttle enabled: max 6 requests/second."
+              ;;
+          esac
           if [[ "$MODE" != provider-probe ]]; then
             test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
           fi
