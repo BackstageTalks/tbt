@@ -684,7 +684,7 @@ def _publish_predictions(
 
 def main():
     parser = argparse.ArgumentParser(description="Offline BlinQ training and prediction publication")
-    parser.add_argument("mode", choices=["train", "refresh", "current-refresh", "backtest"])
+    parser.add_argument("mode", choices=["train", "refresh", "current-refresh", "comparator-build", "backtest"])
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data"))
     parser.add_argument("--max-requests", type=int, default=750)
     parser.add_argument(
@@ -735,7 +735,7 @@ def main():
         print(json.dumps({"history_safety": history_safety}, ensure_ascii=False), flush=True)
 
     atp_leaderboards = None
-    if args.mode in {"train", "backtest", "refresh", "current-refresh"}:
+    if args.mode in {"train", "backtest", "refresh", "current-refresh", "comparator-build"}:
         atp_dir = cache / "atp-leaderboards"
         atp_asset = "atp_leaderboards_1991_2026_52week_career.csv"
         try:
@@ -773,7 +773,7 @@ def main():
                 "reason": str(exc)[:300],
             }), flush=True)
     wta_season_stats = None
-    if args.mode in {"train", "backtest", "refresh", "current-refresh"}:
+    if args.mode in {"train", "backtest", "refresh", "current-refresh", "comparator-build"}:
         wta_dir = cache / "wta-season-stats"
         wta_asset = "wta_stats_2010_2026_serving_returning.csv"
         try:
@@ -950,6 +950,87 @@ def main():
             production.upload_bundle([model_dir / "model.joblib", model_dir / "training_report.json",
                                       promotion_history_path])
         return
+    if args.mode == "comparator-build":
+        # Build only the read-only comparator serving snapshot. This mode must
+        # never initialize a provider client or mutate canonical history/feed.
+        model_store = ReleaseStore(
+            args.data_repository,
+            "tbt-model-production-v1",
+            model_dir,
+        )
+        model_store.download(
+            extra_names=("model.joblib", "training_report.json"),
+            required_names=("model.joblib", "training_report.json"),
+        )
+        model = load_model(str(model_dir / "model.joblib"))
+        now = datetime.now(timezone.utc)
+        artifact = build_serving_artifact(
+            model,
+            matches,
+            now=now,
+            atp_leaderboards=atp_leaderboards,
+            wta_season_stats=wta_season_stats,
+        )
+
+        prediction_dir = cache / "predictions"
+        prediction_store = ReleaseStore(
+            args.data_repository,
+            "tbt-predictions-v1",
+            prediction_dir,
+        )
+        artifact_path = prediction_dir / "comparator.json.gz"
+        with gzip.open(artifact_path, "wt", encoding="utf-8", compresslevel=6) as handle:
+            json.dump(
+                clean(artifact),
+                handle,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+            )
+        prediction_store.upload_bundle([artifact_path])
+
+        # Persisted readback is mandatory: do not treat an upload call as
+        # completion. ReleaseStore verifies the committed bundle checksum.
+        readback_dir = cache / "comparator-readback"
+        readback_store = ReleaseStore(
+            args.data_repository,
+            "tbt-predictions-v1",
+            readback_dir,
+        )
+        readback_store.download(
+            extra_names=("comparator.json.gz",),
+            required_names=("comparator.json.gz",),
+            require_bundle_manifest=True,
+        )
+        with gzip.open(readback_dir / "comparator.json.gz", "rt", encoding="utf-8") as handle:
+            persisted = json.load(handle)
+        persisted_model = str((persisted.get("model") or {}).get("model_version") or "")
+        expected_model = str(getattr(model, "version", "") or "")
+        source = persisted.get("source") or {}
+        players = persisted.get("players")
+        if (
+            int(persisted.get("schema") or 0) != 1
+            or persisted_model != expected_model
+            or not isinstance(players, list)
+            or not players
+            or source.get("canonical_read_only") is not True
+            or int(source.get("provider_requests_per_user_compare", -1)) != 0
+        ):
+            raise RuntimeError("Comparator persisted readback failed serving contract")
+        report = {
+            "status": "persisted_verified",
+            "asset": "comparator.json.gz",
+            "bytes": int((readback_dir / "comparator.json.gz").stat().st_size),
+            "model_version": persisted_model,
+            "players": len(players),
+            "canonical_matches_replayed": int(source.get("canonical_matches_replayed") or 0),
+            "cutoff_utc": persisted.get("cutoff_utc"),
+            "provider_requests": 0,
+            "canonical_read_only": True,
+        }
+        print(json.dumps({"comparator_build": report}, ensure_ascii=False), flush=True)
+        return
+
     if not settings.rapidapi_key:
         parser.error("RAPIDAPI_KEY is required")
     model_store = ReleaseStore(args.data_repository, "tbt-model-production-v1", model_dir)
