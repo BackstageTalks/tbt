@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import function_app
 
@@ -101,9 +102,18 @@ def test_admin_diagnostics_uses_runtime_budget_caps_and_exposes_external_schedul
     )
     monkeypatch.setattr(function_app, "auth_provider", lambda settings: "firebase")
     monkeypatch.setenv("BLINQ_LIVE_WORKER_TOKEN", "configured")
-    monkeypatch.setattr(function_app.settings, "firebase_project_id", "p")
-    monkeypatch.setattr(function_app.settings, "firebase_client_email", "a@example.com")
-    monkeypatch.setattr(function_app.settings, "firebase_private_key", "key")
+    monkeypatch.setattr(
+        function_app,
+        "settings",
+        SimpleNamespace(
+            firebase_project_id="p",
+            firebase_client_email="a@example.com",
+            firebase_private_key="key",
+            blinq_account_worker_token="",
+            rapidapi_key="test",
+            rapidapi_host="tennisapi1.p.rapidapi.com",
+        ),
+    )
 
     payload = _json_response(function_app.admin_diagnostics(Request()))
 
