@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from copy import deepcopy
+import hashlib
+import json
 from zoneinfo import ZoneInfo
 
 PUBLICATION_CUTOFF_MINUTES = 5
@@ -118,7 +120,92 @@ def validate_publication_candidate(feed, ledger):
     return upcoming
 
 
-def confirm_publication(ledger, published_rows, now=None):
+def _evidence_hash(value) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def prepare_publication_evidence(ledger, published_rows, now=None, *, feed_generated_at=None):
+    """Freeze prediction evidence before public deployment without issuing it.
+
+    prepared_publication is operational evidence for a deployment attempt.
+    It deliberately does not set issued_at and therefore cannot affect ROI,
+    settlement, Results, or the immutable issued population. A later successful
+    deployment must confirm the exact same commitment.
+    """
+    now = now or datetime.now(timezone.utc)
+    commitments = _index_published_rows(published_rows)
+    rows_by_event = {
+        _prediction_commitment(row)[0]: row
+        for row in published_rows
+        if isinstance(row, dict)
+    }
+    prepared = []
+    seen = set()
+    for source in ledger:
+        if not isinstance(source, dict):
+            raise ValueError("Invalid prediction ledger row")
+        row = dict(source)
+        event_id = str(row.get("event_id") or "").strip()
+        if not event_id or event_id in seen:
+            raise ValueError("Invalid or duplicate prediction ledger event_id")
+        seen.add(event_id)
+        expected = commitments.get(event_id)
+        if expected is None or row.get("issued_at"):
+            prepared.append(row)
+            continue
+        commitment = _prediction_commitment(row)
+        if commitment != expected:
+            raise RuntimeError(
+                f"Prediction evidence mismatch for event {event_id}; refusing deploy"
+            )
+        card = rows_by_event[event_id]
+        p1 = card.get("player1") if isinstance(card.get("player1"), dict) else {}
+        p2 = card.get("player2") if isinstance(card.get("player2"), dict) else {}
+        row["prepared_publication"] = {
+            "schema": 1,
+            "source": "pre_deploy_feed",
+            "prepared_at": now.isoformat(),
+            "feed_generated_at": feed_generated_at,
+            "commitment_sha256": _evidence_hash(commitment),
+            "event_id": event_id,
+            "scheduled_at": card.get("scheduled_at"),
+            "model_version": card.get("model_version"),
+            "winner_id": card.get("winner_id"),
+            "confidence": card.get("confidence"),
+            "data_depth": card.get("data_depth"),
+            "stats_available": (
+                card.get("stats_available")
+                if isinstance(card.get("stats_available"), bool) else None
+            ),
+            "quality": (
+                deepcopy(card.get("quality"))
+                if isinstance(card.get("quality"), dict) else None
+            ),
+            "players": {
+                "player1": {
+                    "id": str(p1.get("id") or ""),
+                    "probability": p1.get("probability"),
+                    "rank": p1.get("rank"),
+                },
+                "player2": {
+                    "id": str(p2.get("id") or ""),
+                    "probability": p2.get("probability"),
+                    "rank": p2.get("rank"),
+                },
+            },
+        }
+        prepared.append(row)
+    return sorted(prepared, key=lambda r: r["scheduled_at"])
+
+
+def confirm_publication(ledger, published_rows, now=None, *, require_prepared=False):
     """Confirm first public availability after a successful deployment.
 
     Confirmation requires the exact immutable prediction commitment that was
@@ -151,6 +238,16 @@ def confirm_publication(ledger, published_rows, now=None):
             raise RuntimeError(
                 f"Deployed prediction does not match ledger commitment for event {event_id}"
             )
+        if require_prepared:
+            prepared_evidence = row.get("prepared_publication")
+            if not isinstance(prepared_evidence, dict):
+                raise RuntimeError(
+                    f"Prediction {event_id} lacks pre-deploy evidence; refusing confirmation"
+                )
+            if prepared_evidence.get("commitment_sha256") != _evidence_hash(commitment):
+                raise RuntimeError(
+                    f"Prediction {event_id} pre-deploy evidence does not match deployed commitment"
+                )
 
         scheduled_at = datetime.fromisoformat(row["scheduled_at"])
         cutoff = scheduled_at - timedelta(minutes=PUBLICATION_CUTOFF_MINUTES)
@@ -1025,7 +1122,211 @@ def build_confirmed_daily_offer_snapshot(
         snapshot["access_contract"] = access_contract
     return snapshot
 
-def confirm_market_publications(ledger, deployed_feed, now=None):
+def _prepared_model_version(card, publication):
+    version = str(card.get("model_version") or publication.get("model_version") or "").strip()
+    if version:
+        return version
+    doubles = card.get("doubles") if isinstance(card.get("doubles"), dict) else {}
+    return str(doubles.get("model") or "").strip()
+
+
+def _prepared_player_ranks(card):
+    players = {}
+    for side in ("player1", "player2"):
+        player = card.get(side) if isinstance(card.get(side), dict) else {}
+        rank = player.get("rank")
+        try:
+            number = float(rank) if rank is not None else None
+        except (ValueError, TypeError):
+            number = None
+        if number is not None and not 0 < number < float("inf"):
+            number = None
+        players[side] = {
+            "id": str(player.get("id") or ""),
+            "rank": int(number) if number is not None else None,
+            "probability": player.get("probability"),
+        }
+    return players
+
+
+def _validate_two_way_market_evidence(card, *, event_id, section):
+    market = card.get("match_winner_market")
+    if not isinstance(market, dict):
+        raise RuntimeError(
+            f"{section} event {event_id} lacks two-way Match Winner evidence"
+        )
+    required = (
+        "player1_odds",
+        "player2_odds",
+        "player1_implied_probability",
+        "player2_implied_probability",
+        "captured_at",
+        "provider_id",
+    )
+    missing = [name for name in required if market.get(name) in (None, "")]
+    if missing:
+        raise RuntimeError(
+            f"{section} event {event_id} incomplete two-way market evidence: "
+            + ", ".join(missing)
+        )
+    return deepcopy(market)
+
+
+def prepare_market_publication_evidence(ledger, deployed_feed, now=None):
+    """Freeze every pending market card before any public Azure deployment."""
+    now = now or datetime.now(timezone.utc)
+    validate_market_publication_candidate(deployed_feed, ledger)
+
+    deployed_rows = {}
+    for section, key in _MARKET_SECTION_KEYS.items():
+        for position, card in enumerate(_section_feed_rows(deployed_feed, section, key), start=1):
+            commitment = _market_commitment_from_feed_row(card, section)
+            deployed_rows.setdefault(commitment, []).append((position, card))
+
+    market_selection = (
+        deployed_feed.get("market_selection")
+        if isinstance(deployed_feed.get("market_selection"), dict) else {}
+    )
+    rule_keys = {
+        "top200": "top200_rule",
+        "top_daily": "top_daily_rule",
+        "prime": "prime_rule",
+        "value": "value_rule",
+        "doubles": "doubles_rule",
+    }
+
+    prepared_ledger = []
+    prepared_count = 0
+    for source in ledger:
+        row = dict(source)
+        event_id = str(row.get("event_id") or "").strip()
+        publications = [
+            dict(item)
+            for item in row.get("market_publications", []) or []
+            if isinstance(item, dict)
+        ]
+        for publication in publications:
+            if publication.get("issued_at") or publication.get("publication_status") == "published":
+                continue
+            section = str(publication.get("section") or "").strip()
+            commitment = _market_commitment_from_publication(event_id, publication)
+            candidates = deployed_rows.get(commitment) or []
+            if section not in _MARKET_SECTION_KEYS or not candidates:
+                continue
+            if len(candidates) != 1:
+                raise RuntimeError(
+                    f"Ambiguous pre-deploy market evidence for {section} event {event_id}"
+                )
+            position, card = candidates[0]
+            betting = card.get("betting") if isinstance(card.get("betting"), dict) else {}
+            model_version = _prepared_model_version(card, publication)
+            if str(publication.get("market") or "") == "match_winner":
+                if section in {"top_daily", "prime", "value", "doubles"} and not model_version:
+                    raise RuntimeError(
+                        f"{section} event {event_id} lacks model identity before deploy"
+                    )
+                two_way = _validate_two_way_market_evidence(
+                    card, event_id=event_id, section=section
+                )
+            else:
+                two_way = None
+
+            publication["model_version"] = model_version or publication.get("model_version")
+            publication["prepared_snapshot"] = {
+                "schema": 2,
+                "source": "pre_deploy_feed",
+                "prepared_at": now.isoformat(),
+                "feed_generated_at": deployed_feed.get("generated_at"),
+                "commitment_sha256": _evidence_hash(commitment),
+                "event_id": event_id,
+                "section": section,
+                "market": publication.get("market"),
+                "selection": publication.get("selection"),
+                "selection_id": publication.get("selection_id"),
+                "offer_position": position,
+                "model_version": model_version or None,
+                "model_probability": (
+                    betting.get("model_probability")
+                    if betting else publication.get("model_probability")
+                ),
+                "blinq_probability": (
+                    _top_display_probability(card)
+                    if section in {"top_daily", "prime", "value"} else
+                    card.get("probability")
+                ),
+                "odds": (
+                    betting.get("odds")
+                    if betting else publication.get("odds")
+                ),
+                "fair_implied_probability": (
+                    betting.get("fair_implied_probability")
+                    if betting else publication.get("fair_implied_probability")
+                ),
+                "edge": (
+                    betting.get("edge")
+                    if betting else publication.get("edge")
+                ),
+                "expected_value": (
+                    betting.get("expected_value")
+                    if betting else publication.get("expected_value")
+                ),
+                "provider_id": (
+                    betting.get("provider_id")
+                    if betting else publication.get("provider_id")
+                ),
+                "market_captured_at": (
+                    betting.get("captured_at")
+                    if betting else publication.get("captured_at")
+                ),
+                "betting": deepcopy(betting) if betting else None,
+                "two_way_match_winner": two_way,
+                "players": _prepared_player_ranks(card),
+                "quality": (
+                    deepcopy(card.get("quality"))
+                    if isinstance(card.get("quality"), dict) else None
+                ),
+                "stats_available": (
+                    card.get("stats_available")
+                    if isinstance(card.get("stats_available"), bool) else None
+                ),
+                "data_depth": card.get("data_depth"),
+                "selector_contract": (
+                    deepcopy(market_selection.get(rule_keys.get(section)))
+                    if isinstance(market_selection.get(rule_keys.get(section)), dict)
+                    else None
+                ),
+                "projection": {
+                    key: deepcopy(card.get(key))
+                    for key in (
+                        "projection",
+                        "opponent_projection",
+                        "reference_projection",
+                        "market_line",
+                        "projection_gap",
+                        "projection_scope",
+                        "projection_metric",
+                        "projection_direction",
+                        "projection_confidence",
+                        "projection_label",
+                        "projection_kind",
+                        "projection_subject",
+                        "projection_samples",
+                        "projection_unit",
+                        "best_of",
+                        "price_status",
+                        "price_contract",
+                        "ou_side",
+                    )
+                    if key in card
+                },
+            }
+            prepared_count += 1
+        row["market_publications"] = publications
+        prepared_ledger.append(row)
+    return prepared_ledger, prepared_count
+
+
+def confirm_market_publications(ledger, deployed_feed, now=None, *, require_prepared=False):
     """Confirm section-specific betting publications after deployment."""
     now = now or datetime.now(timezone.utc)
     validate_market_publication_candidate(deployed_feed, ledger)
@@ -1054,6 +1355,22 @@ def confirm_market_publications(ledger, deployed_feed, now=None):
             commitment = _market_commitment_from_publication(row.get("event_id"), publication)
             if section not in _MARKET_SECTION_KEYS or commitment not in deployed:
                 continue
+            if require_prepared:
+                prepared_snapshot = publication.get("prepared_snapshot")
+                if not isinstance(prepared_snapshot, dict):
+                    raise RuntimeError(
+                        f"{section} event {row.get('event_id')} lacks pre-deploy market evidence"
+                    )
+                if prepared_snapshot.get("commitment_sha256") != _evidence_hash(commitment):
+                    raise RuntimeError(
+                        f"{section} event {row.get('event_id')} prepared evidence mismatch"
+                    )
+                if int(prepared_snapshot.get("offer_position") or 0) != int(
+                    deployed_positions[commitment]
+                ):
+                    raise RuntimeError(
+                        f"{section} event {row.get('event_id')} changed offer position after evidence prepare"
+                    )
             scheduled_at = datetime.fromisoformat(str(row.get("scheduled_at") or "").replace("Z", "+00:00"))
             if scheduled_at.tzinfo is None:
                 raise ValueError("Naive market publication schedule")
@@ -1069,7 +1386,16 @@ def confirm_market_publications(ledger, deployed_feed, now=None):
             publication["offer_position"] = deployed_positions[commitment]
             publication["issued_at"] = now.isoformat()
             publication["publication_status"] = "published"
-            if section in {"top_daily", "prime", "value"} and publication.get("market") == "match_winner":
+            if require_prepared:
+                evidence = deepcopy(publication["prepared_snapshot"])
+                evidence["source"] = "pre_deploy_feed_confirmed"
+                evidence["confirmed_at"] = now.isoformat()
+                publication["issued_snapshot"] = evidence
+            if (
+                not require_prepared
+                and section in {"top_daily", "prime", "value"}
+                and publication.get("market") == "match_winner"
+            ):
                 candidates = deployed_rows.get(commitment) or []
                 if len(candidates) == 1:
                     card = candidates[0]
