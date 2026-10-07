@@ -1,4 +1,4 @@
-name: BlinQ alimoh89 license-gated preparation
+name: BlinQ alimoh89 market integration
 
 on:
   pull_request:
@@ -6,7 +6,10 @@ on:
       - ".github/alimoh89-preparation-request.json"
       - ".github/workflows/alimoh89-preparation.yml"
       - "scripts/prepare_alimoh89_markets.py"
+      - "scripts/import_offline_market_history.py"
+      - "api/tbt/data/offline_market_history.py"
       - "tests/test_alimoh89_preparation.py"
+      - "tests/test_offline_market_history_v2.py"
   push:
     branches: [main]
     paths:
@@ -15,27 +18,60 @@ on:
       - "scripts/prepare_alimoh89_markets.py"
       - "tests/test_alimoh89_preparation.py"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run or write"
+        required: true
+        default: "dry-run"
+        type: choice
+        options: [dry-run, write]
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: blinq-alimoh89-preparation-v2
-  cancel-in-progress: true
+  group: ${{ github.event_name == 'pull_request' && format('tbt-alimoh89-pr-{0}', github.ref) || 'tbt-history-data-writer' }}
+  cancel-in-progress: false
 
 jobs:
-  prepare:
+  integrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
     env:
       PYTHONPATH: api:scripts
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       REQUEST_FILE: .github/alimoh89-preparation-request.json
+      SOURCE_LABEL: kaggle_alimoh89_tennis_results_odds_2014_2025
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve controlled mode
+        id: request
+        env:
+          DISPATCH_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            mode="dry-run"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            mode="$DISPATCH_MODE"
+            if [[ -z "$mode" ]]; then mode="dry-run"; fi
+          else
+            mode="$(jq -r '.mode // "dry-run"' "$REQUEST_FILE")"
+          fi
+          case "$mode" in dry-run|write) ;; *) echo "Invalid mode=$mode"; exit 1;; esac
+          if [[ "$mode" == "write" && "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            echo "Write forbidden on pull_request"
+            exit 1
+          fi
+          test "$(jq -r '.source.license_status' "$REQUEST_FILE")" = "operator_confirmed_compatible_for_noncommercial_blinq_use"
+          test "$(jq -r '.safety.provider_api_requests' "$REQUEST_FILE")" = "0"
+          test "$(jq -r '.safety.model_promotion' "$REQUEST_FILE")" = "false"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "ALIMOH_MODE=$mode" >> "$GITHUB_ENV"
 
       - uses: actions/setup-python@v5
         with:
@@ -43,23 +79,13 @@ jobs:
           cache: pip
           cache-dependency-path: api/requirements-train.txt
 
-      - name: Validate license gate and safety
-        run: |
-          set -euo pipefail
-          test "$(jq -r '.mode' "$REQUEST_FILE")" = "prepare-license-gated"
-          test "$(jq -r '.source.license_status' "$REQUEST_FILE")" = "review_required_other"
-          test "$(jq -r '.safety.canonical_mutation' "$REQUEST_FILE")" = "false"
-          test "$(jq -r '.safety.provider_api_requests' "$REQUEST_FILE")" = "0"
-          test "$(jq -r '.safety.model_promotion' "$REQUEST_FILE")" = "false"
-          test "$(jq -r '.safety.persist_row_level_output' "$REQUEST_FILE")" = "false"
-
-      - name: Install and test preparation adapter
+      - name: Install and test integration adapters
         run: |
           set -euo pipefail
           python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
           python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
-          python -m compileall -q scripts/prepare_alimoh89_markets.py
-          python -m pytest tests/test_alimoh89_preparation.py -q
+          python -m compileall -q scripts/prepare_alimoh89_markets.py scripts/import_offline_market_history.py api/tbt/data/offline_market_history.py
+          python -m pytest tests/test_alimoh89_preparation.py tests/test_offline_market_history_v2.py -q
 
       - name: Verify private data destination
         run: |
@@ -72,7 +98,9 @@ jobs:
           set -euo pipefail
           mkdir -p .cache/tbt/alimoh/source
           slug="$(jq -r '.source.slug' "$REQUEST_FILE")"
-          curl --fail --location --retry 6 --retry-delay 3             "https://www.kaggle.com/api/v1/datasets/download/$slug"             -o .cache/tbt/alimoh/source.zip
+          curl --fail --location --retry 6 --retry-delay 3 \
+            "https://www.kaggle.com/api/v1/datasets/download/$slug" \
+            -o .cache/tbt/alimoh/source.zip
           test "$(sha256sum .cache/tbt/alimoh/source.zip | awk '{print $1}')" = "$(jq -r '.source.expected_archive_sha256' "$REQUEST_FILE")"
           unzip -q .cache/tbt/alimoh/source.zip -d .cache/tbt/alimoh/source
           SOURCE_FILE=".cache/tbt/alimoh/source/$(jq -r '.source.file' "$REQUEST_FILE")"
@@ -87,36 +115,178 @@ jobs:
           set -euo pipefail
           python -c 'import os; from pathlib import Path; from release_store import ReleaseStore; ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",Path(".cache/tbt/alimoh/history")).download(require_bundle_manifest=True)'
 
-      - name: Build license-gated staging and dry-run audit
+      - name: Build mapped rich sidecars and canonical market stage
         run: |
           set -euo pipefail
-          python scripts/prepare_alimoh89_markets.py             --history-dir .cache/tbt/alimoh/history             --source-csv "$SOURCE_FILE"             --out-dir .cache/tbt/alimoh/out
-          test "$(jq -r '.canonical_mutated' .cache/tbt/alimoh/out/report.json)" = "false"
-          test "$(jq -r '.provider_api_requests' .cache/tbt/alimoh/out/report.json)" = "0"
-          test "$(jq -r '.model_promoted' .cache/tbt/alimoh/out/report.json)" = "false"
-          test "$(jq -r '.license_gate' .cache/tbt/alimoh/out/report.json)" = "blocked_pending_rights_confirmation"
-          test "$(jq -r '.counts.source_rows' .cache/tbt/alimoh/out/report.json)" = "300059"
-          test "$(jq -r '.staged_rows' .cache/tbt/alimoh/out/report.json)" -gt 0
-          test "$(jq -r '.counts.duplicate_canonical_links // 0' .cache/tbt/alimoh/out/report.json)" = "0"
+          python scripts/prepare_alimoh89_markets.py \
+            --history-dir .cache/tbt/alimoh/history \
+            --source-csv "$SOURCE_FILE" \
+            --out-dir .cache/tbt/alimoh/out
+          report=.cache/tbt/alimoh/out/report.json
+          test "$(jq -r '.canonical_mutated' "$report")" = "false"
+          test "$(jq -r '.provider_api_requests' "$report")" = "0"
+          test "$(jq -r '.model_promoted' "$report")" = "false"
+          test "$(jq -r '.license_gate' "$report")" = "unlocked_operator_confirmation"
+          test "$(jq -r '.source.license_status' "$report")" = "operator_confirmed_compatible_for_noncommercial_blinq_use"
+          test "$(jq -r '.counts.source_rows' "$report")" = "300059"
+          test "$(jq -r '.staged_rows' "$report")" -ge 25000
+          test "$(jq -r '.canonical_market_stage_rows' "$report")" -gt 0
+          test "$(jq -r '.counts.duplicate_canonical_links // 0' "$report")" = "0"
+          test "$(jq -r '.quarantine_rows' "$report")" = "0"
+          test "$(jq -r '.review_rows' "$report")" -le 20
 
-      - name: Persist summary audit only
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Dry-run strict canonical market importer
         run: |
           set -euo pipefail
-          path="$(jq -r '.output.audit_path' "$REQUEST_FILE")"
-          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
-          encoded="$(base64 -w0 .cache/tbt/alimoh/out/report.json)"
-          if [[ -n "$sha" ]]; then
-            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Prepare license-gated alimoh89 market data run $GITHUB_RUN_ID"               -f content="$encoded" -f sha="$sha" >/dev/null
-          else
-            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Prepare license-gated alimoh89 market data run $GITHUB_RUN_ID"               -f content="$encoded" >/dev/null
+          stage=.cache/tbt/alimoh/out/canonical_market_stage.jsonl
+          test -s "$stage"
+          python scripts/import_offline_market_history.py \
+            --stage "$stage" \
+            --history-dir .cache/tbt/alimoh/history \
+            --out-dir .cache/tbt/alimoh/dry-run
+          report=.cache/tbt/alimoh/dry-run/report.json
+          for key in identity_missing identity_changed invalid_market_history market_conflicts; do
+            test "$(jq -r --arg k "$key" '.counts[$k] // 0' "$report")" = "0"
+          done
+          test "$(jq -r '.api_requests' "$report")" = "0"
+          test "$(jq -r '.counts.updated // 0' "$report")" -gt 0
+
+      - name: Write verified market history into local canonical partitions
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_market_history.py \
+            --stage .cache/tbt/alimoh/out/canonical_market_stage.jsonl \
+            --history-dir .cache/tbt/alimoh/history \
+            --out-dir .cache/tbt/alimoh/write \
+            --write-partitions \
+            --write-history-dir .cache/tbt/alimoh/history
+          report=.cache/tbt/alimoh/write/report.json
+          for key in identity_missing identity_changed invalid_market_history market_conflicts; do
+            test "$(jq -r --arg k "$key" '.counts[$k] // 0' "$report")" = "0"
+          done
+          test "$(jq -r '.counts.updated // 0' "$report")" -gt 0
+
+      - name: Validate and publish changed canonical history
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python -c 'import json,os; from pathlib import Path; from release_store import ReleaseStore; from tbt.data.history_snapshot import load_partitions; from tbt.data.history_safety import sanitize_history_identities; d=Path(".cache/tbt/alimoh/history"); r=json.loads(Path(".cache/tbt/alimoh/write/report.json").read_text()); years=[int(y) for y in r.get("changed_years") or []]; matches,safety=sanitize_history_identities(load_partitions(d)); assert not safety.get("quarantined_rows"), "identity quarantine before publish"; assert years, "no changed years"; paths=[d/f"history-{y:04d}.parquet" for y in years]+[d/"history_manifest.json"]; assert all(p.is_file() and p.stat().st_size>0 for p in paths); ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",d).upload_bundle(paths); print(json.dumps({"rows":len(matches),"changed_years":years},indent=2))'
+
+      - name: Verify persisted canonical readback
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python -c 'import json,os; from pathlib import Path; from release_store import ReleaseStore; from tbt.data.history_snapshot import load_partitions; from tbt.data.history_safety import sanitize_history_identities; d=Path(".cache/tbt/alimoh/verify"); ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",d).download(require_bundle_manifest=True); matches,safety=sanitize_history_identities(load_partitions(d)); assert not safety.get("quarantined_rows"), "persisted identity quarantine"; by_id={str(m.match_id):m for m in matches}; staged=[json.loads(x) for x in Path(".cache/tbt/alimoh/out/canonical_market_stage.jsonl").read_text().splitlines() if x.strip()]; prefix=os.environ["SOURCE_LABEL"]+":"; missing=[str(r["match_id"]) for r in staged if by_id.get(str(r["match_id"])) is None]; bad=[str(r["match_id"]) for r in staged if by_id.get(str(r["match_id"])) is not None and not str(((by_id[str(r["match_id"])].provider_payload or {}).get("_tbt_market_history") or {}).get("source") or "").startswith(prefix)]; assert not missing and not bad, f"readback missing={len(missing)} bad={len(bad)}"; print(json.dumps({"rows":len(matches),"verified_staged":len(staged)},indent=2))'
+
+      - name: Publish rich market sidecars and raw backup
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          sidecar_tag="$(jq -r '.output.sidecar_release_tag' "$REQUEST_FILE")"
+          if ! gh release view "$sidecar_tag" -R "$TBT_DATA_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$sidecar_tag" -R "$TBT_DATA_REPOSITORY" \
+              --title "BlinQ alimoh89 market sidecars 2026-10-07" \
+              --notes "Canonical-match keyed market sidecars. Opening markets are pre-match candidates; recorded-final markets are CLV/research only."
           fi
+          for file in .cache/tbt/alimoh/out/market-sidecar-*.jsonl.gz; do
+            test -s "$file" || continue
+            gh release upload "$sidecar_tag" "$file" -R "$TBT_DATA_REPOSITORY" --clobber
+          done
 
-      - name: Upload summary evidence only
+          backup_tag="blinq-kaggle-backup-2026-10-07"
+          if ! gh release view "$backup_tag" -R "$TBT_DATA_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$backup_tag" -R "$TBT_DATA_REPOSITORY" \
+              --title "BlinQ Kaggle backup 2026-10-07" \
+              --notes "Permanent raw-source backup assets."
+          fi
+          archive_sha="$(jq -r '.source.expected_archive_sha256' "$REQUEST_FILE")"
+          raw_asset="alimoh89_tennis-results-and-betting-odds-20142025-$(printf '%.12s' "$archive_sha").zip"
+          cp .cache/tbt/alimoh/source.zip "/tmp/$raw_asset"
+          gh release upload "$backup_tag" "/tmp/$raw_asset" -R "$TBT_DATA_REPOSITORY" --clobber
+          echo "RAW_ASSET=$raw_asset" >> "$GITHUB_ENV"
+          echo "SIDECAR_TAG=$sidecar_tag" >> "$GITHUB_ENV"
+
+      - name: Persist sidecar manifest and integration audit
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/alimoh-sidecars
+          : > /tmp/alimoh-sidecars/files.ndjson
+          for file in .cache/tbt/alimoh/out/market-sidecar-*.jsonl.gz; do
+            test -s "$file" || continue
+            name="$(basename "$file")"
+            sha="$(sha256sum "$file" | awk '{print $1}')"
+            bytes="$(stat -c%s "$file")"
+            rows="$(gzip -cd "$file" | wc -l)"
+            jq -cn --arg name "$name" --arg sha "$sha" --argjson bytes "$bytes" --argjson rows "$rows" \
+              '{name:$name,sha256:$sha,bytes:$bytes,rows:$rows}' >> /tmp/alimoh-sidecars/files.ndjson
+          done
+          jq -s '.' /tmp/alimoh-sidecars/files.ndjson > /tmp/alimoh-sidecars/files.json
+          jq -n \
+            --arg source "alimoh89/tennis-results-and-betting-odds-20142025" \
+            --arg license "operator_confirmed_compatible_for_noncommercial_blinq_use" \
+            --arg release_tag "$SIDECAR_TAG" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --slurpfile prep .cache/tbt/alimoh/out/report.json \
+            --slurpfile write .cache/tbt/alimoh/write/report.json \
+            --slurpfile files /tmp/alimoh-sidecars/files.json \
+            '{schema:1,project:"BlinQ",source:$source,license_status:$license,release_tag:$release_tag,github_run_id:$run_id,canonical_import:$write[0],preparation:$prep[0],files:$files[0],provider_api_requests:0,model_promoted:false}' \
+            > /tmp/alimoh-sidecars/manifest.json
+
+          upload_json() {
+            local src="$1" path="$2" msg="$3" sha encoded
+            sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+            encoded="$(base64 -w0 "$src")"
+            if [[ -n "$sha" ]]; then
+              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="$msg" -f content="$encoded" -f sha="$sha" >/dev/null
+            else
+              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="$msg" -f content="$encoded" >/dev/null
+            fi
+          }
+
+          sidecar_path="$(jq -r '.output.sidecar_manifest_path' "$REQUEST_FILE")"
+          upload_json /tmp/alimoh-sidecars/manifest.json "$sidecar_path" "Publish alimoh89 sidecar manifest run $GITHUB_RUN_ID"
+
+          audit_path="$(jq -r '.output.audit_path' "$REQUEST_FILE")"
+          upload_json /tmp/alimoh-sidecars/manifest.json "$audit_path" "Audit integrated alimoh89 markets run $GITHUB_RUN_ID"
+
+      - name: Update permanent backup manifest
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          path="$(jq -r '.output.backup_manifest_path' "$REQUEST_FILE")"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha)"
+          gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .content | tr -d '\n' | base64 -d > /tmp/alimoh-backup.json
+          jq \
+            --arg raw_asset "$RAW_ASSET" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg commit "$GITHUB_SHA" \
+            --arg sidecar_tag "$SIDECAR_TAG" \
+            --slurpfile prep .cache/tbt/alimoh/out/report.json \
+            --slurpfile write .cache/tbt/alimoh/write/report.json \
+            '.source.license_status="operator_confirmed_compatible_for_noncommercial_blinq_use"
+             | .raw_archive.backup_kind="release_asset"
+             | .raw_archive.release_tag="blinq-kaggle-backup-2026-10-07"
+             | .raw_archive.asset_name=$raw_asset
+             | .promotion_status="integrated_canonical_market_history_and_sidecars"
+             | .integration={status:"success",github_run_id:$run_id,commit:$commit,sidecar_release_tag:$sidecar_tag,preparation:$prep[0],canonical_import:$write[0],provider_api_requests:0,model_promoted:false}' \
+            /tmp/alimoh-backup.json > /tmp/alimoh-backup-updated.json
+          encoded="$(base64 -w0 /tmp/alimoh-backup-updated.json)"
+          gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
+            -f message="Mark alimoh89 data integrated run $GITHUB_RUN_ID" \
+            -f content="$encoded" -f sha="$sha" >/dev/null
+
+      - name: Upload integration evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: blinq-alimoh89-preparation-${{ github.run_id }}
-          path: .cache/tbt/alimoh/out/report.json
+          name: blinq-alimoh89-integration-${{ github.run_id }}
+          path: |
+            .cache/tbt/alimoh/out/report.json
+            .cache/tbt/alimoh/out/review.jsonl.gz
+            .cache/tbt/alimoh/out/quarantine.jsonl.gz
+            .cache/tbt/alimoh/dry-run/report.json
+            .cache/tbt/alimoh/write/report.json
           if-no-files-found: warn
           retention-days: 30
