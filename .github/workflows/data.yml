@@ -705,6 +705,24 @@ jobs:
           test -s api/data/feed.json
           python scripts/verify_presentation_feed.py api/data/feed.json --summary
 
+      - name: Freeze immutable issuance evidence before deploy
+        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if python scripts/prepare_prediction_publication.py \
+              --data-repository "$TBT_DATA_REPOSITORY" \
+              --prepared-feed api/data/feed.json; then
+              break
+            fi
+            if [[ "$attempt" == "3" ]]; then
+              echo "::error::Pre-deploy issuance evidence could not be persisted; refusing public deploy."
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
+
       - name: Sanitize generated artifacts before deploy
         if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         run: python scripts/clean_generated_artifacts.py
