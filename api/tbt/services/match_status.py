@@ -816,7 +816,12 @@ def scan_match_statuses(
 
         pending_state = pending.get(eid) if isinstance(pending.get(eid), dict) else {}
         near_side = str(pending_state.get("n") or "1")
-        primary_key = "player2" if near_side == "2" else "player1"
+        # Participant rotation is only for the compact near route. The legacy
+        # previous-match route intentionally keeps player1 semantics because
+        # existing backlog snapshots/tests rely on that stable lookup path.
+        primary_key = (
+            "player2" if prefer_near and near_side == "2" else "player1"
+        )
         secondary_key = "player1" if primary_key == "player2" else "player2"
         player_id = _player_id(row, primary_key)
         checked += 1
