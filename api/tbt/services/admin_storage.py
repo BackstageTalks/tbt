@@ -590,6 +590,90 @@ def save_live_worker_status(payload: object) -> dict:
     return safe
 
 
+def save_live_odds_peak(event_id: str, odds: float, *, observed_at: str = "", first_set: str = "") -> dict:
+    """Persist the highest provider Match Winner price observed by LIVE Radar.
+
+    This is display/research evidence only. It never changes the immutable
+    publication odds, ROI, model selection or training data.
+    """
+    eid = str(event_id or "").strip()
+    if not _VALID_ID.fullmatch(eid):
+        raise ValueError("Invalid event ID")
+    try:
+        price = float(odds)
+    except (TypeError, ValueError):
+        raise ValueError("Invalid live odds") from None
+    if not (1.0 < price < 100.0):
+        raise ValueError("Invalid live odds")
+    now = datetime.now(timezone.utc).isoformat()
+    seen_at = str(observed_at or now)[:64]
+    row_key = f"live-odds-peak:{eid}"
+    client = _table(UI_TABLE)
+    previous = {}
+    try:
+        previous = client.get_entity(partition_key="runtime", row_key=row_key)
+    except Exception as exc:
+        if not _storage_not_found(exc):
+            raise AdminStorageUnavailable("Unable to load LIVE odds peak") from exc
+    try:
+        old_max = float(previous.get("max_live_odds") or 0.0)
+    except (TypeError, ValueError):
+        old_max = 0.0
+    is_new_max = price > old_max + 1e-12
+    payload = {
+        "PartitionKey": "runtime",
+        "RowKey": row_key,
+        "event_id": eid,
+        "current_live_odds": price,
+        "max_live_odds": price if is_new_max else old_max,
+        "max_live_odds_at": seen_at if is_new_max else str(previous.get("max_live_odds_at") or seen_at)[:64],
+        "first_seen_at": str(previous.get("first_seen_at") or seen_at)[:64],
+        "last_seen_at": seen_at,
+        "observations": max(0, int(previous.get("observations") or 0)) + 1,
+        "first_set": str(first_set or previous.get("first_set") or "")[:24],
+        "scope": "comeback_after_first_set_loss",
+        "provider_id": 1,
+        "updated_at": now,
+    }
+    try:
+        client.upsert_entity(payload, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save LIVE odds peak") from exc
+    return {k: payload[k] for k in (
+        "event_id", "current_live_odds", "max_live_odds", "max_live_odds_at",
+        "first_seen_at", "last_seen_at", "observations", "first_set", "scope",
+        "provider_id",
+    )}
+
+
+def load_live_odds_peak(event_id: str) -> dict | None:
+    """Load one persisted LIVE odds peak by provider event ID."""
+    eid = str(event_id or "").strip()
+    if not _VALID_ID.fullmatch(eid):
+        return None
+    try:
+        entity = _table(UI_TABLE).get_entity(
+            partition_key="runtime", row_key=f"live-odds-peak:{eid}"
+        )
+    except Exception as exc:
+        if _storage_not_found(exc):
+            return None
+        raise AdminStorageUnavailable("Unable to load LIVE odds peak") from exc
+    out = {
+        "event_id": str(entity.get("event_id") or eid),
+        "current_live_odds": entity.get("current_live_odds"),
+        "max_live_odds": entity.get("max_live_odds"),
+        "max_live_odds_at": entity.get("max_live_odds_at"),
+        "first_seen_at": entity.get("first_seen_at"),
+        "last_seen_at": entity.get("last_seen_at"),
+        "observations": entity.get("observations"),
+        "first_set": entity.get("first_set"),
+        "scope": entity.get("scope"),
+        "provider_id": entity.get("provider_id"),
+    }
+    return out
+
+
 def load_live_worker_status() -> dict | None:
     """Load the most recent autonomous LIVE worker heartbeat/snapshot."""
     try:

@@ -31,6 +31,17 @@ def test_classifies_predicted_winner_and_loser():
     assert classify_finished_event(row, _event(winner_code=2))["status"] == "loss"
 
 
+def test_classification_preserves_first_set_comeback_context():
+    row = _row()
+    event = _event(winner_code=1)
+    event["homeScore"] = {"period1": 4, "period2": 6, "period3": 6}
+    event["awayScore"] = {"period1": 6, "period2": 3, "period3": 2}
+    result = classify_finished_event(row, event)
+    assert result["status"] == "win"
+    assert result["first_set_outcome"] == "loss"
+    assert result["first_set_score"] == "4:6"
+
+
 def test_walkover_w_o_is_terminal_void_even_if_provider_lists_winner():
     row = _row()
     result = classify_finished_event(

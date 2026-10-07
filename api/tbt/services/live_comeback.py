@@ -18,7 +18,9 @@ from .admin_storage import (
     save_automated_insight, live_alert_levels, load_insight_by_id,
     save_live_radar_result,
 )
-from .market_selection import _walk_market_rows, _outcome_text, _price, _match_side
+from .market_selection import (
+    _walk_market_rows, _outcome_text, _price, _match_side, extract_match_winner_odds,
+)
 
 DEFAULT_MIN_PROBABILITY = .68
 DEFAULT_MAX_ODDS = 1.49
@@ -379,7 +381,27 @@ def attach_second_set_odds(scan: dict[str, Any], odds_payloads: dict[str, Any], 
             continue
         row = dict(source)
         eid = str(row.get("event_id") or "")
-        market = extract_second_set_winner_odds(odds_payloads.get(eid), events.get(eid, {})) if eid in odds_payloads and eid in events else None
+        payload = odds_payloads.get(eid) if eid in odds_payloads else None
+        event = events.get(eid, {})
+        market = extract_second_set_winner_odds(payload, event) if payload is not None and event else None
+        home_name = str(_team(event, "homeTeam").get("name") or "").strip()
+        away_name = str(_team(event, "awayTeam").get("name") or "").strip()
+        match_market = (
+            extract_match_winner_odds(payload, home_name, away_name)
+            if payload is not None and event and home_name and away_name
+            else None
+        )
+        if match_market:
+            side = str(row.get("favorite_side") or "")
+            live_match_odds = (
+                match_market.get("player1_odds") if side == "home"
+                else match_market.get("player2_odds") if side == "away"
+                else None
+            )
+            if live_match_odds is not None:
+                row["live_match_odds"] = live_match_odds
+                row["live_match_odds_source_id"] = match_market.get("source_id")
+                row["live_match_odds_observed_at"] = scan.get("scanned_at")
         if market:
             side = str(row.get("favorite_side") or "")
             fav_odds = market["home_odds"] if side == "home" else market["away_odds"] if side == "away" else None

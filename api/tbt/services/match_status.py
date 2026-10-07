@@ -400,6 +400,14 @@ def runtime_settled_results(
                             "return_units": odds if correct else 0.0,
                             "profit_units": (odds - 1.0) if correct else -1.0,
                         })
+                for context_key in (
+                    "first_set_outcome", "first_set_score",
+                    "max_live_odds", "max_live_odds_at",
+                    "live_odds_observations", "live_odds_scope",
+                ):
+                    context_value = status_row.get(context_key)
+                    if context_value not in (None, ""):
+                        result[context_key] = deepcopy(context_value)
                 result.update({
                     "settled_at": checked_at or scheduled_at,
                     "scheduled_at": scheduled_at,
@@ -549,10 +557,35 @@ def classify_finished_event(
     if not predicted:
         return None
 
+    first_set_outcome = ""
+    first_set_score = ""
+    home_score = event.get("homeScore") if isinstance(event.get("homeScore"), dict) else {}
+    away_score = event.get("awayScore") if isinstance(event.get("awayScore"), dict) else {}
+    try:
+        home_set1 = int(home_score.get("period1"))
+        away_set1 = int(away_score.get("period1"))
+    except (TypeError, ValueError):
+        home_set1 = away_set1 = -1
+    hi, lo = max(home_set1, away_set1), min(home_set1, away_set1)
+    if ((hi == 6 and 0 <= lo <= 4) or (hi == 7 and lo in {5, 6})):
+        first_set_winner = (
+            str(home.get("id") or "").strip()
+            if home_set1 > away_set1
+            else str(away.get("id") or "").strip()
+        )
+        if first_set_winner:
+            first_set_outcome = "win" if predicted == first_set_winner else "loss"
+            predicted_home = predicted == str(home.get("id") or "").strip()
+            predicted_games = home_set1 if predicted_home else away_set1
+            opponent_games = away_set1 if predicted_home else home_set1
+            first_set_score = f"{predicted_games}:{opponent_games}"
+
     return {
         **base,
         "status": "win" if predicted == provider_winner else "loss",
         "winner_id": provider_winner,
+        **({"first_set_outcome": first_set_outcome, "first_set_score": first_set_score}
+           if first_set_outcome else {}),
     }
 
 

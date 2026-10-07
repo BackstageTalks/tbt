@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from tbt.services.live_comeback import evaluate_prime_live, scan_comeback_radar, settle_radar_results
+from tbt.services.live_comeback import evaluate_prime_live, scan_comeback_radar, settle_radar_results, attach_second_set_odds
 from tbt.services.entitlements import filter_feed_for_access
 
 def prime_row(event_id='123', probability=.88, odds=1.18):
@@ -28,6 +28,19 @@ def test_watch_stage_exists_before_confirmed_signal():
     assert len(scan['candidates'])==1
     assert scan['candidates'][0]['stage']=='watch'
     assert scan['signals']==[]
+
+
+def test_reuses_live_odds_payload_for_current_match_winner_price():
+    event = live_event(second=(2, 1))
+    scan = scan_comeback_radar({'prime_picks': [prime_row()]}, [event])
+    payload = {'markets': [{'marketName': 'Full time', 'choices': [
+        {'choiceName': 'Favorite', 'fractionalValue': 1.31},
+        {'choiceName': 'Opponent', 'fractionalValue': 3.55},
+    ]}]}
+    enriched = attach_second_set_odds(scan, {'123': payload}, [event])
+    row = enriched['candidates'][0]
+    assert row['live_match_odds'] == 1.31
+    assert row['live_match_odds_observed_at'] == enriched['scanned_at']
 
 
 def test_results_only_settle_previously_published_confirmed_signals(monkeypatch):
