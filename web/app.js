@@ -5190,12 +5190,12 @@
     // Live copy feedback without replacing the selected editor or interrupting typing.
     host.oninput=event=>{
       const t=event.target,field=t?.dataset?.simpleBannerField;
-      const liveFields=['eyebrow','headline','text','button_text','desktop_image_x','desktop_image_y','mobile_image_x','mobile_image_y','desktop_text_x','desktop_text_y','desktop_text_width','mobile_text_x','mobile_text_y','mobile_text_width'];
+      const liveFields=['eyebrow','headline','text','button_text','desktop_image_x','desktop_image_y','mobile_image_x','mobile_image_y','desktop_text_x','desktop_text_y','desktop_text_width','mobile_text_x','mobile_text_y','mobile_text_width','desktop_headline_size','mobile_headline_size','desktop_text_size','mobile_text_size','desktop_eyebrow_size','mobile_eyebrow_size','desktop_social_x','desktop_social_y','mobile_social_x','mobile_social_y','desktop_social_size','mobile_social_size'];
       if(!field||!liveFields.includes(field))return;
       const wrap=t.closest('[data-simple-banner]'),item=elements()?.[wrap?.dataset?.simpleBanner];
       if(!item)return;
       item.content=item.content||{};
-      item.content[field]=/(?:_x|_y|_width)$/.test(field)?Number(t.value):t.value;
+      item.content[field]=/(?:_x|_y|_width|_size)$/.test(field)?Number(t.value):t.value;
       state.adminPreviewPinnedId=wrap.dataset.simpleBanner;
       state.adminPreviewPaused=true;
       syncAdminHeroPreview();
