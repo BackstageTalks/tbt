@@ -448,6 +448,8 @@ def _deploy_comparator_artifact(source: Path) -> dict:
 def main() -> None:
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
+    comparator_target = ROOT / "api/data/comparator.json"
+    comparator_target.unlink(missing_ok=True)
     repository = os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data")
 
     payload = empty_feed()
@@ -465,7 +467,11 @@ def main() -> None:
                 extra_names=("feed.json", "ledger.json", *optional),
                 required_names=("feed.json", "ledger.json"),
             )
-            comparator_status = _deploy_comparator_artifact(cache / COMPARATOR_ASSET)
+            comparator_status = (
+                _deploy_comparator_artifact(cache / COMPARATOR_ASSET)
+                if optional
+                else {"available": False, "reason": "release_asset_missing"}
+            )
             print("Comparator serving artifact:", json.dumps(comparator_status, ensure_ascii=False))
             payload = read_feed(cache / "feed.json")
             ledger = json.loads((cache / "ledger.json").read_text(encoding="utf-8"))
@@ -490,10 +496,6 @@ def main() -> None:
         json.dumps(payload, ensure_ascii=False, allow_nan=False),
         encoding="utf-8",
     )
-    comparator_target = ROOT / "api/data/comparator.json"
-    if not os.getenv("GH_TOKEN") or not comparator_target.is_file():
-        # Never package a checked-in/stale comparator snapshot.
-        comparator_target.unlink(missing_ok=True)
     print(
         "Serving snapshot ready:",
         payload.get("ready", False),
