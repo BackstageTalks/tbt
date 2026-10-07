@@ -116,3 +116,7 @@ Frontend:
 6. enable the feature flag.
 
 No production model promotion is part of Match Comparator V1.
+
+## Integration revalidation
+
+Before merge, the pull request must be revalidated against the current main branch. Merge only when the current pull-request merge build is green; the independent WTA rank-history source audit is not a Match Comparator acceptance gate.
