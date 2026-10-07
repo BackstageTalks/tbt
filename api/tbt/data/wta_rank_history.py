@@ -354,6 +354,74 @@ class WTARankHistory:
         return out
 
 
+    def export_state(self, players, *, as_of_date, lookback_days: int = 140) -> dict:
+        """Export the recent point-in-time state required by comparator serving."""
+        start = as_of_date - timedelta(days=max(120, int(lookback_days)))
+        requested = []
+        canonical_map = {}
+        for row in players:
+            if not isinstance(row, dict) or str(row.get("tour") or "").lower() != "wta":
+                continue
+            player_id = str(row.get("player_id") or "").strip()
+            name_key = f"name:{_norm_name(row.get('name'))}"
+            sackmann_id = self._canonical_to_sackmann.get(player_id)
+            if sackmann_id:
+                canonical_map[player_id] = sackmann_id
+                requested.append(f"id:{sackmann_id}")
+            requested.append(name_key)
+
+        histories = {}
+        for key in sorted(set(key for key in requested if key and not key.endswith(":"))):
+            dates = self._dates.get(key) or []
+            rows = []
+            for idx, source_date in enumerate(dates):
+                if source_date < start or source_date > as_of_date:
+                    continue
+                rows.append([
+                    source_date.isoformat(),
+                    int(self._ranks[key][idx]),
+                    self._points[key][idx],
+                    int(self._career_best[key][idx]),
+                ])
+            if rows:
+                histories[key] = rows
+        return {
+            "schema": 1,
+            "as_of_date": as_of_date.isoformat(),
+            "lookback_days": max(120, int(lookback_days)),
+            "canonical_to_sackmann": canonical_map,
+            "players": histories,
+        }
+
+    @classmethod
+    def from_state(cls, state: dict) -> "WTARankHistory":
+        if not isinstance(state, dict) or int(state.get("schema") or 0) != 1:
+            raise ValueError("Invalid WTA rank-history state")
+        obj = cls.__new__(cls)
+        obj._canonical_to_sackmann = {
+            str(key): str(value)
+            for key, value in (state.get("canonical_to_sackmann") or {}).items()
+            if str(key).strip() and str(value).strip()
+        }
+        obj._dates, obj._ranks, obj._points, obj._career_best = {}, {}, {}, {}
+        for key, rows in (state.get("players") or {}).items():
+            if not isinstance(rows, list):
+                raise ValueError("Invalid WTA rank-history player state")
+            dates, ranks, points, bests = [], [], [], []
+            for row in rows:
+                if not isinstance(row, list) or len(row) != 4:
+                    raise ValueError("Invalid WTA rank-history snapshot")
+                dates.append(datetime.fromisoformat(str(row[0])).date())
+                ranks.append(int(row[1]))
+                points.append(None if row[2] is None else int(row[2]))
+                bests.append(int(row[3]))
+            obj._dates[str(key)] = dates
+            obj._ranks[str(key)] = ranks
+            obj._points[str(key)] = points
+            obj._career_best[str(key)] = bests
+        return obj
+
+
 def coverage_summary(rows: Iterable[dict[str, float]]) -> dict[str, float | int]:
     materialized = list(rows)
     count = len(materialized)
