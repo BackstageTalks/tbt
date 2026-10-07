@@ -294,17 +294,22 @@ def _meta_count(payload: dict[str, Any]) -> int | None:
     return value if value >= 0 else None
 
 
+def _plan_blocked(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "plan does not allow" in text or "upgrade_required" in text
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--history-dir", required=True)
     ap.add_argument("--from-date", required=True)
     ap.add_argument("--to-date", required=True)
     ap.add_argument("--out-dir", required=True)
-    ap.add_argument("--max-calls", type=int, default=700)
-    ap.add_argument("--daily-reserve", type=int, default=200)
-    ap.add_argument("--expected-min-daily", type=int, default=1000)
-    ap.add_argument("--target-new", type=int, default=450)
-    ap.add_argument("--max-list-pages-per-tour", type=int, default=60)
+    ap.add_argument("--max-calls", type=int, default=5)
+    ap.add_argument("--daily-reserve", type=int, default=20)
+    ap.add_argument("--expected-min-daily", type=int, default=100)
+    ap.add_argument("--target-new", type=int, default=1)
+    ap.add_argument("--max-list-pages-per-tour", type=int, default=1)
     ap.add_argument("--tours", default="wta,itf,challenger,atp")
     args = ap.parse_args()
 
@@ -355,8 +360,14 @@ def main() -> None:
             return result
 
         if not stop_reason:
-            coverage = paced(client.history_coverage)
-            counts["coverage_calls"] += 1
+            try:
+                coverage = paced(client.history_coverage)
+                counts["coverage_calls"] += 1
+            except ProviderError as exc:
+                if not _plan_blocked(exc):
+                    raise
+                counts["provider_plan_blocked"] += 1
+                stop_reason = "provider_plan_blocked:" + str(exc)
 
         with gzip.open(raw_path, "wt", encoding="utf-8") as raw_handle:
             for tour in [part.strip().lower() for part in args.tours.split(",") if part.strip()]:
@@ -380,6 +391,12 @@ def main() -> None:
                         )
                     except RequestBudgetExceeded as exc:
                         stop_reason = "budget_guard:" + str(exc)
+                        break
+                    except ProviderError as exc:
+                        if not _plan_blocked(exc):
+                            raise
+                        counts["provider_plan_blocked"] += 1
+                        stop_reason = "provider_plan_blocked:" + str(exc)
                         break
                     counts["list_calls"] += 1
                     rows = listing.get("data") if isinstance(listing, dict) else None
@@ -408,6 +425,12 @@ def main() -> None:
                             tape_payload = paced(client.history_tape, provider_id, complete=True)
                         except RequestBudgetExceeded as exc:
                             stop_reason = "budget_guard:" + str(exc)
+                            break
+                        except ProviderError as exc:
+                            if not _plan_blocked(exc):
+                                raise
+                            counts["provider_plan_blocked"] += 1
+                            stop_reason = "provider_plan_blocked:" + str(exc)
                             break
                         counts["tape_calls"] += 1
                         raw_handle.write(json.dumps(tape_payload, ensure_ascii=False) + "\n")
