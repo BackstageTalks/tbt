@@ -29,10 +29,11 @@ jobs:
     runs-on: ubuntu-latest
     # Stay alive until the real data.yml refresh finishes; wrapper success must
     # mean the paid refresh/deploy itself succeeded, not only that dispatch worked.
-    timeout-minutes: 240
+    timeout-minutes: 75
     env:
       GH_TOKEN: ${{ github.token }}
       MORNING_MAX_REQUESTS: ${{ inputs.max_requests || vars.TBT_MORNING_REFRESH_MAX_REQUESTS || '300' }}
+      MORNING_CHILD_TIMEOUT_MINUTES: 45
     steps:
       - name: Validate daily request cap
         shell: bash
@@ -99,7 +100,7 @@ jobs:
             local before=".cache/tbt/morning/before-$attempt.txt"
             gh api "$workflow_runs_api" --jq '.workflow_runs[].id' > "$before"
 
-            gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main -f mode=refresh -f morning_refresh=true -f max_requests="$MORNING_MAX_REQUESTS" -f market_odds_max_events=90 -f doubles_odds_max_events=25 -f betting_day_start_hour=6
+            gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main -f mode=current-refresh -f morning_refresh=true -f max_requests="$MORNING_MAX_REQUESTS" -f market_odds_max_events=90 -f doubles_odds_max_events=25 -f betting_day_start_hour=6
 
             CHILD_RUN_ID=""
             for _ in $(seq 1 30); do
@@ -122,6 +123,8 @@ jobs:
 
           wait_child () {
             local child="$1"
+            local started_at
+            started_at="$(date +%s)"
             while true; do
               payload="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$child")"
               status="$(jq -r '.status' <<<"$payload")"
@@ -129,6 +132,13 @@ jobs:
               echo "data.yml run $child status=$status conclusion=$conclusion"
               if [[ "$status" == "completed" ]]; then
                 CHILD_CONCLUSION="$conclusion"
+                return 0
+              fi
+              elapsed="$(( $(date +%s) - started_at ))"
+              if (( elapsed >= MORNING_CHILD_TIMEOUT_MINUTES * 60 )); then
+                echo "::error::Morning current-refresh exceeded ${MORNING_CHILD_TIMEOUT_MINUTES} minutes; cancelling child $child."
+                gh api --method POST "repos/$GITHUB_REPOSITORY/actions/runs/$child/cancel" >/dev/null || true
+                CHILD_CONCLUSION="timed_out"
                 return 0
               fi
               sleep 20
