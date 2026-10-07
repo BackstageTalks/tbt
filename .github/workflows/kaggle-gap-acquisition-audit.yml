@@ -86,34 +86,20 @@ jobs:
               sha="$(sha256sum "$archive" | awk '{print $1}')"
             fi
 
-            SLUG="$slug" SAFE="$safe" OK="$ok" ERR="$err" BYTES="$bytes" SHA="$sha" \
-              python - <<'PY' >> .cache/tbt/kaggle-gap/download-status.ndjson
-import json
-import os
-print(json.dumps({
-    "slug": os.environ["SLUG"],
-    "safe_name": os.environ["SAFE"],
-    "download_ok": os.environ["OK"].lower() == "true",
-    "download_error": os.environ["ERR"] or None,
-    "archive_bytes": int(os.environ["BYTES"] or 0),
-    "archive_sha256": os.environ["SHA"] or None,
-}))
-PY
+            jq -cn \
+              --arg slug "$slug" \
+              --arg safe "$safe" \
+              --arg err "$err" \
+              --arg sha "$sha" \
+              --argjson ok "$ok" \
+              --argjson bytes "$bytes" \
+              '{slug:$slug,safe_name:$safe,download_ok:$ok,download_error:(if $err=="" then null else $err end),archive_bytes:$bytes,archive_sha256:(if $sha=="" then null else $sha end)}' \
+              >> .cache/tbt/kaggle-gap/download-status.ndjson
           done < <(jq -r '.sources[].slug' "$REQUEST_FILE")
 
-          python - <<'PY'
-import json
-from pathlib import Path
-rows = [
-    json.loads(line)
-    for line in Path(".cache/tbt/kaggle-gap/download-status.ndjson").read_text().splitlines()
-    if line.strip()
-]
-Path(".cache/tbt/kaggle-gap/download-status.json").write_text(
-    json.dumps({"sources": rows}, indent=2)
-)
-print(json.dumps({"sources": rows}, indent=2))
-PY
+          jq -s '{sources:.}' .cache/tbt/kaggle-gap/download-status.ndjson \
+            > .cache/tbt/kaggle-gap/download-status.json
+          cat .cache/tbt/kaggle-gap/download-status.json
 
       - name: Audit file inventory schemas nulls and leakage fields
         run: |
@@ -136,12 +122,13 @@ PY
             local source="$1"
             local path="$2"
             local message="$3"
-            local sha
-            sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+            local existing_sha
+            local encoded
+            existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
             encoded="$(base64 -w0 "$source")"
-            if [[ -n "$sha" ]]; then
+            if [[ -n "$existing_sha" ]]; then
               gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
-                -f message="$message" -f content="$encoded" -f sha="$sha" >/dev/null
+                -f message="$message" -f content="$encoded" -f sha="$existing_sha" >/dev/null
             else
               gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
                 -f message="$message" -f content="$encoded" >/dev/null
@@ -174,47 +161,46 @@ PY
               raw_backup="withheld_pending_license_review"
             fi
 
-            SLUG="$slug" SAFE="$safe" LICENSE="$license" SHA="$sha" BYTES="$bytes" \
-            DOWNLOAD_OK="$download_ok" RAW_BACKUP="$raw_backup" ASSET_NAME="$asset_name" \
-            RELEASE_TAG="$tag" RUN_ID="$run_id" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-audit = json.loads(Path(".cache/tbt/kaggle-gap/audit.json").read_text())
-slug = os.environ["SLUG"]
-source = next((x for x in audit["sources"] if x["slug"] == slug), None)
-
-manifest = {
-    "schema": 1,
-    "project": "BlinQ",
-    "source": {
-        "platform": "Kaggle",
-        "slug": slug,
-        "url": "https://www.kaggle.com/datasets/" + slug,
-        "license_status": os.environ["LICENSE"],
-    },
-    "acquired_at_utc": "2026-10-07",
-    "github_run_id": os.environ["RUN_ID"],
-    "download_ok": os.environ["DOWNLOAD_OK"].lower() == "true",
-    "raw_archive": {
-        "sha256": os.environ["SHA"] or None,
-        "bytes": int(os.environ["BYTES"] or 0),
-        "backup_kind": os.environ["RAW_BACKUP"],
-        "release_tag": os.environ["RELEASE_TAG"] if os.environ["ASSET_NAME"] else None,
-        "asset_name": os.environ["ASSET_NAME"] or None,
-    },
-    "audit": source,
-    "canonical_mutated": False,
-    "provider_api_requests": 0,
-    "model_promoted": False,
-    "promotion_status": "not_evaluated_for_canonical_import",
-}
-out = Path("/tmp") / (os.environ["SAFE"] + "-manifest.json")
-out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
-print(out)
-PY
             manifest="/tmp/${safe}-manifest.json"
+            jq \
+              --arg slug "$slug" \
+              --arg license "$license" \
+              --arg sha "$sha" \
+              --arg download_ok "$download_ok" \
+              --arg raw_backup "$raw_backup" \
+              --arg asset_name "$asset_name" \
+              --arg release_tag "$tag" \
+              --arg run_id "$run_id" \
+              --argjson bytes "$bytes" \
+              '
+              .sources[] | select(.slug == $slug) as $src |
+              {
+                schema:1,
+                project:"BlinQ",
+                source:{
+                  platform:"Kaggle",
+                  slug:$slug,
+                  url:("https://www.kaggle.com/datasets/" + $slug),
+                  license_status:$license
+                },
+                acquired_at_utc:"2026-10-07",
+                github_run_id:$run_id,
+                download_ok:($download_ok == "true"),
+                raw_archive:{
+                  sha256:(if $sha=="" then null else $sha end),
+                  bytes:$bytes,
+                  backup_kind:$raw_backup,
+                  release_tag:(if $asset_name=="" then null else $release_tag end),
+                  asset_name:(if $asset_name=="" then null else $asset_name end)
+                },
+                audit:$src,
+                canonical_mutated:false,
+                provider_api_requests:0,
+                model_promoted:false,
+                promotion_status:"not_evaluated_for_canonical_import"
+              }
+              ' "$audit" > "$manifest"
+
             upload_json "$manifest" "$root/$safe/manifest.json" \
               "Backup Kaggle $slug manifest from run $run_id"
           done < <(jq -r '.sources[].slug' "$REQUEST_FILE")
@@ -229,12 +215,12 @@ PY
           set -euo pipefail
           test -s .cache/tbt/kaggle-gap/audit.json || exit 0
           path="audit/kaggle-gap-download-audit-latest.json"
-          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
           encoded="$(base64 -w0 .cache/tbt/kaggle-gap/audit.json)"
-          if [[ -n "$sha" ]]; then
+          if [[ -n "$existing_sha" ]]; then
             gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
               -f message="Audit Kaggle gap downloads run $GITHUB_RUN_ID" \
-              -f content="$encoded" -f sha="$sha" >/dev/null
+              -f content="$encoded" -f sha="$existing_sha" >/dev/null
           else
             gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
               -f message="Audit Kaggle gap downloads run $GITHUB_RUN_ID" \
