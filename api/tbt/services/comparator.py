@@ -10,6 +10,7 @@ import pandas as pd
 
 from ..data.player_identity import normalize_player_name
 from ..models.feature_builder import FeatureBuilder, FEATURE_NAMES, stats_surface_key
+from ..models.portable_export import export_portable_model
 from ..schemas import MatchRecord
 from .data_quality import audit_history
 from .training import _enforce_rank_provenance
@@ -350,3 +351,60 @@ def compare(
             "historical_date_mode": False,
         },
     }
+
+
+def build_serving_artifact(
+    model,
+    history: Iterable[MatchRecord],
+    *,
+    now: datetime | None = None,
+    atp_leaderboards=None,
+    wta_season_stats=None,
+) -> dict:
+    """Build a self-contained read-only comparator artifact for the web runtime."""
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    materialized = list(history)
+    builder, cutoff, replay = build_pre_match_builder(materialized, now=now)
+    directory = PlayerDirectory.from_history(replay)
+
+    players = [
+        {
+            "tour": player.tour,
+            "player_id": player.player_id,
+            "name": player.name,
+            "rank": player.rank,
+            "aliases": list(player.aliases),
+            "matches_seen": player.matches_seen,
+        }
+        for player in directory.players
+        if builder.player_key(player.tour, player.player_id) in builder.players
+    ]
+
+    feature_names = set(getattr(model, "feature_names", None) or FEATURE_NAMES)
+    requires_atp = bool(feature_names & set(ATP_LEADERBOARD_FEATURE_NAMES))
+    requires_wta = bool(feature_names & set(WTA_SEASON_FEATURE_NAMES))
+    if requires_atp and atp_leaderboards is None:
+        raise ComparatorCoverageError("champion requires ATP leaderboard priors")
+    if requires_wta and wta_season_stats is None:
+        raise ComparatorCoverageError("champion requires WTA season priors")
+
+    artifact = {
+        "schema": 1,
+        "generated_at": now.isoformat(),
+        "cutoff_utc": cutoff.isoformat(),
+        "model": export_portable_model(model),
+        "feature_state": builder.export_state(),
+        "players": players,
+        "source": {
+            "canonical_matches_replayed": len(replay),
+            "players": len(players),
+            "point_in_time": True,
+            "canonical_read_only": True,
+            "provider_requests_per_user_compare": 0,
+        },
+    }
+    if atp_leaderboards is not None:
+        artifact["atp_leaderboards"] = atp_leaderboards.export_state()
+    if wta_season_stats is not None:
+        artifact["wta_season_stats"] = wta_season_stats.export_state()
+    return artifact
