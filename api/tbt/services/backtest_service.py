@@ -12,6 +12,8 @@ from .data_quality import audit_history
 from .training import (
     PRODUCTION_FEATURE_NAMES,
     _augment_atp_leaderboard_features,
+    _augment_atp_rank_history_features,
+    _augment_wta_rank_history_features,
     _augment_wta_season_features,
     _candidate_feature_names,
     _enforce_rank_provenance,
@@ -190,6 +192,8 @@ def walk_forward_backtest(
     first_test_year: int | None = None,
     *,
     atp_leaderboards=None,
+    atp_rank_history=None,
+    wta_rank_history=None,
     wta_season_stats=None,
 ) -> dict:
     matches, quality = audit_history(matches)
@@ -202,6 +206,12 @@ def walk_forward_backtest(
     )
     frame, atp_leaderboard_coverage = _augment_atp_leaderboard_features(
         frame, matches, atp_leaderboards
+    )
+    frame, atp_rank_history_coverage = _augment_atp_rank_history_features(
+        frame, matches, atp_rank_history
+    )
+    frame, wta_rank_history_coverage = _augment_wta_rank_history_features(
+        frame, matches, wta_rank_history
     )
     frame, wta_season_coverage = _augment_wta_season_features(
         frame, matches, wta_season_stats
@@ -319,10 +329,17 @@ def walk_forward_backtest(
                 _new_production_ensemble(
                     _candidate_feature_names(
                         atp_leaderboards=atp_leaderboards,
+                        atp_rank_history=atp_rank_history,
+                        wta_rank_history=wta_rank_history,
                         wta_season_stats=wta_season_stats,
                     )
                 )
-                if atp_leaderboards is not None or wta_season_stats is not None
+                if (
+                    atp_leaderboards is not None
+                    or atp_rank_history is not None
+                    or wta_rank_history is not None
+                    or wta_season_stats is not None
+                )
                 else _new_production_ensemble()
             )
             .fit(
@@ -528,6 +545,18 @@ def walk_forward_backtest(
             **atp_leaderboard_coverage,
             "historical_policy": "previous_completed_season_only",
             "candidate_features_enabled": bool(atp_leaderboards is not None),
+            "promotion_required_for_serving": True,
+        },
+        "atp_rank_history": {
+            **atp_rank_history_coverage,
+            "historical_policy": "latest_weekly_snapshot_strictly_before_match_date",
+            "candidate_features_enabled": bool(atp_rank_history is not None),
+            "promotion_required_for_serving": True,
+        },
+        "wta_rank_history": {
+            **wta_rank_history_coverage,
+            "historical_policy": "latest_weekly_snapshot_strictly_before_match_date",
+            "candidate_features_enabled": bool(wta_rank_history is not None),
             "promotion_required_for_serving": True,
         },
         "wta_season_stats": {
