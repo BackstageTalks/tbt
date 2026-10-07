@@ -3427,6 +3427,18 @@
       aceDfNormalizedKpis:aceDfCategory,
     };
   }
+  function resultLiveMaxOddsHtml(publication,publishedOdds){
+    const result=publication?.result&&typeof publication.result==='object'?publication.result:{};
+    const peak=Number(result.max_live_odds);
+    const base=Number(publishedOdds);
+    if(!Number.isFinite(peak)||peak<=1||!Number.isFinite(base)||base<=1||peak<=base+0.005)return '';
+    const title=lcopy(
+      'Highest provider Match Winner price observed by LIVE Radar after the predicted Short Odds player lost set 1. Informational only; ROI uses the published pre-match price.',
+      'Najvyšší provider Match Winner kurz zachytený LIVE Radarom po prehre 1. setu. Iba informatívne; ROI používa publikovaný predzápasový kurz.',
+      'Nejvyšší provider Match Winner kurz zachycený LIVE Radarem po prohře 1. setu. Pouze informativní; ROI používá publikovaný předzápasový kurz.'
+    );
+    return `<small class="result-live-max" title="${escapeHtml(title)}">MAX ${peak.toFixed(2)}</small>`;
+  }
   function resultComebackIcon(publication,outcome){
     if(outcome?.kind!=='win')return '';
     const section=String(publication?.section||'').trim().toLowerCase();
@@ -3514,7 +3526,7 @@
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
         return `<tr class="results-card-row result-${escapeHtml(outcome.kind)} is-projection"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(displayPick)}</strong></td><td class="result-confidence result-projection"><span class="result-projection-value">${escapeHtml(projectionText)}</span><small class="result-projection-label">${escapeHtml(lcopy('Projection','Projekcia','Projekce'))}</small></td><td class="result-odds"${projectionOddsTitle}>${escapeHtml(displayedProjectionOdds)}</td><td class="result-status"><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td class="result-units"><span class="results-units-depth"><b${!hasSettledUnits?projectionOddsTitle:''} class="${Number.isFinite(displayUnits)&&displayUnits>0?'correct':Number.isFinite(displayUnits)&&displayUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b></span></td></tr>`;
       }
-      return `<tr class="results-card-row result-${escapeHtml(outcome.kind)}"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(pickName)}</strong></td><td class="result-confidence">${Number.isFinite(probability)?pct(probability):'—'}</td><td class="result-odds">${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td class="result-status">${resultHtml}</td><td class="result-units ${outcome.kind==='void'?'void':!Number.isFinite(units)?'unit-excluded':units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
+      return `<tr class="results-card-row result-${escapeHtml(outcome.kind)}"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(pickName)}</strong></td><td class="result-confidence">${Number.isFinite(probability)?pct(probability):'—'}</td><td class="result-odds">${Number.isFinite(odds)?odds.toFixed(2):'—'}${resultLiveMaxOddsHtml(publication,odds)}</td><td class="result-status">${resultHtml}</td><td class="result-units ${outcome.kind==='void'?'void':!Number.isFinite(units)?'unit-excluded':units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
     }).join('');
     const pager=`<div class="results-pagination"><div class="results-pagination-meta"><strong>${startIndex+1}–${endIndex}</strong><span>z ${entries.length}</span></div><label><span>Riadkov</span><select id="resultsPageSize">${allowedSizes.map(size=>`<option value="${size}"${size===pageSize?' selected':''}>${size}</option>`).join('')}</select></label><div class="results-pagination-nav"><button type="button" id="resultsPrevPage" ${state.resultsPage<=0?'disabled':''}>←</button><span>Strana <strong>${state.resultsPage+1}</strong> / ${pages}</span><button type="button" id="resultsNextPage" ${state.resultsPage>=pages-1?'disabled':''}>→</button></div></div>`;
     const head=`<tr><th>Dátum</th><th>Kategória</th><th>Turnaj</th><th>Zápas</th><th>Predikcia</th><th data-mobile-label="BlinQ %">Model / BlinQ %<small class="results-model-heading">${escapeHtml(lcopy('or projection','alebo projekcia','nebo projekce'))}</small></th><th>Kurz</th><th>Výsledok</th><th>Jednotky</th></tr>`;
