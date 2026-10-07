@@ -368,3 +368,31 @@ def test_failed_allocation_write_still_serves_the_computed_free_pick(monkeypatch
     data, manifest = filter_feed_for_access(payload, context, cfg)
     assert len(data["prime_picks"]) == 1
     assert manifest["sections"]["prime"]["returned"] == 1
+
+
+def test_rookie_prime_random_sample_is_always_from_ranked_top_five():
+    cfg = _stable_random_cfg("rookie", 1)
+    payload = feed(12)
+    top_five_ids = {row["event_id"] for row in payload["prime_picks"][:5]}
+    for i in range(50):
+        access = {"status": "active", "plan": "rookie", "id": f"top5-user-{i}"}
+        data, _ = filter_feed_for_access(payload, access, cfg)
+        assert len(data["prime_picks"]) == 1
+        assert data["prime_picks"][0]["event_id"] in top_five_ids
+
+
+def test_rookie_prime_migrates_old_out_of_top_five_allocation():
+    from tbt.services.entitlements import _row_access_key
+    cfg = _stable_random_cfg("rookie", 1)
+    payload = feed(12)
+    old_pick = payload["prime_picks"][8]
+    access = {
+        "status": "active",
+        "plan": "rookie",
+        "id": "old-prime-allocation",
+        "_daily_allocations": {"prime": [_row_access_key(old_pick)]},
+    }
+    data, _ = filter_feed_for_access(payload, access, cfg)
+    assert len(data["prime_picks"]) == 1
+    assert data["prime_picks"][0]["event_id"] in {row["event_id"] for row in payload["prime_picks"][:5]}
+    assert data["prime_picks"][0]["event_id"] != old_pick["event_id"]
