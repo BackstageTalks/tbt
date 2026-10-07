@@ -11,8 +11,10 @@ import argparse
 import csv
 import json
 import math
+import threading
 import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -35,6 +37,21 @@ BASE_VARIABLES = (
 LEAD_DAYS = 1
 LEAD_HOURS = 24
 SOURCE = "open-meteo-previous-runs"
+_RATE_LOCK = threading.Lock()
+_NEXT_REQUEST_AT = 0.0
+
+
+def _wait_for_slot(min_interval_seconds: float) -> None:
+    """Apply one process-wide request-start rate limit across worker threads."""
+    global _NEXT_REQUEST_AT
+    if min_interval_seconds <= 0:
+        return
+    with _RATE_LOCK:
+        now = time.monotonic()
+        wait = max(0.0, _NEXT_REQUEST_AT - now)
+        _NEXT_REQUEST_AT = max(_NEXT_REQUEST_AT, now) + min_interval_seconds
+    if wait > 0:
+        time.sleep(wait)
 
 
 def _number(value: Any) -> float | None:
@@ -91,7 +108,15 @@ def _nearest_index(times: list[str], scheduled: datetime) -> int | None:
     return best[1]
 
 
-def _request_json(latitude: float, longitude: float, start: date, end: date, retries: int = 4) -> dict:
+def _request_json(
+    latitude: float,
+    longitude: float,
+    start: date,
+    end: date,
+    retries: int = 4,
+    *,
+    min_interval_seconds: float = 0.0,
+) -> dict:
     hourly = ",".join(_previous_name(name) for name in BASE_VARIABLES)
     params = {
         "latitude": f"{latitude:.4f}",
@@ -105,6 +130,7 @@ def _request_json(latitude: float, longitude: float, start: date, end: date, ret
     url = API_URL + "?" + urlencode(params)
     last_error: Exception | None = None
     for attempt in range(retries):
+        _wait_for_slot(min_interval_seconds)
         req = Request(url, headers={"User-Agent": "BlinQ research weather extractor"})
         try:
             with urlopen(req, timeout=90) as response:
@@ -142,6 +168,8 @@ def main() -> None:
     ap.add_argument("--from-date", default="2024-01-01")
     ap.add_argument("--to-date", required=True)
     ap.add_argument("--max-requests", type=int, default=700)
+    ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--requests-per-minute", type=int, default=360)
     ap.add_argument("--out", required=True)
     ap.add_argument("--report", required=True)
     args = ap.parse_args()
@@ -152,6 +180,10 @@ def main() -> None:
         raise SystemExit("to-date precedes from-date")
     if end >= datetime.now(timezone.utc).date():
         raise SystemExit("Pre-match weather extraction must stop before the current UTC day")
+    if not 1 <= args.workers <= 16:
+        raise SystemExit("workers must be between 1 and 16")
+    if not 1 <= args.requests_per_minute <= 480:
+        raise SystemExit("requests-per-minute must be between 1 and 480")
 
     matches, safety = sanitize_history_identities(load_partitions(Path(args.history_dir)))
     if safety.get("quarantined_rows"):
@@ -172,24 +204,31 @@ def main() -> None:
 
     output_rows = []
     failed_batches = []
-    request_count = 0
-    for (lat, lon, year), group in sorted(batches.items()):
+    min_interval_seconds = 60.0 / float(args.requests_per_minute)
+
+    def process_batch(item):
+        (lat, lon, year), group = item
         days = [m.scheduled_at.astimezone(timezone.utc).date() for m in group]
         batch_start, batch_end = min(days), max(days)
-        request_count += 1
         try:
-            payload = _request_json(lat, lon, batch_start, batch_end)
+            payload = _request_json(
+                lat,
+                lon,
+                batch_start,
+                batch_end,
+                min_interval_seconds=min_interval_seconds,
+            )
         except Exception as exc:  # fail-soft per venue; final gate requires useful output
-            failed_batches.append({
+            return [], {
                 "latitude": lat,
                 "longitude": lon,
                 "year": year,
                 "start": batch_start.isoformat(),
                 "end": batch_end.isoformat(),
                 "error": f"{type(exc).__name__}: {exc}",
-            })
-            continue
+            }
 
+        rows = []
         hourly = payload.get("hourly") or {}
         times = list(hourly.get("time") or [])
         for match in group:
@@ -203,7 +242,7 @@ def main() -> None:
             known = sum(value is not None for value in values.values())
             if known < 3:
                 continue
-            output_rows.append({
+            rows.append({
                 "match_id": str(match.match_id),
                 "scheduled_at": match.scheduled_at.astimezone(timezone.utc).isoformat(),
                 "latitude": lat,
@@ -217,6 +256,15 @@ def main() -> None:
                 "wind_speed_kmh": values["wind_speed_10m"],
                 "wind_gusts_kmh": values["wind_gusts_10m"],
             })
+        return rows, None
+
+    sorted_batches = sorted(batches.items())
+    request_count = len(sorted_batches)
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        for rows, failure in pool.map(process_batch, sorted_batches):
+            output_rows.extend(rows)
+            if failure is not None:
+                failed_batches.append(failure)
 
     by_id = {}
     for row in output_rows:
@@ -253,6 +301,8 @@ def main() -> None:
         "eligible_outdoor_resolved_matches": eligible_count,
         "venue_year_batches": len(batches),
         "open_meteo_requests": request_count,
+        "workers": args.workers,
+        "requests_per_minute": args.requests_per_minute,
         "failed_batches": len(failed_batches),
         "failed_batch_samples": failed_batches[:25],
         "matched_rows": len(output_rows),
