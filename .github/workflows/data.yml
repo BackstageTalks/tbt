@@ -585,7 +585,9 @@ jobs:
             --github-env "$GITHUB_ENV"
 
       - name: Refresh presentation metadata for current feed
+        id: presentation_enrichment
         if: env.MODE == 'refresh' && env.MORNING_REFRESH != 'true' && env.BLINQ_ENRICH_PLANNED_MAX != '0'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -600,6 +602,16 @@ jobs:
             --max-fallback-ranking-requests "$BLINQ_ENRICH_FALLBACK_RANK_CAP" \
             --max-player-detail-requests "$BLINQ_ENRICH_DETAIL_CAP" \
             --max-tournament-logo-requests "$BLINQ_ENRICH_LOGO_CAP"
+
+      - name: Record degraded presentation enrichment
+        if: always() && steps.presentation_enrichment.outcome == 'failure'
+        shell: bash
+        run: |
+          {
+            echo "::warning::Presentation enrichment failed; continuing with the last verified cached artwork."
+            echo "### Presentation enrichment degraded"
+            echo "Core prediction publication remains eligible. prepare_feed.py will checksum-verify the last complete player-assets bundle and fall back to feed fields/initials when presentation assets are unavailable."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare refreshed serving feed and cached player assets
         if: env.MODE == 'refresh' || env.MODE == 'current-refresh' || env.MODE == 'results-rebuild'
