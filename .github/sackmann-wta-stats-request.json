@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "purpose": "Integrate open-licensed Jeff Sackmann WTA main-tour, qualifying and ITF serve-return match statistics into private canonical history.",
+  "source": {
+    "repository": "Aneeshers/tennis-sackmann-archive",
+    "commit": "83733587353df8a41f2fd4f516147d5aa83f5a8d",
+    "upstream": "Jeff Sackmann / Tennis Abstract",
+    "license": "CC BY-NC-SA 4.0",
+    "scope": "wta_matches_*.csv and wta_matches_qual_itf_*.csv, 1968-2026"
+  },
+  "source_policy": "Only raw per-match serve/return observations supported by the existing strict offline linker are eligible. Rankings and biographical data are not re-imported by this workflow.",
+  "api_requests": 0,
+  "model_promotion": false,
+  "requested_at_utc": "2026-10-07T01:05:00Z"
+}
