@@ -327,6 +327,31 @@ def test_daily_exact_event_lookup_resolves_same_day_rows_in_one_request():
     assert snapshot["provider_requests"] == 2  # live + one daily listing
 
 
+def test_daily_lookup_error_is_reported_without_disabling_near_fallback():
+    from tbt.errors import ProviderError
+
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    row = _row("101", "11", (now-timedelta(hours=2)).isoformat())
+
+    class Daily403Provider(_NearFallbackProvider):
+        def events_with_odds_for_status_day(self, day):
+            self.request_count += 1
+            raise ProviderError("RapidAPI HTTP 403: plan restricted")
+
+    provider = Daily403Provider({"11": _event("101", winner_code=1)})
+    snapshot = scan_match_statuses(
+        {"upcoming": [row]}, provider,
+        {"preferred_route": "near"}, now=now, max_checks=10, max_near_checks=10,
+    )
+
+    assert snapshot["daily_attempts"] == 1
+    assert snapshot["daily_matches"] == 0
+    assert snapshot["daily_errors"] == {"ProviderError_HTTP_403": 1}
+    assert provider.near_calls == ["11"]
+    assert snapshot["statuses"]["101"]["status"] == "win"
+    assert snapshot["degraded"] is False
+
+
 def test_near_fallback_checks_second_player_when_first_players_near_event_misses_target():
     now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
     row = _row("101", "11", (now-timedelta(hours=2)).isoformat())
