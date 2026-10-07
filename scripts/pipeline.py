@@ -1062,9 +1062,13 @@ def main():
     # rank history only when the persisted production or shadow artifact opts
     # into these features. Once promoted, both TRAIN and REFRESH use this exact
     # same loader and source hashes.
-    if _model_requires_rank_history(model) or (
+    production_requires_rank_history = _model_requires_rank_history(model)
+    shadow_requires_rank_history = bool(
         shadow_enabled and _model_requires_rank_history(challenger_model)
-    ):
+    )
+    if production_requires_rank_history:
+        # A promoted artifact that requests rank features must fail closed when
+        # the verified serving inputs cannot be reconstructed.
         rank_inputs = load_rank_feature_inputs(
             args.data_repository,
             cache / "rank-feature-inputs",
@@ -1074,6 +1078,26 @@ def main():
         wta_rank_history = rank_inputs.wta
         rank_feature_input_report = rank_inputs.report
         print(json.dumps({"rank_feature_inputs": rank_feature_input_report}, ensure_ascii=False), flush=True)
+    elif shadow_requires_rank_history:
+        # Shadow evaluation is deliberately non-blocking for the public feed.
+        try:
+            rank_inputs = load_rank_feature_inputs(
+                args.data_repository,
+                cache / "rank-feature-inputs",
+                matches,
+            )
+            atp_rank_history = rank_inputs.atp
+            wta_rank_history = rank_inputs.wta
+            rank_feature_input_report = rank_inputs.report
+            print(json.dumps({"rank_feature_inputs": rank_feature_input_report}, ensure_ascii=False), flush=True)
+        except Exception as exc:
+            print(json.dumps({
+                "warning": "rank_enabled_shadow_disabled",
+                "detail": str(exc)[:500],
+            }, ensure_ascii=False), flush=True)
+            challenger_model = None
+            challenger_version = ""
+            shadow_enabled = False
 
     prediction_dir = cache / "predictions"
     prediction_store = ReleaseStore(
