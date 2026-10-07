@@ -1,0 +1,166 @@
+name: Acquire and link US Open 2024 serve metadata
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/tennis-serve-usopen-2024-request.json"
+      - ".github/workflows/tennis-serve-usopen-2024.yml"
+      - "scripts/link_tennis_serve_usopen_2024.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-research-sidecar-writer
+  cancel-in-progress: false
+
+jobs:
+  serve-metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      RELEASE_TAG: tbt-research-sources-v1
+      METADATA_FILE_ID: 1rBJH3qZbp1ln5vlxUMc0QRx18LiPqvXK
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and test
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest gdown
+          python -m pytest tests/test_tennis_serve_usopen_2024.py -q
+          python -m compileall -q scripts/link_tennis_serve_usopen_2024.py
+
+      - name: Verify private destination
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download verified canonical history
+        run: |
+          set -euo pipefail
+          python scripts/download_production_preflight_inputs.py
+
+      - name: Download only the 106 KB serve metadata parquet
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/serve-usopen-2024
+          mkdir -p .cache/tbt/serve-usopen-2024/{source,link}
+          python -m gdown "$METADATA_FILE_ID"             -O .cache/tbt/serve-usopen-2024/source/metadata.parquet
+          test -s .cache/tbt/serve-usopen-2024/source/metadata.parquet
+          curl --fail --location --retry 4             "https://raw.githubusercontent.com/jasnwag/tennis_serve_dataset/main/LICENSE"             -o .cache/tbt/serve-usopen-2024/source/LICENSE
+          grep -q "Creative Commons Attribution 4.0" .cache/tbt/serve-usopen-2024/source/LICENSE
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          import pandas as pd
+          p=Path(".cache/tbt/serve-usopen-2024/source/metadata.parquet")
+          frame=pd.read_parquet(p)
+          expected={
+            "match_id","server","player1","player2","PointServer","Speed_KMH",
+            "SetNo","GameNo","PointNumber","P1Score","P2Score","ServeNumber",
+            "ServeResult","match_num","round","ElapsedTime",
+          }
+          missing=sorted(expected-set(map(str,frame.columns)))
+          if missing: raise SystemExit(f"missing expected columns: {missing}")
+          if len(frame)!=5966: raise SystemExit(f"unexpected serve row count: {len(frame)}")
+          report={
+            "rows":len(frame),"columns":list(map(str,frame.columns)),
+            "sha256":hashlib.sha256(p.read_bytes()).hexdigest(),
+            "bytes":p.stat().st_size,
+          }
+          Path(".cache/tbt/serve-usopen-2024/source/source-manifest.json").write_text(
+            json.dumps(report,indent=2),encoding="utf-8"
+          )
+          print(json.dumps(report,indent=2))
+          PY
+
+      - name: Link serve metadata fail-closed
+        run: |
+          set -euo pipefail
+          python scripts/link_tennis_serve_usopen_2024.py             --metadata .cache/tbt/serve-usopen-2024/source/metadata.parquet             --history-dir .cache/tbt/history             --out-dir .cache/tbt/serve-usopen-2024/link
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/serve-usopen-2024/link/report.json").read_text())
+          c=r.get("counts") or {}
+          if r.get("production_mutated") is not False: raise SystemExit("production mutation")
+          if r.get("canonical_history_mutated") is not False: raise SystemExit("canonical mutation")
+          if r.get("model_promoted") is not False: raise SystemExit("model promotion")
+          if (r.get("identity_safety") or {}).get("quarantined_rows"): raise SystemExit("identity quarantine")
+          if int(c.get("linked_matches") or 0) < 50: raise SystemExit(f"too few linked matches: {c}")
+          if int(c.get("both_players_speed") or 0) <= 0: raise SystemExit("no two-player speed matches")
+          print(json.dumps(c,indent=2))
+          PY
+
+      - name: Publish private research raw metadata and sidecar
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" -R "$TBT_DATA_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" -R "$TBT_DATA_REPOSITORY"               --title "BlinQ research source bundles"               --notes "Private research-only source snapshots. No production model mutation."
+          fi
+          cp .cache/tbt/serve-usopen-2024/source/metadata.parquet             .cache/tbt/serve-usopen-2024/tennis-serve-usopen-2024-metadata.parquet
+          cp .cache/tbt/serve-usopen-2024/source/LICENSE             .cache/tbt/serve-usopen-2024/tennis-serve-dataset-LICENSE.txt
+          gh release upload "$RELEASE_TAG" -R "$TBT_DATA_REPOSITORY" --clobber             .cache/tbt/serve-usopen-2024/tennis-serve-usopen-2024-metadata.parquet             .cache/tbt/serve-usopen-2024/tennis-serve-dataset-LICENSE.txt
+
+          upload_file() {
+            local src="$1"; local path="$2"; local msg="$3"
+            local sha
+            sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+            SRC="$src" SHA="$sha" MSG="$msg" python - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          payload={"message":os.environ["MSG"],"content":base64.b64encode(Path(os.environ["SRC"]).read_bytes()).decode()}
+          if os.environ.get("SHA"): payload["sha"]=os.environ["SHA"]
+          Path("/tmp/serve-upload.json").write_text(json.dumps(payload))
+          PY
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" --input /tmp/serve-upload.json >/dev/null
+          }
+          upload_file .cache/tbt/serve-usopen-2024/link/usopen-2024-serve-metadata.jsonl.gz             research/serve/usopen-2024-serve-metadata.jsonl.gz             "Add CC BY 4.0 US Open 2024 serve metadata sidecar"
+
+      - name: Persist audit
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest=json.loads(Path(".cache/tbt/serve-usopen-2024/source/source-manifest.json").read_text())
+          audit=json.loads(Path(".cache/tbt/serve-usopen-2024/link/report.json").read_text())
+          audit["source_manifest"]=manifest
+          audit["source_url"]="https://github.com/jasnwag/tennis_serve_dataset"
+          audit["drive_metadata_file_id"]="1rBJH3qZbp1ln5vlxUMc0QRx18LiPqvXK"
+          Path(".cache/tbt/serve-usopen-2024/audit.json").write_text(
+            json.dumps(audit,indent=2),encoding="utf-8"
+          )
+          PY
+          path="audit/tennis-serve-usopen-2024-latest.json"
+          encoded="$(base64 -w0 .cache/tbt/serve-usopen-2024/audit.json)"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit CC BY 4.0 US Open 2024 serve metadata"               -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit CC BY 4.0 US Open 2024 serve metadata"               -f content="$encoded" >/dev/null
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tennis-serve-usopen-2024-${{ github.run_id }}
+          path: |
+            .cache/tbt/serve-usopen-2024/source/source-manifest.json
+            .cache/tbt/serve-usopen-2024/link/report.json
+          if-no-files-found: warn
+          retention-days: 14
