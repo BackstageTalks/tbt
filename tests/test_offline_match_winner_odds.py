@@ -76,6 +76,66 @@ class OfflineOddsTests(unittest.TestCase):
         self.assertEqual(parsed.best_of, 3)
         self.assertEqual(parsed.odds_a, 1.55)
 
+    def test_winner_loser_tennis_data_row_parser(self):
+        parsed = parse_legacy_row(
+            {
+                "Tournament": "Brisbane International",
+                "Date": "2013-01-01",
+                "Surface": "Hard",
+                "Round": "1st Round",
+                "Best of": "3",
+                "Winner": "Istomin D.",
+                "Loser": "Klizan M.",
+                "WRank": "43",
+                "LRank": "30",
+                "B365W": "1.9",
+                "B365L": "1.8",
+                "PSW": "1.88",
+                "PSL": "2.0",
+                "AvgW": "1.88",
+                "AvgL": "1.85",
+                "MaxW": "2.05",
+                "MaxL": "2.0",
+            },
+            row_number=2,
+            tour="atp",
+        )
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.player_a, "Istomin D.")
+        self.assertEqual(parsed.player_b, "Klizan M.")
+        self.assertEqual(parsed.rank_a, 43)
+        self.assertEqual(parsed.rank_b, 30)
+        self.assertEqual(parsed.odds_a, 1.9)
+        self.assertEqual(parsed.odds_b, 1.8)
+
+    def test_winner_loser_parser_falls_back_to_avg_not_max(self):
+        parsed = parse_legacy_row(
+            {
+                "Tournament": "Example",
+                "Date": "2026-01-01",
+                "Surface": "Hard",
+                "Round": "1st Round",
+                "Best of": "3",
+                "Winner": "Player A",
+                "Loser": "Player B",
+                "WRank": "10",
+                "LRank": "20",
+                "B365W": "",
+                "B365L": "",
+                "PSW": "",
+                "PSL": "",
+                "AvgW": "1.7",
+                "AvgL": "2.1",
+                "MaxW": "1.95",
+                "MaxL": "2.4",
+            },
+            row_number=3,
+            tour="atp",
+        )
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.odds_a, 1.7)
+        self.assertEqual(parsed.odds_b, 2.1)
+
     def test_candidate_link_exact_identity(self):
         source = parse_legacy_row(
             {

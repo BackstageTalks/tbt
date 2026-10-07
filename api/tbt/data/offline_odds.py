@@ -189,6 +189,26 @@ def int_or_none(value: object) -> int | None:
     return result if result > 0 else None
 
 
+def _winner_loser_market(row: dict[str, Any]) -> tuple[float, float] | None:
+    """Pick one coherent-enough two-way market from winner/loser Tennis-Data rows.
+
+    Prefer a single bookmaker pair (Bet365, then Pinnacle/PS). Avg is a
+    conservative fallback when bookmaker quotes are unavailable. Deliberately
+    do not use MaxW/MaxL because the two maxima can come from different books
+    and therefore are not a coherent two-way market.
+    """
+    for winner_key, loser_key in (
+        ("B365W", "B365L"),
+        ("PSW", "PSL"),
+        ("AvgW", "AvgL"),
+    ):
+        winner_odds = decimal_odds(row.get(winner_key))
+        loser_odds = decimal_odds(row.get(loser_key))
+        if winner_odds is not None and loser_odds is not None:
+            return winner_odds, loser_odds
+    return None
+
+
 def parse_legacy_row(
     row: dict[str, Any],
     *,
@@ -196,11 +216,27 @@ def parse_legacy_row(
     tour: str,
 ) -> LegacyOddsRow | None:
     day = parse_date(row.get("Date") or row.get("date"))
+    winner = str(row.get("Winner") or row.get("winner") or "").strip()
+
     p1 = str(row.get("Player_1") or row.get("player_1") or "").strip()
     p2 = str(row.get("Player_2") or row.get("player_2") or "").strip()
-    winner = str(row.get("Winner") or row.get("winner") or "").strip()
     o1 = decimal_odds(row.get("Odd_1") if "Odd_1" in row else row.get("odd_1"))
     o2 = decimal_odds(row.get("Odd_2") if "Odd_2" in row else row.get("odd_2"))
+    rank_a = int_or_none(row.get("Rank_1") if "Rank_1" in row else row.get("rank_1"))
+    rank_b = int_or_none(row.get("Rank_2") if "Rank_2" in row else row.get("rank_2"))
+
+    # Normalized Tennis-Data/Kaggle rows are winner/loser oriented rather than
+    # arbitrary player1/player2 oriented. Accept them without weakening any of
+    # the downstream date/player/winner/tournament/surface checks.
+    if not p1 or not p2 or o1 is None or o2 is None:
+        loser = str(row.get("Loser") or row.get("loser") or "").strip()
+        market = _winner_loser_market(row)
+        if winner and loser and market is not None:
+            p1, p2 = winner, loser
+            o1, o2 = market
+            rank_a = int_or_none(row.get("WRank") if "WRank" in row else row.get("w_rank"))
+            rank_b = int_or_none(row.get("LRank") if "LRank" in row else row.get("l_rank"))
+
     if day is None or not p1 or not p2 or not winner or o1 is None or o2 is None:
         return None
     bo = int_or_none(row.get("Best of") if "Best of" in row else row.get("best_of"))
@@ -221,8 +257,8 @@ def parse_legacy_row(
         player_a=p1,
         player_b=p2,
         winner=winner,
-        rank_a=int_or_none(row.get("Rank_1") if "Rank_1" in row else row.get("rank_1")),
-        rank_b=int_or_none(row.get("Rank_2") if "Rank_2" in row else row.get("rank_2")),
+        rank_a=rank_a,
+        rank_b=rank_b,
         odds_a=o1,
         odds_b=o2,
         source_match_id=rid,
