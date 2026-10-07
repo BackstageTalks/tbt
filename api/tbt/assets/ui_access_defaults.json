@@ -863,6 +863,17 @@
           "label": "TOP200"
         }
       }
+    },
+    "comparator": {
+      "plans": {
+        "trial": true,
+        "expired": false,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
     }
   },
   "notifications": {

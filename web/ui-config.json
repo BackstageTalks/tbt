@@ -2475,6 +2475,17 @@
       "elite": "all",
       "legend": "all",
       "goat": "all"
+    },
+    "comparator": {
+      "plans": {
+        "trial": true,
+        "expired": false,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
     }
   },
   "ui_revision": "7.3.6",
