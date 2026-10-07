@@ -2,12 +2,16 @@
   "schema": 1,
   "mode": "statistics",
   "promote": false,
-  "purpose": "Use maximum approved provider-day headroom before the 19:10 Europe/Bratislava reset. Fill highest-value statistics gaps first at the guarded batch rate. Shared global budget must hard-stop at 90% provider usage and preserve the 10% reserve. No model promotion or current prediction mutation.",
+  "purpose": "Use confirmed remaining provider-day headroom before the 2026-10-07 reset. Statistics-only. Require RapidAPI remaining-quota header and stop with 1500 requests remaining. No model promotion or current prediction mutation.",
   "requested_on": "2026-10-07",
   "requested_at_utc": "2026-10-07T15:52:00Z",
   "max_requests": 10000,
   "start": "2022-01-01",
   "end": "2026-10-06",
-  "training_scope": "pre_reset_maximum_safe_statistics_gapfill_no_model_promotion",
-  "historical_match_winner_odds_as_model_feature": false
+  "training_scope": "pre_reset_provider_header_guarded_statistics_closeout",
+  "historical_match_winner_odds_as_model_feature": false,
+  "pre_reset_provider_header_override": true,
+  "provider_request_reserve": 1500,
+  "override_valid_before_utc": "2026-10-07T17:09:00Z",
+  "operator_confirmed_provider_usage_percent": 34.05
 }
