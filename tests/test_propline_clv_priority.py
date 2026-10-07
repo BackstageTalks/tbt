@@ -1,6 +1,9 @@
+import base64
 import importlib
 import os
 import sys
+
+import pytest
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -76,3 +79,61 @@ def test_propline_picker_orders_top_then_value_then_other_blinq_offer():
     assert eligible == 3
     assert [item[3] for item in selected] == ["12", "13", "11"]
     assert [item[0] for item in selected] == [0, 1, 2]
+
+
+
+def test_clv_snapshot_preserves_local_gzip_and_verifies_ambiguous_put(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(collector, "api_calls", 7)
+    monkeypatch.setenv("GITHUB_RUN_ID", "12345")
+    captured = {}
+
+    def fake_github(path, method="GET", data=None, missing_ok=False):
+        if method == "PUT":
+            payload = base64.b64decode(data["content"])
+            captured["payload"] = payload
+            captured["path"] = path
+            raise RuntimeError("HTTP 500 from GitHub")
+        assert path == captured["path"]
+        payload = captured["payload"]
+        return {
+            "sha": collector._git_blob_sha(payload),
+            "size": len(payload),
+        }
+
+    monkeypatch.setattr(collector, "github", fake_github)
+    remote, local, attempts = collector.save_snapshot(
+        "research/propline_clv/2026-10-07",
+        {"schema": 1, "events": [{"event_id": "1"}]},
+    )
+    assert remote.startswith("research/propline_clv/2026-10-07/")
+    assert attempts == 1
+    local_path = Path(local)
+    assert local_path.is_file()
+    assert local_path.read_bytes() == captured["payload"]
+
+
+def test_clv_snapshot_keeps_artifact_when_permanent_write_stays_down(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(collector, "api_calls", 5)
+    monkeypatch.setattr(collector.time, "sleep", lambda *_: None)
+
+    def failed_github(path, method="GET", data=None, missing_ok=False):
+        if method == "PUT":
+            raise RuntimeError("HTTP 500 from GitHub")
+        return None
+
+    monkeypatch.setattr(collector, "github", failed_github)
+    with pytest.raises(RuntimeError, match="local artifact preserved"):
+        collector.save_snapshot(
+            "research/propline_clv/2026-10-07",
+            {"schema": 1, "events": []},
+        )
+    assert (tmp_path / "reports/propline_clv_snapshot.json.gz").is_file()
+
+
+def test_clv_workflow_uploads_raw_snapshot_fallback():
+    workflow = (ROOT / ".github/workflows/propline-clv-pilot.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "reports/propline_clv_snapshot.json.gz" in workflow
