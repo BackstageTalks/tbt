@@ -745,6 +745,7 @@ def scan_match_statuses(
     checked = skipped_live = successful_history = matched_events = 0
     newly_resolved = consecutive_errors = near_attempts = unmatched = 0
     daily_attempts = daily_matches = 0
+    daily_errors: dict[str, int] = {}
     next_due_id = ""
     settled_events: dict[str, dict[str, str]] = {}
     max_checks = priority_limit
@@ -867,6 +868,8 @@ def scan_match_statuses(
                 if type(exc).__name__ == "RequestBudgetExceeded":
                     next_due_id = eid
                     break
+                daily_code = _provider_error_code(exc)
+                daily_errors[daily_code] = daily_errors.get(daily_code, 0) + 1
                 daily_cache[day_key] = None
 
         if event is not None:
@@ -1064,6 +1067,7 @@ def scan_match_statuses(
         "near_attempts": near_attempts,
         "daily_attempts": daily_attempts,
         "daily_matches": daily_matches,
+        "daily_errors": daily_errors,
         "unmatched": unmatched,
         "next_due_id": next_due_id if len(due) > 1 else "",
         "runtime_limited": runtime_limited,
