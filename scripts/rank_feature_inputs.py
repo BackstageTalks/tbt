@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import tarfile
 from typing import Iterable
 
@@ -25,6 +26,10 @@ RESEARCH_RELEASE = "tbt-research-sources-v1"
 PLAYER_ASSET_RELEASE = "tbt-player-assets-v1"
 ATP_ASSET = "sackmann-atp-rankings.tar.gz"
 WTA_ASSET = "sackmann-wta-rankings.tar.gz"
+WTA_OFFICIAL_SUPPLEMENT_PATH = (
+    "research/wta-official-2026/wta_official_singles_2026_post_sackmann.csv.gz"
+)
+WTA_OFFICIAL_SUPPLEMENT_AUDIT = "audit/wta-official-ranking-supplement-2026-10-07.json"
 
 
 @dataclass(frozen=True)
@@ -42,17 +47,48 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _source_manifest(repository: str) -> dict:
+def _repo_json(repository: str, path: str) -> dict:
     raw = gh(
         "api",
         "-H",
         "Accept: application/vnd.github.raw+json",
-        f"repos/{repository}/contents/research/source-acquisition/latest.json?ref=main",
+        f"repos/{repository}/contents/{path}?ref=main",
     )
     value = json.loads(raw)
     if not isinstance(value, dict):
-        raise ValueError("Invalid research source acquisition manifest")
+        raise ValueError(f"Invalid JSON document: {path}")
     return value
+
+
+def _source_manifest(repository: str) -> dict:
+    return _repo_json(repository, "research/source-acquisition/latest.json")
+
+
+def _download_repo_binary(repository: str, path: str, destination: Path) -> None:
+    """Download one private-repo file without decoding binary bytes as text."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(destination.name + ".part")
+    temporary.unlink(missing_ok=True)
+    with temporary.open("wb") as handle:
+        result = subprocess.run(
+            [
+                "gh", "api",
+                "-H", "Accept: application/vnd.github.raw+json",
+                f"repos/{repository}/contents/{path}?ref=main",
+            ],
+            stdout=handle,
+            stderr=subprocess.PIPE,
+        )
+    if result.returncode:
+        detail = (result.stderr or b"").decode("utf-8", "replace").strip()
+        temporary.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"GitHub repo asset download failed for {path}: {detail[:500]}"
+        )
+    if not temporary.is_file() or temporary.stat().st_size <= 0:
+        temporary.unlink(missing_ok=True)
+        raise RuntimeError(f"GitHub repo asset download was empty: {path}")
+    temporary.replace(destination)
 
 
 def _manifest_asset(manifest: dict, asset: str) -> dict:
@@ -151,6 +187,34 @@ def load_rank_feature_inputs(
     _safe_extract(source / ATP_ASSET, atp_dir)
     _safe_extract(source / WTA_ASSET, wta_dir)
 
+    supplement_audit = _repo_json(repository, WTA_OFFICIAL_SUPPLEMENT_AUDIT)
+    supplement_expected = str(
+        ((supplement_audit.get("singles") or {}).get("gzip_sha256") or "")
+    ).strip()
+    if len(supplement_expected) != 64:
+        raise ValueError("WTA official supplement audit lacks a valid singles SHA-256")
+    wta_supplement = source / Path(WTA_OFFICIAL_SUPPLEMENT_PATH).name
+    _download_repo_binary(
+        repository,
+        WTA_OFFICIAL_SUPPLEMENT_PATH,
+        wta_supplement,
+    )
+    supplement_actual = _sha256(wta_supplement)
+    if supplement_actual != supplement_expected:
+        raise ValueError("WTA official supplement checksum mismatch")
+    source_rows[wta_supplement.name] = {
+        "sha256": supplement_actual,
+        "bytes": int(wta_supplement.stat().st_size),
+        "source": "Kaggle bwandowando/womens-tennis-association-rankings",
+        "license": "Apache-2.0",
+        "coverage": {
+            "from": (supplement_audit.get("singles") or {}).get("date_min"),
+            "to": (supplement_audit.get("singles") or {}).get("date_max"),
+            "rows": (supplement_audit.get("singles") or {}).get("rows"),
+        },
+        "policy": "extension-only after pinned Sackmann max date",
+    }
+
     atp_players = _exact_file(atp_dir, "atp_players.csv")
     wta_players = _exact_file(wta_dir, "wta_players.csv")
     atp_rankings = _ranking_files(atp_dir, "atp")
@@ -187,6 +251,7 @@ def load_rank_feature_inputs(
         wta_players,
         wta_rankings,
         canonical_to_sackmann=mapping,
+        supplement_csvs=(wta_supplement,),
     )
 
     report = {
@@ -197,6 +262,15 @@ def load_rank_feature_inputs(
         "sources": source_rows,
         "atp_ranking_files": len(atp_rankings),
         "wta_ranking_files": len(wta_rankings),
+        "wta_official_supplement": {
+            "path": WTA_OFFICIAL_SUPPLEMENT_PATH,
+            "sha256": supplement_actual,
+            "rows": (supplement_audit.get("singles") or {}).get("rows"),
+            "date_min": (supplement_audit.get("singles") or {}).get("date_min"),
+            "date_max": (supplement_audit.get("singles") or {}).get("date_max"),
+            "source_max_date": supplement_audit.get("source", {}).get("source_max_date"),
+            "policy": "extension-only; never overwrites pinned historical snapshots",
+        },
         "wta_crosswalk": {
             "canonical_players": crosswalk_report.get("canonical_players"),
             "resolved": crosswalk_report.get("resolved"),
