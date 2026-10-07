@@ -1281,8 +1281,11 @@ def select_market_sections(
                 "edge_filter": False,
             },
             "prime_rule": {
-                "objective": "probability_first",
+                "objective": "75pct_probability_percentile_25pct_odds_percentile",
                 "probability_basis": "blinq_probability",
+                "display_ranking_only": True,
+                "display_weights": {"probability_percentile": 0.75, "odds_percentile": 0.25},
+                "eligibility_pool_unchanged": True,
                 "core_min_probability": prime_core_floor,
                 "fallback_min_probability": fallback_floor,
                 "fallback_only_if_core_count_below": PRIME_MIN_COUNT,
