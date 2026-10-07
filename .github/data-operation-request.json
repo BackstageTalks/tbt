@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "mode": "deploy-current",
+  "mode": "statistics",
   "promote": false,
-  "purpose": "Publish the already-generated immutable prediction candidate after the full refresh benchmark completed successfully but presentation metadata upload hit a transient GitHub HTTP 500. No model promotion and no Tennis provider refresh.",
+  "purpose": "Use approved provider-day headroom before 19:10 Europe/Bratislava reset. Fill highest-value modern serve/return statistics gaps only. Shared global budget hard-stops at 90% provider usage and preserves the 10% reserve. No model promotion or current prediction mutation.",
   "requested_on": "2026-10-07",
-  "requested_at_utc": "2026-10-07T15:24:00Z",
-  "max_requests": 1,
-  "start": "",
-  "end": "",
-  "training_scope": "deploy_existing_current_prediction_candidate_only",
+  "requested_at_utc": "2026-10-07T15:52:00Z",
+  "max_requests": 9000,
+  "start": "2021-01-01",
+  "end": "2026-10-06",
+  "training_scope": "pre_reset_max_safe_statistics_gapfill_no_model_promotion",
   "historical_match_winner_odds_as_model_feature": false
 }
