@@ -150,10 +150,13 @@ class RapidTennisClient:
             time.monotonic()
             - self._last_request_at
         )
+        # Some bounded runtime tests/workers construct the client via __new__
+        # and intentionally skip __init__. Preserve the legacy throttle there.
+        interval = getattr(self, "_min_request_interval", 0.66)
 
-        if elapsed < self._min_request_interval:
+        if elapsed < interval:
             time.sleep(
-                self._min_request_interval - elapsed
+                interval - elapsed
             )
 
     @staticmethod
