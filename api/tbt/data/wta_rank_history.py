@@ -169,6 +169,7 @@ class WTARankHistory:
 
         rows = []
         base_by_key = {}
+        ambiguous_historical_keys = set()
         base_max_date = None
 
         def add_pinned(row, *, source_kind):
@@ -182,9 +183,23 @@ class WTARankHistory:
                 _positive_int(row.get("rank")),
                 _positive_int(row.get("points")),
             )
+            if key in ambiguous_historical_keys:
+                return
             previous = base_by_key.get(key)
             if previous is not None:
                 if previous != signature:
+                    if source_kind == "historical":
+                        # Same pinned source/date/player can contain mutually
+                        # inconsistent duplicate evidence. Do not guess which
+                        # revision is correct: quarantine the key entirely.
+                        ambiguous_historical_keys.add(key)
+                        base_by_key.pop(key, None)
+                        logger.warning(
+                            "Quarantining conflicting pinned WTA historical rank "
+                            "row for %s on %s: previous=%s incoming=%s",
+                            sid, source_date, previous, signature,
+                        )
+                        return
                     raise ValueError(
                         f"Conflicting pinned WTA {source_kind} rank row for "
                         f"{sid} on {source_date}: previous={previous}, incoming={signature}"
@@ -199,6 +214,22 @@ class WTARankHistory:
         for path in historical_paths:
             for row in parsed_rows(path):
                 add_pinned(row, source_kind="historical")
+
+        # Remove every ambiguous pinned key, including the first row that was
+        # appended before its conflicting duplicate was observed. This is a
+        # fail-closed quarantine: ambiguous rank evidence becomes unavailable.
+        if ambiguous_historical_keys:
+            rows = [
+                row for row in rows
+                if (
+                    str(row.get("sackmann_player_id") or "").strip(),
+                    row.get("date"),
+                ) not in ambiguous_historical_keys
+            ]
+            base_max_date = max(
+                (row.get("date") for row in rows if row.get("date") is not None),
+                default=None,
+            )
 
         # If current is the only supplied source, it remains a valid pinned
         # archive. Otherwise it is extension-only: rows at/before the immutable
