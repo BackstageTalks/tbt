@@ -45,3 +45,5 @@ def test_rookie_access_edits_keep_trial_alias_in_sync():
     assert "if(id==='rookie')item.access.trial=item.access[id]" in app
     assert "if(id==='rookie')cfg.plans.trial=Boolean(t.checked)" in app
     assert "if(id==='rookie')tc.plans.trial=clone(rule)" in app
+
+# Revalidation marker: PR merge build must include the latest main admin UI changes.
