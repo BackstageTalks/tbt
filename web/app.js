@@ -411,14 +411,15 @@
     };
     return icons[network]||'';
   }
-  function heroSocialLinksHtml(content={},preview=false){
+  function heroSocialLinksHtml(content={},preview=false,standalone=false){
     const links=['telegram','youtube','instagram','facebook','x','tiktok'].map(network=>{
       const href=safeExternalUrl(content[`social_${network}`]);
       if(!href)return '';
       const label=bannerSocialLabel(network);
-      return `<a class="hero-social-link social-${network}" href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="${escapeHtml(label)}" ${preview?'tabindex="-1"':''}>${bannerSocialIcon(network)}<span>${escapeHtml(label)}</span></a>`;
+      const display=href.replace(/^https:\/\//i,'').replace(/\/$/,'');
+      return `<a class="hero-social-link social-${network}" href="${escapeHtml(href)}" target="_blank" rel="noopener" aria-label="${escapeHtml(label)}" title="${escapeHtml(href)}" ${preview?'tabindex="-1"':''}>${bannerSocialIcon(network)}<span>${escapeHtml(display)}</span></a>`;
     }).filter(Boolean).join('');
-    return links?`<div class="hero-social-links" aria-label="Sociálne siete">${links}</div>`:'';
+    return links?`<div class="hero-social-links${standalone?' hero-social-standalone':''}" aria-label="Sociálne siete">${links}</div>`:'';
   }
   async function loadEditablePresentationConfig(){
     try{
@@ -924,8 +925,8 @@
     const titleHtml=title?`<h2><strong>${bannerLineHtml(title)}</strong></h2>`:'';
     const heroEyebrow=Object.prototype.hasOwnProperty.call(c,'eyebrow')?String(c.eyebrow||'').trim():'BLINQ';
     const subtitle=String(c.text||'').trim();
-    const social=heroSocialLinksHtml(c,false);
-    const copy=showCopy?`<div class="dashboard-hero-copy">${heroEyebrow?`<small>${bannerLineHtml(heroEyebrow)}</small>`:''}${titleHtml}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b class="hero-slide-cta">${bannerLineHtml(c.button_text)} →</b>`:''}${social}</div>`:'';
+    const social=heroSocialLinksHtml(c,false,!showCopy);
+    const copy=showCopy?`<div class="dashboard-hero-copy">${heroEyebrow?`<small>${bannerLineHtml(heroEyebrow)}</small>`:''}${titleHtml}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b class="hero-slide-cta">${bannerLineHtml(c.button_text)} →</b>`:''}${social}</div>`:social;
     const hit=href?`<a class="hero-slide-hitarea" href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''} ${route&&!external?`data-route="${escapeHtml(route)}"`:''} aria-label="${escapeHtml(c.button_text||c.headline||'Otvoriť banner')}"></a>`:'';
     return `<div class="dashboard-hero hero-slide theme-${escapeHtml(theme)}${bannerCreativeClasses(c)}${index===state.heroIndex?' is-active':''}${showCopy?'':' hero-image-only'}" ${bannerCreativeStyle(c)} data-hero-index="${index}" data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} aria-hidden="${index===state.heroIndex?'false':'true'}">${hit}${sponsored}${image}${copy}${art}</div>`;
   }
@@ -3722,8 +3723,8 @@
     const eyebrow=Object.prototype.hasOwnProperty.call(c,'eyebrow')?String(c.eyebrow||'').trim():'BLINQ';
     const headline=String(c.headline||'').trim();
     const subtitle=String(c.text||'').trim();
-    const social=heroSocialLinksHtml(c,true);
-    const copy=c.show_copy===false?'':`<div class="admin-hero-preview-copy">${eyebrow?`<small>${bannerLineHtml(eyebrow)}</small>`:''}${headline?`<strong>${bannerLineHtml(headline)}</strong>`:''}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b>${bannerLineHtml(c.button_text)} →</b>`:''}${social}</div>`;
+    const social=heroSocialLinksHtml(c,true,c.show_copy===false);
+    const copy=c.show_copy===false?social:`<div class="admin-hero-preview-copy">${eyebrow?`<small>${bannerLineHtml(eyebrow)}</small>`:''}${headline?`<strong>${bannerLineHtml(headline)}</strong>`:''}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b>${bannerLineHtml(c.button_text)} →</b>`:''}${social}</div>`;
     const clampSize=(value,min,max,fallback)=>value!=null&&Number.isFinite(Number(value))?Math.max(min,Math.min(max,Number(value))):fallback;
     const previewWidth=mode==='mobile'?370:1396;
     const headlineSize=clampSize(c.headline_size,12,72,36),textSize=clampSize(c.text_size,9,32,14),eyebrowSize=clampSize(c.eyebrow_size,7,18,10);
