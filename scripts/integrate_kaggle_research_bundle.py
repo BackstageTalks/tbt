@@ -283,6 +283,7 @@ def integrate_wta(
                 continue
             by_name[_norm_name(name)] += 1
             raw_rows.append((pid, row))
+        conflicting_source_ids = set()
         for pid, row in raw_rows:
             name = _clean_text(row.get("fullName"))
             key = _norm_name(name)
@@ -296,7 +297,7 @@ def integrate_wta(
             if canonical is None or canonical["tour"] != "wta":
                 counts["players_unmapped"] += 1
                 continue
-            source_players[pid] = {
+            candidate = {
                 "source_player_id": pid,
                 "source_name": name,
                 "canonical_player_id": canonical["canonical_player_id"],
@@ -304,7 +305,18 @@ def integrate_wta(
                 "country_code": _clean_text(row.get("countryCode")),
                 "date_of_birth": _clean_text(row.get("dateOfBirth")),
             }
-            counts["players_safe_mapped"] += 1
+            previous = source_players.get(pid)
+            if previous is None:
+                source_players[pid] = candidate
+            elif previous == candidate:
+                counts["players_duplicate_source_id_rows"] += 1
+            else:
+                conflicting_source_ids.add(pid)
+                counts["players_conflicting_source_id_rows"] += 1
+        for pid in conflicting_source_ids:
+            source_players.pop(pid, None)
+        counts["players_conflicting_source_ids"] = len(conflicting_source_ids)
+        counts["players_safe_mapped"] = len(source_players)
 
     cross_path = out / "wta-player-crosswalk.jsonl.gz"
     cross = JsonlGzipWriter(cross_path)
@@ -536,8 +548,22 @@ def integrate_live(
                 date_pair=date_pair,
             )
             if linked is None:
-                counts[f"match_{reason}"] += 1
-                continue
+                fallback, _ = _candidate_match(
+                    source_date=source_date,
+                    player1=p1_name,
+                    player2=p2_name,
+                    tour=tour,
+                    tournament="",
+                    surface=_clean_text(row.get("surface")),
+                    round_name="",
+                    date_pair=date_pair,
+                )
+                if fallback is not None and "date_exact" in fallback[1]:
+                    linked = fallback
+                    counts["matches_exact_pair_context_fallback"] += 1
+                else:
+                    counts[f"match_{reason}"] += 1
+                    continue
             match, evidence = linked
             mapped_matches[source_mid] = {
                 "canonical_match_id": str(match.match_id),
@@ -655,8 +681,22 @@ def integrate_pinnacle(
             date_pair=date_pair,
         )
         if linked is None:
-            counts[f"match_{reason}"] += 1
-            return None
+            fallback, _ = _candidate_match(
+                source_date=source_date,
+                player1=p1,
+                player2=p2,
+                tour=_clean_text(row.get("Tour")),
+                tournament="",
+                surface=_clean_text(row.get("Surface")),
+                round_name="",
+                date_pair=date_pair,
+            )
+            if fallback is not None and "date_exact" in fallback[1]:
+                linked = fallback
+                counts["exact_pair_context_fallback_rows"] += 1
+            else:
+                counts[f"match_{reason}"] += 1
+                return None
         match, evidence = linked
         previous = source_map.get(source_mid)
         if previous is not None and previous != str(match.match_id):
