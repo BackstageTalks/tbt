@@ -85,7 +85,8 @@ def test_admin_runtime_can_set_zero_to_ten_rows_per_category():
     }
     data, manifest = filter_feed_for_access(feed(12), {"status": "active", "plan": "rookie"}, cfg)
     assert len(data["top200_picks"]) == 5
-    assert len(data["prime_picks"]) == 7
+    # ROOKIE PRIME is intentionally capped to the ranked top-five pool.
+    assert len(data["prime_picks"]) == 5
     assert len(data["top_daily_picks"]) == 10
     assert len(data["value_picks"]) == 4
     assert len(data["doubles_picks"]) == 6
