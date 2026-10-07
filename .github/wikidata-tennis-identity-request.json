@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "requested_at": "2026-10-07T10:47:00+02:00",
+  "requested_at": "2026-10-07T11:13:00+02:00",
   "action": "collect_wikidata_tennis_identity_sidecar",
   "source": "Wikidata structured data (CC0)",
   "properties": {
@@ -13,5 +13,6 @@
     "country": "P27/P298",
     "playing_hand": "P741"
   },
-  "policy": "research sidecar only; exact-name fail-closed canonical links; ATP/WTA tour-specific ID required; no fuzzy matching; no canonical mutation; no model promotion"
+  "policy": "research sidecar only; exact-name fail-closed canonical links; ATP/WTA tour-specific ID required; no fuzzy matching; no canonical mutation; no model promotion",
+  "note": "Trigger first post-merge CC0 collection and private sidecar publication after workflow landed on main."
 }
