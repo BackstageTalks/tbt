@@ -714,7 +714,9 @@ def scan_match_statuses(
         known_history_404 and int(prior.get("successful_history") or 0) == 0
     )
     near_method = getattr(provider, "near_player_matches_for_status", None)
-    daily_method = getattr(provider, "events_with_odds_for_status_day", None)
+    daily_method = getattr(provider, "events_for_status_day", None)
+    if not callable(daily_method):
+        daily_method = getattr(provider, "events_with_odds_for_status_day", None)
     near_cache: dict[str, Any] = {}
     daily_cache: dict[str, Any] = {}
     max_near_checks = max(0, min(30, int(max_near_checks)))
@@ -845,7 +847,19 @@ def scan_match_statuses(
                 if day_key not in daily_cache:
                     daily_attempts += 1
                     nominal_requests += 1
-                    daily_cache[day_key] = daily_method(scheduled.date())
+                    target_ids = {
+                        target_eid for target_scheduled, target_eid, _ in due
+                        if target_scheduled.date() == scheduled.date()
+                    }
+                    try:
+                        daily_cache[day_key] = daily_method(
+                            scheduled.date(), target_event_ids=target_ids,
+                            max_category_requests=min(8, max_near_checks),
+                        )
+                    except TypeError:
+                        # Compatibility with older/fake providers and the
+                        # pre-match odds fallback while deployments roll.
+                        daily_cache[day_key] = daily_method(scheduled.date())
                 daily_payload = daily_cache.get(day_key)
                 event = next(
                     (candidate for candidate in _provider_rows(daily_payload)
