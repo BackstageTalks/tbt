@@ -1,0 +1,146 @@
+name: BlinQ Wikidata tennis identity sidecar
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/wikidata-tennis-identity-request.json"
+      - "scripts/collect_wikidata_tennis_identity.py"
+      - ".github/workflows/wikidata-tennis-identity.yml"
+  pull_request:
+    paths:
+      - "scripts/collect_wikidata_tennis_identity.py"
+      - "tests/test_wikidata_tennis_identity.py"
+      - ".github/workflows/wikidata-tennis-identity.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('wikidata-identity-pr-{0}', github.ref) || 'tbt-research-sidecar-writer' }}
+  cancel-in-progress: false
+
+jobs:
+  wikidata-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and unit test
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m pytest tests/test_wikidata_tennis_identity.py -q
+          python -m compileall -q scripts/collect_wikidata_tennis_identity.py
+
+      - name: Validate private destination
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download verified canonical history
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          python scripts/download_production_preflight_inputs.py
+          test -f .cache/tbt/history/history_manifest.json
+
+      - name: Collect CC0 Wikidata registry and fail-closed links
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/wikidata
+          python scripts/collect_wikidata_tennis_identity.py             --history-dir .cache/tbt/history             --out-dir .cache/tbt/wikidata
+
+      - name: Enforce research-sidecar safety gates
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import gzip, json
+          from pathlib import Path
+          report=json.loads(Path(".cache/tbt/wikidata/report.json").read_text())
+          src=report.get("source_report") or {}
+          link=report.get("link_report") or {}
+          counts=link.get("counts") or {}
+          if report.get("license") != "CC0-1.0":
+              raise SystemExit("Unexpected Wikidata license marker")
+          if int(src.get("profiles") or 0) < 1000:
+              raise SystemExit("Wikidata profile registry unexpectedly small")
+          if int(counts.get("linked") or 0) < 100:
+              raise SystemExit("Too few fail-closed canonical links")
+          if link.get("production_mutated") is not False or report.get("production_mutated") is not False:
+              raise SystemExit("Wikidata job unexpectedly mutated canonical data")
+          if link.get("model_promoted") is not False or report.get("model_promoted") is not False:
+              raise SystemExit("Wikidata job unexpectedly promoted model features")
+          for name in ("wikidata-tennis-identity.jsonl.gz","wikidata-canonical-links.jsonl.gz"):
+              path=Path(".cache/tbt/wikidata")/name
+              if not path.is_file() or path.stat().st_size <= 0:
+                  raise SystemExit(f"Missing sidecar: {name}")
+              with gzip.open(path,"rt",encoding="utf-8") as handle:
+                  if not handle.readline().strip():
+                      raise SystemExit(f"Empty sidecar: {name}")
+          print(json.dumps({
+              "profiles": src.get("profiles"),
+              "linked": counts.get("linked"),
+              "linked_atp": counts.get("linked_atp"),
+              "linked_wta": counts.get("linked_wta"),
+          }, indent=2))
+          PY
+
+      - name: Publish private research sidecars
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          upload_file() {
+            local src="$1"; local path="$2"; local msg="$3"
+            local sha
+            sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+            SRC="$src" SHA="$sha" MSG="$msg" python - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          payload={"message":os.environ["MSG"],"content":base64.b64encode(Path(os.environ["SRC"]).read_bytes()).decode()}
+          if os.environ.get("SHA"): payload["sha"]=os.environ["SHA"]
+          Path("/tmp/wikidata-upload.json").write_text(json.dumps(payload))
+          PY
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" --input /tmp/wikidata-upload.json >/dev/null
+          }
+          upload_file .cache/tbt/wikidata/wikidata-tennis-identity.jsonl.gz             research/player_identity/wikidata-tennis-identity.jsonl.gz             "Update CC0 Wikidata tennis identity registry from run $GITHUB_RUN_ID"
+          upload_file .cache/tbt/wikidata/wikidata-canonical-links.jsonl.gz             research/player_identity/wikidata-canonical-links.jsonl.gz             "Update fail-closed Wikidata canonical links from run $GITHUB_RUN_ID"
+
+      - name: Persist audit
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          path="audit/wikidata-tennis-identity-latest.json"
+          encoded="$(base64 -w0 .cache/tbt/wikidata/report.json)"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit Wikidata tennis identity run $GITHUB_RUN_ID"               -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit Wikidata tennis identity run $GITHUB_RUN_ID"               -f content="$encoded" >/dev/null
+          fi
+
+      - name: Upload evidence
+        if: always() && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wikidata-tennis-identity-${{ github.run_id }}
+          path: .cache/tbt/wikidata/report.json
+          if-no-files-found: warn
+          retention-days: 14

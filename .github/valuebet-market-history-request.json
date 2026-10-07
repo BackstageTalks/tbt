@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "requested_at": "2026-10-06T07:09:00+02:00",
-  "action": "rerun_valuebetennis_market_history_with_strict_player_id_recovery",
+  "requested_at": "2026-10-07T10:47:00+02:00",
+  "action": "refresh_valuebetennis_market_history_delta_after_public_source_update",
   "source": "Valuebetennis 2021-2026 public CSV, CC BY 4.0",
   "policy": "opening odds stored as pre-match candidate; closing odds validation/CLV only; strict one-to-one learned player-ID recovery; fail closed on identity or market conflicts",
-  "note": "Post-PR #303 verified rerun. Publish only exact/unique or strict one-to-one ID-recovered links; validate persisted read-back; no model promotion."
+  "note": "Refresh latest 2026 public delta only through the existing strict linker/importer/read-back safety gates; no model promotion."
 }
