@@ -28,7 +28,31 @@ from ..utils import (
 
 logger = logging.getLogger(__name__)
 
-PROVIDER_REQUEST_RESERVE = 500
+DEFAULT_PROVIDER_REQUEST_RESERVE = 500
+
+
+def _provider_request_reserve() -> int:
+    raw = os.getenv(
+        "BLINQ_PROVIDER_REQUEST_RESERVE",
+        str(DEFAULT_PROVIDER_REQUEST_RESERVE),
+    ).strip()
+    try:
+        reserve = int(raw)
+    except ValueError as exc:
+        raise ConfigurationError(
+            "BLINQ_PROVIDER_REQUEST_RESERVE must be an integer"
+        ) from exc
+    if reserve < 0 or reserve >= 15000:
+        raise ConfigurationError(
+            "BLINQ_PROVIDER_REQUEST_RESERVE must be in 0..14999"
+        )
+    return reserve
+
+
+def _require_provider_remaining_header() -> bool:
+    return os.getenv(
+        "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER", ""
+    ).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _merge_matches(*groups):
@@ -215,10 +239,11 @@ class RapidTennisClient:
             # Reserve outside the retry block: budget/storage failures fail closed.
             if self.request_limit is not None and self.request_count >= self.request_limit:
                 raise RequestBudgetExceeded("Per-run request limit exhausted")
+            provider_reserve = _provider_request_reserve()
             if (self.rate_limit_remaining is not None
-                    and self.rate_limit_remaining <= PROVIDER_REQUEST_RESERVE):
+                    and self.rate_limit_remaining <= provider_reserve):
                 raise RequestBudgetExceeded(
-                    f"Provider reserve reached; keeping {PROVIDER_REQUEST_RESERVE} requests unused"
+                    f"Provider reserve reached; keeping {provider_reserve} requests unused"
                 )
             if self.request_budget is not None:
                 self.request_budget(self.client, self.cfg, enrichment=enrichment)
@@ -235,6 +260,10 @@ class RapidTennisClient:
                 remaining = response.headers.get("x-ratelimit-requests-remaining")
                 if remaining is not None:
                     self.rate_limit_remaining = safe_int(remaining)
+                elif _require_provider_remaining_header():
+                    raise RequestBudgetExceeded(
+                        "Provider rate-limit remaining header missing"
+                    )
 
                 if response.status_code == 429:
                     if attempt + 1 >= attempts:
@@ -310,8 +339,12 @@ class RapidTennisClient:
             self._throttle()
             if self.request_limit is not None and self.request_count >= self.request_limit:
                 raise RequestBudgetExceeded("Per-run request limit exhausted")
-            if self.rate_limit_remaining == 0:
-                raise RequestBudgetExceeded("Provider reports no remaining requests")
+            provider_reserve = _provider_request_reserve()
+            if (self.rate_limit_remaining is not None
+                    and self.rate_limit_remaining <= provider_reserve):
+                raise RequestBudgetExceeded(
+                    f"Provider reserve reached; keeping {provider_reserve} requests unused"
+                )
             if self.request_budget is not None:
                 self.request_budget(self.client, self.cfg, enrichment=enrichment)
 
@@ -420,6 +453,10 @@ class RapidTennisClient:
         remaining = response.headers.get("x-ratelimit-requests-remaining")
         if remaining is not None:
             self.rate_limit_remaining = safe_int(remaining)
+        elif _require_provider_remaining_header():
+            raise RequestBudgetExceeded(
+                "Provider rate-limit remaining header missing"
+            )
         if response.status_code in {204, 404}:
             return {}
         if response.status_code == 429:
