@@ -25,6 +25,7 @@ jobs:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       RELEASE_TAG: tbt-research-sources-v1
+      FIGSHARE_FILE_ID: "45381565"
 
     steps:
       - uses: actions/checkout@v4
@@ -48,16 +49,23 @@ jobs:
           test -n "$GH_TOKEN"
           test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
 
-      - name: Download CC BY 4.0 Figshare archive
+      - name: Download the exact CC BY 4.0 Figshare XLSX
         run: |
           set -euo pipefail
           rm -rf .cache/tbt/figshare-wimbledon-2023
           mkdir -p .cache/tbt/figshare-wimbledon-2023/{source,extract,audit}
-          url="https://figshare.com/ndownloader/articles/25511917/versions/1"
-          curl --fail --location --retry 5 --retry-delay 4 "$url"             -o .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.zip
-          test "$(stat -c %s .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.zip)" -gt 1000000
-          unzip -t .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.zip >/dev/null
-          unzip -q .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.zip             -d .cache/tbt/figshare-wimbledon-2023/extract
+          url="https://figshare.com/ndownloader/files/$FIGSHARE_FILE_ID"
+          curl --fail --location --retry 5 --retry-delay 4 "$url"             -o .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx
+          test "$(stat -c %s .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx)" -gt 1000000
+          cp .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx             .cache/tbt/figshare-wimbledon-2023/extract/tennis-data.xlsx
+          python - <<'PY'
+          import pandas as pd
+          p=".cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx"
+          sheets=pd.ExcelFile(p).sheet_names
+          if not sheets:
+              raise SystemExit("Figshare XLSX contains no sheets")
+          print("sheets:", sheets)
+          PY
 
       - name: Audit actual extracted schema
         run: |
@@ -84,9 +92,11 @@ jobs:
       - name: Preserve raw source and attribution in private research release
         run: |
           set -euo pipefail
-          cp .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.zip             .cache/tbt/figshare-wimbledon-2023/figshare-wimbledon-2023-ccby4.zip
+          cp .cache/tbt/figshare-wimbledon-2023/source/figshare-25511917-v1.xlsx             .cache/tbt/figshare-wimbledon-2023/figshare-wimbledon-2023-ccby4.xlsx
           cat > .cache/tbt/figshare-wimbledon-2023/LICENSE-NOTE.txt <<'EOF'
           Source: Figshare "Tennis Data", DOI 10.6084/m9.figshare.25511917
+          Version: 1
+          Figshare file id: 45381565
           Author shown by source: Ray Ring
           License: Creative Commons Attribution 4.0 International (CC BY 4.0)
           Source page: https://figshare.com/articles/dataset/Tennis_Data/25511917
@@ -95,7 +105,7 @@ jobs:
           if ! gh release view "$RELEASE_TAG" -R "$TBT_DATA_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" -R "$TBT_DATA_REPOSITORY"               --title "BlinQ research source bundles"               --notes "Private research-only source snapshots. No production model mutation."
           fi
-          gh release upload "$RELEASE_TAG" -R "$TBT_DATA_REPOSITORY" --clobber             .cache/tbt/figshare-wimbledon-2023/figshare-wimbledon-2023-ccby4.zip             .cache/tbt/figshare-wimbledon-2023/LICENSE-NOTE.txt
+          gh release upload "$RELEASE_TAG" -R "$TBT_DATA_REPOSITORY" --clobber             .cache/tbt/figshare-wimbledon-2023/figshare-wimbledon-2023-ccby4.xlsx             .cache/tbt/figshare-wimbledon-2023/LICENSE-NOTE.txt
 
       - name: Persist audit to private data repo
         run: |
