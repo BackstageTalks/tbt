@@ -6,7 +6,9 @@ import math
 from typing import Mapping
 
 from ..data.atp_leaderboards import ATP_LEADERBOARD_FEATURE_NAMES, ATPLeaderboardPriors
+from ..data.atp_rank_history import ATP_RANK_HISTORY_FEATURE_NAMES, ATPRankHistory
 from ..data.player_identity import normalize_player_name
+from ..data.wta_rank_history import WTA_RANK_HISTORY_FEATURE_NAMES, WTARankHistory
 from ..data.wta_season_stats import WTA_SEASON_FEATURE_NAMES, WTASeasonPriors
 from ..models.feature_builder import FeatureBuilder, stats_surface_key
 from ..models.portable_model import predict_probability
@@ -223,6 +225,12 @@ def compare_from_artifact(
     atp_state = artifact.get("atp_leaderboards")
     if isinstance(atp_state, dict):
         features.update(ATPLeaderboardPriors.from_state(atp_state).features_for_match(match, current=True))
+    atp_rank_state = artifact.get("atp_rank_history")
+    if isinstance(atp_rank_state, dict):
+        features.update(ATPRankHistory.from_state(atp_rank_state).features_for_match(match))
+    wta_rank_state = artifact.get("wta_rank_history")
+    if isinstance(wta_rank_state, dict):
+        features.update(WTARankHistory.from_state(wta_rank_state).features_for_match(match))
     wta_state = artifact.get("wta_season_stats")
     if isinstance(wta_state, dict):
         features.update(WTASeasonPriors.from_state(wta_state).features_for_match(match, current=True))
@@ -230,6 +238,11 @@ def compare_from_artifact(
     model = artifact.get("model")
     if not isinstance(model, dict):
         raise RuntimeComparatorError("missing portable model")
+    model_features = set(model.get("feature_names") or [])
+    if model_features & set(ATP_RANK_HISTORY_FEATURE_NAMES) and not isinstance(atp_rank_state, dict):
+        raise RuntimeComparatorError("missing ATP rank-history state")
+    if model_features & set(WTA_RANK_HISTORY_FEATURE_NAMES) and not isinstance(wta_rank_state, dict):
+        raise RuntimeComparatorError("missing WTA rank-history state")
     missing = [name for name in model.get("feature_names") or [] if name not in features]
     if missing:
         raise RuntimeComparatorError("missing model features: " + ", ".join(missing))

@@ -9,7 +9,9 @@ from typing import Iterable
 import pandas as pd
 
 from ..data.atp_leaderboards import ATP_LEADERBOARD_FEATURE_NAMES
+from ..data.atp_rank_history import ATP_RANK_HISTORY_FEATURE_NAMES
 from ..data.player_identity import normalize_player_name
+from ..data.wta_rank_history import WTA_RANK_HISTORY_FEATURE_NAMES
 from ..data.wta_season_stats import WTA_SEASON_FEATURE_NAMES
 from ..models.feature_builder import FeatureBuilder, FEATURE_NAMES, stats_surface_key
 from ..models.portable_export import export_portable_model
@@ -227,6 +229,8 @@ def compare(
     best_of: int = 3,
     now: datetime | None = None,
     atp_leaderboards=None,
+    atp_rank_history=None,
+    wta_rank_history=None,
     wta_season_stats=None,
 ) -> dict:
     """Exact champion-model comparison for an arbitrary same-tour singles matchup.
@@ -277,10 +281,19 @@ def compare(
     features = builder.snapshot(synthetic)
     if atp_leaderboards is not None:
         features.update(atp_leaderboards.features_for_match(synthetic, current=True))
+    if atp_rank_history is not None:
+        features.update(atp_rank_history.features_for_match(synthetic))
+    if wta_rank_history is not None:
+        features.update(wta_rank_history.features_for_match(synthetic))
     if wta_season_stats is not None:
         features.update(wta_season_stats.features_for_match(synthetic, current=True))
 
     feature_names = list(getattr(model, "feature_names", None) or FEATURE_NAMES)
+    feature_set = set(feature_names)
+    if feature_set & set(ATP_RANK_HISTORY_FEATURE_NAMES) and atp_rank_history is None:
+        raise ComparatorCoverageError("model requires ATP rank history")
+    if feature_set & set(WTA_RANK_HISTORY_FEATURE_NAMES) and wta_rank_history is None:
+        raise ComparatorCoverageError("model requires WTA rank history")
     missing = [name for name in feature_names if name not in features]
     if missing:
         raise ComparatorCoverageError("model feature sources unavailable: " + ", ".join(missing))
@@ -361,6 +374,8 @@ def build_serving_artifact(
     *,
     now: datetime | None = None,
     atp_leaderboards=None,
+    atp_rank_history=None,
+    wta_rank_history=None,
     wta_season_stats=None,
     builder: FeatureBuilder | None = None,
     cutoff: datetime | None = None,
@@ -412,9 +427,15 @@ def build_serving_artifact(
 
     feature_names = set(getattr(model, "feature_names", None) or FEATURE_NAMES)
     requires_atp = bool(feature_names & set(ATP_LEADERBOARD_FEATURE_NAMES))
+    requires_atp_rank = bool(feature_names & set(ATP_RANK_HISTORY_FEATURE_NAMES))
+    requires_wta_rank = bool(feature_names & set(WTA_RANK_HISTORY_FEATURE_NAMES))
     requires_wta = bool(feature_names & set(WTA_SEASON_FEATURE_NAMES))
     if requires_atp and atp_leaderboards is None:
         raise ComparatorCoverageError("champion requires ATP leaderboard priors")
+    if requires_atp_rank and atp_rank_history is None:
+        raise ComparatorCoverageError("champion requires ATP rank history")
+    if requires_wta_rank and wta_rank_history is None:
+        raise ComparatorCoverageError("champion requires WTA rank history")
     if requires_wta and wta_season_stats is None:
         raise ComparatorCoverageError("champion requires WTA season priors")
 
@@ -458,6 +479,14 @@ def build_serving_artifact(
     }
     if atp_leaderboards is not None:
         artifact["atp_leaderboards"] = atp_leaderboards.export_state()
+    if atp_rank_history is not None:
+        artifact["atp_rank_history"] = atp_rank_history.export_state(
+            players, as_of_date=now.date()
+        )
+    if wta_rank_history is not None:
+        artifact["wta_rank_history"] = wta_rank_history.export_state(
+            players, as_of_date=now.date()
+        )
     if wta_season_stats is not None:
         artifact["wta_season_stats"] = wta_season_stats.export_state()
     return artifact

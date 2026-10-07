@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import bisect
 import csv
+import logging
 import math
 import re
 import unicodedata
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Iterable
 
 from .player_identity import load_crosswalk
+
+logger = logging.getLogger(__name__)
 
 WTA_RANK_HISTORY_FEATURE_NAMES = [
     "wta_hist_rank_advantage",
@@ -123,14 +126,15 @@ class WTARankHistory:
                 if name:
                     player_names[pid] = name
 
-        rows = []
-        for path in ranking_csvs:
+        def parsed_rows(path):
             with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:
-                for row in csv.DictReader(handle):
-                    pid = _positive_int(row.get("player") or row.get("player_id"))
+                for raw in csv.DictReader(handle):
+                    pid = _positive_int(raw.get("player") or raw.get("player_id"))
                     if pid is None or pid not in player_names:
                         continue
-                    raw_date = str(row.get("ranking_date") or row.get("date") or "").strip()
+                    raw_date = str(
+                        raw.get("ranking_date") or raw.get("date") or ""
+                    ).strip()
                     try:
                         source_date = datetime.strptime(raw_date, "%Y%m%d").date()
                     except ValueError:
@@ -138,35 +142,140 @@ class WTARankHistory:
                             source_date = datetime.fromisoformat(raw_date).date()
                         except ValueError:
                             continue
-                    rows.append({
+                    rank = _positive_int(raw.get("ranking") or raw.get("rank"))
+                    if rank is None:
+                        continue
+                    yield {
                         "date": source_date,
-                        "rank": row.get("ranking") or row.get("rank"),
-                        "points": row.get("ranking_points") or row.get("points"),
+                        "rank": rank,
+                        "points": _positive_int(
+                            raw.get("ranking_points") or raw.get("points")
+                        ),
                         "name": player_names[pid],
                         "sackmann_player_id": str(pid),
-                    })
-        # Supplemental official WTA rankings may only extend the pinned
-        # Sackmann source. They may never overlap/overwrite a pinned weekly
-        # snapshot silently: an overlap is either an exact duplicate (ignored)
-        # or a hard conflict (refused). This keeps source precedence explicit.
+                    }
+
+        # Sackmann's pinned mirror ships immutable decade files plus a
+        # wta_rankings_current.csv convenience snapshot. The current file
+        # intentionally overlaps older dates and can contain retrospective
+        # corrections. Historical training must never let that convenience
+        # file rewrite an already-pinned decade snapshot.
+        paths = [Path(path) for path in ranking_csvs]
+        historical_paths = [
+            path for path in paths
+            if path.name.casefold() != "wta_rankings_current.csv"
+        ]
+        current_paths = [
+            path for path in paths
+            if path.name.casefold() == "wta_rankings_current.csv"
+        ]
+
+        rows = []
         base_by_key = {}
+        ambiguous_historical_keys = set()
         base_max_date = None
-        for row in rows:
+
+        def add_pinned(row, *, source_kind):
+            nonlocal base_max_date
             sid = str(row.get("sackmann_player_id") or "").strip()
             source_date = row.get("date")
             if not sid or source_date is None:
-                continue
+                return
             key = (sid, source_date)
             signature = (
                 _positive_int(row.get("rank")),
                 _positive_int(row.get("points")),
             )
+            if key in ambiguous_historical_keys:
+                return
             previous = base_by_key.get(key)
-            if previous is not None and previous != signature:
-                raise ValueError(f"Conflicting pinned WTA rank row for {sid} on {source_date}")
+            if previous is not None:
+                if previous != signature:
+                    if source_kind == "historical":
+                        # Same pinned source/date/player can contain mutually
+                        # inconsistent duplicate evidence. Do not guess which
+                        # revision is correct: quarantine the key entirely.
+                        ambiguous_historical_keys.add(key)
+                        base_by_key.pop(key, None)
+                        logger.warning(
+                            "Quarantining conflicting pinned WTA historical rank "
+                            "row for %s on %s: previous=%s incoming=%s",
+                            sid, source_date, previous, signature,
+                        )
+                        return
+                    raise ValueError(
+                        f"Conflicting pinned WTA {source_kind} rank row for "
+                        f"{sid} on {source_date}: previous={previous}, incoming={signature}"
+                    )
+                return
             base_by_key[key] = signature
+            rows.append(row)
             if base_max_date is None or source_date > base_max_date:
                 base_max_date = source_date
+
+        # Non-current decade files are authoritative for their historical range.
+        for path in historical_paths:
+            for row in parsed_rows(path):
+                add_pinned(row, source_kind="historical")
+
+        # Remove every ambiguous pinned key, including the first row that was
+        # appended before its conflicting duplicate was observed. This is a
+        # fail-closed quarantine: ambiguous rank evidence becomes unavailable.
+        if ambiguous_historical_keys:
+            rows = [
+                row for row in rows
+                if (
+                    str(row.get("sackmann_player_id") or "").strip(),
+                    row.get("date"),
+                ) not in ambiguous_historical_keys
+            ]
+            base_max_date = max(
+                (row.get("date") for row in rows if row.get("date") is not None),
+                default=None,
+            )
+
+        # If current is the only supplied source, it remains a valid pinned
+        # archive. Otherwise it is extension-only: rows at/before the immutable
+        # historical maximum are ignored rather than allowed to rewrite history.
+        historical_max_date = base_max_date
+        current_seen = {}
+        current_rows = {}
+        ambiguous_current_keys = set()
+        for path in current_paths:
+            for row in parsed_rows(path):
+                source_date = row["date"]
+                if historical_max_date is not None and source_date <= historical_max_date:
+                    continue
+                key = (row["sackmann_player_id"], source_date)
+                signature = (row["rank"], row["points"])
+                if key in ambiguous_current_keys:
+                    continue
+                previous = current_seen.get(key)
+                if previous is not None:
+                    if previous != signature:
+                        ambiguous_current_keys.add(key)
+                        current_seen.pop(key, None)
+                        current_rows.pop(key, None)
+                        logger.warning(
+                            "Quarantining conflicting pinned WTA current rank "
+                            "row for %s on %s: previous=%s incoming=%s",
+                            key[0], source_date, previous, signature,
+                        )
+                    continue
+                current_seen[key] = signature
+                current_rows[key] = row
+
+        for key, row in current_rows.items():
+            if key not in ambiguous_current_keys:
+                add_pinned(row, source_kind="current")
+
+        if not historical_paths and not current_paths:
+            raise ValueError("No WTA ranking CSVs supplied")
+
+        # Supplemental official WTA rankings may only extend the pinned
+        # Sackmann source. They may never overlap/overwrite a pinned weekly
+        # snapshot silently: an overlap is either an exact duplicate (ignored)
+        # or a hard conflict (refused). This keeps source precedence explicit.
 
         supplement_seen = {}
         supplement_rows = []
@@ -352,6 +461,74 @@ class WTARankHistory:
             if pts1 is not None and pts2 is not None:
                 out[f"wta_hist_points_momentum_{weeks}w_diff"] = pts1 - pts2
         return out
+
+
+    def export_state(self, players, *, as_of_date, lookback_days: int = 140) -> dict:
+        """Export the recent point-in-time state required by comparator serving."""
+        start = as_of_date - timedelta(days=max(120, int(lookback_days)))
+        requested = []
+        canonical_map = {}
+        for row in players:
+            if not isinstance(row, dict) or str(row.get("tour") or "").lower() != "wta":
+                continue
+            player_id = str(row.get("player_id") or "").strip()
+            name_key = f"name:{_norm_name(row.get('name'))}"
+            sackmann_id = self._canonical_to_sackmann.get(player_id)
+            if sackmann_id:
+                canonical_map[player_id] = sackmann_id
+                requested.append(f"id:{sackmann_id}")
+            requested.append(name_key)
+
+        histories = {}
+        for key in sorted(set(key for key in requested if key and not key.endswith(":"))):
+            dates = self._dates.get(key) or []
+            rows = []
+            for idx, source_date in enumerate(dates):
+                if source_date < start or source_date > as_of_date:
+                    continue
+                rows.append([
+                    source_date.isoformat(),
+                    int(self._ranks[key][idx]),
+                    self._points[key][idx],
+                    int(self._career_best[key][idx]),
+                ])
+            if rows:
+                histories[key] = rows
+        return {
+            "schema": 1,
+            "as_of_date": as_of_date.isoformat(),
+            "lookback_days": max(120, int(lookback_days)),
+            "canonical_to_sackmann": canonical_map,
+            "players": histories,
+        }
+
+    @classmethod
+    def from_state(cls, state: dict) -> "WTARankHistory":
+        if not isinstance(state, dict) or int(state.get("schema") or 0) != 1:
+            raise ValueError("Invalid WTA rank-history state")
+        obj = cls.__new__(cls)
+        obj._canonical_to_sackmann = {
+            str(key): str(value)
+            for key, value in (state.get("canonical_to_sackmann") or {}).items()
+            if str(key).strip() and str(value).strip()
+        }
+        obj._dates, obj._ranks, obj._points, obj._career_best = {}, {}, {}, {}
+        for key, rows in (state.get("players") or {}).items():
+            if not isinstance(rows, list):
+                raise ValueError("Invalid WTA rank-history player state")
+            dates, ranks, points, bests = [], [], [], []
+            for row in rows:
+                if not isinstance(row, list) or len(row) != 4:
+                    raise ValueError("Invalid WTA rank-history snapshot")
+                dates.append(datetime.fromisoformat(str(row[0])).date())
+                ranks.append(int(row[1]))
+                points.append(None if row[2] is None else int(row[2]))
+                bests.append(int(row[3]))
+            obj._dates[str(key)] = dates
+            obj._ranks[str(key)] = ranks
+            obj._points[str(key)] = points
+            obj._career_best[str(key)] = bests
+        return obj
 
 
 def coverage_summary(rows: Iterable[dict[str, float]]) -> dict[str, float | int]:
