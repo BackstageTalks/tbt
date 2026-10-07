@@ -1,0 +1,292 @@
+name: Finalize BlinQ research source integration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/research-source-finalize.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-research-source-finalize
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      RESEARCH_RELEASE: tbt-research-sources-v1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and verify finalizer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m compileall -q api scripts
+          python -m pytest tests/test_open_meteo_pre_match_forecasts.py -q
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+          request=.github/research-source-integration-request.json
+          test "$(jq -r .action "$request")" = "integrate_research_sources_v1"
+          test "$(jq -r .promote_model "$request")" = "false"
+          test "$(jq -r .open_meteo_max_requests "$request")" -ge 1607
+
+      - name: Download canonical history and research inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/download_production_preflight_inputs.py
+          rm -rf .cache/tbt/research-finalize
+          mkdir -p .cache/tbt/research-finalize/{source,work,audit,training,readback-training}
+          cp -a .cache/tbt/history .cache/tbt/research-finalize/history-readback
+
+          gh api -H "Accept: application/vnd.github.raw"             "repos/$TBT_DATA_REPOSITORY/contents/research/source-acquisition/latest.json?ref=main"             > .cache/tbt/research-finalize/source-acquisition.json
+
+          mkdir -p .cache/tbt/research-finalize/source/wta-rank
+          gh release download "$RESEARCH_RELEASE" -R "$TBT_DATA_REPOSITORY"             -p sackmann-wta-rankings.tar.gz -D .cache/tbt/research-finalize/source --clobber
+          expected="$(jq -r '.downloaded[] | select(.asset=="sackmann-wta-rankings.tar.gz") | .sha256' .cache/tbt/research-finalize/source-acquisition.json)"
+          actual="$(sha256sum .cache/tbt/research-finalize/source/sackmann-wta-rankings.tar.gz | awk '{print $1}')"
+          test -n "$expected" && test "$expected" = "$actual"
+          tar -xzf .cache/tbt/research-finalize/source/sackmann-wta-rankings.tar.gz             -C .cache/tbt/research-finalize/source/wta-rank
+          test -s .cache/tbt/research-finalize/source/wta-rank/wta_players.csv
+
+          mkdir -p .cache/tbt/research-finalize/source/profiles .cache/tbt/research-finalize/source/atp-weekly
+          gh release download tbt-player-assets-v1 -R "$TBT_DATA_REPOSITORY"             -p player_profiles.json -D .cache/tbt/research-finalize/source/profiles --clobber
+          curl --fail --location --retry 4             "https://raw.githubusercontent.com/Jupiterian/ATP-Rankings-API/247f2f5e86b9e142a7ead7b0e8b3dfb5ee6abb28/rankings.db"             -o .cache/tbt/research-finalize/source/atp-weekly/rankings.db
+
+      - name: Build WTA identity crosswalk
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_player_identity_crosswalk.py             --history-dir .cache/tbt/research-finalize/history-readback             --tour wta             --profiles .cache/tbt/research-finalize/source/profiles/player_profiles.json             --sackmann-players .cache/tbt/research-finalize/source/wta-rank/wta_players.csv             --out .cache/tbt/research-finalize/work/wta-sackmann-crosswalk.json             --report .cache/tbt/research-finalize/audit/wta-crosswalk-report.json
+          test "$(jq -r '.resolved' .cache/tbt/research-finalize/audit/wta-crosswalk-report.json)" -ge 1000
+
+      - name: Extract Open-Meteo 24h pre-match forecasts in safe parallel batches
+        shell: bash
+        run: |
+          set -euo pipefail
+          request=.github/research-source-integration-request.json
+          python scripts/extract_open_meteo_pre_match_forecasts.py             --history-dir .cache/tbt/research-finalize/history-readback             --from-date "$(jq -r .open_meteo_from "$request")"             --to-date "$(jq -r .open_meteo_to "$request")"             --max-requests "$(jq -r .open_meteo_max_requests "$request")"             --workers 8             --requests-per-minute 360             --out .cache/tbt/research-finalize/work/openmeteo-pre-match.csv             --report .cache/tbt/research-finalize/audit/openmeteo-pre-match-report.json
+          test "$(jq -r '.matched_rows' .cache/tbt/research-finalize/audit/openmeteo-pre-match-report.json)" -gt 0
+
+      - name: Download verified training priors and PBP provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/research-finalize/source/atp-leaderboards .cache/tbt/research-finalize/source/wta-season
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          ReleaseStore(
+              os.environ["TBT_DATA_REPOSITORY"],
+              "tbt-atp-leaderboards-v1",
+              Path(".cache/tbt/research-finalize/source/atp-leaderboards"),
+          ).download(
+              extra_names=("atp_leaderboards_1991_2026_52week_career.csv",),
+              required_names=("atp_leaderboards_1991_2026_52week_career.csv",),
+              require_bundle_manifest=True,
+          )
+          PY
+          gh release download tbt-wta-season-stats-v1 -R "$TBT_DATA_REPOSITORY"             -p wta_stats_2010_2026_serving_returning.csv             -D .cache/tbt/research-finalize/source/wta-season --clobber
+          gh api -H "Accept: application/vnd.github.raw"             "repos/$TBT_DATA_REPOSITORY/contents/audit/slam-pbp-import-latest.json?ref=main"             > .cache/tbt/research-finalize/training/slam_pbp_import_report.json
+
+      - name: Build and audit integrated candidate training table
+        shell: bash
+        run: |
+          set -euo pipefail
+          wta_args=()
+          for f in .cache/tbt/research-finalize/source/wta-rank/wta_rankings_*.csv; do
+            wta_args+=(--wta-rank-history-csv "$f")
+          done
+          python scripts/build_production_training_table.py             --history-dir .cache/tbt/research-finalize/history-readback             --atp-leaderboards-csv .cache/tbt/research-finalize/source/atp-leaderboards/atp_leaderboards_1991_2026_52week_career.csv             --atp-rank-history-sqlite .cache/tbt/research-finalize/source/atp-weekly/rankings.db             --wta-rank-history-players-csv .cache/tbt/research-finalize/source/wta-rank/wta_players.csv             "${wta_args[@]}"             --wta-rank-history-crosswalk .cache/tbt/research-finalize/work/wta-sackmann-crosswalk.json             --wta-season-stats-csv .cache/tbt/research-finalize/source/wta-season/wta_stats_2010_2026_serving_returning.csv             --pre-match-weather-csv .cache/tbt/research-finalize/work/openmeteo-pre-match.csv             --out .cache/tbt/research-finalize/training/training_table.parquet             --report .cache/tbt/research-finalize/training/training_table_report.json
+          python scripts/audit_training_leakage.py             --history-dir .cache/tbt/research-finalize/history-readback             --report .cache/tbt/research-finalize/training/leakage_audit_report.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/research-finalize/training/training_table_report.json").read_text())
+          weather=r.get("pre_match_forecast_weather") or {}
+          wta=r.get("wta_rank_history") or {}
+          atp=r.get("atp_rank_history") or {}
+          if int(weather.get("known_rows") or 0) <= 0:
+              raise SystemExit("No pre-match weather rows reached training table")
+          if float(wta.get("known_both_rate") or 0) <= 0:
+              raise SystemExit("WTA rank history missing from integrated training table")
+          if float(atp.get("known_both_rate") or 0) <= 0:
+              raise SystemExit("ATP rank history missing from integrated training table")
+          print(json.dumps({"rows":r.get("rows"),"weather":weather,"wta":wta,"atp":atp},indent=2))
+          PY
+
+      - name: Publish integrated training DB and Open-Meteo asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .cache/tbt/research-finalize/audit/openmeteo-pre-match-report.json             .cache/tbt/research-finalize/training/openmeteo_pre_match_report.json
+          cp .cache/tbt/research-finalize/audit/wta-crosswalk-report.json             .cache/tbt/research-finalize/training/wta_crosswalk_report.json
+          cp .cache/tbt/research-finalize/source-acquisition.json             .cache/tbt/research-finalize/training/source_acquisition_manifest.json
+
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          root=Path(".cache/tbt/research-finalize/training")
+          required=[
+              root/"training_table.parquet",
+              root/"training_table_report.json",
+              root/"leakage_audit_report.json",
+              root/"openmeteo_pre_match_report.json",
+              root/"wta_crosswalk_report.json",
+              root/"slam_pbp_import_report.json",
+              root/"source_acquisition_manifest.json",
+          ]
+          if any(not p.is_file() or p.stat().st_size<=0 for p in required):
+              raise SystemExit("Refusing incomplete integrated training DB publication")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-training-table-v1",root).upload_bundle(required)
+          PY
+
+          gzip -n -c .cache/tbt/research-finalize/work/openmeteo-pre-match.csv             > .cache/tbt/research-finalize/work/openmeteo-pre-match-24h-2024-2026.csv.gz
+          gh release upload "$RESEARCH_RELEASE" -R "$TBT_DATA_REPOSITORY" --clobber             .cache/tbt/research-finalize/work/openmeteo-pre-match-24h-2024-2026.csv.gz
+
+      - name: Persist final integration audit and acquisition manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          root=Path(".cache/tbt/research-finalize")
+          weather=json.loads((root/"audit/openmeteo-pre-match-report.json").read_text())
+          training=json.loads((root/"training/training_table_report.json").read_text())
+          cross=json.loads((root/"audit/wta-crosswalk-report.json").read_text())
+          slam=json.loads((root/"training/slam_pbp_import_report.json").read_text())
+          source=json.loads((root/"source-acquisition.json").read_text())
+          asset=root/"work/openmeteo-pre-match-24h-2024-2026.csv.gz"
+          sha=hashlib.sha256(asset.read_bytes()).hexdigest()
+
+          source["generated_at"]=datetime.now(timezone.utc).isoformat()
+          source["downloaded"]=[
+              row for row in source.get("downloaded",[])
+              if row.get("id")!="open_meteo_historical_pre_match_forecasts"
+          ]+[{
+              "id":"open_meteo_historical_pre_match_forecasts",
+              "status":"downloaded_and_integrated",
+              "coverage":f"{weather.get('from_date')}..{weather.get('to_date')} fixed 24h lead",
+              "license":"CC BY 4.0",
+              "asset":asset.name,
+              "bytes":asset.stat().st_size,
+              "sha256":sha,
+              "matched_rows":weather.get("matched_rows",0),
+              "open_meteo_requests":weather.get("open_meteo_requests",0),
+          }]
+          source["not_downloaded"]=[
+              row for row in source.get("not_downloaded",[])
+              if row.get("id")!="open_meteo_historical_pre_match_forecasts"
+          ]
+          (root/"audit/source-acquisition-updated.json").write_text(
+              json.dumps(source,ensure_ascii=False,indent=2),encoding="utf-8"
+          )
+
+          report={
+              "schema":1,
+              "status":"verified",
+              "generated_at":datetime.now(timezone.utc).isoformat(),
+              "closeout_mode":"read_only_finalizer",
+              "production_model_mutated":False,
+              "model_promoted":False,
+              "canonical_history_mutated_by_finalizer":False,
+              "slam_pbp_provenance":slam,
+              "open_meteo":weather,
+              "wta_crosswalk":cross,
+              "training_rows":training.get("rows"),
+              "atp_rank_history":training.get("atp_rank_history"),
+              "wta_rank_history":training.get("wta_rank_history"),
+              "pre_match_forecast_weather":training.get("pre_match_forecast_weather"),
+              "valuebetennis":{"status":"already_integrated_reverified_from_acquisition_manifest"},
+          }
+          (root/"audit/research-source-integration-latest.json").write_text(
+              json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8"
+          )
+          print(json.dumps(report,ensure_ascii=False,indent=2))
+          PY
+
+          for item in             "research/source-acquisition/latest.json:.cache/tbt/research-finalize/audit/source-acquisition-updated.json:Update BlinQ research source acquisition manifest"             "audit/research-source-integration-latest.json:.cache/tbt/research-finalize/audit/research-source-integration-latest.json:Verify BlinQ research source integration"
+          do
+            IFS=: read -r path file message <<< "$item"
+            encoded="$(base64 -w0 "$file")"
+            sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+            if [[ -n "$sha" ]]; then
+              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"                 -f message="$message" -f content="$encoded" -f sha="$sha" >/dev/null
+            else
+              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"                 -f message="$message" -f content="$encoded" >/dev/null
+            fi
+          done
+
+      - name: Final persisted training DB readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pandas as pd
+          from release_store import ReleaseStore
+
+          root=Path(".cache/tbt/research-finalize/readback-training")
+          required=(
+              "training_table.parquet",
+              "training_table_report.json",
+              "leakage_audit_report.json",
+              "openmeteo_pre_match_report.json",
+              "wta_crosswalk_report.json",
+              "slam_pbp_import_report.json",
+              "source_acquisition_manifest.json",
+          )
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-training-table-v1",root).download(
+              extra_names=required,required_names=required,require_bundle_manifest=True
+          )
+          frame=pd.read_parquet(root/"training_table.parquet")
+          report=json.loads((root/"training_table_report.json").read_text())
+          weather=report.get("pre_match_forecast_weather") or {}
+          if len(frame)!=int(report.get("rows") or -1):
+              raise SystemExit("Training table readback row mismatch")
+          if "pre_match_weather_known" not in frame.columns or int(weather.get("known_rows") or 0)<=0:
+              raise SystemExit("Persisted pre-match weather integration missing")
+          print(json.dumps({
+              "status":"verified",
+              "rows":len(frame),
+              "columns":len(frame.columns),
+              "pre_match_weather_known_rows":weather.get("known_rows"),
+              "wta_rank_known_both_rate":(report.get("wta_rank_history") or {}).get("known_both_rate"),
+              "atp_rank_known_both_rate":(report.get("atp_rank_history") or {}).get("known_both_rate"),
+          },indent=2))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blinq-research-source-finalize-${{ github.run_id }}
+          path: |
+            .cache/tbt/research-finalize/audit/
+            .cache/tbt/research-finalize/training/training_table_report.json
+            .cache/tbt/research-finalize/training/leakage_audit_report.json
+          if-no-files-found: warn
+          retention-days: 14
