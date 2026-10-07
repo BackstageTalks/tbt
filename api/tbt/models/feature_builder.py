@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Iterable
 
-import pandas as pd
 
 from ..data.atp_leaderboards import ATP_LEADERBOARD_FEATURE_NAMES
 from ..data.atp_rank_history import ATP_RANK_HISTORY_FEATURE_NAMES
@@ -2301,7 +2300,12 @@ class FeatureBuilder:
         matches: Iterable[
             MatchRecord
         ],
-    ) -> pd.DataFrame:
+    ) -> "pd.DataFrame":
+        # pandas is required only for offline training-frame construction.
+        # Keep the point-in-time snapshot/replay runtime importable by the
+        # lightweight Azure Functions environment.
+        import pandas as pd
+
         completed = sorted(
             (
                 match

@@ -509,6 +509,19 @@
     });
     return apiWithSession(`/api/v1/match-intelligence?${params.toString()}`);
   }
+  async function comparatorPlayers(query, tour = 'atp') {
+    const params = new URLSearchParams({
+      q: String(query || '').slice(0, 80),
+      tour: String(tour || 'atp').toLowerCase(),
+    });
+    return apiWithSession(`/api/v1/comparator/players?${params.toString()}`);
+  }
+  async function comparatorCompare(payload) {
+    return apiWithSession('/api/v1/comparator/compare', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
   async function projectGroups() {
     return apiWithSession('/api/v1/project-groups');
   }
@@ -659,7 +672,7 @@
     adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
     adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult,
     adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
-    runtimeUiConfig, contentNews,
+    runtimeUiConfig, contentNews, comparatorPlayers, comparatorCompare,
     bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
     sessionStorageKeys, sessionEpochKey,
   };

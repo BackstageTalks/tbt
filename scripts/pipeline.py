@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import math
 import os
@@ -28,6 +29,7 @@ from tbt.providers.rapidapi import RapidTennisClient
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.statistics import NoSupportedStatisticsError, parse_statistics
 from tbt.services.engine import predict, reconcile_ledger, serving_feed
+from tbt.services.comparator import build_serving_artifact
 from tbt.services.publication import (
     validate_market_publication_candidate,
     restore_published_market_snapshots,
@@ -568,7 +570,7 @@ def _publish_predictions(
     *, odds_report=None, ace_picks=None, ace_report=None,
     sg_picks=None, sg_report=None, doubles_picks=None, doubles_report=None,
     doubles_matches=None, doubles_upcoming=None, prior_feed=None, prior_snapshot=None,
-    settlement_matches=None,
+    settlement_matches=None, comparator_artifact=None,
     betting_day_start_hour=6, morning_refresh=False,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
@@ -663,11 +665,20 @@ def _publish_predictions(
     write_json(store.directory / "ledger.json", records)
     write_json(store.directory / "feed.json", feed)
     write_json(store.directory / "daily_offer_snapshot.json", snapshot)
-    store.upload_bundle([
+    bundle = [
         store.directory / "ledger.json",
         store.directory / "feed.json",
         store.directory / "daily_offer_snapshot.json",
-    ])
+    ]
+    if isinstance(comparator_artifact, dict):
+        comparator_path = store.directory / "comparator.json.gz"
+        with gzip.open(comparator_path, "wt", encoding="utf-8", compresslevel=6) as handle:
+            json.dump(clean(comparator_artifact), handle, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        bundle.append(comparator_path)
+    store.upload_bundle(
+        bundle,
+        remove_names=("comparator.json.gz",) if not isinstance(comparator_artifact, dict) else (),
+    )
     return feed
 
 
@@ -1222,11 +1233,40 @@ def main():
         # BEFORE evaluating their projection models. Match Winner continues to
         # use its independent qualification rules and shares cached payloads.
         prediction_now = datetime.now(timezone.utc)
-        predictions = predict(
+        predictions, prediction_context = predict(
             model, matches, upcoming, now=prediction_now,
             atp_leaderboards=atp_leaderboards,
             wta_season_stats=wta_season_stats,
+            return_context=True,
         )
+        comparator_artifact = None
+        try:
+            comparator_artifact = build_serving_artifact(
+                model,
+                matches,
+                now=prediction_now,
+                atp_leaderboards=atp_leaderboards,
+                wta_season_stats=wta_season_stats,
+                builder=prediction_context["builder"],
+                cutoff=prediction_context["cutoff"],
+                replay_history=prediction_context["replay_history"],
+            )
+            print(json.dumps({
+                "comparator_artifact": {
+                    "status": "ready",
+                    "model_version": comparator_artifact["model"]["model_version"],
+                    "players": comparator_artifact["source"]["players"],
+                    "canonical_matches_replayed": comparator_artifact["source"]["canonical_matches_replayed"],
+                    "provider_requests_per_user_compare": 0,
+                }
+            }, ensure_ascii=False), flush=True)
+        except Exception as exc:
+            # Comparator is an isolated read-only product surface. A failure must
+            # not take down the already-governed prediction publication path.
+            print(json.dumps({
+                "warning": "comparator_artifact_unavailable",
+                "detail": str(exc)[:500],
+            }, ensure_ascii=False), flush=True)
 
         # Score the exact same pre-match fixtures with the private challenger.
         # Only the first snapshot for a model-pair/fixture is retained. Results
@@ -1600,6 +1640,7 @@ def main():
         doubles_matches=doubles_completed, doubles_upcoming=doubles_upcoming,
         prior_feed=prior_feed, prior_snapshot=prior_snapshot,
         settlement_matches=settlement_history,
+        comparator_artifact=comparator_artifact,
         betting_day_start_hour=args.betting_day_start_hour,
         morning_refresh=args.morning_refresh,
     )
@@ -1623,6 +1664,22 @@ def main():
         "odds": odds_report or {},
         "settled": len(feed["results"]),
         "model": model.version,
+        "comparator": {
+            "available": isinstance(comparator_artifact, dict),
+            "model_version": (
+                (comparator_artifact.get("model") or {}).get("model_version")
+                if isinstance(comparator_artifact, dict) else None
+            ),
+            "players": (
+                (comparator_artifact.get("source") or {}).get("players", 0)
+                if isinstance(comparator_artifact, dict) else 0
+            ),
+            "active_window_days": (
+                (comparator_artifact.get("source") or {}).get("active_window_days")
+                if isinstance(comparator_artifact, dict) else None
+            ),
+            "provider_requests_per_user_compare": 0,
+        },
         "shadow": {
             "enabled": shadow_enabled,
             "challenger_model": challenger_version or None,

@@ -103,6 +103,42 @@ class WTASeasonPriors:
                 self._player_key_by_initial[initial_key] = canonical
             self._by_key[(season, canonical)] = row
 
+
+    def export_state(self) -> dict:
+        return {
+            "schema": 1,
+            "full": dict(self._player_key_by_full),
+            "initial": dict(self._player_key_by_initial),
+            "rows": [
+                {"season": season, "player_key": player_key, "row": row}
+                for (season, player_key), row in sorted(self._by_key.items())
+            ],
+        }
+
+    @classmethod
+    def from_state(cls, payload: dict | None) -> "WTASeasonPriors":
+        obj = cls([])
+        if not isinstance(payload, dict) or int(payload.get("schema") or 0) != 1:
+            return obj
+        obj._player_key_by_full = {
+            str(k): str(v) for k, v in (payload.get("full") or {}).items()
+        }
+        obj._player_key_by_initial = {
+            str(k): str(v) for k, v in (payload.get("initial") or {}).items()
+        }
+        obj._by_key = {}
+        for item in payload.get("rows") or []:
+            if not isinstance(item, dict) or not isinstance(item.get("row"), dict):
+                continue
+            try:
+                season = int(item.get("season"))
+            except (TypeError, ValueError):
+                continue
+            player_key = str(item.get("player_key") or "")
+            if player_key:
+                obj._by_key[(season, player_key)] = dict(item["row"])
+        return obj
+
     @classmethod
     def from_csv(cls, path: str | Path) -> "WTASeasonPriors":
         with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:

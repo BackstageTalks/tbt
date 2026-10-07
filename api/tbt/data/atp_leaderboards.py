@@ -123,6 +123,51 @@ class ATPLeaderboardPriors:
                 self._player_key_by_initial[initial_key] = canonical
             self._by_key[(period, surface, board, canonical)] = row
 
+
+    def export_state(self) -> dict:
+        return {
+            "schema": 1,
+            "full": dict(self._player_key_by_full),
+            "initial": dict(self._player_key_by_initial),
+            "rows": [
+                {
+                    "period": period,
+                    "surface": surface,
+                    "board": board,
+                    "player_key": player_key,
+                    "row": row,
+                }
+                for (period, surface, board, player_key), row in sorted(self._by_key.items())
+            ],
+        }
+
+    @classmethod
+    def from_state(cls, payload: dict | None) -> "ATPLeaderboardPriors":
+        obj = cls([])
+        if not isinstance(payload, dict) or int(payload.get("schema") or 0) != 1:
+            return obj
+        obj._player_key_by_full = {
+            str(k): str(v) for k, v in (payload.get("full") or {}).items()
+        }
+        obj._player_key_by_initial = {
+            str(k): str(v) for k, v in (payload.get("initial") or {}).items()
+        }
+        obj._full_unique = set(obj._player_key_by_full)
+        obj._initial_unique = set(obj._player_key_by_initial)
+        obj._by_key = {}
+        for item in payload.get("rows") or []:
+            if not isinstance(item, dict) or not isinstance(item.get("row"), dict):
+                continue
+            key = (
+                str(item.get("period") or ""),
+                _surface_key(item.get("surface")),
+                str(item.get("board") or ""),
+                str(item.get("player_key") or ""),
+            )
+            if all(key):
+                obj._by_key[key] = dict(item["row"])
+        return obj
+
     @classmethod
     def from_csv(cls, path: str | Path) -> "ATPLeaderboardPriors":
         with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:
