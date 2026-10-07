@@ -1262,7 +1262,7 @@ def select_market_sections(
                 "max_selected": int(top200_limit),
                 "force_fill": False,
                 "assignment_priority": 1,
-                "sort": "probability_desc_then_data_depth_then_sample_depth",
+                "sort": "75pct_probability_percentile_25pct_odds_percentile",
             },
             "current_outputs": (["match_winner"] + (["doubles_match_winner"] if doubles_picks else []) + (["aces_projection", "double_faults_projection"] if ace_picks else []) + (["sets_projection", "games_projection"] if sg_picks else [])),
             "pending_outputs": ["aces_odds", "double_faults_odds", "sets_odds", "games_odds"],
