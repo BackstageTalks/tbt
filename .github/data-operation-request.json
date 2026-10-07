@@ -1,17 +1,13 @@
 {
   "schema": 1,
-  "mode": "statistics",
+  "mode": "comparator-build",
   "promote": false,
-  "purpose": "Use confirmed remaining provider-day headroom before the 2026-10-07 reset. Statistics-only. Require RapidAPI remaining-quota header and stop with 1500 requests remaining. No model promotion or current prediction mutation.",
+  "purpose": "Build and persist the Match Comparator serving artifact from canonical history, the production champion and verified priors only. Zero provider/API requests. Then deploy the current verified prediction generation with the comparator artifact.",
   "requested_on": "2026-10-07",
-  "requested_at_utc": "2026-10-07T15:52:00Z",
-  "max_requests": 10000,
-  "start": "2022-01-01",
-  "end": "2026-10-06",
-  "training_scope": "pre_reset_provider_header_guarded_statistics_closeout",
-  "historical_match_winner_odds_as_model_feature": false,
-  "pre_reset_provider_header_override": true,
-  "provider_request_reserve": 1500,
-  "override_valid_before_utc": "2026-10-07T17:09:00Z",
-  "operator_confirmed_provider_usage_percent": 34.05
+  "requested_at_utc": "2026-10-07T17:55:00Z",
+  "max_requests": 1,
+  "start": "",
+  "end": "",
+  "training_scope": "comparator_serving_artifact_only",
+  "historical_match_winner_odds_as_model_feature": false
 }
