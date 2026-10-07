@@ -501,6 +501,18 @@ class RapidTennisClient:
         raise ProviderError("Unrecognised live events response")
 
 
+    def events_with_odds_for_status_day(self, day: date) -> Any:
+        """All provider tennis events for one date, used for exact status settlement.
+
+        One daily response can resolve many published picks by exact event ID,
+        avoiding fragile player-near windows. Availability remains plan/provider
+        dependent, so callers must keep their existing fallback path.
+        """
+        return self._get(
+            f"/api/tennis/events/odds/{day.day}/{day.month}/{day.year}",
+            enrichment=True,
+        )
+
     def event_statistics(self, event_id: str | int) -> Any:
         """Post-match event statistics; coverage is provider/event dependent."""
         return self._get(

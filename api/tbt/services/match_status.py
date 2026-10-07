@@ -714,7 +714,9 @@ def scan_match_statuses(
         known_history_404 and int(prior.get("successful_history") or 0) == 0
     )
     near_method = getattr(provider, "near_player_matches_for_status", None)
+    daily_method = getattr(provider, "events_with_odds_for_status_day", None)
     near_cache: dict[str, Any] = {}
+    daily_cache: dict[str, Any] = {}
     max_near_checks = max(0, min(30, int(max_near_checks)))
 
     provider_errors: dict[str, int] = {}
@@ -742,6 +744,7 @@ def scan_match_statuses(
 
     checked = skipped_live = successful_history = matched_events = 0
     newly_resolved = consecutive_errors = near_attempts = unmatched = 0
+    daily_attempts = daily_matches = 0
     next_due_id = ""
     settled_events: dict[str, dict[str, str]] = {}
     max_checks = priority_limit
@@ -790,7 +793,7 @@ def scan_match_statuses(
     runtime_limited = False
     if budget_paused and ordered:
         next_due_id = ordered[0][1]
-    for position, (_, eid, row) in enumerate(ordered):
+    for position, (scheduled, eid, row) in enumerate(ordered):
         if budget_paused:
             break
         if eid in statuses or eid in live_by_id:
@@ -831,6 +834,57 @@ def scan_match_statuses(
             pending[eid]["c"] = now.isoformat()
         payload = None
         near_used = False
+
+        # Prefer one exact daily event listing over two player-near calls.
+        # A single cached response can settle every pick from the same date.
+        event = None
+        if callable(daily_method):
+            day_key = scheduled.date().isoformat()
+            try:
+                if day_key not in daily_cache:
+                    daily_attempts += 1
+                    nominal_requests += 1
+                    daily_cache[day_key] = daily_method(scheduled.date())
+                daily_payload = daily_cache.get(day_key)
+                event = next(
+                    (candidate for candidate in _provider_rows(daily_payload)
+                     if _provider_event_id(candidate) == eid),
+                    None,
+                )
+                if event is not None:
+                    daily_matches += 1
+                    successful_history += 1
+            except Exception as exc:
+                # This route is an optimization/fallback source, not a reason to
+                # degrade the worker. Quota exhaustion remains authoritative.
+                if type(exc).__name__ == "SharedBudgetExhausted":
+                    budget_paused = True
+                    checked = max(0, checked - 1)
+                    if eid in pending:
+                        pending[eid]["c"] = previous_checked_at
+                    next_due_id = eid
+                    break
+                if type(exc).__name__ == "RequestBudgetExceeded":
+                    next_due_id = eid
+                    break
+                daily_cache[day_key] = None
+
+        if event is not None:
+            consecutive_errors = 0
+            matched_events += 1
+            result = classify_finished_event(row, event, checked_at=now)
+            if result:
+                statuses[eid] = result
+                pending.pop(eid, None)
+                newly_resolved += 1
+                settled_events[eid] = {
+                    "event_id": eid,
+                    "match_status": str(result.get("status") or ""),
+                    "second_set_status": _second_set_outcome(row, event),
+                    "checked_at": now.isoformat(),
+                }
+                continue
+
         try:
             if prefer_near:
                 if player_id in near_cache:
@@ -1008,6 +1062,8 @@ def scan_match_statuses(
         "degraded": degraded,
         "preferred_route": "near" if prefer_near else "history",
         "near_attempts": near_attempts,
+        "daily_attempts": daily_attempts,
+        "daily_matches": daily_matches,
         "unmatched": unmatched,
         "next_due_id": next_due_id if len(due) > 1 else "",
         "runtime_limited": runtime_limited,
