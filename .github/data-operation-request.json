@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "mode": "statistics",
+  "mode": "deploy-current",
   "promote": false,
-  "purpose": "Continue the remaining modern serve/return statistics gap under the deployed hard quota policy: maximum 1000 requests per run, 2500 history requests per provider day, and 90% global provider hard-stop. Do not promote a model or mutate current predictions.",
-  "requested_on": "2026-10-06",
-  "requested_at_utc": "2026-10-06T17:26:30Z",
-  "max_requests": 1000,
-  "start": "2022-01-01",
-  "end": "2025-12-31",
-  "training_scope": "final_targeted_modern_statistics_closeout_no_model_promotion",
+  "purpose": "Publish the already-generated immutable prediction candidate after the full refresh benchmark completed successfully but presentation metadata upload hit a transient GitHub HTTP 500. No model promotion and no Tennis provider refresh.",
+  "requested_on": "2026-10-07",
+  "requested_at_utc": "2026-10-07T15:15:00Z",
+  "max_requests": 1,
+  "start": "",
+  "end": "",
+  "training_scope": "deploy_existing_current_prediction_candidate_only",
   "historical_match_winner_odds_as_model_feature": false
 }
