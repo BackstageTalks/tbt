@@ -4405,6 +4405,9 @@
       'LIVE WORKER':d.live_worker&&d.live_worker.configured
         ? 'Token v Azure je nastavený. Over externý cron, zhodný GitHub Secret a posledný beh LIVE Radar.'
         : 'Nastav rovnaký BLINQ_LIVE_WORKER_TOKEN v Azure a GitHub Actions Secrets. Spúšťanie plánuje externý cron.',
+      'MATCH STATUS':d.match_status_worker&&d.match_status_worker.configured
+        ? 'Over externý 30-minútový cron, posledný heartbeat a prípadné provider/budget chyby.'
+        : 'Match Status používa rovnaký BLINQ_LIVE_WORKER_TOKEN; bez neho sa bezpečne nespustí.',
       'ACCOUNT CHECK':d.account_inactivity&&d.account_inactivity.worker&&d.account_inactivity.worker.configured
         ? 'Over externý denný cron a posledný beh kontroly účtov.'
         : 'Nastav zhodný BLINQ_ACCOUNT_WORKER_TOKEN v Azure a GitHub Actions Secrets.',
@@ -4438,15 +4441,17 @@
       const error=state.adminDiagnostics;
       return '<section class="admin-ux-section"><div class="admin-health-empty is-error" role="alert"><strong>Diagnostiku sa nepodarilo načítať</strong><p>'+escapeHtml(error.error||'Neznáma chyba')+(error.status?' · HTTP '+escapeHtml(error.status):'')+'</p><button class="btn btn-primary" type="button" data-admin-action="diagnostics">Skúsiť znova</button></div></section>';
     }
-    const d=state.adminDiagnostics||{},feed=d.feed||{},provider=d.provider||{},worker=d.live_worker||{},accountHealth=d.account_inactivity||{},accountWorker=accountHealth.worker||{},smtp=accountHealth.smtp||{},accountPolicy=accountHealth.policy||{},ops=d.ops||{},counts=ops.counts||{};
+    const d=state.adminDiagnostics||{},feed=d.feed||{},provider=d.provider||{},worker=d.live_worker||{},matchWorker=d.match_status_worker||{},accountHealth=d.account_inactivity||{},accountWorker=accountHealth.worker||{},smtp=accountHealth.smtp||{},accountPolicy=accountHealth.policy||{},ops=d.ops||{},counts=ops.counts||{};
     const storage=d.storage||{},storageServices=storage.services||{},services=d.services||{},assets=d.assets||{};
     const playerImages=assets.player_images||{},tournamentLogos=assets.tournament_logos||{},marketOdds=assets.market_odds||{};
     const requiredOdds=marketOdds.required||{},projectionOdds=marketOdds.projections||{};
     const budget=d.api_budget||{},budgetAvailable=budget.available===true;
     const fmtBudget=value=>Number(value||0).toLocaleString('sk-SK');
-    const liveSpent=Number(budget.spent?.live||0),liveLeft=Number(budget.remaining?.live||0);
+    const limits=budget.purpose_limits||{};
+    const liveSpent=Number(budget.spent?.live||0),liveLeft=Number(budget.remaining?.live||0),liveLimit=Number(limits.live||0);
+    const resetText=budget.next_reset_utc?new Date(budget.next_reset_utc).toLocaleString('sk-SK',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
     const budgetPanel=budgetAvailable
-      ? `<div class="admin-form-section" aria-label="Tennis RapidAPI rozpočet"><div class="admin-form-section-title"><strong>API ROZPOČET · LIVE RADAR</strong><span>Spoločný bezpečnostný register za posledných 24 hodín. Nezahŕňa požiadavky mimo BlinQ ani pred aktiváciou registra.</span></div><div class="admin-system-details"><div><small>LIVE využité</small><strong>${fmtBudget(liveSpent)} / 2 500</strong></div><div><small>LIVE zostáva</small><strong>${fmtBudget(liveLeft)}</strong></div><div><small>Spolu rezervované</small><strong>${fmtBudget(budget.global_spent)} / ${fmtBudget(budget.global_limit)}</strong></div><div><small>Spolu zostáva</small><strong>${fmtBudget(budget.global_remaining)}</strong></div><div><small>Match / Ranný / História</small><strong>${fmtBudget(budget.spent?.match)} / ${fmtBudget(budget.spent?.refresh)} / ${fmtBudget(budget.spent?.history)}</strong></div></div></div>`
+      ? `<div class="admin-form-section" aria-label="Tennis RapidAPI rozpočet"><div class="admin-form-section-title"><strong>API ROZPOČET · PROVIDER DEŇ</strong><span>Spoločný fail-closed register do najbližšieho provider resetu. Nezahŕňa požiadavky mimo BlinQ.</span></div><div class="admin-system-details"><div><small>LIVE využité</small><strong>${fmtBudget(liveSpent)} / ${fmtBudget(liveLimit)}</strong></div><div><small>LIVE zostáva</small><strong>${fmtBudget(liveLeft)}</strong></div><div><small>Spolu rezervované</small><strong>${fmtBudget(budget.global_spent)} / ${fmtBudget(budget.global_limit)}</strong></div><div><small>Provider rezerva</small><strong>${fmtBudget(budget.reserved_provider_headroom)}</strong></div><div><small>Match / Refresh / História</small><strong>${fmtBudget(budget.spent?.match)} / ${fmtBudget(budget.spent?.refresh)} / ${fmtBudget(budget.spent?.history)}</strong></div><div><small>Reset</small><strong>${escapeHtml(resetText)}</strong></div></div></div>`
       : `<div class="admin-form-section" aria-label="Tennis RapidAPI rozpočet"><div class="admin-form-section-title"><strong>API ROZPOČET</strong><span>Údaje o spoločnej API kvóte nie sú dostupné. LIVE cron nezapínaj, kým sa nepotvrdí register.</span></div></div>`;
     const storageDetail=d.content_storage_ready?`${d.admin_storage||'storage'}${storage.azure_connection_source?' · '+storage.azure_connection_source:''}`:(storage.recommended_setting?`SET ${storage.recommended_setting}`:'unavailable');
     const mediaDetail=item=>`${Number(item.deployed_assets??item.provider_or_proxy_refs??0)}/${Number(item.total||0)} deployed · ${Number(item.fallback_needed||0)} fallback`;
@@ -4459,7 +4464,8 @@
       ['BETTING ODDS',Boolean(requiredOdds.ok),oddsDetail(requiredOdds)],
       ['INFO STORAGE',Boolean(services.info_storage),services.info_storage?'ONLINE':'NEED STORAGE'],
       ['LIVE DATA',Boolean(services.live_data),services.live_data?'FRESH':(feed.ready?'STALE':'NO FEED')],
-      ['LIVE WORKER',Boolean(worker.healthy),worker.healthy?`AUTO · ${Math.max(0,Number(worker.age_seconds)||0)}s`:(worker.configured?'STALE':'TOKEN MISSING')],
+      ['LIVE WORKER',Boolean(worker.healthy),worker.healthy?`EXT · ${Math.max(0,Number(worker.age_seconds)||0)}s · 5m cadence`:(worker.configured?'STALE':'TOKEN MISSING')],
+      ['MATCH STATUS',Boolean(matchWorker.healthy),matchWorker.healthy?`EXT · ${Math.max(0,Number(matchWorker.age_seconds)||0)}s · 30m cadence`:(matchWorker.configured?'STALE':'TOKEN MISSING')],
       ['ACCOUNT CHECK',accountPolicy.enabled===false||Boolean(accountWorker.healthy),accountPolicy.enabled===false?'OFF':(accountWorker.healthy?`DAILY · ${Number(accountWorker.inactive||0)} inactive · ${Number(accountWorker.subscription_7||0)}/${Number(accountWorker.subscription_3||0)} expiry mail`:(accountWorker.configured?'STALE':'TOKEN MISSING'))],
       ['EMAIL / SMTP',accountPolicy.enabled===false||Boolean(smtp.configured),accountPolicy.enabled===false?'NOT NEEDED':(smtp.configured?(smtp.admin_recipient_configured?`READY · ${Number(smtp.admin_recipient_count||1)} admin`:'ADMIN EMAIL MISSING'):'NOT CONFIGURED')],
       ['DATA PROVIDER',Boolean(provider.configured),provider.configured?'CONFIGURED':'MISSING KEY'],
