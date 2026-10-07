@@ -1,0 +1,282 @@
+name: Integrate Wimbledon 1992-1995 point data
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/wimbledon-1992-1995-link-request.json"
+      - ".github/workflows/wimbledon-1992-1995-link.yml"
+      - "scripts/link_wimbledon_1992_1995_pbp.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      RESEARCH_RELEASE: tbt-research-sources-v1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and test historical linker
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest openpyxl
+          python -m pytest tests/test_wimbledon_1992_1995_pbp.py -q
+          python -m compileall -q scripts/link_wimbledon_1992_1995_pbp.py
+
+      - name: Verify private destination and source provenance
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+          rm -rf .cache/tbt/wimbledon-link
+          mkdir -p .cache/tbt/wimbledon-link/{source,link,dryrun,import,readback}
+          gh release download "$RESEARCH_RELEASE" -R "$TBT_DATA_REPOSITORY"             -p wimbledon-1992-1995-pbp-ccby4.xlsx             -D .cache/tbt/wimbledon-link/source --clobber
+          gh api -H "Accept: application/vnd.github.raw"             "repos/$TBT_DATA_REPOSITORY/contents/audit/wimbledon-1992-1995-pbp-source-latest.json?ref=main"             > .cache/tbt/wimbledon-link/source/source-audit.json
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          p=Path(".cache/tbt/wimbledon-link/source/wimbledon-1992-1995-pbp-ccby4.xlsx")
+          a=json.loads(Path(".cache/tbt/wimbledon-link/source/source-audit.json").read_text())
+          expected=(a.get("files") or [{}])[0].get("sha256")
+          actual=hashlib.sha256(p.read_bytes()).hexdigest()
+          if a.get("license")!="CC BY 4.0": raise SystemExit("source license marker mismatch")
+          if not expected or actual!=expected: raise SystemExit(f"source hash mismatch {actual} != {expected}")
+          if int(a.get("tabular_rows_total") or 0)<80000: raise SystemExit("source audit unexpectedly small")
+          print(json.dumps({"sha256":actual,"rows":a.get("tabular_rows_total"),"tables":a.get("table_count")},indent=2))
+          PY
+
+      - name: Download verified canonical history
+        run: |
+          set -euo pipefail
+          python scripts/download_production_preflight_inputs.py
+          cp -a .cache/tbt/history .cache/tbt/wimbledon-link/history-enriched
+
+      - name: Link historical matches and derive safe stats
+        run: |
+          set -euo pipefail
+          python scripts/link_wimbledon_1992_1995_pbp.py             --workbook .cache/tbt/wimbledon-link/source/wimbledon-1992-1995-pbp-ccby4.xlsx             --history-dir .cache/tbt/wimbledon-link/history-enriched             --out-dir .cache/tbt/wimbledon-link/link
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/wimbledon-link/link/report.json").read_text())
+          c=r.get("counts") or {}
+          safety=r.get("identity_safety") or {}
+          if r.get("license")!="CC BY 4.0": raise SystemExit("license marker lost")
+          if safety.get("quarantined_rows"): raise SystemExit("canonical identity quarantine non-empty")
+          if int(c.get("linked_matches") or 0)<100:
+              raise SystemExit(f"too few safe historical links: {c}")
+          if int(c.get("linked_point_rows") or 0)<10000:
+              raise SystemExit(f"too few safely linked point rows: {c}")
+          if r.get("production_mutated") is not False or r.get("model_promoted") is not False:
+              raise SystemExit("linker isolation violation")
+          print(json.dumps({"counts":c,"by_tour":r.get("by_tour"),"by_year":r.get("by_year")},indent=2))
+          PY
+
+      - name: Dry-run strict canonical serve-return importer
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/wimbledon-link/link/serve-return-stage.jsonl             --history-dir .cache/tbt/wimbledon-link/history-enriched             --out-dir .cache/tbt/wimbledon-link/dryrun
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/wimbledon-link/dryrun/report.json").read_text())
+          c=r.get("counts") or {}
+          forbidden={
+            "identity_missing":int(c.get("identity_missing") or 0),
+            "identity_changed":int(c.get("identity_changed") or 0),
+            "invalid_stats":int(c.get("invalid_stats") or 0),
+          }
+          if any(forbidden.values()): raise SystemExit(f"strict import safety failure: {forbidden}")
+          # Existing conflicting stats are intentionally fail-closed and skipped.
+          stage=int(r.get("stage_rows") or 0)
+          accounted=sum(int(c.get(k) or 0) for k in ("updated","already_present","stat_conflicts","no_stats"))
+          if accounted!=stage:
+              raise SystemExit(f"stage accounting mismatch {accounted} != {stage}: {c}")
+          if int(c.get("updated") or 0)<=0:
+              raise SystemExit(f"no net-new safe stats: {c}")
+          print(json.dumps({"stage":stage,"counts":c,"quality_added":r.get("quality_ready_added")},indent=2))
+          PY
+
+      - name: Build enriched local canonical partitions
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/wimbledon-link/link/serve-return-stage.jsonl             --history-dir .cache/tbt/wimbledon-link/history-enriched             --out-dir .cache/tbt/wimbledon-link/import             --write-partitions             --write-history-dir .cache/tbt/wimbledon-link/history-enriched
+
+      - name: Validate enriched history and publication set
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          root=Path(".cache/tbt/wimbledon-link")
+          imp=json.loads((root/"import/report.json").read_text())
+          dry=json.loads((root/"dryrun/report.json").read_text())
+          if imp != dry:
+              # write mode may differ only in local_partitions_written
+              a=dict(imp); b=dict(dry)
+              a.pop("local_partitions_written",None); b.pop("local_partitions_written",None)
+              if a!=b: raise SystemExit("dry-run/write report mismatch")
+          matches=load_partitions(root/"history-enriched")
+          safe,safety=sanitize_history_identities(matches)
+          if safety.get("quarantined_rows") or len(safe)!=len(matches):
+              raise SystemExit("enriched identity safety failed")
+          years=sorted(int(y) for y in imp.get("changed_years") or [])
+          if not years: raise SystemExit("no changed years")
+          if any(year not in {1992,1993,1994,1995} for year in years):
+              raise SystemExit(f"unexpected changed years: {years}")
+          Path(root/"validated.json").write_text(json.dumps({
+              "canonical_rows":len(safe),
+              "changed_years":years,
+              "identity_safety":safety,
+          },indent=2))
+          print(json.dumps({"canonical_rows":len(safe),"changed_years":years},indent=2))
+          PY
+
+      - name: Publish only changed canonical year partitions
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+
+          root=Path(".cache/tbt/wimbledon-link/history-enriched")
+          report=json.loads(Path(".cache/tbt/wimbledon-link/import/report.json").read_text())
+          years=sorted({int(y) for y in report.get("changed_years") or []})
+          paths=[root/f"history-{year:04d}.parquet" for year in years]+[root/"history_manifest.json"]
+          if any(not p.is_file() or p.stat().st_size<=0 for p in paths):
+              raise SystemExit("missing enriched canonical publication asset")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).upload_bundle(paths)
+          print("published",years)
+          PY
+
+      - name: Read back persisted canonical history and verify exact new stats
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          root=Path(".cache/tbt/wimbledon-link")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root/"readback").download(
+              require_bundle_manifest=True
+          )
+          matches=load_partitions(root/"readback")
+          safe,safety=sanitize_history_identities(matches)
+          if safety.get("quarantined_rows") or len(safe)!=len(matches):
+              raise SystemExit("persisted identity safety failed")
+          before=json.loads((root/"validated.json").read_text())
+          if len(safe)!=int(before["canonical_rows"]):
+              raise SystemExit(f"canonical row count changed: {len(safe)} != {before['canonical_rows']}")
+
+          by_id={str(m.match_id):m for m in safe}
+          conflict_ids=set()
+          review=root/"import/review.jsonl"
+          if review.is_file():
+              for line in review.read_text().splitlines():
+                  if not line.strip(): continue
+                  row=json.loads(line)
+                  if row.get("reason")=="stat_conflicts":
+                      conflict_ids.add(str(row.get("match_id") or ""))
+
+          expected=0
+          verified=0
+          with (root/"link/serve-return-stage.jsonl").open() as handle:
+              for line in handle:
+                  row=json.loads(line)
+                  mid=str(row["match_id"])
+                  if mid in conflict_ids: continue
+                  match=by_id.get(mid)
+                  if match is None: raise SystemExit(f"persisted match missing: {mid}")
+                  for key,value in (row.get("incoming_stats") or {}).items():
+                      expected+=1
+                      actual=(match.stats or {}).get(key)
+                      if actual is None or abs(float(actual)-float(value))>1e-6:
+                          raise SystemExit(f"persisted stat mismatch {mid} {key}: {actual} != {value}")
+                      verified+=1
+          summary={
+              "status":"verified",
+              "canonical_rows":len(safe),
+              "persisted_stats_expected":expected,
+              "persisted_stats_verified":verified,
+              "skipped_conflict_matches":len(conflict_ids),
+              "identity_safety":safety,
+          }
+          (root/"readback-verification.json").write_text(json.dumps(summary,indent=2))
+          print(json.dumps(summary,indent=2))
+          PY
+
+      - name: Publish private PBP sidecar and audit
+        run: |
+          set -euo pipefail
+          gh release upload "$RESEARCH_RELEASE" -R "$TBT_DATA_REPOSITORY" --clobber             .cache/tbt/wimbledon-link/link/wimbledon-1992-1995-pbp-sidecar.jsonl.gz
+          python - <<'PY'
+          import json
+          from datetime import datetime,timezone
+          from pathlib import Path
+          root=Path(".cache/tbt/wimbledon-link")
+          audit={
+            "schema":1,
+            "status":"verified",
+            "generated_at_utc":datetime.now(timezone.utc).isoformat(),
+            "source":"klaassen_magnus_wimbledon_1992_1995",
+            "doi":"10.21942/uva.21983555",
+            "version":3,
+            "license":"CC BY 4.0",
+            "link_report":json.loads((root/"link/report.json").read_text()),
+            "dryrun_report":json.loads((root/"dryrun/report.json").read_text()),
+            "import_report":json.loads((root/"import/report.json").read_text()),
+            "readback":json.loads((root/"readback-verification.json").read_text()),
+            "production_mutated":bool(json.loads((root/"import/report.json").read_text()).get("changed_years")),
+            "model_promoted":False,
+            "raw_point_sidecar":"private release tbt-research-sources-v1/wimbledon-1992-1995-pbp-sidecar.jsonl.gz",
+            "feature_policy":"historical post-match stats only; chronological feature builder may use them only after each match completes",
+          }
+          (root/"audit.json").write_text(json.dumps(audit,ensure_ascii=False,indent=2),encoding="utf-8")
+          PY
+          path="audit/wimbledon-1992-1995-pbp-integration-latest.json"
+          encoded="$(base64 -w0 .cache/tbt/wimbledon-link/audit.json)"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Verify Wimbledon 1992-1995 PBP integration"               -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Verify Wimbledon 1992-1995 PBP integration"               -f content="$encoded" >/dev/null
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wimbledon-1992-1995-link-${{ github.run_id }}
+          path: |
+            .cache/tbt/wimbledon-link/link/report.json
+            .cache/tbt/wimbledon-link/link/review.jsonl
+            .cache/tbt/wimbledon-link/dryrun/report.json
+            .cache/tbt/wimbledon-link/import/report.json
+            .cache/tbt/wimbledon-link/readback-verification.json
+          if-no-files-found: warn
+          retention-days: 14
