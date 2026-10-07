@@ -495,6 +495,19 @@ def _stable_order(rows: list, *, access: dict, section: str, day: str | None = N
     return sorted(list(rows or []), key=score)
 
 
+def _stable_random_pool(rows: list, *, access: dict, section: str) -> list:
+    """Return the entitlement sampling window for one section.
+
+    ROOKIE/FREE PRIME sampling is constrained to the displayed top five.
+    Other stable-random surfaces keep the existing top-10 preview window.
+    """
+    canonical = "daily" if section == "top_daily" else str(section or "")
+    plan = effective_plan(access or {})
+    limit = 5 if plan == "rookie" and canonical == "prime" else 10
+    source = list(rows or [])
+    return source[:min(len(source), limit)]
+
+
 def _section_allocation(access: dict, section: str):
     allocations=access.get("_daily_allocations") if isinstance(access,dict) else None
     if not isinstance(allocations,dict):
@@ -548,15 +561,22 @@ def _select_authorized_rows(
     if selection_mode == "stable_random" and not all_visible:
         allocated=_section_allocation(access, section)
         if allocated is not None:
-            # Durable per-user/day allocation is authoritative. If a selected
-            # event later starts/disappears, do not replace it with another pick.
+            # Durable allocation remains authoritative except when the product
+            # rule explicitly narrows ROOKIE PRIME to the ranked top five.
             allocated_keys=set(allocated[:visible_count])
+            pool=_stable_random_pool(source,access=access,section=section)
+            if effective_plan(access or {}) == "rookie" and str(section or "") == "prime":
+                pool_keys={_row_access_key(row) for row in pool}
+                allocated_keys={key for key in allocated_keys if key in pool_keys}
+                if visible_count > 0 and not allocated_keys and pool:
+                    ordered=_stable_order(pool,access=access,section=section)
+                    allocated_keys={_row_access_key(row) for row in ordered[:min(visible_count,len(pool))]}
         elif bool(access.get("_daily_allocations_fail_closed")):
             if str(access.get("plan") or "").lower() in {"rookie", "trial"} and visible_count > 0 and source:
                 # Keep the FREE sample visible during a metadata read outage.
                 # Existing known allocations above always take precedence.
                 # Identical account/day/section and offer yield the same row.
-                pool=source[:min(len(source),10)]
+                pool=_stable_random_pool(source,access=access,section=section)
                 ordered=_stable_order(pool,access=access,section=section)
                 allocated_keys={_row_access_key(row) for row in ordered[:min(visible_count,len(pool))]}
             else:
@@ -920,12 +940,18 @@ def build_daily_access_state(
         except (TypeError,ValueError):
             limit=0
 
+        rows=_source_rows_for_section(payload,canonical)
+        pool=_stable_random_pool(rows, access=access, section=canonical)
         selected=list(sections.get(canonical) or [])
+        if effective_plan(access or {}) == "rookie" and canonical == "prime":
+            pool_keys={_row_access_key(row) for row in pool}
+            migrated=[key for key in selected if key in pool_keys]
+            if migrated != selected:
+                selected=migrated
+                sections[canonical]=list(selected)
+                changed=True
         if len(selected)>=limit:
             continue
-
-        rows=_source_rows_for_section(payload,canonical)
-        pool=rows[:min(len(rows),10)]
         seed=f"{_access_identity(access)}|{day}|{canonical}"
         scored=[]
         selected_set=set(selected)
