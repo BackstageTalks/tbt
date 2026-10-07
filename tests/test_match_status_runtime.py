@@ -318,6 +318,69 @@ def test_near_fallback_checks_second_player_when_first_players_near_event_misses
     assert snapshot["unmatched"] == 0
 
 
+def test_near_cap_rotates_to_second_player_on_next_run_without_extra_calls():
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    row = _row("101", "11", (now-timedelta(hours=2)).isoformat())
+    row["player1"] = {"id": "11"}
+    row["player2"] = {"id": "22"}
+
+    unrelated = _event("999")
+    unrelated["homeTeam"] = {"id": "11"}
+    unrelated["awayTeam"] = {"id": "33"}
+    target = _event("101", winner_code=2)
+    target["homeTeam"] = {"id": "11"}
+    target["awayTeam"] = {"id": "22"}
+
+    # Simulate the production cap where one near lookup is available for one
+    # due row. The first run can only inspect player1 and persists rotation.
+    first_provider = _NearFallbackProvider({"11": unrelated, "22": target})
+    first = scan_match_statuses(
+        {"upcoming": [row]}, first_provider,
+        {"preferred_route": "near"}, now=now, max_checks=1, max_near_checks=1,
+    )
+    assert first_provider.near_calls == ["11"]
+    assert first["statuses"] == {}
+    assert first["pending"]["101"]["n"] == "2"
+
+    # The next scheduled run spends the same single near call on player2 and
+    # resolves the tracked event. No per-run API ceiling increase is required.
+    second_provider = _NearFallbackProvider({"11": unrelated, "22": target})
+    second = scan_match_statuses(
+        {"upcoming": [row]}, second_provider, first,
+        now=now+timedelta(minutes=30), max_checks=1, max_near_checks=1,
+    )
+    assert second_provider.near_calls == ["22"]
+    assert second["statuses"]["101"]["status"] == "loss"
+    assert second["newly_resolved"] == 1
+    assert second["provider_requests"] == 2  # live + one near
+
+
+def test_legacy_checked_pending_starts_with_second_player_under_tight_near_cap():
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    row = _row("101", "11", (now-timedelta(hours=2)).isoformat())
+    row["player1"] = {"id": "11"}
+    row["player2"] = {"id": "22"}
+    target = _event("101", winner_code=2)
+    target["homeTeam"] = {"id": "11"}
+    target["awayTeam"] = {"id": "22"}
+    provider = _NearFallbackProvider({"22": target})
+    previous = {
+        "preferred_route": "near",
+        "pending": {
+            "101": {
+                "t": row["scheduled_at"], "s": "11", "a": "11", "b": "22",
+                "c": (now-timedelta(minutes=30)).isoformat(), "p": "1",
+            }
+        },
+    }
+    snapshot = scan_match_statuses(
+        {"upcoming": [row]}, provider, previous,
+        now=now, max_checks=1, max_near_checks=1,
+    )
+    assert provider.near_calls == ["22"]
+    assert snapshot["statuses"]["101"]["status"] == "loss"
+
+
 def test_near_mismatched_event_is_not_scored():
     now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
     bad = _event()
@@ -1050,13 +1113,12 @@ def test_match_status_worker_uses_higher_bounded_throughput():
     )[1].split(
         '@app.route(route="v1/internal/account-inactivity-worker"', 1
     )[0]
-    assert 'BLINQ_MATCH_STATUS_REQUEST_LIMIT", "24"' in block
-    assert 'min(24, int(os.getenv("BLINQ_MATCH_STATUS_REQUEST_LIMIT"' in block
+    assert 'client.request_limit = 24' in block
     assert 'BLINQ_MATCH_STATUS_MAX_CHECKS", "20"' in block
     assert 'min(20, int(os.getenv("BLINQ_MATCH_STATUS_MAX_CHECKS"' in block
-    assert 'BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS", "20"' in block
-    assert 'min(20, int(os.getenv("BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS"' in block
+    assert 'max_near_checks=20' in block
     assert 'max_wall_seconds=22.0' in block
+    assert 'reserve_shared_api_budget("match")' in block
 
 
 def test_production_status_queue_ignores_generic_upcoming_board():
