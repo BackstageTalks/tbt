@@ -21,7 +21,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: blinq-alimoh89-preparation
+  group: blinq-alimoh89-preparation-v2
   cancel-in-progress: true
 
 jobs:
