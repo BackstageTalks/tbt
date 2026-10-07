@@ -8,7 +8,9 @@ from typing import Iterable
 
 import pandas as pd
 
+from ..data.atp_leaderboards import ATP_LEADERBOARD_FEATURE_NAMES
 from ..data.player_identity import normalize_player_name
+from ..data.wta_season_stats import WTA_SEASON_FEATURE_NAMES
 from ..models.feature_builder import FeatureBuilder, FEATURE_NAMES, stats_surface_key
 from ..models.portable_export import export_portable_model
 from ..schemas import MatchRecord
