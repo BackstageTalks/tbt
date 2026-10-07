@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from tbt.config import Settings
+from tbt.errors import ConfigurationError
 from tbt.providers import shared_budget
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
@@ -177,3 +178,25 @@ def test_remote_429_stops_before_provider_request(monkeypatch):
 
 
 RealClient = httpx.Client
+
+
+def test_batch_provider_rate_can_be_raised_to_six_rps_without_changing_default(monkeypatch):
+    monkeypatch.delenv("BLINQ_RAPIDAPI_MAX_RPS", raising=False)
+    default_client = RapidTennisClient(Settings(rapidapi_key="test"))
+    try:
+        assert default_client._min_request_interval == pytest.approx(0.66)
+    finally:
+        default_client.close()
+
+    monkeypatch.setenv("BLINQ_RAPIDAPI_MAX_RPS", "6")
+    batch_client = RapidTennisClient(Settings(rapidapi_key="test"))
+    try:
+        assert batch_client._min_request_interval == pytest.approx(1 / 6)
+    finally:
+        batch_client.close()
+
+
+def test_batch_provider_rate_rejects_values_above_six_rps(monkeypatch):
+    monkeypatch.setenv("BLINQ_RAPIDAPI_MAX_RPS", "6.1")
+    with pytest.raises(ConfigurationError):
+        RapidTennisClient(Settings(rapidapi_key="test"))
