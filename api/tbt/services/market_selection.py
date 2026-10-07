@@ -371,6 +371,47 @@ def _top200_rank_match(card: dict[str, Any], max_rank: int = TOP200_MAX_RANK) ->
     return any(rank is not None and 1 <= rank <= int(max_rank) for rank in ranks)
 
 
+def _prime_display_rank(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rank PRIME for presentation without changing the eligible radar pool."""
+    if not cards:
+        return []
+
+    def percentile(values: list[float], value: float) -> float:
+        ordered = sorted(values)
+        if len(ordered) <= 1:
+            return 1.0
+        first = ordered.index(value)
+        last = len(ordered) - 1 - ordered[::-1].index(value)
+        return ((first + last) / 2.0) / (len(ordered) - 1)
+
+    probabilities = [float(_number(card.get("probability")) or 0.0) for card in cards]
+    odds_values = [float(_number(card.get("odds")) or 0.0) for card in cards]
+    ranked = []
+    for card in cards:
+        item = deepcopy(card)
+        p = float(_number(card.get("probability")) or 0.0)
+        odds = float(_number(card.get("odds")) or 0.0)
+        probability_percentile = percentile(probabilities, p)
+        odds_percentile = percentile(odds_values, odds)
+        item["prime_display_score"] = 0.75 * probability_percentile + 0.25 * odds_percentile
+        item["prime_probability_percentile"] = probability_percentile
+        item["prime_odds_percentile"] = odds_percentile
+        ranked.append(item)
+
+    ranked.sort(
+        key=lambda card: (
+            _number(card.get("prime_display_score")) or 0.0,
+            _number(card.get("probability")) or 0.0,
+            _number(card.get("odds")) or 0.0,
+            _depth(card),
+            min(_surface_samples(card)),
+            min(_overall_samples(card)),
+        ),
+        reverse=True,
+    )
+    return ranked
+
+
 def _top_rank_key(card: dict[str, Any]) -> tuple[float, float, int, int, float]:
     """Confidence-first Top Bets ranking.
 
@@ -1144,7 +1185,7 @@ def select_market_sections(
     )
     top200 = selected.get("top200", [])
     value = selected.get("value", [])
-    prime = selected.get("prime", [])
+    prime = _prime_display_rank(selected.get("prime", []))
     top = selected.get("top_daily", [])
 
     selected_identities = [_selection_identity(card) for card in (top200 + prime + top + value)]
