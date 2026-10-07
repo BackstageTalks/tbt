@@ -362,11 +362,21 @@ def build_serving_artifact(
     now: datetime | None = None,
     atp_leaderboards=None,
     wta_season_stats=None,
+    builder: FeatureBuilder | None = None,
+    cutoff: datetime | None = None,
+    replay_history: Iterable[MatchRecord] | None = None,
 ) -> dict:
-    """Build a self-contained read-only comparator artifact for the web runtime."""
+    """Build a self-contained read-only comparator artifact for the web runtime.
+
+    The production refresh can pass the already-built prediction state so
+    canonical history is replayed only once.
+    """
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    materialized = list(history)
-    builder, cutoff, replay = build_pre_match_builder(materialized, now=now)
+    if builder is None or cutoff is None or replay_history is None:
+        materialized = list(history)
+        builder, cutoff, replay = build_pre_match_builder(materialized, now=now)
+    else:
+        replay = list(replay_history)
     directory = PlayerDirectory.from_history(replay)
 
     players = [
