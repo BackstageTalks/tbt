@@ -141,6 +141,16 @@ jobs:
           test -n "$GH_TOKEN" || { echo "No read-only data-repo token available"; exit 1; }
           timeout 100s python scripts/diagnose_comparator_snapshot.py
 
+      - name: Audit historical player merge evidence (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "Missing scoped data audit credentials"; exit 1; }
+          timeout 180s python scripts/audit_historical_player_links.py
+
       - name: Run backend tests
         env:
           PYTHONPATH: api:scripts
