@@ -1,0 +1,107 @@
+name: Final shadow model promotion
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/shadow-promotion-request.json"
+      - ".github/workflows/final-shadow-promotion.yml"
+      - "scripts/finalize_shadow_promotion.py"
+      - "tests/test_finalize_shadow_promotion.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: tbt-model-promotion
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      PYTHONPATH: api:scripts
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install model dependencies
+        run: python -m pip install -r api/requirements-train.txt
+
+      - name: Unit-test final gate
+        run: |
+          set -euo pipefail
+          python -m pytest tests/test_finalize_shadow_promotion.py -q
+
+      - name: Verify controlled request and private destination
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+          test "$(jq -r '.provider_requests' .github/shadow-promotion-request.json)" = "0"
+          test "$(jq -r '.retrain' .github/shadow-promotion-request.json)" = "false"
+          test "$(jq -r '.canonical_mutation' .github/shadow-promotion-request.json)" = "false"
+          test "$(jq -r '.promotion_policy' .github/shadow-promotion-request.json)" = "exact_shadow_tested_candidate_only"
+
+      - name: Run final same-cohort promotion gate
+        run: |
+          set -euo pipefail
+          python scripts/finalize_shadow_promotion.py             --data-repository "$TBT_DATA_REPOSITORY"             --out .cache/tbt/shadow-promotion/final_report.json
+          test -s .cache/tbt/shadow-promotion/final_report.json
+          status="$(jq -r '.status' .cache/tbt/shadow-promotion/final_report.json)"
+          case "$status" in
+            approved_and_promoted|rejected|already_production) ;;
+            *) echo "Unexpected final promotion status: $status"; exit 1 ;;
+          esac
+          test "$(jq -r '.provider_requests' .cache/tbt/shadow-promotion/final_report.json)" = "0"
+          test "$(jq -r '.retrained' .cache/tbt/shadow-promotion/final_report.json)" = "false"
+          test "$(jq -r '.canonical_mutated' .cache/tbt/shadow-promotion/final_report.json)" = "false"
+
+      - name: Persist final promotion audit
+        run: |
+          set -euo pipefail
+          path="audit/model-shadow-promotion-latest.json"
+          report=".cache/tbt/shadow-promotion/final_report.json"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          encoded="$(base64 -w0 "$report")"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Persist final shadow promotion decision run $GITHUB_RUN_ID"               -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Persist final shadow promotion decision run $GITHUB_RUN_ID"               -f content="$encoded" >/dev/null
+          fi
+
+      - name: Verify persisted decision and production readback
+        run: |
+          set -euo pipefail
+          path="audit/model-shadow-promotion-latest.json"
+          gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .content             | tr -d '\n' | base64 -d > /tmp/readback.json
+          cmp .cache/tbt/shadow-promotion/final_report.json /tmp/readback.json
+          status="$(jq -r '.status' /tmp/readback.json)"
+          if [[ "$status" == "approved_and_promoted" ]]; then
+            expected="$(jq -r '.production_version_after' /tmp/readback.json)"
+            rm -rf /tmp/model-readback
+            mkdir -p /tmp/model-readback
+            gh release download tbt-model-production-v1               -R "$TBT_DATA_REPOSITORY"               -p training_report.json -D /tmp/model-readback
+            actual="$(jq -r '.promotion_decision.candidate_version // empty' /tmp/model-readback/training_report.json)"
+            test "$actual" = "$expected"
+          fi
+
+      - name: Upload final evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-shadow-promotion-${{ github.run_id }}
+          path: .cache/tbt/shadow-promotion/final_report.json
+          if-no-files-found: error
+          retention-days: 30
