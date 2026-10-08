@@ -19,6 +19,8 @@ def test_comparator_grand_slam_defaults_are_tour_safe():
     assert "US Open" in app
     assert "String(tour||'').toLowerCase()!=='atp'" in app
     assert "state.comparator.tour==='wta'&&Number(state.comparator.bestOf)!==3" in app
+    assert "major&&s.tour==='atp'&&s.bestOfAuto" in app
+    assert "s.bestOfAuto=false;s.result=null;s.error='';refresh();" in app
 
 
 def test_comparator_autocompletes_canonical_player_names():
