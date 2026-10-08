@@ -1276,3 +1276,44 @@ def test_public_pending_is_not_carried_across_betting_day_rollover():
     assert result["pending_count"] == 0
     assert "recent-public" not in result["pending"]
     assert "stale-public" not in result["pending"]
+
+
+def test_inprogress_winner_code_must_not_finalize_match():
+    """The provider may expose winnerCode before the final whistle."""
+    live = _event(winner_code=1, status_type="inprogress", description="2nd set")
+    assert classify_finished_event(_row(), live) is None
+
+
+def test_rechecks_premature_live_terminal_snapshot():
+    """A false terminal win from a previous worker must not be sticky."""
+    now = datetime(2026, 10, 8, 13, 0, tzinfo=timezone.utc)
+    row = _row("101", "11", (now - timedelta(hours=3)).isoformat())
+    previous = {"statuses": {"101": {
+        "status": "win", "winner_id": "11",
+        "provider_status": "inprogress 2nd set",
+        "checked_at": (now-timedelta(hours=2)).isoformat(),
+    }}}
+    final = _event("101", winner_code=2, status_type="finished", description="Ended")
+    client = _Provider(live=[final])
+    snapshot = scan_match_statuses({"upcoming": [row]}, client, previous, now=now)
+    assert snapshot["newly_resolved"] == 1
+    assert snapshot["statuses"]["101"]["status"] == "loss"
+    assert snapshot["statuses"]["101"]["provider_status"] == "finished ended"
+    assert snapshot["pending_count"] == 0
+    assert client.previous_calls == []
+
+
+def test_ongoing_match_remains_pending_after_quarantining_false_terminal():
+    now = datetime(2026, 10, 8, 13, 0, tzinfo=timezone.utc)
+    row = _row("101", "11", (now - timedelta(hours=3)).isoformat())
+    previous = {"statuses": {"101": {
+        "status": "win", "winner_id": "11",
+        "provider_status": "inprogress 2nd set",
+    }}}
+    ongoing = _event("101", winner_code=1, status_type="inprogress", description="2nd set")
+    client = _Provider(live=[ongoing])
+    snapshot = scan_match_statuses({"upcoming": [row]}, client, previous, now=now)
+    assert snapshot["terminal"] == 0
+    assert snapshot["newly_resolved"] == 0
+    assert snapshot["pending_count"] == 1
+    assert snapshot["due"] == 1
