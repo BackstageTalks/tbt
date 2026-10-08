@@ -9663,3 +9663,232 @@ body#blinqPremium .admin-banner-layout-grid fieldset select{
     min-width:38px!important;width:38px!important;
   }
 }
+
+
+/* BlinQ banner studio: cohesive, readable, responsive layout (r69). */
+body#blinqPremium .admin-hero-manager{
+  --banner-studio-border:rgba(107,211,162,.20);
+  --banner-studio-fill:#071c19;
+  --banner-studio-text:#e5f5ef;
+  --banner-studio-muted:#abcac0;
+}
+body#blinqPremium .admin-hero-manager .admin-hero-preview-stage,
+body#blinqPremium .admin-hero-manager .admin-form-section{
+  border:1px solid var(--banner-studio-border)!important;
+  border-radius:17px!important;
+  box-shadow:0 12px 32px rgba(0,0,0,.14)!important;
+}
+body#blinqPremium .admin-hero-manager .admin-form-section{
+  background:linear-gradient(150deg,#09221e 0%,#061916 78%)!important;
+  padding:22px!important;
+  margin-top:18px!important;
+}
+body#blinqPremium .admin-hero-manager .admin-banner-workbench{
+  position:relative!important;
+  isolation:isolate!important;
+  overflow:hidden!important;
+  padding:24px!important;
+  background:#061916!important;
+}
+body#blinqPremium .admin-hero-manager .admin-banner-workbench::before{
+  content:"";
+  position:absolute;inset:0;
+  z-index:-1;pointer-events:none;
+  background:
+    linear-gradient(105deg,rgba(3,20,18,.96),rgba(4,27,24,.94)),
+    url('/assets/blinq_page_background.webp') center/cover no-repeat;
+}
+body#blinqPremium .admin-banner-workbench .admin-form-section-title{
+  display:flex!important;flex-wrap:wrap!important;
+  justify-content:space-between!important;align-items:center!important;
+  gap:10px 20px!important;padding-bottom:17px!important;margin-bottom:18px!important;
+  border-bottom:1px solid rgba(119,205,172,.18)!important;
+}
+body#blinqPremium .admin-banner-workbench .admin-form-section-title strong{
+  color:#eefcf5!important;
+  font-size:17px!important;font-weight:850!important;
+}
+body#blinqPremium .admin-banner-workbench .admin-form-section-title span{
+  color:var(--banner-studio-muted)!important;
+  font-size:12px!important;line-height:1.6!important;
+  max-width:650px!important;
+}
+body#blinqPremium .admin-banner-workbench .admin-form-grid{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  gap:18px!important;
+}
+body#blinqPremium .admin-banner-media-urls{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:16px!important;
+  padding:0!important;
+}
+body#blinqPremium .admin-banner-media-urls .admin-banner-media-url{
+  display:flex!important;flex-direction:column!important;gap:8px!important;
+  min-width:0!important;
+  padding:16px!important;
+  border:1px solid rgba(114,194,165,.20)!important;
+  border-radius:13px!important;
+  background:rgba(4,21,19,.75)!important;
+  color:#cee9dd!important;
+  font-size:12px!important;font-weight:750!important;
+}
+body#blinqPremium .admin-banner-media-urls .admin-media-upload{
+  display:flex!important;align-items:center!important;
+  gap:10px!important;min-width:0!important;
+}
+body#blinqPremium .admin-banner-media-urls input[data-simple-banner-field]{
+  width:100%!important;min-width:0!important;height:47px!important;
+  border:1px solid rgba(113,193,166,.28)!important;
+  border-radius:10px!important;background:#061721!important;
+  color:#e8f6f3!important;padding:0 12px!important;font-size:12px!important;
+}
+body#blinqPremium .admin-banner-media-urls .admin-media-upload-button{
+  height:47px!important;min-width:132px!important;
+  background:#103a30!important;color:#b2ffe1!important;
+  border:1px solid rgba(102,209,163,.38)!important;border-radius:10px!important;
+  font-size:12px!important;font-weight:800!important;
+}
+body#blinqPremium .admin-banner-layout-grid{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  align-items:start!important;gap:16px!important;
+  margin:0!important;
+}
+body#blinqPremium .admin-banner-layout-grid .admin-banner-device-panel{
+  min-width:0!important;
+  display:flex!important;flex-direction:column!important;gap:13px!important;
+  padding:18px!important;
+  border:1px solid rgba(109,214,172,.25)!important;
+  border-radius:15px!important;
+  background:linear-gradient(145deg,rgba(13,48,39,.74),rgba(4,21,19,.78))!important;
+}
+body#blinqPremium .admin-banner-layout-grid .admin-banner-device-mobile{
+  border-color:rgba(98,195,184,.21)!important;
+  background:linear-gradient(145deg,rgba(11,42,40,.74),rgba(4,21,19,.78))!important;
+}
+body#blinqPremium .admin-banner-layout-grid .admin-banner-device-heading{
+  display:flex!important;align-items:center!important;gap:12px!important;
+  min-height:53px!important;
+  padding:0 1px 14px!important;
+  border-bottom:1px solid rgba(119,205,172,.18)!important;
+}
+body#blinqPremium .admin-banner-device-icon{
+  display:grid!important;place-items:center!important;
+  width:43px!important;height:43px!important;min-width:43px!important;
+  border:1px solid rgba(113,231,177,.38)!important;
+  border-radius:12px!important;
+  color:#91efc0!important;background:rgba(66,174,125,.12)!important;
+  font-size:25px!important;font-weight:700!important;line-height:1!important;
+}
+body#blinqPremium .admin-banner-device-heading>div{min-width:0!important;display:flex!important;flex-direction:column!important;gap:4px!important}
+body#blinqPremium .admin-banner-device-heading strong{color:#f2fff9!important;font-size:17px!important;line-height:1.1!important;font-weight:850!important}
+body#blinqPremium .admin-banner-device-heading small{color:#99bfb3!important;font-size:11px!important;font-weight:500!important}
+body#blinqPremium .admin-banner-device-tag{
+  margin-left:auto!important;white-space:nowrap!important;
+  border:1px solid rgba(102,195,165,.23)!important;
+  border-radius:8px!important;
+  padding:7px 10px!important;
+  color:#bdeed6!important;background:rgba(11,44,35,.4)!important;
+  font-size:10px!important;font-weight:850!important;
+}
+body#blinqPremium .admin-banner-layout-grid .admin-banner-device-panel>fieldset,
+body#blinqPremium .admin-banner-layout-grid .admin-banner-device-panel>fieldset:nth-child(-n+2){
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:11px!important;
+  border:1px solid rgba(103,184,156,.18)!important;
+  border-radius:12px!important;
+  background:rgba(3,19,18,.58)!important;
+  padding:14px!important;
+  margin:0!important;
+  min-width:0!important;
+}
+body#blinqPremium .admin-banner-layout-grid .admin-banner-device-panel legend{
+  font-size:12px!important;font-weight:850!important;
+  color:#bee8d4!important;letter-spacing:.01em!important;padding:0 7px!important;
+}
+body#blinqPremium .admin-banner-layout-grid .admin-banner-device-panel label{
+  font-size:12px!important;color:#a9d1c3!important;gap:7px!important;
+}
+body#blinqPremium .admin-banner-layout-grid .admin-banner-device-panel input[type="number"]{
+  height:48px!important;font-size:15px!important;
+  color:#f3fff9!important;background:#071b18!important;
+}
+body#blinqPremium .admin-banner-layout-grid .admin-banner-step{
+  height:48px!important;min-width:44px!important;width:44px!important;
+}
+body#blinqPremium .admin-banner-layout-grid .admin-banner-device-panel select{
+  height:48px!important;
+  border:1px solid rgba(105,195,159,.36)!important;
+  background:#081d1a!important;color:#e6f9ee!important;
+}
+body#blinqPremium .admin-banner-workbench .admin-banner-layout-help{
+  margin:0!important;padding:11px 14px!important;
+  border:1px solid rgba(98,177,152,.15)!important;
+  border-radius:10px!important;
+  background:rgba(7,30,27,.52)!important;
+  font-size:11px!important;color:#aacdbf!important;line-height:1.6!important;
+}
+body#blinqPremium .admin-banner-workbench .admin-banner-copy-toggle{
+  display:flex!important;align-items:center!important;
+  flex-direction:row!important;justify-content:flex-start!important;
+  gap:12px!important;margin:0!important;padding:13px 16px!important;
+  border:1px solid rgba(105,203,167,.19)!important;
+  border-radius:11px!important;background:rgba(10,43,36,.58)!important;
+  font-size:13px!important;font-weight:750!important;
+  color:#e4f9ee!important;
+}
+body#blinqPremium .admin-banner-workbench .admin-banner-copy-toggle input{
+  width:19px!important;height:19px!important;accent-color:#69e8a5!important;
+}
+body#blinqPremium .admin-hero-manager .admin-banner-copy-editor .admin-form-grid,
+body#blinqPremium .admin-hero-manager .admin-banner-typography .admin-banner-type-grid{
+  gap:14px!important;
+}
+body#blinqPremium .admin-hero-manager .admin-banner-copy-editor label,
+body#blinqPremium .admin-hero-manager .admin-banner-typography label{
+  font-size:12px!important;
+  color:#afcfc2!important;font-weight:700!important;
+}
+body#blinqPremium .admin-hero-manager .admin-banner-copy-editor input,
+body#blinqPremium .admin-hero-manager .admin-banner-copy-editor textarea,
+body#blinqPremium .admin-hero-manager .admin-banner-copy-editor select,
+body#blinqPremium .admin-hero-manager .admin-banner-typography select{
+  min-height:46px!important;
+  border-radius:10px!important;
+  border:1px solid rgba(103,190,157,.27)!important;
+  background:#071d1b!important;
+  color:#e8f9f1!important;
+  padding:10px 12px!important;font-size:13px!important;
+}
+body#blinqPremium .admin-hero-manager .admin-banner-social-row{
+  background:rgba(6,30,27,.65)!important;
+  border:1px solid rgba(108,200,165,.18)!important;
+  border-radius:11px!important;
+  padding:13px!important;gap:10px!important;
+}
+body#blinqPremium .admin-hero-manager .admin-banner-social-row strong{
+  font-size:13px!important;color:#d7f4e4!important;
+}
+body#blinqPremium .admin-hero-manager .admin-banner-social-row label>span{
+  color:#a4cfc0!important;font-size:10px!important;
+}
+body#blinqPremium .admin-hero-manager input:focus-visible,
+body#blinqPremium .admin-hero-manager select:focus-visible,
+body#blinqPremium .admin-hero-manager textarea:focus-visible{
+  outline:2px solid rgba(103,234,163,.68)!important;
+  outline-offset:2px!important;
+}
+@media(max-width:1000px){
+  body#blinqPremium .admin-banner-layout-grid{grid-template-columns:1fr!important}
+  body#blinqPremium .admin-banner-media-urls{grid-template-columns:1fr!important}
+}
+@media(max-width:600px){
+  body#blinqPremium .admin-hero-manager .admin-form-section{padding:15px!important}
+  body#blinqPremium .admin-banner-layout-grid .admin-banner-device-panel{padding:11px!important}
+  body#blinqPremium .admin-banner-device-tag{display:none!important}
+  body#blinqPremium .admin-banner-media-urls .admin-media-upload{flex-wrap:wrap!important}
+  body#blinqPremium .admin-banner-media-urls .admin-media-upload-button{width:100%!important}
+}
