@@ -477,3 +477,66 @@ body#blinqPremium #resultsDateRange{display:flex!important;align-items:center!im
 body#blinqPremium#blinqPremium .app-shell{background:rgba(1,13,13,.12)!important;box-shadow:none!important}
 body#blinqPremium#blinqPremium .site-main{background:transparent!important}
 body#blinqPremium [data-daily-tab="top200"],body#blinqPremium [data-admin-hub-tab-card="top200"]{display:none!important}
+
+
+/* BlinQ mobile icon strip · 2026-10-08 */
+@media(max-width:900px){
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .reference-topbar{
+    overflow:visible!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav{
+    display:grid!important;
+    grid-template-columns:repeat(5,minmax(44px,1fr))!important;
+    gap:6px!important;
+    align-items:center!important;
+    width:min(calc(100% - 24px),360px)!important;
+    margin:0 auto!important;
+    padding:0 0 8px!important;
+    overflow:visible!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav .mobile-icon-link{
+    position:relative!important;
+    box-sizing:border-box!important;
+    width:44px!important;min-width:44px!important;height:44px!important;
+    justify-self:center!important;
+    display:grid!important;place-items:center!important;
+    padding:0!important;margin:0!important;
+    border:1px solid rgba(114,179,156,.13)!important;border-radius:10px!important;
+    background:rgba(4,22,18,.42)!important;
+    color:#eab13a!important;text-decoration:none!important;
+    box-shadow:none!important;
+    -webkit-tap-highlight-color:transparent;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav .mobile-icon-link svg{
+    width:24px!important;height:24px!important;display:block!important;overflow:visible!important;
+    fill:none!important;stroke:currentColor!important;stroke-width:1.65!important;stroke-linecap:round!important;stroke-linejoin:round!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav .mobile-icon-link.active{
+    color:#ffd667!important;border-color:rgba(255,205,89,.62)!important;
+    background:rgba(142,88,5,.08)!important;box-shadow:0 0 14px rgba(255,184,43,.14)!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav .mobile-icon-link.active::after{
+    content:""!important;position:absolute!important;left:11px!important;right:11px!important;bottom:-5px!important;height:2px!important;
+    border-radius:999px!important;background:#f4c04b!important;box-shadow:0 0 7px rgba(244,192,75,.65)!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav .mobile-live-icon{
+    color:#68f3a8!important;border-color:rgba(83,236,151,.22)!important;background:rgba(26,113,71,.07)!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav .mobile-upgrade-icon{
+    color:#63eadf!important;border-color:rgba(83,225,212,.20)!important;background:rgba(31,122,115,.06)!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav [data-mobile-action][hidden]{
+    display:none!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav [data-nav-tooltip]::before{
+    display:none!important;
+  }
+}
+@media(max-width:360px){
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav{
+    width:min(calc(100% - 16px),344px)!important;gap:3px!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav .mobile-icon-link{
+    width:42px!important;min-width:42px!important;height:42px!important;
+  }
+}
