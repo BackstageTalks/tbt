@@ -82,7 +82,9 @@ def test_auth_rejects_expired_and_unavailable_identity_service(monkeypatch):
 def test_stale_feed_and_started_matches_are_explicit():
     now = datetime(2025, 1, 2, tzinfo=timezone.utc)
     data = empty_feed()
-    data['generated_at'] = (now - timedelta(hours=13)).isoformat()
+    # Use the previous betting day, not an arbitrary 13-hour age: 06:00 local
+    # is the snapshot validity boundary (and handles winter time correctly).
+    data['generated_at'] = (now - timedelta(days=1)).isoformat()
     data['upcoming'] = [{'scheduled_at': (now - timedelta(seconds=1)).isoformat()},
                         {'scheduled_at': (now + timedelta(hours=1)).isoformat()}]
     visible = visible_feed(data, now)
