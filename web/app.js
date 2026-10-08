@@ -805,7 +805,7 @@
     const referenceNav=document.querySelector('.reference-navigation');
     const predictionRoutes=new Set(['predictions','top200','prime','top_daily','value','doubles','ace','sg']);
     const modelRoutes=new Set(['model_data','methodology','how_blinq_works']);
-    const referenceRoute=predictionRoutes.has(state.route)?'predictions':state.route==='results'?'results':modelRoutes.has(state.route)?'model_data':state.route==='account'?'account':'';
+    const referenceRoute=predictionRoutes.has(state.route)?'predictions':state.route==='results'?'results':state.route==='compare'?'compare':modelRoutes.has(state.route)?'model_data':state.route==='account'?'account':'';
     const resultsLocked=!resultsAccessAllowed();
     const resultsPlan=resultsLocked?firstResultsUnlockPlan():'';
     const decorateResultsAccess=node=>{
@@ -820,17 +820,20 @@
         delete node.dataset.upgradePlan;
         delete node.dataset.upgradeSection;
         delete node.dataset.upgradeExplicit;
-        node.removeAttribute('aria-label');
+        node.setAttribute('aria-label',lcopy('Results','Výsledky','Výsledky'));
       }
     };
-    if(referenceNav){
-      referenceNav.querySelectorAll('[data-route]').forEach(node=>{
+    const syncRouteIcons=host=>{
+      if(!host)return;
+      host.querySelectorAll('[data-route]').forEach(node=>{
         const active=Boolean(referenceRoute)&&node.dataset.route===referenceRoute;
         node.classList.toggle('active',active);
         if(active)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');
       });
-      decorateResultsAccess(referenceNav.querySelector('[data-route="results"]'));
-    }
+      decorateResultsAccess(host.querySelector('[data-route="results"]'));
+    };
+    syncRouteIcons(referenceNav);
+    document.querySelectorAll('.mobile-icon-nav').forEach(syncRouteIcons);
     document.querySelectorAll('#mobileTabs [data-route="results"]').forEach(decorateResultsAccess);
     const profileAdmin=$('profileAdminLink');if(profileAdmin)profileAdmin.hidden=!isAdminAccount();
   }
