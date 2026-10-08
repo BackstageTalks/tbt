@@ -49,6 +49,6 @@ assert.ok(css.includes('opacity:var(--hero-shadow-mobile-opacity,1)!important'),
 assert.ok(css.includes('.lean-admin-preview.mobile::before{opacity:var(--hero-shadow-mobile-opacity,1)!important}'),'mobile preview shadow strength');
 const desktopGradient="linear-gradient(90deg,rgba(2,9,12,.98) 0%,rgba(2,9,12,.94) 31%,rgba(2,9,12,.34) 43%,rgba(2,9,12,.02) 61%,rgba(2,9,12,.04) 100%)";
 const mobileGradient="linear-gradient(90deg,rgba(2,15,13,.94) 0%,rgba(2,15,13,.77) 45%,rgba(2,15,13,.22) 78%,rgba(2,15,13,.35) 100%)";
-assert.ok(css.includes('.lean-admin-preview.desktop::before{\\n  background:'+desktopGradient+'!important;'),'desktop preview uses public desktop gradient');
-assert.ok(css.includes('.lean-admin-preview.mobile::before{\\n  background:'+mobileGradient+'!important;'),'mobile preview uses public mobile gradient');
+assert.ok(css.includes('.lean-admin-preview.desktop::before{\n  background:'+desktopGradient+'!important;'),'desktop preview uses public desktop gradient');
+assert.ok(css.includes('.lean-admin-preview.mobile::before{\n  background:'+mobileGradient+'!important;'),'mobile preview uses public mobile gradient');
 console.log('PASS: banner editor contract');
