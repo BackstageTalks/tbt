@@ -1,7 +1,10 @@
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
-from tbt.services.match_status import classify_finished_event, runtime_settled_results, scan_match_statuses
+from tbt.services.match_status import (
+    classify_finished_event, runtime_settled_results, scan_match_statuses,
+    verified_terminal_statuses,
+)
 
 
 def _row(event_id="101", winner_id="11", scheduled_at=None):
@@ -1317,3 +1320,32 @@ def test_ongoing_match_remains_pending_after_quarantining_false_terminal():
     assert snapshot["newly_resolved"] == 0
     assert snapshot["pending_count"] == 1
     assert snapshot["due"] == 1
+
+
+def test_read_side_does_not_publish_premature_terminal_result():
+    """A successful old worker response must not make a live event a result."""
+    row = {
+        **_row("101", "11", "2026-10-08T09:00:00+00:00"),
+        "betting": {"selection_id": "11", "odds": 1.65},
+    }
+    published_feed = {"results": [], "top_daily_picks": [row]}
+    stale_statuses = {"101": {
+        "status": "win", "winner_id": "11",
+        "provider_status": "inprogress 2nd set",
+        "checked_at": "2026-10-08T10:00:00+00:00",
+    }}
+    assert verified_terminal_statuses(stale_statuses) == {}
+    assert runtime_settled_results(published_feed, stale_statuses) == []
+
+    verified_statuses = {"101": {
+        "status": "loss", "winner_id": "22",
+        "provider_status": "finished ended",
+        "checked_at": "2026-10-08T11:00:00+00:00",
+    }}
+    assert set(verified_terminal_statuses(verified_statuses)) == {"101"}
+    settled_rows = runtime_settled_results(published_feed, verified_statuses)
+    assert len(settled_rows) == 1
+    result = settled_rows[0]["market_publications"][0]["result"]
+    assert result["status"] == "miss"
+    assert result["correct"] is False
+    assert result["runtime_source"] == "match_status_snapshot"

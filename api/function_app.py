@@ -121,7 +121,10 @@ from tbt.services.live_comeback import (
     attach_second_set_odds, set2_push_eligible, set2_push_thresholds,
     settle_radar_results,
 )
-from tbt.services.match_status import event_ids_from_feed, runtime_settled_results, scan_match_statuses
+from tbt.services.match_status import (
+    event_ids_from_feed, runtime_settled_results, scan_match_statuses,
+    verified_terminal_statuses,
+)
 from tbt.services.comparator_runtime import (
     RuntimeComparatorError,
     RuntimeArtifactStale,
@@ -1316,8 +1319,9 @@ def feed(req):
         try:
             status_snapshot = load_match_status_snapshot() or {}
             allowed_event_ids = event_ids_from_feed(data)
-            raw_statuses = status_snapshot.get("statuses")
-            raw_statuses = raw_statuses if isinstance(raw_statuses, dict) else {}
+            # Do not expose stale terminal rows if the original provider state
+            # still said this event was live. The worker will repair on recheck.
+            raw_statuses = verified_terminal_statuses(status_snapshot.get("statuses"))
             # KPI and Results share the same response-time settlement overlay.
             # Only configured scalar cards cross entitlement boundaries.
             if runtime_ui is not None:
