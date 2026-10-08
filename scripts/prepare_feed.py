@@ -413,14 +413,17 @@ def _attach_player_assets(payload: dict, repository: str) -> dict:
 
 def _deploy_comparator_artifact(source: Path) -> dict:
     target = ROOT / "api/data/comparator.json.gz"
+    directory = ROOT / "api/data/comparator-players.json"
     if not source.is_file():
         target.unlink(missing_ok=True)
+        directory.unlink(missing_ok=True)
         return {"available": False, "reason": "release_asset_missing"}
     try:
         with gzip.open(source, "rt", encoding="utf-8") as handle:
             payload = json.load(handle)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         target.unlink(missing_ok=True)
+        directory.unlink(missing_ok=True)
         raise ValueError("Invalid comparator JSON artifact") from exc
     if (
         not isinstance(payload, dict)
@@ -433,9 +436,29 @@ def _deploy_comparator_artifact(source: Path) -> dict:
         or not payload.get("cutoff_utc")
     ):
         target.unlink(missing_ok=True)
+        directory.unlink(missing_ok=True)
         raise ValueError("Comparator artifact failed serving schema validation")
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, target)
+    # Search never needs the ~30 MB compressed feature/model artifact. Publish
+    # only the validated canonical directory, without features or model weights.
+    # Generated solely from the same checksum-verified prediction release.
+    search_directory = {
+        "schema": 1,
+        "players": payload["players"],
+        "generated_at": payload["generated_at"],
+        "cutoff_utc": payload["cutoff_utc"],
+        "model_version": str((payload.get("model") or {}).get("model_version") or ""),
+    }
+    temporary = directory.with_suffix(".json.tmp")
+    try:
+        temporary.write_text(json.dumps(search_directory, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        shutil.copyfile(source, target)
+        temporary.replace(directory)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        directory.unlink(missing_ok=True)
+        target.unlink(missing_ok=True)
+        raise
     return {
         "available": True,
         "players": len(payload["players"]),
@@ -449,6 +472,7 @@ def main() -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     comparator_target = ROOT / "api/data/comparator.json.gz"
     comparator_target.unlink(missing_ok=True)
+    (ROOT / "api/data/comparator-players.json").unlink(missing_ok=True)
     repository = os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data")
 
     payload = empty_feed()
