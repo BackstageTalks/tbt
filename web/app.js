@@ -5690,7 +5690,12 @@
     return groups.filter(group=>!superseded.has(group)).map(group=>{
       group.rows.sort((a,b)=>{
         const full=name=>normalizeComparatorPlayerName(name).split(' ').every(token=>token.length>1)?1:0;
-        return full(b.name)-full(a.name)||
+        // The deployed canonical provider ID remains the preferred record.
+        // A historical-source ID is still selectable after expanding; it is
+        // never silently linked or added to the provider record.
+        const historical=item=>String(item?.player_id||'').startsWith('hist-js:')?1:0;
+        return historical(a)-historical(b)||
+          full(b.name)-full(a.name)||
           Number(b.matches_seen||0)-Number(a.matches_seen||0)||
           String(a.name||'').localeCompare(String(b.name||''))||
           String(a.player_id).localeCompare(String(b.player_id));
