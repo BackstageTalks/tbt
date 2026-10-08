@@ -4,10 +4,11 @@
   "promote": true,
   "purpose": "Retry guarded model promotion gate after WTA rank supplement binary fix. Require leakage audit plus strict candidate-vs-production and candidate-vs-Elo holdout gates on the governed 3-day unseen window. Promote only on full pass.",
   "requested_on": "2026-10-08",
-  "requested_at_utc": "2026-10-08T06:45:00Z",
+  "requested_at_utc": "2026-10-08T09:06:00Z",
   "max_requests": 1,
   "start": "",
   "end": "",
   "training_scope": "guarded_promotion_gate",
-  "historical_match_winner_odds_as_model_feature": false
+  "historical_match_winner_odds_as_model_feature": false,
+  "retry_reason": "Writer queue clear; retry guarded promotion after verified WTA rank supplement readback. Prior attempts were cancelled before current metric decision."
 }
