@@ -33,6 +33,24 @@ def _explicitly_nonterminal_status(value: Any) -> bool:
         "scheduled", "ongoing", "live", "suspended", "interrupted", "paused",
     ))
 
+def verified_terminal_statuses(snapshot_statuses: Any) -> dict[str, dict[str, Any]]:
+    """Fail closed when an older persisted winner was actually still live.
+
+    This read-side guard prevents stale wrong results/KPI values between a
+    runtime deployment and the next successful external scheduler check.
+    The worker retains the raw prior snapshot to recheck and repair it.
+    """
+    if not isinstance(snapshot_statuses, dict):
+        return {}
+    return {
+        str(event_id): row
+        for event_id, row in snapshot_statuses.items()
+        if isinstance(row, dict)
+        and str(row.get("status") or "").strip().lower() in TERMINAL_STATUSES
+        and not _explicitly_nonterminal_status(row.get("provider_status"))
+    }
+
+
 _PUBLIC_MATCH_WINNER_KEYS = (
     "top200_picks",
     "prime_picks",
@@ -291,7 +309,8 @@ def runtime_settled_results(
     existing_results = [
         deepcopy(row) for row in (feed.get("results") or []) if isinstance(row, dict)
     ]
-    if not isinstance(statuses, dict) or not statuses:
+    statuses = verified_terminal_statuses(statuses)
+    if not statuses:
         return existing_results
 
     seen: set[str] = set()
