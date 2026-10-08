@@ -458,7 +458,11 @@ def _deploy_comparator_artifact(source: Path) -> dict:
     try:
         index_report = build_comparator_index(payload, index_path)
         temporary.write_text(json.dumps(search_directory, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-        shutil.copyfile(source, target)
+        # The checksum-verified source stays in the private release/cache. Do
+        # not ship the bulky gzip alongside the indexed serving copy; it is no
+        # longer needed by any public comparator request and would inflate the
+        # Azure Functions package.
+        target.unlink(missing_ok=True)
         temporary.replace(directory)
     except Exception:
         temporary.unlink(missing_ok=True)
