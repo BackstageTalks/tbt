@@ -604,3 +604,15 @@ body#blinqPremium [data-daily-tab="top200"],body#blinqPremium [data-admin-hub-ta
     height:19px!important;
   }
 }
+
+
+/* Final mobile header rule: single row only, primary routes stay in hamburger menu. */
+@media(max-width:900px){
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav{
+    display:none!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .site-header{
+    min-height:64px!important;
+    height:64px!important;
+  }
+}
