@@ -45,7 +45,7 @@ def test_comparator_copy_is_not_duplicated_inside_form():
 def test_comparator_assets_are_cache_busted():
     html = Path("web/index.html").read_text(encoding="utf-8")
     assert "/blinq-app.css?v=7360&p=61&compare=4" in html
-    assert "/app.js?v=7360&p=61&compare=5" in html
+    assert "/app.js?v=7360&p=61&compare=6" in html
 
 
 def test_comparator_player_suggestions_bind_after_async_insertion():
@@ -89,7 +89,9 @@ def test_comparator_search_groups_do_not_merge_canonical_ids():
     assert "function comparatorPlayerGroups(rows)" in app
     assert "group.rows.length>1" in app
     assert "historical(a)-historical(b)" in app
-    assert "data-comparator-expand" in app
-    assert "comparator-search-alternates" in app
-    assert "zápasov v DB" in app
-    assert "Rôzne canonical ID; záznamy nie sú zlúčené." in app
+    render = app.split("function comparatorSearchHtml(side){", 1)[1].split("function comparatorResultHtml", 1)[0]
+    assert "canonical.length===1?canonical" in render
+    assert "hist-js:" in render
+    assert "data-comparator-expand" not in render
+    assert "comparator-search-alternates" not in render
+    assert "zápasov v DB" not in render
