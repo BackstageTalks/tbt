@@ -435,6 +435,24 @@ def _deploy_comparator_artifact(source: Path) -> dict:
         target.unlink(missing_ok=True)
         raise ValueError("Comparator artifact failed serving schema validation")
     target.parent.mkdir(parents=True, exist_ok=True)
+    # Search does not need the multi-megabyte feature/model state. Ship a
+    # compact index built from the same verified serving artifact instead.
+    directory = {
+        "schema": 1,
+        "generated_at": payload["generated_at"],
+        "cutoff_utc": payload["cutoff_utc"],
+        "model_version": str((payload.get("model") or {}).get("model_version") or ""),
+        "players": payload["players"],
+    }
+    index = ROOT / "api/data/comparator_players.json.gz"
+    with gzip.open(index, "wt", encoding="utf-8", compresslevel=6) as handle:
+        json.dump(directory, handle, ensure_ascii=False, separators=(",", ":"))
+    with gzip.open(index, "rt", encoding="utf-8") as handle:
+        check = json.load(handle)
+    if (len(check["players"]) != len(payload["players"])
+            or check["model_version"] != directory["model_version"]):
+        index.unlink(missing_ok=True)
+        raise ValueError("Comparator player index read-back mismatch")
     shutil.copyfile(source, target)
     return {
         "available": True,
@@ -449,6 +467,7 @@ def main() -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     comparator_target = ROOT / "api/data/comparator.json.gz"
     comparator_target.unlink(missing_ok=True)
+    (ROOT / "api/data/comparator_players.json.gz").unlink(missing_ok=True)
     repository = os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data")
 
     payload = empty_feed()
