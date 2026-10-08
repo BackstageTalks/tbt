@@ -5677,7 +5677,12 @@
       const parents=groups.filter(group=>{
         if(group===shortGroup)return false;
         const tokens=group.key.split(' ');
-        return tokens.length>=2&&tokens[0].length>1&&tokens[tokens.length-1]===surname&&tokens[0][0]===initial;
+        const fullName=tokens.length>=2&&tokens[0].length>1&&tokens[tokens.length-1]===surname&&tokens[0][0]===initial;
+        // Require an explicit alias match from canonical evidence, not merely
+        // equal surname/initial (which can belong to different people).
+        return fullName&&shortGroup.rows.some(player=>
+          (Array.isArray(player.aliases)?player.aliases:[]).some(alias=>normalizeComparatorPlayerName(alias)===group.key)
+        );
       });
       if(parents.length!==1)continue;
       const parent=parents[0];
