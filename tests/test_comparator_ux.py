@@ -44,8 +44,8 @@ def test_comparator_copy_is_not_duplicated_inside_form():
 
 def test_comparator_assets_are_cache_busted():
     html = Path("web/index.html").read_text(encoding="utf-8")
-    assert "/blinq-app.css?v=7360&p=61&compare=2" in html
-    assert "/app.js?v=7360&p=61&compare=3" in html
+    assert "/blinq-app.css?v=7360&p=61&compare=3" in html
+    assert "/app.js?v=7360&p=61&compare=4" in html
 
 
 def test_comparator_player_suggestions_bind_after_async_insertion():
@@ -70,3 +70,13 @@ def test_comparator_search_rejects_stale_results_and_displays_failures():
     assert "status===429?" in wire
     assert 'role="alert"' in wire
     assert 'No players found.' in wire
+
+
+def test_comparator_has_clean_route_heading_and_neutral_inline_errors():
+    app = Path("web/app.js").read_text(encoding="utf-8")
+    css = Path("web/blinq-app.css").read_text(encoding="utf-8")
+    assert "pageEyebrow.hidden=route==='results'||route==='compare'" in app
+    assert "pageSubtitle.hidden=route==='results'||route==='compare'" in app
+    assert "document.body.classList.toggle('blinq-compare',route==='compare')" in app
+    assert "comparator-inline-error" in app
+    assert ".blinq-compare .footer-system-dot{display:none}" in css
