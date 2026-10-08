@@ -72,16 +72,7 @@ jobs:
             bust="$GITHUB_SHA-$attempt"
             if curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/deployment.json?__blinq_ui=$bust" -o /tmp/deployment.json &&
                curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/app.js?__blinq_ui=$bust" -o /tmp/app.js; then
-              python - "$GITHUB_SHA" <<'PY'
-import json, pathlib, sys
-sha=sys.argv[1]
-dep=json.loads(pathlib.Path('/tmp/deployment.json').read_text())
-app=pathlib.Path('/tmp/app.js').read_text()
-assert dep.get('git_sha') == sha, (dep.get('git_sha'), sha)
-assert 'Max. počet setov' in app
-assert 'function comparatorAutoPlayer' in app
-assert 'comparatorDefaultBestOf' in app
-PY
+              python -c "import json,pathlib,sys; sha=sys.argv[1]; dep=json.loads(pathlib.Path('/tmp/deployment.json').read_text()); app=pathlib.Path('/tmp/app.js').read_text(); assert dep.get('git_sha')==sha,(dep.get('git_sha'),sha); assert 'Max. počet setov' in app; assert 'function comparatorAutoPlayer' in app; assert 'comparatorDefaultBestOf' in app" "$GITHUB_SHA"
               ok=1
               break
             fi
