@@ -1,4 +1,4 @@
-/* BlinQ mobile presentation adapter, r61. No API, auth or entitlement changes. */
+/* BlinQ mobile presentation adapter, r62. No API, auth or entitlement changes. */
 (() => {
   'use strict';
   if (window.__blinqMobileInstalled) return;
@@ -35,6 +35,7 @@
   projects.append(projectSymbol);
   projects.id = 'bqm-projects';
   projects.setAttribute('aria-label', 'Moje projektové skupiny');
+  projects.dataset.navTooltip = 'Moje skupiny';
   header.querySelector('.header-actions').prepend(projects);
   function joinedControls() {
     return Array.from(document.querySelectorAll('#projectGroupBar [data-project-group-open]')).filter(available);
@@ -95,9 +96,17 @@
     event.stopImmediatePropagation();
     byId('profileMenuToggle')?.click();
   }, true);
+  function syncMobileIconNav() {
+    document.querySelectorAll('[data-mobile-action]').forEach(node => {
+      const action = node.dataset.mobileAction;
+      if (action === 'live') node.hidden = !available(byId('insightShortcut'));
+      if (action === 'upgrade') node.hidden = !available(byId('topUpgradeButton'));
+    });
+  }
   function sync() {
     document.body.classList.toggle('bqm-enabled', enabled());
     syncProjects();
+    syncMobileIconNav();
     if (!enabled() && dialog.open) dialog.close();
   }
   function available(node) { return node && !node.hidden && !node.disabled && node.getAttribute('aria-disabled') !== 'true'; }
@@ -124,6 +133,10 @@
         header.querySelector('.brand')?.click();
       }));
       section('Predikcie', 'predictions');
+      nav.append(button('Porovnávač', () => {
+        dialog.close();
+        document.querySelector('.reference-navigation [data-route="compare"]')?.click();
+      }));
       const resultsSource = document.querySelector('.reference-navigation [data-route="results"]');
       const resultsLocked = resultsSource?.classList.contains('access-nav-locked');
       nav.append(button('Výsledky' + (resultsLocked ? ' 🔒' : ''), () => {
@@ -193,6 +206,15 @@
   if (groupBar) new MutationObserver(syncProjects).observe(groupBar, {childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['hidden']});
   const adminLink = byId('profileAdminLink');
   if (adminLink) new MutationObserver(syncProjects).observe(adminLink, {attributes:true,attributeFilter:['hidden']});
+  const liveSource = byId('insightShortcut');
+  if (liveSource) new MutationObserver(syncMobileIconNav).observe(liveSource, {attributes:true,attributeFilter:['hidden','disabled']});
+  const upgradeSource = byId('topUpgradeButton');
+  if (upgradeSource) new MutationObserver(syncMobileIconNav).observe(upgradeSource, {attributes:true,attributeFilter:['hidden','disabled']});
+  document.querySelectorAll('[data-mobile-action]').forEach(node => node.addEventListener('click', () => {
+    const action = node.dataset.mobileAction;
+    if (action === 'live') finish(byId('insightShortcut'));
+    if (action === 'upgrade') finish(byId('topUpgradeButton'));
+  }));
   new MutationObserver(sync).observe(shell, { attributes: true, attributeFilter: ['hidden'] });
   new MutationObserver(() => {
     if (document.body.classList.contains('bqm-enabled') !== enabled()) sync();
