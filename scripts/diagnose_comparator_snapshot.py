@@ -117,6 +117,18 @@ def main():
         "index_build_s": round(time.perf_counter()-start_index, 2),
         "rss_mb": current_rss_mb(),
     }, flush=True)
+    import subprocess
+    directory_path = destination / "comparator-players.json"
+    directory_path.write_text(json.dumps(directory, ensure_ascii=False), encoding="utf-8")
+    child = subprocess.run(
+        [sys.executable, str(Path(__file__).with_name("smoke_comparator_index_worker.py")),
+         str(indexed_path), str(directory_path)],
+        capture_output=True, text=True, timeout=30,
+    )
+    print(child.stdout[-1500:], flush=True)
+    if child.returncode:
+        raise RuntimeError(f"Indexed cold-start failed: {child.stderr[-1600:]}")
+
 
 
 
