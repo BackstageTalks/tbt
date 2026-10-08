@@ -32,9 +32,10 @@ MATCH_WINNER_MARKET_NAMES = {
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
 # PRIME keeps its current short-price fallback. TOP uses a staged daily probability fallback: start at 68% and relax only until at least three TOP picks exist, never below 65%. The TOP odds boundary is fixed at >=1.50 and never moves. Value keeps a 65% floor.
 #
-# VALUE has assignment priority because close-odds candidates are intentionally
-# scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
-# branch (<1.50).
+# TOP200 is a retired public product. Keep its qualification path available for
+# historical replay/audit, but the default limit is zero so it cannot reserve a
+# candidate away from the active VALUE -> TOP -> PRIME offer. This fixes the
+# post-retirement selector/UI mismatch without changing tournament eligibility.
 SECTION_PRIORITY = ("top200", "value", "top_daily", "prime")
 
 PUBLICATION_MIN_PROBABILITY = 0.65
@@ -48,7 +49,7 @@ TOP200_MAX_RANK = 200
 TOP200_MIN_PROBABILITY = 0.65
 TOP200_MIN_DATA_DEPTH = 0.80
 TOP200_MIN_SURFACE_MATCHES = 5
-TOP200_LIMIT = 5
+TOP200_LIMIT = 0
 PRIME_TOP_CORE_PROBABILITY = 0.68
 PRIME_TOP_FALLBACK_PROBABILITY = 0.65
 TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.65
@@ -1053,10 +1054,9 @@ def select_market_sections(
 ) -> dict[str, Any]:
     """Split priced Match Winner predictions by BlinQ Probability and odds.
 
-    TOP200 runs first across all priced singles Match Winner candidates. At
-    least one player must have a valid point-in-time rank <=200 and the card must
-    satisfy the TOP evidence floor; at most five strongest cards are retained.
-    Remaining cards then follow the existing Value -> TOP/PRIME allocation.
+    TOP200 qualification is retained for historical audit only. Its production
+    default limit is zero after the public TOP200 product was retired, so ranked
+    candidates remain available to the active Value -> TOP/PRIME allocation.
     TOP starts at 68% / 1.50 and may relax to a 65% hard floor only when its own
     inventory is thin. EV/edge remain diagnostics only.
     """
@@ -1218,8 +1218,8 @@ def select_market_sections(
         "sg_picks": deepcopy(sg_picks or []),
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
-            "schema": 15,
-            "selection_policy": "top200_priority_v15_then_value_top_prime",
+            "schema": 16,
+            "selection_policy": "retired_top200_zero_limit_v16_value_top_prime",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "top200_rank_qualified_before_limit": len(top200_qualified),
@@ -1262,6 +1262,8 @@ def select_market_sections(
                 "max_selected": int(top200_limit),
                 "force_fill": False,
                 "assignment_priority": 1,
+                "active_public_product": int(top200_limit) > 0,
+                "retired_default": TOP200_LIMIT == 0,
                 "sort": "75pct_probability_percentile_25pct_odds_percentile",
             },
             "current_outputs": (["match_winner"] + (["doubles_match_winner"] if doubles_picks else []) + (["aces_projection", "double_faults_projection"] if ace_picks else []) + (["sets_projection", "games_projection"] if sg_picks else [])),
