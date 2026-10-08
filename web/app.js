@@ -5660,7 +5660,7 @@
         <div class="comparator-context">
           <label><span>${escapeHtml(lcopy('Tour','Okruh','Okruh'))}</span><select id="comparatorTour"><option value="atp"${s.tour==='atp'?' selected':''}>ATP</option><option value="wta"${s.tour==='wta'?' selected':''}>WTA</option></select></label>
           <label><span>${escapeHtml(lcopy('Surface','Povrch','Povrch'))}</span><select id="comparatorSurface"><option value="hard"${s.surface==='hard'?' selected':''}>Hard</option><option value="clay"${s.surface==='clay'?' selected':''}>Clay</option><option value="grass"${s.surface==='grass'?' selected':''}>Grass</option><option value="indoor_hard"${s.surface==='indoor_hard'?' selected':''}>Indoor hard</option></select></label>
-          <label><span>${escapeHtml(lcopy('Maximum sets','Max. počet setov','Max. počet setů'))}</span><select id="comparatorBestOf"><option value="3"${Number(s.bestOf)===3?' selected':''}>3</option>${s.tour==='atp'?`<option value="5"${Number(s.bestOf)===5?' selected':''}>5</option>`:''}</select>${major&&s.tour==='atp'? `<small class="comparator-auto-note">${escapeHtml(major)} · AUTO</small>`:''}</label>
+          <label><span>${escapeHtml(lcopy('Maximum sets','Max. počet setov','Max. počet setů'))}</span><select id="comparatorBestOf"><option value="3"${Number(s.bestOf)===3?' selected':''}>3</option>${s.tour==='atp'?`<option value="5"${Number(s.bestOf)===5?' selected':''}>5</option>`:''}</select>${major&&s.tour==='atp'&&s.bestOfAuto? `<small class="comparator-auto-note">${escapeHtml(major)} · AUTO</small>`:''}</label>
         </div>
         <div class="comparator-player-grid">
           ${[0,1].map(side=>`<label class="comparator-player-field ${s.players[side]?'is-selected':''}"><span>${escapeHtml(side===0?lcopy('Player 1','Hráč 1','Hráč 1'):lcopy('Player 2','Hráč 2','Hráč 2'))}</span><input type="search" id="comparatorPlayer${side}" data-comparator-input="${side}" autocomplete="off" placeholder="${escapeHtml(lcopy('Type a name…','Napíš meno…','Napiš jméno…'))}" value="${escapeHtml(comparatorPlayerLabel(s.players[side]))}"/>${s.players[side]?`<small class="comparator-player-confirmed">✓ ${escapeHtml(lcopy('selected','vybraný','vybraný'))}${Number(s.players[side]?.rank)>0?` · #${escapeHtml(String(s.players[side].rank))}`:''}</small>`:''}<div id="comparatorSearch${side}">${comparatorSearchHtml(side)}</div></label>`).join('')}
@@ -5677,7 +5677,7 @@
     const refresh=()=>{if(state.route!=='compare')return;host.innerHTML=renderComparatorRoute();wireComparator();};
     form.querySelector('#comparatorTour')?.addEventListener('change',event=>{s.tour=event.target.value;s.bestOf=comparatorDefaultBestOf(s.tour,s.surface);s.bestOfAuto=true;s.players=[null,null];s.search=[[],[]];s.result=null;s.error='';refresh();});
     form.querySelector('#comparatorSurface')?.addEventListener('change',event=>{s.surface=event.target.value;s.bestOf=comparatorDefaultBestOf(s.tour,s.surface);s.bestOfAuto=true;s.result=null;s.error='';refresh();});
-    form.querySelector('#comparatorBestOf')?.addEventListener('change',event=>{s.bestOf=s.tour==='wta'?3:(Number(event.target.value)===5?5:3);s.bestOfAuto=false;s.result=null;s.error='';});
+    form.querySelector('#comparatorBestOf')?.addEventListener('change',event=>{s.bestOf=s.tour==='wta'?3:(Number(event.target.value)===5?5:3);s.bestOfAuto=false;s.result=null;s.error='';refresh();});
     form.querySelectorAll('[data-comparator-input]').forEach(input=>{
       const side=Number(input.dataset.comparatorInput);
       input.addEventListener('input',()=>{
