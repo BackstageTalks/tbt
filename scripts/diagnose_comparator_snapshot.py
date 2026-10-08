@@ -79,6 +79,45 @@ def main():
             "api_requests": result.get("api_requests"),
         }, flush=True)
     assert result.get("api_requests") == 0
+    # Prove byte-compatible model probabilities from the tiny indexed reader
+    # before exposing it to an authenticated Azure request.
+    from tbt.services.comparator_index import build_comparator_index, load_pair_artifact
+    indexed_path = destination / "comparator-serving.sqlite3"
+    start_index = time.perf_counter()
+    info = build_comparator_index(artifact, indexed_path)
+    directory = {
+        "players": artifact["players"],
+        "generated_at": artifact["generated_at"],
+        "model_version": artifact["model"]["model_version"],
+    }
+    pair = load_pair_artifact(
+        indexed_path, directory,
+        player1=norrie[0]["player_id"], player2=svrcina[0]["player_id"], tour="atp",
+    )
+    # Compare the same fixed instant so time-sensitive rest/form stays identical.
+    from datetime import datetime, timezone
+    instant = datetime.now(timezone.utc)
+    original = compare_from_artifact(
+        artifact, player1=norrie[0]["player_id"], player2=svrcina[0]["player_id"],
+        tour="atp", surface="hard", best_of=3, now=instant,
+    )
+    optimized = compare_from_artifact(
+        pair, player1=norrie[0]["player_id"], player2=svrcina[0]["player_id"],
+        tour="atp", surface="hard", best_of=3, now=instant,
+    )
+    json.dumps(optimized, allow_nan=False)
+    p_source = original["player1"]["probability"]
+    p_indexed = optimized["player1"]["probability"]
+    if abs(p_source - p_indexed) > 1e-10 or optimized["winner"] != original["winner"]:
+        raise RuntimeError("Indexed comparator probability or winner mismatch")
+    print("INDEXED PARITY PASS", {
+        "source_p": p_source, "indexed_p": p_indexed,
+        "diff": abs(p_source-p_indexed),
+        "bytes": info["bytes"], "h2h": info["h2h"], "player_states": info["players"],
+        "index_build_s": round(time.perf_counter()-start_index, 2),
+        "rss_mb": current_rss_mb(),
+    }, flush=True)
+
 
 
 if __name__ == "__main__":
