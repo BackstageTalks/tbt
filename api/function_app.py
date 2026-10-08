@@ -2331,7 +2331,7 @@ def admin_diagnostics(req):
                 if worker_moment.tzinfo is None: worker_moment = worker_moment.replace(tzinfo=timezone.utc)
                 worker_moment = worker_moment.astimezone(timezone.utc)
                 worker_age_seconds = max(0, int((datetime.now(timezone.utc)-worker_moment).total_seconds()))
-                worker_healthy = bool(worker_configured and worker_age_seconds <= 180 and not worker_status.get("last_error"))
+                worker_healthy = bool(worker_configured and worker_age_seconds <= 600 and not worker_status.get("last_error"))
                 worker_next_due_at = datetime.fromtimestamp(
                     worker_moment.timestamp() + 300, tz=timezone.utc
                 ).isoformat()

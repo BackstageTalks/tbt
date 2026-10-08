@@ -141,3 +141,25 @@ def test_admin_diagnostics_uses_runtime_budget_caps_and_exposes_external_schedul
     assert status["provider_requests"] == 4
     assert status["next_due_at"]
     assert payload["services"]["match_status_worker"] is True
+
+    # Operational health tolerates one delayed 5-minute scan; user-facing
+    # live data snapshots still have their tighter freshness policy.
+    from datetime import timedelta
+    at_four_minutes = (datetime.now(timezone.utc) - timedelta(minutes=4)).isoformat()
+    monkeypatch.setattr(
+        function_app,
+        "load_live_worker_status",
+        lambda: {"updated_at": at_four_minutes, "scanned_at": at_four_minutes},
+    )
+    delayed = _json_response(function_app.admin_diagnostics(Request()))
+    assert delayed["live_worker"]["healthy"] is True
+
+    at_eleven_minutes = (datetime.now(timezone.utc) - timedelta(minutes=11)).isoformat()
+    monkeypatch.setattr(
+        function_app,
+        "load_live_worker_status",
+        lambda: {"updated_at": at_eleven_minutes, "scanned_at": at_eleven_minutes},
+    )
+    missing = _json_response(function_app.admin_diagnostics(Request()))
+    assert missing["live_worker"]["healthy"] is False
+    assert "live_worker_stale" in missing["problems"]

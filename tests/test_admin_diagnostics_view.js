@@ -87,7 +87,7 @@ const healthy = {
 
 const allGood = render(healthy);
 assert.match(allGood, /Všetky kontroly v poriadku/);
-assert.match(allGood, /<b>13<\/b> v poriadku/);
+assert.match(allGood, /<b>12<\/b> v poriadku/);
 assert.match(allGood, /admin-health-ok-details" open/);
 assert.match(allGood, /API ROZPOČET · PROVIDER DEŇ/);
 assert.match(allGood, /LIVE využité/);
@@ -109,9 +109,11 @@ warnings.match_status_worker = { configured: true, healthy: false, age_seconds: 
 const degraded = render(warnings);
 assert.match(degraded, /Funguje s upozorneniami/);
 assert.match(degraded, /<b>10<\/b> v poriadku/);
-assert.match(degraded, /<b>3<\/b> na kontrolu/);
+assert.match(degraded, /<b>2<\/b> na kontrolu/);
 assert.match(degraded, /Treba skontrolovať/);
-assert.match(degraded, /Chýbajúce logá majú náhradný obrázok/);
+assert.ok(degraded.includes('104/147 deployed · 43 fallback'));
+assert.ok(!degraded.includes('TOURNAMENT LOGOS</small>'), 'fallback-covered logos must not appear as a service outage');
+assert.match(degraded, /8m since scan/);
 const missingOdds = structuredClone(healthy);
 missingOdds.assets.market_odds.required = {
   ...missingOdds.assets.market_odds.required,
