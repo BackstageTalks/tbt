@@ -5682,6 +5682,8 @@
       const side=Number(input.dataset.comparatorInput);
       input.addEventListener('input',()=>{
         s.players[side]=null;s.result=null;s.error='';
+        input.closest('.comparator-player-field')?.classList.remove('is-selected');
+        input.closest('.comparator-player-field')?.querySelector('.comparator-player-confirmed')?.remove();
         const query=input.value.trim();clearTimeout(timers[side]);
         if(query.length<2){s.search[side]=[];const box=$(`comparatorSearch${side}`);if(box)box.innerHTML='';return;}
         timers[side]=setTimeout(async()=>{
