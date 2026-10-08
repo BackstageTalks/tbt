@@ -17,7 +17,7 @@ def main():
     with sync_playwright() as pw:
         browser=pw.chromium.launch(headless=True,executable_path=os.getenv('BLINQ_BROWSER') or browser_path())
         try:
-            for width in (320,390,900,1440):
+            for width in (320,360,390,430,500,768,900,1440):
                 page=browser.new_page(viewport={'width':width,'height':850})
                 errors=[]
                 page.on('pageerror',lambda e:errors.append(str(e)))
@@ -49,6 +49,46 @@ def main():
                     assert page.locator('.mobile-icon-nav').is_hidden(),(width,'second mobile navigation row')
                     header_height=page.locator('.site-header').evaluate('(n)=>n.getBoundingClientRect().height')
                     assert header_height<=66,(width,header_height)
+                    assert page.locator('.header-top .reference-navigation .nav-icon-link:visible').count()==3,(width,'primary icons missing')
+                    # Worst-case icon density: LIVE and crown both available, plus project, bell, profile.
+                    page.evaluate('''() => {
+                        for (const id of ['insightShortcut','topUpgradeButton']) {
+                            const node=document.getElementById(id);
+                            node.dataset.mobileHeaderTestWasHidden=String(node.hidden);
+                            node.hidden=false;
+                        }
+                    }''')
+                    page.wait_for_timeout(60)
+                    icon_fit=page.evaluate('''() => {
+                        const selectors=['#bqm-toggle','.header-top>.brand',
+                          '.header-top .reference-navigation [data-route="predictions"]',
+                          '.header-top .reference-navigation [data-route="results"]',
+                          '.header-top .reference-navigation [data-route="compare"]',
+                          '#bqm-projects','#insightShortcut','#topUpgradeButton','#insightBell',
+                          '#profileButton'];
+                        const rects=selectors.map(selector=>({
+                            selector,node:document.querySelector(selector)
+                          })).filter(x=>x.node && !x.node.hidden && getComputedStyle(x.node).display!=='none')
+                          .map(x=>({selector:x.selector,rect:x.node.getBoundingClientRect()}));
+                        const overlap=rects.some((x,i)=>i>0 && x.rect.left < rects[i-1].rect.right-0.75);
+                        return {overlap,
+                            left:Math.min(...rects.map(x=>x.rect.left)),
+                            right:Math.max(...rects.map(x=>x.rect.right)),
+                            overflow:document.documentElement.scrollWidth-innerWidth,
+                            visible:rects.map(x=>x.selector)};
+                    }''')
+                    assert len(icon_fit['visible'])==10,(width,icon_fit)
+                    assert not icon_fit['overlap'],(width,icon_fit)
+                    assert icon_fit['left']>=0 and icon_fit['right']<=width+1,(width,icon_fit)
+                    assert icon_fit['overflow']<=2,(width,icon_fit)
+                    page.evaluate('''() => {
+                        for (const id of ['insightShortcut','topUpgradeButton']) {
+                            const n=document.getElementById(id);
+                            n.hidden=n.dataset.mobileHeaderTestWasHidden==='true';
+                            delete n.dataset.mobileHeaderTestWasHidden;
+                        }
+                    }''')
+                    print(f'Mobile header full icon fit at {width}px: PASS')
                 else:
                     styles=page.evaluate('''() => {
                         const selectors=['.reference-navigation[data-icon-navigation="1"] .nav-icon-link',
@@ -112,7 +152,11 @@ def main():
                 bell_box=page.locator('#insightBell').bounding_box()
                 badge_box=page.locator('#insightUnread').bounding_box()
                 assert badge_box and bell_box and badge_box['x']>=bell_box['x'] and badge_box['x']+badge_box['width']<=bell_box['x']+bell_box['width']+1,(width,bell_box,badge_box)
-                assert not page.locator('#topUpgradeButton').is_visible()
+                if width<=900:
+                    upgrade=page.locator('#topUpgradeButton')
+                    assert upgrade.is_visible()==(upgrade.get_attribute('hidden') is None),(width,'upgrade visibility should follow entitlement')
+                else:
+                    assert not page.locator('#topUpgradeButton').is_visible()
                 page.locator('#bqm-toggle').click()
                 root_text=page.locator('#bqm-dialog nav').inner_text()
                 assert 'Výsledky' in root_text,(width,root_text)
