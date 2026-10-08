@@ -10123,3 +10123,18 @@ body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile::before{o
     height:20px!important;
   }
 }
+
+
+/* Align icon buttons with existing 42px profile/project controls. */
+@media(min-width:901px){
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link,
+  body#blinqPremium .reference-topbar .header-actions .nav-action-icon,
+  body#blinqPremium .reference-topbar #insightShortcut.insight-live-button.nav-action-icon,
+  body#blinqPremium .reference-topbar #topUpgradeButton.header-upgrade.nav-action-icon,
+  body#blinqPremium .reference-topbar #insightBell.insight-bell.nav-action-icon{
+    width:42px!important;
+    min-width:42px!important;
+    height:42px!important;
+    min-height:42px!important;
+  }
+}
