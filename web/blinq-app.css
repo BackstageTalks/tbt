@@ -9473,10 +9473,10 @@ body#blinqPremium .admin-reload-metrics .admin-login-metrics-cards article stron
   position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;
   overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;
 }
-body#blinqPremium .reference-navigation.icon-navigation{
+body#blinqPremium .reference-navigation[data-icon-navigation="1"]{
   height:58px!important;display:flex!important;align-items:center!important;gap:10px!important;overflow:visible!important;
 }
-body#blinqPremium .reference-navigation.icon-navigation .nav-icon-link,
+body#blinqPremium .reference-navigation[data-icon-navigation="1"] .nav-icon-link,
 body#blinqPremium .reference-topbar .nav-action-icon{
   position:relative!important;box-sizing:border-box!important;
   width:42px!important;min-width:42px!important;height:42px!important;
@@ -9486,17 +9486,17 @@ body#blinqPremium .reference-topbar .nav-action-icon{
   box-shadow:none!important;text-decoration:none!important;
   transition:border-color .18s ease,background .18s ease,color .18s ease,box-shadow .18s ease,transform .18s ease!important;
 }
-body#blinqPremium .reference-navigation.icon-navigation .nav-icon-link:hover,
-body#blinqPremium .reference-navigation.icon-navigation .nav-icon-link:focus-visible{
+body#blinqPremium .reference-navigation[data-icon-navigation="1"] .nav-icon-link:hover,
+body#blinqPremium .reference-navigation[data-icon-navigation="1"] .nav-icon-link:focus-visible{
   color:#ffd667!important;border-color:rgba(244,193,77,.45)!important;
   background:rgba(244,193,77,.055)!important;
 }
-body#blinqPremium .reference-navigation.icon-navigation .nav-icon-link.active{
+body#blinqPremium .reference-navigation[data-icon-navigation="1"] .nav-icon-link.active{
   color:#ffd667!important;border-color:rgba(255,205,89,.72)!important;
   background:linear-gradient(180deg,rgba(245,190,56,.10),rgba(73,45,4,.08))!important;
   box-shadow:0 0 0 1px rgba(255,202,66,.09),0 0 18px rgba(255,181,38,.18)!important;
 }
-body#blinqPremium .reference-navigation.icon-navigation .nav-icon-link.active:after{
+body#blinqPremium .reference-navigation[data-icon-navigation="1"] .nav-icon-link.active:after{
   left:9px!important;right:9px!important;bottom:-9px!important;height:2px!important;border-radius:999px!important;
   background:#f4c04b!important;box-shadow:0 0 8px rgba(244,192,75,.72)!important;
 }
@@ -9534,6 +9534,7 @@ body#blinqPremium .live-heart-icon .live-heart-seam{stroke-width:1.65!important}
 body#blinqPremium .live-heart-icon .live-wave{stroke-width:1.25!important;opacity:.58;transform-origin:16px 16px;animation:blinqLiveWave 1.9s ease-in-out infinite}
 body#blinqPremium .live-heart-icon .live-wave-right{animation-delay:.12s}
 @keyframes blinqLiveWave{0%,100%{opacity:.28;transform:scale(.96)}50%{opacity:.88;transform:scale(1.06)}}
+body#blinqPremium .reference-topbar .header-upgrade.nav-action-icon #topUpgradeLabel{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 body#blinqPremium .reference-topbar .header-upgrade.nav-action-icon{
   width:42px!important;min-width:42px!important;height:42px!important;padding:0!important;
   color:#62eadf!important;border:1px solid rgba(84,222,209,.22)!important;border-radius:10px!important;
