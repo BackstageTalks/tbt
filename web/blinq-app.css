@@ -9457,3 +9457,12 @@ body#blinqPremium .admin-hero-preview-stage .lean-admin-preview:is(.desktop,.mob
 @media(max-width:760px){.admin-level-access-switches,.admin-level-access-meta,.admin-level-access-grid{grid-template-columns:1fr}.admin-level-access-row{grid-template-columns:minmax(90px,1fr) 96px 74px}}
 
 /* BlinQ runtime patch 7.3.6-r61 */
+
+/* Compact page reload panel; leaves the existing login card and its note intact. */
+body#blinqPremium .admin-accounts-simple .admin-reload-metrics{padding:11px 13px!important;max-width:100%!important}
+body#blinqPremium .admin-reload-metrics h3{font-size:12px!important;margin:0 0 8px!important}
+body#blinqPremium .admin-reload-metrics .admin-login-metrics-cards{gap:8px!important}
+body#blinqPremium .admin-reload-metrics .admin-login-metrics-cards article{min-height:54px!important;padding:9px 12px!important}
+body#blinqPremium .admin-reload-metrics .admin-login-metrics-cards article span{font-size:10px!important}
+body#blinqPremium .admin-reload-metrics .admin-login-metrics-cards article strong{font-size:19px!important}
+@media(max-width:480px){body#blinqPremium .admin-reload-metrics .admin-login-metrics-cards{grid-template-columns:repeat(3,minmax(0,1fr))!important}body#blinqPremium .admin-reload-metrics .admin-login-metrics-cards article{padding:8px!important}}

@@ -666,6 +666,32 @@
     return data;
   }
 
+  // One observation for each genuine browser reload (not SPA routing or token renewal).
+  // The sessionStorage marker also prevents duplicate sends during app reinitialization.
+  function startReloadObservation() {
+    try {
+      const nav = performance.getEntriesByType('navigation')[0];
+      if (nav?.type !== 'reload') return;
+      const key = 'blinq-reload-observed:' + performance.timeOrigin;
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, '1');
+      const eventId = crypto.randomUUID();
+      let attempts = 0;
+      const poll = setInterval(() => {
+        if (++attempts > 30) { clearInterval(poll); return; }
+        if (!session()) return;
+        clearInterval(poll);
+        apiWithSession('/api/v1/telemetry/page-reload', {
+          method: 'POST', body: JSON.stringify({event_id: eventId})
+        }).catch(() => {});
+      }, 1000);
+    } catch (_) { /* Optional telemetry must never interrupt site use. */ }
+  }
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    if (document.readyState === 'complete') startReloadObservation();
+    else window.addEventListener('load', startReloadObservation, {once: true});
+  }
+
   window.BlinqAuth = {
     init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, matchIntelligence,
     projectGroups, joinProjectGroup, leaveProjectGroup, insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, markInsightRead,
