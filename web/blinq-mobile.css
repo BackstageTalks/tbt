@@ -740,8 +740,11 @@ body#blinqPremium .reference-topbar #bqm-projects svg.project-rocket-icon{
   body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-top > .reference-navigation[data-icon-navigation="1"]{
     margin-left:auto!important;
   }
-  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-top > .header-actions{
+  /* Override the legacy .site-header .header-top .header-actions auto margin,
+     whose higher specificity left a 186px seam at 768px. */
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .site-header .header-top > .header-actions{
     margin-left:0!important;
+    margin-right:0!important;
   }
 }
 @media (max-width:540px){
