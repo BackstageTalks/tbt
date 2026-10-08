@@ -81,6 +81,14 @@ def main():
                     assert not icon_fit['overlap'],(width,icon_fit)
                     assert icon_fit['left']>=0 and icon_fit['right']<=width+1,(width,icon_fit)
                     assert icon_fit['overflow']<=2,(width,icon_fit)
+                    # The chart and rocket are adjacent parts of ONE icon strip.
+                    # Previously the auto margin left a large central hole.
+                    seam=page.evaluate("""() => {
+                        const left=document.querySelector('.header-top [data-route="compare"]').getBoundingClientRect();
+                        const right=document.querySelector('#bqm-projects').getBoundingClientRect();
+                        return right.left-left.right;
+                    }""")
+                    assert 0 <= seam <= 32,(width,'disconnected navigation groups',seam)
                     page.evaluate('''() => {
                         for (const id of ['insightShortcut','topUpgradeButton']) {
                             const n=document.getElementById(id);
@@ -103,6 +111,12 @@ def main():
                     }''')
                     assert len(styles)==5,(width,styles)
                     assert all(x['width']<=42 and x['height']<=42 and x['border']=='0px' for x in styles),(width,styles)
+                    desktop_seam=page.evaluate("""() => {
+                        const chart=document.querySelector('.header-top [data-route="compare"]').getBoundingClientRect();
+                        const rocket=document.querySelector('#bqm-projects').getBoundingClientRect();
+                        return rocket.left-chart.right;
+                    }""")
+                    assert 0 <= desktop_seam <= 24,(width,'desktop icon-strip gap',desktop_seam)
                 if width<=900:
                     assert page.locator('#bqm-projects').is_visible()
                     assert page.locator('#bqm-projects').get_attribute('data-unread')=='1'
