@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "requested_on": "2026-10-08",
+  "purpose": "Deploy tested betting-day feed freshness fix from PR #407 on the current main head",
+  "merged_fix_commit": "6e083f0e005c4196b9eb7a3aecee06b55d7ead02",
+  "promote_model": false,
+  "mode": "deploy-current"
+}
