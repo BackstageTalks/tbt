@@ -382,6 +382,8 @@
       `--hero-social-wrap:${String(c.desktop_social_layout||'row')==='column'?'nowrap':'wrap'}`,
       `--hero-social-mobile-direction:${String(c.mobile_social_layout||'row')==='column'?'column':'row'}`,
       `--hero-social-mobile-wrap:${String(c.mobile_social_layout||'row')==='column'?'nowrap':'wrap'}`,
+      `--hero-shadow-desktop-opacity:${n(c.desktop_shadow_strength,0,10,10)/10}`,
+      `--hero-shadow-mobile-opacity:${n(c.mobile_shadow_strength,0,10,10)/10}`,
       `--creative-delay:${n(c.animation_delay_ms,0,5000,80)}ms`,
       `--hero-img-x:${n(c.desktop_image_x,0,100,50)}%`,
       `--hero-img-y:${n(c.desktop_image_y,0,100,50)}%`,
@@ -3863,12 +3865,14 @@
           <fieldset><legend>Desktop · poloha obrázka</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_image_x" value="${Number.isFinite(Number(c.desktop_image_x))?Number(c.desktop_image_x):50}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_image_y" value="${Number.isFinite(Number(c.desktop_image_y))?Number(c.desktop_image_y):50}"></label></fieldset>
           <fieldset><legend>Desktop · text</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_text_x" value="${Number.isFinite(Number(c.desktop_text_x))?Number(c.desktop_text_x):3}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_text_y" value="${Number.isFinite(Number(c.desktop_text_y))?Number(c.desktop_text_y):50}"></label><label>Šírka %<input type="number" min="18" max="96" step="1" data-simple-banner-field="desktop_text_width" value="${Number.isFinite(Number(c.desktop_text_width))?Number(c.desktop_text_width):42}"></label></fieldset>
           <fieldset><legend>Desktop · sociálne tlačidlá</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_social_x" value="${Number.isFinite(Number(c.desktop_social_x))?Number(c.desktop_social_x):3}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_social_y" value="${Number.isFinite(Number(c.desktop_social_y))?Number(c.desktop_social_y):76}"></label><label>Písmo px<input type="number" min="7" max="22" step="1" data-simple-banner-field="desktop_social_size" value="${Number.isFinite(Number(c.desktop_social_size))?Number(c.desktop_social_size):11}"></label><label>Rozloženie<select data-simple-banner-field="desktop_social_layout"><option value="row"${String(c.desktop_social_layout||'row')==='row'?' selected':''}>Vedľa seba</option><option value="column"${String(c.desktop_social_layout||'row')==='column'?' selected':''}>Pod sebou</option></select></label></fieldset>
+          <fieldset><legend>Desktop · ľavý tieň</legend><label>Intenzita (0 = vypnutý)<input type="number" min="0" max="10" step="1" data-simple-banner-field="desktop_shadow_strength" value="${c.desktop_shadow_strength==null?10:Math.max(0,Math.min(10,Number(c.desktop_shadow_strength)||0))}"></label></fieldset>
           </section>
           <section class="admin-banner-device-panel admin-banner-device-mobile" aria-label="Nastavenia mobilného bannera">
             <header class="admin-banner-device-heading"><span class="admin-banner-device-icon" aria-hidden="true">▯</span><div><strong>Mobil</strong><small>Vlastné polohy a veľkosti</small></div><span class="admin-banner-device-tag">390 px</span></header>
           <fieldset><legend>Mobil · poloha obrázka</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_image_x" value="${Number.isFinite(Number(c.mobile_image_x))?Number(c.mobile_image_x):50}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_image_y" value="${Number.isFinite(Number(c.mobile_image_y))?Number(c.mobile_image_y):50}"></label></fieldset>
           <fieldset><legend>Mobil · text</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_text_x" value="${Number.isFinite(Number(c.mobile_text_x))?Number(c.mobile_text_x):4}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_text_y" value="${Number.isFinite(Number(c.mobile_text_y))?Number(c.mobile_text_y):50}"></label><label>Šírka %<input type="number" min="22" max="96" step="1" data-simple-banner-field="mobile_text_width" value="${Number.isFinite(Number(c.mobile_text_width))?Number(c.mobile_text_width):70}"></label></fieldset>
           <fieldset><legend>Mobil · sociálne tlačidlá</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_social_x" value="${Number.isFinite(Number(c.mobile_social_x))?Number(c.mobile_social_x):4}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_social_y" value="${Number.isFinite(Number(c.mobile_social_y))?Number(c.mobile_social_y):76}"></label><label>Písmo px<input type="number" min="7" max="22" step="1" data-simple-banner-field="mobile_social_size" value="${Number.isFinite(Number(c.mobile_social_size))?Number(c.mobile_social_size):10}"></label><label>Rozloženie<select data-simple-banner-field="mobile_social_layout"><option value="row"${String(c.mobile_social_layout||'row')==='row'?' selected':''}>Vedľa seba</option><option value="column"${String(c.mobile_social_layout||'row')==='column'?' selected':''}>Pod sebou</option></select></label></fieldset>
+          <fieldset><legend>Mobil · ľavý tieň</legend><label>Intenzita (0 = vypnutý)<input type="number" min="0" max="10" step="1" data-simple-banner-field="mobile_shadow_strength" value="${c.mobile_shadow_strength==null?10:Math.max(0,Math.min(10,Number(c.mobile_shadow_strength)||0))}"></label></fieldset>
           </section>
         </div>
         <p class="admin-banner-layout-help span-2">X = vodorovne, Y = zvisle. Polohy sa nastavujú v % rozmeru bannera, oddelene pre PC a mobil. Šírka textu riadi zalomenie.</p>
@@ -5221,7 +5225,7 @@
       if(t.dataset.adminHeroRotate!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.auto_rotate=t.checked;renderHeroBanner();rerenderAdmin();return;}
       if(t.dataset.adminHeroDots!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.show_dots=t.checked;renderHeroBanner();rerenderAdmin();return;}
       const simpleBanner=t.closest('[data-simple-banner]');
-      if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:/(?:_size|_x|_y|_width)$/.test(t.dataset.simpleBannerField)?Number(t.value):t.value;state.adminPreviewPinnedId=id;state.adminPreviewPaused=true;renderAllUiContent();rerenderAdmin();}return;}
+      if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};const field=t.dataset.simpleBannerField;item.content[field]=t.type==='checkbox'?t.checked:/_shadow_strength$/.test(field)?Math.max(0,Math.min(10,Number(t.value)||0)):/((?:_size|_x|_y|_width))$/.test(field)?Number(t.value):t.value;state.adminPreviewPinnedId=id;state.adminPreviewPaused=true;renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.adminKpiIndex!==undefined&&t.dataset.adminKpiField){
         const index=Number(t.dataset.adminKpiIndex),field=t.dataset.adminKpiField;
         if(!Number.isInteger(index)||index<0||index>=3)return;
@@ -5257,12 +5261,12 @@
     // Live copy feedback without replacing the selected editor or interrupting typing.
     host.oninput=event=>{
       const t=event.target,field=t?.dataset?.simpleBannerField;
-      const liveFields=['eyebrow','headline','text','button_text','desktop_image_x','desktop_image_y','mobile_image_x','mobile_image_y','desktop_text_x','desktop_text_y','desktop_text_width','mobile_text_x','mobile_text_y','mobile_text_width','desktop_headline_size','mobile_headline_size','desktop_text_size','mobile_text_size','desktop_eyebrow_size','mobile_eyebrow_size','desktop_social_x','desktop_social_y','mobile_social_x','mobile_social_y','desktop_social_size','mobile_social_size'];
+      const liveFields=['eyebrow','headline','text','button_text','desktop_image_x','desktop_image_y','mobile_image_x','mobile_image_y','desktop_text_x','desktop_text_y','desktop_text_width','mobile_text_x','mobile_text_y','mobile_text_width','desktop_headline_size','mobile_headline_size','desktop_text_size','mobile_text_size','desktop_eyebrow_size','mobile_eyebrow_size','desktop_social_x','desktop_social_y','mobile_social_x','mobile_social_y','desktop_social_size','mobile_social_size','desktop_shadow_strength','mobile_shadow_strength'];
       if(!field||!liveFields.includes(field))return;
       const wrap=t.closest('[data-simple-banner]'),item=elements()?.[wrap?.dataset?.simpleBanner];
       if(!item)return;
       item.content=item.content||{};
-      item.content[field]=/(?:_x|_y|_width|_size)$/.test(field)?Number(t.value):t.value;
+      item.content[field]=/_shadow_strength$/.test(field)?Math.max(0,Math.min(10,Number(t.value)||0)):/((?:_x|_y|_width|_size))$/.test(field)?Number(t.value):t.value;
       state.adminPreviewPinnedId=wrap.dataset.simpleBanner;
       state.adminPreviewPaused=true;
       syncAdminHeroPreview();
