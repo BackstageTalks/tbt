@@ -45,18 +45,30 @@ def main():
                     const h=window.comparatorHarness;
                     h.state.route='compare';
                     h.state.comparator=null;
-                    window.BlinqAuth.comparatorPlayers=async() => ({
-                        players:[
+                    window.comparatorSearchCalls=[];
+                    window.BlinqAuth.comparatorPlayers=async(query,tour) => {
+                        window.comparatorSearchCalls.push({query,tour});
+                        return {players:[
                             {player_id:'atp:novak',name:'Novak Djokovic',tour:'atp',matches_seen:100},
                             {player_id:'atp:novic',name:'Novak Novic',tour:'atp',matches_seen:8}
-                        ]
-                    });
+                        ]};
+                    };
                     document.getElementById('routePanel').innerHTML=h.renderComparatorRoute();
                     h.wireComparator();
                 }""")
                 page.locator("#comparatorPlayer0").fill("Nov")
-                page.locator(".comparator-search-results button").first.wait_for()
-                assert page.locator(".comparator-search-results button").count() == 2
+                page.wait_for_timeout(1200)
+                diagnostic = page.evaluate("""() => ({
+                    route: comparatorHarness.state.route,
+                    seq: comparatorHarness.state.comparator?.searchSeq,
+                    rows: comparatorHarness.state.comparator?.search?.[0],
+                    query: document.querySelector('#comparatorPlayer0')?.value,
+                    html: document.querySelector('#comparatorSearch0')?.innerHTML,
+                    calls: window.comparatorSearchCalls
+                })""")
+                assert page.locator(".comparator-search-results button").count() == 2, (
+                    width, diagnostic, errors
+                )
                 page.locator(".comparator-search-results button").first.click()
                 assert page.locator("#comparatorPlayer0").input_value() == "Novak Djokovic"
                 assert page.locator(".comparator-player-confirmed").count() == 1
