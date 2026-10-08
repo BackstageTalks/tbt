@@ -32,6 +32,8 @@ def test_worker_remains_externally_dispatchable_without_github_cron():
     assert 'sleep 50' in WORKFLOW
     assert 'X-Blinq-Worker-Token' in WORKFLOW
     assert "github.event_name == 'workflow_dispatch'" in WORKFLOW
+    assert 'data-autofill.yml' not in WORKFLOW, 'LIVE worker must not launch competing data writers'
+    assert 'gh workflow run' not in WORKFLOW, 'LIVE scan must only scan, never dispatch data jobs'
 
 
 def test_worker_heartbeat_is_persistent_and_visible_in_admin_system():
