@@ -24,6 +24,15 @@ from zoneinfo import ZoneInfo
 
 TERMINAL_STATUSES = {"win", "loss", "retired", "void"}
 
+
+def _explicitly_nonterminal_status(value: Any) -> bool:
+    """Never settle live fixtures from an early/incomplete winnerCode."""
+    status = str(value or "").strip().lower()
+    return status.startswith((
+        "inprogress", "in progress", "notstarted", "not started",
+        "scheduled", "ongoing", "live", "suspended", "interrupted", "paused",
+    ))
+
 _PUBLIC_MATCH_WINNER_KEYS = (
     "top200_picks",
     "prime_picks",
@@ -520,11 +529,14 @@ def classify_finished_event(
     except (TypeError, ValueError):
         winner_code = 0
 
+    # Some provider events expose winnerCode while the match is still live.
+    # Require a confirmed terminal provider status before issuing W/L.
+    if _explicitly_nonterminal_status(status_text):
+        return None
     finished = any(
         marker in status_text
         for marker in ("finished", "ended", "completed", "full time")
-    ) or winner_code in {1, 2}
-
+    )
     if not finished and not retired and not void:
         return None
 
@@ -676,6 +688,9 @@ def scan_match_statuses(
         for eid, value in existing.items()
         if isinstance(value, dict)
         and str(value.get("status") or "") in TERMINAL_STATUSES
+        # Repair snapshots prematurely settled from 'inprogress 2nd set'.
+        # They must return to the due queue for verified final evidence.
+        and not _explicitly_nonterminal_status(value.get("provider_status"))
         and (not public_contract_present or str(eid) in tracked_ids)
     }
 
