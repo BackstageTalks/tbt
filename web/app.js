@@ -5734,7 +5734,7 @@
       [publicText('Validity'),duration],
     ];
   }
-  let accessHintTimer=0,accessHintHoverTimer=0,accessHintTarget=null,upgradeReturnTarget=null;
+  let accessHintTimer=0,accessHintHoverTimer=0,accessHintTarget=null,upgradeReturnTarget=null,upgradeReturnTargetOverride=null;
   function accessHintTrigger(node){
     if(node?.closest?.('#accessHint')||$('upgradeDialog')?.open)return null;
     return node?.closest?.('[data-upgrade-plan]:not([data-upgrade-explicit="1"])');
@@ -5844,7 +5844,8 @@
   function showUpgradePrompt(planId='pro',sectionLabel='this content',lockedContext=false){
     const dialog=$('upgradeDialog'),host=$('upgradeDialogContent');if(!dialog||!host)return;
     if(dialog.open)return;
-    upgradeReturnTarget=$('accessHint')?.contains(document.activeElement)?accessHintTarget:document.activeElement;
+    upgradeReturnTarget=upgradeReturnTargetOverride?.isConnected?upgradeReturnTargetOverride:($('accessHint')?.contains(document.activeElement)?accessHintTarget:document.activeElement);
+    upgradeReturnTargetOverride=null;
     hideAccessHint();
     const a=state.feed?.account||{};
     const requiredId=membershipHierarchy.includes(String(planId||'').toLowerCase())?String(planId).toLowerCase():'pro';
@@ -6026,7 +6027,7 @@
     document.addEventListener('click',e=>{
       if(!e.target.closest('#profileShell'))closeProfileMenu();
       const dashboardToggle=e.target.closest('[data-dashboard-toggle]');if(dashboardToggle&&state.route==='predictions'){e.preventDefault();toggleDashboardSection(dashboardToggle.dataset.dashboardToggle);return;}
-      const accessUpgrade=e.target.closest('#accessHintUpgrade');if(accessUpgrade){e.preventDefault();e.stopPropagation();showUpgradePrompt(accessUpgrade.dataset.upgradePlan||'elite',accessUpgrade.dataset.upgradeSection||'BlinQ',true);return;}
+      const accessUpgrade=e.target.closest('#accessHintUpgrade');if(accessUpgrade){e.preventDefault();e.stopPropagation();upgradeReturnTargetOverride=accessHintTarget;showUpgradePrompt(accessUpgrade.dataset.upgradePlan||'elite',accessUpgrade.dataset.upgradeSection||'BlinQ',true);return;}
       const upgradeTarget=e.target.closest('[data-upgrade-plan]');
       const lockedResultsRoute=Boolean(upgradeTarget?.dataset?.uiElement==='SIDEBAR_RESULTS'&&upgradeTarget?.dataset?.route==='results');
       if(upgradeTarget&&state.route!=='admin'&&!lockedResultsRoute){e.preventDefault();e.stopPropagation();const plan=upgradeTarget.dataset.upgradePlan||'pro',section=upgradeTarget.dataset.upgradeSection||'this content';if(upgradeTarget.dataset.upgradeExplicit==='1')showUpgradePrompt(plan,section);else showAccessHint(upgradeTarget,plan,section,true);return;}
@@ -6049,7 +6050,16 @@
     document.addEventListener('focusin',e=>{const target=accessHintTrigger(e.target);if(target&&state.route!=='admin')showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false);});
     document.addEventListener('focusout',e=>{const hint=$('accessHint'),next=e.relatedTarget;if(next instanceof Node&&(hint?.contains(next)||accessHintTarget?.contains(next)))return;if(accessHintTrigger(e.target)||hint?.contains(e.target))hideAccessHint(180);});
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('accessHint')?.hidden){hideAccessHint();}});
-    $('upgradeDialog').addEventListener('cancel',event=>{event.preventDefault();$('upgradeDialog').close();});
+    $('upgradeDialog').addEventListener('cancel',event=>{
+      event.preventDefault();
+      $('upgradeDialog').close();
+      // The native close event may fire after the keypress returns. Restore
+      // focus synchronously for keyboard Escape; the close handler still
+      // covers explicit close buttons and backdrop dismissal.
+      const target=upgradeReturnTarget;
+      if(target?.isConnected)target.focus({preventScroll:true});
+      hideAccessHint();
+    });
     $('upgradeDialog').addEventListener('close',()=>{const target=upgradeReturnTarget;upgradeReturnTarget=null;const restore=()=>{if(target?.isConnected)target.focus({preventScroll:true});hideAccessHint();};restore();queueMicrotask(restore);});
     window.addEventListener('scroll',()=>hideAccessHint(),{passive:true});
     window.addEventListener('resize',()=>{if(accessHintTarget&&!$('accessHint')?.hidden)positionAccessHint(accessHintTarget);},{passive:true});
