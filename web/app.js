@@ -4978,10 +4978,46 @@
       };
     });
   }
+  function decorateBannerNumberControls(host){
+    // Large +/- targets supplement tiny native spinner arrows in banner layout controls.
+    host.querySelectorAll('.admin-banner-layout-grid input[type="number"][data-simple-banner-field]').forEach(input=>{
+      if(input.parentElement?.classList.contains('admin-banner-number-control'))return;
+      const controls=document.createElement('div');
+      controls.className='admin-banner-number-control';
+      const button=(direction,label)=>{
+        const el=document.createElement('button');
+        el.type='button';
+        el.className='admin-banner-step';
+        el.dataset.bannerStep=String(direction);
+        el.textContent=label;
+        el.setAttribute('aria-label',direction<0?'Znížiť hodnotu o 1':'Zvýšiť hodnotu o 1');
+        return el;
+      };
+      input.before(controls);
+      controls.append(button(-1,'−'),input,button(1,'+'));
+    });
+  }
   function wireAdmin(){
     const host=$('routePanel'); if(!host)return;
     decorateAdminMediaUploads(host);
+    decorateBannerNumberControls(host);
     host.onclick=async event=>{
+      const step=event.target.closest('[data-banner-step]');
+      if(step){
+        const input=step.parentElement?.querySelector('input[type="number"][data-simple-banner-field]');
+        if(!input)return;
+        const amount=Number(step.dataset.bannerStep)||0;
+        const min=input.min===''?-Infinity:Number(input.min);
+        const max=input.max===''?Infinity:Number(input.max);
+        const current=Number(input.value)||0;
+        const next=Math.max(min,Math.min(max,current+amount));
+        if(next!==current){
+          input.value=String(next);
+          input.dispatchEvent(new Event('input',{bubbles:true}));
+          input.dispatchEvent(new Event('change',{bubbles:true}));
+        }
+        return;
+      }
       const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;rerenderAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='insights'){loadAdminInsights();loadAdminInfoResults();loadAdminLiveResults();}if(state.adminTab==='system')loadAdminDiagnostics(true);return;}
       const tgAction=event.target.closest('[data-admin-action="tg-add"],[data-admin-action="tg-remove"]');if(tgAction){const cfg=state.ui.telegram_groups=state.ui.telegram_groups||{schema:1,enabled:true,groups:[]};cfg.groups=Array.isArray(cfg.groups)?cfg.groups:[];if(tgAction.dataset.adminAction==='tg-add'){cfg.groups.push({id:`group_${Date.now()}`,enabled:true,badge:'KOMUNITA',title:'Telegram skupina',description:'',cta:'Otvoriť Telegram',url:'',min_plan:'rookie'});}else{const index=Number(tgAction.dataset.tgIndex);if(Number.isInteger(index)&&index>=0)cfg.groups.splice(index,1);}renderTelegramGroupsPanel();rerenderAdmin();return;}
       const planChip=event.target.closest('[data-admin-plan-chip]');if(planChip){state.adminPlan=planChip.dataset.adminPlanChip;rerenderAdmin();return;}
