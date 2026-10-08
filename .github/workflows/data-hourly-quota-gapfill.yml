@@ -1,0 +1,197 @@
+name: BlinQ hourly API quota gapfill
+
+# GitHub cron is intentionally forbidden by the repository contract.
+# The external ChatGPT hourly scheduler writes an explicit tick file; this
+# workflow independently verifies live quota and starts at most one safe job.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hourly-api-gapfill-smoke.json'
+      - '.github/hourly-api-gapfill-tick.json'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Verify budget and eligible job without dispatching anything.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: tbt-hourly-api-gapfill-orchestrator
+  cancel-in-progress: false
+
+jobs:
+  guard-plan-dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      DRY_RUN: ${{ (github.event_name == 'push' && !contains(github.event.head_commit.message, '[api-autofill-tick]')) || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+    steps:
+      - name: Verify budget, reserve hourly capacity, and dispatch governed pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+          from datetime import datetime, time, timedelta, timezone
+          from zoneinfo import ZoneInfo
+
+          REPO = os.environ["GITHUB_REPOSITORY"]
+          TOKEN = os.getenv("GH_TOKEN", "")
+          WORKER = os.getenv("WORKER_TOKEN", "")
+          BUDGET_URL = os.getenv("BUDGET_URL", "")
+          DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
+          ZONE = ZoneInfo("Europe/Bratislava")
+          now = datetime.now(timezone.utc)
+          local = now.astimezone(ZONE)
+
+          # Global provider-day spending ceilings; includes live, match, refresh,
+          # history AND committed reservations, never just history calls.
+          caps = {12: 5700, 13: 6900, 14: 8100, 15: 9300,
+                  16: 10500, 17: 12000, 18: 13500}
+          print(f"Bratislava time: {local.isoformat()}; dry_run={DRY_RUN}", flush=True)
+          closeout_only = local.hour == 19
+          if local.hour not in caps and not closeout_only and not DRY_RUN:
+              print("Outside the 12:00-19:00 Bratislava API window; skipping.")
+              sys.exit(0)
+          if local.hour == 18 and local.minute > 15:
+              print("18:15 cutoff for new dispatches; skipping.")
+              sys.exit(0)
+          if not TOKEN or not WORKER or not BUDGET_URL.startswith("https://"):
+              raise SystemExit("Required GitHub / shared-budget credentials missing; fail closed")
+
+          def get_json(url, token, worker=False):
+              headers = ({"X-Blinq-Worker-Token": token} if worker else {
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              })
+              request = urllib.request.Request(url, headers=headers, method="GET")
+              with urllib.request.urlopen(request, timeout=15) as response:
+                  return json.load(response)
+
+          def check_writers():
+              # Check all concurrent and pending runs, not just this scheduler.
+              writer_paths = {
+                  "data.yml", "training-data-enrichment.yml",
+                  "training-db-rebuild.yml", "nightly-data-maintenance.yml",
+                  "environment-enrichment.yml", "valuebet-market-history.yml",
+                  "offline-uploaded-history-enrichment.yml",
+                  "kaggle-wta-2016-2017-odds.yml", "atp-rank-history.yml",
+                  "wta-rank-gapfill.yml", "wta-rank-history-audit.yml",
+                  "livetennisapi-public-sample.yml", "kaggle-hwaitt-history-enrichment.yml",
+                  "tennis-data-historical-odds.yml", "rank-input-readback-closeout.yml",
+              }
+              active = []
+              for status in ("queued", "pending", "in_progress", "waiting", "requested"):
+                  url = f"https://api.github.com/repos/{REPO}/actions/runs?status={status}&per_page=100"
+                  result = get_json(url, TOKEN)
+                  if int(result.get("total_count", 0)) > 100:
+                      raise RuntimeError("Active workflow results paginated; fail closed")
+                  for run in result.get("workflow_runs", []):
+                      path = str(run.get("path") or "").split("@", 1)[0].rsplit("/", 1)[-1]
+                      if path in writer_paths:
+                          active.append(f"{path} run={run.get('id')} status={status}")
+              return active
+
+          # A missing/unavailable ledger must never be interpreted as zero usage.
+          budget_response = get_json(BUDGET_URL, WORKER, worker=True)
+          if budget_response.get("ok") is not True:
+              raise SystemExit("Shared budget did not confirm status; no dispatch")
+          budget = budget_response.get("budget")
+          if not isinstance(budget, dict) or (
+              budget.get("window") != "provider_day_19_10_europe_bratislava"
+              or budget.get("provider_plan_limit") != 15000
+              or budget.get("global_limit") != 13500
+              or budget.get("reserved_provider_headroom") != 1500
+          ):
+              raise SystemExit("Unrecognized budget contract; no dispatch")
+
+          spent = int(budget["global_spent"])
+          remaining = int(budget["global_remaining"])
+          history_remaining = int(budget["remaining"]["history"])
+          if closeout_only or (DRY_RUN and local.hour not in caps):
+              print(f"Read-only quota check: {spent}/15000 provider-day requests used, "
+                    f"{remaining} remaining to 90% ceiling. No new job.")
+              if DRY_RUN:
+                  print("DRY RUN active writer check: " + str(check_writers()))
+              sys.exit(0)
+          if spent < 0 or remaining != max(0, 13500-spent):
+              raise SystemExit("Shared budget inconsistency; no dispatch")
+          reset = datetime.fromisoformat(str(budget["next_reset_utc"]).replace("Z", "+00:00"))
+          if reset.tzinfo is None or reset.astimezone(ZONE).date() != local.date() or reset.astimezone(ZONE).hour != 19:
+              raise SystemExit("Provider reset time inconsistent; no dispatch")
+
+          limit = caps[local.hour]
+          # Keep the last hour small enough to complete safely. Every run also
+          # gets an enforced per-provider-request UTC cutoff.
+          speed_caps = {17: 1400, 18: 500}
+          proposed = min(3000, speed_caps.get(local.hour, 3000),
+                         limit-spent, remaining, history_remaining)
+          print(f"API budget: {spent}/15000 used; hourly ceiling={limit}; "
+                f"global remaining={remaining}; proposed max={proposed}", flush=True)
+
+          if proposed < 250:
+              print("No useful-sized request allowance under the current time ceiling.")
+              sys.exit(0)
+
+          active = check_writers()
+          if active:
+              print("Canonical writer active/queued; no dispatch: " + "; ".join(active))
+              sys.exit(0)
+
+          # Earlier history may have unavailable statistics. Statistics mode
+          # uses canonical identity, schema-3 cache, and quality-ready skip logic.
+          # The consumer rechecks the provider's real remaining header before
+          # continuing and stops on header loss or below the 1500 reserve.
+          cutoff_local = datetime.combine(local.date(), time(18, 55), tzinfo=ZONE)
+          cutoff = cutoff_local.astimezone(timezone.utc)
+          if now >= cutoff - timedelta(minutes=15):
+              print("Less than 15 minutes until API cutoff; no dispatch")
+              sys.exit(0)
+          last_complete = local.date() - timedelta(days=1)
+          payload = {
+              "ref": "main",
+              "inputs": {
+                  "mode": "statistics",
+                  "start": "2022-01-01",
+                  "end": last_complete.isoformat(),
+                  "max_requests": str(proposed),
+                  "lookback_days": "1095",
+                  "promote": "false",
+                  "hourly_autofill": "true",
+                  "autofill_stop_at_utc": cutoff.isoformat(),
+              },
+          }
+          print("Guarded statistics plan: " + json.dumps(payload, sort_keys=True))
+          if DRY_RUN:
+              print("DRY RUN - no GitHub workflow dispatched.")
+              sys.exit(0)
+
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{REPO}/actions/workflows/data.yml/dispatches",
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Authorization": f"Bearer {TOKEN}",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+                  "Content-Type": "application/json",
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=20) as response:
+              if response.status != 204:
+                  raise RuntimeError(f"Unexpected GitHub dispatch HTTP {response.status}")
+          print("GitHub accepted guarded statistics dispatch. This is not proof of completed ingestion.")
+          PY
