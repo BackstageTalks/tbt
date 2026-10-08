@@ -687,7 +687,7 @@
       }, 1000);
     } catch (_) { /* Optional telemetry must never interrupt site use. */ }
   }
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     if (document.readyState === 'complete') startReloadObservation();
     else window.addEventListener('load', startReloadObservation, {once: true});
   }
