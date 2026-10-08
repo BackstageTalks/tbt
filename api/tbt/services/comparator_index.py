@@ -7,7 +7,7 @@ provider calls in the public runtime.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import sqlite3
@@ -17,7 +17,15 @@ from typing import Mapping
 from ..data.player_identity import normalize_player_name
 
 
-INDEX_SCHEMA = 1
+INDEX_SCHEMA = 2
+H2H_BUCKETS = 256
+
+
+def _pair_bucket(left: str, right: str) -> int:
+    # Symmetric deterministic partition. A request reads only one compressed
+    # bucket, including both historical orientations and every surface.
+    pair = "\\x1f".join(sorted((str(left), str(right))))
+    return hashlib.sha256(pair.encode("utf-8")).digest()[0]
 
 
 class ComparatorIndexError(ValueError):
@@ -69,12 +77,7 @@ def build_comparator_index(artifact: Mapping, target: Path) -> dict:
         conn.execute("PRAGMA synchronous=OFF")
         conn.execute("CREATE TABLE metadata(key TEXT PRIMARY KEY, value BLOB NOT NULL)")
         conn.execute("CREATE TABLE player_states(player_key TEXT PRIMARY KEY, payload BLOB NOT NULL)")
-        conn.execute(
-            "CREATE TABLE h2h(left_key TEXT NOT NULL,right_key TEXT NOT NULL,"
-            " surface TEXT NOT NULL,wins_left INTEGER NOT NULL,wins_right INTEGER NOT NULL,"
-            " PRIMARY KEY(left_key,right_key,surface))"
-        )
-        conn.execute("CREATE INDEX h2h_reverse ON h2h(right_key,left_key)")
+        conn.execute("CREATE TABLE h2h_buckets(bucket INTEGER PRIMARY KEY, payload BLOB NOT NULL)")
         conn.executemany("INSERT INTO metadata(key,value) VALUES (?,?)", [
             ("schema", _encode(INDEX_SCHEMA)),
             ("core", _encode(core)),
@@ -85,21 +88,23 @@ def build_comparator_index(artifact: Mapping, target: Path) -> dict:
             ((key, _encode(states[key])) for key in sorted(allowed)),
         )
         total_h2h = 0
+        buckets = [[] for _ in range(H2H_BUCKETS)]
         for surface_key, rows in (("", source.get("h2h") or []), ("surface", source.get("surface_h2h") or [])):
-            batch = []
             for row in rows:
                 left, right = str(row.get("left") or ""), str(row.get("right") or "")
                 if left not in allowed or right not in allowed:
                     continue
                 surface = str(row.get("surface") or "") if surface_key else ""
-                batch.append((left, right, surface, int(row.get("wins_left") or 0), int(row.get("wins_right") or 0)))
-                if len(batch) >= 2000:
-                    conn.executemany("INSERT INTO h2h VALUES (?,?,?,?,?)", batch)
-                    total_h2h += len(batch)
-                    batch.clear()
-            if batch:
-                conn.executemany("INSERT INTO h2h VALUES (?,?,?,?,?)", batch)
-                total_h2h += len(batch)
+                buckets[_pair_bucket(left, right)].append([
+                    left, right, surface,
+                    int(row.get("wins_left") or 0), int(row.get("wins_right") or 0),
+                ])
+                total_h2h += 1
+        conn.executemany(
+            "INSERT INTO h2h_buckets(bucket,payload) VALUES (?,?)",
+            ((i, _encode(rows)) for i, rows in enumerate(buckets) if rows),
+        )
+        del buckets
         conn.commit()
         verified = conn.execute("SELECT COUNT(*) FROM player_states").fetchone()[0]
         if verified != len(allowed):
@@ -172,11 +177,16 @@ def load_pair_artifact(path: Path, directory: Mapping, *, player1: str, player2:
             if row is None:
                 raise ComparatorIndexError("canonical_player_state_missing")
             states[key] = _decode(row[0])
-        records = conn.execute(
-            "SELECT left_key,right_key,surface,wins_left,wins_right FROM h2h"
-            " WHERE (left_key=? AND right_key=?) OR (left_key=? AND right_key=?)",
-            (key1, key2, key2, key1),
-        ).fetchall()
+        bucket = conn.execute(
+            "SELECT payload FROM h2h_buckets WHERE bucket=?",
+            (_pair_bucket(key1, key2),),
+        ).fetchone()
+        candidates = _decode(bucket[0]) if bucket else []
+        records = [
+            (l, r, surface, wl, wr)
+            for l, r, surface, wl, wr in candidates
+            if (l == key1 and r == key2) or (l == key2 and r == key1)
+        ]
         h2h, surface_h2h = [], []
         for l, r, surf, wins_l, wins_r in records:
             record = {"left": l, "right": r, "wins_left": wins_l, "wins_right": wins_r}
