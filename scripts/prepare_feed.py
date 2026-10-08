@@ -12,6 +12,7 @@ from pathlib import Path
 from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.services.feed import empty_feed, read_feed
+from tbt.services.comparator_index import build_comparator_index
 from tbt.services.countries import normalize_country_code
 from tbt.services.publication import (
     validate_market_publication_candidate,
@@ -414,9 +415,11 @@ def _attach_player_assets(payload: dict, repository: str) -> dict:
 def _deploy_comparator_artifact(source: Path) -> dict:
     target = ROOT / "api/data/comparator.json.gz"
     directory = ROOT / "api/data/comparator-players.json"
+    index_path = ROOT / "api/data/comparator-serving.sqlite3"
     if not source.is_file():
         target.unlink(missing_ok=True)
         directory.unlink(missing_ok=True)
+        index_path.unlink(missing_ok=True)
         return {"available": False, "reason": "release_asset_missing"}
     try:
         with gzip.open(source, "rt", encoding="utf-8") as handle:
@@ -424,6 +427,7 @@ def _deploy_comparator_artifact(source: Path) -> dict:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         target.unlink(missing_ok=True)
         directory.unlink(missing_ok=True)
+        index_path.unlink(missing_ok=True)
         raise ValueError("Invalid comparator JSON artifact") from exc
     if (
         not isinstance(payload, dict)
@@ -437,6 +441,7 @@ def _deploy_comparator_artifact(source: Path) -> dict:
     ):
         target.unlink(missing_ok=True)
         directory.unlink(missing_ok=True)
+        index_path.unlink(missing_ok=True)
         raise ValueError("Comparator artifact failed serving schema validation")
     target.parent.mkdir(parents=True, exist_ok=True)
     # Search never needs the ~30 MB compressed feature/model artifact. Publish
@@ -451,6 +456,7 @@ def _deploy_comparator_artifact(source: Path) -> dict:
     }
     temporary = directory.with_suffix(".json.tmp")
     try:
+        index_report = build_comparator_index(payload, index_path)
         temporary.write_text(json.dumps(search_directory, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         shutil.copyfile(source, target)
         temporary.replace(directory)
@@ -458,8 +464,10 @@ def _deploy_comparator_artifact(source: Path) -> dict:
         temporary.unlink(missing_ok=True)
         directory.unlink(missing_ok=True)
         target.unlink(missing_ok=True)
+        index_path.unlink(missing_ok=True)
         raise
     return {
+        "indexed": index_report, 
         "available": True,
         "players": len(payload["players"]),
         "model_version": str((payload.get("model") or {}).get("model_version") or ""),
@@ -473,6 +481,7 @@ def main() -> None:
     comparator_target = ROOT / "api/data/comparator.json.gz"
     comparator_target.unlink(missing_ok=True)
     (ROOT / "api/data/comparator-players.json").unlink(missing_ok=True)
+    (ROOT / "api/data/comparator-serving.sqlite3").unlink(missing_ok=True)
     repository = os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data")
 
     payload = empty_feed()
