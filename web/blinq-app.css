@@ -9916,3 +9916,62 @@ body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.desktop::before{
 body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile::before{
   background:linear-gradient(90deg,rgba(2,15,13,.94) 0%,rgba(2,15,13,.77) 45%,rgba(2,15,13,.22) 78%,rgba(2,15,13,.35) 100%)!important;
 }
+
+
+/* Minimal approved icon navigation — 3 gold left, 4 utility right. */
+@media (min-width:901px){
+  body#blinqPremium .reference-topbar .header-top{min-height:64px!important;height:64px!important;padding-top:0!important;padding-bottom:0!important}
+  body#blinqPremium .reference-topbar .brand{height:64px!important}
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"]{
+    min-height:0!important;height:64px!important;align-items:center!important;gap:7px!important;
+    padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important
+  }
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link,
+  body#blinqPremium .reference-topbar .header-actions > :is(#bqm-projects,#insightShortcut,#topUpgradeButton,#insightBell){
+    box-sizing:border-box!important;position:relative!important;display:grid!important;place-items:center!important;
+    width:38px!important;min-width:38px!important;max-width:38px!important;
+    height:38px!important;min-height:38px!important;max-height:38px!important;
+    flex:0 0 38px!important;margin:0!important;padding:0!important;
+    border:0!important;border-radius:8px!important;background:transparent!important;box-shadow:none!important
+  }
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link,
+  body#blinqPremium .reference-topbar .header-actions > :is(#bqm-projects,#topUpgradeButton,#insightBell){
+    color:#efbe43!important
+  }
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link.active{
+    color:#ffdc75!important;border:0!important;background:transparent!important;box-shadow:none!important
+  }
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link.active::after{display:none!important}
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link svg,
+  body#blinqPremium .reference-topbar #topUpgradeButton svg.nav-icon-svg,
+  body#blinqPremium .reference-topbar #bqm-projects svg.project-rocket-icon{
+    width:24px!important;height:24px!important;display:block!important;opacity:1!important;
+    fill:none!important;stroke:currentColor!important;stroke-width:1.75!important;
+    stroke-linecap:round!important;stroke-linejoin:round!important
+  }
+  body#blinqPremium .reference-topbar #bqm-projects svg.project-rocket-icon{width:25px!important;height:25px!important}
+  body#blinqPremium .reference-topbar .header-actions > #insightShortcut.insight-live-button{
+    color:#61ecac!important;border:0!important;background:transparent!important;box-shadow:none!important
+  }
+  body#blinqPremium .reference-topbar #insightShortcut svg.live-beat-icon{width:26px!important;height:26px!important;display:block!important;opacity:1!important}
+  body#blinqPremium .reference-topbar .header-actions > #insightBell.insight-bell,
+  body#blinqPremium .reference-topbar .header-actions > #topUpgradeButton.header-upgrade{
+    border:0!important;background:transparent!important;box-shadow:none!important
+  }
+  body#blinqPremium .reference-topbar #insightBell .insight-bell-icon,
+  body#blinqPremium .reference-topbar #insightBell .insight-bell-icon svg{
+    width:24px!important;height:24px!important;display:block!important;opacity:1!important
+  }
+  body#blinqPremium .reference-topbar .header-actions{
+    height:64px!important;min-height:64px!important;align-items:center!important;gap:7px!important
+  }
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link:hover,
+  body#blinqPremium .reference-topbar .header-actions > :is(#bqm-projects,#insightShortcut,#topUpgradeButton,#insightBell):hover{
+    filter:brightness(1.18)!important;background:transparent!important;border:0!important;box-shadow:none!important
+  }
+}
+/* Rocket is a graphic, not a new feature or route. */
+body#blinqPremium #bqm-projects svg.project-rocket-icon{
+  width:24px;height:24px;display:block;fill:none;stroke:currentColor;stroke-width:1.75;
+  stroke-linecap:round;stroke-linejoin:round
+}
