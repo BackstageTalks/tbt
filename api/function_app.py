@@ -1634,11 +1634,19 @@ def live_radar(req):
         logging.exception("Comeback LIVE Radar scan failed");return response({"error":"live_radar_unavailable"},503)
 
 
-@app.route(route="v1/internal/api-budget/reserve", methods=["POST"])
+@app.route(route="v1/internal/api-budget/reserve", methods=["GET", "POST"])
 def internal_api_budget_reserve(req):
-    """Secret-protected per-attempt reservation for external GitHub Actions."""
+    """Secret-protected read-only status (GET) and atomic reservation (POST)."""
     if not _live_worker_token_ok(req):
         return response({"error":"forbidden"},403)
+    if str(getattr(req, "method", "POST")).upper() == "GET":
+        try:
+            return response({"ok":True,"budget":shared_api_budget_status()})
+        except SharedBudgetUnavailable:
+            return response({"error":"api_budget_unavailable"},503)
+        except Exception:
+            logging.exception("Unexpected API budget status error")
+            return response({"error":"api_budget_unavailable"},503)
     try:
         data=req.get_json()
         if not isinstance(data,dict):
