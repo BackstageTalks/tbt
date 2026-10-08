@@ -263,6 +263,23 @@ def _recently_unavailable(profile: dict[str, Any], *, days: int = 30) -> bool:
     return datetime.now(timezone.utc) - checked.astimezone(timezone.utc) < timedelta(days=days)
 
 
+def _recently_unavailable_tournament_logo(profile: dict[str, Any], *, days: int = 30) -> bool:
+    """Avoid spending quota repeatedly on provider-declared missing logos."""
+    if profile.get("logo_status") != "unavailable":
+        return False
+    stamp = profile.get("logo_checked_at")
+    if not isinstance(stamp, str):
+        return False
+    try:
+        checked = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if checked.tzinfo is None:
+        checked = checked.replace(tzinfo=timezone.utc)
+    age = datetime.now(timezone.utc) - checked.astimezone(timezone.utc)
+    return timedelta(0) <= age < timedelta(days=days)
+
+
 def _current_tournaments(feed: dict[str, Any]) -> list[dict[str, Any]]:
     """Return unique current tournaments that expose a numeric provider id."""
     found: dict[str, dict[str, Any]] = {}
@@ -481,6 +498,7 @@ def main() -> None:
         "tournament_logos_downloaded": 0,
         "tournament_logos_cached": 0,
         "tournament_logos_unavailable": 0,
+        "tournament_logos_skipped_cooldown": 0,
         "players_with_rank": 0,
         "players_with_country": 0,
         "errors": [],
@@ -632,6 +650,10 @@ def main() -> None:
             existing_file = str(profile.get("logo_file") or "")
             if existing_file and (tournament_logos_dir / Path(existing_file).name).is_file():
                 report["tournament_logos_cached"] += 1
+                tournament_profiles[tournament_id] = profile
+                continue
+            if _recently_unavailable_tournament_logo(profile):
+                report["tournament_logos_skipped_cooldown"] += 1
                 tournament_profiles[tournament_id] = profile
                 continue
             if tournament_logo_budget <= 0:
