@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "requested_on": "2026-10-08",
+  "purpose": "Deploy verified read-only internal API budget status route for gated hourly backfill",
+  "change_ref": "159819cfd0b5bc8ca18a9a8a33d876d0380c88b5",
+  "mode": "deploy-current",
+  "promote_model": false
+}
