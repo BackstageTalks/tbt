@@ -5839,10 +5839,10 @@
     const displayFeatureHeading=legacyNotes.has(featureHeading)?'':featureHeading;
     return `<article class="upgrade-tier-card plan-${escapeHtml(id)}${required?' is-required':''}${lockedContext&&below?' is-below-required':''}">${note}<div class="upgrade-tier-top">${planAvatarPairHtml(id,p)}<div class="upgrade-tier-copy">${planEyebrowHtml(p)}<strong>${escapeHtml(publicPlanLabel(id,title))}</strong>${short?`<span>${escapeHtml(short)}</span>`:''}</div></div>${detail?`<p class="upgrade-tier-description">${escapeHtml(detail)}</p>`:''}${displayFeatureHeading?`<p class="upgrade-feature-heading">${escapeHtml(displayFeatureHeading)}</p>`:''}<ul class="upgrade-feature-list">${features.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>${action}</article>`;
   }
-  function showUpgradePrompt(planId='pro',sectionLabel='this content',lockedContext=false){
+  function showUpgradePrompt(planId='pro',sectionLabel='this content',lockedContext=false,returnTarget=null){
     const dialog=$('upgradeDialog'),host=$('upgradeDialogContent');if(!dialog||!host)return;
     if(dialog.open)return;
-    upgradeReturnTarget=$('accessHint')?.contains(document.activeElement)?accessHintTarget:document.activeElement;
+    upgradeReturnTarget=returnTarget?.isConnected?returnTarget:($('accessHint')?.contains(document.activeElement)?accessHintTarget:document.activeElement);
     hideAccessHint();
     const a=state.feed?.account||{};
     const requiredId=membershipHierarchy.includes(String(planId||'').toLowerCase())?String(planId).toLowerCase():'pro';
@@ -6024,7 +6024,7 @@
     document.addEventListener('click',e=>{
       if(!e.target.closest('#profileShell'))closeProfileMenu();
       const dashboardToggle=e.target.closest('[data-dashboard-toggle]');if(dashboardToggle&&state.route==='predictions'){e.preventDefault();toggleDashboardSection(dashboardToggle.dataset.dashboardToggle);return;}
-      const accessUpgrade=e.target.closest('#accessHintUpgrade');if(accessUpgrade){e.preventDefault();e.stopPropagation();showUpgradePrompt(accessUpgrade.dataset.upgradePlan||'elite',accessUpgrade.dataset.upgradeSection||'BlinQ',true);return;}
+      const accessUpgrade=e.target.closest('#accessHintUpgrade');if(accessUpgrade){e.preventDefault();e.stopPropagation();const returnTarget=accessHintTarget;showUpgradePrompt(accessUpgrade.dataset.upgradePlan||'elite',accessUpgrade.dataset.upgradeSection||'BlinQ',true,returnTarget);return;}
       const upgradeTarget=e.target.closest('[data-upgrade-plan]');
       const lockedResultsRoute=Boolean(upgradeTarget?.dataset?.uiElement==='SIDEBAR_RESULTS'&&upgradeTarget?.dataset?.route==='results');
       if(upgradeTarget&&state.route!=='admin'&&!lockedResultsRoute){e.preventDefault();e.stopPropagation();const plan=upgradeTarget.dataset.upgradePlan||'pro',section=upgradeTarget.dataset.upgradeSection||'this content';if(upgradeTarget.dataset.upgradeExplicit==='1')showUpgradePrompt(plan,section);else showAccessHint(upgradeTarget,plan,section,true);return;}
