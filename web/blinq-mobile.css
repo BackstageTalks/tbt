@@ -540,3 +540,10 @@ body#blinqPremium [data-daily-tab="top200"],body#blinqPremium [data-admin-hub-ta
     width:42px!important;min-width:42px!important;height:42px!important;
   }
 }
+
+
+/* Final mobile header: single row only. */
+@media(max-width:900px){
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav{display:none!important}
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .site-header{min-height:64px!important;height:64px!important;max-height:64px!important}
+}
