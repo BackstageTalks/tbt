@@ -9718,6 +9718,9 @@ body#blinqPremium .admin-banner-workbench .admin-form-grid{
   grid-template-columns:minmax(0,1fr)!important;
   gap:18px!important;
 }
+body#blinqPremium .admin-banner-workbench .admin-form-grid>.span-2{
+  grid-column:1 / -1!important;
+}
 body#blinqPremium .admin-banner-media-urls{
   display:grid!important;
   grid-template-columns:repeat(2,minmax(0,1fr))!important;
