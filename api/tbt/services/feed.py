@@ -182,6 +182,13 @@ def visible_feed(payload, now=None):
         result["stale"] = True
     else:
         generated_at = _parse_utc_timestamp(stamp, "generated_at")
-        result["stale"] = (now - generated_at).total_seconds() > 12 * 3600
+        # The serving offer is refreshed each betting morning. A fixed 12h
+        # timer incorrectly flags a healthy 06:00 feed as broken after 18:00.
+        # Fail closed after the next 06:00 Bratislava boundary, or when an
+        # implausibly future-dated feed indicates clock/deployment corruption.
+        result["stale"] = (
+            _betting_day_key(generated_at) != day
+            or generated_at > now + timedelta(minutes=5)
+        )
     result["daily_offer_day"] = day
     return result
