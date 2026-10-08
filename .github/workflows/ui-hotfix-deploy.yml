@@ -1,0 +1,90 @@
+name: BlinQ UI hotfix deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-ui-hotfix-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: contains(github.event.head_commit.message, '[ui-hotfix-deploy]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Guard latest main revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          latest="$(git rev-parse origin/main)"
+          current="$(git rev-parse HEAD)"
+          test "$current" = "$latest"
+          test "$GITHUB_SHA" = "$latest"
+
+      - name: Prepare immutable serving feed
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          python scripts/clean_generated_artifacts.py
+          python scripts/prepare_feed.py
+          test -s api/data/feed.json
+          python scripts/verify_presentation_feed.py api/data/feed.json --summary
+          python scripts/stamp_web_deployment.py --web web --sha "$GITHUB_SHA"
+
+      - name: Deploy current UI/API to Azure
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: web
+          api_location: api
+          output_location: ''
+          skip_app_build: true
+
+      - name: Verify exact live revision and comparator UX
+        if: ${{ vars.TBT_PRODUCTION_URL != '' }}
+        env:
+          TBT_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${TBT_PRODUCTION_URL%/}"
+          ok=0
+          for attempt in 1 2 3 4 5 6 7 8; do
+            bust="$GITHUB_SHA-$attempt"
+            if curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/deployment.json?__blinq_ui=$bust" -o /tmp/deployment.json &&
+               curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/app.js?__blinq_ui=$bust" -o /tmp/app.js; then
+              python - "$GITHUB_SHA" <<'PY'
+import json, pathlib, sys
+sha=sys.argv[1]
+dep=json.loads(pathlib.Path('/tmp/deployment.json').read_text())
+app=pathlib.Path('/tmp/app.js').read_text()
+assert dep.get('git_sha') == sha, (dep.get('git_sha'), sha)
+assert 'Max. počet setov' in app
+assert 'function comparatorAutoPlayer' in app
+assert 'comparatorDefaultBestOf' in app
+PY
+              ok=1
+              break
+            fi
+            sleep 8
+          done
+          test "$ok" = 1
