@@ -61,8 +61,7 @@ def main():
                 assert not hint.is_visible(), 'No pending hover timer may reopen the hint'
                 page.keyboard.press('Escape')
                 assert not page.locator('#upgradeDialog').is_visible()
-                active_html = page.evaluate('document.activeElement ? document.activeElement.outerHTML : "NO_ACTIVE_ELEMENT"')
-                assert trigger.evaluate('(e)=>e===document.activeElement'), f'Return focus to original trigger; active={active_html}'
+                assert trigger.evaluate('(e)=>e===document.activeElement'), 'Return focus to original trigger'
                 assert not hint.is_visible()
                 trigger.click()
                 assert hint.is_visible()
