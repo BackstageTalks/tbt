@@ -151,6 +151,16 @@ jobs:
           test -n "$GH_TOKEN" || { echo "Missing scoped data audit credentials"; exit 1; }
           timeout 180s python scripts/audit_historical_player_links.py
 
+      - name: Verify independent historical player IDs (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          timeout 110s python scripts/audit_player_identity_external.py
+
       - name: Run backend tests
         env:
           PYTHONPATH: api:scripts
