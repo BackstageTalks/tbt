@@ -235,6 +235,18 @@ class RapidTennisClient:
 
         for attempt in range(attempts):
             self._throttle()
+            # Scheduled history autofill must not borrow tomorrow's quota if the
+            # runner was delayed. Normal production/runtime callers have no cutoff.
+            cutoff_raw = os.getenv("BLINQ_API_AUTOFILL_STOP_AT_UTC", "").strip()
+            if cutoff_raw:
+                try:
+                    cutoff = datetime.fromisoformat(cutoff_raw.replace("Z", "+00:00"))
+                except ValueError as exc:
+                    raise ConfigurationError("Invalid hourly autofill UTC cutoff") from exc
+                if cutoff.tzinfo is None:
+                    raise ConfigurationError("Hourly autofill cutoff requires timezone")
+                if datetime.now(timezone.utc) >= cutoff.astimezone(timezone.utc):
+                    raise RequestBudgetExceeded("Hourly autofill UTC cutoff reached")
 
             # Reserve outside the retry block: budget/storage failures fail closed.
             if self.request_limit is not None and self.request_count >= self.request_limit:
