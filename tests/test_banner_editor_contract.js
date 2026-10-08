@@ -42,4 +42,9 @@ assert.ok(css.includes('flex-direction:var(--hero-social-mobile-direction,row)')
 assert.ok(app.includes('function adminPreviewEntry(entries=activeAdminBanners())'), 'selected unpublished banner can be previewed');
 assert.ok(app.includes('state.adminPreviewPinnedId=id'), 'font edits pin the selected creative');
 for(let i=1;i<=5;i++)assert.equal(ui.elements['HERO_BANNER_'+i].content.accent_text,'');
+for(const field of ['desktop_shadow_strength','mobile_shadow_strength'])assert.ok(app.includes('data-simple-banner-field="'+field+'"'),field+' control');
+for(const token of ['--hero-shadow-desktop-opacity:','--hero-shadow-mobile-opacity:','n(c.desktop_shadow_strength,0,10,10)/10','n(c.mobile_shadow_strength,0,10,10)/10'])assert.ok(app.includes(token),token);
+assert.ok(css.includes('opacity:var(--hero-shadow-desktop-opacity,1)!important'),'desktop production shadow strength');
+assert.ok(css.includes('opacity:var(--hero-shadow-mobile-opacity,1)!important'),'mobile production shadow strength');
+assert.ok(css.includes('.lean-admin-preview.mobile::before{opacity:var(--hero-shadow-mobile-opacity,1)!important}'),'mobile preview shadow strength');
 console.log('PASS: banner editor contract');
