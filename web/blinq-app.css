@@ -9995,3 +9995,7 @@ body#blinqPremium #bqm-projects svg.project-rocket-icon{
     opacity:1!important;transform:translate(-50%,0)!important
   }
 }
+
+/* Comparator-only cleanup; leave the global site footer and other routes unchanged. */
+.blinq-compare .footer-system-dot{display:none}
+.blinq-compare .comparator-inline-error{margin-top:10px;font-size:12px;line-height:1.45;color:#bccbd3}
