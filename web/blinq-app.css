@@ -9995,3 +9995,8 @@ body#blinqPremium #bqm-projects svg.project-rocket-icon{
     opacity:1!important;transform:translate(-50%,0)!important
   }
 }
+
+/* Comparator: no decorative eyebrow/subtitle; keep errors inside the form. */
+.comparator-inline-message{margin-top:12px;color:#a9c0cd;font-size:11px;line-height:1.5;padding:8px 10px;border-left:2px solid #567789;background:rgba(13,34,46,.42);border-radius:3px}
+.comparator-search-status{display:block;margin-top:5px;color:#9bb4c2;font-size:11px;line-height:1.45}
+.comparator-search-error{color:#d9a5a5}
