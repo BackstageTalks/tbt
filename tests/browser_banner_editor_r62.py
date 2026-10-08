@@ -63,10 +63,10 @@ def main():
                 background:getComputedStyle(editor,'::before').backgroundImage
               };
             }""")
-            assert studio['panels']==2 and studio['desktopFields']==3 and studio['mobileFields']==3,studio
+            assert studio['panels']==2 and studio['desktopFields']==4 and studio['mobileFields']==4,studio
             assert studio['desktopFieldsExist'] and studio['mobileFieldsExist'],studio
             assert abs(studio['desktopTop']-studio['mobileTop'])<5 and studio['panelWidth']>350,studio
-            assert studio['numericCount']==16 and studio['numericHeight']>=44,studio
+            assert studio['numericCount']==18 and studio['numericHeight']>=44,studio
             assert 'blinq_page_background.webp' in studio['background'],studio
             page.evaluate("""() => {
               const s=bannerHarness.state;
@@ -96,6 +96,31 @@ def main():
             }""")
             assert layout['desktopDirection']=='column' and layout['desktopWrap']=='nowrap',layout
             assert layout['mobileDirection']=='column' and layout['mobileWrap']=='nowrap',layout
+            shadow=page.evaluate("""() => {
+              const opacity=mode=>Number(getComputedStyle(document.querySelector('[data-admin-preview-card="'+mode+'"] .lean-admin-preview'),'::before').opacity);
+              const edit=(field,value)=>{
+                const input=document.querySelector('[data-simple-banner-field="'+field+'"]');
+                if(!input)throw Error('Missing shadow setting: '+field);
+                input.value=String(value);
+                input.dispatchEvent(new Event('input',{bubbles:true}));
+              };
+              const initial={desktop:opacity('desktop'),mobile:opacity('mobile')};
+              edit('desktop_shadow_strength',0);
+              const disabled={desktop:opacity('desktop'),mobile:opacity('mobile')};
+              edit('mobile_shadow_strength',4);
+              const separate={desktop:opacity('desktop'),mobile:opacity('mobile')};
+              const state=bannerHarness.state,content=state.ui.elements.HERO_BANNER_1.content;
+              const html=bannerHarness.heroSlideHtml({id:'HERO_BANNER_1',...state.ui.elements.HERO_BANNER_1},0);
+              const doc=document.createElement('div');doc.innerHTML=html;
+              const inline=doc.firstElementChild.style;
+              return {initial,disabled,separate,stored:{desktop:content.desktop_shadow_strength,mobile:content.mobile_shadow_strength},
+                production:{desktop:inline.getPropertyValue('--hero-shadow-desktop-opacity'),mobile:inline.getPropertyValue('--hero-shadow-mobile-opacity')}};
+            }""")
+            assert abs(shadow['initial']['desktop']-1)<.001 and abs(shadow['initial']['mobile']-1)<.001,shadow
+            assert shadow['disabled']['desktop']==0 and abs(shadow['disabled']['mobile']-1)<.001,shadow
+            assert shadow['separate']['desktop']==0 and abs(shadow['separate']['mobile']-.4)<.001,shadow
+            assert shadow['stored']=={'desktop':0,'mobile':4},shadow
+            assert shadow['production']=={'desktop':'0','mobile':'0.4'},shadow
             # Regression: real DOM positions must move when each mode's X/Y inputs change.
             movement=page.evaluate("""() => {
               const s=bannerHarness.state,c=s.ui.elements.HERO_BANNER_1.content;
