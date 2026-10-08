@@ -135,6 +135,7 @@ from tbt.services.auth_email import send_blinq_action_email, claim_auth_email_sl
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
 COMPARATOR = Path(__file__).parent / "data/comparator.json.gz"
+COMPARATOR_PLAYERS = Path(__file__).parent / "data/comparator_players.json.gz"
 RELEASE = "7.3.6"
 API_VERSION = "3.10.0"
 
@@ -177,6 +178,8 @@ _LIVE_ODDS_CACHE_SECONDS = 120.0
 
 _COMPARATOR_ARTIFACT_CACHE: tuple[float, dict] | None = None
 _COMPARATOR_ARTIFACT_CACHE_LOCK = Lock()
+_COMPARATOR_PLAYERS_CACHE: tuple[float, dict] | None = None
+_COMPARATOR_PLAYERS_CACHE_LOCK = Lock()
 _COMPARATOR_RESULT_CACHE: dict[str, tuple[float, dict]] = {}
 _COMPARATOR_RESULT_CACHE_LOCK = Lock()
 _COMPARATOR_RESULT_TTL_SECONDS = 5 * 60
@@ -252,6 +255,25 @@ def _load_comparator_artifact() -> dict:
             raise ValueError("invalid comparator artifact")
         _COMPARATOR_ARTIFACT_CACHE = (mtime, payload)
         return payload
+
+
+def _load_comparator_players() -> dict:
+    """Only names/IDs for autocomplete; never decompress feature state here."""
+    global _COMPARATOR_PLAYERS_CACHE
+    stat = COMPARATOR_PLAYERS.stat()
+    mtime = float(stat.st_mtime)
+    with _COMPARATOR_PLAYERS_CACHE_LOCK:
+        cached = _COMPARATOR_PLAYERS_CACHE
+        if cached is not None and cached[0] == mtime:
+            return cached[1]
+        with gzip.open(COMPARATOR_PLAYERS, "rt", encoding="utf-8") as handle:
+            directory = json.load(handle)
+        if (not isinstance(directory, dict)
+                or int(directory.get("schema") or 0) != 1
+                or not isinstance(directory.get("players"), list)):
+            raise ValueError("invalid comparator player directory")
+        _COMPARATOR_PLAYERS_CACHE = (mtime, directory)
+        return directory
 
 
 def _comparator_request_allowed(user) -> bool:
@@ -443,14 +465,14 @@ def comparator_players(req):
     if len(query) < 2:
         return response({"players": [], "query": query, "tour": tour})
     try:
-        artifact = _load_comparator_artifact()
-        players = search_players(artifact, query, tour=tour, limit=12)
+        directory = _load_comparator_players()
+        players = search_players(directory, query, tour=tour, limit=12)
         return response({
             "players": players,
             "query": query,
             "tour": tour,
-            "generated_at": artifact.get("generated_at"),
-            "model_version": (artifact.get("model") or {}).get("model_version"),
+            "generated_at": directory.get("generated_at"),
+            "model_version": directory.get("model_version"),
         })
     except FileNotFoundError:
         return response({"error": "comparator_unavailable"}, 503)
