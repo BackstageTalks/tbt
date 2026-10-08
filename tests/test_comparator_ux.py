@@ -46,3 +46,27 @@ def test_comparator_assets_are_cache_busted():
     html = Path("web/index.html").read_text(encoding="utf-8")
     assert "/blinq-app.css?v=7360&p=61&compare=2" in html
     assert "/app.js?v=7360&p=61&compare=2" in html
+
+
+def test_comparator_player_suggestions_bind_after_async_insertion():
+    app = Path("web/app.js").read_text(encoding="utf-8")
+    wire = app.split("function wireComparator()", 1)[1].split("function renderRoute(", 1)[0]
+    # Results are injected via innerHTML *after* the initial DOM was wired.
+    # Clicks must therefore be handled by the stable form, not the absent buttons.
+    assert "form.addEventListener('click',event=>" in wire
+    assert "event.target.closest('[data-comparator-select]')" in wire
+    assert "host.querySelectorAll('[data-comparator-select]')" not in wire
+
+
+def test_comparator_search_rejects_stale_results_and_displays_failures():
+    app = Path("web/app.js").read_text(encoding="utf-8")
+    wire = app.split("function wireComparator()", 1)[1].split("function renderRoute(", 1)[0]
+    assert "const requestSeq=++s.searchSeq[side]" in wire
+    assert "s.searchSeq[side]===requestSeq" in wire
+    assert "input.value.trim()===query" in wire
+    assert "if(!isCurrent())return;" in wire
+    assert "status===401?" in wire
+    assert "status===403?" in wire
+    assert "status===429?" in wire
+    assert 'role="alert"' in wire
+    assert 'No players found.' in wire
