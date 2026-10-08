@@ -1,0 +1,132 @@
+name: BlinQ rank-input readback closeout
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/rank-input-readback-closeout.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-rank-input-readback-closeout
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install rank-input dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Verify canonical and rank inputs end to end
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          from rank_feature_inputs import load_rank_feature_inputs
+
+          repo=os.environ["TBT_DATA_REPOSITORY"]
+          root=Path(".cache/tbt/rank-closeout")
+          history=root/"history"
+          ReleaseStore(repo,"tbt-data-v1",history).download(require_bundle_manifest=True)
+          matches,safety=sanitize_history_identities(load_partitions(history))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Canonical identity quarantine is non-empty")
+
+          inputs=load_rank_feature_inputs(repo,root/"rank-inputs",matches)
+          report=inputs.report
+          if report.get("status")!="verified":
+              raise SystemExit("Rank input report is not verified")
+          if int(report.get("provider_requests") or -1)!=0:
+              raise SystemExit("Rank input gate made provider requests")
+
+          supplement=report.get("wta_official_supplement") or {}
+          expected_sha="4267e37ba6357eb11cfb0e9346c3c59eac8a17431e1f19deb5fffa9573a9bf03"
+          if supplement.get("sha256")!=expected_sha:
+              raise SystemExit("WTA official supplement SHA mismatch")
+          if int(supplement.get("rows") or 0)!=16927:
+              raise SystemExit("Unexpected WTA supplement row count")
+
+          audit={
+              "schema":1,
+              "status":"verified",
+              "generated_at_utc":datetime.now(timezone.utc).isoformat(),
+              "github_run_id":os.environ.get("GITHUB_RUN_ID"),
+              "github_sha":os.environ.get("GITHUB_SHA"),
+              "canonical_rows":len(matches),
+              "identity_safety":safety,
+              "rank_inputs":report,
+              "wta_binary_download_fix":"git_blob_sha_plus_base64",
+              "provider_api_requests":0,
+              "canonical_mutated":False,
+              "model_promoted":False,
+          }
+          out=root/"rank-input-readback-closeout.json"
+          out.parent.mkdir(parents=True,exist_ok=True)
+          out.write_text(json.dumps(audit,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps({
+              "status":audit["status"],
+              "canonical_rows":audit["canonical_rows"],
+              "wta_supplement":supplement,
+              "wta_crosswalk":report.get("wta_crosswalk"),
+              "provider_api_requests":0,
+              "model_promoted":False,
+          },ensure_ascii=False,indent=2))
+          PY
+
+      - name: Persist closeout audit
+        run: |
+          set -euo pipefail
+          file=.cache/tbt/rank-closeout/rank-input-readback-closeout.json
+          path=audit/rank-input-readback-closeout-2026-10-08.json
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          encoded="$(base64 -w0 "$file")"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Verify rank-input readback closeout run $GITHUB_RUN_ID"               -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Verify rank-input readback closeout run $GITHUB_RUN_ID"               -f content="$encoded" >/dev/null
+          fi
+
+      - name: Verify persisted audit readback
+        run: |
+          set -euo pipefail
+          path=audit/rank-input-readback-closeout-2026-10-08.json
+          raw="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .content | tr -d '\n' | base64 -d)"
+          test "$(printf '%s' "$raw" | jq -r '.status')" = "verified"
+          test "$(printf '%s' "$raw" | jq -r '.provider_api_requests')" = "0"
+          test "$(printf '%s' "$raw" | jq -r '.canonical_mutated')" = "false"
+          test "$(printf '%s' "$raw" | jq -r '.model_promoted')" = "false"
+          test "$(printf '%s' "$raw" | jq -r '.rank_inputs.wta_official_supplement.sha256')" = "4267e37ba6357eb11cfb0e9346c3c59eac8a17431e1f19deb5fffa9573a9bf03"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rank-input-readback-closeout-${{ github.run_id }}
+          path: .cache/tbt/rank-closeout/rank-input-readback-closeout.json
+          if-no-files-found: warn
+          retention-days: 14
