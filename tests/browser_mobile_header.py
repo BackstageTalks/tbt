@@ -152,7 +152,11 @@ def main():
                 bell_box=page.locator('#insightBell').bounding_box()
                 badge_box=page.locator('#insightUnread').bounding_box()
                 assert badge_box and bell_box and badge_box['x']>=bell_box['x'] and badge_box['x']+badge_box['width']<=bell_box['x']+bell_box['width']+1,(width,bell_box,badge_box)
-                assert not page.locator('#topUpgradeButton').is_visible()
+                if width<=900:
+                    upgrade=page.locator('#topUpgradeButton')
+                    assert upgrade.is_visible()==(upgrade.get_attribute('hidden') is None),(width,'upgrade visibility should follow entitlement')
+                else:
+                    assert not page.locator('#topUpgradeButton').is_visible()
                 page.locator('#bqm-toggle').click()
                 root_text=page.locator('#bqm-dialog nav').inner_text()
                 assert 'Výsledky' in root_text,(width,root_text)
