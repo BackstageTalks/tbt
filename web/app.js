@@ -832,7 +832,9 @@
       });
       decorateResultsAccess(host.querySelector('[data-route="results"]'));
     };
-    syncRouteIcons(referenceNav);
+    if(referenceNav){
+      syncRouteIcons(referenceNav);
+    }
     document.querySelectorAll('.mobile-icon-nav').forEach(syncRouteIcons);
     document.querySelectorAll('#mobileTabs [data-route="results"]').forEach(decorateResultsAccess);
     const profileAdmin=$('profileAdminLink');if(profileAdmin)profileAdmin.hidden=!isAdminAccount();
