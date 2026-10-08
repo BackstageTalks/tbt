@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from scripts.finalize_shadow_promotion import (
@@ -33,10 +34,32 @@ def test_gate_report_contains_same_cohort_metrics():
         weaker = .62 if target else .38
         elo = .58 if target else .42
         rows.append(_row(i, "atp" if i % 2 else "wta", target, good, weaker, elo))
-    report = _build_gate_report(rows, "prod-v1", "cand-v2")
+    report = _build_gate_report(
+        rows, "prod-v1", "cand-v2",
+        as_of=datetime(2026, 10, 9, tzinfo=timezone.utc),
+    )
     assert report["holdout"]["n"] == 240
     assert report["production_holdout"]["n"] == 240
     assert report["elo_baseline_holdout"]["n"] == 240
     assert report["shadow"]["settled_utc_days"] == 3
     assert report["shadow"]["by_tour"] == {"atp": 120, "wta": 120}
     assert report["evaluation_governance"]["eligibility_reason"] is None
+
+
+def test_shadow_gate_rejects_ongoing_utc_day_without_changing_cohort():
+    rows = []
+    for i in range(240):
+        target = i % 2
+        rows.append(_row(i, "atp" if i % 2 else "wta", target,
+                         .75 if target else .25,
+                         .62 if target else .38,
+                         .58 if target else .42))
+    report = _build_gate_report(
+        rows, "prod-v1", "cand-v2",
+        as_of=datetime(2026, 10, 8, 14, tzinfo=timezone.utc),
+    )
+    assert report["holdout"]["n"] == 240
+    assert report["shadow"]["settled_utc_days"] == 3
+    assert "shadow_holdout_contains_incomplete_utc_day" in (
+        report["evaluation_governance"]["eligibility_reasons"]
+    )
