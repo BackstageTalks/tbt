@@ -5644,7 +5644,7 @@
   function comparatorState(){
     if(!state.comparator){
       const tour='atp',surface='hard';
-      state.comparator={tour,surface,bestOf:comparatorDefaultBestOf(tour,surface),bestOfAuto:true,players:[null,null],result:null,error:'',loading:false,search:[[],[]],searchSeq:[0,0]};
+      state.comparator={tour,surface,bestOf:comparatorDefaultBestOf(tour,surface),bestOfAuto:true,players:[null,null],result:null,error:'',loading:false,search:[[],[]],searchSeq:[0,0],expandedGroups:[[],[]]};
     }
     if(state.comparator.tour==='wta'&&Number(state.comparator.bestOf)!==3)state.comparator.bestOf=3;
     return state.comparator;
@@ -5652,17 +5652,78 @@
   function comparatorPlayerLabel(player){
     return player?String(player.name||''):'';
   }
+  function comparatorPlayerGroups(rows){
+    // Display groups are not identity links: keep every canonical ID distinct.
+    const grouped=new Map();
+    (Array.isArray(rows)?rows:[]).forEach((player,index)=>{
+      const key=normalizeComparatorPlayerName(player?.name);
+      if(!key||!player?.player_id)return;
+      if(!grouped.has(key))grouped.set(key,{key,index,rows:[]});
+      const group=grouped.get(key);
+      if(!group.rows.some(item=>String(item.player_id)===String(player.player_id)))group.rows.push(player);
+    });
+    const groups=[...grouped.values()];
+    const superseded=new Set();
+    // A reversed initial, e.g. "Svrčina D.", is presented under a matching
+    // full-name group only when *one* unique full-name candidate exists.
+    // Never treat this as proof that the underlying canonical IDs match.
+    for(const shortGroup of groups){
+      const parts=shortGroup.key.split(' ');
+      if(parts.length!==2)continue;
+      let surname='',initial='';
+      if(parts[1].length===1&&parts[0].length>1){surname=parts[0];initial=parts[1];}
+      else if(parts[0].length===1&&parts[1].length>1){surname=parts[1];initial=parts[0];}
+      if(!surname)continue;
+      const parents=groups.filter(group=>{
+        if(group===shortGroup)return false;
+        const tokens=group.key.split(' ');
+        const fullName=tokens.length>=2&&tokens[0].length>1&&tokens[tokens.length-1]===surname&&tokens[0][0]===initial;
+        // Require an explicit alias match from canonical evidence, not merely
+        // equal surname/initial (which can belong to different people).
+        return fullName&&shortGroup.rows.some(player=>
+          (Array.isArray(player.aliases)?player.aliases:[]).some(alias=>normalizeComparatorPlayerName(alias)===group.key)
+        );
+      });
+      if(parents.length!==1)continue;
+      const parent=parents[0];
+      parent.index=Math.min(parent.index,shortGroup.index);
+      for(const player of shortGroup.rows){
+        if(!parent.rows.some(item=>String(item.player_id)===String(player.player_id)))parent.rows.push(player);
+      }
+      superseded.add(shortGroup);
+    }
+    return groups.filter(group=>!superseded.has(group)).map(group=>{
+      group.rows.sort((a,b)=>{
+        const full=name=>normalizeComparatorPlayerName(name).split(' ').every(token=>token.length>1)?1:0;
+        // The deployed canonical provider ID remains the preferred record.
+        // A historical-source ID is still selectable after expanding; it is
+        // never silently linked or added to the provider record.
+        const historical=item=>String(item?.player_id||'').startsWith('hist-js:')?1:0;
+        return historical(a)-historical(b)||
+          full(b.name)-full(a.name)||
+          Number(b.matches_seen||0)-Number(a.matches_seen||0)||
+          String(a.name||'').localeCompare(String(b.name||''))||
+          String(a.player_id).localeCompare(String(b.player_id));
+      });
+      return group;
+    }).sort((a,b)=>a.index-b.index);
+  }
   function comparatorAutoPlayer(query,rows){
     const normalized=normalizeComparatorPlayerName(query);
     if(normalized.length<2||!Array.isArray(rows)||!rows.length)return null;
+    const groups=comparatorPlayerGroups(rows);
+    const unique=player=>{
+      // Never auto-select one of multiple unresolved canonical IDs.
+      return player&&!groups.some(group=>group.rows.length>1&&group.rows.some(item=>String(item.player_id)===String(player.player_id)))?player:null;
+    };
     const exact=rows.filter(player=>normalizeComparatorPlayerName(player?.name)===normalized);
-    if(exact.length===1)return exact[0];
+    if(exact.length===1)return unique(exact[0]);
     const surname=rows.filter(player=>{
       const parts=normalizeComparatorPlayerName(player?.name).split(' ').filter(Boolean);
       return parts.length&&parts[parts.length-1]===normalized;
     });
-    if(surname.length===1)return surname[0];
-    if(normalized.length>=4&&rows.length===1)return rows[0];
+    if(surname.length===1)return unique(surname[0]);
+    if(normalized.length>=4&&rows.length===1)return unique(rows[0]);
     return null;
   }
   function comparatorSelectPlayer(side,player){
@@ -5670,6 +5731,7 @@
     if(!player||![0,1].includes(Number(side)))return false;
     s.players[Number(side)]={player_id:player.player_id,name:player.name,rank:player.rank||null,tour:s.tour};
     s.search[Number(side)]=[];
+    s.expandedGroups[Number(side)]=[];
     s.searchSeq[Number(side)]+=1;
     s.result=null;
     s.error='';
@@ -5678,7 +5740,12 @@
   function comparatorSearchHtml(side){
     const s=comparatorState(),rows=Array.isArray(s.search?.[side])?s.search[side]:[];
     if(!rows.length)return '';
-    return `<div class="comparator-search-results">${rows.map(player=>`<button type="button" data-comparator-select="${side}" data-player-id="${escapeHtml(String(player.player_id||''))}" data-player-name="${escapeHtml(String(player.name||''))}" data-player-rank="${escapeHtml(String(player.rank??''))}"><strong>${escapeHtml(player.name||'—')}</strong><span>${escapeHtml(String(player.tour||'').toUpperCase())}${Number(player.rank)>0?` · #${escapeHtml(String(player.rank))}`:''} · ${escapeHtml(String(player.matches_seen||0))} ${escapeHtml(lcopy('matches','zápasov','zápasů'))}</span></button>`).join('')}</div>`;
+    const groups=comparatorPlayerGroups(rows);
+    const option=(player,other=false)=>`<button type="button" class="${other?'comparator-search-alternative':'comparator-search-primary'}" data-comparator-select="${side}" data-player-id="${escapeHtml(String(player.player_id||''))}" data-player-name="${escapeHtml(String(player.name||''))}" data-player-rank="${escapeHtml(String(player.rank??''))}"><strong>${escapeHtml(player.name||'—')}</strong><span>${escapeHtml(String(player.tour||'').toUpperCase())}${Number(player.rank)>0?` · #${escapeHtml(String(player.rank))}`:''} · ${escapeHtml(String(player.matches_seen||0))} ${escapeHtml(lcopy('DB matches','zápasov v DB','zápasů v DB'))}</span></button>`;
+    return `<div class="comparator-search-results">${groups.map((group,index)=>{
+      const expanded=Boolean(s.expandedGroups?.[side]?.[index]),extra=group.rows.length-1;
+      return `<div class="comparator-search-group">${option(group.rows[0])}${extra>0?`<button type="button" class="comparator-search-more" data-comparator-expand="${index}" data-comparator-side="${side}" aria-expanded="${expanded}">${escapeHtml(expanded?lcopy('Hide other IDs','Skryť ďalšie ID','Skrýt další ID'):lcopy(`+${extra} other record${extra===1?'':'s'}`,`+${extra} ďalší${extra===1?' záznam':'e záznamy'}`,`+${extra} další záznam${extra===1?'':'y'}`))}</button>${expanded?`<div class="comparator-search-alternates"><small>${escapeHtml(lcopy('Different canonical IDs; records have not been merged.','Rôzne canonical ID; záznamy nie sú zlúčené.','Různá canonical ID; záznamy nejsou sloučené.'))}</small>${group.rows.slice(1).map(player=>option(player,true)).join('')}</div>`:''}`:''}</div>`;
+    }).join('')}</div>`;
   }
   function comparatorResultHtml(result){
     if(!result)return '';
@@ -5730,14 +5797,14 @@
     const host=$('routePanel'),form=$('comparatorForm');if(!host||!form)return;
     const s=comparatorState(),timers=[null,null];
     const refresh=()=>{if(state.route!=='compare')return;host.innerHTML=renderComparatorRoute();wireComparator();};
-    form.querySelector('#comparatorTour')?.addEventListener('change',event=>{s.tour=event.target.value;s.bestOf=comparatorDefaultBestOf(s.tour,s.surface);s.bestOfAuto=true;s.players=[null,null];s.search=[[],[]];s.result=null;s.error='';refresh();});
+    form.querySelector('#comparatorTour')?.addEventListener('change',event=>{s.tour=event.target.value;s.bestOf=comparatorDefaultBestOf(s.tour,s.surface);s.bestOfAuto=true;s.players=[null,null];s.search=[[],[]];s.expandedGroups=[[],[]];s.result=null;s.error='';refresh();});
     form.querySelector('#comparatorSurface')?.addEventListener('change',event=>{s.surface=event.target.value;s.bestOf=comparatorDefaultBestOf(s.tour,s.surface);s.bestOfAuto=true;s.result=null;s.error='';refresh();});
     form.querySelector('#comparatorBestOf')?.addEventListener('change',event=>{s.bestOf=s.tour==='wta'?3:(Number(event.target.value)===5?5:3);s.bestOfAuto=false;s.result=null;s.error='';refresh();});
     form.querySelectorAll('[data-comparator-input]').forEach(input=>{
       const side=Number(input.dataset.comparatorInput);
       input.addEventListener('input',()=>{
         const requestSeq=++s.searchSeq[side];
-        s.players[side]=null;s.result=null;s.error='';s.search[side]=[];
+        s.players[side]=null;s.result=null;s.error='';s.search[side]=[];s.expandedGroups[side]=[];
         input.closest('.comparator-player-field')?.classList.remove('is-selected');
         input.closest('.comparator-player-field')?.querySelector('.comparator-player-confirmed')?.remove();
         const query=input.value.trim();clearTimeout(timers[side]);
@@ -5769,8 +5836,17 @@
         },300);
       });
     });
-    // Suggestions arrive after the initial render: delegate the click to the form.
+    // Suggestions arrive after the initial render: delegate click and expand.
     form.addEventListener('click',event=>{
+      const expander=event.target.closest('[data-comparator-expand]');
+      if(expander&&form.contains(expander)){
+        const side=Number(expander.dataset.comparatorSide),index=Number(expander.dataset.comparatorExpand);
+        if(![0,1].includes(side)||!Number.isSafeInteger(index)||index<0)return;
+        s.expandedGroups[side][index]=!s.expandedGroups[side][index];
+        const box=$(`comparatorSearch${side}`);
+        if(box)box.innerHTML=comparatorSearchHtml(side);
+        return;
+      }
       const button=event.target.closest('[data-comparator-select]');
       if(!button||!form.contains(button))return;
       if(comparatorSelectPlayer(Number(button.dataset.comparatorSelect),{player_id:button.dataset.playerId,name:button.dataset.playerName,rank:button.dataset.playerRank||null}))refresh();

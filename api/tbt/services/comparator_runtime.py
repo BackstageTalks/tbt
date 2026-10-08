@@ -78,6 +78,9 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
         {
             "player_id": str(row[-1].get("player_id") or ""),
             "name": str(row[-1].get("name") or ""),
+            # The explicit canonical alias is evidence for presenting name
+            # variants together; it is NOT permission to merge their IDs.
+            "aliases": [str(value)[:120] for value in (row[-1].get("aliases") or [])[:12] if value],
             "tour": tour,
             "rank": row[-1].get("rank"),
             "matches_seen": int(row[-1].get("matches_seen") or 0),
