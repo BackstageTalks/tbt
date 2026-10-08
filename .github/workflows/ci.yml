@@ -129,6 +129,18 @@ jobs:
       - name: Install backend test dependencies
         run: python -m pip install -r api/requirements-train.txt pytest
 
+      # Reproduce the user's comparator error using the verified private serving
+      # snapshot. This job is read-only and never calls external tennis APIs.
+      - name: Reproduce comparator with canonical release (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "No read-only data-repo token available"; exit 1; }
+          timeout 100s python scripts/diagnose_comparator_snapshot.py
+
       - name: Run backend tests
         env:
           PYTHONPATH: api:scripts
