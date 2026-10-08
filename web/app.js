@@ -1724,7 +1724,14 @@
       else{delete shortcut.dataset.upgradePlan;delete shortcut.dataset.upgradeSection;shortcut.setAttribute('aria-label','Comeback LIVE Radar');shortcut.removeAttribute('title');}
       shortcut.setAttribute('aria-expanded',state.insightDrawerOpen&&state.insightChannel==='live'?'true':'false');
     }
-    if(shortcutCount){const n=confirmed?Number(radar.signals)||0:watching?Number(radar.candidates)||0:0;shortcutCount.textContent=String(n);shortcutCount.hidden=!n||!liveEligible;}
+    // Badge means unread LIVE notifications, not the total radar candidates/signals.
+    // Radar activity remains visible through its existing WATCH/CONFIRMED state.
+    if(shortcutCount){
+      const n=liveEligible?state.insights.filter(item=>!item.read&&isLiveInsight(item)).length:0;
+      shortcutCount.textContent=n>99?'99+':String(n);
+      shortcutCount.hidden=!n;
+      if(liveEligible&&shortcut)shortcut.setAttribute('aria-label','Comeback LIVE Radar'+(n?`, ${n} neprečítaných upozornení`:''));
+    }
     if(shortcutLabel){shortcutLabel.textContent=liveEligible?(confirmed?'CONFIRMED':watching?'WATCH':'RADAR'):'RADAR';shortcutLabel.hidden=false;}
     const infoUnread=state.insights.filter(item=>!item.read&&!isLiveInsight(item)&&String(item?.audience_mode||'levels')!=='groups').length;
     badge.textContent=infoUnread>99?'99+':String(infoUnread);badge.hidden=!infoUnread||!infoEligible;
