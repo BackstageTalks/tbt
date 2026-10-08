@@ -58,6 +58,21 @@ def main():
               mobile:document.querySelector('[data-admin-preview-card="mobile"] .hero-social-link.social-telegram')?.textContent.trim()
             })""")
             assert social['desktop']=='Telegram' and social['mobile']=='Telegram',social
+            layout=page.evaluate("""() => {
+              const s=bannerHarness.state,c=s.ui.elements.HERO_BANNER_1.content;
+              c.desktop_social_layout='column';c.mobile_social_layout='column';
+              bannerHarness.syncAdminHeroPreview();
+              const d=document.querySelector('[data-admin-preview-card="desktop"] .hero-social-links');
+              const m=document.querySelector('[data-admin-preview-card="mobile"] .hero-social-links');
+              return {
+                desktopDirection:getComputedStyle(d).flexDirection,
+                desktopWrap:getComputedStyle(d).flexWrap,
+                mobileDirection:getComputedStyle(m).flexDirection,
+                mobileWrap:getComputedStyle(m).flexWrap
+              };
+            }""")
+            assert layout['desktopDirection']=='column' and layout['desktopWrap']=='nowrap',layout
+            assert layout['mobileDirection']=='column' and layout['mobileWrap']=='nowrap',layout
             page.wait_for_timeout(3300)
             second=page.evaluate('''() => ({selected:bannerHarness.state.selectedElement,
                 preview:bannerHarness.state.adminPreviewIndex,
