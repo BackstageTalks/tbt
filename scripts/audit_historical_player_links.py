@@ -52,7 +52,7 @@ def load(directory: Path) -> tuple[list[dict], dict]:
     assert isinstance(bundle.get("files"), dict) and isinstance(manifest.get("years"), dict)
     records = []
     inventory = {}
-    for year in range(2020, 2027):
+    for year in range(2017, 2027):
         meta = manifest["years"].get(str(year))
         if not isinstance(meta, dict):
             raise RuntimeError(f"Missing canonical manifest year: {year}")
@@ -110,7 +110,12 @@ def evidence(records: list[dict], provider: str, historical: str) -> dict:
             same_tournament = norm(candidate["tournament"]) == norm(old["tournament"])
             same_winner = candidate["won"] == old["won"]
             same_surface = norm(candidate["surface"]) == norm(old["surface"])
-            detail = {"provider_match_id": candidate["match_id"],
+            detail = {
+                      "provider_tournament": candidate["tournament"],
+                      "historical_tournament": old["tournament"],
+                      "provider_round": candidate["round"],
+                      "historical_round": old["round"],
+                      "provider_match_id": candidate["match_id"],
                       "historical_match_id": old["match_id"],
                       "date": old["date"],
                       "opponent": old["opponent"],
@@ -138,7 +143,7 @@ def evidence(records: list[dict], provider: str, historical: str) -> dict:
         "conflict_examples": potential_conflicts[:10],
         "historical_examples": older[:8],
         "provider_examples": main[-4:],
-        "scope": "only canonical history years 2020-2026",
+        "scope": "canonical history years 2017-2026",
         # A zero conflict count alone never proves identity. Require positive
         # independent identical-match evidence before proposing a crosswalk.
         "link_gate": "candidate_review" if len(matches)>=2 and not potential_conflicts else "unverified_quarantine",
