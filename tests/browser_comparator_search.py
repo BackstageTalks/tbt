@@ -126,7 +126,7 @@ def main():
                             {player_id:'norman-1',name:'Simon Norman',tour:'atp',matches_seen:37},
                             {player_id:'norrie-other',name:'Cameron Norrie',tour:'atp',rank:27,matches_seen:8},
                         ]:[
-                            {player_id:'svrcina-old',name:'Svrčina D.',tour:'atp',rank:99,matches_seen:83},
+                            {player_id:'svrcina-old',name:'Svrčina D.',aliases:['Dalibor Svrcina'],tour:'atp',rank:99,matches_seen:83},
                             {player_id:'svrcina-main',name:'Dalibor Svrčina',tour:'atp',rank:91,matches_seen:330},
                         ]
                     });
