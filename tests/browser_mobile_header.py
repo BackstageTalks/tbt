@@ -42,6 +42,27 @@ def main():
                     document.getElementById('projectGroupBar').onclick=e=>{const b=e.target.closest('[data-project-group-open]');if(b)groupCalls.push(b.dataset.projectGroupOpen);};
                 }''')
                 page.wait_for_timeout(200)
+                # Approved header: gold rocket instead of PP, no tile borders,
+                # and no second navigation row on phones.
+                assert page.locator('#bqm-projects svg.project-rocket-icon').count()==1,(width,'rocket icon missing')
+                if width<=900:
+                    assert page.locator('.mobile-icon-nav').is_hidden(),(width,'second mobile navigation row')
+                    header_height=page.locator('.site-header').evaluate('(n)=>n.getBoundingClientRect().height')
+                    assert header_height<=66,(width,header_height)
+                else:
+                    styles=page.evaluate('''() => {
+                        const selectors=['.reference-navigation[data-icon-navigation="1"] .nav-icon-link',
+                            '.reference-topbar #bqm-projects','.reference-topbar #insightBell'];
+                        return selectors.flatMap(s=>[...document.querySelectorAll(s)])
+                            .filter(n=>!n.hidden).map(n=>({
+                                id:n.id||n.getAttribute('data-route'),
+                                width:n.getBoundingClientRect().width,
+                                height:n.getBoundingClientRect().height,
+                                border:getComputedStyle(n).borderTopWidth
+                            }));
+                    }''')
+                    assert len(styles)==5,(width,styles)
+                    assert all(x['width']<=42 and x['height']<=42 and x['border']=='0px' for x in styles),(width,styles)
                 if width<=900:
                     assert page.locator('#bqm-projects').is_visible()
                     assert page.locator('#bqm-projects').get_attribute('data-unread')=='1'
@@ -113,7 +134,7 @@ def main():
                     page.locator('.site-header').screenshot(path=str(Path(os.environ['BLINQ_SCREENSHOTS'])/'admin-header-review.png'))
                 assert not errors,(width,errors)
                 page.close()
-            print('Header PP/Info numeric badges, avatar profile, mobile layout and desktop: PASS')
+            print('Header rocket/gold navigation, single-row mobile, badges, profile and desktop: PASS')
         finally:
             browser.close()
 

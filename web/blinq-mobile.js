@@ -28,10 +28,13 @@
     }
     openMenu(); render('projects');
   });
-  const projectSymbol = document.createElement('img');
-  projectSymbol.src = '/assets/project-pp.svg';
-  projectSymbol.alt = '';
-  projectSymbol.width = 24; projectSymbol.height = 24;
+  // Gold rocket: the existing project-menu action and unread counts are preserved.
+  const projectSymbol = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  projectSymbol.setAttribute('viewBox', '0 0 32 32');
+  projectSymbol.setAttribute('aria-hidden', 'true');
+  projectSymbol.setAttribute('focusable', 'false');
+  projectSymbol.classList.add('project-rocket-icon');
+  projectSymbol.innerHTML = '<path d="M12.6 21.1 10.9 17.5 14.8 11.7C18.1 7.1 22.4 5.2 27 5c-.2 4.6-2.1 8.9-6.7 12.2l-5.8 3.9-3.6-1.7Z"/><circle cx="21.7" cy="10.7" r="2.35"/><path d="M10.9 17.5 6.1 17.9 3.9 23l8.7-1.9M14.5 21.1 13.4 29l5-2.4 1.9-9.4M7.4 24.6l-3 3"/>';
   projects.append(projectSymbol);
   projects.id = 'bqm-projects';
   projects.setAttribute('aria-label', 'Moje projektové skupiny');
