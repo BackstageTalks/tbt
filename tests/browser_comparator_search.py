@@ -117,44 +117,38 @@ def main():
                 page.get_by_role("button", name="Rafael Nadal").click()
                 assert page.locator("#comparatorPlayer1").input_value() == "Rafael Nadal"
                 assert page.locator(".comparator-player-confirmed").count() == 2
-                # Fragmented canonical identities: collapse the visual row,
-                # preserve each player ID and never combine match counts.
+                # Existing historical import fragments must not be exposed
+                # as separate public records, but remain untouched in the API.
                 page.evaluate("""() => {
                     window.BlinqAuth.comparatorPlayers=async(query) => ({
                         players:query.toLowerCase().includes('norr')?[
-                            {player_id:'norrie-main',name:'Cameron Norrie',tour:'atp',rank:27,matches_seen:598},
-                            {player_id:'norman-1',name:'Simon Norman',tour:'atp',matches_seen:37},
-                            {player_id:'norrie-other',name:'Cameron Norrie',tour:'atp',rank:27,matches_seen:8},
+                            {player_id:'95935',name:'Cameron Norrie',tour:'atp',rank:27,matches_seen:598},
+                            {player_id:'other-person',name:'Simon Norman',tour:'atp',matches_seen:37},
+                            {player_id:'hist-js:atp:N771',name:'Cameron Norrie',tour:'atp',matches_seen:8},
                         ]:[
-                            {player_id:'svrcina-old',name:'Svrčina D.',aliases:['Dalibor Svrcina'],tour:'atp',rank:99,matches_seen:83},
-                            {player_id:'svrcina-main',name:'Dalibor Svrčina',tour:'atp',rank:91,matches_seen:330},
+                            {player_id:'hist-js:atp:207494',name:'Svrčina D.',aliases:['Dalibor Svrcina'],tour:'atp',rank:99,matches_seen:83},
+                            {player_id:'260122',name:'Dalibor Svrčina',tour:'atp',rank:91,matches_seen:330},
                         ]
                     });
                 }""")
                 page.locator("#comparatorPlayer0").fill("norr")
                 page.get_by_role("button", name="Cameron Norrie").wait_for()
                 assert page.locator("#comparatorSearch0 .comparator-search-primary").count() == 2
-                assert page.locator("#comparatorSearch0 .comparator-search-alternative").count() == 0
-                assert page.locator("#comparatorSearch0 .comparator-search-primary").first.get_attribute("data-player-id") == "norrie-main"
-                assert "598 zápasov v DB" in page.locator("#comparatorSearch0").inner_text()
-                assert page.locator("#comparatorSearch0 [data-player-id='norrie-other']").count() == 0
-                page.locator("#comparatorSearch0 [data-comparator-expand]").click()
-                assert page.locator("#comparatorSearch0 .comparator-search-alternative").count() == 1
-                assert page.locator("#comparatorSearch0 [data-player-id='norrie-other']").count() == 1
-                assert "8 zápasov v DB" in page.locator("#comparatorSearch0").inner_text()
-                page.locator("#comparatorSearch0 .comparator-search-primary").first.click()
-                assert page.evaluate("comparatorHarness.state.comparator.players[0].player_id") == "norrie-main"
+                assert page.locator("#comparatorSearch0 [data-player-id='95935']").count() == 1
+                assert page.locator("#comparatorSearch0 [data-player-id='hist-js:atp:N771']").count() == 0
+                assert page.locator("#comparatorSearch0 [data-comparator-expand]").count() == 0
+                assert "zápasov v DB" not in page.locator("#comparatorSearch0").inner_text()
+                page.locator("#comparatorSearch0 [data-player-id='95935']").click()
+                assert page.evaluate("comparatorHarness.state.comparator.players[0].player_id") == "95935"
 
                 page.locator("#comparatorPlayer1").fill("svrc")
                 page.get_by_role("button", name="Dalibor Svrčina").wait_for()
                 assert page.locator("#comparatorSearch1 .comparator-search-primary").count() == 1
-                assert page.locator("#comparatorSearch1 .comparator-search-primary").first.get_attribute("data-player-id") == "svrcina-main"
-                assert page.locator("#comparatorSearch1 .comparator-search-alternative").count() == 0
-                page.locator("#comparatorSearch1 [data-comparator-expand]").click()
-                assert page.locator("#comparatorSearch1 .comparator-search-alternative").count() == 1
-                assert "Svrčina D." in page.locator("#comparatorSearch1 .comparator-search-alternates").inner_text()
-                page.locator("#comparatorSearch1 .comparator-search-primary").first.click()
-                assert page.evaluate("comparatorHarness.state.comparator.players[1].player_id") == "svrcina-main"
+                assert page.locator("#comparatorSearch1 [data-player-id='260122']").count() == 1
+                assert page.locator("#comparatorSearch1 [data-player-id='hist-js:atp:207494']").count() == 0
+                assert page.locator("#comparatorSearch1 [data-comparator-expand]").count() == 0
+                page.locator("#comparatorSearch1 [data-player-id='260122']").click()
+                assert page.evaluate("comparatorHarness.state.comparator.players[1].player_id") == "260122"
                 assert not errors, (width, errors)
                 page.close()
             print("Comparator player search click, errors, stale result and mobile: PASS")
