@@ -9906,3 +9906,13 @@ body#blinqPremium #dashboardHero .hero-slide:after{opacity:var(--hero-shadow-des
 body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.desktop::before{opacity:var(--hero-shadow-desktop-opacity,1)!important}
 body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile::before{opacity:var(--hero-shadow-mobile-opacity,1)!important}
 @media(max-width:700px){body#blinqPremium #dashboardHero .hero-slide:after{opacity:var(--hero-shadow-mobile-opacity,1)!important}}
+
+/* Banner Studio: show the production shadow gradient in each device preview.
+   Unlike the former weak preview-only tint, this matches the actual 1440px
+   and 390px public hero gradients. Existing 0..10 opacity controls are shared. */
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.desktop::before{
+  background:linear-gradient(90deg,rgba(2,9,12,.98) 0%,rgba(2,9,12,.94) 31%,rgba(2,9,12,.34) 43%,rgba(2,9,12,.02) 61%,rgba(2,9,12,.04) 100%)!important;
+}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile::before{
+  background:linear-gradient(90deg,rgba(2,15,13,.94) 0%,rgba(2,15,13,.77) 45%,rgba(2,15,13,.22) 78%,rgba(2,15,13,.35) 100%)!important;
+}

@@ -121,6 +121,42 @@ def main():
             assert shadow['separate']['desktop']==0 and abs(shadow['separate']['mobile']-.4)<.001,shadow
             assert shadow['stored']=={'desktop':0,'mobile':4},shadow
             assert shadow['production']=={'desktop':'0','mobile':'0.4'},shadow
+            # Regression: preview gradient and strength must match the *published*
+            # banner, not a lighter preview-only overlay.
+            def gradient_parity():
+                return page.evaluate("""() => {
+                  const host=document.querySelector('#dashboardHero');
+                  if(!host)throw Error('Public hero container missing');
+                  const previous=host.innerHTML;
+                  const entry=bannerHarness.state.ui.elements.HERO_BANNER_1;
+                  host.innerHTML=bannerHarness.heroSlideHtml({id:'HERO_BANNER_1',...entry},0);
+                  try {
+                    const publicHero=host.querySelector('.hero-slide');
+                    const mode=innerWidth<=700?'mobile':'desktop';
+                    const preview=document.querySelector('[data-admin-preview-card="'+mode+'"] .lean-admin-preview');
+                    const live=getComputedStyle(publicHero,'::after');
+                    const draft=getComputedStyle(preview,'::before');
+                    return {viewport:innerWidth,mode,
+                      publicGradient:live.backgroundImage,
+                      previewGradient:draft.backgroundImage,
+                      publicOpacity:live.opacity,previewOpacity:draft.opacity,
+                      publicLayer:live.display,previewLayer:draft.display};
+                  } finally {host.innerHTML=previous;}
+                }""")
+            desktop_parity=gradient_parity()
+            assert desktop_parity['publicGradient']==desktop_parity['previewGradient'],desktop_parity
+            assert desktop_parity['publicOpacity']==desktop_parity['previewOpacity'],desktop_parity
+            assert desktop_parity['previewOpacity']=='0',desktop_parity
+            # The published mobile-only media rules exclude admin mode; temporarily
+            # leave admin mode so both samples use the same public viewport styles.
+            page.set_viewport_size({'width':390,'height':900})
+            page.evaluate("document.body.classList.remove('blinq-admin')")
+            mobile_parity=gradient_parity()
+            page.evaluate("document.body.classList.add('blinq-admin')")
+            page.set_viewport_size({'width':1440,'height':900})
+            assert mobile_parity['publicGradient']==mobile_parity['previewGradient'],mobile_parity
+            assert mobile_parity['publicOpacity']==mobile_parity['previewOpacity'],mobile_parity
+            assert mobile_parity['previewOpacity']=='0.4',mobile_parity
             # Regression: real DOM positions must move when each mode's X/Y inputs change.
             movement=page.evaluate("""() => {
               const s=bannerHarness.state,c=s.ui.elements.HERO_BANNER_1.content;
