@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "mode": "deploy-current",
+  "mode": "train",
   "promote": false,
-  "purpose": "Deploy the current verified BlinQ application revision with per-membership Admin access controls. Deployment-only: reuse immutable prediction candidate, no Tennis provider/API calls, no model promotion, no canonical history mutation.",
-  "requested_on": "2026-10-07",
-  "requested_at_utc": "2026-10-07T19:07:00Z",
+  "purpose": "Final data closeout preflight after fixing private WTA rank supplement binary download. Verify current canonical/research inputs load cleanly; no model promotion and no intentional provider/data mutation.",
+  "requested_on": "2026-10-08",
+  "requested_at_utc": "2026-10-08T06:02:00Z",
   "max_requests": 1,
   "start": "",
   "end": "",
-  "training_scope": "deployment_only",
+  "training_scope": "closeout_validation_only",
   "historical_match_winner_odds_as_model_feature": false
 }
