@@ -94,7 +94,6 @@ def test_retired_top200_default_does_not_steal_active_offer_candidates():
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['ranked-top-active']
     counts = sections['market_selection']['selection_counts']
     assert counts['top200_rank_qualified_before_limit'] == 3
-    assert counts['limited_out'] >= 3
     rule = sections['market_selection']['top200_rule']
     assert rule['max_selected'] == 0
     assert rule['active_public_product'] is False
@@ -106,7 +105,7 @@ def test_top200_claims_ranked_matches_before_all_price_buckets():
         row('ranked-value', .72, 1.90, 2.00, depth=1.0, rank1=360, rank2=88),
         row('ranked-top', .70, 1.60, 2.50, depth=1.0, rank1=199, rank2=260),
     ]
-    sections = select_market_sections(rows)
+    sections = select_market_sections(rows, top200_limit=5)
     assert [item['event_id'] for item in sections['top200_picks']] == [
         'ranked-short', 'ranked-value', 'ranked-top',
     ]
@@ -124,7 +123,7 @@ def test_top200_is_capped_at_five_and_releases_remainder_to_normal_categories():
         row(f'ranked-{i}', .80 - i * .01, 1.60, 2.50, depth=1.0, rank1=100 + i, rank2=500)
         for i in range(7)
     ]
-    sections = select_market_sections(rows)
+    sections = select_market_sections(rows, top200_limit=5)
     assert [item['event_id'] for item in sections['top200_picks']] == [
         'ranked-0', 'ranked-1', 'ranked-2', 'ranked-3', 'ranked-4',
     ]
