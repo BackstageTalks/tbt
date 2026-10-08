@@ -552,3 +552,10 @@ body#blinqPremium [data-daily-tab="top200"],body#blinqPremium [data-admin-hub-ta
 body#blinqPremium .reference-topbar #bqm-projects svg.project-rocket-icon{
   display:block!important;width:24px!important;height:24px!important;opacity:1!important
 }
+
+/* Override the legacy high-specificity strip display without affecting desktop. */
+@media(max-width:900px){
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) nav.mobile-icon-nav{
+    display:none!important;
+  }
+}
