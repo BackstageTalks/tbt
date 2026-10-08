@@ -731,3 +731,34 @@ body#blinqPremium .reference-topbar #bqm-projects svg.project-rocket-icon{
     width:27px!important;height:27px!important;min-width:27px!important
   }
 }
+
+/* Keep the seven quick-access icons visually joined on every mobile width.
+   The previous auto margin created an ~80–110px empty hole at 390–430px.
+   At narrow widths, distribute spare room evenly *within* the two icon
+   sets (3 navigation items : 4 actions + avatar), rather than between them. */
+@media (max-width:900px){
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-top > .reference-navigation[data-icon-navigation="1"]{
+    margin-left:auto!important;
+  }
+  /* Override the legacy .site-header .header-top .header-actions auto margin,
+     whose higher specificity left a 186px seam at 768px. */
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .site-header .header-top > .header-actions{
+    margin-left:0!important;
+    margin-right:0!important;
+  }
+}
+@media (max-width:540px){
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-top > .reference-navigation[data-icon-navigation="1"]{
+    flex:3 1 0!important;
+    min-width:0!important;
+    margin-left:0!important;
+    justify-content:space-evenly!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-top > .header-actions{
+    flex:5 1 0!important;
+    min-width:0!important;
+    margin-left:0!important;
+    justify-content:space-evenly!important;
+  }
+}
+
