@@ -10014,8 +10014,15 @@ body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile::before{
   }
   body#blinqPremium .reference-topbar #insightShortcut.insight-live-button.nav-action-icon{
     color:#61eba1!important;
-    border:1px solid rgba(83,232,149,.26)!important;
-    background:rgba(19,92,58,.07)!important;
+    border:0!important;
+    background:transparent!important;
+    box-shadow:none!important;
+  }
+  body#blinqPremium .reference-topbar #insightShortcut.insight-live-button.nav-action-icon:hover,
+  body#blinqPremium .reference-topbar #insightShortcut.insight-live-button.nav-action-icon:focus-visible{
+    color:#7bffb8!important;
+    border:0!important;
+    background:rgba(77,233,150,.045)!important;
     box-shadow:none!important;
   }
   body#blinqPremium .reference-topbar #insightShortcut .live-beat-icon{
