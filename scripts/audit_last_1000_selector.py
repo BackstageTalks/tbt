@@ -280,6 +280,10 @@ def main():
         "model_only": (1,0,0,0,0),
         "market_only": (0,1,0,0,0),
         "past_reliability_only": (0,0,1,0,0),
+        "market_reliability_50_50": (0,.5,.5,0,0),
+        "market_reliability_model": (.15,.55,.30,0,0),
+        "conservative_three_way": (.25,.50,.25,0,0),
+        "model_reliability_50_50": (.5,0,.5,0,0),
         "tuned_blend": weights,
     }
     for name, w in named.items():
