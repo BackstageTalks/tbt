@@ -37,9 +37,13 @@ def main():
                 page.wait_for_function(
                     "window.comparatorHarness && comparatorHarness.state.ui"
                 )
+                # Wait for the app's asynchronous boot/auth path to finish so it
+                # cannot replace the manually mounted comparator during typing.
+                page.wait_for_function("document.getElementById('bootSplash') === null")
                 page.evaluate("""() => {
                     document.querySelector('#bootSplash')?.remove();
                     document.querySelector('#cookieConsent')?.remove();
+                    document.querySelectorAll('dialog[open]').forEach(d=>d.close());
                     document.getElementById('appShell').hidden=false;
                     document.getElementById('routePanel').hidden=false;
                     const h=window.comparatorHarness;
