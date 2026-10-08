@@ -57,10 +57,8 @@ jobs:
           caps = {12: 5700, 13: 6900, 14: 8100, 15: 9300,
                   16: 10500, 17: 12000, 18: 13500}
           print(f"Bratislava time: {local.isoformat()}; dry_run={DRY_RUN}", flush=True)
-          if local.hour == 19:
-              print("19:00 is read-only closeout. No new paid work.")
-              sys.exit(0)
-          if local.hour not in caps:
+          closeout_only = local.hour == 19
+          if local.hour not in caps and not closeout_only:
               print("Outside the 12:00-19:00 Bratislava API window; skipping.")
               sys.exit(0)
           if local.hour == 18 and local.minute > 15:
@@ -119,6 +117,10 @@ jobs:
           spent = int(budget["global_spent"])
           remaining = int(budget["global_remaining"])
           history_remaining = int(budget["remaining"]["history"])
+          if closeout_only:
+              print(f"19:00 read-only closeout: {spent}/15000 provider-day requests used, "
+                    f"{remaining} remaining to 90% ceiling. No new job.")
+              sys.exit(0)
           if spent < 0 or remaining != max(0, 13500-spent):
               raise SystemExit("Shared budget inconsistency; no dispatch")
           reset = datetime.fromisoformat(str(budget["next_reset_utc"]).replace("Z", "+00:00"))
