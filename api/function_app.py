@@ -130,12 +130,14 @@ from tbt.services.comparator_runtime import (
     compare_from_artifact,
     search_players,
 )
+from tbt.services.comparator_index import ComparatorIndexError, load_pair_artifact
 from tbt.services.auth_email import send_blinq_action_email, claim_auth_email_slot
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
 COMPARATOR = Path(__file__).parent / "data/comparator.json.gz"
 COMPARATOR_PLAYERS = Path(__file__).parent / "data/comparator-players.json"
+COMPARATOR_INDEX = Path(__file__).parent / "data/comparator-serving.sqlite3"
 RELEASE = "7.3.6"
 API_VERSION = "3.10.0"
 
@@ -509,15 +511,18 @@ def comparator_compare(req):
         return response({"error": "players_required"}, 400)
 
     try:
-        artifact = _load_comparator_artifact()
-        model_version = str((artifact.get("model") or {}).get("model_version") or "")
-        generated_at = str(artifact.get("generated_at") or "")
+        directory = _load_comparator_players()
+        model_version = str(directory.get("model_version") or "")
+        generated_at = str(directory.get("generated_at") or "")
         cache_key = "|".join((generated_at, model_version, tour, surface, str(best_of), player1, player2))
         now_mono = time.monotonic()
         with _COMPARATOR_RESULT_CACHE_LOCK:
             cached = _COMPARATOR_RESULT_CACHE.get(cache_key)
             if cached and now_mono - cached[0] <= _COMPARATOR_RESULT_TTL_SECONDS:
                 return response({**cached[1], "cache": "hit"})
+        artifact = load_pair_artifact(
+            COMPARATOR_INDEX, directory, player1=player1, player2=player2, tour=tour,
+        )
         result = compare_from_artifact(
             artifact,
             player1=player1,
@@ -534,6 +539,15 @@ def comparator_compare(req):
                     if item[0] < cutoff:
                         _COMPARATOR_RESULT_CACHE.pop(key, None)
         return response({**result, "cache": "miss"})
+    except ComparatorIndexError as exc:
+        if str(exc) == "player_not_found":
+            return response({"error": "player_not_found"}, 404)
+        if str(exc) == "ambiguous_player":
+            return response({"error": "ambiguous_player"}, 409)
+        if str(exc) == "same_player":
+            return response({"error": "invalid_players"}, 400)
+        logging.warning("Comparator serving index failed: %s", str(exc))
+        return response({"error": "comparator_unavailable"}, 503)
     except RuntimePlayerNotFound:
         return response({"error": "player_not_found"}, 404)
     except RuntimeAmbiguousPlayer:
