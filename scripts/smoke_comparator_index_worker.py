@@ -2,7 +2,6 @@
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-import resource
 import sys
 import time
 
@@ -22,10 +21,13 @@ def main():
     result = compare_from_artifact(artifact, player1=norrie["player_id"], player2=svrcina["player_id"], tour="atp", surface="hard", best_of=3)
     json.dumps(result, allow_nan=False)
     elapsed = time.perf_counter() - start
-    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+    # getrusage().ru_maxrss can be inherited from the full-snapshot parent
+    # at fork/exec. The Linux process's own current RSS is the reliable metric.
+    status = Path("/proc/self/status").read_text(encoding="utf-8")
+    rss = float(next(line.split()[1] for line in status.splitlines() if line.startswith("VmRSS:"))) / 1024
     print("INDEXED REQUEST PASS", {
         "elapsed_s": round(elapsed, 2),
-        "peak_rss_mb": round(rss, 1),
+        "rss_mb": round(rss, 1),
         "probability": result["player1"]["probability"],
         "model_version": result["model_version"],
     }, flush=True)
