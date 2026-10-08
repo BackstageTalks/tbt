@@ -9970,6 +9970,27 @@ body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile::before{
     filter:brightness(1.18)!important;background:transparent!important;border:0!important;box-shadow:none!important
   }
 }
+/* Join navigation and action icons into one continuous desktop cluster.
+   Logo stays on the left; no large spacer between comparator and rocket. */
+@media(min-width:901px){
+  body#blinqPremium .reference-topbar .header-top{
+    display:flex!important;align-items:center!important;gap:10px!important;
+  }
+  body#blinqPremium .reference-topbar .header-top>.brand{
+    flex:0 0 auto!important;
+  }
+  body#blinqPremium .reference-topbar .header-top>.reference-navigation[data-icon-navigation="1"]{
+    display:flex!important;flex:0 0 auto!important;
+    width:auto!important;min-width:0!important;max-width:none!important;
+    margin-left:auto!important;margin-right:0!important;
+    justify-content:flex-end!important;
+  }
+  body#blinqPremium .reference-topbar .header-top>.header-actions{
+    flex:0 0 auto!important;min-width:0!important;
+    margin-left:0!important;padding-left:0!important;
+  }
+}
+
 /* Rocket is a graphic, not a new feature or route. */
 body#blinqPremium #bqm-projects svg.project-rocket-icon{
   width:24px;height:24px;display:block;fill:none;stroke:currentColor;stroke-width:1.75;
