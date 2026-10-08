@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import base64
 import hashlib
 import json
 import os
@@ -65,29 +66,57 @@ def _source_manifest(repository: str) -> dict:
 
 
 def _download_repo_binary(repository: str, path: str, destination: Path) -> None:
-    """Download one private-repo file without decoding binary bytes as text."""
+    """Download one private-repo binary file via Git blob base64 payload.
+
+    GitHub CLI's raw contents transform can intermittently fail on private
+    gzip assets with "transform: short source buffer". Resolving the content
+    entry to its immutable blob SHA and decoding the blob's documented base64
+    payload avoids any text/binary transform while remaining checksum-verifiable.
+    """
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name(destination.name + ".part")
     temporary.unlink(missing_ok=True)
-    with temporary.open("wb") as handle:
-        result = subprocess.run(
-            [
-                "gh", "api",
-                "-H", "Accept: application/vnd.github.raw+json",
-                f"repos/{repository}/contents/{path}?ref=main",
-            ],
-            stdout=handle,
-            stderr=subprocess.PIPE,
-        )
-    if result.returncode:
-        detail = (result.stderr or b"").decode("utf-8", "replace").strip()
-        temporary.unlink(missing_ok=True)
+
+    meta = subprocess.run(
+        [
+            "gh", "api",
+            f"repos/{repository}/contents/{path}?ref=main",
+            "--jq", ".sha",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if meta.returncode:
+        detail = (meta.stderr or b"").decode("utf-8", "replace").strip()
         raise RuntimeError(
-            f"GitHub repo asset download failed for {path}: {detail[:500]}"
+            f"GitHub repo metadata lookup failed for {path}: {detail[:500]}"
         )
-    if not temporary.is_file() or temporary.stat().st_size <= 0:
-        temporary.unlink(missing_ok=True)
+    blob_sha = (meta.stdout or b"").decode("ascii", "strict").strip()
+    if len(blob_sha) != 40:
+        raise RuntimeError(f"GitHub repo metadata returned invalid blob SHA for {path}")
+
+    blob = subprocess.run(
+        [
+            "gh", "api",
+            f"repos/{repository}/git/blobs/{blob_sha}",
+            "--jq", ".content",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if blob.returncode:
+        detail = (blob.stderr or b"").decode("utf-8", "replace").strip()
+        raise RuntimeError(
+            f"GitHub repo blob download failed for {path}: {detail[:500]}"
+        )
+    encoded = b"".join((blob.stdout or b"").split())
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except Exception as exc:
+        raise RuntimeError(f"GitHub repo blob base64 decode failed for {path}") from exc
+    if not payload:
         raise RuntimeError(f"GitHub repo asset download was empty: {path}")
+    temporary.write_bytes(payload)
     temporary.replace(destination)
 
 
