@@ -32,7 +32,8 @@ def test_match_comparator_release_and_runtime_contract():
     assert "async function comparatorCompare" in auth
 
 
-def test_comparator_header_icon_is_not_hardcoded_before_asset_approval():
+def test_comparator_header_icon_is_present_after_asset_approval():
     html = Path("web/index.html").read_text(encoding="utf-8")
-    # The approved icon can later link here with data-route="compare".
-    assert 'data-route="compare"' not in html
+    assert 'data-route="compare"' in html
+    assert 'aria-label="Porovnávač"' in html
+    assert 'nav-icon-compare' in html
