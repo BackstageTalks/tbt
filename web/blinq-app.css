@@ -9900,3 +9900,9 @@ body#blinqPremium .admin-hero-manager textarea:focus-visible{
   body#blinqPremium .admin-banner-media-urls .admin-media-upload{flex-wrap:wrap!important}
   body#blinqPremium .admin-banner-media-urls .admin-media-upload-button{width:100%!important}
 }
+
+/* Adjustable per-device left shadow: zero fully disables the tint; defaults retain the original banner. */
+body#blinqPremium #dashboardHero .hero-slide:after{opacity:var(--hero-shadow-desktop-opacity,1)!important}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.desktop::before{opacity:var(--hero-shadow-desktop-opacity,1)!important}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile::before{opacity:var(--hero-shadow-mobile-opacity,1)!important}
+@media(max-width:700px){body#blinqPremium #dashboardHero .hero-slide:after{opacity:var(--hero-shadow-mobile-opacity,1)!important}}
