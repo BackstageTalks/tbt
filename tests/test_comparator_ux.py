@@ -45,7 +45,7 @@ def test_comparator_copy_is_not_duplicated_inside_form():
 def test_comparator_assets_are_cache_busted():
     html = Path("web/index.html").read_text(encoding="utf-8")
     assert "/blinq-app.css?v=7360&p=61&compare=2" in html
-    assert "/app.js?v=7360&p=61&compare=2" in html
+    assert "/app.js?v=7360&p=61&compare=3" in html
 
 
 def test_comparator_player_suggestions_bind_after_async_insertion():
