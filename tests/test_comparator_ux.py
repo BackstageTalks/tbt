@@ -44,8 +44,8 @@ def test_comparator_copy_is_not_duplicated_inside_form():
 
 def test_comparator_assets_are_cache_busted():
     html = Path("web/index.html").read_text(encoding="utf-8")
-    assert "/blinq-app.css?v=7360&p=61&compare=2" in html
-    assert "/app.js?v=7360&p=61&compare=3" in html
+    assert "/blinq-app.css?v=7360&p=61&compare=3" in html
+    assert "/app.js?v=7360&p=61&compare=4" in html
 
 
 def test_comparator_player_suggestions_bind_after_async_insertion():
@@ -70,3 +70,13 @@ def test_comparator_search_rejects_stale_results_and_displays_failures():
     assert "status===429?" in wire
     assert 'role="alert"' in wire
     assert 'No players found.' in wire
+
+
+def test_comparator_route_hides_decoration_and_keeps_error_inside_form():
+    app = Path("web/app.js").read_text(encoding="utf-8")
+    route = app.split("function setRoute(route,push=true)", 1)[1].split("function metricCards(", 1)[0]
+    render = app.split("function renderComparatorRoute()", 1)[1].split("function wireComparator()", 1)[0]
+    assert "pageEyebrow.hidden=route==='results'||route==='compare'" in route
+    assert "pageSubtitle.hidden=route==='results'||route==='compare'" in route
+    assert 'class="comparator-inline-message"' in render
+    assert "state-card comparator-error" not in render
