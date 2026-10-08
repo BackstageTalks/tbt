@@ -10002,3 +10002,11 @@ body#blinqPremium #bqm-projects svg.project-rocket-icon{
 .comparator-search-error{color:#d9a5a5}
 
 body.blinq-compare .footer-system-dot{display:none}
+
+/* Comparator player search: visual group only, never a canonical ID merge. */
+.comparator-search-group+.comparator-search-group{border-top:1px solid rgba(90,138,165,.17)}
+.comparator-search-results .comparator-search-more{display:block;width:auto;margin:0 0 5px 10px;padding:4px 7px;color:#a5bac8;font-size:10px;font-weight:650;line-height:1.25;background:rgba(45,77,99,.3);border:1px solid rgba(84,127,152,.22);border-radius:5px}
+.comparator-search-results .comparator-search-more:hover,.comparator-search-results .comparator-search-more:focus{color:#e7f4f9;background:rgba(45,77,99,.55)}
+.comparator-search-alternates{margin:2px 4px 6px 11px;padding:5px 0 4px 8px;border-left:2px solid #42677f}
+.comparator-search-alternates>small{display:block;padding:3px 7px 5px;color:#a2b7c5;font-size:9px;line-height:1.3}
+.comparator-search-results .comparator-search-alternative{padding:7px 9px;opacity:.88}
