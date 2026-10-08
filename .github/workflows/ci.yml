@@ -4,6 +4,10 @@ run-name: "BlinQ CI · ${{ github.sha }}"
 on:
   push:
     branches: [main]
+    # Hourly external ticks carry no application changes; never redeploy the UI.
+    paths-ignore:
+      - '.github/hourly-api-gapfill-tick.json'
+      - '.github/hourly-api-gapfill-smoke.json'
   pull_request:
   workflow_dispatch:
 
