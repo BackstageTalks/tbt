@@ -5638,7 +5638,7 @@
   function comparatorState(){
     if(!state.comparator){
       const tour='atp',surface='hard';
-      state.comparator={tour,surface,bestOf:comparatorDefaultBestOf(tour,surface),bestOfAuto:true,players:[null,null],result:null,error:'',loading:false,search:[[],[]]};
+      state.comparator={tour,surface,bestOf:comparatorDefaultBestOf(tour,surface),bestOfAuto:true,players:[null,null],result:null,error:'',loading:false,search:[[],[]],searchSeq:[0,0]};
     }
     if(state.comparator.tour==='wta'&&Number(state.comparator.bestOf)!==3)state.comparator.bestOf=3;
     return state.comparator;
@@ -5664,6 +5664,7 @@
     if(!player||![0,1].includes(Number(side)))return false;
     s.players[Number(side)]={player_id:player.player_id,name:player.name,rank:player.rank||null,tour:s.tour};
     s.search[Number(side)]=[];
+    s.searchSeq[Number(side)]+=1;
     s.result=null;
     s.error='';
     return true;
@@ -5711,7 +5712,7 @@
           <label><span>${escapeHtml(lcopy('Maximum sets','Max. počet setov','Max. počet setů'))}</span><select id="comparatorBestOf"><option value="3"${Number(s.bestOf)===3?' selected':''}>3</option>${s.tour==='atp'?`<option value="5"${Number(s.bestOf)===5?' selected':''}>5</option>`:''}</select>${major&&s.tour==='atp'&&s.bestOfAuto? `<small class="comparator-auto-note">${escapeHtml(major)} · AUTO</small>`:''}</label>
         </div>
         <div class="comparator-player-grid">
-          ${[0,1].map(side=>`<label class="comparator-player-field ${s.players[side]?'is-selected':''}"><span>${escapeHtml(side===0?lcopy('Player 1','Hráč 1','Hráč 1'):lcopy('Player 2','Hráč 2','Hráč 2'))}</span><input type="search" id="comparatorPlayer${side}" data-comparator-input="${side}" autocomplete="off" placeholder="${escapeHtml(lcopy('Type a name…','Napíš meno…','Napiš jméno…'))}" value="${escapeHtml(comparatorPlayerLabel(s.players[side]))}"/>${s.players[side]?`<small class="comparator-player-confirmed">✓ ${escapeHtml(lcopy('selected','vybraný','vybraný'))}${Number(s.players[side]?.rank)>0?` · #${escapeHtml(String(s.players[side].rank))}`:''}</small>`:''}<div id="comparatorSearch${side}">${comparatorSearchHtml(side)}</div></label>`).join('')}
+          ${[0,1].map(side=>`<label class="comparator-player-field ${s.players[side]?'is-selected':''}"><span>${escapeHtml(side===0?lcopy('Player 1','Hráč 1','Hráč 1'):lcopy('Player 2','Hráč 2','Hráč 2'))}</span><input type="search" id="comparatorPlayer${side}" data-comparator-input="${side}" autocomplete="off" placeholder="${escapeHtml(lcopy('Type a name…','Napíš meno…','Napiš jméno…'))}" value="${escapeHtml(comparatorPlayerLabel(s.players[side]))}"/>${s.players[side]?`<small class="comparator-player-confirmed">✓ ${escapeHtml(lcopy('selected','vybraný','vybraný'))}${Number(s.players[side]?.rank)>0?` · #${escapeHtml(String(s.players[side].rank))}`:''}</small>`:''}<div id="comparatorSearch${side}" role="status" aria-live="polite">${comparatorSearchHtml(side)}</div></label>`).join('')}
         </div>
         <div class="comparator-actions"><button class="btn btn-primary" type="submit" ${s.loading?'disabled':''}>${escapeHtml(s.loading?lcopy('Comparing…','Porovnávam…','Porovnávám…'):lcopy('Compare','Porovnať','Porovnat'))}</button></div>
       </form>
@@ -5729,28 +5730,45 @@
     form.querySelectorAll('[data-comparator-input]').forEach(input=>{
       const side=Number(input.dataset.comparatorInput);
       input.addEventListener('input',()=>{
-        s.players[side]=null;s.result=null;s.error='';
+        const requestSeq=++s.searchSeq[side];
+        s.players[side]=null;s.result=null;s.error='';s.search[side]=[];
         input.closest('.comparator-player-field')?.classList.remove('is-selected');
         input.closest('.comparator-player-field')?.querySelector('.comparator-player-confirmed')?.remove();
         const query=input.value.trim();clearTimeout(timers[side]);
-        if(query.length<2){s.search[side]=[];const box=$(`comparatorSearch${side}`);if(box)box.innerHTML='';return;}
+        const box=$(`comparatorSearch${side}`);
+        if(query.length<2){if(box)box.innerHTML='';return;}
+        if(box)box.innerHTML=`<small class="comparator-search-status">${escapeHtml(lcopy('Searching…','Vyhľadávam…','Vyhledávám…'))}</small>`;
+        const tour=s.tour;
         timers[side]=setTimeout(async()=>{
+          const isCurrent=()=>s.searchSeq[side]===requestSeq&&s.tour===tour&&state.route==='compare'&&$(`comparatorPlayer${side}`)===input&&input.value.trim()===query;
           try{
-            const data=await BlinqAuth.comparatorPlayers(query,s.tour);
+            const data=await BlinqAuth.comparatorPlayers(query,tour);
+            if(!isCurrent())return;
             s.search[side]=Array.isArray(data?.players)?data.players:[];
             const automatic=comparatorAutoPlayer(query,s.search[side]);
             if(automatic&&comparatorSelectPlayer(side,automatic)){refresh();return;}
-            const box=$(`comparatorSearch${side}`);if(box)box.innerHTML=comparatorSearchHtml(side);
+            const target=$(`comparatorSearch${side}`);
+            if(target)target.innerHTML=s.search[side].length?comparatorSearchHtml(side):`<small class="comparator-search-status">${escapeHtml(lcopy('No players found.','Nenašli sa žiadni hráči.','Nebyli nalezeni žádní hráči.'))}</small>`;
           }catch(error){
-            s.search[side]=[];s.error=lcopy('Player search is temporarily unavailable.','Vyhľadávanie hráčov je dočasne nedostupné.','Vyhledávání hráčů je dočasně nedostupné.');
+            if(!isCurrent())return;
+            s.search[side]=[];
+            const status=Number(error?.status||0);
+            const message=status===401?lcopy('Sign in to search players.','Na vyhľadávanie sa prihlás.','Pro vyhledávání se přihlas.'):
+              status===403?lcopy('Player search is not available for this account.','Vyhľadávanie nie je dostupné pre tento účet.','Vyhledávání není dostupné pro tento účet.'):
+              status===429?lcopy('Too many searches. Try again shortly.','Priveľa vyhľadávaní. Skús to o chvíľu.','Příliš mnoho vyhledávání. Zkus to za chvíli.'):
+              lcopy('Player search is temporarily unavailable.','Vyhľadávanie hráčov je dočasne nedostupné.','Vyhledávání hráčů je dočasně nedostupné.');
+            const target=$(`comparatorSearch${side}`);
+            if(target)target.innerHTML=`<small class="comparator-search-status comparator-search-error" role="alert">${escapeHtml(message)}</small>`;
           }
-        },250);
+        },300);
       });
     });
-    host.querySelectorAll('[data-comparator-select]').forEach(button=>button.addEventListener('click',()=>{
-      comparatorSelectPlayer(Number(button.dataset.comparatorSelect),{player_id:button.dataset.playerId,name:button.dataset.playerName,rank:button.dataset.playerRank||null});
-      refresh();
-    }));
+    // Suggestions arrive after the initial render: delegate the click to the form.
+    form.addEventListener('click',event=>{
+      const button=event.target.closest('[data-comparator-select]');
+      if(!button||!form.contains(button))return;
+      if(comparatorSelectPlayer(Number(button.dataset.comparatorSelect),{player_id:button.dataset.playerId,name:button.dataset.playerName,rank:button.dataset.playerRank||null}))refresh();
+    });
     form.addEventListener('submit',async event=>{
       event.preventDefault();if(s.loading)return;
       if(!s.players[0]||!s.players[1]){s.error=lcopy('Select both players from the suggestions so their full canonical names are filled in.','Vyber oboch hráčov z ponuky, aby sa doplnilo celé meno.','Vyber oba hráče z nabídky, aby se doplnilo celé jméno.');refresh();return;}

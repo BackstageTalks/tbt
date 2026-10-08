@@ -154,6 +154,7 @@ jobs:
         run: |
           python -m pip install playwright==1.57.0
           python -m playwright install chromium
+          python tests/browser_comparator_search.py
           python tests/browser_runtime_r43.py
           python tests/browser_access_odds.py
           python tests/browser_preproduction_r61.py
