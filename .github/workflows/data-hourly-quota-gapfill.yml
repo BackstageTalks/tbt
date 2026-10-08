@@ -3,6 +3,9 @@ name: BlinQ hourly API quota gapfill
 # UTC 10:00-18:00 covers Bratislava 12:00-19:00 in both winter and summer.
 # The local-hour gate below is authoritative; 19:00 never dispatches API work.
 on:
+  push:
+    branches: [main]
+    paths: ['.github/hourly-api-gapfill-smoke.json']
   schedule:
     - cron: '0 10-18 * * *'
   workflow_dispatch:
@@ -28,7 +31,7 @@ jobs:
       BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
       WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
       GH_TOKEN: ${{ github.token }}
-      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+      DRY_RUN: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     steps:
       - name: Verify budget, reserve hourly capacity, and dispatch governed pipeline
         shell: bash
@@ -58,7 +61,7 @@ jobs:
                   16: 10500, 17: 12000, 18: 13500}
           print(f"Bratislava time: {local.isoformat()}; dry_run={DRY_RUN}", flush=True)
           closeout_only = local.hour == 19
-          if local.hour not in caps and not closeout_only:
+          if local.hour not in caps and not closeout_only and not DRY_RUN:
               print("Outside the 12:00-19:00 Bratislava API window; skipping.")
               sys.exit(0)
           if local.hour == 18 and local.minute > 15:
@@ -117,9 +120,11 @@ jobs:
           spent = int(budget["global_spent"])
           remaining = int(budget["global_remaining"])
           history_remaining = int(budget["remaining"]["history"])
-          if closeout_only:
-              print(f"19:00 read-only closeout: {spent}/15000 provider-day requests used, "
+          if closeout_only or (DRY_RUN and local.hour not in caps):
+              print(f"Read-only quota check: {spent}/15000 provider-day requests used, "
                     f"{remaining} remaining to 90% ceiling. No new job.")
+              if DRY_RUN:
+                  print("DRY RUN active writer check: " + str(check_writers()))
               sys.exit(0)
           if spent < 0 or remaining != max(0, 13500-spent):
               raise SystemExit("Shared budget inconsistency; no dispatch")
