@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "kind": "dry-run",
+  "requested_utc": "2026-10-08T17:48:00Z",
+  "purpose": "Verify GitHub Actions read-only provider budget and active writer checks; no paid API calls.",
+  "safe_mode": true
+}
