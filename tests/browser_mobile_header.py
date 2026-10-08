@@ -108,6 +108,31 @@ def main():
                     assert page.locator('#bqm-projects').get_attribute('data-unread')=='1'
                     assert page.locator('#insightUnread').is_visible()
                     assert page.locator('#insightUnread').inner_text()=='1'
+                    if width==390:
+                        # LIVE counts unread published alerts, not active radar signals.
+                        page.evaluate("""() => {
+                            const h=mobileTest, s=h.state;
+                            s.feed.account.plan='elite';
+                            s.insights.push({id:'live-unread-test',read:false,type:'alert',audience_mode:'levels'});
+                            s.userLiveRadarStatus={signals:4,candidates:7};
+                            h.renderInsightBell();
+                        }""")
+                        assert page.locator('#insightShortcutCount').is_visible()
+                        assert page.locator('#insightShortcutCount').inner_text()=='1'
+                        assert '1 neprečítaných' in page.locator('#insightShortcut').get_attribute('aria-label')
+                        page.evaluate("""() => {
+                            const h=mobileTest, s=h.state;
+                            s.insights.find(item=>item.id==='live-unread-test').read=true;
+                            h.renderInsightBell();
+                        }""")
+                        assert page.locator('#insightShortcutCount').is_hidden(), 'Radar signals must not masquerade as unread alerts'
+                        page.evaluate("""() => {
+                            const h=mobileTest, s=h.state;
+                            s.insights=s.insights.filter(item=>item.id!=='live-unread-test');
+                            s.userLiveRadarStatus=null;
+                            s.feed.account.plan='rookie';
+                            h.renderInsightBell();
+                        }""")
                     geometry=page.evaluate('''() => {
                         const els=['#bqm-toggle','.header-top>.brand','#bqm-projects','#insightBell','#profileButton'].map(s=>document.querySelector(s).getBoundingClientRect());
                         return {overlap:els.some((r,i)=>i&&r.left<els[i-1].right-1),overflow:document.documentElement.scrollWidth-innerWidth};
