@@ -805,7 +805,7 @@
     const referenceNav=document.querySelector('.reference-navigation');
     const predictionRoutes=new Set(['predictions','top200','prime','top_daily','value','doubles','ace','sg']);
     const modelRoutes=new Set(['model_data','methodology','how_blinq_works']);
-    const referenceRoute=predictionRoutes.has(state.route)?'predictions':state.route==='results'?'results':modelRoutes.has(state.route)?'model_data':state.route==='account'?'account':'';
+    const referenceRoute=predictionRoutes.has(state.route)?'predictions':state.route==='results'?'results':state.route==='compare'?'compare':modelRoutes.has(state.route)?'model_data':state.route==='account'?'account':'';
     const resultsLocked=!resultsAccessAllowed();
     const resultsPlan=resultsLocked?firstResultsUnlockPlan():'';
     const decorateResultsAccess=node=>{
@@ -820,17 +820,22 @@
         delete node.dataset.upgradePlan;
         delete node.dataset.upgradeSection;
         delete node.dataset.upgradeExplicit;
-        node.removeAttribute('aria-label');
+        node.setAttribute('aria-label',lcopy('Results','Výsledky','Výsledky'));
       }
     };
-    if(referenceNav){
-      referenceNav.querySelectorAll('[data-route]').forEach(node=>{
+    const syncRouteIcons=host=>{
+      if(!host)return;
+      host.querySelectorAll('[data-route]').forEach(node=>{
         const active=Boolean(referenceRoute)&&node.dataset.route===referenceRoute;
         node.classList.toggle('active',active);
         if(active)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');
       });
-      decorateResultsAccess(referenceNav.querySelector('[data-route="results"]'));
+      decorateResultsAccess(host.querySelector('[data-route="results"]'));
+    };
+    if(referenceNav){
+      syncRouteIcons(referenceNav);
     }
+    document.querySelectorAll('.mobile-icon-nav').forEach(syncRouteIcons);
     document.querySelectorAll('#mobileTabs [data-route="results"]').forEach(decorateResultsAccess);
     const profileAdmin=$('profileAdminLink');if(profileAdmin)profileAdmin.hidden=!isAdminAccount();
   }
@@ -6042,7 +6047,8 @@
     document.addEventListener('focusin',e=>{const target=accessHintTrigger(e.target);if(target&&state.route!=='admin')showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false);});
     document.addEventListener('focusout',e=>{const hint=$('accessHint'),next=e.relatedTarget;if(next instanceof Node&&(hint?.contains(next)||accessHintTarget?.contains(next)))return;if(accessHintTrigger(e.target)||hint?.contains(e.target))hideAccessHint(180);});
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('accessHint')?.hidden){hideAccessHint();}});
-    $('upgradeDialog').addEventListener('close',()=>{const target=upgradeReturnTarget;upgradeReturnTarget=null;if(target?.isConnected){target.focus({preventScroll:true});}hideAccessHint();});
+    $('upgradeDialog').addEventListener('cancel',event=>{event.preventDefault();$('upgradeDialog').close();});
+    $('upgradeDialog').addEventListener('close',()=>{const target=upgradeReturnTarget;upgradeReturnTarget=null;const restore=()=>{if(target?.isConnected)target.focus({preventScroll:true});hideAccessHint();};restore();queueMicrotask(restore);});
     window.addEventListener('scroll',()=>hideAccessHint(),{passive:true});
     window.addEventListener('resize',()=>{if(accessHintTarget&&!$('accessHint')?.hidden)positionAccessHint(accessHintTarget);},{passive:true});
     let resizeTimer,lastCardCapacity=dashboardCardsPerPanel(); window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{const capacity=dashboardCardsPerPanel();if(capacity===lastCardCapacity)return;lastCardCapacity=capacity;if(state.route==='predictions'){state.page=0;Object.keys(state.marketPage||{}).forEach(k=>{state.marketPage[k]=0;});renderPredictions();renderMarketSections();renderDashboardComposition();}},120)});
