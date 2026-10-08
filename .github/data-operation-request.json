@@ -1,15 +1,12 @@
 {
   "schema": 1,
-  "mode": "statistics",
+  "mode": "deploy-current",
   "promote": false,
-  "purpose": "Bounded modern 2025-2026 serve/return event statistics gapfill after coverage and identity audit; no model promotion and no prediction publication; skips full-quality canonical matches.",
+  "purpose": "Deploy verified Match Comparator UX cleanup only: maximum-set labels, ATP Grand Slam seasonal defaults, WTA 3-set safety, canonical player-name autocomplete and reduced duplicate copy. Reuse immutable prediction generation; no provider data collection, no model promotion, no canonical history mutation.",
   "requested_on": "2026-10-08",
-  "max_requests": 6000,
-  "start": "2025-01-01",
-  "end": "2026-10-07",
-  "provider_rps_limit": 6,
-  "budget_guard": "Shared provider API budget; max <=6000 calls including retries and 1500 daily reserve",
-  "planned_backup_manifest": "BackstageTalks/tbt-data/backup/rapidapi-tennisapi1/2026-10-08/modern-statistics-2025-2026/pre-run-manifest.json",
-  "previous_request_mode": "train",
+  "max_requests": 1,
+  "start": "",
+  "end": "",
+  "training_scope": "deployment_only",
   "historical_match_winner_odds_as_model_feature": false
 }
