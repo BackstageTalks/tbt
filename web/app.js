@@ -6047,7 +6047,7 @@
     document.addEventListener('focusin',e=>{const target=accessHintTrigger(e.target);if(target&&state.route!=='admin')showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false);});
     document.addEventListener('focusout',e=>{const hint=$('accessHint'),next=e.relatedTarget;if(next instanceof Node&&(hint?.contains(next)||accessHintTarget?.contains(next)))return;if(accessHintTrigger(e.target)||hint?.contains(e.target))hideAccessHint(180);});
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('accessHint')?.hidden){hideAccessHint();}});
-    $('upgradeDialog').addEventListener('close',()=>{const target=upgradeReturnTarget;upgradeReturnTarget=null;if(target?.isConnected){target.focus({preventScroll:true});}hideAccessHint();});
+    $('upgradeDialog').addEventListener('close',()=>{const target=upgradeReturnTarget;upgradeReturnTarget=null;hideAccessHint();if(target?.isConnected){const restore=()=>{if(target.isConnected)target.focus({preventScroll:true});};restore();queueMicrotask(restore);}});
     window.addEventListener('scroll',()=>hideAccessHint(),{passive:true});
     window.addEventListener('resize',()=>{if(accessHintTarget&&!$('accessHint')?.hidden)positionAccessHint(accessHintTarget);},{passive:true});
     let resizeTimer,lastCardCapacity=dashboardCardsPerPanel(); window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{const capacity=dashboardCardsPerPanel();if(capacity===lastCardCapacity)return;lastCardCapacity=capacity;if(state.route==='predictions'){state.page=0;Object.keys(state.marketPage||{}).forEach(k=>{state.marketPage[k]=0;});renderPredictions();renderMarketSections();renderDashboardComposition();}},120)});
