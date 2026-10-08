@@ -62,7 +62,8 @@ jobs:
           report=inputs.report
           if report.get("status")!="verified":
               raise SystemExit("Rank input report is not verified")
-          if int(report.get("provider_requests") or -1)!=0:
+          provider_requests=report.get("provider_requests")
+          if provider_requests is None or int(provider_requests)!=0:
               raise SystemExit("Rank input gate made provider requests")
 
           supplement=report.get("wta_official_supplement") or {}
