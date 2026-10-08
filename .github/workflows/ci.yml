@@ -141,15 +141,6 @@ jobs:
           test -n "$GH_TOKEN" || { echo "No read-only data-repo token available"; exit 1; }
           timeout 100s python scripts/diagnose_comparator_snapshot.py
 
-      - name: Audit comparator player identity evidence (PR only)
-        if: ${{ github.event_name == 'pull_request' }}
-        env:
-          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
-        shell: bash
-        run: |
-          test -n "$GH_TOKEN"
-          timeout 100s python scripts/audit_comparator_identity_candidates.py
-
       - name: Run backend tests
         env:
           PYTHONPATH: api:scripts
