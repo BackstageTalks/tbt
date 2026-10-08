@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "requested_on": "2026-10-08",
+  "purpose": "Finalize the already-captured production-vs-candidate shadow cohort against the identical point-in-time Elo baseline. Do not retrain or call providers. Consume the cohort exactly once and leave a final approved/rejected decision.",
+  "provider_requests": 0,
+  "retrain": false,
+  "canonical_mutation": false,
+  "promotion_policy": "exact_shadow_tested_candidate_only",
+  "rejection_policy": "keep_current_champion_and_consume_same_cohort",
+  "approval_policy": "promote_exact_candidate_artifact_no_refit"
+}
