@@ -45,6 +45,29 @@ def main():
             assert first['preview']==0,first
             assert 'Prvý banner' in first['desktop'] and 'Prvý banner' in first['mobile'],first
             assert first['colors']==3,first
+            studio=page.evaluate("""() => {
+              const editor=document.querySelector('.admin-banner-workbench');
+              const panels=[...editor.querySelectorAll('.admin-banner-device-panel')];
+              const numbers=[...editor.querySelectorAll('.admin-banner-number-control input[type="number"]')];
+              const rect=element=>element.getBoundingClientRect();
+              return {
+                panels:panels.length,
+                desktopFields:panels[0]?.querySelectorAll('fieldset').length,
+                mobileFields:panels[1]?.querySelectorAll('fieldset').length,
+                desktopFieldsExist:Boolean(panels[0]?.querySelector('[data-simple-banner-field="desktop_social_x"]')),
+                mobileFieldsExist:Boolean(panels[1]?.querySelector('[data-simple-banner-field="mobile_social_x"]')),
+                desktopTop:rect(panels[0]).top,mobileTop:rect(panels[1]).top,
+                panelWidth:rect(panels[0]).width,
+                numericCount:numbers.length,
+                numericHeight:rect(numbers[0]).height,
+                background:getComputedStyle(editor,'::before').backgroundImage
+              };
+            }""")
+            assert studio['panels']==2 and studio['desktopFields']==3 and studio['mobileFields']==3,studio
+            assert studio['desktopFieldsExist'] and studio['mobileFieldsExist'],studio
+            assert abs(studio['desktopTop']-studio['mobileTop'])<5 and studio['panelWidth']>350,studio
+            assert studio['numericCount']==16 and studio['numericHeight']>=44,studio
+            assert 'blinq_page_background.webp' in studio['background'],studio
             page.evaluate("""() => {
               const s=bannerHarness.state;
               const c=s.ui.elements.HERO_BANNER_1.content;
