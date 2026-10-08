@@ -523,7 +523,7 @@ body#blinqPremium [data-daily-tab="top200"],body#blinqPremium [data-admin-hub-ta
     color:#68f3a8!important;border-color:rgba(83,236,151,.22)!important;background:rgba(26,113,71,.07)!important;
   }
   body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav .mobile-upgrade-icon{
-    color:#63eadf!important;border-color:rgba(83,225,212,.20)!important;background:rgba(31,122,115,.06)!important;
+    color:#efb83f!important;border-color:rgba(244,193,77,.20)!important;background:rgba(128,82,8,.05)!important;
   }
   body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav [data-mobile-action][hidden]{
     display:none!important;
