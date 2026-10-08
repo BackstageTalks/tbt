@@ -111,7 +111,7 @@ assert.match(degraded, /Funguje s upozorneniami/);
 assert.match(degraded, /<b>10<\/b> v poriadku/);
 assert.match(degraded, /<b>2<\/b> na kontrolu/);
 assert.match(degraded, /Treba skontrolovať/);
-assert.match(degraded, /104\\/147 deployed · 43 fallback/);
+assert.ok(degraded.includes('104/147 deployed · 43 fallback'));
 assert.ok(!degraded.includes('TOURNAMENT LOGOS</small>'), 'fallback-covered logos must not appear as a service outage');
 assert.match(degraded, /8m since scan/);
 const missingOdds = structuredClone(healthy);
