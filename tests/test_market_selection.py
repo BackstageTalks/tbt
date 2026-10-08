@@ -80,6 +80,26 @@ def test_betting_day_uses_six_am_bratislava_boundary():
     assert end.isoformat() == '2026-09-07T04:00:00+00:00'
 
 
+
+def test_retired_top200_default_does_not_steal_active_offer_candidates():
+    rows = [
+        row('ranked-short-active', .75, 1.30, 3.40, depth=1.0, rank1=150, rank2=420),
+        row('ranked-value-active', .72, 1.90, 2.00, depth=1.0, rank1=360, rank2=88),
+        row('ranked-top-active', .70, 1.60, 2.50, depth=1.0, rank1=199, rank2=260),
+    ]
+    sections = select_market_sections(rows)
+    assert sections['top200_picks'] == []
+    assert [x['event_id'] for x in sections['prime_picks']] == ['ranked-short-active']
+    assert [x['event_id'] for x in sections['value_picks']] == ['ranked-value-active']
+    assert [x['event_id'] for x in sections['top_daily_picks']] == ['ranked-top-active']
+    counts = sections['market_selection']['selection_counts']
+    assert counts['top200_rank_qualified_before_limit'] == 3
+    assert counts['limited_out'] >= 3
+    rule = sections['market_selection']['top200_rule']
+    assert rule['max_selected'] == 0
+    assert rule['active_public_product'] is False
+    assert rule['retired_default'] is True
+
 def test_top200_claims_ranked_matches_before_all_price_buckets():
     rows = [
         row('ranked-short', .75, 1.30, 3.40, depth=1.0, rank1=150, rank2=420),
@@ -137,7 +157,7 @@ def test_probability_first_odds_buckets_match_product_policy():
     assert [x['event_id'] for x in sections['value_picks']] == ['value']
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['top', 'top-not-value']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'top200_priority_v15_then_value_top_prime'
+    assert meta['selection_policy'] == 'retired_top200_zero_limit_v16_value_top_prime'
     assert meta['value_rule']['assignment_priority'] == 2
     assert meta['value_rule']['max_two_way_odds_difference'] == .15
     assert meta['top_daily_rule']['value_priority_exclusion'] is True
