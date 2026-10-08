@@ -540,3 +540,15 @@ body#blinqPremium [data-daily-tab="top200"],body#blinqPremium [data-admin-hub-ta
     width:42px!important;min-width:42px!important;height:42px!important;
   }
 }
+
+
+/* Single-row mobile header: main sections stay in the hamburger menu. */
+@media(max-width:900px){
+  body#blinqPremium.bqm-enabled .mobile-icon-nav{display:none!important}
+  body#blinqPremium.bqm-enabled .site-header,
+  body#blinqPremium.bqm-enabled .site-header .header-top{height:64px!important;min-height:64px!important;max-height:64px!important}
+  body#blinqPremium.bqm-enabled .header-actions #bqm-projects{color:#efbe43!important;border:0!important;background:transparent!important}
+}
+body#blinqPremium .reference-topbar #bqm-projects svg.project-rocket-icon{
+  display:block!important;width:24px!important;height:24px!important;opacity:1!important
+}
