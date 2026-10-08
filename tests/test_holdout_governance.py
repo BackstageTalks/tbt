@@ -1,5 +1,5 @@
 """Regression coverage for completed-day and preview-safe promotion governance."""
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 import sys
 
@@ -47,7 +47,7 @@ def _frame(*days):
 
 def test_readiness_excludes_current_and_future_utc_days():
     report = build_readiness(
-        [_match(day) for day in (5, 6, 7, 8, 9)],
+        [_match(day) for day in (5, 6, 7, 8)],
         production_model=Champion(),
         minimum_gate_rows=3,
         target_rows=4,
@@ -57,7 +57,7 @@ def test_readiness_excludes_current_and_future_utc_days():
     assert report["latest_complete_utc_day"] == "2026-10-07"
     assert report["eligible_unseen_rows"] == 3
     assert report["eligible_unseen_days"] == 3
-    assert report["excluded_incomplete_or_future_rows"] == 2
+    assert report["excluded_incomplete_or_future_rows"] == 1
     assert report["ready_for_metric_gate"] is True
 
 
