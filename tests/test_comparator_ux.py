@@ -78,5 +78,7 @@ def test_comparator_route_hides_decoration_and_keeps_error_inside_form():
     render = app.split("function renderComparatorRoute()", 1)[1].split("function wireComparator()", 1)[0]
     assert "pageEyebrow.hidden=route==='results'||route==='compare'" in route
     assert "pageSubtitle.hidden=route==='results'||route==='compare'" in route
+    assert "document.body.classList.toggle('blinq-compare',route==='compare')" in route
+    assert "body.blinq-compare .footer-system-dot{display:none}" in Path("web/blinq-app.css").read_text(encoding="utf-8")
     assert 'class="comparator-inline-message"' in render
     assert "state-card comparator-error" not in render
