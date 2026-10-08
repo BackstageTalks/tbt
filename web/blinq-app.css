@@ -9906,3 +9906,164 @@ body#blinqPremium #dashboardHero .hero-slide:after{opacity:var(--hero-shadow-des
 body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.desktop::before{opacity:var(--hero-shadow-desktop-opacity,1)!important}
 body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile::before{opacity:var(--hero-shadow-mobile-opacity,1)!important}
 @media(max-width:700px){body#blinqPremium #dashboardHero .hero-slide:after{opacity:var(--hero-shadow-mobile-opacity,1)!important}}
+
+
+/* BlinQ icon navigation · visual pass 2 · 2026-10-08 */
+@media(min-width:901px){
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"]{
+    gap:12px!important;
+    height:64px!important;
+  }
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link,
+  body#blinqPremium .reference-topbar .header-actions .nav-action-icon{
+    width:48px!important;
+    min-width:48px!important;
+    height:48px!important;
+    min-height:48px!important;
+    padding:0!important;
+    border-radius:12px!important;
+    display:grid!important;
+    place-items:center!important;
+    box-sizing:border-box!important;
+  }
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link{
+    border:1px solid rgba(120,177,157,.15)!important;
+    background:rgba(4,20,17,.34)!important;
+    color:#d9a92f!important;
+  }
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link:hover,
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link:focus-visible{
+    color:#ffd767!important;
+    border-color:rgba(247,197,74,.38)!important;
+    background:rgba(116,78,9,.055)!important;
+  }
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link.active{
+    color:#ffd767!important;
+    border-color:rgba(255,205,89,.72)!important;
+    background:linear-gradient(180deg,rgba(209,148,21,.12),rgba(92,58,4,.07))!important;
+    box-shadow:0 0 0 1px rgba(255,204,83,.08),0 0 14px rgba(255,188,46,.14)!important;
+  }
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link.active:after{
+    display:block!important;
+    content:""!important;
+    position:absolute!important;
+    left:12px!important;
+    right:12px!important;
+    width:auto!important;
+    bottom:-7px!important;
+    height:2px!important;
+    transform:none!important;
+    border-radius:999px!important;
+    background:#f3bd3f!important;
+    box-shadow:0 0 7px rgba(243,189,63,.64)!important;
+  }
+  body#blinqPremium .reference-topbar .nav-icon-svg{
+    width:29px!important;
+    height:29px!important;
+    opacity:1!important;
+    display:block!important;
+    fill:none!important;
+    stroke:currentColor!important;
+    stroke-width:1.65!important;
+  }
+  body#blinqPremium .reference-topbar .nav-icon-compare .nav-icon-svg{
+    width:30px!important;
+    height:30px!important;
+  }
+  body#blinqPremium .reference-topbar #insightShortcut.insight-live-button.nav-action-icon{
+    width:48px!important;
+    min-width:48px!important;
+    height:48px!important;
+    min-height:48px!important;
+    padding:0!important;
+    gap:0!important;
+    border:1px solid rgba(82,232,147,.23)!important;
+    border-radius:12px!important;
+    background:rgba(20,90,58,.075)!important;
+    color:#68f3a8!important;
+    box-shadow:none!important;
+  }
+  body#blinqPremium .reference-topbar #insightShortcut .live-beat-icon{
+    width:30px!important;
+    height:30px!important;
+    opacity:1!important;
+  }
+  body#blinqPremium .reference-topbar #insightShortcut .live-beat-line{
+    stroke-width:2!important;
+  }
+  body#blinqPremium .reference-topbar #insightShortcut .insight-shortcut-live,
+  body#blinqPremium .reference-topbar #insightShortcut #insightShortcutLabel{
+    position:absolute!important;
+    width:1px!important;
+    height:1px!important;
+    padding:0!important;
+    margin:-1px!important;
+    overflow:hidden!important;
+    clip:rect(0,0,0,0)!important;
+    white-space:nowrap!important;
+    border:0!important;
+  }
+  body#blinqPremium .reference-topbar #topUpgradeButton.header-upgrade.nav-action-icon{
+    width:48px!important;
+    min-width:48px!important;
+    height:48px!important;
+    min-height:48px!important;
+    padding:0!important;
+    border:1px solid rgba(244,193,77,.20)!important;
+    border-radius:12px!important;
+    background:rgba(128,82,8,.045)!important;
+    color:#efb83f!important;
+  }
+  body#blinqPremium .reference-topbar #topUpgradeButton.header-upgrade.nav-action-icon svg.nav-icon-svg{
+    display:block!important;
+    width:29px!important;
+    height:29px!important;
+    opacity:1!important;
+    fill:none!important;
+    stroke:currentColor!important;
+    stroke-width:1.65!important;
+  }
+  body#blinqPremium .reference-topbar #topUpgradeButton #topUpgradeLabel{
+    position:absolute!important;
+    width:1px!important;
+    height:1px!important;
+    padding:0!important;
+    margin:-1px!important;
+    overflow:hidden!important;
+    clip:rect(0,0,0,0)!important;
+    white-space:nowrap!important;
+    border:0!important;
+  }
+  body#blinqPremium .reference-topbar #insightBell.insight-bell.nav-action-icon{
+    width:48px!important;
+    min-width:48px!important;
+    height:48px!important;
+    min-height:48px!important;
+    padding:0!important;
+    border:1px solid rgba(244,193,77,.16)!important;
+    border-radius:12px!important;
+    background:rgba(128,82,8,.03)!important;
+    color:#efb83f!important;
+  }
+  body#blinqPremium .reference-topbar #insightBell .insight-bell-icon,
+  body#blinqPremium .reference-topbar #insightBell .insight-bell-icon svg{
+    display:block!important;
+    width:27px!important;
+    height:27px!important;
+    opacity:1!important;
+  }
+  body#blinqPremium .reference-topbar #insightBell .insight-info-label{
+    display:none!important;
+  }
+  body#blinqPremium .reference-topbar [data-nav-tooltip]::before{
+    top:calc(100% + 7px)!important;
+    padding:6px 8px!important;
+    border-radius:7px!important;
+    background:#071b17!important;
+    color:#edf5f1!important;
+    border:1px solid rgba(145,196,177,.18)!important;
+    font:700 10px/1 Inter,"Segoe UI",Arial,sans-serif!important;
+    letter-spacing:.01em!important;
+    box-shadow:0 8px 20px rgba(0,0,0,.28)!important;
+  }
+}
