@@ -399,13 +399,14 @@ def test_evaluation_excludes_champion_seen_days_and_overlapping_decisions():
     champion = SimpleNamespace(metadata={'history_end': '2025-01-01T12:00Z'})
     previous = [{'holdout_fingerprint': 'different', 'holdout_period': {'end': '2025-01-02T12:00Z'}}]
     eligible, reason = training._eligible_evaluation(frame, champion, previous)
-    assert list(eligible.match_id) == ['c'] and reason is None
+    # One eligible UTC date cannot be promoted; the 3-day window is mandatory.
+    assert eligible.empty and reason == 'no_eligible_unseen_evaluation_rows'
     assert training._eligible_evaluation(frame, SimpleNamespace(metadata={}))[0].empty
     assert training._eligible_evaluation(frame, champion, [{}])[0].empty
 
 
 @pytest.mark.parametrize('promote,passing', [(False, False), (True, False), (False, True), (True, True)])
-def test_all_holdout_decisions_persist_before_promotion(monkeypatch, tmp_path, promote, passing):
+def test_only_requested_holdout_decisions_persist_before_promotion(monkeypatch, tmp_path, promote, passing):
     published = []
     class Store:
         def __init__(self, repository, tag, directory):
@@ -462,9 +463,14 @@ def test_all_holdout_decisions_persist_before_promotion(monkeypatch, tmp_path, p
     else:
         pipeline.main()
     assert published[0][0] == 'tbt-model-candidate-v1'
-    decision = published[0][1][0]
-    assert decision['eligible'] is passing
-    assert pipeline._holdout_already_used(published[0][1], 'fingerprint')
+    if promote:
+        decision = published[0][1][0]
+        assert decision['eligible'] is passing
+        assert pipeline._holdout_already_used(published[0][1], 'fingerprint')
+    else:
+        # Preview report is still saved, but no promotion decision is consumed.
+        assert published[0][1] == []
+        assert not pipeline._holdout_already_used(published[0][1], 'fingerprint')
     assert len(published) == (2 if promote and passing else 1)
 
 
