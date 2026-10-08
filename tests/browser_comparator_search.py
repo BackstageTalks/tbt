@@ -137,9 +137,10 @@ def main():
                 assert page.locator("#comparatorSearch0 .comparator-search-alternative").count() == 0
                 assert page.locator("#comparatorSearch0 .comparator-search-primary").first.get_attribute("data-player-id") == "norrie-main"
                 assert "598 zápasov v DB" in page.locator("#comparatorSearch0").inner_text()
-                assert "8 zápasov v DB" not in page.locator("#comparatorSearch0").inner_text()
+                assert page.locator("#comparatorSearch0 [data-player-id='norrie-other']").count() == 0
                 page.locator("#comparatorSearch0 [data-comparator-expand]").click()
                 assert page.locator("#comparatorSearch0 .comparator-search-alternative").count() == 1
+                assert page.locator("#comparatorSearch0 [data-player-id='norrie-other']").count() == 1
                 assert "8 zápasov v DB" in page.locator("#comparatorSearch0").inner_text()
                 page.locator("#comparatorSearch0 .comparator-search-primary").first.click()
                 assert page.evaluate("comparatorHarness.state.comparator.players[0].player_id") == "norrie-main"
