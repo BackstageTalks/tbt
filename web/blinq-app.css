@@ -9466,3 +9466,98 @@ body#blinqPremium .admin-reload-metrics .admin-login-metrics-cards article{min-h
 body#blinqPremium .admin-reload-metrics .admin-login-metrics-cards article span{font-size:10px!important}
 body#blinqPremium .admin-reload-metrics .admin-login-metrics-cards article strong{font-size:19px!important}
 @media(max-width:480px){body#blinqPremium .admin-reload-metrics .admin-login-metrics-cards{grid-template-columns:repeat(3,minmax(0,1fr))!important}body#blinqPremium .admin-reload-metrics .admin-login-metrics-cards article{padding:8px!important}}
+
+
+/* BlinQ icon navigation · 2026-10-08 */
+.nav-visually-hidden{
+  position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;
+  overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;
+}
+body#blinqPremium .reference-navigation.icon-navigation{
+  height:58px!important;display:flex!important;align-items:center!important;gap:10px!important;overflow:visible!important;
+}
+body#blinqPremium .reference-navigation.icon-navigation .nav-icon-link,
+body#blinqPremium .reference-topbar .nav-action-icon{
+  position:relative!important;box-sizing:border-box!important;
+  width:42px!important;min-width:42px!important;height:42px!important;
+  display:grid!important;place-items:center!important;padding:0!important;margin:0!important;
+  border:1px solid rgba(115,180,157,.14)!important;border-radius:10px!important;
+  background:rgba(5,24,20,.34)!important;color:#efb83f!important;
+  box-shadow:none!important;text-decoration:none!important;
+  transition:border-color .18s ease,background .18s ease,color .18s ease,box-shadow .18s ease,transform .18s ease!important;
+}
+body#blinqPremium .reference-navigation.icon-navigation .nav-icon-link:hover,
+body#blinqPremium .reference-navigation.icon-navigation .nav-icon-link:focus-visible{
+  color:#ffd667!important;border-color:rgba(244,193,77,.45)!important;
+  background:rgba(244,193,77,.055)!important;
+}
+body#blinqPremium .reference-navigation.icon-navigation .nav-icon-link.active{
+  color:#ffd667!important;border-color:rgba(255,205,89,.72)!important;
+  background:linear-gradient(180deg,rgba(245,190,56,.10),rgba(73,45,4,.08))!important;
+  box-shadow:0 0 0 1px rgba(255,202,66,.09),0 0 18px rgba(255,181,38,.18)!important;
+}
+body#blinqPremium .reference-navigation.icon-navigation .nav-icon-link.active:after{
+  left:9px!important;right:9px!important;bottom:-9px!important;height:2px!important;border-radius:999px!important;
+  background:#f4c04b!important;box-shadow:0 0 8px rgba(244,192,75,.72)!important;
+}
+body#blinqPremium .nav-icon-svg{
+  width:25px!important;height:25px!important;display:block!important;overflow:visible!important;
+  fill:none!important;stroke:currentColor!important;stroke-width:1.65!important;stroke-linecap:round!important;stroke-linejoin:round!important;
+}
+body#blinqPremium .nav-icon-compare .nav-icon-svg{width:26px!important;height:26px!important}
+body#blinqPremium [data-nav-tooltip]::before{
+  content:attr(data-nav-tooltip);position:absolute;z-index:150;left:50%;top:calc(100% + 8px);
+  transform:translate(-50%,-2px);padding:6px 8px;border:1px solid rgba(145,196,177,.18);border-radius:7px;
+  background:#071b17;color:#e8f1ed;box-shadow:0 10px 24px rgba(0,0,0,.30);
+  font:700 10px/1 Inter,"Segoe UI",Arial,sans-serif;letter-spacing:.01em;white-space:nowrap;
+  opacity:0;pointer-events:none;transition:opacity .14s ease,transform .14s ease;
+}
+body#blinqPremium [data-nav-tooltip]:hover::before,
+body#blinqPremium [data-nav-tooltip]:focus-visible::before{opacity:1;transform:translate(-50%,0)}
+body#blinqPremium .reference-topbar .insight-shortcut.insight-live-button{
+  width:42px!important;min-width:42px!important;height:42px!important;padding:0!important;gap:0!important;
+  color:#66f3a7!important;border-color:rgba(78,230,145,.24)!important;background:rgba(19,95,61,.08)!important;
+}
+body#blinqPremium .reference-topbar .insight-shortcut.insight-live-button:hover,
+body#blinqPremium .reference-topbar .insight-shortcut.insight-live-button:focus-visible{
+  color:#82ffbb!important;border-color:rgba(94,248,163,.46)!important;background:rgba(35,138,87,.10)!important;
+}
+body#blinqPremium .reference-topbar .insight-shortcut.insight-live-button #insightShortcutCount{
+  position:absolute!important;right:-4px!important;top:-4px!important;min-width:16px!important;height:16px!important;padding:0 3px!important;
+  display:grid!important;place-items:center!important;border-radius:999px!important;background:#58f0a0!important;color:#03110b!important;
+  font:900 8px/1 Arial,sans-serif!important;box-shadow:0 0 0 2px #03110f!important;
+}
+body#blinqPremium .reference-topbar .insight-shortcut.insight-live-button #insightShortcutCount[hidden]{display:none!important}
+body#blinqPremium .live-heart-icon{width:27px!important;height:27px!important}
+body#blinqPremium .live-heart-icon .live-heart-core,
+body#blinqPremium .live-heart-icon .live-heart-seam{stroke-width:1.65!important}
+body#blinqPremium .live-heart-icon .live-wave{stroke-width:1.25!important;opacity:.58;transform-origin:16px 16px;animation:blinqLiveWave 1.9s ease-in-out infinite}
+body#blinqPremium .live-heart-icon .live-wave-right{animation-delay:.12s}
+@keyframes blinqLiveWave{0%,100%{opacity:.28;transform:scale(.96)}50%{opacity:.88;transform:scale(1.06)}}
+body#blinqPremium .reference-topbar .header-upgrade.nav-action-icon{
+  width:42px!important;min-width:42px!important;height:42px!important;padding:0!important;
+  color:#62eadf!important;border:1px solid rgba(84,222,209,.22)!important;border-radius:10px!important;
+  background:rgba(34,123,116,.06)!important;
+}
+body#blinqPremium .reference-topbar .header-upgrade.nav-action-icon:hover,
+body#blinqPremium .reference-topbar .header-upgrade.nav-action-icon:focus-visible{
+  color:#84fff1!important;border-color:rgba(100,245,231,.45)!important;background:rgba(49,157,147,.10)!important;
+}
+body#blinqPremium .reference-topbar .insight-bell.nav-action-icon{
+  width:42px!important;min-width:42px!important;height:42px!important;padding:0!important;
+  color:#d6dfdc!important;border:1px solid rgba(150,183,172,.15)!important;border-radius:10px!important;
+  background:rgba(255,255,255,.012)!important;gap:0!important;
+}
+body#blinqPremium .reference-topbar .insight-bell.nav-action-icon .insight-info-label{display:none!important}
+body#blinqPremium .reference-topbar .insight-bell.nav-action-icon .insight-bell-icon,
+body#blinqPremium .reference-topbar .insight-bell.nav-action-icon .insight-bell-icon svg{width:22px!important;height:22px!important}
+body#blinqPremium .reference-topbar .insight-bell.nav-action-icon:hover,
+body#blinqPremium .reference-topbar .insight-bell.nav-action-icon:focus-visible,
+body#blinqPremium .reference-topbar .insight-bell.nav-action-icon.has-unread{
+  color:#f3f7f5!important;border-color:rgba(188,215,206,.28)!important;background:rgba(255,255,255,.035)!important;
+}
+body#blinqPremium .mobile-icon-nav{display:none!important}
+
+@media (prefers-reduced-motion: reduce){
+  body#blinqPremium .live-heart-icon .live-wave{animation:none!important;opacity:.65!important}
+}
