@@ -31,6 +31,9 @@ def _decision_cutoff(history) -> datetime | None:
         if not isinstance(row, dict):
             continue
         period = row.get("holdout_period") or {}
+        # A preview (promote=false) is not a promotion decision.
+        if row.get("promotion_requested") is False and row.get("decision") == "not_requested":
+            continue
         value = _parse_provenance_datetime(period.get("end"))
         if value is not None:
             values.append(value)
@@ -45,6 +48,7 @@ def build_readiness(
     minimum_gate_rows: int = 200,
     target_rows: int = 1000,
     minimum_days: int = 3,
+    as_of: datetime | None = None,
 ) -> dict:
     accepted, quality = audit_history(matches)
     metadata = getattr(production_model, "metadata", {}) or {}
@@ -58,10 +62,19 @@ def build_readiness(
     )
     cutoff_day = pd.Timestamp(cutoff).tz_convert("UTC").normalize()
 
-    unseen = [
+    clock = as_of if as_of is not None else datetime.now(timezone.utc)
+    if clock.tzinfo is None or clock.utcoffset() is None:
+        raise ValueError("Readiness cutoff must be timezone-aware")
+    today_utc = pd.Timestamp(clock).tz_convert("UTC").normalize()
+    post_cutoff = [
         match
         for match in accepted
         if pd.Timestamp(match.scheduled_at).tz_convert("UTC").normalize() > cutoff_day
+    ]
+    unseen = [
+        match
+        for match in post_cutoff
+        if pd.Timestamp(match.scheduled_at).tz_convert("UTC").normalize() < today_utc
     ]
     unseen.sort(key=lambda match: (match.scheduled_at, str(match.match_id)))
     days = sorted(
@@ -82,6 +95,8 @@ def build_readiness(
             decision_cutoff.isoformat() if decision_cutoff is not None else None
         ),
         "eligibility_cutoff_day_utc": cutoff_day.date().isoformat(),
+        "latest_complete_utc_day": (today_utc - pd.Timedelta(days=1)).date().isoformat(),
+        "excluded_incomplete_or_future_rows": len(post_cutoff) - len(unseen),
         "eligible_unseen_rows": rows,
         "eligible_unseen_days": distinct_days,
         "unseen_period": {
@@ -99,7 +114,7 @@ def build_readiness(
         "canonical_accepted_rows": int(quality.get("accepted") or 0),
         "policy": (
             "whole UTC days strictly later than production serving history and "
-            "all previously consumed promotion-decision holdouts"
+            "all previously consumed promotion-decision holdouts; current/future UTC days excluded"
         ),
         "provider_requests": 0,
     }

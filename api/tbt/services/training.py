@@ -605,8 +605,12 @@ def _holdout_fingerprint(frame: pd.DataFrame) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _eligible_evaluation(test, production_model=None, promotion_history=()):
-    """Only later whole days unseen by the champion and previous decisions."""
+def _eligible_evaluation(test, production_model=None, promotion_history=(), *, as_of=None):
+    """Only completed whole UTC days unseen by the champion and decisions."""
+    today_utc = pd.Timestamp(as_of if as_of is not None else pd.Timestamp.now(tz="UTC"))
+    if today_utc.tzinfo is None:
+        raise ValueError("Holdout evaluation cutoff must be timezone-aware")
+    today_utc = today_utc.tz_convert("UTC").normalize()
     cutoffs = []
     if production_model is not None:
         metadata = getattr(production_model, "metadata", {}) or {}
@@ -615,15 +619,26 @@ def _eligible_evaluation(test, production_model=None, promotion_history=()):
             return test.iloc[:0].copy(), "production_history_cutoff_unknown"
         cutoffs.append(pd.Timestamp(cutoff).normalize())
     for decision in promotion_history:
+        # A dry-run with promote=false must not consume unseen evaluation data.
+        if (isinstance(decision, dict)
+                and decision.get("promotion_requested") is False
+                and decision.get("decision") == "not_requested"):
+            continue
         period = decision.get("holdout_period") if isinstance(decision, dict) else None
         cutoff = _parse_provenance_datetime((period or {}).get("end"))
         if cutoff is None:
             return test.iloc[:0].copy(), "previous_decision_cutoff_unknown"
         cutoffs.append(pd.Timestamp(cutoff).normalize())
+    days = pd.to_datetime(test.scheduled_at, utc=True).dt.normalize()
+    eligible = days < today_utc
     if cutoffs:
-        days = pd.to_datetime(test.scheduled_at, utc=True).dt.normalize()
-        test = test.loc[days > max(cutoffs)].copy()
-    return test, None if len(test) else "no_eligible_unseen_evaluation_rows"
+        eligible &= days > max(cutoffs)
+    test = test.loc[eligible].copy()
+    # Fail closed until at least three distinct, fully completed UTC dates exist.
+    eligible_days = pd.to_datetime(test.scheduled_at, utc=True).dt.normalize().nunique()
+    if eligible_days < 3:
+        return test.iloc[:0].copy(), "no_eligible_unseen_evaluation_rows"
+    return test, None
 
 
 def _augment_atp_leaderboard_features(

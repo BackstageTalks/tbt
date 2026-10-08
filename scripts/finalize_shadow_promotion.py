@@ -11,7 +11,7 @@ import argparse
 import hashlib
 import json
 from collections import defaultdict
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from _bootstrap import ROOT  # noqa: F401
@@ -191,7 +191,7 @@ def _period(rows: list[dict]) -> dict:
     }
 
 
-def _build_gate_report(rows: list[dict], production_version: str, candidate_version: str) -> dict:
+def _build_gate_report(rows: list[dict], production_version: str, candidate_version: str, *, as_of=None) -> dict:
     y = [int(row["target_player1_win"]) for row in rows]
     candidate_p = [float(row["challenger_player1_probability"]) for row in rows]
     production_p = [float(row["production_player1_probability"]) for row in rows]
@@ -221,6 +221,14 @@ def _build_gate_report(rows: list[dict], production_version: str, candidate_vers
     }
 
     reasons = []
+    clock = as_of if as_of is not None else datetime.now(timezone.utc)
+    if clock.tzinfo is None or clock.utcoffset() is None:
+        raise ValueError("Shadow gate cutoff must be timezone-aware")
+    today_utc = clock.astimezone(timezone.utc).date()
+    # Never promote from a cohort containing the current or a future UTC date.
+    # Reject the *entire* mixed cohort rather than silently changing its fingerprint.
+    if any(day >= today_utc.isoformat() for day in days):
+        reasons.append("shadow_holdout_contains_incomplete_utc_day")
     if len(rows) < REQUIRED_MIN_MATCHES:
         reasons.append("shadow_holdout_n_below_200")
     if len(days) < REQUIRED_MIN_DAYS:

@@ -199,6 +199,7 @@ def _promotion_history(path):
 def _holdout_already_used(history, fingerprint):
     return any(
         isinstance(row, dict)
+        and not (row.get("promotion_requested") is False and row.get("decision") == "not_requested")
         and row.get("holdout_fingerprint") == fingerprint
         for row in history
     )
@@ -954,10 +955,10 @@ def main():
                 "calibration_method": model_to_save.calibrator.kind,
             }
 
-        # Only a real evaluated holdout is consumable governance evidence.
-        # Deferred attempts carry no fingerprint and therefore must not poison
-        # future unseen evaluation windows.
-        if fingerprint:
+        # Only an actual requested promotion decision consumes holdout evidence.
+        # Preview training and deferred attempts must leave unseen data reusable.
+        # Rejected *requested* promotions still consume the tested cohort.
+        if args.promote and fingerprint and not deferred:
             promotion_history.append(decision)
 
         # Keep the current attempt visible even when it is deferred and thus is
