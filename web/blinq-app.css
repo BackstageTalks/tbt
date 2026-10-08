@@ -4442,8 +4442,8 @@ body::before{opacity:.13!important;pointer-events:none}
 .lean-admin-preview-grid>div>span{display:block!important;margin:0 0 7px!important;color:#758b84!important;font-size:10px!important;font-weight:800!important;text-transform:uppercase!important;letter-spacing:.8px!important}
 .lean-admin-preview{position:relative!important;overflow:hidden!important;border-radius:16px!important;border:1px solid var(--lean-line)!important;background:linear-gradient(90deg,rgba(2,9,8,.9),rgba(2,9,8,.25)),var(--preview-image) center/cover!important;box-shadow:0 18px 42px rgba(0,0,0,.22)!important}
 .lean-admin-preview.desktop{aspect-ratio:3/1!important}.lean-admin-preview.mobile{aspect-ratio:3/4!important}
-.lean-admin-preview>div{position:absolute!important;inset:0!important;padding:clamp(16px,3vw,30px)!important;display:flex!important;flex-direction:column!important;justify-content:center!important;align-items:flex-start!important;max-width:65%!important}
-.lean-admin-preview.mobile>div{max-width:92%!important;padding:16px!important}
+.lean-admin-preview>div.admin-hero-preview-copy{position:absolute!important;inset:0!important;padding:clamp(16px,3vw,30px)!important;display:flex!important;flex-direction:column!important;justify-content:center!important;align-items:flex-start!important;max-width:65%!important}
+.lean-admin-preview.mobile>div.admin-hero-preview-copy{max-width:92%!important;padding:16px!important}
 .lean-admin-preview small{color:var(--lean-green)!important;font-size:8px!important;letter-spacing:1px!important;font-weight:850!important}.lean-admin-preview strong{font-size:clamp(15px,2vw,26px)!important;line-height:1.05!important;margin-top:5px!important}.lean-admin-preview.mobile strong{font-size:18px!important}.lean-admin-preview p{font-size:10px!important;color:#bed0cb!important;line-height:1.4!important;margin:7px 0!important}.lean-admin-preview b{font-size:9px!important;color:#071b13!important;background:var(--lean-green)!important;border-radius:8px!important;padding:7px 9px!important}
 .admin-banner-save-note{display:flex!important;gap:8px!important;align-items:center!important;padding:12px 14px!important;border-radius:13px!important;border:1px solid rgba(121,242,177,.12)!important;background:rgba(121,242,177,.035)!important}.admin-banner-save-note>span{width:7px;height:7px;border-radius:50%;background:var(--lean-green)}.admin-banner-save-note strong{font-size:11px!important}.admin-banner-save-note small{font-size:10px!important;color:#758983!important}
 
@@ -9561,4 +9561,105 @@ body#blinqPremium .mobile-icon-nav{display:none!important}
 
 @media (prefers-reduced-motion: reduce){
   body#blinqPremium .live-heart-icon .live-wave{animation:none!important;opacity:.65!important}
+}
+
+
+/* Banner editor: editable link coordinates must not inherit old full-card copy styling. */
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview>div.hero-social-links.hero-social-standalone{
+  position:absolute!important;
+  inset:auto!important;
+  left:var(--hero-social-x,3%)!important;
+  top:var(--hero-social-y,76%)!important;
+  right:auto!important;bottom:auto!important;
+  transform:translateY(-50%)!important;
+  width:max-content!important;height:auto!important;
+  max-width:96%!important;
+  padding:0!important;margin:0!important;
+  display:flex!important;
+  flex-direction:var(--hero-social-direction,row)!important;
+  flex-wrap:var(--hero-social-wrap,wrap)!important;
+  align-items:flex-start!important;justify-content:flex-start!important;
+  z-index:5!important;
+}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile>div.hero-social-links.hero-social-standalone{
+  left:var(--hero-social-mobile-x,4%)!important;
+  top:var(--hero-social-mobile-y,76%)!important;
+  flex-direction:var(--hero-social-mobile-direction,row)!important;
+  flex-wrap:var(--hero-social-mobile-wrap,wrap)!important;
+}
+/* More comfortable layout controls: two roomy columns, readable labels and 44px steppers. */
+body#blinqPremium .admin-banner-layout-grid{
+  gap:16px!important;
+}
+body#blinqPremium .admin-banner-layout-grid fieldset{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:12px 14px!important;
+  padding:16px!important;
+}
+body#blinqPremium .admin-banner-layout-grid legend{
+  font-size:13px!important;
+  letter-spacing:.015em!important;
+}
+body#blinqPremium .admin-banner-layout-grid label{
+  gap:7px!important;
+  min-width:0!important;
+  font-size:12px!important;
+  font-weight:700!important;
+}
+body#blinqPremium .admin-banner-layout-grid .admin-banner-number-control{
+  display:grid!important;
+  grid-template-columns:44px minmax(0,1fr) 44px!important;
+  align-items:center!important;
+  gap:6px!important;
+  width:100%!important;
+}
+body#blinqPremium .admin-banner-layout-grid input[type="number"]{
+  height:46px!important;
+  min-width:0!important;
+  padding:0 12px!important;
+  font-size:14px!important;
+  font-weight:750!important;
+  text-align:center!important;
+  appearance:textfield!important;
+  -moz-appearance:textfield!important;
+}
+body#blinqPremium .admin-banner-layout-grid input[type="number"]::-webkit-inner-spin-button,
+body#blinqPremium .admin-banner-layout-grid input[type="number"]::-webkit-outer-spin-button{
+  -webkit-appearance:none!important;
+  margin:0!important;
+}
+body#blinqPremium .admin-banner-layout-grid .admin-banner-step{
+  display:grid!important;
+  place-items:center!important;
+  box-sizing:border-box!important;
+  height:46px!important;width:44px!important;min-width:44px!important;
+  margin:0!important;padding:0!important;
+  border:1px solid rgba(112,197,167,.40)!important;
+  border-radius:9px!important;
+  background:rgba(19,68,54,.36)!important;
+  color:#d4f5e6!important;
+  font-size:22px!important;line-height:1!important;font-weight:650!important;
+  cursor:pointer!important;
+}
+body#blinqPremium .admin-banner-layout-grid .admin-banner-step:hover,
+body#blinqPremium .admin-banner-layout-grid .admin-banner-step:focus-visible{
+  background:rgba(49,132,96,.32)!important;
+  border-color:#78e6b3!important;
+  outline:2px solid rgba(120,230,179,.30)!important;
+  outline-offset:1px!important;
+}
+body#blinqPremium .admin-banner-layout-grid fieldset select{
+  height:46px!important;min-width:0!important;width:100%!important;
+  padding:0 12px!important;
+  font-size:13px!important;
+  border-radius:9px!important;
+}
+@media(max-width:900px){
+  body#blinqPremium .admin-banner-layout-grid .admin-banner-number-control{
+    grid-template-columns:38px minmax(0,1fr) 38px!important;
+    gap:4px!important;
+  }
+  body#blinqPremium .admin-banner-layout-grid .admin-banner-step{
+    min-width:38px!important;width:38px!important;
+  }
 }
