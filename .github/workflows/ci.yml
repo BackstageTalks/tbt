@@ -161,6 +161,16 @@ jobs:
           test -n "$GH_TOKEN"
           timeout 110s python scripts/audit_player_identity_external.py
 
+      - name: Dry-run evidenced history identity links (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          timeout 180s python scripts/dryrun_comparator_identity_links.py
+
       - name: Run backend tests
         env:
           PYTHONPATH: api:scripts
