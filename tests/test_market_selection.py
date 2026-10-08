@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from tbt.services.market_selection import (
     betting_day_bounds,
+    build_selection_candidate_snapshot,
     decimal_odds,
     enrich_current_betting_day_odds,
     extract_match_winner_odds,
