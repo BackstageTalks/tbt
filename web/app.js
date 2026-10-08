@@ -2956,13 +2956,13 @@
 
 
   const routeMetaEn={
-    predictions:['TENNIS INTELLIGENCE','Dashboard','Daily predictions, model signals and current BlinQ intelligence.'],top200:['RANK FIRST','TOP200','First-priority Match Winner picks where at least one player is ranked inside the top 200, quality-gated and capped at five.'],prime:['COMEBACKS','Comebacks','Short-priced favourite selections with strong model probability and data quality.'],top_daily:['CONFIDENCE FIRST','TOP','Strongest daily predictions ranked by model probability and data quality.'],value:['VALUE','Value','Predictions selected for stronger model value with probability, price and data-quality context.'],doubles:['DOUBLES','Doubles','Separate doubles model and team-pair intelligence.'],ace:['ACES + DOUBLE FAULTS','Aces','Top Aces and Double Faults market selections.'],sg:['SETS + GAMES','Sets / Games','Top Sets and Games market selections.'],results:['SETTLED PREDICTIONS','Results','Settled predictions, hit rate, ROI, units and related performance statistics.'],compare:['MATCH COMPARATOR','Compare players','Compare any two canonical ATP/WTA players using the current BlinQ point-in-time model state.'],account:['BLINQ MEMBERS','Account','Profile, security, membership and access.'],admin:['BLINQ CONTROL','Admin centrum','Správa modelu, publikovania, prístupov, účtov a obsahu BlinQ.'],how_blinq_works:['LEARN','How BlinQ Works','How the BlinQ workflow turns point-in-time tennis data into probabilities.'],methodology:['LEARN','Methodology','The principles used to keep predictions point-in-time and auditable.'],model_data:['LEARN','Model & Data','What the published feed exposes about data and model state.'],faq:['LEARN','FAQ','Common questions about probabilities, results and model output.'],responsible_use:['LEARN','Responsible Use','Use probabilities as information, never as guarantees.'],terms:['LEGAL','Terms of Use','Rules for using the BlinQ service.'],privacy:['LEGAL','Privacy','How BlinQ works with account and service data.'],cookies:['LEGAL','Cookies','Browser storage, essential functionality and analytics preferences.']
+    predictions:['TENNIS INTELLIGENCE','Dashboard','Daily predictions, model signals and current BlinQ intelligence.'],top200:['RANK FIRST','TOP200','First-priority Match Winner picks where at least one player is ranked inside the top 200, quality-gated and capped at five.'],prime:['COMEBACKS','Comebacks','Short-priced favourite selections with strong model probability and data quality.'],top_daily:['CONFIDENCE FIRST','TOP','Strongest daily predictions ranked by model probability and data quality.'],value:['VALUE','Value','Predictions selected for stronger model value with probability, price and data-quality context.'],doubles:['DOUBLES','Doubles','Separate doubles model and team-pair intelligence.'],ace:['ACES + DOUBLE FAULTS','Aces','Top Aces and Double Faults market selections.'],sg:['SETS + GAMES','Sets / Games','Top Sets and Games market selections.'],results:['SETTLED PREDICTIONS','Results','Settled predictions, hit rate, ROI, units and related performance statistics.'],compare:['MATCH COMPARATOR','Compare players','Choose two players, surface and maximum sets. BlinQ compares their current model profile.'],account:['BLINQ MEMBERS','Account','Profile, security, membership and access.'],admin:['BLINQ CONTROL','Admin centrum','Správa modelu, publikovania, prístupov, účtov a obsahu BlinQ.'],how_blinq_works:['LEARN','How BlinQ Works','How the BlinQ workflow turns point-in-time tennis data into probabilities.'],methodology:['LEARN','Methodology','The principles used to keep predictions point-in-time and auditable.'],model_data:['LEARN','Model & Data','What the published feed exposes about data and model state.'],faq:['LEARN','FAQ','Common questions about probabilities, results and model output.'],responsible_use:['LEARN','Responsible Use','Use probabilities as information, never as guarantees.'],terms:['LEGAL','Terms of Use','Rules for using the BlinQ service.'],privacy:['LEGAL','Privacy','How BlinQ works with account and service data.'],cookies:['LEGAL','Cookies','Browser storage, essential functionality and analytics preferences.']
   };
   const routeMetaSk={
-    predictions:['TENISOVÁ ANALYTIKA','Prehľad','Denné predikcie, kľúčové modelové signály a aktuálna BlinQ analytika.'],top200:['RANKING NA PRVOM MIESTE','TOP200','Prioritné Match Winner picky, kde je aspoň jeden hráč v TOP200, s quality filtrami a maximom päť tipov.'],prime:['COMEBACKS','Comebacks','Predikcie favoritov s nižším kurzom a silnou modelovou pravdepodobnosťou.'],top_daily:['NAJSILNEJŠIE SIGNÁLY','TOP','Najsilnejšie denné predikcie zoradené podľa pravdepodobnosti modelu a kvality dát.'],value:['MODEL VALUE','Value','Predikcie so zvýšenou modelovou hodnotou a priaznivým pomerom rizika a ceny.'],doubles:['ŠTVORHRA','Štvorhra','Samostatný model štvorhry a inteligencia dvojíc/tímov.'],ace:['ESÁ + DVOJCHYBY','Esá','Najlepšie projekcie pre esá a dvojchyby.'],sg:['SETY + HRY','Sety / hry','Najlepšie projekcie pre sety a počet hier.'],results:['VYHODNOTENÉ PREDIKCIE','Výsledky','Vyhodnotené predikcie, úspešnosť, ROI, jednotky a súvisiace štatistiky výkonu.'],compare:['POROVNÁVAČ ZÁPASOV','Porovnať hráčov','Porovnaj ľubovoľných dvoch canonical ATP/WTA hráčov podľa aktuálneho point-in-time stavu BlinQ modelu.'],account:['BLINQ ČLENSTVO','Účet','Profil, zabezpečenie, členstvo a prístup.'],how_blinq_works:['INFO','Ako funguje BlinQ','Ako BlinQ mení point-in-time tenisové dáta na pravdepodobnosti.'],methodology:['INFO','Metodika','Princípy, ktoré udržujú predikcie point-in-time a auditovateľné.'],model_data:['INFO','Model a dáta','Čo publikovaný feed ukazuje o dátach a stave modelu.'],faq:['INFO','FAQ','Najčastejšie otázky o pravdepodobnostiach, výsledkoch a výstupe modelu.'],responsible_use:['INFO','Zodpovedné používanie','Pravdepodobnosti používaj ako informáciu, nikdy nie ako záruku.'],terms:['LEGAL','Podmienky používania','Pravidlá používania služby BlinQ.'],privacy:['LEGAL','Ochrana súkromia','Ako BlinQ pracuje s údajmi používateľov.'],cookies:['LEGAL','Cookies','Nevyhnutné úložisko, preferencie a analytika.']
+    predictions:['TENISOVÁ ANALYTIKA','Prehľad','Denné predikcie, kľúčové modelové signály a aktuálna BlinQ analytika.'],top200:['RANKING NA PRVOM MIESTE','TOP200','Prioritné Match Winner picky, kde je aspoň jeden hráč v TOP200, s quality filtrami a maximom päť tipov.'],prime:['COMEBACKS','Comebacks','Predikcie favoritov s nižším kurzom a silnou modelovou pravdepodobnosťou.'],top_daily:['NAJSILNEJŠIE SIGNÁLY','TOP','Najsilnejšie denné predikcie zoradené podľa pravdepodobnosti modelu a kvality dát.'],value:['MODEL VALUE','Value','Predikcie so zvýšenou modelovou hodnotou a priaznivým pomerom rizika a ceny.'],doubles:['ŠTVORHRA','Štvorhra','Samostatný model štvorhry a inteligencia dvojíc/tímov.'],ace:['ESÁ + DVOJCHYBY','Esá','Najlepšie projekcie pre esá a dvojchyby.'],sg:['SETY + HRY','Sety / hry','Najlepšie projekcie pre sety a počet hier.'],results:['VYHODNOTENÉ PREDIKCIE','Výsledky','Vyhodnotené predikcie, úspešnosť, ROI, jednotky a súvisiace štatistiky výkonu.'],compare:['POROVNÁVAČ','Porovnať hráčov','Vyber dvoch hráčov, povrch a maximálny počet setov. BlinQ porovná ich aktuálny modelový profil.'],account:['BLINQ ČLENSTVO','Účet','Profil, zabezpečenie, členstvo a prístup.'],how_blinq_works:['INFO','Ako funguje BlinQ','Ako BlinQ mení point-in-time tenisové dáta na pravdepodobnosti.'],methodology:['INFO','Metodika','Princípy, ktoré udržujú predikcie point-in-time a auditovateľné.'],model_data:['INFO','Model a dáta','Čo publikovaný feed ukazuje o dátach a stave modelu.'],faq:['INFO','FAQ','Najčastejšie otázky o pravdepodobnostiach, výsledkoch a výstupe modelu.'],responsible_use:['INFO','Zodpovedné používanie','Pravdepodobnosti používaj ako informáciu, nikdy nie ako záruku.'],terms:['LEGAL','Podmienky používania','Pravidlá používania služby BlinQ.'],privacy:['LEGAL','Ochrana súkromia','Ako BlinQ pracuje s údajmi používateľov.'],cookies:['LEGAL','Cookies','Nevyhnutné úložisko, preferencie a analytika.']
   };
   const routeMetaCz={
-    predictions:['TENISOVÁ ANALYTIKA','Přehled','Denní predikce, klíčové modelové signály a aktuální BlinQ analytika.'],top200:['RANKING NA PRVNÍM MÍSTĚ','TOP200','Prioritní Match Winner tipy, kde je alespoň jeden hráč v TOP200, s quality filtry a maximem pěti tipů.'],prime:['COMEBACKS','Comebacks','Predikce favoritů s nižším kurzem a silnou modelovou pravděpodobností.'],top_daily:['NEJSILNĚJŠÍ SIGNÁLY','TOP','Nejsilnější denní predikce seřazené podle pravděpodobnosti modelu a kvality dat.'],value:['MODEL VALUE','Value','Predikce se zvýšenou modelovou hodnotou a příznivým poměrem rizika a ceny.'],doubles:['ČTYŘHRA','Čtyřhra','Samostatný model čtyřhry a inteligence dvojic/týmů.'],ace:['ESA + DVOJCHYBY','Esa','Nejlepší projekce pro esa a dvojchyby.'],sg:['SETY + HRY','Sety / hry','Nejlepší projekce pro sety a počet her.'],results:['VYHODNOCENÉ PREDIKCE','Výsledky','Vyhodnocené predikce, úspěšnost, ROI, jednotky a související statistiky výkonu.'],compare:['POROVNÁVAČ ZÁPASŮ','Porovnat hráče','Porovnej libovolné dva canonical ATP/WTA hráče podle aktuálního point-in-time stavu BlinQ modelu.'],account:['BLINQ ČLENSTVÍ','Účet','Profil, zabezpečení, členství a přístup.'],how_blinq_works:['INFO','Jak funguje BlinQ','Jak BlinQ mění point-in-time tenisová data na pravděpodobnosti.'],methodology:['INFO','Metodika','Principy, které udržují predikce point-in-time a auditovatelné.'],model_data:['INFO','Model a data','Co publikovaný feed ukazuje o datech a stavu modelu.'],faq:['INFO','FAQ','Nejčastější otázky o pravděpodobnostech, výsledcích a výstupu modelu.'],responsible_use:['INFO','Zodpovědné používání','Pravděpodobnosti používej jako informaci, nikdy ne jako záruku.'],terms:['LEGAL','Podmínky používání','Pravidla používání služby BlinQ.'],privacy:['LEGAL','Ochrana soukromí','Jak BlinQ pracuje s údaji uživatelů.'],cookies:['LEGAL','Cookies','Nezbytné úložiště, preference a analytika.']
+    predictions:['TENISOVÁ ANALYTIKA','Přehled','Denní predikce, klíčové modelové signály a aktuální BlinQ analytika.'],top200:['RANKING NA PRVNÍM MÍSTĚ','TOP200','Prioritní Match Winner tipy, kde je alespoň jeden hráč v TOP200, s quality filtry a maximem pěti tipů.'],prime:['COMEBACKS','Comebacks','Predikce favoritů s nižším kurzem a silnou modelovou pravděpodobností.'],top_daily:['NEJSILNĚJŠÍ SIGNÁLY','TOP','Nejsilnější denní predikce seřazené podle pravděpodobnosti modelu a kvality dat.'],value:['MODEL VALUE','Value','Predikce se zvýšenou modelovou hodnotou a příznivým poměrem rizika a ceny.'],doubles:['ČTYŘHRA','Čtyřhra','Samostatný model čtyřhry a inteligence dvojic/týmů.'],ace:['ESA + DVOJCHYBY','Esa','Nejlepší projekce pro esa a dvojchyby.'],sg:['SETY + HRY','Sety / hry','Nejlepší projekce pro sety a počet her.'],results:['VYHODNOCENÉ PREDIKCE','Výsledky','Vyhodnocené predikce, úspěšnost, ROI, jednotky a související statistiky výkonu.'],compare:['POROVNÁVAČ','Porovnat hráče','Vyber dva hráče, povrch a maximální počet setů. BlinQ porovná jejich aktuální modelový profil.'],account:['BLINQ ČLENSTVÍ','Účet','Profil, zabezpečení, členství a přístup.'],how_blinq_works:['INFO','Jak funguje BlinQ','Jak BlinQ mění point-in-time tenisová data na pravděpodobnosti.'],methodology:['INFO','Metodika','Principy, které udržují predikce point-in-time a auditovatelné.'],model_data:['INFO','Model a data','Co publikovaný feed ukazuje o datech a stavu modelu.'],faq:['INFO','FAQ','Nejčastější otázky o pravděpodobnostech, výsledcích a výstupu modelu.'],responsible_use:['INFO','Zodpovědné používání','Pravděpodobnosti používej jako informaci, nikdy ne jako záruku.'],terms:['LEGAL','Podmínky používání','Pravidla používání služby BlinQ.'],privacy:['LEGAL','Ochrana soukromí','Jak BlinQ pracuje s údaji uživatelů.'],cookies:['LEGAL','Cookies','Nezbytné úložiště, preference a analytika.']
   };
   const routeMeta=locale==='sk'?{...routeMetaEn,...routeMetaSk}:locale==='cz'?{...routeMetaEn,...routeMetaCz}:routeMetaEn;
 
@@ -5559,14 +5559,66 @@
     const cookieSettings=route==='cookies'?`<div class="cookie-settings-card"><strong>${escapeHtml(lcopy('Cookie preferences','Nastavenia cookies','Nastavení cookies'))}</strong><p>${escapeHtml(lcopy('You can change optional analytics consent at any time.','Súhlas s nepovinnou analytikou môžete kedykoľvek zmeniť.','Souhlas s nepovinnou analytikou můžete kdykoli změnit.'))}</p><div><button class="btn btn-ghost" type="button" data-cookie-choice="essential">${escapeHtml(lcopy('Essential only','Iba nevyhnutné','Pouze nezbytné'))}</button><button class="btn btn-primary" type="button" data-cookie-choice="analytics">${escapeHtml(lcopy('Allow analytics','Povoliť analytiku','Povolit analytiku'))}</button></div></div>`:'';
     return `<section class="content-page"><header class="content-page-hero"><span>${escapeHtml(page.eyebrow||'BLINQ')}</span><h2>${escapeHtml(page.title||'')}</h2><p>${escapeHtml(page.subtitle||'')}</p>${legalMeta}</header>${sections?`<div class="content-section-grid">${sections}</div>`:''}${faqs?`<div class="content-faq-list">${faqs}</div>`:''}${cookieSettings}</section>`;
   }
+  function normalizeComparatorPlayerName(value){
+    return String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
+  }
+  function comparatorGrandSlamContext(tour='atp',surface='hard',date=new Date()){
+    if(String(tour||'').toLowerCase()!=='atp')return '';
+    const normalizedSurface=String(surface||'').toLowerCase();
+    const majors=[
+      {name:'Australian Open',surface:'hard',tokens:['australian open']},
+      {name:'Roland Garros',surface:'clay',tokens:['roland garros','french open']},
+      {name:'Wimbledon',surface:'grass',tokens:['wimbledon']},
+      {name:'US Open',surface:'hard',tokens:['us open','u.s. open']}
+    ];
+    const pools=[state.feed?.upcoming,state.feed?.daily_picks,state.feed?.board_upcoming];
+    const tournamentNames=pools.flatMap(rows=>Array.isArray(rows)?rows:[]).map(row=>String(row?.tournament||row?.tournament_name||row?.event_name||'').trim()).filter(Boolean);
+    for(const major of majors){
+      if(major.surface!==normalizedSurface)continue;
+      if(tournamentNames.some(name=>major.tokens.some(token=>normalizeComparatorPlayerName(name).includes(normalizeComparatorPlayerName(token)))))return major.name;
+    }
+    const month=date.getUTCMonth()+1,day=date.getUTCDate(),md=month*100+day;
+    if(normalizedSurface==='hard'&&md>=110&&md<=202)return 'Australian Open';
+    if(normalizedSurface==='clay'&&md>=518&&md<=610)return 'Roland Garros';
+    if(normalizedSurface==='grass'&&md>=623&&md<=714)return 'Wimbledon';
+    if(normalizedSurface==='hard'&&md>=820&&md<=915)return 'US Open';
+    return '';
+  }
+  function comparatorDefaultBestOf(tour='atp',surface='hard'){
+    return String(tour||'').toLowerCase()==='atp'&&Boolean(comparatorGrandSlamContext(tour,surface))?5:3;
+  }
   function comparatorState(){
-    if(!state.comparator)state.comparator={tour:'atp',surface:'hard',bestOf:3,players:[null,null],result:null,error:'',loading:false,search:[[],[]]};
+    if(!state.comparator){
+      const tour='atp',surface='hard';
+      state.comparator={tour,surface,bestOf:comparatorDefaultBestOf(tour,surface),bestOfAuto:true,players:[null,null],result:null,error:'',loading:false,search:[[],[]]};
+    }
+    if(state.comparator.tour==='wta'&&Number(state.comparator.bestOf)!==3)state.comparator.bestOf=3;
     return state.comparator;
   }
   function comparatorPlayerLabel(player){
-    if(!player)return '';
-    const rank=Number(player.rank)>0?` · #${Number(player.rank)}`:'';
-    return `${player.name||''}${rank}`;
+    return player?String(player.name||''):'';
+  }
+  function comparatorAutoPlayer(query,rows){
+    const normalized=normalizeComparatorPlayerName(query);
+    if(normalized.length<2||!Array.isArray(rows)||!rows.length)return null;
+    const exact=rows.filter(player=>normalizeComparatorPlayerName(player?.name)===normalized);
+    if(exact.length===1)return exact[0];
+    const surname=rows.filter(player=>{
+      const parts=normalizeComparatorPlayerName(player?.name).split(' ').filter(Boolean);
+      return parts.length&&parts[parts.length-1]===normalized;
+    });
+    if(surname.length===1)return surname[0];
+    if(normalized.length>=4&&rows.length===1)return rows[0];
+    return null;
+  }
+  function comparatorSelectPlayer(side,player){
+    const s=comparatorState();
+    if(!player||![0,1].includes(Number(side)))return false;
+    s.players[Number(side)]={player_id:player.player_id,name:player.name,rank:player.rank||null,tour:s.tour};
+    s.search[Number(side)]=[];
+    s.result=null;
+    s.error='';
+    return true;
   }
   function comparatorSearchHtml(side){
     const s=comparatorState(),rows=Array.isArray(s.search?.[side])?s.search[side]:[];
@@ -5581,12 +5633,12 @@
     const stat=(label,a,b)=>`<div class="comparator-stat-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(a??'—'))}</strong><strong>${escapeHtml(String(b??'—'))}</strong></div>`;
     const factors=(result.factors||[]).map(item=>`<span class="comparator-factor">${escapeHtml(item.label||'')}: <b>${escapeHtml(String(item.advantage_player_id)===String(p1.player_id)?p1.name:p2.name)}</b></span>`).join('');
     return `<section class="comparator-result" aria-live="polite">
-      <header class="comparator-result-head"><small>BLINQ MATCH COMPARATOR</small><h3>${escapeHtml(winner.name||'—')}</h3><p>${escapeHtml(lcopy('Model-selected winner for this hypothetical matchup.','Modelom vybraný víťaz pre toto hypotetické stretnutie.','Modelem vybraný vítěz pro toto hypotetické utkání.'))}</p></header>
+      <header class="comparator-result-head"><small>${escapeHtml(lcopy('MODEL PREDICTION','MODELOVÁ PREDIKCIA','MODELOVÁ PREDIKCE'))}</small><h3>${escapeHtml(winner.name||'—')}</h3><p>${escapeHtml(lcopy('Predicted winner','Predikovaný víťaz','Predikovaný vítěz'))}</p></header>
       <div class="comparator-prob-grid">
         <article><small>${escapeHtml(p1.name||'—')}</small><strong>${probability(p1.probability)}</strong><span>${escapeHtml(lcopy('Fair odds','Férový kurz','Férový kurz'))} ${odds(p1.fair_odds)}</span></article>
         <article><small>${escapeHtml(p2.name||'—')}</small><strong>${probability(p2.probability)}</strong><span>${escapeHtml(lcopy('Fair odds','Férový kurz','Férový kurz'))} ${odds(p2.fair_odds)}</span></article>
       </div>
-      <div class="comparator-quality"><b>${escapeHtml(lcopy('Data confidence','Dátová istota','Datová jistota'))}: ${escapeHtml(String(result.confidence?.data_band||quality.band||'—').toUpperCase())}</b><span>${escapeHtml(lcopy('Point-in-time, read-only comparison · 0 provider requests','Point-in-time, read-only porovnanie · 0 provider requestov','Point-in-time, read-only porovnání · 0 provider requestů'))}</span></div>
+      <div class="comparator-quality"><b>${escapeHtml(lcopy('Data confidence','Dátová istota','Datová jistota'))}: ${escapeHtml(String(result.confidence?.data_band||quality.band||'—').toUpperCase())}</b><span>${escapeHtml(String(result.tour||'').toUpperCase())} · ${escapeHtml(lcopy('max sets','max. setov','max. setů'))} ${escapeHtml(String(result.best_of||3))} · ${escapeHtml(String(result.surface||'').replace('_',' '))}</span></div>
       <div class="comparator-stats">
         <div class="comparator-stat-row comparator-stat-head"><span></span><strong>${escapeHtml(p1.name||'Hráč 1')}</strong><strong>${escapeHtml(p2.name||'Hráč 2')}</strong></div>
         ${stat('Overall Elo',p1.stats?.overall_elo,p2.stats?.overall_elo)}
@@ -5602,19 +5654,18 @@
     </section>`;
   }
   function renderComparatorRoute(){
-    const s=comparatorState(),p1=s.players[0],p2=s.players[1];
+    const s=comparatorState(),p1=s.players[0],p2=s.players[1],major=comparatorGrandSlamContext(s.tour,s.surface);
     return `<section class="comparator-shell">
-      <div class="comparator-intro"><span>BLINQ INTELLIGENCE</span><h2>${escapeHtml(lcopy('Match Comparator','Porovnávač zápasov','Porovnávač zápasů'))}</h2><p>${escapeHtml(lcopy('Choose any two players from BlinQ canonical history. The comparison uses only information available before today’s UTC cutoff.','Vyber ľubovoľných dvoch hráčov z canonical histórie BlinQ. Porovnanie používa iba informácie dostupné pred dnešným UTC cutoffom.','Vyber libovolné dva hráče z canonical historie BlinQ. Porovnání používá pouze informace dostupné před dnešním UTC cutoffem.'))}</p></div>
       <form id="comparatorForm" class="comparator-form">
         <div class="comparator-context">
-          <label><span>Tour</span><select id="comparatorTour"><option value="atp"${s.tour==='atp'?' selected':''}>ATP</option><option value="wta"${s.tour==='wta'?' selected':''}>WTA</option></select></label>
+          <label><span>${escapeHtml(lcopy('Tour','Okruh','Okruh'))}</span><select id="comparatorTour"><option value="atp"${s.tour==='atp'?' selected':''}>ATP</option><option value="wta"${s.tour==='wta'?' selected':''}>WTA</option></select></label>
           <label><span>${escapeHtml(lcopy('Surface','Povrch','Povrch'))}</span><select id="comparatorSurface"><option value="hard"${s.surface==='hard'?' selected':''}>Hard</option><option value="clay"${s.surface==='clay'?' selected':''}>Clay</option><option value="grass"${s.surface==='grass'?' selected':''}>Grass</option><option value="indoor_hard"${s.surface==='indoor_hard'?' selected':''}>Indoor hard</option></select></label>
-          <label><span>Format</span><select id="comparatorBestOf"><option value="3"${Number(s.bestOf)===3?' selected':''}>BO3</option>${s.tour==='atp'?`<option value="5"${Number(s.bestOf)===5?' selected':''}>BO5</option>`:''}</select></label>
+          <label><span>${escapeHtml(lcopy('Maximum sets','Max. počet setov','Max. počet setů'))}</span><select id="comparatorBestOf"><option value="3"${Number(s.bestOf)===3?' selected':''}>3</option>${s.tour==='atp'?`<option value="5"${Number(s.bestOf)===5?' selected':''}>5</option>`:''}</select>${major&&s.tour==='atp'? `<small class="comparator-auto-note">${escapeHtml(major)} · AUTO</small>`:''}</label>
         </div>
         <div class="comparator-player-grid">
-          ${[0,1].map(side=>`<label class="comparator-player-field"><span>${escapeHtml(side===0?lcopy('Player 1','Hráč 1','Hráč 1'):lcopy('Player 2','Hráč 2','Hráč 2'))}</span><input type="search" id="comparatorPlayer${side}" data-comparator-input="${side}" autocomplete="off" placeholder="${escapeHtml(lcopy('Start typing a player name…','Začni písať meno hráča…','Začni psát jméno hráče…'))}" value="${escapeHtml(comparatorPlayerLabel(s.players[side]))}"/><div id="comparatorSearch${side}">${comparatorSearchHtml(side)}</div></label>`).join('')}
+          ${[0,1].map(side=>`<label class="comparator-player-field ${s.players[side]?'is-selected':''}"><span>${escapeHtml(side===0?lcopy('Player 1','Hráč 1','Hráč 1'):lcopy('Player 2','Hráč 2','Hráč 2'))}</span><input type="search" id="comparatorPlayer${side}" data-comparator-input="${side}" autocomplete="off" placeholder="${escapeHtml(lcopy('Type a name…','Napíš meno…','Napiš jméno…'))}" value="${escapeHtml(comparatorPlayerLabel(s.players[side]))}"/>${s.players[side]?`<small class="comparator-player-confirmed">✓ ${escapeHtml(lcopy('selected','vybraný','vybraný'))}${Number(s.players[side]?.rank)>0?` · #${escapeHtml(String(s.players[side].rank))}`:''}</small>`:''}<div id="comparatorSearch${side}">${comparatorSearchHtml(side)}</div></label>`).join('')}
         </div>
-        <div class="comparator-actions"><button class="btn btn-primary" type="submit" ${(!p1||!p2||s.loading)?'disabled':''}>${escapeHtml(s.loading?lcopy('Comparing…','Porovnávam…','Porovnávám…'):lcopy('Compare players','Porovnať hráčov','Porovnat hráče'))}</button><span>${escapeHtml(lcopy('No odds, weather or provider API is fetched on click.','Kliknutie nespúšťa kurzy, počasie ani provider API.','Kliknutí nespouští kurzy, počasí ani provider API.'))}</span></div>
+        <div class="comparator-actions"><button class="btn btn-primary" type="submit" ${s.loading?'disabled':''}>${escapeHtml(s.loading?lcopy('Comparing…','Porovnávam…','Porovnávám…'):lcopy('Compare','Porovnať','Porovnat'))}</button></div>
       </form>
       ${s.error?`<div class="state-card comparator-error">${escapeHtml(s.error)}</div>`:''}
       ${comparatorResultHtml(s.result)}
@@ -5624,9 +5675,9 @@
     const host=$('routePanel'),form=$('comparatorForm');if(!host||!form)return;
     const s=comparatorState(),timers=[null,null];
     const refresh=()=>{if(state.route!=='compare')return;host.innerHTML=renderComparatorRoute();wireComparator();};
-    form.querySelector('#comparatorTour')?.addEventListener('change',event=>{s.tour=event.target.value;s.bestOf=3;s.players=[null,null];s.search=[[],[]];s.result=null;s.error='';refresh();});
-    form.querySelector('#comparatorSurface')?.addEventListener('change',event=>{s.surface=event.target.value;s.result=null;});
-    form.querySelector('#comparatorBestOf')?.addEventListener('change',event=>{s.bestOf=Number(event.target.value)||3;s.result=null;});
+    form.querySelector('#comparatorTour')?.addEventListener('change',event=>{s.tour=event.target.value;s.bestOf=comparatorDefaultBestOf(s.tour,s.surface);s.bestOfAuto=true;s.players=[null,null];s.search=[[],[]];s.result=null;s.error='';refresh();});
+    form.querySelector('#comparatorSurface')?.addEventListener('change',event=>{s.surface=event.target.value;s.bestOf=comparatorDefaultBestOf(s.tour,s.surface);s.bestOfAuto=true;s.result=null;s.error='';refresh();});
+    form.querySelector('#comparatorBestOf')?.addEventListener('change',event=>{s.bestOf=s.tour==='wta'?3:(Number(event.target.value)===5?5:3);s.bestOfAuto=false;s.result=null;s.error='';});
     form.querySelectorAll('[data-comparator-input]').forEach(input=>{
       const side=Number(input.dataset.comparatorInput);
       input.addEventListener('input',()=>{
@@ -5637,6 +5688,8 @@
           try{
             const data=await BlinqAuth.comparatorPlayers(query,s.tour);
             s.search[side]=Array.isArray(data?.players)?data.players:[];
+            const automatic=comparatorAutoPlayer(query,s.search[side]);
+            if(automatic&&comparatorSelectPlayer(side,automatic)){refresh();return;}
             const box=$(`comparatorSearch${side}`);if(box)box.innerHTML=comparatorSearchHtml(side);
           }catch(error){
             s.search[side]=[];s.error=lcopy('Player search is temporarily unavailable.','Vyhľadávanie hráčov je dočasne nedostupné.','Vyhledávání hráčů je dočasně nedostupné.');
@@ -5645,12 +5698,12 @@
       });
     });
     host.querySelectorAll('[data-comparator-select]').forEach(button=>button.addEventListener('click',()=>{
-      const side=Number(button.dataset.comparatorSelect);
-      s.players[side]={player_id:button.dataset.playerId,name:button.dataset.playerName,rank:button.dataset.playerRank||null,tour:s.tour};
-      s.search[side]=[];s.result=null;s.error='';refresh();
+      comparatorSelectPlayer(Number(button.dataset.comparatorSelect),{player_id:button.dataset.playerId,name:button.dataset.playerName,rank:button.dataset.playerRank||null});
+      refresh();
     }));
     form.addEventListener('submit',async event=>{
-      event.preventDefault();if(!s.players[0]||!s.players[1]||s.loading)return;
+      event.preventDefault();if(s.loading)return;
+      if(!s.players[0]||!s.players[1]){s.error=lcopy('Select both players from the suggestions so their full canonical names are filled in.','Vyber oboch hráčov z ponuky, aby sa doplnilo celé meno.','Vyber oba hráče z nabídky, aby se doplnilo celé jméno.');refresh();return;}
       if(String(s.players[0].player_id)===String(s.players[1].player_id)){s.error=lcopy('Choose two different players.','Vyber dvoch rôznych hráčov.','Vyber dva různé hráče.');refresh();return;}
       s.loading=true;s.error='';s.result=null;refresh();
       try{
@@ -5668,7 +5721,7 @@
       if(comparatorPlanAllowed()){host.innerHTML=renderComparatorRoute();wireComparator();}
       else{
         const minPlan=firstComparatorUnlockPlan(),required=String(upgradePlanLabel(minPlan)||minPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
-        host.innerHTML=`<section class="comparator-shell"><div class="comparator-intro"><span>BLINQ INTELLIGENCE</span><h2>${escapeHtml(lcopy('Match Comparator','Porovnávač zápasov','Porovnávač zápasů'))}</h2></div><div class="match-detail-lock-card comparator-route-lock" data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Match Comparator','Porovnávač zápasov','Porovnávač zápasů'))}"><span class="match-detail-lock-icon" aria-hidden="true">🔒</span><div><small>${escapeHtml(lcopy('LOCKED SECTION','UZAMKNUTÁ SEKCIA','UZAMČENÁ SEKCE'))}</small><strong>${escapeHtml(lcopy('Match Comparator','Porovnávač zápasov','Porovnávač zápasů'))}</strong><p>${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od: ${required}`,`Dostupné od: ${required}`))}</p></div></div></section>`;
+        host.innerHTML=`<section class="comparator-shell"><div class="match-detail-lock-card comparator-route-lock" data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Match Comparator','Porovnávač','Porovnávač'))}"><span class="match-detail-lock-icon" aria-hidden="true">🔒</span><div><small>${escapeHtml(lcopy('LOCKED SECTION','UZAMKNUTÁ SEKCIA','UZAMČENÁ SEKCE'))}</small><strong>${escapeHtml(lcopy('Match Comparator','Porovnávač','Porovnávač'))}</strong><p>${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od: ${required}`,`Dostupné od: ${required}`))}</p></div></div></section>`;
         applyAccessStates(host);
       }
       return;
