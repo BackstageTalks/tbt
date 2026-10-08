@@ -114,6 +114,7 @@ from tbt.services.entitlements import (
     build_daily_access_state,
 )
 from tbt.services.login_metrics import load_login_statistics, TRACKING_STARTED_AT
+from tbt.services.page_reload_metrics import record_reload, load_reload_statistics
 from tbt.services.account_inactivity import run_inactivity_review, smtp_diagnostics, inactivity_policy
 from tbt.services.live_comeback import (
     scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
@@ -2497,6 +2498,30 @@ def admin_diagnostics(req):
     except AuthUnavailable:
         return response({"error": "admin_auth_unavailable"}, 503)
 
+@app.route(route="v1/telemetry/page-reload", methods=["POST"])
+def page_reload_event(req):
+    """A genuine reload is signalled once by the authenticated browser per navigation."""
+    try:
+        user = _verified_user(req)
+        if not user:
+            return response({"error": "unauthorized"}, 401)
+        if is_suspended(user):
+            return response({"error": "account_suspended"}, 403)
+        payload = req.get_json()
+        event_id = payload.get("event_id") if isinstance(payload, dict) else None
+        if not isinstance(event_id, str) or len(event_id) > 40:
+            return response({"error": "invalid_event_id"}, 400)
+        if not record_reload(user.get("id"), event_id):
+            return response({"recorded": False}, 200)
+        return response({"recorded": True}, 200)
+    except (ValueError, TypeError):
+        return response({"error": "invalid_event_id"}, 400)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "telemetry_storage_unavailable"}, 503)
+
+
 @app.route(route="v1/admin/users", methods=["GET"])
 def admin_users(req):
     try:
@@ -2519,8 +2544,12 @@ def admin_users(req):
             login_metrics = load_login_statistics([user.get("id") for user in users])
         except AdminStorageUnavailable:
             login_metrics = {}
+        try:
+            reload_metrics = load_reload_statistics([user.get("id") for user in users])
+        except AdminStorageUnavailable:
+            reload_metrics = {}
         payload = {
-            "users": [{**_admin_account_row(user, profiles.get(str(user.get("id") or ""), {})), **login_metrics.get(str(user.get("id") or ""), {"login_count": None, "login_tracking_started_at": TRACKING_STARTED_AT})} for user in users],
+            "users": [{**_admin_account_row(user, profiles.get(str(user.get("id") or ""), {})), **login_metrics.get(str(user.get("id") or ""), {"login_count": None, "login_tracking_started_at": TRACKING_STARTED_AT}), **reload_metrics.get(str(user.get("id") or ""), {"reload_count_today": None, "reload_count_7d": None, "reload_count_30d": None})} for user in users],
             "page": page,
             "per_page": per_page,
             "actor_id": actor.get("id"),
