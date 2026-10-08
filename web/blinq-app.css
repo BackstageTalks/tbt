@@ -9929,9 +9929,9 @@ body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile::before{
   body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link,
   body#blinqPremium .reference-topbar .header-actions > :is(#bqm-projects,#insightShortcut,#topUpgradeButton,#insightBell){
     box-sizing:border-box!important;position:relative!important;display:grid!important;place-items:center!important;
-    width:38px!important;min-width:38px!important;max-width:38px!important;
-    height:38px!important;min-height:38px!important;max-height:38px!important;
-    flex:0 0 38px!important;margin:0!important;padding:0!important;
+    width:42px!important;min-width:42px!important;max-width:42px!important;
+    height:42px!important;min-height:42px!important;max-height:42px!important;
+    flex:0 0 42px!important;margin:0!important;padding:0!important;
     border:0!important;border-radius:8px!important;background:transparent!important;box-shadow:none!important
   }
   body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation="1"] .nav-icon-link,
