@@ -73,6 +73,54 @@ def main():
             }""")
             assert layout['desktopDirection']=='column' and layout['desktopWrap']=='nowrap',layout
             assert layout['mobileDirection']=='column' and layout['mobileWrap']=='nowrap',layout
+            # Regression: real DOM positions must move when each mode's X/Y inputs change.
+            movement=page.evaluate("""() => {
+              const s=bannerHarness.state,c=s.ui.elements.HERO_BANNER_1.content;
+              c.social_youtube_link='https://youtube.com/example';
+              c.social_youtube_text='YouTube';
+              s.adminPreviewIndex=0;
+              bannerHarness.syncAdminHeroPreview();
+              const coords=mode=>{
+                const card=document.querySelector('[data-admin-preview-card="'+mode+'"] .lean-admin-preview');
+                const group=card.querySelector('.hero-social-links');
+                const root=card.getBoundingClientRect(),box=group.getBoundingClientRect();
+                return {x:box.left-root.left,y:box.top-root.top,width:root.width,height:root.height,
+                  position:getComputedStyle(group).position,
+                  direction:getComputedStyle(group).flexDirection,
+                  wrap:getComputedStyle(group).flexWrap};
+              };
+              const edit=(field,value)=>{
+                const input=document.querySelector('[data-simple-banner-field="'+field+'"]');
+                if(!input)throw Error('Missing banner control '+field);
+                input.value=String(value);
+                input.dispatchEvent(new Event('input',{bubbles:true}));
+              };
+              edit('desktop_social_x',10);edit('desktop_social_y',14);
+              edit('mobile_social_x',7);edit('mobile_social_y',16);
+              const startDesktop=coords('desktop'),startMobile=coords('mobile');
+              edit('desktop_social_x',48);edit('desktop_social_y',61);
+              const desktop=coords('desktop'),mobileUnaffected=coords('mobile');
+              edit('mobile_social_x',38);edit('mobile_social_y',64);
+              const mobile=coords('mobile');
+              const desktopLinks=[...document.querySelectorAll('[data-admin-preview-card="desktop"] .hero-social-link')];
+              const stacked=desktopLinks.length===2 &&
+                desktopLinks[1].getBoundingClientRect().top>desktopLinks[0].getBoundingClientRect().top;
+              const height=+getComputedStyle(document.querySelector('[data-simple-banner-field="desktop_social_x"]')).height.replace('px','');
+              const minus=document.querySelector('[data-simple-banner-field="desktop_social_x"]').parentElement.querySelector('[data-banner-step="-1"]');
+              const plus=document.querySelector('[data-simple-banner-field="desktop_social_x"]').parentElement.querySelector('[data-banner-step="1"]');
+              s.adminPreviewPinnedId=null;
+              s.adminPreviewPaused=false;
+              return {startDesktop,startMobile,desktop,mobileUnaffected,mobile,stacked,height,
+                stepperButtons:Boolean(minus&&plus)};
+            }""")
+            assert movement['desktop']['position']=='absolute',movement
+            assert movement['desktop']['x']-movement['startDesktop']['x']>movement['desktop']['width']*.32,movement
+            assert movement['desktop']['y']-movement['startDesktop']['y']>movement['desktop']['height']*.35,movement
+            assert abs(movement['mobileUnaffected']['x']-movement['startMobile']['x'])<2,movement
+            assert abs(movement['mobileUnaffected']['y']-movement['startMobile']['y'])<2,movement
+            assert movement['mobile']['x']-movement['startMobile']['x']>movement['mobile']['width']*.25,movement
+            assert movement['mobile']['y']-movement['startMobile']['y']>movement['mobile']['height']*.38,movement
+            assert movement['stacked'] and movement['height']>=44 and movement['stepperButtons'],movement
             page.wait_for_timeout(3300)
             second=page.evaluate('''() => ({selected:bannerHarness.state.selectedElement,
                 preview:bannerHarness.state.adminPreviewIndex,
