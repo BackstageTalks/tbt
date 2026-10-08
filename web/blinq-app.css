@@ -9528,26 +9528,31 @@ body#blinqPremium .reference-topbar .insight-shortcut.insight-live-button #insig
   font:900 8px/1 Arial,sans-serif!important;box-shadow:0 0 0 2px #03110f!important;
 }
 body#blinqPremium .reference-topbar .insight-shortcut.insight-live-button #insightShortcutCount[hidden]{display:none!important}
-body#blinqPremium .live-heart-icon{width:27px!important;height:27px!important}
-body#blinqPremium .live-heart-icon .live-heart-core,
-body#blinqPremium .live-heart-icon .live-heart-seam{stroke-width:1.65!important}
-body#blinqPremium .live-heart-icon .live-wave{stroke-width:1.25!important;opacity:.58;transform-origin:16px 16px;animation:blinqLiveWave 1.9s ease-in-out infinite}
-body#blinqPremium .live-heart-icon .live-wave-right{animation-delay:.12s}
-@keyframes blinqLiveWave{0%,100%{opacity:.28;transform:scale(.96)}50%{opacity:.88;transform:scale(1.06)}}
+body#blinqPremium .live-beat-icon{width:27px!important;height:27px!important}
+body#blinqPremium .live-beat-icon .live-beat-line{
+  stroke-width:1.9!important;opacity:.62;
+  transform-origin:16px 16px;
+  animation:blinqLiveBeat 1.35s ease-in-out infinite;
+}
+@keyframes blinqLiveBeat{
+  0%,100%{opacity:.32;filter:drop-shadow(0 0 0 rgba(102,243,167,0))}
+  42%{opacity:1;filter:drop-shadow(0 0 4px rgba(102,243,167,.72))}
+  58%{opacity:.68;filter:drop-shadow(0 0 2px rgba(102,243,167,.35))}
+}
 body#blinqPremium .reference-topbar .header-upgrade.nav-action-icon #topUpgradeLabel{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 body#blinqPremium .reference-topbar .header-upgrade.nav-action-icon{
   width:42px!important;min-width:42px!important;height:42px!important;padding:0!important;
-  color:#62eadf!important;border:1px solid rgba(84,222,209,.22)!important;border-radius:10px!important;
-  background:rgba(34,123,116,.06)!important;
+  color:#efb83f!important;border:1px solid rgba(244,193,77,.22)!important;border-radius:10px!important;
+  background:rgba(128,82,8,.055)!important;
 }
 body#blinqPremium .reference-topbar .header-upgrade.nav-action-icon:hover,
 body#blinqPremium .reference-topbar .header-upgrade.nav-action-icon:focus-visible{
-  color:#84fff1!important;border-color:rgba(100,245,231,.45)!important;background:rgba(49,157,147,.10)!important;
+  color:#ffd667!important;border-color:rgba(255,205,89,.45)!important;background:rgba(168,108,9,.09)!important;
 }
 body#blinqPremium .reference-topbar .insight-bell.nav-action-icon{
   width:42px!important;min-width:42px!important;height:42px!important;padding:0!important;
-  color:#d6dfdc!important;border:1px solid rgba(150,183,172,.15)!important;border-radius:10px!important;
-  background:rgba(255,255,255,.012)!important;gap:0!important;
+  color:#efb83f!important;border:1px solid rgba(244,193,77,.16)!important;border-radius:10px!important;
+  background:rgba(128,82,8,.035)!important;gap:0!important;
 }
 body#blinqPremium .reference-topbar .insight-bell.nav-action-icon .insight-info-label{display:none!important}
 body#blinqPremium .reference-topbar .insight-bell.nav-action-icon .insight-bell-icon,
@@ -9555,12 +9560,12 @@ body#blinqPremium .reference-topbar .insight-bell.nav-action-icon .insight-bell-
 body#blinqPremium .reference-topbar .insight-bell.nav-action-icon:hover,
 body#blinqPremium .reference-topbar .insight-bell.nav-action-icon:focus-visible,
 body#blinqPremium .reference-topbar .insight-bell.nav-action-icon.has-unread{
-  color:#f3f7f5!important;border-color:rgba(188,215,206,.28)!important;background:rgba(255,255,255,.035)!important;
+  color:#ffd667!important;border-color:rgba(255,205,89,.34)!important;background:rgba(168,108,9,.075)!important;
 }
 body#blinqPremium .mobile-icon-nav{display:none!important}
 
 @media (prefers-reduced-motion: reduce){
-  body#blinqPremium .live-heart-icon .live-wave{animation:none!important;opacity:.65!important}
+  body#blinqPremium .live-beat-icon .live-beat-line{animation:none!important;opacity:.78!important;filter:none!important}
 }
 
 
