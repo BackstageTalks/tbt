@@ -1,14 +1,15 @@
 {
   "schema": 1,
-  "mode": "train",
-  "promote": true,
-  "purpose": "Retry guarded model promotion gate after WTA rank supplement binary fix. Require leakage audit plus strict candidate-vs-production and candidate-vs-Elo holdout gates on the governed 3-day unseen window. Promote only on full pass.",
+  "mode": "statistics",
+  "promote": false,
+  "purpose": "Bounded modern 2025-2026 serve/return event statistics gapfill after coverage and identity audit; no model promotion and no prediction publication; skips full-quality canonical matches.",
   "requested_on": "2026-10-08",
-  "requested_at_utc": "2026-10-08T09:06:00Z",
-  "max_requests": 1,
-  "start": "",
-  "end": "",
-  "training_scope": "guarded_promotion_gate",
-  "historical_match_winner_odds_as_model_feature": false,
-  "retry_reason": "Writer queue clear; retry guarded promotion after verified WTA rank supplement readback. Prior attempts were cancelled before current metric decision."
+  "max_requests": 6000,
+  "start": "2025-01-01",
+  "end": "2026-10-07",
+  "provider_rps_limit": 6,
+  "budget_guard": "Shared provider API budget; max <=6000 calls including retries and 1500 daily reserve",
+  "planned_backup_manifest": "BackstageTalks/tbt-data/backup/rapidapi-tennisapi1/2026-10-08/modern-statistics-2025-2026/pre-run-manifest.json",
+  "previous_request_mode": "train",
+  "historical_match_winner_odds_as_model_feature": false
 }
