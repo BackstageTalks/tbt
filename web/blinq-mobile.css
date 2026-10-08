@@ -540,3 +540,67 @@ body#blinqPremium [data-daily-tab="top200"],body#blinqPremium [data-admin-hub-ta
     width:42px!important;min-width:42px!important;height:42px!important;
   }
 }
+
+
+/* Compact mobile icon row · 2026-10-08 */
+@media(max-width:900px){
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .site-header{
+    min-height:auto!important;
+    height:auto!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav{
+    display:grid!important;
+    grid-template-columns:repeat(5,36px)!important;
+    justify-content:center!important;
+    align-items:center!important;
+    gap:7px!important;
+    width:auto!important;
+    max-width:100%!important;
+    min-height:44px!important;
+    margin:0!important;
+    padding:4px 8px 6px!important;
+    background:rgba(3,16,14,.96)!important;
+    border-top:1px solid rgba(102,176,150,.08)!important;
+    border-bottom:1px solid rgba(102,176,150,.10)!important;
+    overflow:visible!important;
+    position:relative!important;
+    z-index:3!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav .mobile-icon-link{
+    width:36px!important;
+    min-width:36px!important;
+    height:36px!important;
+    min-height:36px!important;
+    border-radius:9px!important;
+    padding:0!important;
+    justify-self:center!important;
+    background:rgba(4,22,18,.36)!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav .mobile-icon-link svg{
+    width:20px!important;
+    height:20px!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav .mobile-icon-link.active::after{
+    left:9px!important;
+    right:9px!important;
+    bottom:-4px!important;
+  }
+}
+@media(max-width:380px){
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav{
+    grid-template-columns:repeat(5,34px)!important;
+    gap:5px!important;
+    padding-left:6px!important;
+    padding-right:6px!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav .mobile-icon-link{
+    width:34px!important;
+    min-width:34px!important;
+    height:34px!important;
+    min-height:34px!important;
+  }
+  body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .mobile-icon-nav .mobile-icon-link svg{
+    width:19px!important;
+    height:19px!important;
+  }
+}
