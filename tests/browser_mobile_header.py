@@ -17,7 +17,7 @@ def main():
     with sync_playwright() as pw:
         browser=pw.chromium.launch(headless=True,executable_path=os.getenv('BLINQ_BROWSER') or browser_path())
         try:
-            for width in (320,390,900,1440):
+            for width in (320,360,390,430,500,768,900,1440):
                 page=browser.new_page(viewport={'width':width,'height':850})
                 errors=[]
                 page.on('pageerror',lambda e:errors.append(str(e)))
