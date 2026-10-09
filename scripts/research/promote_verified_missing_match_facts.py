@@ -39,9 +39,18 @@ def digest(path):
             h.update(b)
     return h.hexdigest()
 
+_PINNED_BACKUP_PROOF = None
 def assert_remote_unchanged():
-    proof=verify_backup()
-    return proof
+    # Download and verify the sealed backup only once: repeated gh release
+    # download without --clobber fails on a pre-existing proof.json.
+    global _PINNED_BACKUP_PROOF
+    if _PINNED_BACKUP_PROOF is None:
+        _PINNED_BACKUP_PROOF = verify_backup()
+    expected={name:(meta["source_id"], meta["bytes"],"sha256:"+meta["sha256"])
+              for name,meta in _PINNED_BACKUP_PROOF["sha256"].items()}
+    if release_history()!=expected:
+        raise RuntimeError("Canonical release changed since verified backup; abort safely")
+    return _PINNED_BACKUP_PROOF
 
 def list_rows(directory):
     manifest=json.loads((directory/"history_manifest.json").read_text())
