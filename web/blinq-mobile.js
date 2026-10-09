@@ -228,6 +228,7 @@
           navigationToggle.classList.remove('is-open');
           accountPanel.querySelector('button')?.focus();
         }
+        syncAvatarMenu();
       });
       accountToggle.className = 'bqm-account-switch';
       accountToggle.setAttribute('aria-controls', 'bqm-account-panel');
@@ -271,6 +272,7 @@
           accountToggle.classList.remove('is-open');
           navigationPanel.querySelector('button')?.focus();
         }
+        syncAvatarMenu();
       });
       navigationToggle.className = 'bqm-navigation-switch';
       navigationToggle.setAttribute('aria-controls', 'bqm-navigation-panel');
