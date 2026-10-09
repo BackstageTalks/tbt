@@ -1,0 +1,79 @@
+name: BlinQ trust evidence readback (read-only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/audit_top_reliability.py
+      - scripts/audit_market_reliability.py
+      - tests/test_issuance_schema2_trust.py
+      - .github/workflows/trust-evidence-readback.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-trust-evidence-readonly
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check private data access
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+      - name: Verify new and legacy frozen evidence contracts
+        run: |
+          python -m pip install pytest
+          python -m pytest tests/test_issuance_schema2_trust.py tests/test_market_reliability_audit.py tests/test_top_reliability_audit.py -q
+      - name: Recheck exactly issued ledger without provider calls
+        run: |
+          python scripts/audit_market_reliability.py \
+            --data-repository "$TBT_DATA_REPOSITORY" --window-days 365 \
+            --out .cache/tbt/trust-evidence/market-quality.json \
+            --markdown .cache/tbt/trust-evidence/readback.md
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          source=json.loads(Path('.cache/tbt/trust-evidence/market-quality.json').read_text())
+          out={
+              'schema':1,'purpose':'trust_evidence_coverage_only',
+              'source':'private tbt-predictions-v1 ledger, 365-day issued window',
+              'provider_requests':0,'production_mutated':False,
+              'by_section':{
+                  key:{
+                      'published':value['overall']['published'],
+                      'settled':value['overall']['settled'],
+                      'calibration_n':value['overall']['calibration_n'],
+                      'exact_issuance_evidence':value['exact_probability_snapshots'],
+                  }
+                  for key,value in source['sections'].items()
+              },
+              'diagnostics':source['diagnostics'],
+              'limit':'Only already-published offers; cannot infer benefit for unissued candidates.',
+          }
+          dest=Path('.cache/tbt/trust-evidence/coverage.json')
+          dest.write_text(json.dumps(out,indent=2))
+          print(json.dumps(out))
+          PY
+      - name: Upload private readback, never mutate canonical data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-trust-evidence-${{ github.run_id }}
+          path: .cache/tbt/trust-evidence/
+          if-no-files-found: warn
+          retention-days: 30
