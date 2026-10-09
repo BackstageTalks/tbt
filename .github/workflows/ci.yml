@@ -145,6 +145,10 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
         run: python scripts/audit_comparator_name_variants.py
 
+      - name: Audit comparator names second pass (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        run: python scripts/audit_comparator_names_second_pass.py
+
 
       - name: Run backend tests
         env:
