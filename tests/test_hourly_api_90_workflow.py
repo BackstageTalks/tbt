@@ -27,11 +27,12 @@ def test_90_percent_shared_budget_and_provider_headroom():
     assert 'budget.get("global_limit") != 13500' in HOURLY
     assert 'budget.get("reserved_provider_headroom") != 1500' in HOURLY
     assert 'remaining != max(0, 13500-spent)' in HOURLY
-    assert 'caps = {hour: 13500 for hour in range(12, 19)}' in HOURLY
+    assert 'caps = {12: 5700, 13: 6900, 14: 8100, 15: 9300,' in HOURLY
+    assert '16: 10500, 17: 12000, 18: 13500}' in HOURLY
 
 
-def test_1850_final_start_and_provider_reset_are_bounded():
-    assert "18:50" in HOURLY
+def test_1845_final_start_and_provider_reset_are_bounded():
+    assert "18:45" in HOURLY
     assert "local.hour == 18 and local.minute > 57" in HOURLY
     assert "time(19, 5)" in HOURLY
     assert "cutoff - timedelta(minutes=8)" in HOURLY
