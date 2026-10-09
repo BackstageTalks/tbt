@@ -38,7 +38,7 @@ def main():
                     const btn=document.getElementById('profileButton');
                     const toggle=document.getElementById('profileMenuToggle');
                     const menu=document.getElementById('profileMenu');
-                    assert menu.hidden, 'legacy profile dropdown must stay closed';
+                    if (!menu.hidden) throw new Error('legacy profile dropdown must stay closed');
                     const round=r=>({top:r.top,bottom:r.bottom,left:r.left,right:r.right,
                                     centerY:(r.top+r.bottom)/2});
                     const s=round(shell.getBoundingClientRect());
