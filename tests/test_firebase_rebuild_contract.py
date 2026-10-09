@@ -42,8 +42,9 @@ def test_rebuild_keeps_probability_first_market_policy():
     assert "TOP_MIN_COUNT = 3" in source
     assert "VALUE_MIN_ODDS = 1.80" in source
     assert "VALUE_MAX_ODDS_DIFFERENCE = 0.15" in source
-    assert "top200_priority_v15_then_value_top_prime" in source
-    assert 'SECTION_PRIORITY = ("top200", "value", "top_daily", "prime")' in source
+    assert "active_value_top_prime_v16" in source
+    assert 'SECTION_PRIORITY = ("value", "top_daily", "prime")' in source
+    assert '"top200_picks": []' in source
 
 
 def test_firebase_runtime_dependency_and_api_routes_are_present():
