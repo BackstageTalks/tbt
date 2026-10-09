@@ -24,7 +24,7 @@ rolling 24-hour window.
 LIVE, Match Status and Refresh retain bounded purpose allocations. History/backfill
 may opportunistically use any provider-day headroom left by those workloads, up to
 the same 14,250 global ceiling. The global ceiling is always authoritative, so the
-750 provider reserve remains untouched.
+450 provider reserve remains untouched.
 
 An API request is reserved **before every billable upstream attempt, including
 retries**. Cancelled, timed-out or ambiguous requests are never refunded:
@@ -41,7 +41,7 @@ The authoritative values live in
 `api/tbt/providers/shared_budget.py`:
 
 - `PROVIDER_PLAN_LIMIT = 15000`
-- `PROVIDER_RESERVE = 750`
+- `PROVIDER_RESERVE = 450`
 - `GLOBAL_CEILING = 14550`
 - reset: `19:10 Europe/Bratislava`
 - `PURPOSE_CAPS = {live: 3000, match: 2500, refresh: 5500, history: 14250}`
