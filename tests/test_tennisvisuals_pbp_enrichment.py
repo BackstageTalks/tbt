@@ -229,6 +229,27 @@ def test_pbpx_linker_uses_point_tape_winner_and_stages_missing_counts(tmp_path, 
     assert report3["quality_ready_projected_added"] == 0
     assert (out3 / "auto_linked.jsonl").read_text() == ""
 
+    # Source timestamp evidence now permits PRIVATE, nonconsumable canonical
+    # archival metadata without smuggling late stats into early-date features.
+    monkeypatch.setenv("SOURCE_REF", "a" * 40)
+    out4 = tmp_path / "link4"
+    monkeypatch.setattr(
+        sys, "argv",
+        ["pbpx-linker", "--history-dir", str(tmp_path),
+         "--source-dir", str(sourcedir), "--out-dir", str(out4)],
+    )
+    linker.main()
+    report4 = json.loads((out4 / "report.json").read_text())
+    saved = json.loads((out4 / "auto_linked.jsonl").read_text().strip())
+    assert report4["counts"]["pit_evidence_only_staged"] == 1
+    assert report4["quality_ready_projected_added"] == 0
+    assert saved["incoming_stats"] == {}
+    assert saved["baseline_stats"] == match.stats
+    assert saved["delayed_observation"]["source_date"] == "2016-05-05"
+    assert saved["delayed_observation"]["status"] == "pit_quarantined_unconsumed"
+    assert saved["delayed_observation"]["stats"]["p1_aces"] == 2.0
+    assert saved["delayed_observation"]["source_ref"] == "a" * 40
+
 
 def test_pbpx_canonical_payload_retains_provenance():
     from tbt.data.provider_context import minimize_provider_payload
@@ -240,3 +261,19 @@ def test_pbpx_canonical_payload_retains_provenance():
     }
     reduced = minimize_provider_payload({"_tbt_pbpx_enrichment": marker})
     assert reduced["_tbt_pbpx_enrichment"] == marker
+
+    delayed = {
+        "schema": 1, "source": "tennisvisuals_validated_pointbypoint",
+        "source_file": "ATP_Singles_pbpx.csv", "source_row": 42,
+        "source_ref": "a" * 40, "source_date": "2016-05-05",
+        "status": "pit_quarantined_unconsumed",
+        "score_validated": True,
+        "stats": {
+            f"{p}_{field}": 0.5 if field.endswith("_won") else 3.0
+            for p in ("p1", "p2")
+            for field in ("service_points_won", "return_points_won", "aces", "double_faults")
+        },
+    }
+    assert minimize_provider_payload({
+        "_tbt_pbpx_delayed_observation": delayed,
+    })["_tbt_pbpx_delayed_observation"] == delayed

@@ -480,8 +480,81 @@ def main():
                         counts["historical_window_verified"] += 1
                         local["historical_window_verified"] += 1
                         if window[0].scheduled_at.date() < source_date:
-                            counts["window_pit_blocked"] += 1
-                            local["window_pit_blocked"] += 1
+                            # Historical foundation uses tournament-start UTC
+                            # timestamps. Keep post-match observations out of
+                            # canonical stats/FeatureBuilder entirely; archive
+                            # only immutable, source-dated evidence in private
+                            # CDB provider context for later PIT-safe correction.
+                            candidate = window[0]
+                            if (
+                                tournament_score(tournament, candidate.tournament)[0] != 2
+                                or not os.environ.get("SOURCE_REF")
+                            ):
+                                counts["window_pit_blocked"] += 1
+                                local["window_pit_blocked"] += 1
+                                continue
+                            if (
+                                norm_text(server1) == norm_text(candidate.player1_name)
+                                and norm_text(server2) == norm_text(candidate.player2_name)
+                            ):
+                                side_map = ((1, "p1"), (2, "p2"))
+                            elif (
+                                norm_text(server1) == norm_text(candidate.player2_name)
+                                and norm_text(server2) == norm_text(candidate.player1_name)
+                            ):
+                                side_map = ((1, "p2"), (2, "p1"))
+                            else:
+                                counts["window_pit_blocked"] += 1
+                                local["window_pit_blocked"] += 1
+                                continue
+                            derived = {}
+                            for source_side, prefix in side_map:
+                                for field in ("service_points_won", "return_points_won"):
+                                    derived[f"{prefix}_{field}"] = parsed[source_side][field]
+                                if str(row.get("adf_flag") or "").strip() == "1":
+                                    for field in ("aces", "double_faults"):
+                                        derived[f"{prefix}_{field}"] = float(parsed[source_side][field])
+                            match_id = str(candidate.match_id)
+                            item = {
+                                "schema": 1,
+                                "match_id": match_id,
+                                "canonical": _signature(candidate),
+                                "incoming_stats": {},
+                                "baseline_stats": dict(candidate.stats or {}),
+                                "delayed_observation": {
+                                    "schema": 1,
+                                    "source": "tennisvisuals_validated_pointbypoint",
+                                    "source_ref": os.environ["SOURCE_REF"],
+                                    "source_file": path.name,
+                                    "source_row": row_number,
+                                    "source_date": source_date.isoformat(),
+                                    "status": "pit_quarantined_unconsumed",
+                                    "score_validated": True,
+                                    "stats": derived,
+                                },
+                                "import_ready": True,
+                                "quality_ready_added": False,
+                            }
+                            if match_id in quarantined_match_ids:
+                                counts["source_duplicate_quarantined"] += 1
+                                local["source_duplicate_quarantined"] += 1
+                                continue
+                            previous = staged_by_match.get(match_id)
+                            if previous is not None:
+                                if previous == item:
+                                    counts["source_duplicate_same"] += 1
+                                    local["source_duplicate_same"] += 1
+                                else:
+                                    staged_by_match.pop(match_id, None)
+                                    quarantined_match_ids.add(match_id)
+                                    counts["source_duplicate_conflict"] += 1
+                                    local["source_duplicate_conflict"] += 1
+                                continue
+                            staged_by_match[match_id] = item
+                            counts["staged_matches"] += 1
+                            local["staged_matches"] += 1
+                            counts["pit_evidence_only_staged"] += 1
+                            local["pit_evidence_only_staged"] += 1
                             continue
                         candidates = window
                     elif len(window) > 1:

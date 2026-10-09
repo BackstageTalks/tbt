@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
+from datetime import date
 from collections import Counter
 from pathlib import Path
 
@@ -113,6 +115,73 @@ def main() -> None:
         if not isinstance(recorded, dict) or recorded != _signature(match):
             counts["identity_changed"] += 1
             review.append({"match_id": mid, "reason": "identity_changed"})
+            continue
+
+        delayed = row.get("delayed_observation")
+        if delayed is not None:
+            if row.get("baseline_stats") != dict(match.stats or {}):
+                counts["baseline_stats_changed"] += 1
+                review.append({"match_id": mid, "reason": "canonical_baseline_stats_changed"})
+                continue
+            if not isinstance(delayed, dict) or row.get("incoming_stats") != {}:
+                counts["invalid_delayed_observation"] += 1
+                review.append({"match_id": mid, "reason": "invalid_delayed_payload"})
+                continue
+            values = delayed.get("stats")
+            try:
+                observation_date = date.fromisoformat(str(delayed.get("source_date") or ""))
+                event_date = match.scheduled_at.date()
+                age_days = (observation_date - event_date).days
+            except ValueError:
+                age_days = -1
+            valid_provenance = (
+                mid.startswith("hist-js:")
+                and delayed.get("schema") == 1
+                and delayed.get("source") == "tennisvisuals_validated_pointbypoint"
+                and delayed.get("status") == "pit_quarantined_unconsumed"
+                and delayed.get("score_validated") is True
+                and isinstance(delayed.get("source_file"), str)
+                and delayed.get("source_file") in {"ATP_Singles_pbpx.csv", "WTA_Singles_pbpx.csv"}
+                and isinstance(delayed.get("source_row"), int)
+                and delayed["source_row"] > 1
+                and isinstance(delayed.get("source_ref"), str)
+                and re.fullmatch(r"[0-9a-f]{40}", delayed["source_ref"]) is not None
+                and 1 <= age_days <= 21
+                and str(match.winner_id or "") in (str(match.player1_id), str(match.player2_id))
+            )
+            valid_stats = isinstance(values, dict) and set(values) == {
+                f"{side}_{field}"
+                for side in ("p1", "p2")
+                for field in ("service_points_won", "return_points_won", "aces", "double_faults")
+            }
+            if valid_stats:
+                for key, value in values.items():
+                    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                        valid_stats = False
+                        break
+                    if key.endswith(("aces", "double_faults")):
+                        if value < 0 or not float(value).is_integer():
+                            valid_stats = False
+                    elif not 0 <= value <= 1:
+                        valid_stats = False
+            if not valid_provenance or not valid_stats:
+                counts["invalid_delayed_observation"] += 1
+                review.append({"match_id": mid, "reason": "invalid_pit_quarantine_observation"})
+                continue
+            payload = dict(match.provider_payload or {})
+            prior = payload.get("_tbt_pbpx_delayed_observation")
+            if prior is not None:
+                if prior == delayed:
+                    counts["already_present"] += 1
+                else:
+                    counts["provenance_conflicts"] += 1
+                    review.append({"match_id": mid, "reason": "existing_pit_observation_conflict"})
+                continue
+            payload["_tbt_pbpx_delayed_observation"] = delayed
+            match.provider_payload = payload
+            counts["updated"] += 1
+            counts["pit_observations_added"] += 1
+            changed_years.add(match.scheduled_at.year)
             continue
 
         incoming = row.get("incoming_stats")

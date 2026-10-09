@@ -1,6 +1,6 @@
 name: Integrate Drive TennisVisuals PBPX safely
 # Re-trigger on main after workflow registration; never bypass the dry-run and backup gates.
-# Retest 2026-10-09: derive winner from full point tape, preserve PIT/provenance, enrich missing stat fields only.
+# Retest 2026-10-09: preserve PIT-unsafe history in nonconsumable sourced CDB evidence, no stat overwrite.
 
 on:
   push:
@@ -113,19 +113,19 @@ jobs:
           link=json.loads((root/"link/report.json").read_text())
           dry=json.loads((root/"dry/report.json").read_text())
           c=dry.get("counts") or {}
-          for key in ("identity_missing","identity_changed","invalid_stats","stat_conflicts","invalid_provenance","provenance_conflicts"):
+          for key in ("identity_missing","identity_changed","invalid_stats","stat_conflicts","invalid_provenance","provenance_conflicts","invalid_delayed_observation","baseline_stats_changed"):
               if c.get(key,0):
                   raise SystemExit(f"FAIL CLOSED: {key}={c[key]}")
           assert dry.get("quality_ready_added",0)>=0, "Quality regression"
           assert dry.get("stage_rows")==len((root/"link/auto_linked.jsonl").read_text().splitlines())
           count=int(c.get("updated",0))
           assert 0<=dry.get("quality_ready_added",0)<=count, "Unexpected quality-ready delta"
-          assert int(c.get("stat_fields_added",0))>=count, "No genuine enrichment"
+          assert int(c.get("stat_fields_added",0))+int(c.get("pit_observations_added",0))>=count, "No genuine enrichment"
           if count:
               assert dry.get("changed_years"), "Changed partitions missing"
           with open(os.environ["GITHUB_OUTPUT"],"a") as fh:
               fh.write(f"changes={'true' if count else 'false'}\n")
-          print("Dry-run:",json.dumps({"updated":count,"stat_fields_added":c.get("stat_fields_added",0),"quality_ready_added":dry["quality_ready_added"],"years":dry.get("changed_years")}))
+          print("Dry-run:",json.dumps({"updated":count,"stat_fields_added":c.get("stat_fields_added",0),"pit_observations_added":c.get("pit_observations_added",0),"quality_ready_added":dry["quality_ready_added"],"years":dry.get("changed_years")}))
           PY
 
       - name: Persist immutable prewrite partition backup and verify checksum
@@ -232,6 +232,11 @@ jobs:
               match=by_id.get(str(entry["match_id"]))
               if match is None:
                   raise SystemExit(f"Persisted match missing: {entry['match_id']}")
+              if entry.get("delayed_observation") is not None:
+                  if (match.provider_payload or {}).get("_tbt_pbpx_delayed_observation") != entry["delayed_observation"]:
+                      raise SystemExit(f"Persisted PIT evidence missing: {entry['match_id']}")
+                  if dict(match.stats or {}) != entry.get("baseline_stats"):
+                      raise SystemExit(f"Persisted canonical statistics drifted: {entry['match_id']}")
               for k,v in entry["incoming_stats"].items():
                   if not math.isclose(float((match.stats or {}).get(k,-999)),float(v),rel_tol=0,abs_tol=1e-6):
                       raise SystemExit(f"Persisted stat differs: {entry['match_id']}/{k}")
@@ -249,7 +254,7 @@ jobs:
                       and evidence.get("score_validated") is True
                   ):
                       raise SystemExit(f"Persisted provenance missing: {entry['match_id']}")
-          print(json.dumps({"status":"verified","persisted_rows":len(rows),"staged_matches":len(stage),"quality_ready_after":ready,"quality_ready_added":dry["quality_ready_added"],"stat_fields_added":dry["counts"].get("stat_fields_added",0)}))
+          print(json.dumps({"status":"verified","persisted_rows":len(rows),"staged_matches":len(stage),"quality_ready_after":ready,"quality_ready_added":dry["quality_ready_added"],"stat_fields_added":dry["counts"].get("stat_fields_added",0),"pit_observations_added":dry["counts"].get("pit_observations_added",0)}))
           PY
 
       - name: Persist run audit (including zero-change outcome)
