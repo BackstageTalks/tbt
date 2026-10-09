@@ -1234,6 +1234,8 @@
       &&Boolean(row?.captured_at);
   }
   function marketRows(key){
+    // TOP200 has been retired. Old feed data must not recreate active picks.
+    if(key==='top200')return [];
     const candidates={top200:['top200_picks','top200'],prime:['prime_picks','prime'],top_daily:['top_daily_picks','daily_picks','top_daily'],value:['value_picks','value'],doubles:['doubles_picks','doubles'],ace:['ace_picks','aces','ace_markets'],sg:['sg_picks','sets_games','set_game_picks']}[key]||[];
     for(const field of candidates){const value=state.feed?.[field];if(Array.isArray(value))return ['ace','sg'].includes(key)?value.filter(authenticLiveProjection):value;}
     const markets=state.feed?.markets;if(markets&&Array.isArray(markets[key]))return ['ace','sg'].includes(key)?markets[key].filter(authenticLiveProjection):markets[key];
@@ -1423,7 +1425,7 @@
     const totalToday=Number.isSafeInteger(suppliedTotal)&&suppliedTotal>=0
       ?suppliedTotal
       :Math.max(dailyHubRows('see_all').length,
-        ['top200','daily','prime','value','ace','double_faults','doubles','games','sets']
+        ['daily','prime','value','ace','double_faults','doubles','games','sets']
           .reduce((sum,tab)=>sum+Math.max(0,Number(dailyHubEntitlement(tab)?.total)||0),0));
     const odds=rows.map(r=>Number(r?.odds??r?.betting?.odds)).filter(v=>Number.isFinite(v)&&v>1);
     const perf=state.feed?.performance||{};
@@ -1487,7 +1489,7 @@
     host.innerHTML=cards.map(([icon,label,value,note,trend])=>`<article class="dashboard-kpi"><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}${trend?`<em class="kpi-trend">↗ ${escapeHtml(trend)}</em>`:''}</strong>${note?`<p>${escapeHtml(note)}</p>`:''}</div></article>`).join('');
   }
   function highlightRow(){
-    return dailyHubRows('top200')[0]||dashboardDailyRows()[0]||dailyHubRows('top')[0]||dailyHubRows('value')[0]||null;
+    return dashboardDailyRows()[0]||dailyHubRows('top')[0]||dailyHubRows('value')[0]||null;
   }
   function findRowByEventId(id){
     const target=String(id||'');
@@ -2046,7 +2048,6 @@
   function leanSeeAllRows(){
     const rows=[],seen=new Set();
     const add=row=>{const id=dailyPickIdentity(row);if(!row||!id||seen.has(id))return;seen.add(id);rows.push(row);};
-    (marketRows('top200')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'top200'}));
     (marketRows('prime')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'prime'}));
     (marketRows('value')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'value'}));
     (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'daily'}));
@@ -3231,7 +3232,7 @@
   function currentBettingDayPublishedKeys(now=Date.now()){
     const currentDay=bratislavaBettingDayKey(now,6),keys=new Set();
     const sources=[
-      ['top200_picks','match_winner'],['daily_picks','match_winner'],
+      ['daily_picks','match_winner'],
       ['top_daily_picks','match_winner'],['prime_picks','match_winner'],
       ['value_picks','match_winner'],['doubles_picks','match_winner'],
       ['ace_picks',''],['sg_picks','']
@@ -4049,7 +4050,7 @@
   }
   function enableDemoBoardPreview(){
     if(!state.demoFeedBackup)state.demoFeedBackup=clone(state.feed||{});
-    const base=clone(state.feed||{});base.generated_at=new Date().toISOString();base.model={...(base.model||{}),version:'DEMO PREVIEW'};base.top200_picks=[0,1,2,3,4].map(i=>buildDemoMatch(i,'top200'));base.prime_picks=[0,1,2,3,4].map(i=>buildDemoMatch(i,'prime'));base.top_daily_picks=[0,1,2,3,4,5].map(i=>buildDemoMatch(i,'top_daily'));base.value_picks=[0,1,2,3,4].map(i=>buildDemoMatch(i,'value'));base.ace_picks=[0,1,2,3,4].map(buildDemoProjection);base.doubles_picks=[];base.sg_picks=[];state.feed=base;state.demoMode=true;state.dashboardVisibility=null;state.page=0;Object.keys(state.marketPage||{}).forEach(k=>state.marketPage[k]=0);populateFilters();renderAllUiContent();setRoute('predictions');showStatus('Demo preview only — sample picks are in browser memory and are never published.');
+    const base=clone(state.feed||{});base.generated_at=new Date().toISOString();base.model={...(base.model||{}),version:'DEMO PREVIEW'};base.top200_picks=[];base.prime_picks=[0,1,2,3,4].map(i=>buildDemoMatch(i,'prime'));base.top_daily_picks=[0,1,2,3,4,5].map(i=>buildDemoMatch(i,'top_daily'));base.value_picks=[0,1,2,3,4].map(i=>buildDemoMatch(i,'value'));base.ace_picks=[0,1,2,3,4].map(buildDemoProjection);base.doubles_picks=[];base.sg_picks=[];state.feed=base;state.demoMode=true;state.dashboardVisibility=null;state.page=0;Object.keys(state.marketPage||{}).forEach(k=>state.marketPage[k]=0);populateFilters();renderAllUiContent();setRoute('predictions');showStatus('Demo preview only — sample picks are in browser memory and are never published.');
   }
 
   async function loadAdminInsights(force=false){
@@ -4645,7 +4646,7 @@
       const supplied=Number(feed.entitlements?.daily_pick_count);
       const total=Number.isSafeInteger(supplied)&&supplied>=0?supplied:
         Math.max(dailyHubRows('see_all').length,
-          ['top200','daily','prime','value','ace','double_faults','doubles','games','sets']
+          ['daily','prime','value','ace','double_faults','doubles','games','sets']
             .reduce((sum,tab)=>sum+Math.max(0,Number(dailyHubEntitlement(tab)?.total)||0),0));
       return {text:String(total),available:true};
     }
