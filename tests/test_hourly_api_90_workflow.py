@@ -1,4 +1,4 @@
-"""Contract regression for the operator-triggered 95% provider-day stats fill."""
+"""Contract regression for the operator-triggered 90% provider-day stats fill."""
 from pathlib import Path
 
 from tbt.providers import shared_budget
@@ -18,16 +18,16 @@ def test_real_manual_trigger_not_dry_run_by_default():
     assert '"promote": "false"' in HOURLY
 
 
-def test_95_percent_shared_budget_and_provider_headroom():
+def test_90_percent_shared_budget_and_provider_headroom():
     assert shared_budget.PROVIDER_PLAN_LIMIT == 15000
-    assert shared_budget.PROVIDER_RESERVE == 750
-    assert shared_budget.GLOBAL_CEILING == 14250
-    assert shared_budget.PURPOSE_CAPS["history"] == 14250
-    assert DEFAULT_PROVIDER_REQUEST_RESERVE == 750
-    assert 'budget.get("global_limit") != 14250' in HOURLY
-    assert 'budget.get("reserved_provider_headroom") != 750' in HOURLY
-    assert 'remaining != max(0, 14250-spent)' in HOURLY
-    assert 'caps = {hour: 14250 for hour in range(12, 19)}' in HOURLY
+    assert shared_budget.PROVIDER_RESERVE == 1500
+    assert shared_budget.GLOBAL_CEILING == 13500
+    assert shared_budget.PURPOSE_CAPS["history"] == 13500
+    assert DEFAULT_PROVIDER_REQUEST_RESERVE == 500
+    assert 'budget.get("global_limit") != 13500' in HOURLY
+    assert 'budget.get("reserved_provider_headroom") != 1500' in HOURLY
+    assert 'remaining != max(0, 13500-spent)' in HOURLY
+    assert 'caps = {hour: 13500 for hour in range(12, 19)}' in HOURLY
 
 
 def test_1850_final_start_and_provider_reset_are_bounded():
@@ -46,7 +46,7 @@ def test_writer_and_two_independent_quota_guards():
     assert 'check_writers()' in HOURLY
     assert 'min(3000, limit-spent, remaining, history_remaining)' in HOURLY
     assert 'group: tbt-history-data-writer' in DATA
-    assert 'BLINQ_PROVIDER_REQUEST_RESERVE=750' in DATA
+    assert 'BLINQ_PROVIDER_REQUEST_RESERVE=1500' in DATA
     assert 'BLINQ_RAPIDAPI_MAX_RPS=6' in DATA
     assert '"hourly_autofill": "true"' in HOURLY
     assert 'BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER' in DATA
