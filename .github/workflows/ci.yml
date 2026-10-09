@@ -160,6 +160,7 @@ jobs:
           test -n "$GH_TOKEN" || { echo 'Missing verified canonical release read token'; exit 1; }
           timeout 480s python scripts/audit_cdb_identity_reconciliation.py
           timeout 150s python scripts/audit_cdb_external_registry.py
+          timeout 480s python scripts/build_cdb_verified_player_crosswalk.py
 
       - name: Run backend tests
         env:
