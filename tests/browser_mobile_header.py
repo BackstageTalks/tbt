@@ -230,6 +230,7 @@ def main():
                 for unwanted in ('Členstvo', 'Komunita', 'Jazyk', 'Môj účet', 'Odhlásiť sa'):
                     assert unwanted not in root_text,(width,root_text)
                 page.get_by_role('button',name='Zavrieť menu',exact=True).click()
+                page.wait_for_function("document.querySelector('.header-top > .brand').getAttribute('aria-expanded')==='false'")
                 assert brand.get_attribute('aria-expanded')=='false'
                 if width==390:
                     brand.focus()
