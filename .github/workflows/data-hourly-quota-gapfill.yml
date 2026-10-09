@@ -2,7 +2,7 @@ name: BlinQ hourly API gapfill (90%)
 
 # GitHub cron is intentionally forbidden by the repository contract.
 # Manual workflow_dispatch is intended for an external hourly schedule with
-# an optional final 18:50 Europe/Bratislava invocation. Existing tick pushes
+# an optional final 18:45 Europe/Bratislava invocation. Existing tick pushes
 # remain compatible but are not required. A single canonical writer runs at once.
 on:
   push:
@@ -57,12 +57,12 @@ jobs:
           now = datetime.now(timezone.utc)
           local = now.astimezone(ZONE)
 
-          # Global provider-day spending ceilings; includes live, match, refresh,
-          # history AND committed reservations, never just history calls.
-          # The shared ledger and actual provider-header reserve are the
-          # authoritative caps. Fill as much as possible before 90%, not only
-          # a fixed daily/hourly portion; no cap can exceed 13,500.
-          caps = {hour: 13500 for hour in range(12, 19)}
+          # Progressive cumulative caps across all purposes, including LIVE,
+          # Match Status, refresh and history, plus committed reservations.
+          # The provider-day shared ledger still enforces the absolute 90% cap.
+          # The 18:00 cap also applies to the operator's final 18:45 launch.
+          caps = {12: 5700, 13: 6900, 14: 8100, 15: 9300,
+                  16: 10500, 17: 12000, 18: 13500}
           print(f"Bratislava time: {local.isoformat()}; dry_run={DRY_RUN}", flush=True)
           closeout_only = local.hour == 19
           if local.hour not in caps and not closeout_only and not DRY_RUN:
@@ -154,7 +154,7 @@ jobs:
 
           # Statistics mode uses canonical identity, quality-ready skip logic,
           # and fail-closed provider-header quota checks. Stop well BEFORE the
-          # verified 19:10 provider reset, including an 18:50 final invocation.
+          # verified 19:10 provider reset, including an 18:45 final invocation.
           cutoff_local = datetime.combine(local.date(), time(19, 5), tzinfo=ZONE)
           cutoff = cutoff_local.astimezone(timezone.utc)
           if now >= cutoff - timedelta(minutes=8):
