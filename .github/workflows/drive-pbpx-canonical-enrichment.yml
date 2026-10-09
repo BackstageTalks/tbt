@@ -1,5 +1,6 @@
 name: Integrate Drive TennisVisuals PBPX safely
 # Re-trigger on main after workflow registration; never bypass the dry-run and backup gates.
+# Retest 2026-10-09: guarded canonical historical player aliases; preserve all existing gates.
 
 on:
   push:

@@ -1,10 +1,14 @@
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from scripts.link_pointbypoint_serve_return import (
     _parse_pbp,
     _source_files,
     _source_tour,
     _winner_side,
+    _historical_alias_indexes,
+    _resolve_historical_alias,
 )
 
 
@@ -49,3 +53,65 @@ def test_validated_rich_pbp_parser_handles_lowercase_aces_and_double_faults():
     assert parsed["point_count"] > 0
     assert 0.0 <= parsed[1]["service_points_won"] <= 1.0
     assert 0.0 <= parsed[2]["return_points_won"] <= 1.0
+
+
+def _match(mid, name1, name2, pid1="player-1", pid2="player-2", day="2016-05-05"):
+    return SimpleNamespace(
+        match_id=mid, tour="atp", scheduled_at=datetime.fromisoformat(day).replace(tzinfo=timezone.utc),
+        player1_id=pid1, player2_id=pid2, player1_name=name1, player2_name=name2,
+        tournament="Madrid", round_name="R16", surface="Clay", winner_id=pid1,
+    )
+
+
+def test_unique_canonical_historical_alias_requires_same_canonical_id():
+    history = [
+        _match("prior", "JoaoSousa", "Jack Sock", day="2015-05-05"),
+        _match("target", "Joao Sousa", "Jack Sock"),
+    ]
+    result = _resolve_historical_alias(
+        _historical_alias_indexes(history),
+        "atp", "2016-05-05", "JoaoSousa", "Jack Sock",
+        "Madrid", "Clay", "R16",
+    )
+    assert result is not None
+    assert result[0].match_id == "target"
+    assert result[1] == ((1, "p1"), (2, "p2"))
+    assert result[2] == "canonical_historical_alias"
+
+
+def test_compact_name_requires_unique_global_id_and_event_corroboration():
+    indexes = _historical_alias_indexes([_match("target", "Joao Sousa", "Jack Sock")])
+    matched = _resolve_historical_alias(
+        indexes, "atp", "2016-05-05", "JoaoSousa", "Jack Sock", "Madrid", "Clay", "R16",
+    )
+    assert matched is not None
+    assert matched[2] == "canonical_unique_compact_alias"
+    assert _resolve_historical_alias(
+        indexes, "atp", "2016-05-05", "JoaoSousa", "Jack Sock", "Other", "Clay", "R16",
+    ) is None
+    assert _resolve_historical_alias(
+        indexes, "atp", "2016-05-05", "JoaoSousa", "Jack Sock", "Madrid", "Hard", "R16",
+    ) is None
+    assert _resolve_historical_alias(
+        indexes, "atp", "2016-05-06", "JoaoSousa", "Jack Sock", "Madrid", "Clay", "R16",
+    ) is None
+
+
+def test_homonym_canonical_ids_never_become_alias_matches():
+    matches = [
+        _match("target", "Joao Sousa", "Jack Sock"),
+        _match("homonym", "JoaoSousa", "Different Person", pid1="other-id", pid2="different-id", day="2017-05-05"),
+    ]
+    assert _resolve_historical_alias(
+        _historical_alias_indexes(matches),
+        "atp", "2016-05-05", "JoaoSousa", "Jack Sock", "Madrid", "Clay", "R16",
+    ) is None
+
+
+def test_source_orientation_can_be_swapped_without_guessing_identity():
+    indexes = _historical_alias_indexes([_match("target", "Joao Sousa", "Jack Sock")])
+    matched = _resolve_historical_alias(
+        indexes, "atp", "2016-05-05", "Jack Sock", "JoaoSousa", "Madrid", "Clay", "R16",
+    )
+    assert matched is not None
+    assert matched[1] == ((1, "p2"), (2, "p1"))
