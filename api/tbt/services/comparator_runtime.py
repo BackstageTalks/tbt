@@ -72,12 +72,28 @@ def _safe_abbreviation_target(short: Mapping, full_candidates: list[dict]) -> di
     """UI-only alias replacement: require a unique full name and second evidence."""
     distinct = {str(item.get("player_id") or ""): item for item in full_candidates}
     distinct.pop("", None)
-    if len(distinct) != 1:
+    if not distinct:
         return None
-    full = next(iter(distinct.values()))
+    # Several IDs may all have *the same complete name*: a canonical provider
+    # record and historical fragments. That is a single DISPLAY name, not
+    # evidence that the canonical identities/match histories can be merged.
+    # If even two different complete names share the initial/surname, do not
+    # guess which one the abbreviated row represents (e.g. B. Perez).
+    normalized = {normalize_player_name(row.get("name")) for row in distinct.values()}
+    if len(normalized) != 1:
+        return None
+    canonical = [
+        row for id_, row in distinct.items() if not id_.startswith("hist-js:")
+    ]
+    if len(distinct) == 1:
+        full = next(iter(distinct.values()))
+    elif len(canonical) == 1 and len(canonical) < len(distinct):
+        full = canonical[0]
+    else:
+        return None
     if str(full.get("player_id")) == str(short.get("player_id")):
         return None
-    full_name = normalize_player_name(full.get("name"))
+    full_name = next(iter(normalized))
     short_aliases = {
         normalize_player_name(alias) for alias in (short.get("aliases") or [])
     }
@@ -88,7 +104,15 @@ def _safe_abbreviation_target(short: Mapping, full_candidates: list[dict]) -> di
         rank_evidence = short_rank > 0 and full_rank > 0 and abs(short_rank - full_rank) <= 10
     except (TypeError, ValueError, OverflowError):
         rank_evidence = False
-    return full if alias_evidence or rank_evidence else None
+    # Historical abbreviated + historical full spelling + canonical full
+    # spelling independently corroborate the display label. Ranks across
+    # historical/current sources need not be within 10 places.
+    historical_full_evidence = (
+        str(short.get("player_id") or "").startswith("hist-js:")
+        and len(distinct) > 1
+        and len(canonical) == 1
+    )
+    return full if alias_evidence or rank_evidence or historical_full_evidence else None
 
 
 def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12) -> list[dict]:
