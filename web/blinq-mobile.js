@@ -93,14 +93,14 @@
   const logo = document.createElement('img');
   logo.src = header.querySelector('.brand img')?.getAttribute('src') || '/assets/blinq_logo.svg';
   logo.alt = 'BlinQ';
-  const home = document.createElement('a');
-  home.href = '#predictions';
-  home.dataset.route = 'predictions';
-  home.setAttribute('aria-label', 'BlinQ · hlavná stránka');
-  home.style.justifySelf = 'center';
-  home.append(logo);
-  home.addEventListener('click', () => dialog.close());
-  top.append(close, home);
+  // Close the menu without unexpectedly changing the active route.
+  // The explicit "Domov" item continues to navigate to the homepage.
+  const menuLogo = button('', () => dialog.close());
+  menuLogo.className = 'bqm-logo-close';
+  menuLogo.setAttribute('aria-label', 'Zavrieť menu BlinQ');
+  menuLogo.style.justifySelf = 'center';
+  menuLogo.append(logo);
+  top.append(close, menuLogo);
   const nav = document.createElement('nav'); nav.setAttribute('aria-label', 'Mobilná navigácia');
   const note = document.createElement('p'); note.className = 'bqm-note'; note.setAttribute('role', 'status');
   dialog.append(top, nav, note); document.body.append(dialog);
@@ -297,6 +297,13 @@
   });
   dialog.addEventListener('cancel', event => {
     if (currentLevel !== 'root') { event.preventDefault(); render('root'); }
+  });
+  // A click on the dimmed desktop area dismisses the menu, not the page.
+  dialog.addEventListener('click', event => {
+    if (event.target !== dialog) return;
+    const rect = dialog.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right ||
+        event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
   });
   window.addEventListener('hashchange', () => { if (dialog.open) dialog.close(); });
   mq.addEventListener('change', sync);
