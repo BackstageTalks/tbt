@@ -26,11 +26,11 @@ def test_all_purposes_share_provider_day_pool_with_3_percent_reserve():
     ):
         ledger, result = shared_budget.calculate(ledger, purpose, amount, now=NOW)
 
-    assert result["provider_plan_limit"] == 4500
+    assert result["provider_plan_limit"] == 15000
     assert result["global_limit"] == 14550
-    assert result["global_spent"] == 14250
+    assert result["global_spent"] == 14550
     assert result["global_remaining"] == 0
-    assert result["reserved_provider_headroom"] == 750
+    assert result["reserved_provider_headroom"] == 450
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "refresh", 1, now=NOW)
 
@@ -40,10 +40,10 @@ def test_history_can_use_global_headroom_but_never_cross_ninety_seven_percent():
     result = None
     for amount in (3000, 3000, 3000, 3000, 1500, 1050):
         ledger, result = shared_budget.calculate(ledger, "history", amount, now=NOW)
-    assert result["spent"]["history"] == 14250
-    assert result["global_spent"] == 14250
+    assert result["spent"]["history"] == 14550
+    assert result["global_spent"] == 14550
     assert result["global_remaining"] == 0
-    assert result["reserved_provider_headroom"] == 750
+    assert result["reserved_provider_headroom"] == 450
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "history", 1, now=NOW)
 
