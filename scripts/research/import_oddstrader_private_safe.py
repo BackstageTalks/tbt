@@ -343,7 +343,6 @@ def main():
         # Preserve matched historical bookmaker price information in a SEPARATE
         # private release. No raw quote data or sidecars in public tbt artifacts.
         if sidecars:
-            from pathlib import Path
             sidecar_manifest = {"schema": 1, "source": "oddstrader",
                 "run_id": RUN_ID, "quote_timestamps_verified": False,
                 "training_eligible": False,
