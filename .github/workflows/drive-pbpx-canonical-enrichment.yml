@@ -1,6 +1,6 @@
 name: Integrate Drive TennisVisuals PBPX safely
 # Re-trigger on main after workflow registration; never bypass the dry-run and backup gates.
-# Retest 2026-10-09: guarded canonical historical player aliases; preserve all existing gates.
+# Retest 2026-10-09: derive winner from full point tape, preserve PIT/provenance, enrich missing stat fields only.
 
 on:
   push:
@@ -113,18 +113,19 @@ jobs:
           link=json.loads((root/"link/report.json").read_text())
           dry=json.loads((root/"dry/report.json").read_text())
           c=dry.get("counts") or {}
-          for key in ("identity_missing","identity_changed","invalid_stats","stat_conflicts"):
+          for key in ("identity_missing","identity_changed","invalid_stats","stat_conflicts","invalid_provenance","provenance_conflicts"):
               if c.get(key,0):
                   raise SystemExit(f"FAIL CLOSED: {key}={c[key]}")
           assert dry.get("quality_ready_added",0)>=0, "Quality regression"
           assert dry.get("stage_rows")==len((root/"link/auto_linked.jsonl").read_text().splitlines())
           count=int(c.get("updated",0))
-          assert count==dry.get("quality_ready_added",0), "Unexpected quality-ready delta"
+          assert 0<=dry.get("quality_ready_added",0)<=count, "Unexpected quality-ready delta"
+          assert int(c.get("stat_fields_added",0))>=count, "No genuine enrichment"
           if count:
               assert dry.get("changed_years"), "Changed partitions missing"
           with open(os.environ["GITHUB_OUTPUT"],"a") as fh:
               fh.write(f"changes={'true' if count else 'false'}\n")
-          print("Dry-run:",json.dumps({"updated":count,"quality_ready_added":dry["quality_ready_added"],"years":dry.get("changed_years")}))
+          print("Dry-run:",json.dumps({"updated":count,"stat_fields_added":c.get("stat_fields_added",0),"quality_ready_added":dry["quality_ready_added"],"years":dry.get("changed_years")}))
           PY
 
       - name: Persist immutable prewrite partition backup and verify checksum
@@ -164,7 +165,8 @@ jobs:
           root=Path(".cache/tbt/drive-pbpx")
           dry=json.loads((root/"dry/report.json").read_text())
           write=json.loads((root/"write/report.json").read_text())
-          assert write["quality_ready_added"]==dry["quality_ready_added"]>0
+          assert write["quality_ready_added"]==dry["quality_ready_added"]
+          assert write["counts"].get("updated",0)==dry["counts"].get("updated",0)>0
           assert write["changed_years"]==dry["changed_years"]
           assert write["counts"]==dry["counts"]
           PY
@@ -206,6 +208,7 @@ jobs:
           from release_store import ReleaseStore
           from tbt.data.history_snapshot import load_partitions
           from tbt.data.history_safety import sanitize_history_identities
+          from tbt.models.feature_builder import FeatureBuilder
           root=Path(".cache/tbt/drive-pbpx")
           verify=root/"verify"
           ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",verify).download(require_bundle_manifest=True)
@@ -214,6 +217,15 @@ jobs:
           assert len(safe)==len(rows) and not safety.get("quarantined_rows"), "Persisted identity violation"
           dry=json.loads((root/"dry/report.json").read_text())
           assert len(rows)>=993442, "Persisted canonical row regression"
+          ready=sum(
+              1 for m in rows
+              if all(
+                  FeatureBuilder._extract_quality(m.stats or {}, side)[0] is not None
+                  and FeatureBuilder._extract_quality(m.stats or {}, side)[1] is not None
+                  for side in ("p1","p2")
+              )
+          )
+          assert ready==dry["quality_ready_after"], "Persisted quality-ready mismatch"
           by_id={str(x.match_id):x for x in rows}
           stage=[json.loads(s) for s in (root/"link/auto_linked.jsonl").read_text().splitlines() if s.strip()]
           for entry in stage:
@@ -223,7 +235,21 @@ jobs:
               for k,v in entry["incoming_stats"].items():
                   if not math.isclose(float((match.stats or {}).get(k,-999)),float(v),rel_tol=0,abs_tol=1e-6):
                       raise SystemExit(f"Persisted stat differs: {entry['match_id']}/{k}")
-          print(json.dumps({"status":"verified","persisted_rows":len(rows),"staged_matches":len(stage),"quality_ready_added":dry["quality_ready_added"]}))
+              sources=[p for p in entry.get("provenance",[]) if p.get("source")=="tennisvisuals_validated_pointbypoint"]
+              if sources:
+                  evidence=match.provider_payload.get("_tbt_pbpx_enrichment") or {}
+                  proof=sources[0]
+                  if not (
+                      evidence.get("schema")==1
+                      and evidence.get("source")==proof["source"]
+                      and evidence.get("source_file")==proof["source_file"]
+                      and evidence.get("source_row")==proof["source_row"]
+                      and evidence.get("source_ref")==proof["source_ref"]==os.environ["SOURCE_REF"]
+                      and evidence.get("source_date")==proof["source_date"]
+                      and evidence.get("score_validated") is True
+                  ):
+                      raise SystemExit(f"Persisted provenance missing: {entry['match_id']}")
+          print(json.dumps({"status":"verified","persisted_rows":len(rows),"staged_matches":len(stage),"quality_ready_after":ready,"quality_ready_added":dry["quality_ready_added"],"stat_fields_added":dry["counts"].get("stat_fields_added",0)}))
           PY
 
       - name: Persist run audit (including zero-change outcome)

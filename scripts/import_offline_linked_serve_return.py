@@ -157,11 +157,61 @@ def main() -> None:
             continue
 
         new_stats = dict(existing)
-        new_stats.update({key: value for key, value in clean.items() if new_stats.get(key) is None})
+        added = {key: value for key, value in clean.items() if new_stats.get(key) is None}
+        new_stats.update(added)
         if new_stats == existing:
             counts["already_present"] += 1
             continue
+
+        # Canonical stats provenance is mandatory for TennisVisuals imports.
+        # Other legacy offline imports retain their existing provenance contract.
+        provenance = row.get("provenance") or []
+        pbpx_sources = [
+            item for item in provenance
+            if isinstance(item, dict)
+            and item.get("source") == "tennisvisuals_validated_pointbypoint"
+        ]
+        if pbpx_sources:
+            if len(pbpx_sources) != 1:
+                counts["invalid_provenance"] += 1
+                review.append({"match_id": mid, "reason": "ambiguous_pbpx_provenance"})
+                continue
+            proof = pbpx_sources[0]
+            evidence = proof.get("evidence") or []
+            source_date = str(proof.get("source_date") or "")
+            if (
+                proof.get("score_validated") is not True
+                or not source_date
+                or "winner_derived_from_point_tape" not in evidence
+                or "full_set_score_matches_point_tape" not in evidence
+                or not proof.get("source_file")
+                or not isinstance(proof.get("source_row"), int)
+                or source_date > match.scheduled_at.date().isoformat()
+            ):
+                counts["invalid_provenance"] += 1
+                review.append({"match_id": mid, "reason": "invalid_pbpx_provenance"})
+                continue
+            payload = dict(match.provider_payload or {})
+            marker = {
+                "schema": 1,
+                "source": proof["source"],
+                "source_file": str(proof["source_file"]),
+                "source_row": proof["source_row"],
+                "source_ref": str(proof.get("source_ref") or ""),
+                "source_date": source_date,
+                "score_validated": True,
+                "stat_keys": sorted(added),
+            }
+            previous = payload.get("_tbt_pbpx_enrichment")
+            if previous is not None and previous != marker:
+                counts["provenance_conflicts"] += 1
+                review.append({"match_id": mid, "reason": "pbpx_provenance_conflict"})
+                continue
+            payload["_tbt_pbpx_enrichment"] = marker
+            match.provider_payload = payload
+
         match.stats = new_stats
+        counts["stat_fields_added"] += len(added)
         counts["updated"] += 1
         changed_years.add(match.scheduled_at.year)
 

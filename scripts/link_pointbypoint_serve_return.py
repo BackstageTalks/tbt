@@ -17,6 +17,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
+import re
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +26,7 @@ from pathlib import Path
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_partitions
 from tbt.data.history_safety import sanitize_history_identities
-from tbt.data.offline_odds import norm_text
+from tbt.data.offline_odds import norm_text, norm_round, norm_surface, tournament_score
 from tbt.models.feature_builder import FeatureBuilder
 
 
@@ -127,13 +129,16 @@ def _parse_pbp(value: object):
         return None
 
     sides = {
-        1: {"service_points": 0, "service_won": 0, "return_points": 0, "return_won": 0},
-        2: {"service_points": 0, "service_won": 0, "return_points": 0, "return_won": 0},
+        1: {"service_points": 0, "service_won": 0, "return_points": 0, "return_won": 0, "aces": 0, "double_faults": 0},
+        2: {"service_points": 0, "service_won": 0, "return_points": 0, "return_won": 0, "aces": 0, "double_faults": 0},
     }
     game_server = 1
     current_server = 1
     game_has_points = False
     valid_points = 0
+    game_wins = [0, 0]
+    set_games = []
+    last_point_winner = None
 
     for raw in text:
         if raw.isspace():
@@ -145,8 +150,14 @@ def _parse_pbp(value: object):
             sides[receiver]["return_points"] += 1
             if ch in {"S", "A"}:
                 sides[current_server]["service_won"] += 1
+                last_point_winner = current_server
             else:
                 sides[receiver]["return_won"] += 1
+                last_point_winner = receiver
+            if ch == "A":
+                sides[current_server]["aces"] += 1
+            elif ch == "D":
+                sides[current_server]["double_faults"] += 1
             game_has_points = True
             valid_points += 1
             continue
@@ -159,13 +170,21 @@ def _parse_pbp(value: object):
 
         if ch in {";", "."}:
             if game_has_points:
+                game_wins[last_point_winner - 1] += 1
                 game_server = 3 - game_server
                 current_server = game_server
                 game_has_points = False
+            if ch == "." and sum(game_wins):
+                set_games.append(tuple(game_wins))
+                game_wins = [0, 0]
             continue
 
         return None
 
+    if game_has_points:
+        game_wins[last_point_winner - 1] += 1
+    if sum(game_wins):
+        set_games.append(tuple(game_wins))
     if valid_points <= 0:
         return None
     if any(
@@ -178,13 +197,47 @@ def _parse_pbp(value: object):
         1: {
             "service_points_won": sides[1]["service_won"] / sides[1]["service_points"],
             "return_points_won": sides[1]["return_won"] / sides[1]["return_points"],
+            "aces": sides[1]["aces"],
+            "double_faults": sides[1]["double_faults"],
         },
         2: {
             "service_points_won": sides[2]["service_won"] / sides[2]["service_points"],
             "return_points_won": sides[2]["return_won"] / sides[2]["return_points"],
+            "aces": sides[2]["aces"],
+            "double_faults": sides[2]["double_faults"],
         },
         "point_count": valid_points,
+        "set_games": set_games,
+        "winner_side": (
+            1 if sum(a > b for a, b in set_games) > sum(b > a for a, b in set_games)
+            else 2 if sum(b > a for a, b in set_games) > sum(a > b for a, b in set_games)
+            else None
+        ),
     }
+
+
+def _pbpx_score_validated(parsed: dict, score: object) -> bool:
+    """Validate reconstructed point-tape game/set scores, independent of winner label.
+
+    TennisVisuals winner/score order need not be server1/server2 order.
+    All sets must have the SAME direct or reversed orientation.
+    """
+    tokens = str(score or "").strip().split()
+    if not 2 <= len(tokens) <= 5 or len(tokens) != len(parsed["set_games"]):
+        return False
+    recorded = []
+    for token in tokens:
+        found = re.fullmatch(r"(\d+)(?:\(\d+\))?-(\d+)(?:\(\d+\))?", token)
+        if not found:
+            return False
+        recorded.append((int(found.group(1)), int(found.group(2))))
+    sets = parsed["set_games"]
+    if not all(max(a, b) >= 6 and a != b for a, b in sets):
+        return False
+    return (
+        all(tuple(games) == expected for games, expected in zip(sets, recorded))
+        or all(tuple(reversed(games)) == expected for games, expected in zip(sets, recorded))
+    )
 
 
 def _resolve_candidate(candidates, source_tournament: str, source_winner: str):
@@ -307,9 +360,13 @@ def main():
 
     alias_indexes = _historical_alias_indexes(matches)
     index = defaultdict(list)
+    window_index = defaultdict(list)
     for match in matches:
         pair = tuple(sorted((norm_text(match.player1_name), norm_text(match.player2_name))))
-        index[(str(match.tour or "").lower(), match.scheduled_at.date().isoformat(), pair)].append(match)
+        tour = str(match.tour or "").lower()
+        index[(tour, match.scheduled_at.date().isoformat(), pair)].append(match)
+        if str(match.match_id).startswith("hist-js:"):
+            window_index[(tour, pair)].append(match)
 
     before = sum(1 for match in matches if _quality(dict(match.stats or {})))
     counts = Counter()
@@ -347,15 +404,11 @@ def main():
                 server1 = str(_field(row, ("server1", "player1")) or "").strip()
                 server2 = str(_field(row, ("server2", "player2")) or "").strip()
                 tournament = str(_field(row, ("tny_name", "tournament", "tournament_name")) or "").strip()
-                winner_side = _winner_side(
+                source_winner_side = _winner_side(
                     _field(row, ("winner",)),
                     zero_based=tennisvisuals_format,
                 )
-                winner_name = ""
-                if winner_side == 1:
-                    winner_name = norm_text(server1)
-                elif winner_side == 2:
-                    winner_name = norm_text(server2)
+                winner_side = source_winner_side
 
                 if source_date is None or not server1 or not server2:
                     counts["source_identity_unusable"] += 1
@@ -370,6 +423,18 @@ def main():
                 counts["pbp_usable"] += 1
                 local["pbp_usable"] += 1
                 counts["point_rows_derived"] += int(parsed["point_count"])
+                if tennisvisuals_format:
+                    if not _pbpx_score_validated(parsed, row.get("score")) or parsed["winner_side"] is None:
+                        counts["pbpx_score_unverified"] += 1
+                        local["pbpx_score_unverified"] += 1
+                        continue
+                    winner_side = parsed["winner_side"]
+                    counts["pbpx_score_validated"] += 1
+                    local["pbpx_score_validated"] += 1
+                    if source_winner_side != winner_side:
+                        counts["pbpx_raw_winner_not_server_oriented"] += 1
+                        local["pbpx_raw_winner_not_server_oriented"] += 1
+                winner_name = norm_text(server1 if winner_side == 1 else server2) if winner_side in (1, 2) else ""
 
                 pair = tuple(sorted((norm_text(server1), norm_text(server2))))
                 source_tour = _source_tour(row, path)
@@ -393,6 +458,35 @@ def main():
                         candidates = [alias_match]
                         counts["historical_alias_candidate"] += 1
                         local["historical_alias_candidate"] += 1
+                if not candidates and tennisvisuals_format and winner_side in (1, 2):
+                    # Historical hist-js timestamps can represent tournament START,
+                    # not this actual match day. Audit likely matches, but NEVER
+                    # attach post-match statistics to an earlier PIT timestamp.
+                    window = []
+                    for historical in window_index.get((source_tour, pair), []):
+                        offset = (source_date - historical.scheduled_at.date()).days
+                        if not 0 <= offset <= 21:
+                            continue
+                        if _winner_name(historical) != winner_name:
+                            continue
+                        if not tournament or tournament_score(tournament, historical.tournament)[0] < 1:
+                            continue
+                        if not historical.round_name or norm_round(historical.round_name) != norm_round(row.get("round")):
+                            continue
+                        if norm_surface(historical.surface) != norm_surface(row.get("surface")):
+                            continue
+                        window.append(historical)
+                    if len(window) == 1:
+                        counts["historical_window_verified"] += 1
+                        local["historical_window_verified"] += 1
+                        if window[0].scheduled_at.date() < source_date:
+                            counts["window_pit_blocked"] += 1
+                            local["window_pit_blocked"] += 1
+                            continue
+                        candidates = window
+                    elif len(window) > 1:
+                        counts["historical_window_ambiguous"] += 1
+                        local["historical_window_ambiguous"] += 1
                 if len(candidates) != 1:
                     reason = "unmatched" if not candidates else "ambiguous"
                     counts[reason] += 1
@@ -424,11 +518,19 @@ def main():
                     str(match.player1_id if mapping[winner_side - 1][1] == "p1" else match.player2_id)
                     if winner_side in (1, 2) else ""
                 )
-                winner_conflict = (
-                    bool(alias_mapping is not None and expected_winner_id != str(match.winner_id or ""))
-                    if alias_mapping is not None
-                    else bool(winner_name and _winner_name(match) and winner_name != _winner_name(match))
-                )
+                if tennisvisuals_format:
+                    # Independent canonical outcome is mandatory; source winner
+                    # label is draw-oriented and cannot validate the server side.
+                    winner_conflict = (
+                        not expected_winner_id
+                        or expected_winner_id != str(match.winner_id or "")
+                    )
+                elif alias_mapping is not None:
+                    winner_conflict = expected_winner_id != str(match.winner_id or "")
+                else:
+                    winner_conflict = bool(
+                        winner_name and _winner_name(match) and winner_name != _winner_name(match)
+                    )
                 if winner_conflict:
                     counts["winner_mismatch"] += 1
                     local["winner_mismatch"] += 1
@@ -440,16 +542,30 @@ def main():
                     })
                     continue
 
+                if tennisvisuals_format:
+                    # Pair/date/winner alone cannot override a different event.
+                    source_round, canonical_round = norm_round(row.get("round")), norm_round(match.round_name)
+                    source_surface, canonical_surface = norm_surface(row.get("surface")), norm_surface(match.surface)
+                    event_conflict = (
+                        (bool(tournament and match.tournament) and tournament_score(tournament, match.tournament)[0] < 1)
+                        or (bool(source_round and canonical_round) and source_round != canonical_round)
+                        or (source_surface != "unknown" and canonical_surface != "unknown" and source_surface != canonical_surface)
+                    )
+                    if event_conflict:
+                        counts["source_event_conflicts"] += 1
+                        local["source_event_conflicts"] += 1
+                        continue
+
                 incoming = {}
                 for source_side, prefix in mapping:
                     incoming[f"{prefix}_service_points_won"] = parsed[source_side]["service_points_won"]
                     incoming[f"{prefix}_return_points_won"] = parsed[source_side]["return_points_won"]
+                    if tennisvisuals_format and str(row.get("adf_flag") or "").strip() == "1":
+                        incoming[f"{prefix}_aces"] = float(parsed[source_side]["aces"])
+                        incoming[f"{prefix}_double_faults"] = float(parsed[source_side]["double_faults"])
 
                 existing = dict(match.stats or {})
-                if _quality(existing):
-                    counts["already_quality_ready"] += 1
-                    local["already_quality_ready"] += 1
-                    continue
+                quality_before = _quality(existing)
 
                 conflicts = [
                     key_name
@@ -471,16 +587,17 @@ def main():
 
                 clean = {key_name: value for key_name, value in incoming.items() if existing.get(key_name) is None}
                 if not clean:
-                    counts["already_present"] += 1
-                    local["already_present"] += 1
+                    counts["already_quality_ready" if quality_before else "already_present"] += 1
+                    local["already_quality_ready" if quality_before else "already_present"] += 1
                     continue
 
                 projected = dict(existing)
                 projected.update(clean)
-                if not _quality(projected):
+                if not quality_before and not _quality(projected):
                     counts["partial_only_no_quality_gain"] += 1
                     local["partial_only_no_quality_gain"] += 1
                     continue
+                adds_quality = not quality_before and _quality(projected)
 
                 match_id = str(match.match_id)
                 stage = {
@@ -496,14 +613,19 @@ def main():
                         ),
                         "source_file": path.name,
                         "source_row": row_number,
+                        "source_ref": os.environ.get("SOURCE_REF", ""),
+                        "source_date": source_date.isoformat(),
+                        "score_validated": bool(tennisvisuals_format),
                         "evidence": [
-                            "calendar_date_exact",
-                            "player_pair_exact",
+                            "calendar_date_exact" if match.scheduled_at.date() == source_date else "historical_window_date_guarded",
+                            "player_pair_exact" if alias_mapping is None else "player_pair_canonical_alias",
                             "canonical_candidate_unique",
+                            * (["winner_derived_from_point_tape", "full_set_score_matches_point_tape"] if tennisvisuals_format else []),
                             *([alias_evidence] if alias_evidence else []),
                             "explicit_pbp_server_relative_outcomes",
                         ],
                     }],
+                    "quality_ready_added": adds_quality,
                     "import_ready": True,
                 }
 
@@ -532,11 +654,16 @@ def main():
                 staged_by_match[match_id] = stage
                 counts["staged_matches"] += 1
                 local["staged_matches"] += 1
+                counts["staged_stat_fields"] += len(clean)
+                local["staged_stat_fields"] += len(clean)
+                if adds_quality:
+                    counts["staged_quality_ready_added"] += 1
+                    local["staged_quality_ready_added"] += 1
 
         file_counts[path.name] = dict(local)
 
     staged = list(staged_by_match.values())
-    projected_added = len(staged)
+    projected_added = sum(1 for entry in staged if entry.get("quality_ready_added") is True)
     report = {
         "schema": 1,
         "canonical_rows": len(matches),
