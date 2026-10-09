@@ -10082,3 +10082,6 @@ body.blinq-compare .footer-system-dot{display:none}
 .comparator-analytics .comparator-stat-row{grid-template-columns:minmax(102px,1.3fr) minmax(60px,1fr) minmax(60px,1fr);gap:5px}
 .comparator-analytics .comparator-stat-row strong{font-size:11px}
 }
+
+.comparator-win-meter{height:5px;border-radius:6px;overflow:hidden;background:rgba(85,122,147,.27);margin:11px 0 2px}
+.comparator-win-meter>span{display:block;height:100%;background:linear-gradient(90deg,#20a989,#41daa2);border-radius:inherit}
