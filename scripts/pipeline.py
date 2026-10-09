@@ -58,6 +58,7 @@ from tbt.services.doubles_selection import (
 from tbt.services.comeback_projection import annotate_live_second_set_projections
 from tbt.services.market_selection import (
     annotate_market_publication_candidates,
+    build_selection_candidate_snapshot,
     attach_market_sections_to_feed,
     attach_match_winner_market,
     enrich_current_betting_day_odds,
@@ -347,9 +348,12 @@ def _load_prediction_ledger(store):
             "Prediction release is incomplete; missing assets: " + ", ".join(missing)
         )
     optional_snapshot = "daily_offer_snapshot.json" if "daily_offer_snapshot.json" in assets else None
+    candidate_month_asset = f"selection_candidates_{datetime.now(timezone.utc):%Y-%m}.json.gz"
     extra_names = ["feed.json", "ledger.json"]
     if optional_snapshot:
         extra_names.append(optional_snapshot)
+    if candidate_month_asset in assets:
+        extra_names.append(candidate_month_asset)
     store.download(
         extra_names=tuple(extra_names),
         required_names=("feed.json", "ledger.json"),
@@ -677,10 +681,28 @@ def _publish_predictions(
     write_json(store.directory / "ledger.json", records)
     write_json(store.directory / "feed.json", feed)
     write_json(store.directory / "daily_offer_snapshot.json", snapshot)
+
+    # Persist the complete pre-match singles selector universe for chronological
+    # replay. Monthly gzip partitions keep release asset count bounded while
+    # preserving every generated snapshot. Outcomes are deliberately absent.
+    candidate_snapshot = clean(build_selection_candidate_snapshot(predictions, generated_at=now))
+    candidate_month_path = store.directory / f"selection_candidates_{now:%Y-%m}.json.gz"
+    candidate_history = {"schema": 1, "month": f"{now:%Y-%m}", "snapshots": []}
+    if candidate_month_path.exists():
+        with gzip.open(candidate_month_path, "rt", encoding="utf-8") as handle:
+            existing = json.load(handle)
+        if not isinstance(existing, dict) or not isinstance(existing.get("snapshots"), list):
+            raise ValueError("Invalid selection candidate history; refusing to overwrite replay evidence")
+        candidate_history = existing
+    candidate_history["snapshots"].append(candidate_snapshot)
+    with gzip.open(candidate_month_path, "wt", encoding="utf-8", compresslevel=6) as handle:
+        json.dump(clean(candidate_history), handle, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+
     bundle = [
         store.directory / "ledger.json",
         store.directory / "feed.json",
         store.directory / "daily_offer_snapshot.json",
+        candidate_month_path,
     ]
     if isinstance(comparator_artifact, dict):
         comparator_path = store.directory / "comparator.json.gz"

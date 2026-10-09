@@ -1263,6 +1263,107 @@ def select_market_sections(
     }
 
 
+def build_selection_candidate_snapshot(
+    predictions: list[dict[str, Any]], *, generated_at: datetime
+) -> dict[str, Any]:
+    """Freeze the full singles selector input before public section assignment.
+
+    Private replay evidence only: no outcomes, settlements or post-match stats.
+    Selected and unselected candidates are both retained so future policy tests
+    can preserve historical daily capacity.
+    """
+    sections = select_market_sections(predictions)
+    assigned: dict[str, str] = {}
+    tier: dict[str, str | None] = {}
+    for section, key in (
+        ("top200", "top200_picks"), ("value", "value_picks"),
+        ("top_daily", "top_daily_picks"), ("prime", "prime_picks"),
+    ):
+        for card in sections.get(key, []) or []:
+            identity = _selection_identity(card)
+            if identity:
+                assigned[identity] = section
+                tier[identity] = card.get("selection_tier")
+
+    rows = []
+    for source in predictions:
+        if not isinstance(source, dict) or source.get("prediction_family") == "doubles":
+            continue
+        betting = source.get("betting") if isinstance(source.get("betting"), dict) else {}
+        market = source.get("match_winner_market") if isinstance(source.get("match_winner_market"), dict) else {}
+        card = _market_card(source)
+        player1 = source.get("player1") if isinstance(source.get("player1"), dict) else {}
+        player2 = source.get("player2") if isinstance(source.get("player2"), dict) else {}
+        quality = source.get("quality") if isinstance(source.get("quality"), dict) else {}
+        q1 = quality.get("player1") if isinstance(quality.get("player1"), dict) else {}
+        q2 = quality.get("player2") if isinstance(quality.get("player2"), dict) else {}
+        identity = _selection_identity(card or source) if (card is not None or betting) else ""
+        rows.append({
+            "event_id": str(source.get("event_id") or source.get("id") or ""),
+            "scheduled_at": source.get("scheduled_at"),
+            "tour": source.get("tour"),
+            "tournament": source.get("tournament"),
+            "surface": source.get("surface"),
+            "model_version": source.get("model_version"),
+            "winner_id": source.get("winner_id"),
+            "player1": {
+                "id": player1.get("id"), "name": player1.get("name"),
+                "rank": player1.get("rank"), "probability": player1.get("probability"),
+            },
+            "player2": {
+                "id": player2.get("id"), "name": player2.get("name"),
+                "rank": player2.get("rank"), "probability": player2.get("probability"),
+            },
+            "raw_model_probability": (
+                betting.get("model_probability") if betting else _raw_confidence(source)
+            ),
+            "blinq_probability": (
+                betting.get("blinq_probability") if betting else _blinq_probability(source)
+            ),
+            "data_depth": _depth(source),
+            "samples": {
+                "player1_matches": q1.get("matches"), "player2_matches": q2.get("matches"),
+                "player1_surface_matches": q1.get("surface_matches"),
+                "player2_surface_matches": q2.get("surface_matches"),
+            },
+            "priced": bool(card is not None),
+            "betting": ({
+                "selection": betting.get("selection"),
+                "selection_id": betting.get("selection_id"),
+                "odds": betting.get("odds"),
+                "fair_implied_probability": betting.get("fair_implied_probability"),
+                "edge": betting.get("edge"),
+                "expected_value": betting.get("expected_value"),
+                "provider_id": betting.get("provider_id"),
+                "captured_at": betting.get("captured_at"),
+                "betting_day": betting.get("betting_day"),
+            } if betting else None),
+            "two_way_market": ({
+                "player1_odds": market.get("player1_odds"),
+                "player2_odds": market.get("player2_odds"),
+                "player1_implied_probability": market.get("player1_implied_probability"),
+                "player2_implied_probability": market.get("player2_implied_probability"),
+                "captured_at": market.get("captured_at"),
+                "provider_id": market.get("provider_id"),
+            } if market else None),
+            "selected_section": assigned.get(identity),
+            "selection_tier": tier.get(identity),
+        })
+    return {
+        "schema": 1,
+        "generated_at": generated_at.astimezone(timezone.utc).isoformat(),
+        "selection_policy": (sections.get("market_selection") or {}).get("selection_policy"),
+        "selection_counts": (sections.get("market_selection") or {}).get("selection_counts"),
+        "rows": rows,
+        "scope": {
+            "all_singles_selector_inputs": len(rows),
+            "priced_match_winner_inputs": sum(bool(row.get("priced")) for row in rows),
+            "selected_public_sections": sum(bool(row.get("selected_section")) for row in rows),
+            "post_match_fields_excluded": True,
+        },
+    }
+
+
 def annotate_market_publication_candidates(
     predictions: list[dict[str, Any]],
     *,
