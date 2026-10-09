@@ -193,7 +193,13 @@
         // route handler still enforces the account's results access.
         resultsSource?.click();
       }));
-      proxy('Live radar', () => byId('insightShortcut'));
+      // Match the locked LIVE header control: the shortcut remains visible
+      // to eligible users, but carries an upgrade requirement until unlocked.
+      const liveSource = byId('insightShortcut');
+      const liveLocked = !!liveSource?.dataset.upgradePlan || !!liveSource?.classList.contains('is-access-locked');
+      if (available(liveSource)) {
+        nav.append(button('Live radar' + (liveLocked ? ' 🔒' : ''), () => finish(byId('insightShortcut'))));
+      }
       if (joinedControls().length) section('Moje skupiny', 'projects');
       proxy('Info', () => byId('insightBell'));
       const divider = document.createElement('div');
