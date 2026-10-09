@@ -155,7 +155,7 @@ def _merge_stats(match,incoming,counts,quarantine,source):
         match.stats=existing
     return changed
 
-def import_futures(path,matches,counts,quarantine):
+def import_futures(path,matches,counts,quarantine,*,existing_only=False):
     rows=[]; seen=set()
     with Path(path).open("r",encoding="utf-8-sig",newline="") as h:
         for n,row in enumerate(csv.DictReader(h),start=2):
@@ -221,6 +221,9 @@ def import_futures(path,matches,counts,quarantine):
                 counts["foundation_existing_stats_updated"] += 1
             continue
 
+        if existing_only:
+            counts["foundation_unmatched_quarantined_for_identity_review"] += 1
+            continue
         digest=hashlib.sha256(src["key"].encode()).hexdigest()[:24]
         mid=f"hist-js:atp:{digest}"
         if mid in existing_ids:
@@ -326,6 +329,7 @@ def main():
     ap.add_argument("--charting-csv",action="append",default=[])
     ap.add_argument("--out-dir",required=True)
     ap.add_argument("--write-partitions",action="store_true")
+    ap.add_argument("--existing-only",action="store_true",help="Never add unmatched source matches; enrich identity-proven canonical rows only.")
     args=ap.parse_args()
     out=Path(args.out_dir); out.mkdir(parents=True,exist_ok=True)
     matches,safety=sanitize_history_identities(load_partitions(args.history_dir))
@@ -333,7 +337,7 @@ def main():
         raise SystemExit("Canonical history identity quarantine is non-empty")
     counts=Counter(); quarantine=[]
     changed=set()
-    changed |= import_futures(args.futures_csv,matches,counts,quarantine)
+    changed |= import_futures(args.futures_csv,matches,counts,quarantine,existing_only=args.existing_only)
     changed |= import_charting(args.charting_csv,matches,counts,quarantine)
     if args.write_partitions:
         for year in sorted(changed):
