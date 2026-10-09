@@ -1022,3 +1022,60 @@ body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-top{
 @media(prefers-reduced-motion:reduce){
   body#blinqPremium.bqm-unified-menu #bqm-dialog[open]{scroll-behavior:auto!important}
 }
+
+
+/* Admin/public header parity (2026-10-09).
+   The admin control room already has its own sidebar. That must not hide the
+   public icon toolbar in the shared header. Preserve the current-page menu,
+   access gating, original icon sizes and notification badges. */
+@media(min-width:901px){
+  body#blinqPremium.bqm-enabled.blinq-admin .site-header.reference-topbar .header-top{
+    display:flex!important;flex-wrap:nowrap!important;align-items:center!important;
+    justify-content:flex-start!important;gap:10px!important;
+    min-height:64px!important;height:64px!important;
+  }
+  body#blinqPremium.bqm-enabled.blinq-admin .site-header.reference-topbar .header-top > .reference-navigation[data-icon-navigation="1"]{
+    display:flex!important;visibility:visible!important;opacity:1!important;
+    position:relative!important;flex:0 0 auto!important;align-items:center!important;
+    justify-content:flex-end!important;width:auto!important;min-width:0!important;
+    height:64px!important;grid-column:auto!important;grid-row:auto!important;
+    margin-left:auto!important;margin-right:0!important;gap:7px!important;
+    border:0!important;background:transparent!important;box-shadow:none!important;
+  }
+  body#blinqPremium.bqm-enabled.blinq-admin .site-header.reference-topbar .header-top > .header-actions{
+    display:flex!important;position:relative!important;flex:0 0 auto!important;
+    align-items:center!important;justify-content:flex-end!important;gap:7px!important;
+    width:auto!important;min-width:0!important;margin:0!important;padding:0!important;
+    grid-column:auto!important;grid-row:auto!important;
+  }
+  body#blinqPremium.bqm-enabled.blinq-admin .site-header.reference-topbar .header-actions > :is(#bqm-projects,#insightShortcut,#topUpgradeButton,#insightBell):not([hidden]){
+    display:grid!important;place-items:center!important;
+    border:0!important;border-radius:8px!important;background:transparent!important;
+    box-shadow:none!important;
+  }
+  body#blinqPremium.bqm-enabled.blinq-admin .site-header.reference-topbar #bqm-projects{
+    color:#efbe43!important;
+  }
+}
+@media(max-width:900px){
+  /* Defeat the obsolete admin-only one-bell header; reuse the same 3+actions
+     compact toolbar that already passes the public 320–900px browser tests. */
+  body#blinqPremium#blinqPremium.bqm-enabled.blinq-admin .site-header.reference-topbar .header-top > .reference-navigation[data-icon-navigation="1"]{
+    display:flex!important;visibility:visible!important;opacity:1!important;
+    position:relative!important;grid-column:auto!important;grid-row:auto!important;
+    align-items:center!important;justify-content:flex-start!important;
+  }
+  body#blinqPremium#blinqPremium.bqm-enabled.blinq-admin .site-header.reference-topbar .header-top > .header-actions{
+    display:flex!important;position:relative!important;
+    grid-column:auto!important;grid-row:auto!important;
+    align-items:center!important;justify-content:flex-end!important;
+    width:auto!important;min-width:0!important;
+  }
+  body#blinqPremium#blinqPremium.bqm-enabled.blinq-admin .site-header.reference-topbar .header-top .header-actions > :is(#bqm-projects,#insightShortcut,#topUpgradeButton,#insightBell):not([hidden]){
+    display:grid!important;place-items:center!important;border:0!important;
+    background:transparent!important;box-shadow:none!important;
+  }
+  body#blinqPremium#blinqPremium.bqm-enabled.blinq-admin .site-header.reference-topbar .header-top .header-actions > #profileShell{
+    display:flex!important;align-items:center!important;
+  }
+}
