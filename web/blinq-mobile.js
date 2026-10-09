@@ -118,20 +118,26 @@
   const profileToggle = byId('profileMenuToggle');
   let currentLevel = 'root';
   let accountExpanded = false;
+  let navigationExpanded = true;
   let lastOpener = brand;
   function enabled() { return (mq.matches || document.body.classList.contains('blinq-admin')) && !shell.hidden; }
   function menuEnabled() { return !shell.hidden; }
   function syncAvatarMenu() {
     for (const control of [profileButton, profileToggle]) {
       if (!control) continue;
+      const open = menuEnabled() && dialog.open;
       if (menuEnabled()) {
         control.setAttribute('aria-controls', 'bqm-dialog');
         control.setAttribute('aria-haspopup', 'dialog');
-        control.setAttribute('aria-expanded', String(dialog.open));
       } else {
         control.setAttribute('aria-controls', 'profileMenu');
         control.removeAttribute('aria-haspopup');
-        control.setAttribute('aria-expanded', 'false');
+      }
+      // Legacy account handlers can still reset the avatar's ARIA state.
+      // Keep it consistent with the actual open shared dialog.
+      const expanded = String(open);
+      if (control.getAttribute('aria-expanded') !== expanded) {
+        control.setAttribute('aria-expanded', expanded);
       }
     }
     if (menuEnabled() && profileMenu) profileMenu.hidden = true;
@@ -144,6 +150,14 @@
   }
   profileButton?.addEventListener('click', onAvatarOpen, true);
   profileToggle?.addEventListener('click', onAvatarOpen, true);
+  for (const control of [profileButton, profileToggle]) {
+    if (!control) continue;
+    new MutationObserver(() => {
+      if (control.getAttribute('aria-expanded') !== String(menuEnabled() && dialog.open)) {
+        syncAvatarMenu();
+      }
+    }).observe(control, {attributes:true,attributeFilter:['aria-expanded']});
+  }
   function syncMobileIconNav() {
     document.querySelectorAll('[data-mobile-action]').forEach(node => {
       const action = node.dataset.mobileAction;
@@ -220,7 +234,14 @@
         accountPanel.hidden = !accountExpanded;
         accountToggle.setAttribute('aria-expanded', String(accountExpanded));
         accountToggle.classList.toggle('is-open', accountExpanded);
-        if (accountExpanded) accountPanel.querySelector('button')?.focus();
+        if (accountExpanded) {
+          navigationExpanded = false;
+          navigationPanel.hidden = true;
+          navigationToggle.setAttribute('aria-expanded', 'false');
+          navigationToggle.classList.remove('is-open');
+          accountPanel.querySelector('button')?.focus();
+        }
+        syncAvatarMenu();
       });
       accountToggle.className = 'bqm-account-switch';
       accountToggle.setAttribute('aria-controls', 'bqm-account-panel');
@@ -240,6 +261,38 @@
       accountAction('Odhlásiť sa', () => byId('headerLogoutButton'));
       accountPanel.hidden = !accountExpanded;
       nav.append(accountPanel);
+
+      // The same menu opens from both controls, but starts in a different
+      // section: avatar -> account first, logo -> navigation first.
+      // The account is always the upper section, navigation is lower.
+      const navigationPanel = document.createElement('div');
+      navigationPanel.id = 'bqm-navigation-panel';
+      navigationPanel.className = 'bqm-navigation-panel';
+      navigationPanel.setAttribute('role', 'group');
+      navigationPanel.setAttribute('aria-label', 'Navigácia');
+      navHeading.remove();
+      while (nav.firstChild !== divider) navigationPanel.append(nav.firstChild);
+      divider.remove();
+      const navigationToggle = button('Navigácia', () => {
+        navigationExpanded = !navigationExpanded;
+        navigationPanel.hidden = !navigationExpanded;
+        navigationToggle.setAttribute('aria-expanded', String(navigationExpanded));
+        navigationToggle.classList.toggle('is-open', navigationExpanded);
+        if (navigationExpanded) {
+          accountExpanded = false;
+          accountPanel.hidden = true;
+          accountToggle.setAttribute('aria-expanded', 'false');
+          accountToggle.classList.remove('is-open');
+          navigationPanel.querySelector('button')?.focus();
+        }
+        syncAvatarMenu();
+      });
+      navigationToggle.className = 'bqm-navigation-switch';
+      navigationToggle.setAttribute('aria-controls', 'bqm-navigation-panel');
+      navigationToggle.setAttribute('aria-expanded', String(navigationExpanded));
+      navigationToggle.classList.toggle('is-open', navigationExpanded);
+      navigationPanel.hidden = !navigationExpanded;
+      nav.append(navigationToggle, navigationPanel);
     } else if (level === 'predictions') {
       proxy('Všetky predikcie', () => document.querySelector('.reference-navigation [data-route="predictions"]'));
       document.querySelectorAll('#dailyHubTabs [data-daily-hub-tab]').forEach(source => {
@@ -280,6 +333,8 @@
     }
     if (level === 'root' && accountExpanded) {
       nav.querySelector('#bqm-account-panel button')?.focus();
+    } else if (level === 'root' && navigationExpanded) {
+      nav.querySelector('#bqm-navigation-panel button')?.focus();
     } else {
       nav.querySelector('button')?.focus();
     }
@@ -288,6 +343,7 @@
     if (!menuEnabled()) return;
     if (dialog.open) dialog.close();
     accountExpanded = Boolean(expandAccount);
+    navigationExpanded = !accountExpanded;
     lastOpener = opener || brand;
     dialog.dataset.anchor = [profileButton, profileToggle].includes(lastOpener) ? 'account' : 'brand';
     scrim.hidden = false;

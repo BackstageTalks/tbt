@@ -1079,3 +1079,62 @@ body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-top{
     display:flex!important;align-items:center!important;
   }
 }
+
+
+/* Menu hierarchy, October 9: account first and navigation underneath.
+   Use the same configurable page artwork as the home screen, not an invented
+   solid menu gradient. A dark veil keeps white labels legible. */
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open]{
+  background-color:#051910!important;
+  background-image:
+    linear-gradient(180deg,rgba(2,17,14,.78),rgba(2,17,14,.87)),
+    var(--blinq-page-bg,var(--blinq-page-bg-fallback,url('/assets/blinq_background.webp')))!important;
+  background-position:center,center top!important;
+  background-repeat:no-repeat,no-repeat!important;
+  background-size:cover,cover!important;
+  background-attachment:scroll,scroll!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] nav > :is(.bqm-account-switch,.bqm-navigation-switch){
+  display:flex!important;align-items:center!important;justify-content:space-between!important;
+  width:100%!important;margin:4px 0!important;padding:12px 14px!important;
+  min-height:48px!important;border:0!important;border-radius:11px!important;
+  background:rgba(3,33,24,.40)!important;
+  font-size:14px!important;font-weight:800!important;letter-spacing:.02em!important;
+  color:#edc55e!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] nav > :is(.bqm-account-switch,.bqm-navigation-switch).is-open{
+  background:rgba(20,73,52,.52)!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] nav > .bqm-navigation-switch{
+  margin-top:13px!important;border-top:1px solid rgba(176,190,139,.28)!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] nav > .bqm-navigation-switch::after{
+  content:'';width:8px;height:8px;margin-right:6px;
+  border-right:2px solid #edbd48;border-bottom:2px solid #edbd48;
+  transform:rotate(45deg);transition:transform .16s ease;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] nav > .bqm-navigation-switch.is-open::after{
+  transform:rotate(225deg);
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-navigation-panel:not([hidden]){
+  display:flex!important;flex-direction:column!important;
+  gap:2px;padding:5px 0 9px!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-navigation-panel[hidden]{
+  display:none!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-navigation-panel button{
+  display:block!important;width:100%!important;min-height:44px!important;
+  margin:2px 0!important;padding:10px 14px!important;
+  border:0!important;border-radius:11px!important;
+  background:transparent!important;color:#e9f6ef!important;
+  text-align:left!important;font:inherit!important;font-size:14px!important;
+  cursor:pointer!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-navigation-panel button:is(:hover,:focus-visible),
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-account-panel button:is(:hover,:focus-visible){
+  background:rgba(32,98,67,.63)!important;
+}
+@media(prefers-reduced-motion:reduce){
+  body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-navigation-switch::after{transition:none!important}
+}
