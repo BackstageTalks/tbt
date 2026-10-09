@@ -969,3 +969,20 @@ body#blinqPremium.bqm-enabled .site-header .header-top .header-actions > #insigh
 body#blinqPremium .site-header .header-top .header-actions > #insightShortcut.is-access-locked::after{
   display:none!important;content:none!important;
 }
+
+
+/* Desktop navigation overlays must retain the underlying page context.
+   Keep the existing full-screen mobile menu unchanged. */
+#bqm-dialog .bqm-top .bqm-logo-close{
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  width:104px!important;min-width:104px!important;height:48px!important;padding:0!important;
+  border:0!important;background:transparent!important;
+}
+#bqm-dialog .bqm-top .bqm-logo-close img{
+  display:block!important;width:104px!important;height:46px!important;object-fit:contain!important;
+}
+@media(min-width:901px){
+  body#blinqPremium.bqm-unified-menu #bqm-dialog::backdrop{
+    background:rgba(1,15,13,.38)!important;
+  }
+}
