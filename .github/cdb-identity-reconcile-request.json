@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "requested_at_utc": "2026-10-09",
+  "task": "Publish guarded CDB player identity crosswalk to isolated private release",
+  "source_sha": "21dccecf2c1e5b650f17ff27b0a54ce317f567e4",
+  "source_directory_sha256": "d394bb595058f832038bd6aa599a5d48d2e1a7abc6aaece19acba07fc1389430",
+  "candidate_count": 388,
+  "dryrun_verified": 268,
+  "quarantine": 120,
+  "model_promotion": false,
+  "raw_cdb_rewrite": false,
+  "api_requests": 0,
+  "approval": "user requested canonical identity reconciliation"
+}
