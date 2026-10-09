@@ -520,6 +520,7 @@ def main():
                                 "match_id": match_id,
                                 "canonical": _signature(candidate),
                                 "incoming_stats": {},
+                                "baseline_stats": dict(candidate.stats or {}),
                                 "delayed_observation": {
                                     "schema": 1,
                                     "source": "tennisvisuals_validated_pointbypoint",
