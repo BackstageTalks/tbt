@@ -125,6 +125,10 @@ from tbt.services.match_status import (
     event_ids_from_feed, runtime_settled_results, scan_match_statuses,
     verified_terminal_statuses,
 )
+from tbt.services.results_archive import (
+    settled_archive_candidates, save_settled_results_archive,
+    load_settled_results_archive, merge_settled_results,
+)
 from tbt.services.comparator_runtime import (
     RuntimeComparatorError,
     RuntimeArtifactStale,
@@ -1289,6 +1293,13 @@ def feed(req):
         profile = _profile_for(user)
         account_data = public_account(user, cfg=settings, profile=profile)
         source_feed = visible_feed(read_feed(FEED))
+        try:
+            source_feed = merge_settled_results(source_feed, load_settled_results_archive())
+        except AdminStorageUnavailable:
+            # An archive outage cannot grant access or invent outcomes. The
+            # immutable issued feed remains available, but health is explicit.
+            logging.exception("Durable Results archive read unavailable")
+            source_feed["results_archive_unavailable"] = True
         runtime_ui = None
         try:
             runtime_ui, _, _ = load_effective_ui_config()
@@ -1806,6 +1817,12 @@ def internal_match_status_worker(req):
                 if value not in (None,""):
                     settled[key]=value
         saved = save_match_status_snapshot(snapshot)
+        # Persist verified settled public offers before the 06:00 feed rollover.
+        # Zero API calls: use only the provider-verified status snapshot and the
+        # already deployed immutable offer. Readback is required to pass cron.
+        saved["results_archive"] = save_settled_results_archive(
+            settled_archive_candidates(feed_payload, saved.get("statuses") or {})
+        )
         live_results = {"saved": 0, "comeback": 0, "set2": 0}
         try:
             live_results = settle_radar_results(snapshot.get("settled_events") or [])
