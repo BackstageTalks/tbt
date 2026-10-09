@@ -5767,14 +5767,22 @@
         if(group===shortGroup)return false;
         const tokens=group.key.split(' ');
         const fullName=tokens.length>=2&&tokens[0].length>1&&tokens[tokens.length-1]===surname&&tokens[0][0]===initial;
-        // Require an explicit alias match from canonical evidence, not merely
-        // equal surname/initial (which can belong to different people).
-        return fullName&&shortGroup.rows.some(player=>
+        if(!fullName)return false;
+        const aliasConfirmed=shortGroup.rows.some(player=>
           (Array.isArray(player.aliases)?player.aliases:[]).some(alias=>normalizeComparatorPlayerName(alias)===group.key)
         );
+        // A unique first-initial/surname candidate with the same tour and a
+        // near-identical independently displayed ranking can be folded in the
+        // search UI. Never reconcile its separate canonical ID or match history.
+        const rankedPair=shortGroup.rows.length===1&&group.rows.length===1&&
+          String(shortGroup.rows[0].tour||'').toLowerCase()===String(group.rows[0].tour||'').toLowerCase()&&
+          Number(shortGroup.rows[0].rank)>0&&Number(group.rows[0].rank)>0&&
+          Math.abs(Number(shortGroup.rows[0].rank)-Number(group.rows[0].rank))<=10;
+        return aliasConfirmed||rankedPair;
       });
       if(parents.length!==1)continue;
       const parent=parents[0];
+      parent.shortNameGrouped=true;
       parent.index=Math.min(parent.index,shortGroup.index);
       for(const player of shortGroup.rows){
         if(!parent.rows.some(item=>String(item.player_id)===String(player.player_id)))parent.rows.push(player);
@@ -5831,11 +5839,19 @@
     if(!rows.length)return '';
     const groups=comparatorPlayerGroups(rows);
     const visible=groups.flatMap(group=>{
-      // The identity reconciliation belongs in the data pipeline, not the UI.
-      // When exactly one canonical provider ID is known, hide any unlinked
-      // historical import fragments; do not merge their matches or IDs.
+      // Presentation only: never merge historical/canonical IDs or match rows.
       const canonical=group.rows.filter(player=>!String(player.player_id||'').startsWith('hist-js:'));
-      return canonical.length===1?canonical:canonical.length>1?canonical:group.rows;
+      const candidates=canonical.length?canonical:group.rows;
+      if(group.shortNameGrouped){
+        const full=candidates.filter(player=>{
+          const tokens=normalizeComparatorPlayerName(player.name).split(' ');
+          return tokens.length>=2&&tokens.every(token=>token.length>1);
+        });
+        // Exactly one complete name: don't expose its abbreviated duplicate.
+        // Ambiguous full-name candidates remain distinct and selectable.
+        if(full.length===1)return full;
+      }
+      return candidates;
     });
     return `<div class="comparator-search-results">${visible.map(player=>`<button type="button" class="comparator-search-primary" data-comparator-select="${side}" data-player-id="${escapeHtml(String(player.player_id||''))}" data-player-name="${escapeHtml(String(player.name||''))}" data-player-rank="${escapeHtml(String(player.rank??''))}"><strong>${escapeHtml(player.name||'—')}</strong><span>${escapeHtml(String(player.tour||'').toUpperCase())}${Number(player.rank)>0?` · #${escapeHtml(String(player.rank))}`:''}</span></button>`).join('')}</div>`;
   }

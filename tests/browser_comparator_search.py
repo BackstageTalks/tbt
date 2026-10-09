@@ -150,6 +150,36 @@ def main():
                 page.locator("#comparatorSearch1 [data-player-id='260122']").click()
                 assert page.evaluate("comparatorHarness.state.comparator.players[1].player_id") == "260122"
 
+                # The real screenshot shows one abbreviated provider record
+                # and one full-name provider record with ranks #50 and #54.
+                # Only the full name should be offered, never a technical ID.
+                page.evaluate("""() => {
+                    window.BlinqAuth.comparatorPlayers=async(query) => ({
+                        players:query.includes('ambig')?[
+                            {player_id:'short-50',name:'Kecmanovic M.',tour:'atp',rank:50},
+                            {player_id:'provider-54',name:'Miomir Kecmanović',tour:'atp',rank:54},
+                            {player_id:'different-53',name:'Milos Kecmanovic',tour:'atp',rank:53}
+                        ]:[
+                            {player_id:'short-50',name:'Kecmanovic M.',tour:'atp',rank:50},
+                            {player_id:'provider-54',name:'Miomir Kecmanović',tour:'atp',rank:54}
+                        ]
+                    });
+                }""")
+                page.locator("#comparatorPlayer0").fill("kecma")
+                page.locator("#comparatorSearch0 [data-player-id='provider-54']").wait_for()
+                assert page.locator("#comparatorSearch0 .comparator-search-primary").count() == 1
+                assert page.locator("#comparatorSearch0 [data-player-id='short-50']").count() == 0
+                assert page.locator("#comparatorSearch0 [data-comparator-expand]").count() == 0
+                page.locator("#comparatorSearch0 [data-player-id='provider-54']").click()
+                assert page.evaluate("comparatorHarness.state.comparator.players[0].player_id") == "provider-54"
+                page.locator("#comparatorPlayer0").fill("ambig")
+                page.locator("#comparatorSearch0 [data-player-id='different-53']").wait_for()
+                assert page.locator("#comparatorSearch0 .comparator-search-primary").count() == 3
+                assert page.locator("#comparatorSearch0 [data-player-id='short-50']").count() == 1
+                # Ambiguous initials are never silently collapsed or linked.
+                page.locator("#comparatorSearch0 [data-player-id='provider-54']").click()
+                assert page.evaluate("comparatorHarness.state.comparator.players[0].player_id") == "provider-54"
+
                 # Realistic analysis data, not decorative placeholders.
                 page.evaluate("""() => {
                     const h=window.comparatorHarness;
