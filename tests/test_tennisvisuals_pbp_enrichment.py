@@ -1,9 +1,13 @@
 from datetime import datetime, timezone
+import csv
+import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 from scripts.link_pointbypoint_serve_return import (
     _parse_pbp,
+    _pbpx_score_validated,
     _source_files,
     _source_tour,
     _winner_side,
@@ -115,3 +119,85 @@ def test_source_orientation_can_be_swapped_without_guessing_identity():
     )
     assert matched is not None
     assert matched[1] == ((1, "p2"), (2, "p1"))
+
+
+def _synthetic_6_0_6_0_pbpx():
+    # Six games per set: server 1 wins all games, including receiving games.
+    # Deliberately record an ace for player 1 and a double fault for player 2.
+    games = ["ASSS", "DRRR", "SSSS", "RRRR", "SSSS", "RRRR"]
+    return ";".join(games) + "." + ";".join(games)
+
+
+def test_pbpx_tape_not_raw_winner_is_server_relative():
+    parsed = _parse_pbp(_synthetic_6_0_6_0_pbpx())
+    assert parsed is not None
+    assert parsed["winner_side"] == 1
+    assert parsed["set_games"] == [(6, 0), (6, 0)]
+    assert parsed[1]["aces"] == 2
+    assert parsed[2]["double_faults"] == 2
+    # A score from the opposite draw orientation is valid, even when
+    # source winner=1 is not server2. This was the lost-data root cause.
+    assert _pbpx_score_validated(parsed, "0-6 0-6")
+    assert _pbpx_score_validated(parsed, "6-0 6-0")
+    assert not _pbpx_score_validated(parsed, "6-1 6-0")
+    assert not _pbpx_score_validated(parsed, "6-0 0-6")
+
+
+def test_pbpx_linker_uses_point_tape_winner_and_stages_missing_counts(tmp_path, monkeypatch):
+    import scripts.link_pointbypoint_serve_return as linker
+    match = _match("safe", "Andy Murray", "Gilles Simon")
+    match.stats = {}
+    match.provider_payload = {}
+    match.tournament = "Madrid"
+    match.round_name = "R16"
+    match.surface = "Clay"
+    monkeypatch.setattr(linker, "load_partitions", lambda *args: [match])
+    monkeypatch.setattr(
+        linker, "sanitize_history_identities",
+        lambda rows: (list(rows), {"quarantined_rows": 0}),
+    )
+    sourcedir = tmp_path / "source"
+    sourcedir.mkdir()
+    with (sourcedir / "ATP_Singles_pbpx.csv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=[
+            "date", "tournament", "type", "tour", "draw",
+            "server1", "server2", "winner", "pbp", "score",
+            "adf_flag", "round", "surface",
+        ])
+        writer.writeheader()
+        writer.writerow({
+            "date": "2016-05-05", "tournament": "Madrid",
+            "type": "Singles", "tour": "ATP", "draw": "64",
+            "server1": "Andy Murray", "server2": "Gilles Simon",
+            "winner": "1", "pbp": _synthetic_6_0_6_0_pbpx(),
+            "score": "0-6 0-6", "adf_flag": "1",
+            "round": "R16", "surface": "Clay",
+        })
+    out = tmp_path / "link"
+    monkeypatch.setattr(
+        sys, "argv",
+        ["pbpx-linker", "--history-dir", str(tmp_path),
+         "--source-dir", str(sourcedir), "--out-dir", str(out)],
+    )
+    linker.main()
+    report = json.loads((out / "report.json").read_text())
+    stage = json.loads((out / "auto_linked.jsonl").read_text().strip())
+    assert report["counts"]["staged_matches"] == 1
+    assert report["quality_ready_projected_added"] == 1
+    assert report["counts"]["pbpx_raw_winner_not_server_oriented"] == 1
+    assert stage["incoming_stats"]["p1_aces"] == 2.0
+    assert stage["incoming_stats"]["p2_double_faults"] == 2.0
+    assert "winner_derived_from_point_tape" in stage["provenance"][0]["evidence"]
+    assert stage["provenance"][0]["score_validated"] is True
+
+
+def test_pbpx_canonical_payload_retains_provenance():
+    from tbt.data.provider_context import minimize_provider_payload
+    marker = {
+        "schema": 1, "source": "tennisvisuals_validated_pointbypoint",
+        "source_file": "ATP_Singles_pbpx.csv", "source_row": 42,
+        "source_ref": "pinned-sha", "source_date": "2016-05-05",
+        "score_validated": True, "stat_keys": ["p1_aces"],
+    }
+    reduced = minimize_provider_payload({"_tbt_pbpx_enrichment": marker})
+    assert reduced["_tbt_pbpx_enrichment"] == marker
