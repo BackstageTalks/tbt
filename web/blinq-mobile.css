@@ -836,6 +836,32 @@ body#blinqPremium.bqm-enabled .site-header .header-top > .brand.brand-menu-trigg
 }
 
 
+/* Shared menu surface is identical on desktop and mobile. */
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open]{
+  background:#061b15!important;color:#e4f0e9!important;
+  background-image:var(--blinq-login-loader-backdrop,
+    linear-gradient(rgba(1,11,12,.90),rgba(1,11,12,.90)),url('/assets/blinq_page_background.webp'))!important;
+  font:14px Arial,sans-serif!important;overflow-y:auto!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-top{
+  display:grid!important;grid-template-columns:44px 1fr 44px!important;
+  align-items:center!important;min-height:64px!important;
+  border-bottom:1px solid rgba(113,167,144,.3)!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-top button{
+  width:44px!important;height:44px!important;font-size:28px!important;
+  background:transparent!important;border:0!important;color:#e4f0e9!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] nav > button,
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] nav .bqm-account-panel > button{
+  display:block;width:100%;min-height:44px;margin:2px 0;padding:10px 14px;
+  text-align:left;font:inherit;font-size:14px;border:0;border-radius:12px;
+  background:transparent;color:#e4f0e9;cursor:pointer;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] nav button:is(:hover,:focus-visible){
+  background:rgba(30,90,65,.6)!important;
+}
+
 /* One BlinQ menu for the genuine brand and the avatar, with account accordion.
    Right-hand icons keep their exact width/height; only free-space gutters grow. */
 body#blinqPremium.bqm-unified-menu .site-header .header-top > .brand.brand-menu-trigger{
