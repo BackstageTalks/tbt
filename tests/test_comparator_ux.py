@@ -84,12 +84,14 @@ def test_comparator_route_hides_decoration_and_keeps_error_inside_form():
     assert "state-card comparator-error" not in render
 
 
-def test_comparator_search_groups_do_not_merge_canonical_ids():
+def test_comparator_search_hides_internal_identity_duplicates():
     app = Path("web/app.js").read_text(encoding="utf-8")
-    assert "function comparatorPlayerGroups(rows)" in app
-    assert "group.rows.length>1" in app
-    assert "historical(a)-historical(b)" in app
-    assert "data-comparator-expand" in app
-    assert "comparator-search-alternates" in app
-    assert "zápasov v DB" in app
-    assert "Rôzne canonical ID; záznamy nie sú zlúčené." in app
+    render = app.split("function comparatorSearchHtml(side)", 1)[1].split("function comparatorResultHtml(result)", 1)[0]
+    assert "comparatorPlayerGroups(rows)" in render
+    assert "group.rows[0]" in render
+    assert "data-comparator-select" in render
+    assert "data-comparator-expand" not in render
+    assert "comparator-search-alternates" not in render
+    assert "matches_seen" not in render
+    assert "zápasov v DB" not in render
+    assert "Rôzne canonical ID" not in render
