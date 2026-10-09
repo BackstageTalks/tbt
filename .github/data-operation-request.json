@@ -1,12 +1,12 @@
 {
   "schema": 1,
-  "mode": "deploy-current",
+  "mode": "statistics",
   "promote": false,
-  "purpose": "Deploy verified Match Comparator UX cleanup only: maximum-set labels, ATP Grand Slam seasonal defaults, WTA 3-set safety, canonical player-name autocomplete and reduced duplicate copy. Reuse immutable prediction generation; no provider data collection, no model promotion, no canonical history mutation.",
-  "requested_on": "2026-10-08",
-  "max_requests": 1,
-  "start": "",
-  "end": "",
-  "training_scope": "deployment_only",
+  "purpose": "Fill missing canonical ATP/WTA match-level serve and return statistics from TennisAPI; preserve verified identities, prior quality, shared provider-day budget and 1500-request reserve. Do not train or promote a model.",
+  "requested_on": "2026-10-09",
+  "max_requests": 6000,
+  "start": "2022-01-01",
+  "end": "2026-10-08",
+  "training_scope": "none",
   "historical_match_winner_odds_as_model_feature": false
 }
