@@ -167,6 +167,18 @@ def minimize_provider_payload(
             ) if key in pbpx
         }
 
+    delayed = raw.get("_tbt_pbpx_delayed_observation")
+    if isinstance(delayed, dict) and delayed.get("schema") == 1:
+        # Private source-dated evidence only: NEVER promote these values to
+        # match.stats or to pre-match model features at tournament-start time.
+        out["_tbt_pbpx_delayed_observation"] = {
+            key: delayed[key] for key in (
+                "schema", "source", "source_ref", "source_file",
+                "source_row", "source_date", "status",
+                "score_validated", "stats",
+            ) if key in delayed
+        }
+
     termination = _compact_termination(raw)
     if termination is not None:
         out["_tbt_termination"] = termination
