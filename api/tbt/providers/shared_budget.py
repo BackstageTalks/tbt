@@ -24,6 +24,7 @@ GLOBAL_CEILING = PROVIDER_PLAN_LIMIT - PROVIDER_RESERVE
 RESET_TIMEZONE = ZoneInfo("Europe/Bratislava")
 RESET_HOUR = 19
 RESET_MINUTE = 10
+DAILY_STOP_MINUTE = 8  # Hard stop 19:08–19:10 even for high-priority calls
 # Runtime classes retain bounded allocations. History/backfill may opportunistically
 # use any provider-day capacity that is still available, but GLOBAL_CEILING remains
 # authoritative and always preserves the 3% provider reserve.
@@ -127,6 +128,12 @@ def _summary(buckets: list[list[int]], slot: int) -> dict[str, Any]:
 def calculate(ledger: dict | None, purpose: str, requested: int = 1,
               *, now: datetime | None = None) -> tuple[dict, dict]:
     """Pure reservation planning; no paid API or storage requests."""
+    instant = now or datetime.now(timezone.utc)
+    if instant.tzinfo is None:
+        raise ValueError("Budget times must be timezone-aware")
+    local = instant.astimezone(RESET_TIMEZONE)
+    if local.hour == RESET_HOUR and DAILY_STOP_MINUTE <= local.minute < RESET_MINUTE:
+        raise SharedBudgetExhausted("Provider daily hard stop: 19:08–19:10 Bratislava")
     if purpose not in PURPOSE_CAPS:
         raise ValueError("Unknown budget purpose")
     if isinstance(requested, bool) or not isinstance(requested, int) or not 1 <= requested <= 3000:
