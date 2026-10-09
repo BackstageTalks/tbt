@@ -28,7 +28,7 @@ from ..utils import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PROVIDER_REQUEST_RESERVE = 500
+DEFAULT_PROVIDER_REQUEST_RESERVE = 750
 
 
 def _provider_request_reserve() -> int:
