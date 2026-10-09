@@ -149,8 +149,16 @@ jobs:
           leakage=json.loads((root/'leakage_audit_report.json').read_text())
           if leakage.get('status')!='pass' or leakage.get('failed_checks'):
               raise SystemExit('Training leakage audit failed')
-          if pq.read_metadata(root/'training_table.parquet').num_rows < 800000:
+          table_rows=pq.read_metadata(root/'training_table.parquet').num_rows
+          training_report=json.loads((root/'training_table_report.json').read_text())
+          if table_rows < 800000:
               raise SystemExit('Incomplete training table: reject publish')
+          if table_rows != int(training_report.get('rows') or -1):
+              raise SystemExit('Training parquet/report row count mismatch')
+          if table_rows != int(leakage.get('rows') or -1):
+              raise SystemExit('Training parquet/leakage row count mismatch')
+          if not leakage.get('checks') or any(value is not True for value in leakage['checks'].values()):
+              raise SystemExit('Training leakage audit incomplete or failed')
           ReleaseStore(
               os.environ["TBT_DATA_REPOSITORY"],
               "tbt-training-table-v1",
