@@ -54,6 +54,18 @@ def main():
                 }""")
                 assert len(tennis_paths)==2 and tennis_paths[0]==tennis_paths[1],(width,tennis_paths)
                 assert len(tennis_paths[0])==2,(width,'expected two distinctive ball seams')
+                # Real brand file opens the menu; there is no second hamburger.
+                brand=page.locator('.header-top > .brand')
+                assert brand.locator('img.brand-source-logo').get_attribute('src')=='/assets/blinq_logo.svg'
+                assert page.locator('#bqm-toggle').is_hidden(),(width,'old hamburger still visible')
+                assert brand.locator('.brand-menu-chevron').is_visible()==(width<=900)
+                if width<=900:
+                    assert brand.get_attribute('role')=='button'
+                    assert brand.get_attribute('aria-controls')=='bqm-dialog'
+                    assert brand.get_attribute('aria-expanded')=='false'
+                else:
+                    assert brand.get_attribute('role') is None
+                    assert brand.get_attribute('href')=='#predictions'
                 # Approved header: gold rocket instead of PP, no tile borders,
                 # and no second navigation row on phones.
                 assert page.locator('#bqm-projects svg.project-rocket-icon').count()==1,(width,'rocket icon missing')
@@ -89,7 +101,7 @@ def main():
                             overflow:document.documentElement.scrollWidth-innerWidth,
                             visible:rects.map(x=>x.selector)};
                     }''')
-                    assert len(icon_fit['visible'])==10,(width,icon_fit)
+                    assert len(icon_fit['visible'])==9,(width,icon_fit)
                     assert not icon_fit['overlap'],(width,icon_fit)
                     assert icon_fit['left']>=0 and icon_fit['right']<=width+1,(width,icon_fit)
                     assert icon_fit['overflow']<=2,(width,icon_fit)
@@ -160,7 +172,7 @@ def main():
                             h.renderInsightBell();
                         }""")
                     geometry=page.evaluate('''() => {
-                        const els=['#bqm-toggle','.header-top>.brand','#bqm-projects','#insightBell','#profileButton'].map(s=>document.querySelector(s).getBoundingClientRect());
+                        const els=['.header-top>.brand','#bqm-projects','#insightBell','#profileButton'].map(s=>document.querySelector(s).getBoundingClientRect());
                         return {overlap:els.some((r,i)=>i&&r.left<els[i-1].right-1),overflow:document.documentElement.scrollWidth-innerWidth};
                     }''')
                     assert not geometry['overlap'],(width,geometry)
@@ -197,7 +209,9 @@ def main():
                     assert page.evaluate('groupCalls')==['one']
                 page.evaluate("document.body.classList.add('blinq-admin');document.getElementById('telegramGroupsPanel').hidden=false")
                 page.wait_for_timeout(50)
-                assert page.locator('#bqm-toggle').is_visible()
+                assert page.locator('#bqm-toggle').is_hidden(),(width,'legacy hamburger returned in admin')
+                assert brand.locator('.brand-menu-chevron').is_visible(),(width,'brand menu chevron missing')
+                assert brand.get_attribute('role')=='button'
                 page.evaluate("document.getElementById('bqm-projects').dataset.unread='12';document.getElementById('bqm-projects').classList.add('has-unread');document.getElementById('insightUnread').textContent='6';document.getElementById('insightUnread').hidden=false")
                 assert page.locator('#bqm-projects').evaluate("n=>getComputedStyle(n,'::after').content")=='"12"'
                 bell_box=page.locator('#insightBell').bounding_box()
@@ -208,12 +222,21 @@ def main():
                     assert upgrade.is_visible()==(upgrade.get_attribute('hidden') is None),(width,'upgrade visibility should follow entitlement')
                 else:
                     assert not page.locator('#topUpgradeButton').is_visible()
-                page.locator('#bqm-toggle').click()
+                brand.click()
+                assert page.locator('#bqm-dialog').is_visible()
+                assert brand.get_attribute('aria-expanded')=='true'
                 root_text=page.locator('#bqm-dialog nav').inner_text()
                 assert 'Výsledky' in root_text,(width,root_text)
                 for unwanted in ('Členstvo', 'Komunita', 'Jazyk', 'Môj účet', 'Odhlásiť sa'):
                     assert unwanted not in root_text,(width,root_text)
                 page.get_by_role('button',name='Zavrieť menu',exact=True).click()
+                assert brand.get_attribute('aria-expanded')=='false'
+                if width==390:
+                    brand.focus()
+                    page.keyboard.press('Space')
+                    assert page.locator('#bqm-dialog').is_visible(), 'logo must support keyboard space'
+                    page.keyboard.press('Escape')
+                    assert not page.locator('#bqm-dialog').is_visible()
                 page.locator('#profileButton').click()
                 assert page.locator('#profileMenu').is_visible()
                 menu_box=page.locator('#profileMenu').bounding_box()
@@ -229,7 +252,7 @@ def main():
                     page.locator('.site-header').screenshot(path=str(Path(os.environ['BLINQ_SCREENSHOTS'])/'admin-header-review.png'))
                 assert not errors,(width,errors)
                 page.close()
-            print('Header rocket/gold navigation, single-row mobile, badges, profile and desktop: PASS')
+            print('Real-logo menu trigger, unchanged header icons, single-row mobile, badges, profile and desktop: PASS')
         finally:
             browser.close()
 
