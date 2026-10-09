@@ -18,7 +18,7 @@ def test_shared_api_budget_documentation_matches_runtime_contract():
 
     assert f"**{PROVIDER_PLAN_LIMIT:,} requests per provider billing day**" in text
     assert f"**{GLOBAL_CEILING:,} request global ceiling**" in text
-    assert f"**{PROVIDER_RESERVE:,} requests (5%)**" in text
+    assert f"**{PROVIDER_RESERVE:,} requests (3%)**" in text
     assert f"**{RESET_HOUR:02d}:{RESET_MINUTE:02d} Europe/Bratislava**" in text
 
     labels = {
