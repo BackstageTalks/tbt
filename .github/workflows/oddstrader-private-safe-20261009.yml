@@ -11,6 +11,7 @@ permissions:
   contents: read
 
 # Same per-repository writer lock as production history/enrichment jobs.
+# Retry corrected provider_context_json immutable gate; preserve private-only audit and readback.
 concurrency:
   group: tbt-history-data-writer
   cancel-in-progress: false
