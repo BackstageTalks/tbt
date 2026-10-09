@@ -205,31 +205,54 @@ def main():
         links.append(p)
     player_votes = defaultdict(set)
     for link in links:
-        for n in (1,2):
-            key = (link["tour"],link[f"source_player{n}_id"])
-            player_votes[key].add(link[f"canonical_player{n}_id"])
-
-    with (out/"match_links.jsonl").open("w",encoding="utf-8") as f:
+        for n in (1, 2):
+            player_votes[(link["tour"], link[f"source_player{n}_id"])].add(
+                link[f"canonical_player{n}_id"])
+    conflicted_players = {key for key, ids in player_votes.items() if len(ids) > 1}
+    for tour, sid in sorted(conflicted_players):
+        review.append({"reason": "source_player_conflict", "tour": tour,
+                       "source_player_id": sid,
+                       "candidate_canonical_ids": sorted(player_votes[(tour, sid)])})
+    if conflicted_players:
+        clean_links = []
         for link in links:
-            f.write(json.dumps(link,ensure_ascii=False)+"\n")
-    with (out/"review.jsonl").open("w",encoding="utf-8") as f:
-        for item in review:
-            f.write(json.dumps(item,ensure_ascii=False)+"\n")
-    player_path=out/"player_source_crosswalk.csv"
-    with player_path.open("w",encoding="utf-8-sig",newline="") as f:
-        writer=csv.DictWriter(f,fieldnames=("tour","source_player_id","canonical_player_id","status"))
-        writer.writeheader()
-        for (tour,sid), ids in sorted(player_votes.items()):
-            if len(ids)==1:
-                writer.writerow({"tour":tour,"source_player_id":sid,
-                                "canonical_player_id":next(iter(ids)),
-                                "status":"single_unambiguous_identity_proposal"})
-                counts["player_ids_unique"]+=1
+            if any((link["tour"], link[f"source_player{n}_id"]) in conflicted_players
+                   for n in (1, 2)):
+                counts["links_quarantined_player_conflict"] += 1
+                review.append({"reason": "source_player_conflict_invalidates_match_link",
+                               "source_match_id": link["source_match_id"]})
             else:
-                counts["player_ids_conflicted"]+=1
-                review.append({"reason":"source_player_conflict","source_player_id":sid,
-                               "candidate_canonical_ids":sorted(ids)})
-    counts["linked_unique_matches"]=len(links)
+                clean_links.append(link)
+        links = clean_links
+    player_votes.clear()
+    for link in links:
+        for n in (1, 2):
+            player_votes[(link["tour"], link[f"source_player{n}_id"])].add(
+                link[f"canonical_player{n}_id"])
+    with (out / "match_links.jsonl").open("w", encoding="utf-8") as f:
+        for link in links:
+            f.write(json.dumps(link, ensure_ascii=False) + "\n")
+    with (out / "review.jsonl").open("w", encoding="utf-8") as f:
+        for item in review:
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
+    with (out / "player_source_crosswalk.csv").open(
+        "w", encoding="utf-8-sig", newline=""
+    ) as f:
+        writer = csv.DictWriter(
+            f, fieldnames=("tour", "source_player_id", "canonical_player_id", "status")
+        )
+        writer.writeheader()
+        for (tour, sid), ids in sorted(player_votes.items()):
+            if len(ids) != 1:
+                raise ValueError("Unresolved player mapping conflict")
+            writer.writerow({
+                "tour": tour, "source_player_id": sid,
+                "canonical_player_id": next(iter(ids)),
+                "status": "single_unambiguous_identity_proposal",
+            })
+            counts["player_ids_unique"] += 1
+    counts["player_ids_conflicted"] = len(conflicted_players)
+    counts["linked_unique_matches"] = len(links)
     counts["production_writes"]=0
     report={"schema":1,"status":"PROPOSED_LINKS_ONLY_NOT_IMPORTED",
             "production_mutated":False,"counts":dict(counts),
