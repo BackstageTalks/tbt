@@ -1,3 +1,5 @@
+# The source release can change during preceding PBPX single-writer. This run
+# seals a FRESH private canonical backup before any new write.
 name: BlinQ governed historical facts integration — all current sources
 on:
   push:
@@ -16,7 +18,7 @@ concurrency:
 jobs:
   enrich_missing_canonical_facts:
     runs-on: ubuntu-latest
-    timeout-minutes: 165
+    timeout-minutes: 115
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PYTHONPATH: api:scripts
@@ -32,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile scripts/research/promote_verified_missing_match_facts.py scripts/research/nightly_private_canonical_gap_scan.py scripts/import_blinq_offline_bundle.py scripts/link_pointbypoint_serve_return.py scripts/import_offline_linked_serve_return.py
+          python -m py_compile scripts/research/private_canonical_snapshot_v2.py scripts/research/promote_verified_missing_match_facts.py scripts/research/nightly_private_canonical_gap_scan.py scripts/import_blinq_offline_bundle.py scripts/link_pointbypoint_serve_return.py scripts/import_offline_linked_serve_return.py
           test -n "$GH_TOKEN" || exit 1
           test "$(gh repo view BackstageTalks/tbt-data --json visibility -q .visibility)" = "PRIVATE" || exit 1
       - name: Install existing deterministic history/schema dependencies
