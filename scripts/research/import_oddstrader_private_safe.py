@@ -192,6 +192,111 @@ def parse_payload(value):
         return {}
     return json.loads(value)
 
+def preserve_original_context(years: list[int]) -> dict:
+    """Publish only new OddsTrader markers, retaining every original parquet value.
+
+    The generic history writer re-minimizes *all* provider contexts when it
+    reserializes a partition. For historical market enrichment, that could
+    silently alter or drop pre-existing provider evidence. Reconstruct the
+    changed partition from the sealed original Arrow table, grafting in only
+    newly inserted, source-validated OddsTrader markers.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from tbt.data.history_snapshot import load_manifest, write_manifest
+
+    manifest = load_manifest(BEFORE)
+    if not isinstance(manifest.get("years"), dict):
+        raise RuntimeError("Missing sealed canonical manifest")
+    totals = Counter()
+    per_year = {}
+    for year in years:
+        name = f"history-{year}.parquet"
+        original = pq.read_table(BEFORE / name)
+        generated = pq.read_table(SHADOW / name)
+        if original.schema.names != generated.schema.names or original.num_rows != generated.num_rows:
+            raise RuntimeError("Parquet schema/row count drift: " + name)
+        old = original.to_pandas()
+        new = generated.to_pandas()
+        if "provider_context_json" not in old or old["match_id"].duplicated().any() or new["match_id"].duplicated().any():
+            raise RuntimeError("Unverifiable original/updated match identity: " + name)
+        if set(old["match_id"]) != set(new["match_id"]):
+            raise RuntimeError("Match identity set changed: " + name)
+        aligned = new.set_index("match_id").loc[list(old["match_id"])]
+        for col in old.columns:
+            if col != "provider_context_json" and not old[col].equals(aligned[col].reset_index(drop=True)):
+                raise RuntimeError("Immutable canonical column changed: " + name + "." + col)
+
+        safe_values = []
+        added_by_year = Counter()
+        for old_raw, new_raw in zip(old["provider_context_json"], aligned["provider_context_json"]):
+            before = parse_payload(old_raw)
+            candidate = parse_payload(new_raw)
+            if not isinstance(before, dict) or not isinstance(candidate, dict):
+                raise RuntimeError("Malformed canonical context: " + name)
+            newly_added = set(candidate) - set(before)
+            if newly_added - ALLOWED_MARKERS:
+                raise RuntimeError("Unexpected nonmarket evidence added: " + name)
+            for key in ALLOWED_MARKERS & set(before):
+                if key not in candidate or candidate[key] != before[key]:
+                    raise RuntimeError("Existing market evidence changed: " + name + "." + key)
+            for key in newly_added:
+                marker = candidate[key]
+                if not isinstance(marker, dict) or marker.get("source") != "oddstrader_atp_2015_2026":
+                    raise RuntimeError("Unverified new market source: " + name)
+                if key == "_tbt_market_history" and (
+                    not isinstance(marker.get("opening"), dict)
+                    or marker.get("closing") is not None
+                    or marker.get("price_kind") != "historical_open_close"
+                ):
+                    raise RuntimeError("Unsafe opening/closing semantics: " + name)
+                if key == "_tbt_match_winner_odds" and marker.get("price_kind") != "historical_two_way_unspecified_timestamp":
+                    raise RuntimeError("Unsafe unspecified-price semantics: " + name)
+                added_by_year[key] += 1
+                totals[key] += 1
+            if candidate != before:
+                totals["contexts_reserialized_by_generic_writer"] += 1
+            if newly_added:
+                safe = dict(before)
+                for key in newly_added:
+                    safe[key] = candidate[key]
+                safe_values.append(json.dumps(safe, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+            else:
+                # Keep byte-for-byte original JSON when no new market exists.
+                safe_values.append(old_raw)
+        if not added_by_year:
+            raise RuntimeError("Unexpected rewritten year without new market evidence: " + name)
+
+        idx = original.schema.get_field_index("provider_context_json")
+        if idx < 0:
+            raise RuntimeError("Missing canonical provider context: " + name)
+        rewritten = original.set_column(
+            idx, original.schema.field(idx),
+            pa.array(safe_values, type=original.schema.field(idx).type),
+        )
+        target = SHADOW / name
+        temporary = target.with_suffix(".parquet.tmp")
+        try:
+            pq.write_table(rewritten, temporary, compression="zstd")
+            temporary.replace(target)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+        metadata = manifest["years"].get(str(year))
+        if not isinstance(metadata, dict) or int(metadata.get("rows", -1)) != original.num_rows:
+            raise RuntimeError("Sealed manifest rows differ: " + name)
+        metadata["sha256"] = hash_file(target)
+        metadata["bytes"] = target.stat().st_size
+        per_year[str(year)] = dict(added_by_year)
+
+    if years:
+        write_manifest(SHADOW, manifest)
+    return {"inserted_markers": {
+        key: value for key, value in totals.items() if key in ALLOWED_MARKERS
+    }, "contexts_safely_restored": totals["contexts_reserialized_by_generic_writer"],
+        "per_year": per_year, "all_preexisting_parquet_columns_and_payloads_preserved": True}
+
+
 def immutable_market_gate(years: list[int]) -> dict:
     changed_rows = 0
     new_markers = Counter()
@@ -303,7 +408,11 @@ def main():
         audit["changed_years"] = sorted(write_years)
         if rows(SHADOW) != audit["canonical_before_rows"]:
             raise RuntimeError("Local canonical row count mutated")
+        audit["context_preservation"] = preserve_original_context(sorted(write_years))
         audit["immutable_gate"] = immutable_market_gate(sorted(write_years))
+        if (audit["immutable_gate"]["new_market_markers"].get("_tbt_market_history", 0) != writes["opening"] or
+                audit["immutable_gate"]["new_market_markers"].get("_tbt_match_winner_odds", 0) != writes["fallback"]):
+            raise RuntimeError("Inserted marker totals do not match guarded importer writes")
         from tbt.data.history_snapshot import load_partitions
         from tbt.data.history_safety import sanitize_history_identities
         from tbt.services.data_quality import audit_history
