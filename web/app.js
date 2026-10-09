@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email',loginDate:''}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminCalibration:null, adminCalibrationLoading:false, adminCalibrationError:'', adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email',loginDate:''}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -4853,15 +4853,86 @@
     }catch(error){showStatus(error?.message||'Lokálny koncept sa nepodarilo načítať.');}
   }
 
+
+  function renderAdminCalibration(){
+    const d=state.adminCalibration||{},shadow=d.shadow||{},unseen=d.unseen||{},gate=shadow.gate||{};
+    const active=Boolean(d.candidate_active);
+    const numberOrDash=value=>Number.isSafeInteger(value)&&value>=0?value.toLocaleString('sk-SK'):'—';
+    const percent=value=>typeof value==='number'&&Number.isFinite(value)?(value*100).toFixed(1)+' %':'—';
+    const score=(value,kind)=>typeof value!=='number'||!Number.isFinite(value)?'—':
+      kind==='accuracy'||kind==='roc_auc'||kind==='ece_10'?percent(value):value.toFixed(4);
+    const fmtStamp=value=>{if(!value)return '—';const t=new Date(value);return Number.isFinite(t.getTime())?t.toLocaleString('sk-SK',{dateStyle:'medium',timeStyle:'short'}):'—';};
+    const branch=d.research_branch_url||'https://github.com/BackstageTalks/tbt/tree/research/model-calibration';
+    const link='<a href="'+escapeHtml(branch)+'" target="_blank" rel="noopener noreferrer">GitHub: kalibračná vetva ↗</a>';
+    const head=`<div class="admin-ux-heading"><div><small>MODEL LAB · READ ONLY</small><h2>Kalibrácia modelu</h2><p>Automaticky aktualizovaný stav produkčného modelu a nového kandidáta. Bez zásahu do nasadenia.</p></div><button class="btn btn-ghost" type="button" data-admin-action="calibration-refresh" ${state.adminCalibrationLoading?'disabled':''}>${state.adminCalibrationLoading?'Načítavam…':'↻ Obnoviť údaje'}</button></div>`;
+    if(state.adminCalibrationError&&!state.adminCalibrationLoading)return `<section class="admin-ux-section admin-calibration">${head}<div class="admin-runtime-note is-error" role="alert"><strong>Kalibračné údaje ešte nie sú dostupné</strong><span>${escapeHtml(state.adminCalibrationError)}. Dáta sa dopĺňajú zo súkromného GitHub Actions monitora.</span></div><p class="admin-calibration-links">${link}</p></section>`;
+    if(!state.adminCalibration)return `<section class="admin-ux-section admin-calibration">${head}<div class="admin-runtime-note"><strong>${state.adminCalibrationLoading?'Načítavam kalibračný snapshot…':'Dáta ešte neboli načítané'}</strong><span>Automatická synchronizácia prebieha nezávisle od predikčného modelu.</span></div><p class="admin-calibration-links">${link}</p></section>`;
+    const progress=(title,count,target,remaining,hint)=>{
+      const valid=Number.isSafeInteger(count)&&Number.isSafeInteger(target)&&target>0;
+      const filled=valid?Math.max(0,Math.min(100,100*count/target)):0;
+      return `<article class="admin-calibration-progress"><div class="admin-calibration-progress-head"><strong>${escapeHtml(title)}</strong><span>${numberOrDash(count)} / ${numberOrDash(target)}</span></div><div class="admin-calibration-track" role="progressbar" aria-label="${escapeHtml(title)}" aria-valuenow="${valid?count:0}" aria-valuemin="0" aria-valuemax="${valid?target:1}"><div style="width:${filled.toFixed(2)}%"></div></div><p>${escapeHtml(hint)} · Chýba <strong>${numberOrDash(remaining)}</strong></p></article>`;
+    };
+    const card=(label,value,hint)=>`<article class="admin-calibration-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(hint)}</span></article>`;
+    const metrics=[['Úspešnosť','accuracy'],['Log loss','log_loss'],['Brier score','brier_score'],['ECE kalibrácia','ece_10'],['ROC AUC','roc_auc']];
+    const rows=metrics.map(([label,key])=>{
+      const old=shadow.production?.[key],next=shadow.candidate?.[key];
+      const delta=typeof next==='number'&&typeof old==='number'?next-old:null;
+      const better=delta!==null?(key==='accuracy'||key==='roc_auc'?delta>0:delta<0):false;
+      const same=delta===0;
+      const deltaText=delta===null?'—':(delta>0?'+':'')+(key==='accuracy'||key==='roc_auc'||key==='ece_10'?(delta*100).toFixed(2)+' pp':delta.toFixed(4));
+      return `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(score(old,key))}</td><td>${escapeHtml(score(next,key))}</td><td class="${same?'':better?'is-better':'is-worse'}">${escapeHtml(deltaText)}</td></tr>`;
+    }).join('');
+    const decision=d.last_decision||{};
+    const pairDecision=decision.same_pair===true;
+    const status=decision.status==='rejected'&&pairDecision?'Posledný kandidát zamietnutý':
+      gate.ready_for_promotion_review&&active?'Pripravený na odborné posúdenie':
+      active?'V shadow testovaní': 'Čakáme na nový kandidátsky model';
+    const incomplete=!active||!Number(shadow.settled);
+    return `<section class="admin-ux-section admin-calibration">${head}
+      <div class="admin-calibration-status${d.stale?' is-stale':''}" role="status"><strong>${escapeHtml(status)}</strong><span>${d.stale?'Údaje synchronizácie sú staršie než 8 hodín.':''} Synchronizácia: ${escapeHtml(fmtStamp(d.updated_at))} · Shadow report: ${escapeHtml(fmtStamp(d.shadow_generated_at))}</span></div>
+      <div class="admin-calibration-grid">
+        ${card('Aktívny champion',String(d.production_version||'—'),'Produkčná verzia')}
+        ${card('Nový kandidát',String(d.candidate_version||'—'),active?'Shadow – bez automatického nasadenia':'Čaká na vytvorenie')}
+        ${card('Vyhodnotené v shadow',numberOrDash(shadow.settled),'z '+numberOrDash(shadow.captured)+' zaznamenaných')}
+        ${card('Čakajú na výsledok',numberOrDash(shadow.pending),'Predzápasové nemenné snapshoty')}
+      </div>
+      <div class="admin-calibration-progress-grid">
+        ${progress('Shadow kandidát – cieľ pre sledovanie',shadow.settled,shadow.target_for_tracking,shadow.remaining_to_target,'Aktuálny presný pár modelov')}
+        ${progress('Nové nezávislé zápasy – cieľ pre ďalší tréning',unseen.eligible_rows,unseen.target_for_retrain,unseen.remaining_to_target,'Už raz použité zápasy sa nepočítajú')}
+        ${progress('Nové zápasy – minimum na prehodnotenie',unseen.eligible_rows,unseen.minimum_for_review,unseen.remaining_to_review,'Minimálne '+numberOrDash(shadow.minimum_for_review)+' shadow výsledkov a tri dni')}
+      </div>
+      <div class="admin-calibration-split">
+        <article class="admin-calibration-panel"><h3>Nový model vs produkčný</h3>
+          <p>Rovnaké zápasy, skutočné výsledky, zmrazené pravdepodobnosti pred štartom. Počet: ${numberOrDash(shadow.settled)} · dni: ${numberOrDash(shadow.settled_utc_days)}</p>
+          <div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Metrika</th><th>Champion</th><th>Kandidát</th><th>Rozdiel</th></tr></thead><tbody>${rows}</tbody></table></div>
+          <p class="admin-calibration-foot">${incomplete?'Zatiaľ nie je dostatočná aktívna porovnateľná vzorka.':'Zelený rozdiel je lepší; pri log loss, Brier a ECE je lepšia nižšia hodnota.'} Žiadne automatické povýšenie modelu.</p>
+        </article>
+        <article class="admin-calibration-panel"><h3>Brána kalibrácie</h3><div class="admin-calibration-gates">
+          ${[
+            ['200 vyhodnotených zápasov',gate.minimum_matches_met],
+            ['Aspoň 3 samostatné dni',gate.minimum_days_met],
+            ['Úspešnosť nie horšia',gate.accuracy_not_worse],
+            ['Lepší log loss',gate.log_loss_better],
+            ['Lepší Brier score',gate.brier_better],
+            ['ECE nie horšia',gate.ece_not_worse],
+          ].map(([label,pass])=>`<div><span>${escapeHtml(label)}</span><strong class="${pass?'is-good':'is-pending'}">${pass?'✓':'—'}</strong></div>`).join('')}
+        </div><p class="admin-calibration-foot">Audit nových zápasov: ${escapeHtml(fmtStamp(unseen.readiness_generated_at))}. ${unseen.available?'Cohort nezávislý od už spotrebovaných rozhodnutí.':'Pozor: audit nových zápasov zatiaľ nepatrí aktuálnemu championovi.'}</p></article>
+      </div>
+      <div class="admin-calibration-bottom"><div><strong>Posledné rozhodnutie</strong><span>${escapeHtml(decision.status||'neznáme')} · ${escapeHtml(decision.candidate_version||'—')} · ${escapeHtml(fmtStamp(decision.decided_at))}${pairDecision?' · rovnaký modelový pár':' · historický kandidát'}</span></div><div class="admin-calibration-links">${link} · <a href="https://github.com/BackstageTalks/tbt-data/blob/main/audit/model-promotion-readiness-latest.json" target="_blank" rel="noopener noreferrer">Readiness audit ↗</a> · <a href="https://github.com/BackstageTalks/tbt-data/releases/tag/tbt-model-shadow-v1" target="_blank" rel="noopener noreferrer">Shadow report ↗</a></div></div>
+      <p class="admin-calibration-foot">Kandidát sa automaticky identifikuje podľa presnej verzie nového artefaktu. Po schválenom nasadení sa ďalšie hodnotenie začne s novým párom champion/kandidát. História zostáva uložená na GitHube; tlačidlo Obnoviť iba načíta posledný privátny snapshot.</p>
+    </section>`;
+  }
+
   function renderAdminRoute(){
-    const tabs=[['accounts','Účty','Prístup · platnosť'],['projects','Projektové skupiny','Skupiny · INFO · výsledky'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard setting','3 karty · KPI'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram','Skupiny · odkazy'],['insights','Info & LIVE','Správy · radar'],['system','Systém','Diagnostika']];
+    const tabs=[['accounts','Účty','Prístup · platnosť'],['projects','Projektové skupiny','Skupiny · INFO · výsledky'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard setting','3 karty · KPI'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram','Skupiny · odkazy'],['insights','Info & LIVE','Správy · radar'],['calibration','Kalibrácia','Model · 1 000 zápasov'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
-    const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
-    const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],projects:['Projektové skupiny','Samostatné skupiny bez ohľadu na level, ich INFO kanál a vyhodnotenia.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard setting','Nastavenie troch hlavných metrík bez zmeny grafiky.'],layout:['Zobrazenie','SHOW / BLUR / HIDE pre panely a jednotlivé riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
+    const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,calibration:renderAdminCalibration,system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
+    const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],projects:['Projektové skupiny','Samostatné skupiny bez ohľadu na level, ich INFO kanál a vyhodnotenia.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard setting','Nastavenie troch hlavných metrík bez zmeny grafiky.'],layout:['Zobrazenie','SHOW / BLUR / HIDE pre panely a jednotlivé riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],calibration:['Kalibrácia modelu','Shadow výsledky, chýbajúce zápasy a porovnanie s produkciou.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
     let contextual='';
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov sa aplikujú okamžite</div>';
     else if(state.adminTab==='projects')contextual='<div class="admin-account-direct-note"><span></span>Skupiny a správy sa ukladajú okamžite</div>';
     else if(state.adminTab==='insights')contextual='<div class="admin-account-direct-note"><span></span>Správy sa publikujú okamžite</div>';
+    else if(state.adminTab==='calibration')contextual='<div class="admin-account-direct-note"><span></span>Súkromný read-only modelový audit</div>';
     else if(state.adminTab==='system')contextual='<div class="admin-account-direct-note"><span></span>Kontrola je len čítacia diagnostika</div>';
     else contextual='<div class="admin-publish-hint"><span>Koncept</span><i></i><b>Live po publikovaní</b></div><button class="btn btn-ghost" type="button" data-admin-action="load-draft">Načítať koncept</button><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Uložiť koncept</button><button class="btn btn-primary" type="button" data-admin-action="publish-config" '+(state.uiStorageAvailable===true?'':'disabled title="Publikovanie je pozastavené, kým sa neoverí Azure konfigurácia"')+'>Publikovať</button>';
     const uiWarning=state.uiStorageAvailable===false
@@ -4911,6 +4982,22 @@
     }
   }
   function exportUiConfig(){ const blob=new Blob([JSON.stringify(state.ui,null,2)+'\n'],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');a.href=url;a.download='ui-config.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),0); }
+  async function loadAdminCalibration(force=false){
+    const generation=feedGeneration;
+    if(state.adminCalibrationLoading||(!force&&state.adminCalibration))return;
+    state.adminCalibrationLoading=true;state.adminCalibrationError='';rerenderAdmin();
+    try{
+      const data=await BlinqAuth.adminModelCalibration();
+      if(generation!==feedGeneration)return;
+      state.adminCalibration=data;
+      if(force)showStatus('Kalibračné údaje z Azure obnovené.');
+    }catch(error){
+      if(generation!==feedGeneration)return;
+      state.adminCalibrationError=error?.status===503?'Čaká sa na prvú automatickú synchronizáciu z GitHubu':(error?.message||'Kalibračné API nie je dostupné');
+    }finally{
+      if(generation===feedGeneration){state.adminCalibrationLoading=false;rerenderAdmin();}
+    }
+  }
   async function loadAdminDiagnostics(force=false){
     const generation=feedGeneration;
     if(state.adminDiagnosticsLoading||(!force&&state.adminDiagnostics))return;
@@ -5037,7 +5124,7 @@
         }
         return;
       }
-      const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;rerenderAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='insights'){loadAdminInsights();loadAdminInfoResults();loadAdminLiveResults();}if(state.adminTab==='system')loadAdminDiagnostics(true);return;}
+      const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;rerenderAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='insights'){loadAdminInsights();loadAdminInfoResults();loadAdminLiveResults();}if(state.adminTab==='system')loadAdminDiagnostics(true);if(state.adminTab==='calibration')loadAdminCalibration();return;}
       const tgAction=event.target.closest('[data-admin-action="tg-add"],[data-admin-action="tg-remove"]');if(tgAction){const cfg=state.ui.telegram_groups=state.ui.telegram_groups||{schema:1,enabled:true,groups:[]};cfg.groups=Array.isArray(cfg.groups)?cfg.groups:[];if(tgAction.dataset.adminAction==='tg-add'){cfg.groups.push({id:`group_${Date.now()}`,enabled:true,badge:'KOMUNITA',title:'Telegram skupina',description:'',cta:'Otvoriť Telegram',url:'',min_plan:'rookie'});}else{const index=Number(tgAction.dataset.tgIndex);if(Number.isInteger(index)&&index>=0)cfg.groups.splice(index,1);}renderTelegramGroupsPanel();rerenderAdmin();return;}
       const planChip=event.target.closest('[data-admin-plan-chip]');if(planChip){state.adminPlan=planChip.dataset.adminPlanChip;rerenderAdmin();return;}
       const dailyPreset=event.target.closest('[data-admin-daily-preset]');if(dailyPreset){const preset=dailyPreset.dataset.adminDailyPreset,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].forEach(tab=>{const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.tab_enabled=true;rule.row_overrides={};if(preset==='full'){rule.display_state='active';rule.visible_rows='ALL';rule.selection_mode='first';rule.blur_remaining=false;rule.see_all=true;}else if(preset==='preview3'){rule.display_state='active';rule.visible_rows=3;rule.selection_mode='first';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='rookie2'){rule.display_state='active';rule.visible_rows=tab==='daily'?2:Math.min(1,Number(rule.visible_rows)||1);rule.selection_mode='stable_random';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='blurred'){rule.display_state='blurred';rule.visible_rows=0;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='hidden'){rule.display_state='hidden';rule.visible_rows=0;rule.blur_remaining=false;rule.see_all=false;}if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);});renderAllUiContent();rerenderAdmin();showStatus(`Zobrazenie · ${accessLabel(state.adminPlan)} preset bol nastavený.`);return;}
@@ -5185,6 +5272,7 @@
         return;
       }
       if(action==='live-radar-scan'){if(state.adminLiveRadarLoading)return;state.adminLiveRadarLoading=true;state.adminLiveRadarStatus=null;rerenderAdmin();try{const result=await BlinqAuth.adminLiveRadar(true,true);state.adminLiveRadarStatus={...result,ok:true,new_alerts:Number(result?.created)||0};state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);showStatus(`LIVE Radar: ${Number(result?.signals?.length??result?.signals)||0} signálov · ${Number(result?.created)||0} nových upozornení.`);}catch(error){state.adminLiveRadarStatus={error:error.message||'LIVE Radar sa nepodarilo spustiť.'};showStatus(state.adminLiveRadarStatus.error);}finally{state.adminLiveRadarLoading=false;rerenderAdmin();}return;}
+      if(action==='calibration-refresh'){loadAdminCalibration(true);return;}
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
       if(action==='copy-diagnostics'){
         const d=state.adminDiagnostics||{};
@@ -5900,7 +5988,7 @@
 
   function renderRoute(route){
     const host=$('routePanel'),feed=state.feed,p=feed.performance||{},history=feed.history||{},report=feed.model?.report||{}; let body='';
-    if(route==='admin'){host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='system')loadAdminDiagnostics();return;}
+    if(route==='admin'){host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='system')loadAdminDiagnostics();if(state.adminTab==='calibration')loadAdminCalibration();return;}
     if(route==='compare'){
       if(comparatorPlanAllowed()){host.innerHTML=renderComparatorRoute();wireComparator();}
       else{
@@ -6113,7 +6201,7 @@
     state.insights=[];state.insightsUnread=0;state.insightsLoading=false;state.insightsStorageUnavailable=false;
     state.userLiveRadarStatus=null;state.userLiveRadarLoading=false;state.liveRadarHeartbeat=null;state.privateUpdatesBusy=false;state.privateUpdatesLastPoll=0;
     state.adminUsers=null;state.adminUsersLoading=false;state.adminUsersError='';state.adminUsersWarning='';state.adminSelectedUser=null;
-    state.adminDiagnostics=null;state.adminDiagnosticsLoading=false;state.adminInsights=null;state.adminInsightsLoading=false;state.adminInsightsError='';state.adminInsightEditingId='';state.adminLiveRadarStatus=null;state.adminLiveRadarLoading=false;
+    state.adminDiagnostics=null;state.adminDiagnosticsLoading=false;state.adminCalibration=null;state.adminCalibrationLoading=false;state.adminCalibrationError='';state.adminInsights=null;state.adminInsightsLoading=false;state.adminInsightsError='';state.adminInsightEditingId='';state.adminLiveRadarStatus=null;state.adminLiveRadarLoading=false;
     state.railMatch=null;state.previewPlan=null;state.demoFeedBackup=null;state.demoMode=false;state.dashboardVisibility=null;state.pushConfig=null;state.pushBusy=false;
     state.projectGroups=[];state.projectGroupsLoading=false;state.projectGroupsError='';state.activeProjectGroupId='';
     state.adminProjectGroups=null;state.adminProjectGroupsLoading=false;state.adminProjectGroupsError='';state.adminProjectGroupId='';

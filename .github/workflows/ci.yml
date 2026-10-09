@@ -458,3 +458,17 @@ jobs:
           assert payload.get('release') == '7.3.6', payload
           print(json.dumps(payload, indent=2))
           PYSMOKE
+
+
+      - name: Seed private calibration Admin snapshot
+        # Only after Azure deployment and health checks succeed; no tennis API
+        # quota use and no model promotion. Scheduled monitor keeps it current.
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          PYTHONPATH: api:scripts
+        run: |
+          set -euo pipefail
+          python scripts/publish_model_calibration_status.py

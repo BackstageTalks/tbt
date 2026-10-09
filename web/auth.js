@@ -601,6 +601,9 @@
   async function adminDiagnostics() {
     return apiWithSession('/api/v1/admin/diagnostics');
   }
+  async function adminModelCalibration() {
+    return apiWithSession('/api/v1/admin/model-calibration');
+  }
   async function adminUsers(page = 1, perPage = 100) {
     return apiWithSession(`/api/v1/admin/users?page=${encodeURIComponent(page)}&per_page=${encodeURIComponent(perPage)}`);
   }
@@ -697,7 +700,7 @@
     projectGroups, joinProjectGroup, leaveProjectGroup, insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, markInsightRead,
     adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
     adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult,
-    adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
+    adminDiagnostics, adminModelCalibration, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews, comparatorPlayers, comparatorCompare,
     bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
     sessionStorageKeys, sessionEpochKey,

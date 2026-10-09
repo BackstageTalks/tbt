@@ -66,3 +66,22 @@ jobs:
           gh workflow run the-odds-clv.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f reason=hourly
 
+
+      - name: Dispatch private calibration monitor every six hours
+        # External scheduler already drives Match Status. Reuse its cadence
+        # instead of adding a forbidden GitHub cron schedule.
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          hour="$(date -u +%H)"
+          minute="$(date -u +%M)"
+          if (( 10#$hour % 6 != 0 || 10#$minute >= 30 )); then
+            echo "Calibration monitor not due at this UTC hour."
+            exit 0
+          fi
+          gh workflow run model-calibration-monitor.yml -R "$GITHUB_REPOSITORY" --ref main
+          echo "Dispatched private model calibration snapshot updater."
