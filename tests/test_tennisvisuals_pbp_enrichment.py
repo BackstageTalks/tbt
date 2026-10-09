@@ -217,6 +217,9 @@ def test_pbpx_linker_uses_point_tape_winner_and_stages_missing_counts(tmp_path, 
     # tape's match date; a day-3 result must not leak into day-0 features.
     match.match_id = "hist-js:atp:test"
     match.scheduled_at = datetime(2016, 5, 2, tzinfo=timezone.utc)
+    # Production workflow sets SOURCE_REF globally; test the fail-closed
+    # behavior when the immutable source pin is deliberately unavailable.
+    monkeypatch.delenv("SOURCE_REF", raising=False)
     out3 = tmp_path / "link3"
     monkeypatch.setattr(
         sys, "argv",
