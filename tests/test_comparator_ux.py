@@ -90,7 +90,7 @@ def test_comparator_search_groups_do_not_merge_canonical_ids():
     assert "group.rows.length>1" in app
     assert "historical(a)-historical(b)" in app
     render = app.split("function comparatorSearchHtml(side){", 1)[1].split("function comparatorResultHtml", 1)[0]
-    assert "canonical.length===1?canonical" in render
+    assert "const candidates=canonical.length?canonical:group.rows" in render
     assert "hist-js:" in render
     assert "data-comparator-expand" not in render
     assert "comparator-search-alternates" not in render
