@@ -247,6 +247,27 @@ def main():
                 assert brand.get_attribute('aria-expanded')=='true'
                 root_text=page.locator('#bqm-dialog nav').inner_text()
                 assert 'Výsledky' in root_text,(width,root_text)
+                # Locked LIVE must show the same padlock as its header button.
+                page.get_by_role('button',name='Zavrieť menu').click()
+                page.wait_for_function("!document.getElementById('bqm-dialog').open")
+                page.evaluate("""() => {
+                    const n=document.getElementById('insightShortcut');
+                    n.hidden=false;
+                    n.dataset.upgradePlan='pro';
+                    n.classList.add('is-access-locked');
+                }""")
+                brand.click()
+                assert page.locator('#bqm-dialog nav').get_by_role('button',name='Live radar 🔒',exact=True).is_visible(),width
+                page.get_by_role('button',name='Zavrieť menu').click()
+                page.wait_for_function("!document.getElementById('bqm-dialog').open")
+                page.evaluate("""() => {
+                    const n=document.getElementById('insightShortcut');
+                    delete n.dataset.upgradePlan;
+                    n.classList.remove('is-access-locked');
+                }""")
+                brand.click()
+                assert page.locator('#bqm-dialog nav').get_by_role('button',name='Live radar',exact=True).is_visible(),width
+                root_text=page.locator('#bqm-dialog nav').inner_text()
                 assert 'Môj účet' in root_text,(width,root_text)
                 assert not page.locator('#bqm-account-panel').is_visible()
                 for unwanted in ('Profil a členstvo', 'Odhlásiť sa', 'Jazyk'):
