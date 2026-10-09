@@ -1,0 +1,145 @@
+name: BlinQ three-source cloud collectors (private checkpoint)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-three-sources-private-cloud.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-three-sources-private-cloud
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+    steps:
+      - name: Check token and private destination; create source-specific releases
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "TBT_DATA_GH_TOKEN unavailable"; exit 1; }
+          test "$(gh api "repos/$DATA_REPO" --jq .private)" = "true"
+          for tag in blinq-cloud-atptour-20261009 blinq-cloud-oddstrader-20261009 blinq-cloud-checkbestodds-20261009; do
+            if gh release view "$tag" --repo "$DATA_REPO" >/dev/null 2>&1; then
+              echo "PRIVATE_RELEASE_EXISTS $tag"
+            else
+              gh release create "$tag" --repo "$DATA_REPO" --target main \
+                --title "$tag - RAW, not CDB" \
+                --notes "Private source checkpoint archives only; do not train or import before identity, timestamp and quality verification."
+            fi
+          done
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate orchestration and supported source task routing
+        run: |
+          python -m py_compile source/scripts/cloud_collect_remaining_sources.py
+          python -u source/scripts/test_cloud_collect_remaining_sources.py
+
+  atptour:
+    name: ATP Tour / ${{ matrix.task }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        task: [ATP_SINGLES, ATP_DOUBLES, ATP_LEADERBOARDS, ATP_ARCHIVE_2026, ATP_ARCHIVE_2025, ATP_ARCHIVE_2024, ATP_ARCHIVE_2023, ATP_ARCHIVE_2022, ATP_ARCHIVE_2021, ATP_ARCHIVE_2020, ATP_ARCHIVE_2019, ATP_ARCHIVE_2018, ATP_ARCHIVE_2017, ATP_ARCHIVE_2016, ATP_ARCHIVE_2015, ATP_ARCHIVE_2014, ATP_ARCHIVE_2013, ATP_ARCHIVE_2012, ATP_ARCHIVE_2011, ATP_ARCHIVE_2010, ATP_ARCHIVE_2009, ATP_ARCHIVE_2008, ATP_ARCHIVE_2007, ATP_ARCHIVE_2006]
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TASK: ${{ matrix.task }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install requests beautifulsoup4
+      - name: Continue ATP Tour source data from private checkpoint
+        working-directory: source
+        run: python -u scripts/cloud_collect_remaining_sources.py --task "$TASK" --duration 295m
+      - name: Write safety status
+        if: always()
+        run: |
+          echo "ATP Tour task: $TASK" >> "$GITHUB_STEP_SUMMARY"
+          echo "Raw source checkpoints are private release assets in tbt-data; CDB and Training DB untouched." >> "$GITHUB_STEP_SUMMARY"
+
+  oddstrader:
+    name: OddsTrader / ${{ matrix.task }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        task: [ODDS_ATP_2026, ODDS_WTA_2026, ODDS_ATP_2025, ODDS_WTA_2025, ODDS_ATP_2024, ODDS_WTA_2024, ODDS_ATP_2023, ODDS_WTA_2023, ODDS_ATP_2022, ODDS_WTA_2022, ODDS_ATP_2021, ODDS_WTA_2021, ODDS_ATP_2020, ODDS_WTA_2020, ODDS_ATP_2019, ODDS_WTA_2019, ODDS_ATP_2018, ODDS_WTA_2018, ODDS_ATP_2017, ODDS_WTA_2017, ODDS_ATP_2016, ODDS_WTA_2016, ODDS_ATP_2015, ODDS_WTA_2015]
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TASK: ${{ matrix.task }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install requests beautifulsoup4 playwright
+      - run: python -m playwright install --with-deps chromium
+      - name: Continue OddsTrader rendered pages from private checkpoint
+        working-directory: source
+        run: python -u scripts/cloud_collect_remaining_sources.py --task "$TASK" --duration 295m
+      - name: Write safety status
+        if: always()
+        run: |
+          echo "OddsTrader task: $TASK" >> "$GITHUB_STEP_SUMMARY"
+          echo "Raw source checkpoints private; CDB and Training DB untouched." >> "$GITHUB_STEP_SUMMARY"
+
+  checkbestodds:
+    name: CheckBestOdds historical odds
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install requests beautifulsoup4
+      - name: Collect historical best odds into private checkpoint
+        working-directory: source
+        run: python -u scripts/cloud_collect_remaining_sources.py --task CHECKBESTODDS --duration 295m
+      - name: Write safety status
+        if: always()
+        run: |
+          echo "CheckBestOdds historical research only." >> "$GITHUB_STEP_SUMMARY"
+          echo "Raw source checkpoints private; CDB and Training DB untouched." >> "$GITHUB_STEP_SUMMARY"
