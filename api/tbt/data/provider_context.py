@@ -158,6 +158,15 @@ def minimize_provider_payload(
                 }
         if compact_market_history:
             out["_tbt_market_history"] = compact_market_history
+    pbpx = raw.get("_tbt_pbpx_enrichment")
+    if isinstance(pbpx, dict) and pbpx.get("schema") == 1:
+        out["_tbt_pbpx_enrichment"] = {
+            key: pbpx[key] for key in (
+                "schema", "source", "source_file", "source_row",
+                "source_ref", "source_date", "score_validated", "stat_keys",
+            ) if key in pbpx
+        }
+
     termination = _compact_termination(raw)
     if termination is not None:
         out["_tbt_termination"] = termination
