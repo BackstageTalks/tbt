@@ -148,28 +148,68 @@ def _quality(builder: FeatureBuilder, match: MatchRecord) -> dict:
     return {"band": band, **samples}
 
 
+def _window(rows) -> dict:
+    return {
+        "matches": len(rows),
+        "wins": sum(float(row.won) >= .5 for row in rows),
+    }
+
+
 def _player_stats(builder: FeatureBuilder, match: MatchRecord, *, first: bool) -> dict:
     state = builder._state(match, first)
     surface = stats_surface_key(match.surface)
-    recent = list(state.recent)[-10:]
-    surface_recent = [row for row in state.recent if stats_surface_key(row.surface) == surface][-10:]
-    serve = builder._stat_quality(state, match.scheduled_at, "serve_quality", surface=surface)
-    ret = builder._stat_quality(state, match.scheduled_at, "return_quality", surface=surface)
+    # Feature state has already replayed only matches before the UTC-day
+    # cutoff. Preserve that boundary for every explanatory statistic.
+    recent_all = [row for row in state.recent if row.played_at < match.scheduled_at]
+    recent = recent_all[-10:]
+    surface_all = [row for row in recent_all if stats_surface_key(row.surface) == surface]
+    surface_recent = surface_all[-10:]
+    serve_samples = sum(row.serve_quality is not None for row in surface_all)
+    return_samples = sum(row.return_quality is not None for row in surface_all)
+    serve = builder._stat_quality(state, match.scheduled_at, "serve_quality", surface=surface) if serve_samples else None
+    ret = builder._stat_quality(state, match.scheduled_at, "return_quality", surface=surface) if return_samples else None
+    rest = (
+        (match.scheduled_at.date() - state.last_played.date()).days
+        if state.last_played is not None and state.last_played < match.scheduled_at
+        else None
+    )
     return {
         "history_matches": int(state.matches),
         "surface_matches": int(state.surface_matches.get(surface, 0)),
         "overall_elo": round(float(state.overall_elo), 1),
         "surface_elo": round(float(state.get_surface_elo(surface)), 1),
-        "recent_10": {
-            "matches": len(recent),
-            "wins": sum(float(row.won) >= .5 for row in recent),
-        },
-        "surface_recent_10": {
-            "matches": len(surface_recent),
-            "wins": sum(float(row.won) >= .5 for row in surface_recent),
-        },
+        "recent_5": _window(recent[-5:]),
+        "recent_10": _window(recent),
+        "surface_recent_10": _window(surface_recent),
+        "recent_results": [
+            {"result": "W" if float(row.won) >= .5 else "L", "surface": stats_surface_key(row.surface)}
+            for row in recent
+        ],
+        "days_since_last_match": rest,
         "surface_serve_quality": None if serve is None else round(float(serve), 4),
         "surface_return_quality": None if ret is None else round(float(ret), 4),
+        "surface_quality_samples": {"serve": serve_samples, "return": return_samples},
+        "recent_window_limit": 80,
+    }
+
+
+def _matchup_history(builder: FeatureBuilder, match: MatchRecord) -> dict:
+    key1 = builder.player_key(match.tour, match.player1_id)
+    key2 = builder.player_key(match.tour, match.player2_id)
+    low, high = sorted((key1, key2))
+    surface = stats_surface_key(match.surface)
+
+    def orient(value):
+        wins = list(value or (0, 0))
+        if len(wins) != 2:
+            return {"player1_wins": 0, "player2_wins": 0, "matches": 0}
+        first, second = (wins[0], wins[1]) if key1 == low else (wins[1], wins[0])
+        return {"player1_wins": int(first), "player2_wins": int(second), "matches": int(first + second)}
+
+    return {
+        "overall": orient(builder.h2h.get((low, high))),
+        "surface": orient(builder.surface_h2h.get((low, high, surface))),
+        "scope": "historical_completed_before_utc_day_cutoff",
     }
 
 
@@ -311,4 +351,12 @@ def compare_from_artifact(
         },
         "quality": quality,
         "factors": factors[:5],
+        "h2h": _matchup_history(builder, match),
+        "evidence": {
+            "history_cutoff_utc": freshness["cutoff_utc"],
+            "latest_possible_match_date": (match.scheduled_at.date()).isoformat(),
+            "model_unchanged": True,
+            "serve_return_quality_is_estimate": True,
+            "no_odds_or_external_live_data": True,
+        },
     }
