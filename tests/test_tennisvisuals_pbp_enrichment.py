@@ -190,6 +190,45 @@ def test_pbpx_linker_uses_point_tape_winner_and_stages_missing_counts(tmp_path, 
     assert "winner_derived_from_point_tape" in stage["provenance"][0]["evidence"]
     assert stage["provenance"][0]["score_validated"] is True
 
+    # An already quality-ready match can still receive missing A/DF counts,
+    # without falsely reporting a quality-ready coverage increase.
+    decoded = _parse_pbp(_synthetic_6_0_6_0_pbpx())
+    match.stats = {
+        f"p{side}_{field}": decoded[side][field]
+        for side in (1, 2)
+        for field in ("service_points_won", "return_points_won")
+    }
+    out2 = tmp_path / "link2"
+    monkeypatch.setattr(
+        sys, "argv",
+        ["pbpx-linker", "--history-dir", str(tmp_path),
+         "--source-dir", str(sourcedir), "--out-dir", str(out2)],
+    )
+    linker.main()
+    report2 = json.loads((out2 / "report.json").read_text())
+    stage2 = json.loads((out2 / "auto_linked.jsonl").read_text().strip())
+    assert report2["quality_ready_projected_added"] == 0
+    assert report2["counts"]["staged_matches"] == 1
+    assert set(stage2["incoming_stats"]) == {
+        "p1_aces", "p1_double_faults", "p2_aces", "p2_double_faults",
+    }
+
+    # A hist-js canonical timestamp denotes tournament start, NOT the point
+    # tape's match date; a day-3 result must not leak into day-0 features.
+    match.match_id = "hist-js:atp:test"
+    match.scheduled_at = datetime(2016, 5, 2, tzinfo=timezone.utc)
+    out3 = tmp_path / "link3"
+    monkeypatch.setattr(
+        sys, "argv",
+        ["pbpx-linker", "--history-dir", str(tmp_path),
+         "--source-dir", str(sourcedir), "--out-dir", str(out3)],
+    )
+    linker.main()
+    report3 = json.loads((out3 / "report.json").read_text())
+    assert report3["counts"]["window_pit_blocked"] == 1
+    assert report3["quality_ready_projected_added"] == 0
+    assert (out3 / "auto_linked.jsonl").read_text() == ""
+
 
 def test_pbpx_canonical_payload_retains_provenance():
     from tbt.data.provider_context import minimize_provider_payload
