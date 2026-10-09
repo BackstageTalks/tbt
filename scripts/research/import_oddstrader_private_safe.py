@@ -202,9 +202,9 @@ def immutable_market_gate(years: list[int]) -> dict:
         y = pd.read_parquet(SHADOW / name).sort_values("match_id").reset_index(drop=True)
         if len(x) != len(y) or list(x.columns) != list(y.columns):
             raise RuntimeError("Schema or row count changed: " + name)
-        allowed_col = "provider_payload_json"
+        allowed_col = "provider_context_json"
         if allowed_col not in x:
-            raise RuntimeError("Missing provider_payload_json column in " + name)
+            raise RuntimeError("Missing provider_context_json column in " + name)
         for col in x:
             if col != allowed_col and not x[col].equals(y[col]):
                 raise RuntimeError(f"Immutable column differs: {name}.{col}")
