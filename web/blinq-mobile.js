@@ -97,7 +97,7 @@
   // The explicit "Domov" item continues to navigate to the homepage.
   const menuLogo = button('', () => dialog.close());
   menuLogo.className = 'bqm-logo-close';
-  menuLogo.setAttribute('aria-label', 'Zavrieť menu BlinQ');
+  menuLogo.setAttribute('aria-label', 'BlinQ · zavrieť navigáciu');
   menuLogo.style.justifySelf = 'center';
   menuLogo.append(logo);
   top.append(close, menuLogo);
