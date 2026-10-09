@@ -1,0 +1,38 @@
+name: BlinQ isolated canonical snapshot (private only)
+on:
+  push:
+    branches: [ops/blinq-canonical-snapshot-20261009]
+    paths: [.github/workflows/blinq-private-canonical-backup-20261009.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-private-canonical-backup-20261009
+  cancel-in-progress: false
+
+jobs:
+  private_backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate private destination access (no public artefact)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "::error::Private-data token unavailable"; exit 1; }
+          test "$(gh repo view BackstageTalks/tbt-data --json visibility -q .visibility)" = "PRIVATE" || exit 1
+          echo "Private canonical destination verified; runner holds data in ephemeral workspace."
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Prepare read-only parquet verification
+        run: python -m pip install --disable-pip-version-check pyarrow
+      - name: Copy complete canonical history to separate PRIVATE release, SHA-verify all 79 assets, and remote readback
+        run: python scripts/research/snapshot_canonical_private_release.py
+      # Intentionally never upload raw datasets, report, or artifacts to the public tbt repository.
