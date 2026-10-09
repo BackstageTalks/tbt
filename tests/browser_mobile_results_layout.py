@@ -180,7 +180,9 @@ def main():
                         from pathlib import Path
                         out=Path(os.environ['BLINQ_SCREENSHOTS']);out.mkdir(parents=True,exist_ok=True)
                         page.screenshot(path=str(out / "mobile-results-review.png"),full_page=True)
-                    page.locator('#bqm-toggle').click()
+                    assert page.locator('#bqm-toggle').is_hidden()
+                    page.locator('.header-top > .brand').click()
+                    assert page.locator('#bqm-dialog').is_visible()
                     page.get_by_role('button',name='Predikcie ›',exact=True).click()
                     page.keyboard.press('Escape')
                     assert page.locator('#bqm-dialog').is_visible()
