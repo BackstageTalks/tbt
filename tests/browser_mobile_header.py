@@ -34,7 +34,7 @@ def main():
                       {id:'project-one',read:false,type:'info',audience_mode:'groups',group_ids:['one']},
                       {id:'info-one',read:false,type:'info',audience_mode:'levels'}
                     ];
-                    h.state.ui.notifications={enabled:true};h.renderInsightBell();h.renderProjectGroupBar();
+                    h.state.ui.notifications={enabled:true,live_min_level:'elite'};h.renderInsightBell();h.renderProjectGroupBar();
                     const row={event_id:'test',scheduled_at:new Date(Date.now()+3600000).toISOString(),tour:'ATP',tournament:'Beijing, China',surface:'hard',player1:{id:'one',name:'Andrey Rublev',rank:26},player2:{id:'two',name:'Roman Safiullin',rank:102},pick:'Andrey Rublev',model_probability:.703,odds:1.67};
                     document.getElementById('dailyHubBody').innerHTML=h.dailyHubRow(row,'daily',false,0);
                     document.getElementById('dailyHubEmpty').hidden=true;
@@ -42,6 +42,20 @@ def main():
                     document.getElementById('projectGroupBar').onclick=e=>{const b=e.target.closest('[data-project-group-open]');if(b)groupCalls.push(b.dataset.projectGroupOpen);};
                 }''')
                 page.wait_for_timeout(200)
+                # LIVE lock reflects actual member access; no change to icon size.
+                live=page.locator('#insightShortcut')
+                lock=page.locator('#insightShortcut .live-access-lock')
+                assert live.get_attribute('data-upgrade-plan')=='elite',(width,'LIVE minimum')
+                assert 'is-access-locked' in live.get_attribute('class'),(width,'LIVE access class')
+                assert lock.is_visible(),(width,'missing LIVE padlock')
+                live_geom=page.evaluate("""() => {
+                    const b=document.querySelector('#insightShortcut').getBoundingClientRect();
+                    const l=document.querySelector('#insightShortcut .live-access-lock').getBoundingClientRect();
+                    return {buttonWidth:b.width,lockWidth:l.width,lockHeight:l.height,
+                      lockLeft:l.left,lockRight:l.right};
+                }""")
+                assert 11<=live_geom['lockWidth']<=16 and 11<=live_geom['lockHeight']<=16,(width,live_geom)
+                assert live_geom['lockLeft']>=0 and live_geom['lockRight']<=width+2,(width,live_geom)
                 # Approved tennis-ball icon must keep two unmistakable curved seams
                 # on the actual header and its dormant mobile-navigation fallback.
                 tennis_paths=page.evaluate("""() => {
@@ -152,6 +166,10 @@ def main():
                             s.userLiveRadarStatus={signals:4,candidates:7};
                             h.renderInsightBell();
                         }""")
+                        assert lock.is_hidden(), 'eligible LIVE cannot display locked badge'
+                        assert live.get_attribute('data-upgrade-plan') is None
+                        assert 'is-access-locked' not in live.get_attribute('class')
+                        assert abs(live.bounding_box()['width']-live_geom['buttonWidth'])<1
                         assert page.locator('#insightShortcutCount').is_visible()
                         assert page.locator('#insightShortcutCount').inner_text()=='1'
                         assert '1 neprečítaných' in page.locator('#insightShortcut').get_attribute('aria-label')
@@ -168,6 +186,8 @@ def main():
                             s.feed.account.plan='rookie';
                             h.renderInsightBell();
                         }""")
+                        assert lock.is_visible(), 'padlock must return for Rookie'
+                        assert 'is-access-locked' in live.get_attribute('class')
                     geometry=page.evaluate('''() => {
                         const els=['.header-top>.brand','#bqm-projects','#insightBell','#profileButton'].map(s=>document.querySelector(s).getBoundingClientRect());
                         return {overlap:els.some((r,i)=>i&&r.left<els[i-1].right-1),overflow:document.documentElement.scrollWidth-innerWidth};
