@@ -44,8 +44,8 @@ def test_comparator_copy_is_not_duplicated_inside_form():
 
 def test_comparator_assets_are_cache_busted():
     html = Path("web/index.html").read_text(encoding="utf-8")
-    assert "/blinq-app.css?v=7360&p=61&compare=4" in html
-    assert "/app.js?v=7360&p=61&compare=6" in html
+    assert "/blinq-app.css?v=7360&p=61&compare=5" in html
+    assert "/app.js?v=7360&p=61&compare=7" in html
 
 
 def test_comparator_player_suggestions_bind_after_async_insertion():
@@ -95,3 +95,18 @@ def test_comparator_search_groups_do_not_merge_canonical_ids():
     assert "data-comparator-expand" not in render
     assert "comparator-search-alternates" not in render
     assert "zápasov v DB" not in render
+
+
+def test_comparator_analytics_labels_missing_samples_and_explicit_h2h():
+    app=Path("web/app.js").read_text(encoding="utf-8")
+    css=Path("web/blinq-app.css").read_text(encoding="utf-8")
+    segment=app.split("function comparatorResultHtml(result){",1)[1].split("function renderComparatorRoute()",1)[0]
+    assert "comparator-form-cards" in segment
+    assert "comparator-h2h-line" in segment
+    assert "comparator-prob-meter" in segment
+    assert "surface_quality_samples" in segment
+    assert ">=3" in segment
+    assert "Podporné signály" in segment
+    assert "comparator-analytics-note" in segment
+    assert "comparator-insight-grid" in css
+    assert "@media(max-width:650px)" in css
