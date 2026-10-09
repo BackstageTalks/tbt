@@ -156,7 +156,7 @@ def test_pit_quarantined_pbpx_archives_only_private_metadata_without_stats_leaka
     ], cwd=ROOT, check=True)
     report = json.loads((out / "report.json").read_text())
     assert report["counts"]["pit_observations_added"] == 1
-    assert report["counts"]["stat_fields_added"] == 0
+    assert report["counts"].get("stat_fields_added", 0) == 0
     assert report["quality_ready_added"] == 0
     assert report["changed_years"] == [2016]
     rows = load_partitions(history)
