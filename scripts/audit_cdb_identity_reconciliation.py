@@ -199,6 +199,7 @@ def audit_from_release(directory):
         folder = Path(tmp)
         bundle = json.loads(release_download("_tbt_bundle_manifest.json", folder).read_text())
         manifest_path = release_download("history_manifest.json", folder)
+        manifest_digest = sha256(manifest_path.read_bytes()).hexdigest()
         manifest = json.loads(manifest_path.read_text())
         if not isinstance(bundle.get("files"), dict) or not isinstance(manifest.get("years"), dict):
             raise RuntimeError("Incomplete verified release inventory")
@@ -276,7 +277,7 @@ def audit_from_release(directory):
         "schema": 1, "state": "dry_run_only",
         "model_unchanged": True, "cdb_mutated": False,
         "release": TAG, "comparator_directory_sha256": sha256(raw).hexdigest(),
-        "release_manifest_sha256": sha256(manifest_path.read_bytes()).hexdigest() if False else None,
+        "release_manifest_sha256": manifest_digest,
         "period": [min(YEARS), max(YEARS)],
         "counts": dict(counts), "candidate_reasons": dict(rejected),
         "partitions": partition_meta,
