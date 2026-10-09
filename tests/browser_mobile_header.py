@@ -279,18 +279,20 @@ def main():
                     return {header,nav,actions,overlap,outside,viewport:innerWidth};
                 }""")
                 assert len(admin_layout['nav'])==3 and all(n['visible'] for n in admin_layout['nav']),(width,'admin missing public navigation',admin_layout)
-                assert all(next(a['visible'] for a in admin_layout['actions'] if a['selector']==sel) for sel in ('#bqm-projects','#insightBell','#profileButton')),(width,'admin missing original header actions',admin_layout)
+                # Entitlement / group availability is authoritative; any control
+                # that is not hidden must keep its public-header presence.
+                for sel in ('#bqm-projects','#insightShortcut','#topUpgradeButton','#insightBell','#profileButton'):
+                    icon_visible=next(a['visible'] for a in admin_layout['actions'] if a['selector']==sel)
+                    expected=page.locator(sel).get_attribute('hidden') is None
+                    assert icon_visible==expected,(width,'admin action visibility mismatch',sel,admin_layout)
                 assert not admin_layout['overlap'] and not admin_layout['outside'],(width,'admin header icons overlap/overflow',admin_layout)
                 page.evaluate("document.getElementById('bqm-projects').dataset.unread='12';document.getElementById('bqm-projects').classList.add('has-unread');document.getElementById('insightUnread').textContent='6';document.getElementById('insightUnread').hidden=false")
                 assert page.locator('#bqm-projects').evaluate("n=>getComputedStyle(n,'::after').content")=='"12"'
                 bell_box=page.locator('#insightBell').bounding_box()
                 badge_box=page.locator('#insightUnread').bounding_box()
                 assert badge_box and bell_box and badge_box['x']>=bell_box['x'] and badge_box['x']+badge_box['width']<=bell_box['x']+bell_box['width']+1,(width,bell_box,badge_box)
-                if width<=900:
-                    upgrade=page.locator('#topUpgradeButton')
-                    assert upgrade.is_visible()==(upgrade.get_attribute('hidden') is None),(width,'upgrade visibility should follow entitlement')
-                else:
-                    assert not page.locator('#topUpgradeButton').is_visible()
+                upgrade=page.locator('#topUpgradeButton')
+                assert upgrade.is_visible()==(upgrade.get_attribute('hidden') is None),(width,'upgrade visibility should follow entitlement')
                 brand.click()
                 assert page.locator('#bqm-dialog').is_visible()
                 assert brand.get_attribute('aria-expanded')=='true'
