@@ -30,9 +30,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # This job can wait behind a long-running canonical writer while main advances.
+          # Refresh to the latest trusted main *under* the same shared writer lock.
           git fetch origin main --depth=1
+          git checkout --detach origin/main
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" || {
-            echo "::error::Stale writer checkout"; exit 1;
+            echo "::error::Unable to pin current main checkout"; exit 1;
           }
           test -n "$GH_TOKEN"
           test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
