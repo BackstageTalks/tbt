@@ -568,6 +568,8 @@ def save_live_worker_status(payload: object) -> dict:
         "new_alerts": max(0, int(data.get("new_alerts") or 0)),
         "prime_total": max(0, int(data.get("prime_total") or 0)),
         "prime_eligible": max(0, int(data.get("prime_eligible") or 0)),
+        "matched_prime_live": max(0, int(data.get("matched_prime_live") or 0)),
+        "matched_eligible_live": max(0, int(data.get("matched_eligible_live") or 0)),
         "set2_candidates": max(0, int(data.get("set2_candidates") or 0)),
         "set2_priced": max(0, int(data.get("set2_priced") or 0)),
         "set2_eligible": max(0, int(data.get("set2_eligible") or 0)),
