@@ -7,9 +7,11 @@ BlinQ enforces a fail-closed **14,550 request global ceiling** and permanently
 keeps **450 requests (3%)** as provider headroom.
 
 The durable ledger is aligned to the verified provider-day reset used by the
-runtime guard: **19:10 Europe/Bratislava**. Usage is stored in five-minute
-buckets, but the accounting window is the current provider day, not a generic
-rolling 24-hour window.
+runtime guard: **19:10 Europe/Bratislava**. ALL billable TennisAPI requests
+are blocked at 19:08–19:10 Europe/Bratislava, regardless of priority. A guarded
+19:11 new provider-day statistics startup is limited to 3,000 requests.
+Usage is stored in five-minute buckets, but the accounting window is the
+current provider day, not a generic rolling 24-hour window.
 
 | Purpose | Provider-day allocation |
 | --- | ---: |
@@ -23,7 +25,7 @@ rolling 24-hour window.
 
 LIVE, Match Status and Refresh retain bounded purpose allocations. History/backfill
 may opportunistically use any provider-day headroom left by those workloads, up to
-the same 14,250 global ceiling. The global ceiling is always authoritative, so the
+the same 14,550 global ceiling. The global ceiling is always authoritative, so the
 450 provider reserve remains untouched.
 
 An API request is reserved **before every billable upstream attempt, including
@@ -44,8 +46,8 @@ The authoritative values live in
 - `PROVIDER_RESERVE = 450`
 - `GLOBAL_CEILING = 14550`
 - reset: `19:10 Europe/Bratislava`
-- `PURPOSE_CAPS = {live: 3000, match: 2500, refresh: 5500, history: 14250}`
-  (`history` is opportunistic; the shared 14,250 global ceiling still applies)
+- `PURPOSE_CAPS = {live: 3000, match: 2500, refresh: 5500, history: 14550}`
+  (`history` is opportunistic; the shared 14,550 global ceiling still applies)
 
 CI contains a documentation contract test so future edits must keep this file
 synchronized with those runtime constants.
@@ -64,7 +66,7 @@ synchronized with those runtime constants.
    allocation.
 5. Refresh jobs use the **refresh** allocation. History/statistics/autofill jobs
    use the **history** class, which can consume otherwise-unused global headroom
-   but can never exceed the 14,250 global ceiling.
+   but can never exceed the 14,550 global ceiling.
 6. The Ops journal records 80% and 95% threshold crossings for both the global
    budget and the active purpose cap.
 
