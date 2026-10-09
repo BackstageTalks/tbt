@@ -58,14 +58,11 @@ def main():
                 brand=page.locator('.header-top > .brand')
                 assert brand.locator('img.brand-source-logo').get_attribute('src')=='/assets/blinq_logo.svg'
                 assert page.locator('#bqm-toggle').is_hidden(),(width,'old hamburger still visible')
-                assert brand.locator('.brand-menu-chevron').is_visible()==(width<=900)
-                if width<=900:
-                    assert brand.get_attribute('role')=='button'
-                    assert brand.get_attribute('aria-controls')=='bqm-dialog'
-                    assert brand.get_attribute('aria-expanded')=='false'
-                else:
-                    assert brand.get_attribute('role') is None
-                    assert brand.get_attribute('href')=='#predictions'
+                assert brand.locator('.brand-menu-chevron').is_visible()
+                assert brand.get_attribute('role')=='button'
+                assert brand.get_attribute('aria-controls')=='bqm-dialog'
+                assert brand.get_attribute('aria-expanded')=='false'
+                assert page.locator('#profileButton').get_attribute('aria-controls')=='bqm-dialog'
                 # Approved header: gold rocket instead of PP, no tile borders,
                 # and no second navigation row on phones.
                 assert page.locator('#bqm-projects svg.project-rocket-icon').count()==1,(width,'rocket icon missing')
@@ -187,9 +184,12 @@ def main():
                     page.get_by_role('button',name='Druhá skupina',exact=True).click()
                     assert page.evaluate('groupCalls')==['one','two']
                     page.locator('#profileButton').click()
-                    assert page.locator('#profileMenu').is_visible()
-                    assert not page.locator('#profileProjectsLink').is_visible()
-                    page.locator('#profileButton').click()
+                    assert page.locator('#bqm-dialog').is_visible()
+                    assert page.locator('#bqm-account-panel').is_visible()
+                    assert page.locator('#profileMenu').is_hidden()
+                    assert page.locator('#bqm-dialog').get_by_role('button',name='Odhlásiť sa').is_visible()
+                    page.get_by_role('button',name='Zavrieť menu').click()
+                    page.wait_for_function("!document.getElementById('bqm-dialog').open")
                     if width==390 and os.getenv('BLINQ_SCREENSHOTS'):
                         out=Path(os.environ['BLINQ_SCREENSHOTS']);out.mkdir(parents=True,exist_ok=True)
                         page.screenshot(path=str(out/'mobile-predictions-review.png'),full_page=True)
@@ -227,7 +227,9 @@ def main():
                 assert brand.get_attribute('aria-expanded')=='true'
                 root_text=page.locator('#bqm-dialog nav').inner_text()
                 assert 'Výsledky' in root_text,(width,root_text)
-                for unwanted in ('Členstvo', 'Komunita', 'Jazyk', 'Môj účet', 'Odhlásiť sa'):
+                assert 'Môj účet' in root_text,(width,root_text)
+                assert not page.locator('#bqm-account-panel').is_visible()
+                for unwanted in ('Profil a členstvo', 'Odhlásiť sa', 'Jazyk'):
                     assert unwanted not in root_text,(width,root_text)
                 page.get_by_role('button',name='Zavrieť menu',exact=True).click()
                 page.wait_for_function("document.querySelector('.header-top > .brand').getAttribute('aria-expanded')==='false'")
@@ -239,21 +241,26 @@ def main():
                     page.keyboard.press('Escape')
                     assert not page.locator('#bqm-dialog').is_visible()
                 page.locator('#profileButton').click()
-                assert page.locator('#profileMenu').is_visible()
-                menu_box=page.locator('#profileMenu').bounding_box()
+                assert page.locator('#bqm-dialog').is_visible()
+                assert page.locator('#profileMenu').is_hidden(),(width,'old profile dropdown must stay closed')
+                assert page.locator('#bqm-account-panel').is_visible()
+                assert page.locator('#bqm-dialog .bqm-account-switch').get_attribute('aria-expanded')=='true'
+                assert page.locator('#profileButton').get_attribute('aria-expanded')=='true'
+                menu_box=page.locator('#bqm-dialog').bounding_box()
                 assert menu_box and menu_box['y'] >= 0 and menu_box['y']+menu_box['height'] <= 850,(width,menu_box)
-                for label in ('Môj účet', 'Odhlásiť sa', 'Upgrade', 'Komunita', 'Jazyk'):
-                    assert page.locator('#profileMenu').get_by_role('button',name=label,exact=(label in ('Upgrade','Komunita','Jazyk'))).is_visible(),(width,label)
-                page.locator('#profileMenu').get_by_role('button',name='Jazyk',exact=True).click()
+                for label in ('Profil a členstvo', 'Odhlásiť sa', 'Upgrade', 'Komunita', 'Jazyk'):
+                    assert page.locator('#bqm-account-panel').get_by_role('button',name=label,exact=True).is_visible(),(width,label)
+                page.locator('#bqm-account-panel').get_by_role('button',name='Jazyk',exact=True).click()
                 assert page.locator('#bqm-dialog').is_visible()
                 assert page.locator('#bqm-dialog').get_by_role('button',name='SK',exact=True).is_visible()
-                page.get_by_role('button',name='← Menu účtu',exact=True).click()
-                assert page.locator('#profileMenu').is_visible()
+                page.get_by_role('button',name='← Môj účet',exact=True).click()
+                assert page.locator('#bqm-account-panel').is_visible()
+                assert page.locator('#profileMenu').is_hidden()
                 if width==1440 and os.getenv('BLINQ_SCREENSHOTS'):
                     page.locator('.site-header').screenshot(path=str(Path(os.environ['BLINQ_SCREENSHOTS'])/'admin-header-review.png'))
                 assert not errors,(width,errors)
                 page.close()
-            print('Real-logo menu trigger, unchanged header icons, single-row mobile, badges, profile and desktop: PASS')
+            print('Unified logo/avatar menu, account accordion, unchanged icons and badges: PASS')
         finally:
             browser.close()
 
