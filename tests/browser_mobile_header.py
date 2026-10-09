@@ -296,6 +296,17 @@ def main():
                 brand.click()
                 assert page.locator('#bqm-dialog').is_visible()
                 assert brand.get_attribute('aria-expanded')=='true'
+                # Both triggers share one menu: account first, navigation below it.
+                section_order=page.locator('#bqm-dialog nav').evaluate(
+                    "n=>[...n.children].map(c=>c.className)"
+                )
+                assert section_order==['bqm-account-switch','bqm-account-panel','bqm-navigation-switch','bqm-navigation-panel'],(width,section_order)
+                assert page.locator('#bqm-navigation-panel').is_visible(),(width,'logo should open navigation')
+                assert page.locator('#bqm-account-panel').is_hidden(),(width,'logo should keep account collapsed')
+                assert page.locator('.bqm-navigation-switch').get_attribute('aria-expanded')=='true'
+                # Use the configured main-page artwork with dark overlay, not a flat gradient.
+                background=page.locator('#bqm-dialog').evaluate("(n)=>getComputedStyle(n).backgroundImage")
+                assert 'url(' in background and 'gradient' in background,(width,'missing home-page artwork',background)
                 root_text=page.locator('#bqm-dialog nav').inner_text()
                 assert 'Výsledky' in root_text,(width,root_text)
                 # Locked LIVE must show the same padlock as its header button.
@@ -335,6 +346,15 @@ def main():
                 page.locator('#profileButton').click()
                 assert page.locator('#bqm-dialog').is_visible()
                 assert page.locator('#profileMenu').is_hidden(),(width,'old profile dropdown must stay closed')
+                assert page.locator('#bqm-account-panel').is_visible()
+                assert page.locator('#bqm-navigation-panel').is_hidden(),(width,'avatar should collapse navigation by default')
+                assert page.locator('.bqm-navigation-switch').get_attribute('aria-expanded')=='false'
+                # Users can switch between sections without navigating away.
+                page.locator('.bqm-navigation-switch').click()
+                assert page.locator('#bqm-navigation-panel').is_visible()
+                assert page.locator('#bqm-account-panel').is_hidden()
+                page.locator('.bqm-account-switch').click()
+                assert page.locator('#bqm-navigation-panel').is_hidden()
                 assert page.locator('#bqm-account-panel').is_visible()
                 assert page.locator('#bqm-dialog .bqm-account-switch').get_attribute('aria-expanded')=='true'
                 assert page.locator('#profileButton').get_attribute('aria-expanded')=='true'
