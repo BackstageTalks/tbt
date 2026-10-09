@@ -85,8 +85,9 @@ jobs:
         working-directory: source
         run: |
           python - <<'PY'
-          import datetime,requests
-          from scripts.scrape_tennisexplorer_results_by_category import build_url
+          import datetime,requests,sys
+          sys.path.insert(0, 'scripts')
+          from scrape_tennisexplorer_results_by_category import build_url
           u=build_url("atp-single",datetime.date(2018,1,5))
           r=requests.get(u,timeout=35,headers={
             "User-Agent":"Mozilla/5.0 (compatible; BlinQResearch/1.0; +https://github.com/BackstageTalks/tbt-data)"})
