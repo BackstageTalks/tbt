@@ -1410,6 +1410,7 @@ def _public_live_radar_payload(result: dict) -> dict:
         "budget_paused": bool(result.get("budget_paused")),
         "cached": bool(result.get("cached")),
         "alert_storage_unavailable": bool(result.get("alert_storage_unavailable")),
+        "alert_publish_error": str(result.get("alert_publish_error") or "")[:64],
         "thresholds": result.get("thresholds") or {},
     }
 
@@ -1724,13 +1725,30 @@ def internal_live_radar_worker(req):
                 previous.get("last_success_at")
                 or (previous.get("scanned_at") if not previous.get("last_error") else None)
             )
-        persisted=True
+        # A successful provider HTTP request is NOT an operational success
+        # when the durable LIVE signal/heartbeat write failed. Preserve the
+        # last-good scan clock, report a non-2xx status, and let Actions fail.
+        failure = ("live_alert_storage_unavailable" if public.get("alert_storage_unavailable")
+                   else "live_alert_publish_failed" if public.get("alert_publish_error")
+                   else "")
+        if failure:
+            previous=load_live_worker_status() or {}
+            public["last_error"]=failure
+            public["last_success_at"]=(
+                previous.get("last_success_at")
+                or (previous.get("scanned_at") if not previous.get("last_error") else None)
+            )
         try:
             save_live_worker_status(public)
         except AdminStorageUnavailable:
-            persisted=False
             logging.warning("LIVE worker heartbeat storage unavailable")
-        return response({**public,"autonomous":True,"heartbeat_persisted":persisted})
+            return response({**public,"error":"live_heartbeat_storage_unavailable",
+                             "autonomous":True,"heartbeat_persisted":False},503)
+        if failure:
+            return response({**public,"error":failure,
+                             "autonomous":True,"heartbeat_persisted":True},503)
+        return response({**public,"autonomous":True,"heartbeat_persisted":True,
+                         "status":"budget_paused" if public.get("budget_paused") else "ok"})
     except Exception as exc:
         logging.exception("Autonomous LIVE Radar worker failed")
         try:
@@ -1793,29 +1811,36 @@ def internal_match_status_worker(req):
         # Attach only persisted provider evidence collected by LIVE Radar.
         # This remains display metadata; settlement P/L still uses the immutable
         # publication odds from the issued pick.
-        for settled in snapshot.get("settled_events") or []:
-            if not isinstance(settled,dict):
-                continue
-            eid=str(settled.get("event_id") or "").strip()
-            if not eid:
+        settled_by_id={
+            str(item.get("event_id") or "").strip():item
+            for item in snapshot.get("settled_events") or []
+            if isinstance(item,dict) and item.get("event_id")
+        }
+        # Include previously settled current-day events: their LIVE peak may
+        # have been observed before this rollout, and no billable tennis API
+        # calls are needed to read the existing Azure peak evidence.
+        for eid,status_row in (snapshot.get("statuses") or {}).items():
+            if not isinstance(status_row,dict):
                 continue
             try:
-                peak=load_live_odds_peak(eid)
+                peak=load_live_odds_peak(str(eid))
             except AdminStorageUnavailable:
-                peak=None
+                logging.warning("LIVE odds peak lookup unavailable")
+                snapshot["live_odds_peak_storage_unavailable"]=True
+                break
             if not peak:
                 continue
-            status_row=(snapshot.get("statuses") or {}).get(eid)
-            if isinstance(status_row,dict):
-                for key in ("max_live_odds","max_live_odds_at","live_odds_observations","live_odds_scope"):
-                    source_key={"live_odds_observations":"observations","live_odds_scope":"scope"}.get(key,key)
-                    value=peak.get(source_key)
-                    if value not in (None,""):
-                        status_row[key]=value
-            for key in ("max_live_odds","max_live_odds_at"):
-                value=peak.get(key)
+            for key in ("max_live_odds","max_live_odds_at","live_odds_observations","live_odds_scope"):
+                source_key={"live_odds_observations":"observations","live_odds_scope":"scope"}.get(key,key)
+                value=peak.get(source_key)
                 if value not in (None,""):
-                    settled[key]=value
+                    status_row[key]=value
+            settled=settled_by_id.get(str(eid))
+            if isinstance(settled,dict):
+                for key in ("max_live_odds","max_live_odds_at"):
+                    value=peak.get(key)
+                    if value not in (None,""):
+                        settled[key]=value
         saved = save_match_status_snapshot(snapshot)
         # Persist verified settled public offers before the 06:00 feed rollover.
         # Zero API calls: use only the provider-verified status snapshot and the
@@ -2414,8 +2439,20 @@ def admin_diagnostics(req):
                 "generated_at": raw_feed.get("generated_at"),
                 "upcoming": len(raw_feed.get("upcoming") or []),
                 "results": len(raw_feed.get("results") or []),
+                # The static release is not the full Results ledger since
+                # verified current-day settlements live in the Azure sidecar.
+                "served_results": None,
+                "results_archive_count": None,
                 "model_version": model.get("version") if isinstance(model, dict) else None,
             }
+            try:
+                settled_archive=load_settled_results_archive()
+                feed_health["results_archive_count"]=len(settled_archive)
+                feed_health["served_results"]=len(
+                    merge_settled_results(visible,settled_archive).get("results") or []
+                )
+            except AdminStorageUnavailable:
+                feed_health["results_archive_unavailable"]=True
         except Exception as exc:
             feed_health["error"] = exc.__class__.__name__
         asset_health = _feed_asset_health(raw_feed if 'raw_feed' in locals() else {})
