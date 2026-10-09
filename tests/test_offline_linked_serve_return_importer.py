@@ -6,7 +6,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from tbt.data.history_snapshot import write_year_partition
+from tbt.data.history_snapshot import write_year_partition, load_partitions
 from tbt.schemas import MatchRecord
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,3 +111,87 @@ def test_rejects_out_of_range_rich_charting_rate(tmp_path):
     assert review[0]["reason"]=="invalid_stats"
     assert "p1_return_deep_rate" in review[0]["keys"]
 
+
+
+def test_pit_quarantined_pbpx_archives_only_private_metadata_without_stats_leakage(tmp_path):
+    observed_on = datetime(2016, 5, 5, tzinfo=timezone.utc)
+    tournament_start = datetime(2016, 5, 2, 12, tzinfo=timezone.utc)
+    m = match({"p1_service_points_won": 0.62})
+    m.match_id = "hist-js:atp:trusted-event"
+    m.scheduled_at = tournament_start
+    m.tournament = "Madrid"
+    m.round_name = "R16"
+    m.surface = "clay"
+    history = tmp_path / "history"
+    history.mkdir()
+    write_year_partition([m], history, 2016)
+    from scripts.import_offline_linked_serve_return import _signature
+
+    stats = {
+        f"{side}_{field}": float(2 if field in {"aces", "double_faults"} else 0.6)
+        for side in ("p1", "p2")
+        for field in ("service_points_won", "return_points_won", "aces", "double_faults")
+    }
+    marker = {
+        "schema": 1, "source": "tennisvisuals_validated_pointbypoint",
+        "source_ref": "a" * 40,
+        "source_file": "ATP_Singles_pbpx.csv", "source_row": 12,
+        "source_date": observed_on.date().isoformat(),
+        "status": "pit_quarantined_unconsumed", "score_validated": True,
+        "stats": stats,
+    }
+    stage = {
+        "schema": 1, "match_id": m.match_id, "canonical": _signature(m),
+        "incoming_stats": {}, "baseline_stats": dict(m.stats),
+        "delayed_observation": marker, "import_ready": True,
+        "quality_ready_added": False,
+    }
+    stagefile = tmp_path / "stage.jsonl"
+    stagefile.write_text(json.dumps(stage) + "\n")
+    out = tmp_path / "out"
+    subprocess.run([
+        sys.executable, str(SCRIPT), "--stage", str(stagefile),
+        "--history-dir", str(history), "--out-dir", str(out),
+        "--write-partitions", "--write-history-dir", str(history),
+    ], cwd=ROOT, check=True)
+    report = json.loads((out / "report.json").read_text())
+    assert report["counts"]["pit_observations_added"] == 1
+    assert report["counts"]["stat_fields_added"] == 0
+    assert report["quality_ready_added"] == 0
+    assert report["changed_years"] == [2016]
+    rows = load_partitions(history)
+    assert len(rows) == 1
+    assert rows[0].scheduled_at == tournament_start
+    assert rows[0].winner_id == m.winner_id
+    assert rows[0].stats == m.stats
+    assert rows[0].provider_payload["_tbt_pbpx_delayed_observation"] == marker
+
+
+def test_pit_delayed_observation_fails_closed_on_wrong_source_date(tmp_path):
+    m = match()
+    history = tmp_path / "history"
+    history.mkdir()
+    write_year_partition([m], history, 2024)
+    from scripts.import_offline_linked_serve_return import _signature
+    row = {
+        "schema": 1, "match_id": m.match_id, "canonical": _signature(m),
+        "incoming_stats": {}, "baseline_stats": dict(m.stats),
+        "delayed_observation": {
+            "schema": 1, "source": "tennisvisuals_validated_pointbypoint",
+            "source_ref": "a" * 40, "source_file": "ATP_Singles_pbpx.csv",
+            "source_row": 2, "source_date": "2024-01-06",
+            "status": "pit_quarantined_unconsumed",
+            "score_validated": True, "stats": {},
+        },
+        "import_ready": True,
+    }
+    stage = tmp_path / "stage.jsonl"
+    stage.write_text(json.dumps(row) + "\n")
+    out = tmp_path / "out"
+    subprocess.run([
+        sys.executable, str(SCRIPT), "--stage", str(stage),
+        "--history-dir", str(history), "--out-dir", str(out),
+    ], cwd=ROOT, check=True)
+    report = json.loads((out / "report.json").read_text())
+    assert report["counts"]["invalid_delayed_observation"] == 1
+    assert report["quality_ready_added"] == 0
