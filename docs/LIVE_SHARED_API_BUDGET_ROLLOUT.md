@@ -17,7 +17,7 @@ rolling 24-hour window.
 | Match Status | 2,500 |
 | Refresh (including presentation enrichment) | 5,500 |
 | History/backfill opportunistic ceiling | 14,550 |
-| **Combined, hard** | **14,250** |
+| **Combined, hard** | **14,550** |
 | **Provider reserve kept untouched** | **450** |
 | **Provider plan** | **15,000** |
 
