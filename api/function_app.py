@@ -1406,6 +1406,8 @@ def _public_live_radar_payload(result: dict) -> dict:
         "new_alerts": int(result.get("created") or result.get("new_alerts") or 0),
         "prime_total": int(result.get("prime_total") or 0),
         "prime_eligible": int(result.get("prime_eligible") or 0),
+        "matched_prime_live": int(result.get("matched_prime_live") or 0),
+        "matched_eligible_live": int(result.get("matched_eligible_live") or 0),
         "provider_skipped_reason": result.get("provider_skipped_reason"),
         "budget_paused": bool(result.get("budget_paused")),
         "cached": bool(result.get("cached")),
