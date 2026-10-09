@@ -1734,6 +1734,7 @@ def internal_live_radar_worker(req):
                    else "live_alert_publish_failed" if public.get("alert_publish_error")
                    else "")
         if failure:
+            public["ok"]=False
             previous=load_live_worker_status() or {}
             public["last_error"]=failure
             public["last_success_at"]=(
@@ -1744,12 +1745,13 @@ def internal_live_radar_worker(req):
             save_live_worker_status(public)
         except AdminStorageUnavailable:
             logging.warning("LIVE worker heartbeat storage unavailable")
-            return response({**public,"error":"live_heartbeat_storage_unavailable",
+            return response({**public,"ok":False,"error":"live_heartbeat_storage_unavailable",
                              "autonomous":True,"heartbeat_persisted":False},503)
         if failure:
             return response({**public,"error":failure,
                              "autonomous":True,"heartbeat_persisted":True},503)
-        return response({**public,"autonomous":True,"heartbeat_persisted":True,
+        return response({**public,"ok":not public.get("budget_paused"),"autonomous":True,
+                         "heartbeat_persisted":True,
                          "status":"budget_paused" if public.get("budget_paused") else "ok"})
     except Exception as exc:
         logging.exception("Autonomous LIVE Radar worker failed")
