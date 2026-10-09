@@ -34,5 +34,7 @@ jobs:
       - name: Prepare read-only parquet verification
         run: python -m pip install --disable-pip-version-check pyarrow
       - name: Copy complete canonical history to separate PRIVATE release, SHA-verify all 79 assets, and remote readback
-        run: python scripts/research/snapshot_canonical_private_release.py
+        run: |
+          python -m py_compile scripts/research/private_canonical_snapshot_v2.py
+          python scripts/research/private_canonical_snapshot_v2.py
       # Intentionally never upload raw datasets, report, or artifacts to the public tbt repository.
