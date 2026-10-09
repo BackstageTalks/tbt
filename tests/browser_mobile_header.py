@@ -48,6 +48,17 @@ def main():
                 assert live.get_attribute('data-upgrade-plan')=='elite',(width,'LIVE minimum')
                 assert 'is-access-locked' in live.get_attribute('class'),(width,'LIVE access class')
                 assert lock.is_visible(),(width,'missing LIVE padlock')
+                # Real account access, not synthetic CSS: rookie has LIVE locked.
+                page.locator('.header-top > .brand').click()
+                assert page.locator('#bqm-dialog nav').get_by_role('button',name='Live radar 🔒',exact=True).is_visible(),(width,'LIVE menu access lock')
+                page.get_by_role('button',name='Zavrieť menu').click()
+                page.wait_for_function("!document.getElementById('bqm-dialog').open")
+                page.evaluate("""() => {mobileTest.state.feed.account.plan='elite';mobileTest.renderInsightBell();}""")
+                page.locator('.header-top > .brand').click()
+                assert page.locator('#bqm-dialog nav').get_by_role('button',name='Live radar',exact=True).is_visible(),(width,'LIVE menu unlock')
+                page.get_by_role('button',name='Zavrieť menu').click()
+                page.wait_for_function("!document.getElementById('bqm-dialog').open")
+                page.evaluate("""() => {mobileTest.state.feed.account.plan='rookie';mobileTest.renderInsightBell();}""")
                 live_geom=page.evaluate("""() => {
                     const b=document.querySelector('#insightShortcut').getBoundingClientRect();
                     const l=document.querySelector('#insightShortcut .live-access-lock').getBoundingClientRect();
