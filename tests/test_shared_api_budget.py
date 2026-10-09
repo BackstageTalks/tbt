@@ -14,7 +14,7 @@ from tbt.providers.rapidapi import RapidTennisClient
 NOW = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
 
 
-def test_all_purposes_share_provider_day_pool_with_5_percent_reserve():
+def test_all_purposes_share_provider_day_pool_with_3_percent_reserve():
     ledger = None
     for purpose, amount in (
         ("live", 3000),
@@ -22,12 +22,12 @@ def test_all_purposes_share_provider_day_pool_with_5_percent_reserve():
         ("refresh", 2500),
         ("match", 2500),
         ("history", 2500),
-        ("history", 750),
+        ("history", 1050),
     ):
         ledger, result = shared_budget.calculate(ledger, purpose, amount, now=NOW)
 
-    assert result["provider_plan_limit"] == 7500
-    assert result["global_limit"] == 14250
+    assert result["provider_plan_limit"] == 4500
+    assert result["global_limit"] == 14550
     assert result["global_spent"] == 14250
     assert result["global_remaining"] == 0
     assert result["reserved_provider_headroom"] == 750
@@ -35,10 +35,10 @@ def test_all_purposes_share_provider_day_pool_with_5_percent_reserve():
         shared_budget.calculate(ledger, "refresh", 1, now=NOW)
 
 
-def test_history_can_use_global_headroom_but_never_cross_ninety_five_percent():
+def test_history_can_use_global_headroom_but_never_cross_ninety_seven_percent():
     ledger = None
     result = None
-    for amount in (3000, 3000, 3000, 3000, 1500, 750):
+    for amount in (3000, 3000, 3000, 3000, 1500, 1050):
         ledger, result = shared_budget.calculate(ledger, "history", amount, now=NOW)
     assert result["spent"]["history"] == 14250
     assert result["global_spent"] == 14250
@@ -57,7 +57,7 @@ def test_provider_day_resets_at_1910_bratislava():
 
     ledger, result = shared_budget.calculate(ledger, "refresh", 1000, now=at_reset)
     assert result["global_spent"] == 1000
-    assert result["global_remaining"] == 13250
+    assert result["global_remaining"] == 13550
     assert result["window"] == "provider_day_19_10_europe_bratislava"
 
 
