@@ -209,6 +209,88 @@ def _resolve_candidate(candidates, source_tournament: str, source_winner: str):
     return candidates
 
 
+def _historical_alias_indexes(matches):
+    """Use only names already attributed to an immutable canonical player ID.
+
+    A name shared by multiple canonical IDs is *never* treated as an alias.
+    Compact comparison (JoaoSousa vs Joao Sousa) has the same uniqueness gate.
+    """
+    exact_ids = defaultdict(set)
+    compact_ids = defaultdict(set)
+    by_ids_date = defaultdict(list)
+    for match in matches:
+        tour = str(match.tour or "").lower()
+        day = match.scheduled_at.date().isoformat()
+        ids = (str(match.player1_id), str(match.player2_id))
+        by_ids_date[(tour, day, tuple(sorted(ids)))].append(match)
+        for pid, name in ((ids[0], match.player1_name), (ids[1], match.player2_name)):
+            normalized = norm_text(name)
+            if not normalized or not pid:
+                continue
+            exact_ids[(tour, normalized)].add(pid)
+            if len(normalized.replace(" ", "")) >= 8:
+                compact_ids[(tour, normalized.replace(" ", ""))].add(pid)
+    return exact_ids, compact_ids, by_ids_date
+
+
+def _resolve_historical_alias(
+    indexes, tour: str, day: str, server1: str, server2: str,
+    tournament: str, surface: str, round_name: str,
+):
+    """Return (canonical match, side mapping, evidence) only for a unique ID pair.
+
+    No edit-distance or partial-name match; no shift of match date.
+    Compact-only matches additionally require exact event/round/surface evidence.
+    """
+    exact_ids, compact_ids, by_ids_date = indexes
+
+    def find(name):
+        normalized = norm_text(name)
+        if not normalized:
+            return None
+        exact = exact_ids.get((tour, normalized), set())
+        if len(exact) > 1:
+            return None  # a homonym cannot be repaired by collapsing whitespace
+        if len(exact) == 1:
+            return next(iter(exact)), "canonical_historical_alias"
+        compact = normalized.replace(" ", "")
+        if len(compact) < 8:
+            return None
+        ids = compact_ids.get((tour, compact), set())
+        if len(ids) != 1:
+            return None
+        return next(iter(ids)), "canonical_unique_compact_alias"
+
+    first, second = find(server1), find(server2)
+    if not first or not second or first[0] == second[0]:
+        return None
+    candidates = by_ids_date.get((tour, day, tuple(sorted((first[0], second[0])))), [])
+    if len(candidates) != 1:
+        return None
+    match = candidates[0]
+    compact_used = "canonical_unique_compact_alias" in (first[1], second[1])
+    if compact_used:
+        # Orthogonal evidence prevents "matching" a similarly named athlete.
+        if not tournament or norm_text(match.tournament) != norm_text(tournament):
+            return None
+        if not surface or not match.surface or norm_text(surface) == "unknown":
+            return None
+        from tbt.data.offline_odds import norm_round, norm_surface
+        if norm_surface(match.surface) != norm_surface(surface):
+            return None
+        if round_name and match.round_name and norm_round(round_name) != norm_round(match.round_name):
+            return None
+    if first[0] == str(match.player1_id) and second[0] == str(match.player2_id):
+        mapping = ((1, "p1"), (2, "p2"))
+    elif first[0] == str(match.player2_id) and second[0] == str(match.player1_id):
+        mapping = ((1, "p2"), (2, "p1"))
+    else:
+        return None
+    return match, mapping, (
+        "canonical_unique_compact_alias" if compact_used else "canonical_historical_alias"
+    )
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--history-dir", required=True)
@@ -223,6 +305,7 @@ def main():
     if safety.get("quarantined_rows"):
         raise SystemExit("Canonical history identity quarantine is non-empty")
 
+    alias_indexes = _historical_alias_indexes(matches)
     index = defaultdict(list)
     for match in matches:
         pair = tuple(sorted((norm_text(match.player1_name), norm_text(match.player2_name))))
@@ -232,6 +315,7 @@ def main():
     counts = Counter()
     file_counts = {}
     staged_by_match = {}
+    quarantined_match_ids = set()
     review = []
 
     source = Path(args.source_dir)
@@ -295,6 +379,20 @@ def main():
                     continue
                 key = (source_tour, source_date.isoformat(), pair)
                 candidates = _resolve_candidate(list(index.get(key, [])), tournament, winner_name)
+                alias_mapping = None
+                alias_evidence = None
+                if not candidates and winner_side in (1, 2):
+                    resolved = _resolve_historical_alias(
+                        alias_indexes, source_tour, source_date.isoformat(),
+                        server1, server2, tournament,
+                        str(row.get("surface") or ""),
+                        str(row.get("round") or ""),
+                    )
+                    if resolved is not None:
+                        alias_match, alias_mapping, alias_evidence = resolved
+                        candidates = [alias_match]
+                        counts["historical_alias_candidate"] += 1
+                        local["historical_alias_candidate"] += 1
                 if len(candidates) != 1:
                     reason = "unmatched" if not candidates else "ambiguous"
                     counts[reason] += 1
@@ -311,7 +409,9 @@ def main():
                 match = candidates[0]
                 mp1 = norm_text(match.player1_name)
                 mp2 = norm_text(match.player2_name)
-                if norm_text(server1) == mp1 and norm_text(server2) == mp2:
+                if alias_mapping is not None:
+                    mapping = alias_mapping
+                elif norm_text(server1) == mp1 and norm_text(server2) == mp2:
                     mapping = ((1, "p1"), (2, "p2"))
                 elif norm_text(server1) == mp2 and norm_text(server2) == mp1:
                     mapping = ((1, "p2"), (2, "p1"))
@@ -320,7 +420,16 @@ def main():
                     local["orientation_failed"] += 1
                     continue
 
-                if winner_name and _winner_name(match) and winner_name != _winner_name(match):
+                expected_winner_id = (
+                    str(match.player1_id if mapping[winner_side - 1][1] == "p1" else match.player2_id)
+                    if winner_side in (1, 2) else ""
+                )
+                winner_conflict = (
+                    bool(alias_mapping is not None and expected_winner_id != str(match.winner_id or ""))
+                    if alias_mapping is not None
+                    else bool(winner_name and _winner_name(match) and winner_name != _winner_name(match))
+                )
+                if winner_conflict:
                     counts["winner_mismatch"] += 1
                     local["winner_mismatch"] += 1
                     review.append({
@@ -391,12 +500,17 @@ def main():
                             "calendar_date_exact",
                             "player_pair_exact",
                             "canonical_candidate_unique",
+                            *([alias_evidence] if alias_evidence else []),
                             "explicit_pbp_server_relative_outcomes",
                         ],
                     }],
                     "import_ready": True,
                 }
 
+                if match_id in quarantined_match_ids:
+                    counts["source_duplicate_quarantined"] += 1
+                    local["source_duplicate_quarantined"] += 1
+                    continue
                 previous = staged_by_match.get(match_id)
                 if previous is not None:
                     if previous["incoming_stats"] == stage["incoming_stats"]:
@@ -412,6 +526,7 @@ def main():
                             "match_id": match_id,
                         })
                         staged_by_match.pop(match_id, None)
+                        quarantined_match_ids.add(match_id)
                     continue
 
                 staged_by_match[match_id] = stage
