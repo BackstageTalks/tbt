@@ -26,7 +26,7 @@ def test_all_purposes_share_provider_day_pool_with_5_percent_reserve():
     ):
         ledger, result = shared_budget.calculate(ledger, purpose, amount, now=NOW)
 
-    assert result["provider_plan_limit"] == 7500
+    assert result["provider_plan_limit"] == 15000
     assert result["global_limit"] == 14250
     assert result["global_spent"] == 14250
     assert result["global_remaining"] == 0
