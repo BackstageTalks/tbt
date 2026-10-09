@@ -4,6 +4,7 @@ on:
     branches: [ops/oddstrader-private-integration-20261009]
     paths:
       - .github/workflows/oddstrader-private-safe-20261009.yml
+      - scripts/research/import_oddstrader_private_safe.py
   workflow_dispatch:
 
 permissions:
