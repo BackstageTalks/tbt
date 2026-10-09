@@ -767,8 +767,8 @@ body#blinqPremium .reference-topbar #bqm-projects svg.project-rocket-icon{
 /* Branded menu control: the existing asset stays pixel-for-pixel intact.
    Only the logo/old hamburger area changes; right-side icons are untouched. */
 body#blinqPremium .site-header .header-top > .brand .brand-menu-chevron{display:none!important}
-body#blinqPremium.bqm-enabled .site-header .header-top > #bqm-toggle,
-body#blinqPremium.bqm-enabled.blinq-admin .site-header .header-top > #bqm-toggle{
+/* The repeated ID intentionally beats older legacy !important selectors. */
+body#blinqPremium#blinqPremium.bqm-enabled .site-header .header-top > #bqm-toggle{
   display:none!important;
 }
 body#blinqPremium.bqm-enabled .site-header .header-top > .brand.brand-menu-trigger{
