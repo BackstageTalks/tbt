@@ -45,7 +45,7 @@ def test_comparator_copy_is_not_duplicated_inside_form():
 def test_comparator_assets_are_cache_busted():
     html = Path("web/index.html").read_text(encoding="utf-8")
     assert "/blinq-app.css?v=7360&p=61&compare=5" in html
-    assert "/app.js?v=7360&p=61&compare=7" in html
+    assert "/app.js?v=7360&p=61&compare=8" in html
 
 
 def test_comparator_player_suggestions_bind_after_async_insertion():
@@ -110,3 +110,16 @@ def test_comparator_analytics_labels_missing_samples_and_explicit_h2h():
     assert "comparator-analytics-note" in segment
     assert "comparator-insight-grid" in css
     assert "@media(max-width:650px)" in css
+
+
+def test_comparator_search_compacts_unambiguous_initial_name_without_identity_merge():
+    app = Path("web/app.js").read_text(encoding="utf-8")
+    groups = app.split("function comparatorPlayerGroups(rows)", 1)[1].split("function comparatorAutoPlayer(", 1)[0]
+    render = app.split("function comparatorSearchHtml(side)", 1)[1].split("function comparatorResultHtml", 1)[0]
+    assert "group.rows.length===1" in groups
+    assert "shortGroup.rows.length===1" in groups
+    assert "Math.abs(Number(shortGroup.rows[0].rank)-Number(group.rows[0].rank))<=10" in groups
+    assert "parents.length!==1" in groups
+    assert "parent.shortNameGrouped=true" in groups
+    assert "if(full.length===1)return full" in render
+    assert "data-comparator-expand" not in render
