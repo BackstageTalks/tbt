@@ -63,7 +63,7 @@ def audit(players: list[dict]) -> dict:
                     for p in matches[:4]
                 ],
             })
-        if label == "safe_to_display_full_name":
+        if label == "safe_to_display_full_name" and counts["safe_to_display_full_name"] <= 15:
             mapped = search_players(
                 {"players": players}, str(row.get("name")), tour=tour, limit=25
             )
