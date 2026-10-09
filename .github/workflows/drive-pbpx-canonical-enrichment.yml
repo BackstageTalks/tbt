@@ -1,0 +1,251 @@
+name: Integrate Drive TennisVisuals PBPX safely
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/drive-pbpx-canonical-enrichment.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  pbpx-enrichment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      SOURCE_REF: 470659694330da03c4509d2e341555216929d118
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Verify private source and tested import contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+          python -m pip install --retries 5 --timeout 60 -r api/requirements.txt -r api/requirements-train.txt pytest
+          python -m pytest tests/test_sackmann_pbp_serve_return.py tests/test_tennisvisuals_pbp_enrichment.py tests/test_offline_linked_serve_return_importer.py -q
+          python -m compileall -q scripts/link_pointbypoint_serve_return.py scripts/import_offline_linked_serve_return.py
+
+      - name: Download pinned operator PBPX input from private repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir=.cache/tbt/drive-pbpx/source
+          mkdir -p "$source_dir"
+          for name in ATP_Singles_pbpx.csv WTA_Singles_pbpx.csv; do
+            path="research/offline-sources/drive-pbpx-20261009/$name"
+            gh api -H "Accept: application/vnd.github.raw" "repos/$TBT_DATA_REPOSITORY/contents/$path?ref=$SOURCE_REF" > "$source_dir/$name"
+            expected="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path?ref=$SOURCE_REF" --jq .sha)"
+            actual="$(git hash-object "$source_dir/$name")"
+            test "$expected" = "$actual" || { echo "Source SHA mismatch: $name"; exit 1; }
+          done
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          root=Path(".cache/tbt/drive-pbpx/source")
+          expected={"ATP_Singles_pbpx.csv": 1360, "WTA_Singles_pbpx.csv":1185}
+          for name, count in expected.items():
+              with (root/name).open(encoding="utf-8-sig", newline="") as handle:
+                  reader=csv.DictReader(handle)
+                  assert {"date","tournament","tour","server1","server2","winner","pbp","score","surface"}.issubset(reader.fieldnames or []), name
+                  rows=list(reader)
+              assert len(rows)==count, (name,len(rows),count)
+              assert all(row.get("pbp") for row in rows), name
+              print(f"Verified private input {name}: {len(rows)} rows")
+          PY
+
+      - name: Download current checksum-verified private canonical history
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          root=Path(".cache/tbt/drive-pbpx/history")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).download(require_bundle_manifest=True)
+          PY
+
+      - name: Strict exact-identity linker
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/link_pointbypoint_serve_return.py             --history-dir .cache/tbt/drive-pbpx/history             --source-dir .cache/tbt/drive-pbpx/source             --out-dir .cache/tbt/drive-pbpx/link
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/drive-pbpx/link/report.json").read_text())
+          c=r.get("counts") or {}
+          assert c.get("source_files")==2, c
+          assert c.get("source_match_rows")==2545, c
+          assert r.get("canonical_rows",0)>=993442, "Stale canonical snapshot"
+          assert r.get("api_requests")==0
+          assert r.get("production_mutated") is False
+          print("Link gate:",json.dumps({"canonical":r["canonical_rows"],"linked_staged":c.get("staged_matches",0),"conflicts":c.get("source_duplicate_conflict",0),"unmatched":c.get("unmatched",0)}))
+          PY
+
+      - name: Dry-run importer and reject any unverified updates
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/drive-pbpx/link/auto_linked.jsonl             --history-dir .cache/tbt/drive-pbpx/history             --out-dir .cache/tbt/drive-pbpx/dry
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(".cache/tbt/drive-pbpx")
+          link=json.loads((root/"link/report.json").read_text())
+          dry=json.loads((root/"dry/report.json").read_text())
+          c=dry.get("counts") or {}
+          for key in ("identity_missing","identity_changed","invalid_stats","stat_conflicts"):
+              if c.get(key,0):
+                  raise SystemExit(f"FAIL CLOSED: {key}={c[key]}")
+          assert dry.get("quality_ready_added",0)>=0, "Quality regression"
+          assert dry.get("stage_rows")==len((root/"link/auto_linked.jsonl").read_text().splitlines())
+          count=int(c.get("updated",0))
+          assert count==dry.get("quality_ready_added",0), "Unexpected quality-ready delta"
+          if count:
+              assert dry.get("changed_years"), "Changed partitions missing"
+          with open(os.environ["GITHUB_OUTPUT"],"a") as fh:
+              fh.write(f"changes={'true' if count else 'false'}\n")
+          print("Dry-run:",json.dumps({"updated":count,"quality_ready_added":dry["quality_ready_added"],"years":dry.get("changed_years")}))
+          PY
+
+      - name: Persist immutable prewrite partition backup and verify checksum
+        if: steps.gate.outputs.changes == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/drive-pbpx
+          backup="$root/backup"
+          mkdir -p "$backup"
+          cp "$root/history/history_manifest.json" "$backup/"
+          mapfile -t years < <(python - <<'PY'
+          import json
+          r=json.load(open(".cache/tbt/drive-pbpx/dry/report.json"))
+          for y in r["changed_years"]: print(int(y))
+          PY
+          )
+          for y in "${years[@]}"; do
+            cp "$root/history/history-$y.parquet" "$backup/"
+          done
+          (cd "$backup" && sha256sum * > SHA256SUMS && sha256sum --check SHA256SUMS)
+          tag="tbt-pbpx-before-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$backup/"* -R "$TBT_DATA_REPOSITORY"             --title "Immutable prewrite PBPX backup $GITHUB_RUN_ID"             --notes "Prewrite canonical affected partitions and manifest. Never delete before verified rollback."
+          mkdir -p "$root/backup-verify"
+          gh release download "$tag" -R "$TBT_DATA_REPOSITORY" -D "$root/backup-verify"
+          (cd "$root/backup-verify" && sha256sum --check SHA256SUMS)
+
+      - name: Write only strict matched enrichment to local partitions
+        if: steps.gate.outputs.changes == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/drive-pbpx/link/auto_linked.jsonl             --history-dir .cache/tbt/drive-pbpx/history             --out-dir .cache/tbt/drive-pbpx/write             --write-partitions             --write-history-dir .cache/tbt/drive-pbpx/history
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path(".cache/tbt/drive-pbpx")
+          dry=json.loads((root/"dry/report.json").read_text())
+          write=json.loads((root/"write/report.json").read_text())
+          assert write["quality_ready_added"]==dry["quality_ready_added"]>0
+          assert write["changed_years"]==dry["changed_years"]
+          assert write["counts"]==dry["counts"]
+          PY
+
+      - name: Publish changed private canonical partitions
+        if: steps.gate.outputs.changes == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          root=Path(".cache/tbt/drive-pbpx/history")
+          report=json.loads(Path(".cache/tbt/drive-pbpx/write/report.json").read_text())
+          matches=load_partitions(root)
+          safe,safety=sanitize_history_identities(matches)
+          if safety.get("quarantined_rows") or len(safe)!=len(matches):
+              raise SystemExit("Identity safety failure: no publication")
+          if len(matches)<993442:
+              raise SystemExit("Canonical row regression: no publication")
+          files=[root/f"history-{int(y)}.parquet" for y in report["changed_years"]]
+          files.append(root/"history_manifest.json")
+          if any(not f.is_file() or not f.stat().st_size for f in files):
+              raise SystemExit("Missing partition file")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).upload_bundle(files)
+          PY
+
+      - name: Re-download published history and verify every staged value
+        if: steps.gate.outputs.changes == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,math
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          root=Path(".cache/tbt/drive-pbpx")
+          verify=root/"verify"
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",verify).download(require_bundle_manifest=True)
+          rows=load_partitions(verify)
+          safe,safety=sanitize_history_identities(rows)
+          assert len(safe)==len(rows) and not safety.get("quarantined_rows"), "Persisted identity violation"
+          dry=json.loads((root/"dry/report.json").read_text())
+          assert len(rows)>=993442, "Persisted canonical row regression"
+          by_id={str(x.match_id):x for x in rows}
+          stage=[json.loads(s) for s in (root/"link/auto_linked.jsonl").read_text().splitlines() if s.strip()]
+          for entry in stage:
+              match=by_id.get(str(entry["match_id"]))
+              if match is None:
+                  raise SystemExit(f"Persisted match missing: {entry['match_id']}")
+              for k,v in entry["incoming_stats"].items():
+                  if not math.isclose(float((match.stats or {}).get(k,-999)),float(v),rel_tol=0,abs_tol=1e-6):
+                      raise SystemExit(f"Persisted stat differs: {entry['match_id']}/{k}")
+          print(json.dumps({"status":"verified","persisted_rows":len(rows),"staged_matches":len(stage),"quality_ready_added":dry["quality_ready_added"]}))
+          PY
+
+      - name: Persist run audit (including zero-change outcome)
+        if: always()
+        shell: bash
+        env:
+          FINAL_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(".cache/tbt/drive-pbpx")
+          def read(path):
+              p=root/path
+              return json.loads(p.read_text()) if p.is_file() else None
+          audit={"schema":1,"status":os.environ.get("FINAL_STATUS"),"run_id":os.environ["GITHUB_RUN_ID"],"run_sha":os.environ["GITHUB_SHA"],"source_ref":os.environ["SOURCE_REF"],"link":read("link/report.json"),"dry_run":read("dry/report.json"),"write":read("write/report.json"),"model_promoted":False,"provider_requests":0,"note":"Published only if backup, strict dry-run and persisted value readback succeeded. If failure after publication, inspect release and rollback using the prewrite backup."}
+          Path("/tmp/drive-pbpx-audit.json").write_text(json.dumps(audit,ensure_ascii=False,indent=2))
+          PY
+          path=audit/drive-pbpx-canonical-import-latest.json
+          existing="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          content="$(base64 -w0 /tmp/drive-pbpx-audit.json)"
+          if [[ -n "$existing" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Audit Drive PBPX canonical import $GITHUB_RUN_ID" -f content="$content" -f sha="$existing" > /dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Audit Drive PBPX canonical import $GITHUB_RUN_ID" -f content="$content" > /dev/null
+          fi
