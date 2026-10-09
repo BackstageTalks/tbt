@@ -199,6 +199,25 @@ def main():
                 page.locator("#comparatorSearch0 [data-player-id='cerun-francisco']").click()
                 assert page.evaluate("comparatorHarness.state.comparator.players[0].player_id") == "cerun-francisco"
 
+                # Production screenshot: abbreviated historical Bublik #51 and
+                # canonical Alexander #13, plus historical full-name duplicate.
+                page.evaluate("""() => {
+                    window.BlinqAuth.comparatorPlayers=async() => ({
+                        players:[
+                            {player_id:'hist-js:atp:122330',name:'Bublik A.',tour:'atp',rank:51},
+                            {player_id:'hist-js:atp:BK92',name:'Alexander Bublik',tour:'atp'},
+                            {player_id:'163480',name:'Alexander Bublik',tour:'atp',rank:13}
+                        ]
+                    });
+                }""")
+                page.locator("#comparatorPlayer0").fill("bublik")
+                page.locator("#comparatorSearch0 [data-player-id='163480']").wait_for()
+                assert page.locator("#comparatorSearch0 .comparator-search-primary").count() == 1
+                assert page.locator("#comparatorSearch0 [data-player-id='hist-js:atp:122330']").count() == 0
+                assert page.locator("#comparatorSearch0 [data-player-id='hist-js:atp:BK92']").count() == 0
+                page.locator("#comparatorSearch0 [data-player-id='163480']").click()
+                assert page.evaluate("comparatorHarness.state.comparator.players[0].player_id") == "163480"
+
                 # Realistic analysis data, not decorative placeholders.
                 page.evaluate("""() => {
                     const h=window.comparatorHarness;
