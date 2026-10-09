@@ -47,6 +47,18 @@ def test_history_can_use_global_headroom_but_never_cross_ninety_seven_percent():
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "history", 1, now=NOW)
 
+def test_absolute_provider_hard_stop_between_1908_and_1910():
+    # 2026-09-27 in Bratislava is UTC+2.
+    for minute in (8, 9):
+        with pytest.raises(shared_budget.SharedBudgetExhausted, match="19:08"):
+            shared_budget.calculate(None, "live", 1,
+                                    now=datetime(2026, 9, 27, 17, minute, tzinfo=timezone.utc))
+    _, result = shared_budget.calculate(None, "live", 1,
+                                        now=datetime(2026, 9, 27, 17, 10, tzinfo=timezone.utc))
+    assert result["global_spent"] == 1
+    assert result["global_remaining"] == 14549
+
+
 def test_provider_day_resets_at_1910_bratislava():
     # 2026-09-27 is CEST, so 19:10 Europe/Bratislava == 17:10 UTC.
     before_reset = datetime(2026, 9, 27, 17, 9, tzinfo=timezone.utc)
