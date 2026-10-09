@@ -197,10 +197,14 @@ def _parse_pbp(value: object):
         1: {
             "service_points_won": sides[1]["service_won"] / sides[1]["service_points"],
             "return_points_won": sides[1]["return_won"] / sides[1]["return_points"],
+            "aces": sides[1]["aces"],
+            "double_faults": sides[1]["double_faults"],
         },
         2: {
             "service_points_won": sides[2]["service_won"] / sides[2]["service_points"],
             "return_points_won": sides[2]["return_won"] / sides[2]["return_points"],
+            "aces": sides[2]["aces"],
+            "double_faults": sides[2]["double_faults"],
         },
         "point_count": valid_points,
         "set_games": set_games,
