@@ -159,7 +159,7 @@ jobs:
           cutoff_local = datetime.combine(local.date(), time(19, 8), tzinfo=ZONE)
           cutoff = cutoff_local.astimezone(timezone.utc)
           if now >= cutoff - timedelta(minutes=4):
-              print("Less than 8 minutes until provider cutoff; no dispatch")
+              print("Less than 4 minutes until provider cutoff; no dispatch")
               sys.exit(0)
           last_complete = local.date() - timedelta(days=1)
           payload = {
