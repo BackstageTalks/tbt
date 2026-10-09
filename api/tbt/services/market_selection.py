@@ -35,20 +35,10 @@ MATCH_WINNER_MARKET_NAMES = {
 # VALUE has assignment priority because close-odds candidates are intentionally
 # scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
 # branch (<1.50).
-SECTION_PRIORITY = ("top200", "value", "top_daily", "prime")
+SECTION_PRIORITY = ("value", "top_daily", "prime")
 
 PUBLICATION_MIN_PROBABILITY = 0.65
 
-# TOP200: first-pass singles selection. A match qualifies when at least one
-# player has a real point-in-time ranking from 1..200. It keeps the same hard
-# evidence floor as TOP but does not inherit TOP's >=1.50 price bucket because
-# TOP200 sits before all public price categories. Real Match Winner odds are
-# still mandatory. Missing/invalid ranks fail closed.
-TOP200_MAX_RANK = 200
-TOP200_MIN_PROBABILITY = 0.65
-TOP200_MIN_DATA_DEPTH = 0.80
-TOP200_MIN_SURFACE_MATCHES = 5
-TOP200_LIMIT = 5
 PRIME_TOP_CORE_PROBABILITY = 0.68
 PRIME_TOP_FALLBACK_PROBABILITY = 0.65
 TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.65
@@ -356,19 +346,6 @@ def _overall_samples(row: dict[str, Any]) -> tuple[int, int]:
         return int(number)
 
     return count(p1.get("matches")), count(p2.get("matches"))
-
-
-def _player_rank(card: dict[str, Any], side: str) -> int | None:
-    player = card.get(side) if isinstance(card.get(side), dict) else {}
-    value = _number(player.get("rank"))
-    if value is None or value <= 0:
-        return None
-    return int(value)
-
-
-def _top200_rank_match(card: dict[str, Any], max_rank: int = TOP200_MAX_RANK) -> bool:
-    ranks = [_player_rank(card, "player1"), _player_rank(card, "player2")]
-    return any(rank is not None and 1 <= rank <= int(max_rank) for rank in ranks)
 
 
 def _prime_display_rank(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1041,11 +1018,6 @@ def select_market_sections(
     value_min_edge: float = VALUE_MIN_EDGE,
     value_min_expected_value: float = VALUE_MIN_EXPECTED_VALUE,
     value_limit: int | None = VALUE_LIMIT,
-    top200_max_rank: int = TOP200_MAX_RANK,
-    top200_min_probability: float = TOP200_MIN_PROBABILITY,
-    top200_min_data_depth: float = TOP200_MIN_DATA_DEPTH,
-    top200_min_surface_matches: int = TOP200_MIN_SURFACE_MATCHES,
-    top200_limit: int = TOP200_LIMIT,
     section_priority: tuple[str, ...] = SECTION_PRIORITY,
     ace_picks: list[dict[str, Any]] | None = None,
     sg_picks: list[dict[str, Any]] | None = None,
@@ -1053,10 +1025,8 @@ def select_market_sections(
 ) -> dict[str, Any]:
     """Split priced Match Winner predictions by BlinQ Probability and odds.
 
-    TOP200 runs first across all priced singles Match Winner candidates. At
-    least one player must have a valid point-in-time rank <=200 and the card must
-    satisfy the TOP evidence floor; at most five strongest cards are retained.
-    Remaining cards then follow the existing Value -> TOP/PRIME allocation.
+    Retired TOP200 is never evaluated or allowed to reserve candidates.
+    Active VALUE -> TOP/PRIME selection uses the normal quality gates.
     TOP starts at 68% / 1.50 and may relax to a 65% hard floor only when its own
     inventory is thin. EV/edge remain diagnostics only.
     """
@@ -1081,7 +1051,6 @@ def select_market_sections(
         max_odds_difference=VALUE_MAX_ODDS_DIFFERENCE,
     )
 
-    top200_qualified: list[dict[str, Any]] = []
     value_qualified: list[dict[str, Any]] = []
     prime_core: list[dict[str, Any]] = []
     prime_fallback: list[dict[str, Any]] = []
@@ -1093,24 +1062,6 @@ def select_market_sections(
         if odds is None:
             continue
         probability = _number(card.get("probability")) or 0.0
-
-        if (
-            _top200_rank_match(card, top200_max_rank)
-            and _passes_candidate_gate(
-                card,
-                min_probability=max(PUBLICATION_MIN_PROBABILITY, float(top200_min_probability)),
-                min_data_depth=top200_min_data_depth,
-                min_surface_matches=top200_min_surface_matches,
-            )
-        ):
-            tagged = deepcopy(card)
-            tagged["top200_rank_match"] = True
-            tagged["top200_rank_limit"] = int(top200_max_rank)
-            tagged["top200_player_ranks"] = {
-                "player1": _player_rank(card, "player1"),
-                "player2": _player_rank(card, "player2"),
-            }
-            top200_qualified.append(tagged)
 
         if (
             odds >= float(value_min_odds)
@@ -1150,17 +1101,6 @@ def select_market_sections(
         min(_surface_samples(card)),
         min(_overall_samples(card)),
     )
-    top200_qualified.sort(key=rank, reverse=True)
-    top200 = top200_qualified[:max(0, int(top200_limit))]
-    top200_ids = {_selection_identity(card) for card in top200}
-
-    # TOP200 has first claim across every priced singles bucket. Remove those
-    # selections before Value/Prime/TOP perform their normal allocation.
-    value_qualified = [card for card in value_qualified if _selection_identity(card) not in top200_ids]
-    prime_core = [card for card in prime_core if _selection_identity(card) not in top200_ids]
-    prime_fallback = [card for card in prime_fallback if _selection_identity(card) not in top200_ids]
-    top_core = [card for card in top_core if _selection_identity(card) not in top200_ids]
-    top_fallback = [card for card in top_fallback if _selection_identity(card) not in top200_ids]
     value_qualified.sort(key=rank, reverse=True)
 
     # Value claims overlap with Top before the Top minimum-fill decision.
@@ -1179,24 +1119,17 @@ def select_market_sections(
     )
 
     selected, duplicate_removed, limited_out = _exclusive_section_assignment(
-        {"top200": top200, "value": value_qualified, "prime": prime_qualified, "top_daily": top_qualified},
+        {"value": value_qualified, "prime": prime_qualified, "top_daily": top_qualified},
         priority=section_priority,
-        limits={"top200": top200_limit, "value": value_limit, "prime": prime_limit, "top_daily": top_limit},
+        limits={"value": value_limit, "prime": prime_limit, "top_daily": top_limit},
     )
-    top200 = selected.get("top200", [])
     value = selected.get("value", [])
     prime = _prime_display_rank(selected.get("prime", []))
     top = selected.get("top_daily", [])
 
-    selected_identities = [_selection_identity(card) for card in (top200 + prime + top + value)]
+    selected_identities = [_selection_identity(card) for card in (prime + top + value)]
     if len(selected_identities) != len(set(selected_identities)):
         raise ValueError("Market section exclusivity invariant failed")
-    if any(not _top200_rank_match(card, top200_max_rank) for card in top200):
-        raise ValueError("TOP200 ranking invariant failed")
-    if any((_number(card.get("probability")) or 0.0) + 1e-12 < max(PUBLICATION_MIN_PROBABILITY, float(top200_min_probability)) for card in top200):
-        raise ValueError("TOP200 probability floor invariant failed")
-    if len(top200) > int(top200_limit):
-        raise ValueError("TOP200 limit invariant failed")
     if any((_number(card.get("probability")) or 0.0) + 1e-12 < PRIME_TOP_FALLBACK_PROBABILITY for card in prime):
         raise ValueError("Prime fallback probability floor invariant failed")
     if any((_number(card.get("probability")) or 0.0) + 1e-12 < TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY for card in top):
@@ -1210,7 +1143,7 @@ def select_market_sections(
 
     value_diffs = [_market_odds_difference(card) for card in value]
     return {
-        "top200_picks": top200,
+        "top200_picks": [],  # Retired product: empty compatibility field; never issue new picks.
         "top_daily_picks": top,
         "prime_picks": prime,
         "value_picks": value,
@@ -1218,12 +1151,10 @@ def select_market_sections(
         "sg_picks": deepcopy(sg_picks or []),
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
-            "schema": 15,
-            "selection_policy": "top200_priority_v15_then_value_top_prime",
+            "schema": 16,
+            "selection_policy": "active_value_top_prime_v16",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
-                "top200_rank_qualified_before_limit": len(top200_qualified),
-                "top200": len(top200),
                 "prime_core_68_plus": len(prime_core),
                 "top_core_68_plus_after_value_priority": len(top_core),
                 "prime_fallback_65_679_added": prime_fallback_added,
@@ -1248,21 +1179,6 @@ def select_market_sections(
                 "duplicates_removed_by_section": duplicate_removed,
                 "limited_out_by_section": limited_out,
                 "limit_aware": True,
-            },
-            "top200_rule": {
-                "product_label": "TOP200",
-                "objective": "rank_first_quality_guarded",
-                "requires_real_match_winner_odds": True,
-                "rank_rule": "at_least_one_player_point_in_time_rank_1_to_200",
-                "max_rank": int(top200_max_rank),
-                "min_probability": max(PUBLICATION_MIN_PROBABILITY, float(top200_min_probability)),
-                "min_data_depth": float(top200_min_data_depth),
-                "min_surface_matches_each": int(top200_min_surface_matches),
-                "min_odds": None,
-                "max_selected": int(top200_limit),
-                "force_fill": False,
-                "assignment_priority": 1,
-                "sort": "75pct_probability_percentile_25pct_odds_percentile",
             },
             "current_outputs": (["match_winner"] + (["doubles_match_winner"] if doubles_picks else []) + (["aces_projection", "double_faults_projection"] if ace_picks else []) + (["sets_projection", "games_projection"] if sg_picks else [])),
             "pending_outputs": ["aces_odds", "double_faults_odds", "sets_odds", "games_odds"],
@@ -1338,7 +1254,7 @@ def select_market_sections(
                 "max_two_way_odds_difference": VALUE_MAX_ODDS_DIFFERENCE,
                 "odds_difference_formula": "abs(o1-o2)/mean(o1,o2)",
                 "edge_ev_role": "diagnostic_only",
-                "assignment_priority": 2,
+                "assignment_priority": 1,
                 "limit": value_limit,
                 "sort": "probability_desc_then_data_depth_then_sample_depth",
                 "max_selected_odds_difference": max((d for d in value_diffs if d is not None), default=None),
@@ -1364,7 +1280,6 @@ def annotate_market_publication_candidates(
     sections = select_market_sections(predictions, **selection_kwargs)
     membership: dict[str, str] = {}
     for section_name, key in (
-        ("top200", "top200_picks"),
         ("prime", "prime_picks"),
         ("top_daily", "top_daily_picks"),
         ("value", "value_picks"),
