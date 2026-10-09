@@ -1,8 +1,9 @@
-name: BlinQ hourly API quota gapfill
+name: BlinQ hourly API gapfill (95%)
 
 # GitHub cron is intentionally forbidden by the repository contract.
-# The external ChatGPT hourly scheduler writes an explicit tick file; this
-# workflow independently verifies live quota and starts at most one safe job.
+# Manual workflow_dispatch is intended for an external hourly schedule with
+# an optional final 18:50 Europe/Bratislava invocation. Existing tick pushes
+# remain compatible but are not required. A single canonical writer runs at once.
 on:
   push:
     branches: [main]
@@ -12,9 +13,9 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Verify budget and eligible job without dispatching anything.
+        description: Check only (true) or actually start safe statistics ingestion (false).
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: read
@@ -58,15 +59,17 @@ jobs:
 
           # Global provider-day spending ceilings; includes live, match, refresh,
           # history AND committed reservations, never just history calls.
-          caps = {12: 5700, 13: 6900, 14: 8100, 15: 9300,
-                  16: 10500, 17: 12000, 18: 13500}
+          # The shared ledger and actual provider-header reserve are the
+          # authoritative caps. Fill as much as possible before 95%, not only
+          # a fixed daily/hourly portion; no cap can exceed 14,250.
+          caps = {hour: 14250 for hour in range(12, 19)}
           print(f"Bratislava time: {local.isoformat()}; dry_run={DRY_RUN}", flush=True)
           closeout_only = local.hour == 19
           if local.hour not in caps and not closeout_only and not DRY_RUN:
               print("Outside the 12:00-19:00 Bratislava API window; skipping.")
               sys.exit(0)
-          if local.hour == 18 and local.minute > 15:
-              print("18:15 cutoff for new dispatches; skipping.")
+          if local.hour == 18 and local.minute > 57:
+              print("18:57 latest dispatch guard; no post-reset API calls.")
               sys.exit(0)
           if not TOKEN or not WORKER or not BUDGET_URL.startswith("https://"):
               raise SystemExit("Required GitHub / shared-budget credentials missing; fail closed")
@@ -113,37 +116,35 @@ jobs:
           if not isinstance(budget, dict) or (
               budget.get("window") != "provider_day_19_10_europe_bratislava"
               or budget.get("provider_plan_limit") != 15000
-              or budget.get("global_limit") != 13500
-              or budget.get("reserved_provider_headroom") != 1500
+              or budget.get("global_limit") != 14250
+              or budget.get("reserved_provider_headroom") != 750
           ):
               raise SystemExit("Unrecognized budget contract; no dispatch")
 
           spent = int(budget["global_spent"])
           remaining = int(budget["global_remaining"])
           history_remaining = int(budget["remaining"]["history"])
-          if closeout_only or (DRY_RUN and local.hour not in caps):
-              print(f"Read-only quota check: {spent}/15000 provider-day requests used, "
-                    f"{remaining} remaining to 90% ceiling. No new job.")
+          if closeout_only or local.hour not in caps:
+              print(f"No new job outside 12:00–18:57 Europe/Bratislava; "
+                    f"shared ledger {spent}/15000, remaining to 95%={remaining}.")
               if DRY_RUN:
                   print("DRY RUN active writer check: " + str(check_writers()))
               sys.exit(0)
-          if spent < 0 or remaining != max(0, 13500-spent):
+          if spent < 0 or remaining != max(0, 14250-spent):
               raise SystemExit("Shared budget inconsistency; no dispatch")
           reset = datetime.fromisoformat(str(budget["next_reset_utc"]).replace("Z", "+00:00"))
-          if reset.tzinfo is None or reset.astimezone(ZONE).date() != local.date() or reset.astimezone(ZONE).hour != 19:
+          if reset.tzinfo is None or reset.astimezone(ZONE).date() != local.date() or reset.astimezone(ZONE).hour != 19 or reset.astimezone(ZONE).minute != 10:
               raise SystemExit("Provider reset time inconsistent; no dispatch")
 
           limit = caps[local.hour]
-          # Keep the last hour small enough to complete safely. Every run also
-          # gets an enforced per-provider-request UTC cutoff.
-          speed_caps = {17: 1400, 18: 500}
-          proposed = min(3000, speed_caps.get(local.hour, 3000),
-                         limit-spent, remaining, history_remaining)
+          # At most 3000 per job; the provider rechecks the 750-remaining
+          # header and the shared ETag ledger before every billable attempt.
+          proposed = min(3000, limit-spent, remaining, history_remaining)
           print(f"API budget: {spent}/15000 used; hourly ceiling={limit}; "
                 f"global remaining={remaining}; proposed max={proposed}", flush=True)
 
-          if proposed < 250:
-              print("No useful-sized request allowance under the current time ceiling.")
+          if proposed < 1:
+              print("No request allowance left beneath the 95% ceiling.")
               sys.exit(0)
 
           active = check_writers()
@@ -151,14 +152,13 @@ jobs:
               print("Canonical writer active/queued; no dispatch: " + "; ".join(active))
               sys.exit(0)
 
-          # Earlier history may have unavailable statistics. Statistics mode
-          # uses canonical identity, schema-3 cache, and quality-ready skip logic.
-          # The consumer rechecks the provider's real remaining header before
-          # continuing and stops on header loss or below the 1500 reserve.
-          cutoff_local = datetime.combine(local.date(), time(18, 55), tzinfo=ZONE)
+          # Statistics mode uses canonical identity, quality-ready skip logic,
+          # and fail-closed provider-header quota checks. Stop well BEFORE the
+          # verified 19:10 provider reset, including an 18:50 final invocation.
+          cutoff_local = datetime.combine(local.date(), time(19, 5), tzinfo=ZONE)
           cutoff = cutoff_local.astimezone(timezone.utc)
-          if now >= cutoff - timedelta(minutes=15):
-              print("Less than 15 minutes until API cutoff; no dispatch")
+          if now >= cutoff - timedelta(minutes=8):
+              print("Less than 8 minutes until provider cutoff; no dispatch")
               sys.exit(0)
           last_complete = local.date() - timedelta(days=1)
           payload = {

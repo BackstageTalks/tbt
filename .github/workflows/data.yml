@@ -140,6 +140,10 @@ jobs:
             [[ -n "$BLINQ_API_AUTOFILL_STOP_AT_UTC" ]] || { echo "::error::Hourly autofill requires a UTC stop time"; exit 1; }
             stop_epoch="$(date -u -d "$BLINQ_API_AUTOFILL_STOP_AT_UTC" +%s)" || exit 1
             (( stop_epoch > $(date -u +%s) )) || { echo "::error::Hourly autofill deadline expired"; exit 1; }
+            # Fail closed on the provider's actual remaining-call header;
+            # preserve 5% (750 requests) even if key usage outside BlinQ
+            # is absent from the internal shared ledger.
+            echo "BLINQ_PROVIDER_REQUEST_RESERVE=750" >> "$GITHUB_ENV"
           fi
 
       - name: Resolve controlled push data request
