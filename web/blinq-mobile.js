@@ -19,6 +19,39 @@
   toggle.setAttribute('aria-expanded', 'false');
   toggle.setAttribute('aria-controls', 'bqm-dialog');
   header.prepend(toggle);
+  // Keep the original SVG brand image and use its link as the existing
+  // responsive/admin menu control. Desktop public logo remains Home.
+  const brand = header.querySelector('a.brand');
+  const homeLabel = brand?.getAttribute('aria-label') || 'BlinQ home';
+  function syncBrandMenu() {
+    if (!brand) return;
+    if (enabled()) {
+      brand.setAttribute('role', 'button');
+      brand.setAttribute('aria-haspopup', 'dialog');
+      brand.setAttribute('aria-controls', 'bqm-dialog');
+      brand.setAttribute('aria-expanded', String(dialog.open));
+      brand.setAttribute('aria-label', 'Otvoriť hlavné menu BlinQ');
+      brand.classList.add('brand-menu-trigger');
+    } else {
+      brand.removeAttribute('role');
+      brand.removeAttribute('aria-haspopup');
+      brand.removeAttribute('aria-controls');
+      brand.removeAttribute('aria-expanded');
+      brand.setAttribute('aria-label', homeLabel);
+      brand.classList.remove('brand-menu-trigger');
+    }
+  }
+  brand?.addEventListener('click', event => {
+    if (!enabled()) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    openMenu();
+  });
+  brand?.addEventListener('keydown', event => {
+    if (!enabled() || (event.key !== ' ' && event.key !== 'Spacebar')) return;
+    event.preventDefault();
+    openMenu();
+  });
   const projects = button('', () => {
     const groups = joinedControls();
     if (groups.length === 1) { groups[0].click(); return; }
@@ -111,6 +144,7 @@
     syncProjects();
     syncMobileIconNav();
     if (!enabled() && dialog.open) dialog.close();
+    syncBrandMenu();
   }
   function available(node) { return node && !node.hidden && !node.disabled && node.getAttribute('aria-disabled') !== 'true'; }
   function finish(node) {
@@ -194,11 +228,14 @@
   function openMenu(level = 'root') {
     if (!enabled()) return;
     dialog.showModal(); document.body.classList.add('bqm-menu-open');
-    toggle.setAttribute('aria-expanded', 'true'); render(level);
+    toggle.setAttribute('aria-expanded', 'true');
+    syncBrandMenu();
+    render(level);
   }
   dialog.addEventListener('close', () => {
     document.body.classList.remove('bqm-menu-open'); toggle.setAttribute('aria-expanded', 'false');
-    if (enabled()) toggle.focus();
+    syncBrandMenu();
+    if (enabled()) brand?.focus();
   });
   dialog.addEventListener('cancel', event => {
     if (currentLevel !== 'root') { event.preventDefault(); render('root'); }
