@@ -3,11 +3,9 @@
 # No model promotion; existing source SHA, PIT, leakage and remote readback gates apply.
 name: BlinQ guarded canonical-to-training resync 2026-10-09
 
+# Operator deferred training to the night after remaining imports finish.
+# No automatic training when this branch changes; explicit overnight activation only.
 on:
-  push:
-    branches: [ops/oddstrader-private-integration-20261009]
-    paths:
-      - '.github/workflows/blinq-training-db-resync-20261009.yml'
   workflow_dispatch:
 
 permissions:
