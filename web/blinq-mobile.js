@@ -86,8 +86,13 @@
     projects.classList.toggle('has-unread', unread > 0);
     document.body.classList.toggle('bqm-project-admin', available(byId('profileAdminLink')));
   }
+  const scrim = document.createElement('div');
+  scrim.id = 'bqm-menu-scrim';
+  scrim.hidden = true;
+  scrim.setAttribute('aria-hidden', 'true');
   const dialog = document.createElement('dialog');
   dialog.id = 'bqm-dialog'; dialog.setAttribute('aria-label', 'Hlavné menu BlinQ');
+  dialog.setAttribute('aria-modal', 'false');
   const top = document.createElement('div'); top.className = 'bqm-top';
   const close = button('×', () => dialog.close()); close.setAttribute('aria-label', 'Zavrieť menu');
   const logo = document.createElement('img');
@@ -103,7 +108,8 @@
   top.append(close, home);
   const nav = document.createElement('nav'); nav.setAttribute('aria-label', 'Mobilná navigácia');
   const note = document.createElement('p'); note.className = 'bqm-note'; note.setAttribute('role', 'status');
-  dialog.append(top, nav, note); document.body.append(dialog);
+  dialog.append(top, nav, note); document.body.append(scrim, dialog);
+  scrim.addEventListener('click', () => { if (dialog.open) dialog.close(); });
 
   // Both entry points share one dialog. The existing controls remain
   // authoritative for permissions, membership and sign-out.
@@ -283,13 +289,16 @@
     if (dialog.open) dialog.close();
     accountExpanded = Boolean(expandAccount);
     lastOpener = opener || brand;
-    dialog.showModal(); document.body.classList.add('bqm-menu-open');
+    dialog.dataset.anchor = [profileButton, profileToggle].includes(lastOpener) ? 'account' : 'brand';
+    scrim.hidden = false;
+    dialog.show(); document.body.classList.add('bqm-menu-open');
     toggle.setAttribute('aria-expanded', 'true');
     syncBrandMenu();
     syncAvatarMenu();
     render(level);
   }
   dialog.addEventListener('close', () => {
+    scrim.hidden = true;
     document.body.classList.remove('bqm-menu-open'); toggle.setAttribute('aria-expanded', 'false');
     syncBrandMenu();
     syncAvatarMenu();
@@ -298,6 +307,13 @@
   dialog.addEventListener('cancel', event => {
     if (currentLevel !== 'root') { event.preventDefault(); render('root'); }
   });
+  // A non-modal dialog does not automatically receive the native Escape cancel.
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !dialog.open) return;
+    event.preventDefault(); event.stopPropagation();
+    if (currentLevel !== 'root') render('root');
+    else dialog.close();
+  }, true);
   window.addEventListener('hashchange', () => { if (dialog.open) dialog.close(); });
   mq.addEventListener('change', sync);
   const groupBar = byId('projectGroupBar');
