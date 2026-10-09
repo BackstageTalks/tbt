@@ -128,6 +128,11 @@ def main():
                 page.wait_for_function("window.mobileAudit")
                 page.evaluate(FIXTURE)
                 page.wait_for_timeout(80)
+                # Preserve the heading and tabs, omit both unwanted decorations.
+                assert page.locator('#dailyHub .daily-mark').count() == 0, label
+                assert page.locator('#dailyHub .daily-date').count() == 0, label
+                assert page.locator('#dailyHub .daily-title-group h2').inner_text().startswith('Dnešné predikcie'), label
+                assert page.locator('#dailyHubTabs .daily-hub-tab').count() == 8, label
                 report = page.evaluate("""() => {
                   const rect=sel=>{const e=typeof sel==='string'?document.querySelector(sel):sel;if(!e)return null;const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
                   const visible=sel=>{const e=document.querySelector(sel);return e&&!e.hidden&&getComputedStyle(e).display!=='none';};
