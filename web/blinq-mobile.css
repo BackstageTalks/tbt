@@ -834,3 +834,108 @@ body#blinqPremium.bqm-enabled .site-header .header-top > .brand.brand-menu-trigg
 @media(prefers-reduced-motion:reduce){
   body#blinqPremium .brand-menu-chevron{transition:none!important}
 }
+
+
+/* Shared menu surface is identical on desktop and mobile. */
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open]{
+  background:#061b15!important;color:#e4f0e9!important;
+  background-image:var(--blinq-login-loader-backdrop,
+    linear-gradient(rgba(1,11,12,.90),rgba(1,11,12,.90)),url('/assets/blinq_page_background.webp'))!important;
+  font:14px Arial,sans-serif!important;overflow-y:auto!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-top{
+  display:grid!important;grid-template-columns:44px 1fr 44px!important;
+  align-items:center!important;min-height:64px!important;
+  border-bottom:1px solid rgba(113,167,144,.3)!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-top button{
+  width:44px!important;height:44px!important;font-size:28px!important;
+  background:transparent!important;border:0!important;color:#e4f0e9!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] nav > button,
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] nav .bqm-account-panel > button{
+  display:block;width:100%;min-height:44px;margin:2px 0;padding:10px 14px;
+  text-align:left;font:inherit;font-size:14px;border:0;border-radius:12px;
+  background:transparent;color:#e4f0e9;cursor:pointer;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] nav button:is(:hover,:focus-visible){
+  background:rgba(30,90,65,.6)!important;
+}
+
+/* One BlinQ menu for the genuine brand and the avatar, with account accordion.
+   Right-hand icons keep their exact width/height; only free-space gutters grow. */
+body#blinqPremium.bqm-unified-menu .site-header .header-top > .brand.brand-menu-trigger{
+  cursor:pointer!important;overflow:visible!important;
+}
+body#blinqPremium.bqm-unified-menu .site-header .header-top > .brand.brand-menu-trigger .brand-menu-chevron{
+  display:block!important;width:12px!important;height:12px!important;min-width:12px!important;
+  flex:0 0 12px!important;color:#edbd48!important;
+}
+body#blinqPremium.bqm-unified-menu #profileMenu{display:none!important}
+#bqm-dialog .bqm-section-label{
+  margin:12px 10px 8px;color:#94b3a6;font-size:10px;font-weight:800;
+  line-height:1.4;letter-spacing:.12em;
+}
+#bqm-dialog .bqm-menu-divider{
+  height:1px;background:rgba(113,167,144,.3);margin:12px 10px 8px;
+}
+#bqm-dialog nav .bqm-account-switch{
+  display:flex!important;align-items:center!important;justify-content:space-between!important;
+  font-weight:750!important;border-radius:12px!important;color:#eaf6ee!important;
+}
+#bqm-dialog nav .bqm-account-switch::after{
+  content:'';width:8px;height:8px;margin-right:6px;
+  border-right:2px solid #edbd48;border-bottom:2px solid #edbd48;
+  transform:rotate(45deg);transition:transform .16s ease;
+}
+#bqm-dialog nav .bqm-account-switch.is-open::after{transform:rotate(225deg)}
+#bqm-dialog .bqm-account-panel:not([hidden]){
+  display:flex!important;flex-direction:column!important;gap:2px;
+  padding:0 0 9px 12px;margin:0 7px 0 8px;border-left:2px solid rgba(105,207,160,.24);
+}
+#bqm-dialog .bqm-account-panel[hidden]{display:none!important}
+#bqm-dialog nav .bqm-account-panel button{
+  margin:0!important;padding:10px 14px!important;min-height:43px!important;
+  border-radius:9px!important;font-size:13px!important;
+}
+@media(prefers-reduced-motion:reduce){
+  #bqm-dialog nav .bqm-account-switch::after{transition:none!important}
+}
+@media(min-width:901px){
+  /* A single anchored dialog on desktop; desktop navigation remains in the header. */
+  body#blinqPremium.bqm-unified-menu #bqm-dialog[open]{
+    position:fixed!important;inset:72px auto auto max(12px,calc((100vw - 1500px)/2 + 18px))!important;
+    width:min(390px,calc(100vw - 24px))!important;height:auto!important;
+    max-height:calc(100dvh - 88px)!important;padding:0 14px 16px!important;
+    margin:0!important;box-sizing:border-box!important;overflow-y:auto!important;
+    border:1px solid #225242!important;border-radius:16px!important;
+    box-shadow:0 24px 80px rgba(0,0,0,.56)!important;z-index:1100!important;
+  }
+  body#blinqPremium.bqm-unified-menu #bqm-dialog .bqm-top{margin-bottom:6px!important}
+  body#blinqPremium.bqm-unified-menu:not(.bqm-enabled) .site-header .header-top > .brand.brand-menu-trigger{
+    flex:0 0 130px!important;width:130px!important;max-width:130px!important;
+    min-width:130px!important;display:flex!important;gap:2px!important;
+    align-items:center!important;justify-content:flex-start!important;
+    background:transparent!important;border:0!important;box-shadow:none!important;
+  }
+  body#blinqPremium.bqm-unified-menu .reference-topbar .reference-navigation[data-icon-navigation="1"]{
+    gap:clamp(8px,1.1vw,18px)!important;
+  }
+  body#blinqPremium.bqm-unified-menu .reference-topbar .header-actions{
+    gap:clamp(8px,1.1vw,18px)!important;
+  }
+}
+@media(min-width:541px) and (max-width:900px){
+  body#blinqPremium.bqm-enabled .header-top .reference-navigation[data-icon-navigation="1"],
+  body#blinqPremium.bqm-enabled .header-top .header-actions{
+    gap:clamp(6px,.9vw,11px)!important;
+  }
+}
+@media(min-width:431px) and (max-width:540px){
+  body#blinqPremium.bqm-enabled .header-top .reference-navigation[data-icon-navigation="1"],
+  body#blinqPremium.bqm-enabled .header-top .header-actions{gap:4px!important}
+}
+@media(min-width:361px) and (max-width:430px){
+  body#blinqPremium.bqm-enabled .header-top .reference-navigation[data-icon-navigation="1"],
+  body#blinqPremium.bqm-enabled .header-top .header-actions{gap:3px!important}
+}

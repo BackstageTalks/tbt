@@ -25,7 +25,7 @@
   const homeLabel = brand?.getAttribute('aria-label') || 'BlinQ home';
   function syncBrandMenu() {
     if (!brand) return;
-    if (enabled()) {
+    if (menuEnabled()) {
       brand.setAttribute('role', 'button');
       brand.setAttribute('aria-haspopup', 'dialog');
       brand.setAttribute('aria-controls', 'bqm-dialog');
@@ -42,15 +42,15 @@
     }
   }
   brand?.addEventListener('click', event => {
-    if (!enabled()) return;
+    if (!menuEnabled()) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    openMenu();
+    openMenu('root', false, brand);
   });
   brand?.addEventListener('keydown', event => {
-    if (!enabled() || (event.key !== ' ' && event.key !== 'Spacebar')) return;
+    if (!menuEnabled() || (event.key !== ' ' && event.key !== 'Spacebar')) return;
     event.preventDefault();
-    openMenu();
+    openMenu('root', false, brand);
   });
   const projects = button('', () => {
     const groups = joinedControls();
@@ -105,33 +105,39 @@
   const note = document.createElement('p'); note.className = 'bqm-note'; note.setAttribute('role', 'status');
   dialog.append(top, nav, note); document.body.append(dialog);
 
-  // Keep account actions in the original avatar menu and reuse existing handlers.
+  // Both entry points share one dialog. The existing controls remain
+  // authoritative for permissions, membership and sign-out.
   const profileMenu = byId('profileMenu');
-  function avatarAction(label, action) {
-    const item = button(label, () => {
-      byId('profileButton')?.click();
-      action();
-    });
-    item.className = 'bqm-avatar-action';
-    profileMenu?.insertBefore(item, byId('headerLogoutButton'));
-    return item;
-  }
-  const avatarUpgrade = avatarAction('Upgrade', () => byId('topUpgradeButton')?.click());
-  const avatarCommunity = avatarAction('Komunita', () => openMenu('community'));
-  avatarAction('Jazyk', () => openMenu('language'));
-  function syncAvatarActions() {
-    avatarUpgrade.hidden = !available(byId('topUpgradeButton'));
-    avatarCommunity.hidden = !available(byId('telegramGroupsPanel'));
-  }
-  if (profileMenu) new MutationObserver(syncAvatarActions).observe(profileMenu, {attributes:true,attributeFilter:['hidden']});
-
+  const profileButton = byId('profileButton');
+  const profileToggle = byId('profileMenuToggle');
   let currentLevel = 'root';
+  let accountExpanded = false;
+  let lastOpener = brand;
   function enabled() { return (mq.matches || document.body.classList.contains('blinq-admin')) && !shell.hidden; }
-  byId('profileButton')?.addEventListener('click', event => {
-    if (!enabled() || mq.matches) return;
+  function menuEnabled() { return !shell.hidden; }
+  function syncAvatarMenu() {
+    for (const control of [profileButton, profileToggle]) {
+      if (!control) continue;
+      if (menuEnabled()) {
+        control.setAttribute('aria-controls', 'bqm-dialog');
+        control.setAttribute('aria-haspopup', 'dialog');
+        control.setAttribute('aria-expanded', String(dialog.open));
+      } else {
+        control.setAttribute('aria-controls', 'profileMenu');
+        control.removeAttribute('aria-haspopup');
+        control.setAttribute('aria-expanded', 'false');
+      }
+    }
+    if (menuEnabled() && profileMenu) profileMenu.hidden = true;
+  }
+  function onAvatarOpen(event) {
+    if (!menuEnabled()) return;
+    event.preventDefault();
     event.stopImmediatePropagation();
-    byId('profileMenuToggle')?.click();
-  }, true);
+    openMenu('root', true, event.currentTarget);
+  }
+  profileButton?.addEventListener('click', onAvatarOpen, true);
+  profileToggle?.addEventListener('click', onAvatarOpen, true);
   function syncMobileIconNav() {
     document.querySelectorAll('[data-mobile-action]').forEach(node => {
       const action = node.dataset.mobileAction;
@@ -141,10 +147,12 @@
   }
   function sync() {
     document.body.classList.toggle('bqm-enabled', enabled());
+    document.body.classList.toggle('bqm-unified-menu', menuEnabled());
     syncProjects();
     syncMobileIconNav();
-    if (!enabled() && dialog.open) dialog.close();
+    if (!menuEnabled() && dialog.open) dialog.close();
     syncBrandMenu();
+    syncAvatarMenu();
   }
   function available(node) { return node && !node.hidden && !node.disabled && node.getAttribute('aria-disabled') !== 'true'; }
   function finish(node) {
@@ -159,15 +167,18 @@
   function section(label, level) { nav.append(button(label + ' ›', () => render(level))); }
   function render(level) {
     currentLevel = level; nav.replaceChildren(); note.textContent = '';
-    if (level !== 'root') nav.append(button(level === 'community' || level === 'language' ? '← Menu účtu' : '← Hlavné menu', event => {
-      event.stopPropagation();
-      if (level === 'community' || level === 'language') { dialog.close(); byId('profileButton')?.click(); }
-      else render('root');
+    if (level !== 'root') nav.append(button(level === 'community' || level === 'language' ? '← Môj účet' : '← Hlavné menu', () => {
+      if (level === 'community' || level === 'language') accountExpanded = true;
+      render('root');
     }));
     if (level === 'root') {
-      nav.append(button('Späť na hlavnú stránku', () => {
+      const navHeading = document.createElement('p');
+      navHeading.className = 'bqm-section-label';
+      navHeading.textContent = 'NAVIGÁCIA';
+      nav.append(navHeading);
+      nav.append(button('Domov', () => {
         dialog.close();
-        header.querySelector('.brand')?.click();
+        document.querySelector('.reference-navigation [data-route="predictions"]')?.click();
       }));
       section('Predikcie', 'predictions');
       nav.append(button('Porovnávač', () => {
@@ -185,6 +196,38 @@
       proxy('Live radar', () => byId('insightShortcut'));
       if (joinedControls().length) section('Moje skupiny', 'projects');
       proxy('Info', () => byId('insightBell'));
+      const divider = document.createElement('div');
+      divider.className = 'bqm-menu-divider';
+      divider.setAttribute('aria-hidden', 'true');
+      nav.append(divider);
+      const accountPanel = document.createElement('div');
+      accountPanel.id = 'bqm-account-panel';
+      accountPanel.className = 'bqm-account-panel';
+      const accountToggle = button('Môj účet', () => {
+        accountExpanded = !accountExpanded;
+        accountPanel.hidden = !accountExpanded;
+        accountToggle.setAttribute('aria-expanded', String(accountExpanded));
+        accountToggle.classList.toggle('is-open', accountExpanded);
+        if (accountExpanded) accountPanel.querySelector('button')?.focus();
+      });
+      accountToggle.className = 'bqm-account-switch';
+      accountToggle.setAttribute('aria-controls', 'bqm-account-panel');
+      accountToggle.setAttribute('aria-expanded', String(accountExpanded));
+      accountToggle.classList.toggle('is-open', accountExpanded);
+      nav.append(accountToggle);
+      function accountAction(label, resolve) {
+        const source = resolve();
+        if (!available(source)) return;
+        accountPanel.append(button(label, () => finish(resolve())));
+      }
+      accountAction('Profil a členstvo', () => byId('profileAccountLink'));
+      accountAction('Upgrade', () => byId('topUpgradeButton'));
+      if (available(byId('telegramGroupsPanel'))) accountPanel.append(button('Komunita', () => render('community')));
+      accountPanel.append(button('Jazyk', () => render('language')));
+      accountAction('Admin', () => byId('profileAdminLink'));
+      accountAction('Odhlásiť sa', () => byId('headerLogoutButton'));
+      accountPanel.hidden = !accountExpanded;
+      nav.append(accountPanel);
     } else if (level === 'predictions') {
       proxy('Všetky predikcie', () => document.querySelector('.reference-navigation [data-route="predictions"]'));
       document.querySelectorAll('#dailyHubTabs [data-daily-hub-tab]').forEach(source => {
@@ -223,19 +266,28 @@
         else { const unavailable = button(label + ' · nedostupné', () => {}); unavailable.disabled = true; nav.append(unavailable); }
       });
     }
-    nav.querySelector('button')?.focus();
+    if (level === 'root' && accountExpanded) {
+      nav.querySelector('#bqm-account-panel button')?.focus();
+    } else {
+      nav.querySelector('button')?.focus();
+    }
   }
-  function openMenu(level = 'root') {
-    if (!enabled()) return;
+  function openMenu(level = 'root', expandAccount = false, opener = brand) {
+    if (!menuEnabled()) return;
+    if (dialog.open) dialog.close();
+    accountExpanded = Boolean(expandAccount);
+    lastOpener = opener || brand;
     dialog.showModal(); document.body.classList.add('bqm-menu-open');
     toggle.setAttribute('aria-expanded', 'true');
     syncBrandMenu();
+    syncAvatarMenu();
     render(level);
   }
   dialog.addEventListener('close', () => {
     document.body.classList.remove('bqm-menu-open'); toggle.setAttribute('aria-expanded', 'false');
     syncBrandMenu();
-    if (enabled()) brand?.focus();
+    syncAvatarMenu();
+    if (menuEnabled()) lastOpener?.focus();
   });
   dialog.addEventListener('cancel', event => {
     if (currentLevel !== 'root') { event.preventDefault(); render('root'); }

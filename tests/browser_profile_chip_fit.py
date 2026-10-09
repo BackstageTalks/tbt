@@ -38,19 +38,18 @@ def main():
                     const btn=document.getElementById('profileButton');
                     const toggle=document.getElementById('profileMenuToggle');
                     const menu=document.getElementById('profileMenu');
-                    menu.hidden=false;
+                    if (!menu.hidden) throw new Error('legacy profile dropdown must stay closed');
                     const round=r=>({top:r.top,bottom:r.bottom,left:r.left,right:r.right,
                                     centerY:(r.top+r.bottom)/2});
                     const s=round(shell.getBoundingClientRect());
                     const b=round(btn.getBoundingClientRect());
                     const t=round(toggle.getBoundingClientRect());
                     const svg=round(toggle.querySelector('svg').getBoundingClientRect());
-                    const m=round(menu.getBoundingClientRect());
+                    const menuHidden=getComputedStyle(menu).display==='none';
                     const overflow=getComputedStyle(shell).overflow;
                     const controls=['#bqm-projects','#insightShortcut','#topUpgradeButton','#insightBell','#profileShell']
                       .map(sel=>({sel,rect:round(document.querySelector(sel).getBoundingClientRect())}));
-                    menu.hidden=true;
-                    return {shell:s,button:b,toggle:t,svg,menu:m,overflow,controls};
+                    return {shell:s,button:b,toggle:t,svg,menuHidden,overflow,controls};
                 }""")
                 s=result["shell"]
                 for part in ("button","toggle"):
@@ -60,7 +59,7 @@ def main():
                     assert b["left"]>=s["left"]-0.5,(width,part,result)
                     assert b["right"]<=s["right"]+0.5,(width,part,result)
                 assert abs(result["toggle"]["centerY"]-result["svg"]["centerY"])<=1,(width,result)
-                assert result["menu"]["top"]>=s["bottom"],(width,result)
+                assert result["menuHidden"],(width,result)
                 assert result["overflow"]=="visible",(width,result)
                 controls=result["controls"]
                 heights=[round(item["rect"]["bottom"]-item["rect"]["top"],1) for item in controls]
@@ -68,9 +67,14 @@ def main():
                 assert max(heights)-min(heights)<=0.5,(width,heights,result)
                 assert max(centers)-min(centers)<=1.0,(width,centers,result)
                 assert all(abs(h-42)<=0.5 for h in heights),(width,heights,result)
+                page.locator('#profileButton').click()
+                assert page.locator('#bqm-dialog').is_visible(),(width,'shared dialog missing')
+                assert page.locator('#bqm-account-panel').is_visible(),(width,'account section not expanded')
+                assert page.locator('#profileMenu').is_hidden(),(width,'duplicate account dropdown')
+                page.get_by_role('button',name='Zavrieť menu').click()
                 assert not errors,(width,errors)
                 page.close()
-                print(f"PASS: {width}px profile outline and unclipped dropdown")
+                print(f"PASS: {width}px profile outline and unified account menu")
         finally:
             browser.close()
 
