@@ -150,6 +150,18 @@ jobs:
         run: python scripts/audit_comparator_names_second_pass.py
 
 
+      - name: Audit canonical CDB identity overlaps (target PR only)
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'fix/canonical-identity-reconciliation-audit-20261009' }}
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing verified canonical release read token'; exit 1; }
+          timeout 480s python scripts/audit_cdb_identity_reconciliation.py
+          timeout 150s python scripts/audit_cdb_external_registry.py
+          timeout 480s python scripts/build_cdb_verified_player_crosswalk.py
+
       - name: Run backend tests
         env:
           PYTHONPATH: api:scripts

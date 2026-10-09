@@ -1,0 +1,145 @@
+name: Reconcile canonical player identities
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/cdb-identity-reconcile-request.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Identical lock as the canonical writers / Training DB / data.yml.
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  publish-identity-crosswalk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard fresh main and private data permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" || {
+            echo "::error::Stale writer checkout"; exit 1;
+          }
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+          if gh release view tbt-canonical-identity-links-v1 --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Immutable identity crosswalk release already exists. Review before overwriting."
+            exit 1
+          fi
+
+      - name: Install read-only audit dependencies
+        run: |
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m pytest tests/test_cdb_identity_reconciliation.py tests/test_cdb_external_registry.py tests/test_cdb_verified_player_crosswalk.py -q
+          python -m compileall -q scripts
+
+      - name: Load independently verified private comparator snapshot
+        run: |
+          set -euo pipefail
+          timeout 150s python scripts/diagnose_comparator_snapshot.py
+
+      - name: Reconcile against verified current CDB - dry run
+        run: |
+          set -euo pipefail
+          timeout 480s python scripts/build_cdb_verified_player_crosswalk.py
+          test -s .cache/tbt/player-identity-publish/player-identity-crosswalk.jsonl
+          test -s .cache/tbt/player-identity-publish/crosswalk-integrity-report.json
+
+      - name: Verify current CDB has not changed and publish isolated identity sidecar
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          import subprocess
+          from hashlib import sha256
+          from pathlib import Path
+          from release_store import ReleaseStore
+
+          repo=os.environ["TBT_DATA_REPOSITORY"]
+          root=Path(".cache/tbt/player-identity-publish")
+          report=json.loads((root/"crosswalk-integrity-report.json").read_text(encoding="utf-8"))
+          expected=report["canonical_source"]["bundle_manifest_sha256"]
+          # Revalidate source release manifest *immediately* before any write.
+          bundle=subprocess.check_output([
+              "gh","release","download","tbt-data-v1","--repo",repo,
+              "--pattern","_tbt_bundle_manifest.json","--dir",str(root),"--clobber"
+          ], text=True)
+          remote=(root/"_tbt_bundle_manifest.json").read_bytes()
+          if sha256(remote).hexdigest()!=expected:
+              raise SystemExit("Canonical changed during identity preflight; abort")
+
+          if report.get("raw_cdb_modified") is not False or report.get("model_changed") is not False:
+              raise SystemExit("Unexpected source data or model mutation")
+          if not (0 < int(report["crosswalk_rows"]) <= int(report["counts"]["candidate_count"])):
+              raise SystemExit("Invalid count of reconciled identities")
+
+          source=root/"player-identity-crosswalk.jsonl"
+          if sha256(source.read_bytes()).hexdigest()!=report["sidecar_sha256"]:
+              raise SystemExit("Generated crosswalk content changed")
+          store=ReleaseStore(repo,"tbt-canonical-identity-links-v1",root)
+          store.upload_bundle([source,root/"crosswalk-integrity-report.json"])
+          print("CDB_IDENTITY_CROSSWALK_PUBLISHED",json.dumps({
+              "source_snapshot_sha256": expected,"linked_ids":report["crosswalk_rows"],
+              "crosswalk_sha256": report["sidecar_sha256"],
+              "raw_cdb_changed":False,"champion_changed":False
+          }), flush=True)
+          PY
+
+      - name: Independent private release read-back
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from hashlib import sha256
+          from release_store import ReleaseStore
+          repo=os.environ["TBT_DATA_REPOSITORY"]
+          target=Path(".cache/tbt/player-identity-publish")
+          source=json.loads((target/"crosswalk-integrity-report.json").read_text())
+          separate=Path(".cache/tbt/player-identity-readback")
+          store=ReleaseStore(repo,"tbt-canonical-identity-links-v1",separate)
+          store.download(extra_names=("player-identity-crosswalk.jsonl","crosswalk-integrity-report.json"),
+                         required_names=("player-identity-crosswalk.jsonl","crosswalk-integrity-report.json"),
+                         require_bundle_manifest=True)
+          data=(separate/"player-identity-crosswalk.jsonl").read_bytes()
+          report=json.loads((separate/"crosswalk-integrity-report.json").read_text())
+          records=[json.loads(line) for line in data.splitlines() if line.strip()]
+          if sha256(data).hexdigest()!=source["sidecar_sha256"]:
+              raise SystemExit("Crosswalk read-back SHA256 mismatch")
+          if len(records)!=int(source["crosswalk_rows"]) or report!=source:
+              raise SystemExit("Crosswalk read-back count/report mismatch")
+          keys=[(r["tour"],r["source_player_id"]) for r in records]
+          if len(keys)!=len(set(keys)):
+              raise SystemExit("Duplicate source crosswalk ID")
+          assert all(r["source_player_id"]!=r["canonical_player_id"] for r in records)
+          print("CDB_IDENTITY_CROSSWALK_READBACK_PASS", json.dumps({
+              "links":len(records),"sha256":sha256(data).hexdigest(),
+              "source_manifest":source["canonical_source"]["bundle_manifest_sha256"],
+              "source_history_unchanged":True,"model_promoted":False
+          }),flush=True)
+          PY
+
+      - name: Retain dry-run and read-back evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdb-identity-crosswalk-${{ github.run_id }}
+          path: |
+            .cache/tbt/player-identity-publish/crosswalk-integrity-report.json
+          if-no-files-found: warn
+          retention-days: 30
