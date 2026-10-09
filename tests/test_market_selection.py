@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from tbt.services.market_selection import (
     betting_day_bounds,
+    build_selection_candidate_snapshot,
     decimal_odds,
     enrich_current_betting_day_odds,
     extract_match_winner_odds,
@@ -52,6 +53,33 @@ def row(event_id, probability, odds, opponent_odds, *, depth=.9, surface1=12, su
         },
         'match_winner_market': market,
     }
+
+
+def test_candidate_snapshot_keeps_selected_and_unselected_without_post_match_fields():
+    selected = row('selected-top', .72, 1.60, 2.50, depth=1.0)
+    unpriced = row('unpriced', .73, 1.70, 2.30, depth=.95)
+    unpriced.pop('betting', None)
+    unpriced.pop('match_winner_market', None)
+    # Deliberately inject fields that must never enter replay evidence.
+    selected['result'] = {'correct': True}
+    selected['stats'] = {'p1_aces': 99}
+    snap = build_selection_candidate_snapshot(
+        [selected, unpriced], generated_at=datetime(2026, 10, 8, 6, 30, tzinfo=timezone.utc)
+    )
+    assert snap['scope'] == {
+        'all_singles_selector_inputs': 2,
+        'priced_match_winner_inputs': 1,
+        'selected_public_sections': 1,
+        'post_match_fields_excluded': True,
+    }
+    rows = {item['event_id']: item for item in snap['rows']}
+    assert rows['selected-top']['selected_section'] == 'top_daily'
+    assert rows['selected-top']['selection_tier'] == 'core'
+    assert rows['unpriced']['priced'] is False
+    assert rows['unpriced']['selected_section'] is None
+    serialized = str(snap).lower()
+    assert 'correct' not in serialized
+    assert 'p1_aces' not in serialized
 
 
 def test_decimal_odds_supports_fractional_and_decimal():
