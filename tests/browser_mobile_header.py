@@ -261,6 +261,26 @@ def main():
                 assert page.locator('#bqm-toggle').is_hidden(),(width,'legacy hamburger returned in admin')
                 assert brand.locator('.brand-menu-chevron').is_visible(),(width,'brand menu chevron missing')
                 assert brand.get_attribute('role')=='button'
+                # Admin uses the same complete icon strip as the public site:
+                # 3 primary routes plus the existing project, LIVE, bell and avatar.
+                admin_layout=page.evaluate("""() => {
+                    const view = n => {
+                        const r=n.getBoundingClientRect(),cs=getComputedStyle(n);
+                        return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,
+                                visible:cs.display!=='none'&&cs.visibility!=='hidden'&&!n.hidden&&r.width>0&&r.height>0};
+                    };
+                    const header=view(document.querySelector('.site-header .header-top'));
+                    const nav=[...document.querySelectorAll('.header-top .reference-navigation .nav-icon-link')].map(view);
+                    const actions=['#bqm-projects','#insightShortcut','#topUpgradeButton','#insightBell','#profileButton']
+                        .map(s=>({selector:s,...view(document.querySelector(s))}));
+                    const all=[...nav,...actions].filter(n=>n.visible).sort((a,b)=>a.left-b.left);
+                    const overlap=all.some((r,i)=>i>0&&r.left<all[i-1].right-1);
+                    const outside=all.some(r=>r.left<-1||r.right>innerWidth+1);
+                    return {header,nav,actions,overlap,outside,viewport:innerWidth};
+                }""")
+                assert len(admin_layout['nav'])==3 and all(n['visible'] for n in admin_layout['nav']),(width,'admin missing public navigation',admin_layout)
+                assert all(next(a['visible'] for a in admin_layout['actions'] if a['selector']==sel) for sel in ('#bqm-projects','#insightBell','#profileButton')),(width,'admin missing original header actions',admin_layout)
+                assert not admin_layout['overlap'] and not admin_layout['outside'],(width,'admin header icons overlap/overflow',admin_layout)
                 page.evaluate("document.getElementById('bqm-projects').dataset.unread='12';document.getElementById('bqm-projects').classList.add('has-unread');document.getElementById('insightUnread').textContent='6';document.getElementById('insightUnread').hidden=false")
                 assert page.locator('#bqm-projects').evaluate("n=>getComputedStyle(n,'::after').content")=='"12"'
                 bell_box=page.locator('#insightBell').bounding_box()
