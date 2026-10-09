@@ -10,5 +10,7 @@
   "model_promotion": false,
   "raw_cdb_rewrite": false,
   "api_requests": 0,
-  "approval": "user requested canonical identity reconciliation"
+  "approval": "user requested canonical identity reconciliation",
+  "attempt": 2,
+  "retry_reason": "Queued writer failed safe because main advanced; refresh to current main while holding writer lock; never rewrite canonical history"
 }
