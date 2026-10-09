@@ -49,15 +49,65 @@ def _players(artifact: Mapping) -> list[dict]:
     return [row for row in rows if isinstance(row, dict)]
 
 
+def _abbreviated_name_key(value: object) -> tuple[str, str] | None:
+    """Recognize 'Surname F.' and 'F. Surname', never infer a whole identity."""
+    tokens = normalize_player_name(value).split()
+    if len(tokens) != 2:
+        return None
+    if len(tokens[0]) == 1 and len(tokens[1]) > 1:
+        return tokens[0], tokens[1]
+    if len(tokens[1]) == 1 and len(tokens[0]) > 1:
+        return tokens[1], tokens[0]
+    return None
+
+
+def _full_name_key(value: object) -> tuple[str, str] | None:
+    tokens = normalize_player_name(value).split()
+    if len(tokens) < 2 or len(tokens[0]) <= 1 or len(tokens[-1]) <= 1:
+        return None
+    return tokens[0][0], tokens[-1]
+
+
+def _safe_abbreviation_target(short: Mapping, full_candidates: list[dict]) -> dict | None:
+    """UI-only alias replacement: require a unique full name and second evidence."""
+    distinct = {str(item.get("player_id") or ""): item for item in full_candidates}
+    distinct.pop("", None)
+    if len(distinct) != 1:
+        return None
+    full = next(iter(distinct.values()))
+    if str(full.get("player_id")) == str(short.get("player_id")):
+        return None
+    full_name = normalize_player_name(full.get("name"))
+    short_aliases = {
+        normalize_player_name(alias) for alias in (short.get("aliases") or [])
+    }
+    alias_evidence = full_name in short_aliases
+    try:
+        short_rank = int(short.get("rank") or 0)
+        full_rank = int(full.get("rank") or 0)
+        rank_evidence = short_rank > 0 and full_rank > 0 and abs(short_rank - full_rank) <= 10
+    except (TypeError, ValueError, OverflowError):
+        rank_evidence = False
+    return full if alias_evidence or rank_evidence else None
+
+
 def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12) -> list[dict]:
     tour = str(tour or "").strip().lower()
     key = normalize_player_name(query)
     if tour not in ALLOWED_TOURS or len(key) < 2:
         return []
+
+    # Build the possible full-name matches from the *entire* directory, not
+    # the truncated search page. An abbreviated row may otherwise push out its
+    # own complete name when the query is common. Keep distinct canonical IDs.
+    full_names: dict[tuple[str, str], list[dict]] = {}
     ranked = []
     for player in _players(artifact):
         if str(player.get("tour") or "").lower() != tour:
             continue
+        complete_key = _full_name_key(player.get("name"))
+        if complete_key:
+            full_names.setdefault(complete_key, []).append(player)
         names = [str(player.get("name") or "")] + [
             str(value) for value in (player.get("aliases") or []) if value
         ]
@@ -74,19 +124,31 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
             player,
         ))
     ranked.sort(key=lambda row: row[:-1])
-    return [
-        {
-            "player_id": str(row[-1].get("player_id") or ""),
-            "name": str(row[-1].get("name") or ""),
-            # The explicit canonical alias is evidence for presenting name
-            # variants together; it is NOT permission to merge their IDs.
-            "aliases": [str(value)[:120] for value in (row[-1].get("aliases") or [])[:12] if value],
+    visible = []
+    seen_ids: set[str] = set()
+    for candidate in ranked:
+        player = candidate[-1]
+        short_key = _abbreviated_name_key(player.get("name"))
+        if short_key:
+            full = _safe_abbreviation_target(player, full_names.get(short_key, []))
+            if full is not None:
+                player = full
+        player_id = str(player.get("player_id") or "")
+        if not player_id or player_id in seen_ids:
+            continue
+        seen_ids.add(player_id)
+        visible.append({
+            "player_id": player_id,
+            "name": str(player.get("name") or ""),
+            # An alias is only display/search evidence, NOT an ID merge.
+            "aliases": [str(value)[:120] for value in (player.get("aliases") or [])[:12] if value],
             "tour": tour,
-            "rank": row[-1].get("rank"),
-            "matches_seen": int(row[-1].get("matches_seen") or 0),
-        }
-        for row in ranked[: max(1, min(int(limit), 25))]
-    ]
+            "rank": player.get("rank"),
+            "matches_seen": int(player.get("matches_seen") or 0),
+        })
+        if len(visible) >= max(1, min(int(limit), 25)):
+            break
+    return visible
 
 
 def _resolve(artifact: Mapping, value: str, *, tour: str) -> dict:

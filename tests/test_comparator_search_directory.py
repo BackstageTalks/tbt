@@ -50,3 +50,66 @@ def test_comparator_search_route_uses_small_directory():
     assert "_load_comparator_players()" in players_route
     assert "_load_comparator_artifact()" not in players_route
     assert 'data/comparator-players.json' in source
+
+
+def test_search_compacts_cerundolo_and_keeps_juan_manuel():
+    directory = {"players": [
+        {"player_id": "short-f", "name": "Cerundolo F.", "tour": "atp", "rank": 24, "matches_seen": 700},
+        {"player_id": "francisco", "name": "Francisco Cerundolo", "tour": "atp", "rank": 21, "matches_seen": 500},
+        {"player_id": "juan", "name": "Juan Manuel Cerundolo", "tour": "atp", "rank": 87, "matches_seen": 350},
+    ]}
+    found = search_players(directory, "cerun", tour="atp")
+    assert {row["player_id"] for row in found} == {"francisco", "juan"}
+    assert len(found) == 2
+    # An exact abbreviated query must resolve to the presentation target too.
+    assert [row["player_id"] for row in search_players(directory, "Cerundolo F.", tour="atp")] == ["francisco"]
+    # Search presentation must not write an ID linkage into the input artifact.
+    assert directory["players"][0]["player_id"] == "short-f"
+
+
+def test_search_compacts_reversed_initial_and_accents_without_merging_ids():
+    directory = {"players": [
+        {"player_id": "hist-d", "name": "Svrčina D.", "tour": "atp", "rank": 99, "matches_seen": 600},
+        {"player_id": "provider-d", "name": "Dalibor Svrčina", "tour": "atp", "rank": 91, "matches_seen": 100},
+    ]}
+    found = search_players(directory, "svrc", tour="atp")
+    assert [p["player_id"] for p in found] == ["provider-d"]
+    assert [p["player_id"] for p in search_players(directory, "D. Svrcina", tour="atp")] == []
+    assert [p["player_id"] for p in search_players(directory, "Svrcina D", tour="atp")] == ["provider-d"]
+
+
+def test_search_limits_after_compaction_not_before():
+    directory = {"players": [
+        {"player_id": "short-f", "name": "Cerundolo F.", "tour": "atp", "rank": 24, "matches_seen": 999},
+        {"player_id": "francisco", "name": "Francisco Cerundolo", "tour": "atp", "rank": 21, "matches_seen": 1},
+        {"player_id": "juan", "name": "Juan Manuel Cerundolo", "tour": "atp", "rank": 87, "matches_seen": 2},
+        *(
+            {"player_id": f"extra-{i}", "name": f"Test Cerundolo{i}", "tour": "atp", "rank": 100 + i, "matches_seen": 800 - i}
+            for i in range(25)
+        ),
+    ]}
+    found = search_players(directory, "cerun", tour="atp", limit=12)
+    assert len(found) == 12
+    assert found[0]["player_id"] == "francisco"
+    assert all(row["player_id"] != "short-f" for row in found)
+
+
+def test_search_fails_closed_for_same_initial_homonyms_and_weak_evidence():
+    directory = {"players": [
+        {"player_id": "short", "name": "Kecmanovic M.", "tour": "atp", "rank": 50, "matches_seen": 500},
+        {"player_id": "miomir", "name": "Miomir Kecmanović", "tour": "atp", "rank": 54, "matches_seen": 300},
+        {"player_id": "milos", "name": "Milos Kecmanovic", "tour": "atp", "rank": 53, "matches_seen": 200},
+    ]}
+    assert {p["player_id"] for p in search_players(directory, "kecma", tour="atp")} == {"short", "miomir", "milos"}
+
+    directory["players"].pop()
+    directory["players"][1]["rank"] = 251
+    assert {p["player_id"] for p in search_players(directory, "kecma", tour="atp")} == {"short", "miomir"}
+
+    # Explicit full alias is a second source of evidence when ranks are missing.
+    directory["players"][0]["aliases"] = ["Miomir Kecmanovic"]
+    assert [p["player_id"] for p in search_players(directory, "kecma", tour="atp")] == ["miomir"]
+
+    # A matching WTA name cannot resolve an ATP initial.
+    directory["players"][1]["tour"] = "wta"
+    assert [p["player_id"] for p in search_players(directory, "kecma", tour="atp")] == ["short"]
