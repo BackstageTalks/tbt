@@ -1,0 +1,37 @@
+name: BlinQ entire private data repo gap audit vs canonical
+on:
+  push:
+    branches: [ops/blinq-canonical-snapshot-20261009]
+    paths: [.github/workflows/blinq-canonical-gap-audit-20261009.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  verify_and_audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: scripts:api
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Compile and install read-only imports
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/research/nightly_private_canonical_gap_scan.py
+          python -m pip install -r api/requirements-train.txt
+      - name: Complete private source inventory, validate backup, reconstruct 5 source CSVs, compare all source candidates with CURRENT canonical (no production writes)
+        run: python -u scripts/research/nightly_private_canonical_gap_scan.py
+      # Never publish data files or auditing artefacts into this public repository.
