@@ -266,7 +266,11 @@
         else { const unavailable = button(label + ' · nedostupné', () => {}); unavailable.disabled = true; nav.append(unavailable); }
       });
     }
-    nav.querySelector('button')?.focus();
+    if (level === 'root' && accountExpanded) {
+      nav.querySelector('#bqm-account-panel button')?.focus();
+    } else {
+      nav.querySelector('button')?.focus();
+    }
   }
   function openMenu(level = 'root', expandAccount = false, opener = brand) {
     if (!menuEnabled()) return;
