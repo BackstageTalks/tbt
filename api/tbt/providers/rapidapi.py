@@ -7,6 +7,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Iterable
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -28,7 +29,14 @@ from ..utils import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PROVIDER_REQUEST_RESERVE = 500
+DEFAULT_PROVIDER_REQUEST_RESERVE = 450
+
+
+def _enforce_provider_day_hard_stop() -> None:
+    """No paid TennisAPI request from 19:08 to 19:10 Europe/Bratislava."""
+    local = datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Bratislava"))
+    if local.hour == 19 and 8 <= local.minute < 10:
+        raise RequestBudgetExceeded("Provider daily hard stop: 19:08–19:10 Bratislava")
 
 
 def _provider_request_reserve() -> int:
@@ -235,6 +243,7 @@ class RapidTennisClient:
 
         for attempt in range(attempts):
             self._throttle()
+            _enforce_provider_day_hard_stop()
             # Scheduled history autofill must not borrow tomorrow's quota if the
             # runner was delayed. Normal production/runtime callers have no cutoff.
             cutoff_raw = os.getenv("BLINQ_API_AUTOFILL_STOP_AT_UTC", "").strip()
@@ -349,6 +358,7 @@ class RapidTennisClient:
 
         for attempt in range(max(1, min(5, int(self.retry_attempts)))):
             self._throttle()
+            _enforce_provider_day_hard_stop()
             if self.request_limit is not None and self.request_count >= self.request_limit:
                 raise RequestBudgetExceeded("Per-run request limit exhausted")
             provider_reserve = _provider_request_reserve()
@@ -453,10 +463,12 @@ class RapidTennisClient:
         """GET optional provider JSON; 204/404 mean unavailable, not fatal."""
         url = f"{self.cfg.rapidapi_base_url}{path}"
         self._throttle()
+        _enforce_provider_day_hard_stop()
         if self.request_limit is not None and self.request_count >= self.request_limit:
             raise RequestBudgetExceeded("Per-run request limit exhausted")
-        if self.rate_limit_remaining == 0:
-            raise RequestBudgetExceeded("Provider reports no remaining requests")
+        if (self.rate_limit_remaining is not None
+                and self.rate_limit_remaining <= _provider_request_reserve()):
+            raise RequestBudgetExceeded("Provider reserve reached")
         if self.request_budget is not None:
             self.request_budget(self.client, self.cfg, enrichment=True)
         self._last_request_at = time.monotonic()

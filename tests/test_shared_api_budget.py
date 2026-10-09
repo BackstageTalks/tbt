@@ -14,7 +14,7 @@ from tbt.providers.rapidapi import RapidTennisClient
 NOW = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
 
 
-def test_all_purposes_share_provider_day_pool_with_10_percent_reserve():
+def test_all_purposes_share_provider_day_pool_with_3_percent_reserve():
     ledger = None
     for purpose, amount in (
         ("live", 3000),
@@ -22,33 +22,46 @@ def test_all_purposes_share_provider_day_pool_with_10_percent_reserve():
         ("refresh", 2500),
         ("match", 2500),
         ("history", 2500),
+        ("history", 1050),
     ):
         ledger, result = shared_budget.calculate(ledger, purpose, amount, now=NOW)
 
     assert result["provider_plan_limit"] == 15000
-    assert result["global_limit"] == 13500
-    assert result["global_spent"] == 13500
+    assert result["global_limit"] == 14550
+    assert result["global_spent"] == 14550
     assert result["global_remaining"] == 0
-    assert result["reserved_provider_headroom"] == 1500
+    assert result["reserved_provider_headroom"] == 450
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "refresh", 1, now=NOW)
 
 
-def test_history_can_use_global_headroom_but_never_cross_ninety_percent():
+def test_history_can_use_global_headroom_but_never_cross_ninety_seven_percent():
     ledger = None
     result = None
-    for amount in (3000, 3000, 3000, 3000, 1500):
+    for amount in (3000, 3000, 3000, 3000, 1500, 1050):
         ledger, result = shared_budget.calculate(ledger, "history", amount, now=NOW)
-    assert result["spent"]["history"] == 13500
-    assert result["global_spent"] == 13500
+    assert result["spent"]["history"] == 14550
+    assert result["global_spent"] == 14550
     assert result["global_remaining"] == 0
-    assert result["reserved_provider_headroom"] == 1500
+    assert result["reserved_provider_headroom"] == 450
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "history", 1, now=NOW)
 
+def test_absolute_provider_hard_stop_between_1908_and_1910():
+    # 2026-09-27 in Bratislava is UTC+2.
+    for minute in (8, 9):
+        with pytest.raises(shared_budget.SharedBudgetExhausted, match="19:08"):
+            shared_budget.calculate(None, "live", 1,
+                                    now=datetime(2026, 9, 27, 17, minute, tzinfo=timezone.utc))
+    _, result = shared_budget.calculate(None, "live", 1,
+                                        now=datetime(2026, 9, 27, 17, 10, tzinfo=timezone.utc))
+    assert result["global_spent"] == 1
+    assert result["global_remaining"] == 14549
+
+
 def test_provider_day_resets_at_1910_bratislava():
     # 2026-09-27 is CEST, so 19:10 Europe/Bratislava == 17:10 UTC.
-    before_reset = datetime(2026, 9, 27, 17, 9, tzinfo=timezone.utc)
+    before_reset = datetime(2026, 9, 27, 17, 7, tzinfo=timezone.utc)
     at_reset = datetime(2026, 9, 27, 17, 10, tzinfo=timezone.utc)
 
     ledger, result = shared_budget.calculate(None, "refresh", 1000, now=before_reset)
@@ -56,7 +69,7 @@ def test_provider_day_resets_at_1910_bratislava():
 
     ledger, result = shared_budget.calculate(ledger, "refresh", 1000, now=at_reset)
     assert result["global_spent"] == 1000
-    assert result["global_remaining"] == 12500
+    assert result["global_remaining"] == 13550
     assert result["window"] == "provider_day_19_10_europe_bratislava"
 
 

@@ -3,7 +3,7 @@
 The provider allowance resets at 19:10 Europe/Bratislava. One ETag-protected
 Azure Table row coordinates every BlinQ TennisAPI caller. Reserve BEFORE every
 billable attempt, including retries; never refund an ambiguous network failure.
-A 10% (1,500-request) provider reserve is kept untouched, so BlinQ hard-stops at 90%.
+A 3% (450-request) provider reserve is kept untouched, so BlinQ hard-stops at 97%.
 This guard is production-critical and must be deployed before provider work resumes.
 """
 from __future__ import annotations
@@ -19,14 +19,15 @@ from .budget import RequestBudgetExceeded
 
 SLOT_SECONDS = 300
 PROVIDER_PLAN_LIMIT = 15000
-PROVIDER_RESERVE = 1500
+PROVIDER_RESERVE = 450
 GLOBAL_CEILING = PROVIDER_PLAN_LIMIT - PROVIDER_RESERVE
 RESET_TIMEZONE = ZoneInfo("Europe/Bratislava")
 RESET_HOUR = 19
 RESET_MINUTE = 10
+DAILY_STOP_MINUTE = 8  # Hard stop 19:08–19:10 even for high-priority calls
 # Runtime classes retain bounded allocations. History/backfill may opportunistically
 # use any provider-day capacity that is still available, but GLOBAL_CEILING remains
-# authoritative and always preserves the 10% provider reserve.
+# authoritative and always preserves the 3% provider reserve.
 PURPOSE_CAPS = {
     "live": 3000,
     "match": 2500,
@@ -127,6 +128,12 @@ def _summary(buckets: list[list[int]], slot: int) -> dict[str, Any]:
 def calculate(ledger: dict | None, purpose: str, requested: int = 1,
               *, now: datetime | None = None) -> tuple[dict, dict]:
     """Pure reservation planning; no paid API or storage requests."""
+    instant = now or datetime.now(timezone.utc)
+    if instant.tzinfo is None:
+        raise ValueError("Budget times must be timezone-aware")
+    local = instant.astimezone(RESET_TIMEZONE)
+    if local.hour == RESET_HOUR and DAILY_STOP_MINUTE <= local.minute < RESET_MINUTE:
+        raise SharedBudgetExhausted("Provider daily hard stop: 19:08–19:10 Bratislava")
     if purpose not in PURPOSE_CAPS:
         raise ValueError("Unknown budget purpose")
     if isinstance(requested, bool) or not isinstance(requested, int) or not 1 <= requested <= 3000:

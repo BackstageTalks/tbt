@@ -1,8 +1,8 @@
-name: BlinQ hourly API gapfill (90%)
+name: BlinQ hourly API gapfill (90% staged, 97% closeout)
 
 # GitHub cron is intentionally forbidden by the repository contract.
 # Manual workflow_dispatch is intended for an external hourly schedule with
-# an optional final 18:45 Europe/Bratislava invocation. Existing tick pushes
+# a 90% 18:45 launch, optional 97% 18:55 closeout, and 19:11 new-day start.
 # remain compatible but are not required. A single canonical writer runs at once.
 on:
   push:
@@ -59,17 +59,18 @@ jobs:
 
           # Progressive cumulative caps across all purposes, including LIVE,
           # Match Status, refresh and history, plus committed reservations.
-          # The provider-day shared ledger still enforces the absolute 90% cap.
+          # The provider-day shared ledger enforces the absolute 97% cap.
           # The 18:00 cap also applies to the operator's final 18:45 launch.
           caps = {12: 5700, 13: 6900, 14: 8100, 15: 9300,
                   16: 10500, 17: 12000, 18: 13500}
           print(f"Bratislava time: {local.isoformat()}; dry_run={DRY_RUN}", flush=True)
-          closeout_only = local.hour == 19
-          if local.hour not in caps and not closeout_only and not DRY_RUN:
-              print("Outside the 12:00-19:00 Bratislava API window; skipping.")
+          final_topup = local.hour == 18 and 55 <= local.minute <= 57
+          new_day_start = local.hour == 19 and local.minute == 11
+          if local.hour not in caps and not final_topup and not new_day_start and not DRY_RUN:
+              print("Outside permitted API dispatch slots; skipping.")
               sys.exit(0)
-          if local.hour == 18 and local.minute > 57:
-              print("18:57 latest dispatch guard; no post-reset API calls.")
+          if local.hour == 19 and not new_day_start:
+              print("No provider dispatch near the 19:10 reset except at 19:11.")
               sys.exit(0)
           if not TOKEN or not WORKER or not BUDGET_URL.startswith("https://"):
               raise SystemExit("Required GitHub / shared-budget credentials missing; fail closed")
@@ -116,35 +117,36 @@ jobs:
           if not isinstance(budget, dict) or (
               budget.get("window") != "provider_day_19_10_europe_bratislava"
               or budget.get("provider_plan_limit") != 15000
-              or budget.get("global_limit") != 13500
-              or budget.get("reserved_provider_headroom") != 1500
+              or budget.get("global_limit") != 14550
+              or budget.get("reserved_provider_headroom") != 450
           ):
               raise SystemExit("Unrecognized budget contract; no dispatch")
 
           spent = int(budget["global_spent"])
           remaining = int(budget["global_remaining"])
           history_remaining = int(budget["remaining"]["history"])
-          if closeout_only or local.hour not in caps:
-              print(f"No new job outside 12:00–18:57 Europe/Bratislava; "
-                    f"shared ledger {spent}/15000, remaining to 90%={remaining}.")
+          if local.hour not in caps and not final_topup and not new_day_start:
+              print(f"No new job outside guarded hours Europe/Bratislava; "
+                    f"shared ledger {spent}/15000, remaining to 97%={remaining}.")
               if DRY_RUN:
                   print("DRY RUN active writer check: " + str(check_writers()))
               sys.exit(0)
-          if spent < 0 or remaining != max(0, 13500-spent):
+          if spent < 0 or remaining != max(0, 14550-spent):
               raise SystemExit("Shared budget inconsistency; no dispatch")
           reset = datetime.fromisoformat(str(budget["next_reset_utc"]).replace("Z", "+00:00"))
-          if reset.tzinfo is None or reset.astimezone(ZONE).date() != local.date() or reset.astimezone(ZONE).hour != 19 or reset.astimezone(ZONE).minute != 10:
+          expected_reset_date = local.date() + timedelta(days=1) if new_day_start else local.date()
+          if reset.tzinfo is None or reset.astimezone(ZONE).date() != expected_reset_date or reset.astimezone(ZONE).hour != 19 or reset.astimezone(ZONE).minute != 10:
               raise SystemExit("Provider reset time inconsistent; no dispatch")
 
-          limit = caps[local.hour]
-          # At most 3000 per job; the provider rechecks the 1500-remaining
+          limit = 3000 if new_day_start else (14550 if final_topup else caps[local.hour])
+          # At most 3000 per job; the provider rechecks the 450-remaining
           # header and the shared ETag ledger before every billable attempt.
           proposed = min(3000, limit-spent, remaining, history_remaining)
           print(f"API budget: {spent}/15000 used; hourly ceiling={limit}; "
                 f"global remaining={remaining}; proposed max={proposed}", flush=True)
 
           if proposed < 1:
-              print("No request allowance left beneath the 90% ceiling.")
+              print("No request allowance left beneath the applicable staged/97% ceiling.")
               sys.exit(0)
 
           active = check_writers()
@@ -154,11 +156,12 @@ jobs:
 
           # Statistics mode uses canonical identity, quality-ready skip logic,
           # and fail-closed provider-header quota checks. Stop well BEFORE the
-          # verified 19:10 provider reset, including an 18:45 final invocation.
-          cutoff_local = datetime.combine(local.date(), time(19, 5), tzinfo=ZONE)
+          # verified 19:10 provider reset; do not use old-day quota after 19:08.
+          cutoff_date = local.date() + timedelta(days=1) if new_day_start else local.date()
+          cutoff_local = datetime.combine(cutoff_date, time(19, 8), tzinfo=ZONE)
           cutoff = cutoff_local.astimezone(timezone.utc)
-          if now >= cutoff - timedelta(minutes=8):
-              print("Less than 8 minutes until provider cutoff; no dispatch")
+          if now >= cutoff - timedelta(minutes=4):
+              print("Less than 4 minutes until provider cutoff; no dispatch")
               sys.exit(0)
           last_complete = local.date() - timedelta(days=1)
           payload = {
