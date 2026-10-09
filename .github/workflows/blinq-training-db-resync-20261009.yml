@@ -1,3 +1,6 @@
+# Request single guarded rebuild from verified canonical 993759 after PBPX readback
+# (run 37900142099) and failed-safe OddsTrader run 37900334491.
+# No model promotion; existing source SHA, PIT, leakage and remote readback gates apply.
 name: BlinQ guarded canonical-to-training resync 2026-10-09
 
 on:
