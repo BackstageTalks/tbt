@@ -20,7 +20,8 @@ concurrency:
 jobs:
   rebuild:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # Previous 90m GitHub Actions job timed out during leakage audit after completing the 993759-row table.
+    timeout-minutes: 240
     env:
       PYTHONPATH: api:scripts
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
