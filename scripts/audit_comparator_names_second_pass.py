@@ -36,6 +36,7 @@ def inspect(players: list[dict]) -> dict:
     provider_full = defaultdict(list)
     reverse_names = defaultdict(list)
     compound = defaultdict(list)
+    provider_ids_by_tour = defaultdict(set)
 
     def keep(reason: str, item: dict, *, max_examples: int = 8):
         if len(examples[reason]) < max_examples:
@@ -51,6 +52,8 @@ def inspect(players: list[dict]) -> dict:
         counts["directory_rows"] += 1
         counts[f"{tour}_rows"] += 1
         counts["provider_rows" if _provider(p) else "historical_rows"] += 1
+        if _provider(p):
+            provider_ids_by_tour[tour].add(pid)
         names[tour, norm].append(p)
         for name in p.get("aliases") or []:
             a = normalize_player_name(name)
@@ -103,11 +106,7 @@ def inspect(players: list[dict]) -> dict:
             continue
         # Only count aliases naming several provider rows when actual provider
         # identity ambiguity exists; historic fragments remain separate.
-        matching_provider_ids = {
-            str(p.get("player_id")) for p in players
-            if _provider(p) and str(p.get("tour") or "").lower() == tour
-            and str(p.get("player_id")) in ids
-        }
+        matching_provider_ids = ids & provider_ids_by_tour[tour]
         if len(matching_provider_ids) >= 2:
             counts["multi_provider_alias_conflicts"] += 1
             keep("provider_alias_conflict", {"tour": tour, "alias": alias, "provider_ids": sorted(matching_provider_ids)[:5]})
