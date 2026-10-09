@@ -46,12 +46,15 @@ def audit(players: list[dict]) -> dict:
         counts["abbreviated_rows"] += 1
         matches = full[tour, key]
         distinct = {str(p["player_id"]): p for p in matches}
+        target = _safe_abbreviation_target(row, matches)
         if not distinct:
             label = "no_full_candidate"
-        elif len(distinct) != 1:
-            label = "ambiguous_full_candidates"
-        elif _safe_abbreviation_target(row, matches) is not None:
+        elif target is not None:
             label = "safe_to_display_full_name"
+            if len(distinct) > 1:
+                counts["safe_historical_full_name_corrob"] += 1
+        elif len({normalize_player_name(p.get("name")) for p in distinct.values()}) > 1 or len(distinct) > 1:
+            label = "ambiguous_full_candidates"
         else:
             label = "weak_evidence_keep_distinct"
         counts[label] += 1
@@ -67,8 +70,7 @@ def audit(players: list[dict]) -> dict:
             mapped = search_players(
                 {"players": players}, str(row.get("name")), tour=tour, limit=25
             )
-            target = next(iter(distinct))
-            if not mapped or mapped[0].get("player_id") != target:
+            if not mapped or mapped[0].get("player_id") != str(target.get("player_id")):
                 counts["search_contract_failures"] += 1
     for group in same_name.values():
         distinct = {str(p.get("player_id")) for p in group}
