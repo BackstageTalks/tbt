@@ -25,3 +25,12 @@ Commit != deployment; passing CI != production verification; retained version na
 - Existing production champion in audit: `v201-20260925T204608601094Z`.
 - Shadow candidate `v201-20261005T201258172391Z` was rejected; production model unchanged per model-shadow-promotion audit.
 - Previous artifact's full integrity and rehearsal of rollback are **not yet verified**. Do not claim otherwise.
+
+
+### Private admin calibration monitor — 2026-10-09
+
+- Admin `Kalibrácia` reads the exact champion–candidate shadow cohort, the independent new/unseen completed canonical-match counter and the last historic promotion decision from a signed, verified private Azure snapshot.
+- The research branch is [research/model-calibration](https://github.com/BackstageTalks/tbt/tree/research/model-calibration), with [operating rules](https://github.com/BackstageTalks/tbt/blob/research/model-calibration/docs/MODEL_CALIBRATION_LAB.md).
+- The monitor runs from the existing externally scheduled Match Status worker every six hours, without Tennis API calls. The initial snapshot is seeded only after an Azure deployment passes release/health checks.
+- This dashboard is **read-only**, never a production-model activation switch. Model promotion requires separate explicit approval, calibration comparison, and rollback verification as above.
+- Implementation: [PR #434](https://github.com/BackstageTalks/tbt/pull/434).
