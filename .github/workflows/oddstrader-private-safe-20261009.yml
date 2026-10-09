@@ -1,0 +1,60 @@
+name: BlinQ safe OddsTrader market reconciliation
+on:
+  push:
+    branches: [ops/oddstrader-private-integration-20261009]
+    paths:
+      - .github/workflows/oddstrader-private-safe-20261009.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Same per-repository writer lock as production history/enrichment jobs.
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Checkout application code (no persistent credentials)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read verified private OddsTrader source only
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          ref: main
+          path: private_data
+          persist-credentials: false
+          sparse-checkout: |
+            data/oddstrader/atp
+            scripts/stage_oddstrader_canonical.py
+          sparse-checkout-cone-mode: false
+      - name: Prepare Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install existing history/market dependencies
+        run: python -m pip install --disable-pip-version-check -r api/requirements-train.txt
+      - name: Validate private destination and preflight code
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || exit 1
+          test "$(gh repo view BackstageTalks/tbt-data --json visibility -q .visibility)" = "PRIVATE" || exit 1
+          python -m py_compile scripts/research/private_canonical_snapshot_v2.py scripts/research/import_oddstrader_private_safe.py private_data/scripts/stage_oddstrader_canonical.py
+      - name: Check source and pages, seal private backup, strict-match and import only non-conflicting markets with remote SHA readback
+        run: python -u scripts/research/import_oddstrader_private_safe.py
+      # All research sidecars, raw source and audit evidence stay private.
+      # Never upload artifacts or private data to the public tbt repository.
