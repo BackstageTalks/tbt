@@ -36,8 +36,6 @@ def registry():
     if blob.get("encoding") != "base64":
         raise RuntimeError("Unexpected Wikidata registry encoding")
     compressed = base64.b64decode(blob["content"])
-    if sha256(compressed).digest() is None:
-        raise RuntimeError("Unexpected registry hash")
     rows = [
         json.loads(line)
         for line in gzip.decompress(compressed).decode("utf-8").splitlines()
