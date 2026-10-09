@@ -566,6 +566,15 @@ def save_live_worker_status(payload: object) -> dict:
         "candidates": max(0, int(data.get("candidates") or 0)),
         "signals": max(0, int(data.get("signals") or 0)),
         "new_alerts": max(0, int(data.get("new_alerts") or 0)),
+        "prime_total": max(0, int(data.get("prime_total") or 0)),
+        "prime_eligible": max(0, int(data.get("prime_eligible") or 0)),
+        "set2_candidates": max(0, int(data.get("set2_candidates") or 0)),
+        "set2_priced": max(0, int(data.get("set2_priced") or 0)),
+        "set2_eligible": max(0, int(data.get("set2_eligible") or 0)),
+        "set2_push_thresholds": data.get("set2_push_thresholds") if isinstance(data.get("set2_push_thresholds"), dict) else {},
+        "alert_storage_unavailable": bool(data.get("alert_storage_unavailable")),
+        "alert_publish_error": str(data.get("alert_publish_error") or "")[:64],
+        "heartbeat_persisted": True,
         "candidate_items": data.get("candidate_items") if isinstance(data.get("candidate_items"), list) else [],
         "signal_items": data.get("signal_items") if isinstance(data.get("signal_items"), list) else [],
         "thresholds": data.get("thresholds") if isinstance(data.get("thresholds"), dict) else {},
@@ -712,6 +721,27 @@ def save_match_status_snapshot(payload: object) -> dict:
             "winner_id": str(value.get("winner_id") or "")[:64],
             "provider_status": str(value.get("provider_status") or "")[:120],
         }
+        # Only provider-confirmed settlement context is persisted. These fields
+        # are display metadata, NEVER a replacement for immutable issued odds.
+        first_outcome = str(value.get("first_set_outcome") or "").strip().lower()
+        if first_outcome in {"win", "loss"}:
+            statuses[eid]["first_set_outcome"] = first_outcome
+        first_score = str(value.get("first_set_score") or "").strip()
+        if re.fullmatch(r"(?:[0-7]):(?:[0-7])", first_score):
+            statuses[eid]["first_set_score"] = first_score
+        try:
+            peak = float(value.get("max_live_odds"))
+        except (TypeError, ValueError):
+            peak = 0.0
+        if 1.0 < peak < 100.0:
+            statuses[eid]["max_live_odds"] = peak
+            observed = str(value.get("max_live_odds_at") or "").strip()[:64]
+            if observed:
+                statuses[eid]["max_live_odds_at"] = observed
+            statuses[eid]["live_odds_scope"] = "comeback_after_first_set_loss"
+            statuses[eid]["live_odds_observations"] = max(
+                0, min(100_000, int(value.get("live_odds_observations") or 0))
+            )
     # Compact pending identities survive the next morning's feed rollover.
     raw_pending = data.get("pending")
     raw_pending = raw_pending if isinstance(raw_pending, dict) else {}
