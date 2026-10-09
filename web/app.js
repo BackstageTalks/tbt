@@ -5778,7 +5778,16 @@
           String(shortGroup.rows[0].tour||'').toLowerCase()===String(group.rows[0].tour||'').toLowerCase()&&
           Number(shortGroup.rows[0].rank)>0&&Number(group.rows[0].rank)>0&&
           Math.abs(Number(shortGroup.rows[0].rank)-Number(group.rows[0].rank))<=10;
-        return aliasConfirmed||rankedPair;
+        // Exact complete spelling exists independently in both a provider
+        // row and historical row. Collapse only the historical abbreviated
+        // suggestion for display, even if rankings are from different dates.
+        const canonicalFull=group.rows.filter(player=>!String(player.player_id||'').startsWith('hist-js:'));
+        const historicalFull=group.rows.filter(player=>String(player.player_id||'').startsWith('hist-js:'));
+        const historicallyCorroborated=shortGroup.rows.length===1&&
+          String(shortGroup.rows[0].player_id||'').startsWith('hist-js:')&&
+          canonicalFull.length===1&&historicalFull.length>0&&
+          group.rows.every(player=>String(player.tour||'').toLowerCase()===String(shortGroup.rows[0].tour||'').toLowerCase());
+        return aliasConfirmed||rankedPair||historicallyCorroborated;
       });
       if(parents.length!==1)continue;
       const parent=parents[0];
