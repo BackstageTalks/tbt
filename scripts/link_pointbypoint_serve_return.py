@@ -230,7 +230,7 @@ def _pbpx_score_validated(parsed: dict, score: object) -> bool:
         found = re.fullmatch(r"(\d+)(?:\(\d+\))?-(\d+)(?:\(\d+\))?", token)
         if not found:
             return False
-        recorded.append((int(found.group(1)), int(found.group(3))))
+        recorded.append((int(found.group(1)), int(found.group(2))))
     sets = parsed["set_games"]
     if not all(max(a, b) >= 6 and a != b for a, b in sets):
         return False
