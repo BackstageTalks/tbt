@@ -72,12 +72,28 @@ def _safe_abbreviation_target(short: Mapping, full_candidates: list[dict]) -> di
     """UI-only alias replacement: require a unique full name and second evidence."""
     distinct = {str(item.get("player_id") or ""): item for item in full_candidates}
     distinct.pop("", None)
-    if len(distinct) != 1:
+    if not distinct:
         return None
-    full = next(iter(distinct.values()))
+    # Several IDs may all have *the same complete name*: a canonical provider
+    # record and historical fragments. That is a single DISPLAY name, not
+    # evidence that the canonical identities/match histories can be merged.
+    # If even two different complete names share the initial/surname, do not
+    # guess which one the abbreviated row represents (e.g. B. Perez).
+    normalized = {normalize_player_name(row.get("name")) for row in distinct.values()}
+    if len(normalized) != 1:
+        return None
+    canonical = [
+        row for id_, row in distinct.items() if not id_.startswith("hist-js:")
+    ]
+    if len(distinct) == 1:
+        full = next(iter(distinct.values()))
+    elif len(canonical) == 1 and len(canonical) < len(distinct):
+        full = canonical[0]
+    else:
+        return None
     if str(full.get("player_id")) == str(short.get("player_id")):
         return None
-    full_name = normalize_player_name(full.get("name"))
+    full_name = next(iter(normalized))
     short_aliases = {
         normalize_player_name(alias) for alias in (short.get("aliases") or [])
     }
@@ -88,7 +104,15 @@ def _safe_abbreviation_target(short: Mapping, full_candidates: list[dict]) -> di
         rank_evidence = short_rank > 0 and full_rank > 0 and abs(short_rank - full_rank) <= 10
     except (TypeError, ValueError, OverflowError):
         rank_evidence = False
-    return full if alias_evidence or rank_evidence else None
+    # Historical abbreviated + historical full spelling + canonical full
+    # spelling independently corroborate the display label. Ranks across
+    # historical/current sources need not be within 10 places.
+    historical_full_evidence = (
+        str(short.get("player_id") or "").startswith("hist-js:")
+        and len(distinct) > 1
+        and len(canonical) == 1
+    )
+    return full if alias_evidence or rank_evidence or historical_full_evidence else None
 
 
 def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12) -> list[dict]:
@@ -101,6 +125,7 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
     # the truncated search page. An abbreviated row may otherwise push out its
     # own complete name when the query is common. Keep distinct canonical IDs.
     full_names: dict[tuple[str, str], list[dict]] = {}
+    provider_names: dict[str, list[dict]] = {}
     ranked = []
     for player in _players(artifact):
         if str(player.get("tour") or "").lower() != tour:
@@ -108,6 +133,10 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
         complete_key = _full_name_key(player.get("name"))
         if complete_key:
             full_names.setdefault(complete_key, []).append(player)
+            # Only replace historical *display* records with a unique
+            # canonical full spelling, never between different provider IDs.
+            if not str(player.get("player_id") or "").startswith("hist-js:"):
+                provider_names.setdefault(normalize_player_name(player.get("name")), []).append(player)
         names = [str(player.get("name") or "")] + [
             str(value) for value in (player.get("aliases") or []) if value
         ]
@@ -128,6 +157,10 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
     seen_ids: set[str] = set()
     for candidate in ranked:
         player = candidate[-1]
+        if str(player.get("player_id") or "").startswith("hist-js:") and _full_name_key(player.get("name")):
+            preferred = provider_names.get(normalize_player_name(player.get("name")), [])
+            if len(preferred) == 1:
+                player = preferred[0]
         short_key = _abbreviated_name_key(player.get("name"))
         if short_key:
             full = _safe_abbreviation_target(player, full_names.get(short_key, []))
