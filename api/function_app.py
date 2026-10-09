@@ -82,6 +82,8 @@ from tbt.services.admin_storage import (
     load_match_status_snapshot,
     save_account_worker_status,
     load_account_worker_status,
+    save_model_calibration_status,
+    load_model_calibration_status,
     live_min_level,
     membership_levels_from,
     list_live_radar_results,
@@ -2347,6 +2349,50 @@ def _feed_asset_health(raw_feed: dict) -> dict:
             },
         },
     }
+
+
+@app.route(route="v1/internal/model-calibration-snapshot", methods=["POST"])
+def internal_model_calibration_snapshot(req):
+    """Receive signed read-only calibration evidence from GitHub Actions."""
+    if not str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip():
+        return response({"error": "calibration_worker_not_configured"}, 503)
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    if len(req.get_body()) > 32_000:
+        return response({"error": "calibration_payload_too_large"}, 413)
+    try:
+        payload = req.get_json()
+        saved = save_model_calibration_status(payload)
+        return response({
+            "stored": True,
+            "production_version": saved["production_version"],
+            "candidate_version": saved["candidate_version"],
+            "updated_at": saved["updated_at"],
+        })
+    except (ValueError, TypeError) as exc:
+        logging.warning("Invalid calibration monitor payload: %s", exc)
+        return response({"error": "invalid_calibration_snapshot"}, 400)
+    except AdminStorageUnavailable:
+        logging.exception("Calibration monitor durable storage unavailable")
+        return response({"error": "calibration_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/model-calibration", methods=["GET"])
+def admin_model_calibration(req):
+    """Only verified admins can see private model-pair evaluation progress."""
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        status = load_model_calibration_status()
+        if status is None:
+            return response({"ready": False, "error": "calibration_snapshot_pending"}, 503)
+        return response({"ready": True, **status})
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "calibration_storage_unavailable"}, 503)
+
 
 @app.route(route="v1/admin/diagnostics", methods=["GET"])
 def admin_diagnostics(req):

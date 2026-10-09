@@ -10085,3 +10085,49 @@ body.blinq-compare .footer-system-dot{display:none}
 
 .comparator-win-meter{height:5px;border-radius:6px;overflow:hidden;background:rgba(85,122,147,.27);margin:11px 0 2px}
 .comparator-win-meter>span{display:block;height:100%;background:linear-gradient(90deg,#20a989,#41daa2);border-radius:inherit}
+
+
+/* Admin · private, read-only model calibration control room */
+.admin-calibration{max-width:100%;min-width:0}
+.admin-calibration .admin-ux-heading{align-items:center}
+.admin-calibration-status{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;border:1px solid #2b6d7f;background:#082b36;border-radius:12px;padding:13px 16px;margin:12px 0 17px}
+.admin-calibration-status strong{color:#7bffd0;font-size:15px}
+.admin-calibration-status span{color:#afc6d4;font-size:12px}
+.admin-calibration-status.is-stale{border-color:#8e6735;background:#332518}
+.admin-calibration-status.is-stale strong{color:#ffd38b}
+.admin-calibration-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.admin-calibration-card{display:flex;min-width:0;flex-direction:column;gap:6px;padding:16px;border:1px solid #28536a;background:linear-gradient(145deg,#0b2a3c,#071c2b);border-radius:13px}
+.admin-calibration-card small{font-size:11px;color:#8fb6ca;text-transform:uppercase;font-weight:800;letter-spacing:.065em}
+.admin-calibration-card strong{overflow-wrap:anywhere;font-size:19px;line-height:1.2;color:#f7fbff}
+.admin-calibration-card span{font-size:11px;color:#aac0cf}
+.admin-calibration-progress-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:17px}
+.admin-calibration-progress{border:1px solid #28475e;border-radius:13px;padding:15px;background:#071e2d}
+.admin-calibration-progress-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline;font-size:12px}
+.admin-calibration-progress-head span{font-variant-numeric:tabular-nums;color:#b7cad6;font-weight:800;white-space:nowrap}
+.admin-calibration-track{height:9px;background:#163748;border-radius:20px;margin:15px 0 11px;overflow:hidden}
+.admin-calibration-track>div{height:100%;background:linear-gradient(90deg,#46e3d5,#50ef9b);border-radius:20px}
+.admin-calibration-progress p{color:#94aec0;font-size:11px;margin:0}
+.admin-calibration-progress p strong{color:#f2f8ff}
+.admin-calibration-split{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.85fr);gap:13px}
+.admin-calibration-panel{min-width:0;border:1px solid #234b61;border-radius:14px;background:#081d2c;padding:16px}
+.admin-calibration-panel h3{margin:0 0 6px;font-size:16px}
+.admin-calibration-panel>p{color:#90adbf;font-size:12px;margin:0 0 12px}
+.admin-calibration-panel .admin-table-wrap{overflow-x:auto}
+.admin-calibration-panel table{width:100%;border-collapse:collapse;font-size:12px;min-width:380px}
+.admin-calibration-panel th,.admin-calibration-panel td{text-align:left;padding:10px 6px;border-bottom:1px solid #1b4055;font-variant-numeric:tabular-nums}
+.admin-calibration-panel thead th{color:#92b7ca;font-size:11px}
+.admin-calibration-panel td.is-better{color:#63f3b0;font-weight:800}
+.admin-calibration-panel td.is-worse{color:#ff9b9b;font-weight:800}
+.admin-calibration-gates{display:grid;gap:0}
+.admin-calibration-gates>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #193d51;font-size:12px;color:#d9e8f1}
+.admin-calibration-gates strong{border:1px solid #315169;border-radius:8px;min-width:26px;min-height:26px;display:grid;place-items:center}
+.admin-calibration-gates strong.is-good{background:#104938;color:#8affc5;border-color:#25785b}
+.admin-calibration-gates strong.is-pending{color:#a6b4c1}
+.admin-calibration-foot{margin:13px 0 0;color:#8da5b5;font-size:11px;line-height:1.55}
+.admin-calibration-bottom{margin-top:13px;border:1px solid #25465a;border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;gap:15px;flex-wrap:wrap}
+.admin-calibration-bottom>div:first-child{display:grid;gap:3px}
+.admin-calibration-bottom strong{font-size:12px}
+.admin-calibration-bottom span,.admin-calibration-links{color:#a3bece;font-size:12px}
+.admin-calibration-links a{color:#70e9da;text-underline-offset:3px}
+@media(max-width:1100px){.admin-calibration-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-calibration-progress-grid{grid-template-columns:1fr}.admin-calibration-split{grid-template-columns:1fr}}
+@media(max-width:620px){.admin-calibration-grid{grid-template-columns:1fr}.admin-calibration .admin-ux-heading{flex-direction:column}.admin-calibration-panel{padding:12px}.admin-calibration-card strong{font-size:17px}}

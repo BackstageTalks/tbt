@@ -975,6 +975,49 @@ def load_account_worker_status() -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
+
+
+def save_model_calibration_status(payload: object) -> dict:
+    """Store only a small, validated, read-only model-monitor snapshot in Azure.
+
+    Called exclusively by the secret-protected internal endpoint. No training,
+    GitHub token, raw private ledger, player rows or model artifact is stored.
+    """
+    from .model_calibration_status import normalize_model_calibration_snapshot
+    safe = normalize_model_calibration_snapshot(payload)
+    now = datetime.now(timezone.utc).isoformat()
+    safe["updated_at"] = now
+    encoded = json.dumps(safe, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    if len(encoded.encode("utf-8")) > 24_000:
+        raise ValueError("Calibration status exceeds safe Azure Table payload size")
+    try:
+        _table(UI_TABLE).upsert_entity({
+            "PartitionKey": "runtime",
+            "RowKey": "model-calibration-status-v1",
+            "payload": encoded,
+            "updated_at": now,
+        }, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save calibration status") from exc
+    return safe
+
+
+def load_model_calibration_status() -> dict | None:
+    from .model_calibration_status import with_freshness
+    try:
+        entity = _table(UI_TABLE).get_entity(
+            partition_key="runtime", row_key="model-calibration-status-v1"
+        )
+    except Exception as exc:
+        if _storage_not_found(exc):
+            return None
+        raise AdminStorageUnavailable("Unable to read calibration status") from exc
+    try:
+        payload = json.loads(str(entity.get("payload") or ""))
+        return with_freshness(payload)
+    except (ValueError, TypeError) as exc:
+        raise AdminStorageUnavailable("Invalid persisted calibration status") from exc
+
 def validate_ui_config(payload: object) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Invalid UI configuration")
