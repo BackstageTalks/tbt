@@ -31,3 +31,20 @@ def test_winter_betting_day_uses_cet_offset():
 def test_missing_or_implausibly_future_dated_feed_is_stale():
     assert _stale(None, "2026-10-08T12:00:00Z") is True
     assert _stale("2026-10-08T14:00:00Z", "2026-10-08T12:00:00Z") is True
+
+
+def test_retired_top200_is_never_served_even_from_legacy_snapshot():
+    now = datetime.fromisoformat("2026-10-09T09:00:00+00:00")
+    historical = {"event_id": "old-legacy", "market_publications": [{"section": "top200"}]}
+    payload = {
+        "generated_at": "2026-10-09T04:10:00Z",
+        "upcoming": [],
+        "results": [historical],
+        "top200_picks": [{"event_id": "obsolete", "betting_day": "2026-10-09"}],
+        "top_daily_picks": [{"event_id": "current", "betting_day": "2026-10-09"}],
+    }
+    visible = visible_feed(payload, now=now)
+    assert visible["top200_picks"] == []
+    assert [row["event_id"] for row in visible["top_daily_picks"]] == ["current"]
+    assert visible["results"] == [historical]
+    assert payload["top200_picks"][0]["event_id"] == "obsolete"  # Input not mutated.
