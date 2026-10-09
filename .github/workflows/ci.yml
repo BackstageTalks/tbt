@@ -159,6 +159,7 @@ jobs:
           set -euo pipefail
           test -n "$GH_TOKEN" || { echo 'Missing verified canonical release read token'; exit 1; }
           timeout 480s python scripts/audit_cdb_identity_reconciliation.py
+          timeout 150s python scripts/audit_cdb_external_registry.py
 
       - name: Run backend tests
         env:
