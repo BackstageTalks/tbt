@@ -61,7 +61,7 @@ def test_absolute_provider_hard_stop_between_1908_and_1910():
 
 def test_provider_day_resets_at_1910_bratislava():
     # 2026-09-27 is CEST, so 19:10 Europe/Bratislava == 17:10 UTC.
-    before_reset = datetime(2026, 9, 27, 17, 9, tzinfo=timezone.utc)
+    before_reset = datetime(2026, 9, 27, 17, 7, tzinfo=timezone.utc)
     at_reset = datetime(2026, 9, 27, 17, 10, tzinfo=timezone.utc)
 
     ledger, result = shared_budget.calculate(None, "refresh", 1000, now=before_reset)
