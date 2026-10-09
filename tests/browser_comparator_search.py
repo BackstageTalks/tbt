@@ -180,6 +180,25 @@ def main():
                 page.locator("#comparatorSearch0 [data-player-id='provider-54']").click()
                 assert page.evaluate("comparatorHarness.state.comparator.players[0].player_id") == "provider-54"
 
+                # Screenshot regression: abbreviated Francisco must not shadow
+                # Francisco Cerundolo, while Juan Manuel remains selectable.
+                page.evaluate("""() => {
+                    window.BlinqAuth.comparatorPlayers=async() => ({
+                        players:[
+                            {player_id:'cerun-short',name:'Cerundolo F.',tour:'atp',rank:24},
+                            {player_id:'cerun-francisco',name:'Francisco Cerundolo',tour:'atp',rank:21},
+                            {player_id:'cerun-juan',name:'Juan Manuel Cerundolo',tour:'atp',rank:87}
+                        ]
+                    });
+                }""")
+                page.locator("#comparatorPlayer0").fill("cerun")
+                page.locator("#comparatorSearch0 [data-player-id='cerun-francisco']").wait_for()
+                assert page.locator("#comparatorSearch0 .comparator-search-primary").count() == 2
+                assert page.locator("#comparatorSearch0 [data-player-id='cerun-short']").count() == 0
+                assert page.locator("#comparatorSearch0 [data-player-id='cerun-juan']").count() == 1
+                page.locator("#comparatorSearch0 [data-player-id='cerun-francisco']").click()
+                assert page.evaluate("comparatorHarness.state.comparator.players[0].player_id") == "cerun-francisco"
+
                 # Realistic analysis data, not decorative placeholders.
                 page.evaluate("""() => {
                     const h=window.comparatorHarness;
