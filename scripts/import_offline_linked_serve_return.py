@@ -119,6 +119,10 @@ def main() -> None:
 
         delayed = row.get("delayed_observation")
         if delayed is not None:
+            if row.get("baseline_stats") != dict(match.stats or {}):
+                counts["baseline_stats_changed"] += 1
+                review.append({"match_id": mid, "reason": "canonical_baseline_stats_changed"})
+                continue
             if not isinstance(delayed, dict) or row.get("incoming_stats") != {}:
                 counts["invalid_delayed_observation"] += 1
                 review.append({"match_id": mid, "reason": "invalid_delayed_payload"})
