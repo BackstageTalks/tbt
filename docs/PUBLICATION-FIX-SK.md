@@ -27,3 +27,10 @@ Zdrojové súbory: `api/tbt/services/publication.py`, `scripts/prepare_feed.py`,
 Na dodaných dátach prešlo všetkých päť market záznamov po oprave; zmenil sa iba Top Bets `16983980`. Ostatné sekcie feedu a pôvodné vstupné súbory zostali nezmenené. Prešlo 19 testov obnovy snapshotu a nasadzovacieho procesu vrátane odmietnutia nesprávneho nasadeného feedu. Produkčný GitHub/Azure beh tu nebol spustený a celý výpočtový pipeline s externými zdrojmi sa lokálne nevykonával.
 
 Pôvodný návod k vizuálnej úprave opisuje predchádzajúcu verziu bez backendových zmien. Táto verzia navyše mení vyššie uvedené štyri publikačné súbory; model, tréningové pravidlá ani Firebase autentifikácia sa nemenia.
+
+## Odstránenie TOP200 z aktívnej publikácie (2026-10-09)
+
+- PR #430 natrvalo zrušil aktívny TOP200 selector a jeho prioritu. Nové singles tipy sa zaraďujú iba do VALUE, TOP alebo Comebacks.
+- Historické skutočne publikované výsledky sa neprepisujú. Zastarané TOP200 riadky z existujúceho feed release sa nesmú zobrazovať v dennej ponuke.
+- Overenie: CI na PR #37892762010 a na main #37893163968 vrátane backend, JavaScript a browser testov prešlo.
+- Produkčné nasadenie je spustené samostatne cez explicitnú [deploy-current] požiadavku; presný nasadený SHA treba overiť po skončení CI.
