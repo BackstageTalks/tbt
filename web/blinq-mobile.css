@@ -969,3 +969,56 @@ body#blinqPremium.bqm-enabled .site-header .header-top .header-actions > #insigh
 body#blinqPremium .site-header .header-top .header-actions > #insightShortcut.is-access-locked::after{
   display:none!important;content:none!important;
 }
+
+
+/* Unified navigation lives on the current page: anchored dropdown on PC,
+   compact side drawer on mobile. The app remains visible behind the menu. */
+#bqm-menu-scrim[hidden]{display:none!important}
+#bqm-menu-scrim:not([hidden]){
+  display:block!important;position:fixed;inset:0;z-index:1198!important;
+  background:rgba(1,14,10,.16);cursor:default;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open]{
+  z-index:1199!important;
+  background-color:#081d16!important;
+  background-image:linear-gradient(150deg,#0c2a20 0%,#071a13 72%,#06150f 100%)!important;
+  background-repeat:no-repeat!important;
+  border:1px solid rgba(75,160,115,.42)!important;
+  box-shadow:0 20px 60px rgba(0,0,0,.38)!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-top{
+  border-bottom:1px solid rgba(122,170,145,.24)!important;
+}
+@media(min-width:901px){
+  body#blinqPremium.bqm-menu-open{overflow:auto!important}
+  body#blinqPremium.bqm-unified-menu #bqm-dialog[open]{
+    border-radius:15px!important;
+    max-height:calc(100dvh - 90px)!important;
+  }
+  body#blinqPremium.bqm-unified-menu #bqm-dialog[open][data-anchor="account"]{
+    inset:72px max(12px,calc((100vw - 1500px)/2 + 18px)) auto auto!important;
+  }
+}
+@media(max-width:900px){
+  #bqm-menu-scrim:not([hidden]){background:rgba(0,12,9,.45)!important}
+  body#blinqPremium.bqm-unified-menu #bqm-dialog[open]{
+    inset:0 auto 0 0!important;
+    width:min(352px,calc(100vw - 42px))!important;
+    max-width:calc(100vw - 42px)!important;
+    height:100dvh!important;max-height:100dvh!important;
+    margin:0!important;
+    padding:0 14px max(20px,env(safe-area-inset-bottom))!important;
+    border-top:0!important;border-bottom:0!important;border-left:0!important;
+    border-radius:0 16px 16px 0!important;
+    overflow-x:hidden!important;overflow-y:auto!important;
+    overscroll-behavior:contain;
+  }
+  body#blinqPremium.bqm-unified-menu #bqm-dialog[open][data-anchor="account"]{
+    inset:0 0 0 auto!important;
+    border-left:1px solid rgba(75,160,115,.42)!important;border-right:0!important;
+    border-radius:16px 0 0 16px!important;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  body#blinqPremium.bqm-unified-menu #bqm-dialog[open]{scroll-behavior:auto!important}
+}

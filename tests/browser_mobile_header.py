@@ -51,6 +51,24 @@ def main():
                 # Real account access, not synthetic CSS: rookie has LIVE locked.
                 page.locator('.header-top > .brand').click()
                 assert page.locator('#bqm-dialog nav').get_by_role('button',name='Live radar 🔒',exact=True).is_visible(),(width,'LIVE menu access lock')
+                assert page.locator('#bqm-menu-scrim').is_visible(),(width,'on-page menu scrim missing')
+                menu_state=page.evaluate("""() => {
+                    const menu=document.getElementById('bqm-dialog');
+                    const scrim=document.getElementById('bqm-menu-scrim');
+                    const box=menu.getBoundingClientRect();
+                    const color=getComputedStyle(scrim).backgroundColor;
+                    return {
+                      nonModal: !menu.matches(':modal'),
+                      mainVisible: !!document.getElementById('mainContent').getBoundingClientRect().height,
+                      width: box.width, viewport:innerWidth,
+                      scrimColor:color,
+                      isInline: menu.dataset.anchor === 'brand',
+                    };
+                }""")
+                assert menu_state['nonModal'] and menu_state['mainVisible'] and menu_state['isInline'],(width,menu_state)
+                assert menu_state['width'] < width,(width,'menu should not fill the page',menu_state)
+                assert not menu_state['scrimColor'].endswith(', 1)'),(width,'scrim must preserve page context',menu_state)
+
                 page.get_by_role('button',name='Zavrieť menu').click()
                 page.wait_for_function("!document.getElementById('bqm-dialog').open")
                 page.evaluate("""() => {mobileTest.state.feed.account.plan='elite';mobileTest.renderInsightBell();}""")
@@ -302,6 +320,9 @@ def main():
                 assert menu_box and menu_box['y'] >= 0 and menu_box['y']+menu_box['height'] <= 850,(width,menu_box)
                 for label in ('Profil a členstvo', 'Odhlásiť sa', 'Upgrade', 'Komunita', 'Jazyk'):
                     assert page.locator('#bqm-account-panel').get_by_role('button',name=label,exact=True).is_visible(),(width,label)
+                if width == 1440:
+                    account_box=page.locator('#bqm-dialog').bounding_box()
+                    assert account_box['x'] > 750,(width,'account menu should anchor near avatar',account_box)
                 page.locator('#bqm-account-panel').get_by_role('button',name='Jazyk',exact=True).click()
                 assert page.locator('#bqm-dialog').is_visible()
                 assert page.locator('#bqm-dialog').get_by_role('button',name='SK',exact=True).is_visible()
