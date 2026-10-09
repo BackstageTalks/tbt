@@ -336,7 +336,9 @@ def main():
     print(
         f"The Odds CLV: {len(report['events'])} events, "
         f"{report['credits_spent']} credits, "
-        f"daily={report['credits_used_after_run']}/{DAILY_CAP}, archived={path}"
+        f"daily={report['credits_used_after_run']}/{DAILY_CAP}, "
+        f"status={report['status']}, provider_remaining={report['provider_remaining']}, "
+        f"active_tennis_sports={report.get('active_tennis_sports', 0)}, archived={path}"
     )
 
 

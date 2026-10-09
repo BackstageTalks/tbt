@@ -289,12 +289,17 @@ def scan_comeback_radar(feed, live_events):
             continue
         eligible_prime.append(row)
     candidates = []
+    matched_prime_live = 0
+    matched_eligible_live = 0
     for row in prime:
         if not isinstance(row, dict):
             continue
         e = live.get(str(row.get("event_id") or "").strip())
         if not e:
             continue
+        matched_prime_live += 1
+        if prime_radar_eligible(row):
+            matched_eligible_live += 1
         status = e.get("status") if isinstance(e.get("status"), dict) else {}
         st = str(status.get("type") or status.get("description") or e.get("status") or "").lower()
         if st in {"finished", "ended", "canceled", "cancelled", "postponed"}:
@@ -308,6 +313,8 @@ def scan_comeback_radar(feed, live_events):
         "live_events": len(live_events),
         "prime_pool": len(prime),
         "eligible_prime_pool": len(eligible_prime),
+        "matched_prime_live": matched_prime_live,
+        "matched_eligible_live": matched_eligible_live,
         "rejected_prime": {
             "probability": rejected_probability,
             "odds": rejected_odds,

@@ -358,7 +358,8 @@ def main():
         json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     print(f"CLV snapshot: {len(report['events'])} events, {api_calls} calls, "
-          f"daily local calls={already+api_calls}/{DAILY_LIMIT}; archived {path}")
+          f"daily local calls={already+api_calls}/{DAILY_LIMIT}; "
+          f"status={report.get('status') or 'ok'}, archived {path}")
     if "error" in report:
         raise RuntimeError(report["error"])
 
