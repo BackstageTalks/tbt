@@ -125,14 +125,19 @@
   function syncAvatarMenu() {
     for (const control of [profileButton, profileToggle]) {
       if (!control) continue;
+      const open = menuEnabled() && dialog.open;
       if (menuEnabled()) {
         control.setAttribute('aria-controls', 'bqm-dialog');
         control.setAttribute('aria-haspopup', 'dialog');
-        control.setAttribute('aria-expanded', String(dialog.open));
       } else {
         control.setAttribute('aria-controls', 'profileMenu');
         control.removeAttribute('aria-haspopup');
-        control.setAttribute('aria-expanded', 'false');
+      }
+      // Legacy account handlers can still reset the avatar's ARIA state.
+      // Keep it consistent with the actual open shared dialog.
+      const expanded = String(open);
+      if (control.getAttribute('aria-expanded') !== expanded) {
+        control.setAttribute('aria-expanded', expanded);
       }
     }
     if (menuEnabled() && profileMenu) profileMenu.hidden = true;
@@ -145,6 +150,14 @@
   }
   profileButton?.addEventListener('click', onAvatarOpen, true);
   profileToggle?.addEventListener('click', onAvatarOpen, true);
+  for (const control of [profileButton, profileToggle]) {
+    if (!control) continue;
+    new MutationObserver(() => {
+      if (control.getAttribute('aria-expanded') !== String(menuEnabled() && dialog.open)) {
+        syncAvatarMenu();
+      }
+    }).observe(control, {attributes:true,attributeFilter:['aria-expanded']});
+  }
   function syncMobileIconNav() {
     document.querySelectorAll('[data-mobile-action]').forEach(node => {
       const action = node.dataset.mobileAction;
