@@ -94,7 +94,7 @@ jobs:
         run: |
           set -euo pipefail
           repo="$TBT_DATA_REPOSITORY"
-          tag="blinq-training-snapshot-\${GITHUB_RUN_ID}"
+          tag="blinq-training-snapshot-$GITHUB_RUN_ID"
           mkdir -p .cache/tbt/previous-training .cache/tbt/training-snapshot-readback
           gh release download tbt-training-table-v1 --repo "$repo" \
             --pattern 'training_table.parquet' \
