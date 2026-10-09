@@ -125,6 +125,7 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
     # the truncated search page. An abbreviated row may otherwise push out its
     # own complete name when the query is common. Keep distinct canonical IDs.
     full_names: dict[tuple[str, str], list[dict]] = {}
+    provider_names: dict[str, list[dict]] = {}
     ranked = []
     for player in _players(artifact):
         if str(player.get("tour") or "").lower() != tour:
@@ -132,6 +133,10 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
         complete_key = _full_name_key(player.get("name"))
         if complete_key:
             full_names.setdefault(complete_key, []).append(player)
+            # Only replace historical *display* records with a unique
+            # canonical full spelling, never between different provider IDs.
+            if not str(player.get("player_id") or "").startswith("hist-js:"):
+                provider_names.setdefault(normalize_player_name(player.get("name")), []).append(player)
         names = [str(player.get("name") or "")] + [
             str(value) for value in (player.get("aliases") or []) if value
         ]
@@ -152,6 +157,10 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
     seen_ids: set[str] = set()
     for candidate in ranked:
         player = candidate[-1]
+        if str(player.get("player_id") or "").startswith("hist-js:") and _full_name_key(player.get("name")):
+            preferred = provider_names.get(normalize_player_name(player.get("name")), [])
+            if len(preferred) == 1:
+                player = preferred[0]
         short_key = _abbreviated_name_key(player.get("name"))
         if short_key:
             full = _safe_abbreviation_target(player, full_names.get(short_key, []))
