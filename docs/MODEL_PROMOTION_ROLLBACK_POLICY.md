@@ -34,3 +34,11 @@ Commit != deployment; passing CI != production verification; retained version na
 - The monitor runs from the existing externally scheduled Match Status worker every six hours, without Tennis API calls. The initial snapshot is seeded only after an Azure deployment passes release/health checks.
 - This dashboard is **read-only**, never a production-model activation switch. Model promotion requires separate explicit approval, calibration comparison, and rollback verification as above.
 - Implementation: [PR #434](https://github.com/BackstageTalks/tbt/pull/434).
+
+### Production initialization checkpoint — 2026-10-09
+
+The read-only Admin calibration cockpit from PR #434 needs an actual verified
+Azure deployment to initialize the private summary. Deploy the current main
+with the normal tests, authenticated worker-token checks, and post-deployment
+calibration sync. Keep exact champion/challenger provenance; never treat the
+prior 688-match shadow as newly unseen training evidence.
