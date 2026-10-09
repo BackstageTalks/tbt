@@ -100,10 +100,17 @@ def check_stat_only(before,after,years):
 def main():
     if not os.environ.get("GH_TOKEN"):
         raise SystemExit("Missing access to private destination")
+    # Another serialized writer may have changed canonical after last night's
+    # backup. Make a NEW complete private backup of the actual current release
+    # in this writer's GitHub run, before any history mutation.
+    subprocess.run([sys.executable,
+                    "scripts/research/private_canonical_snapshot_v2.py"],check=True)
+    import research.nightly_private_canonical_gap_scan as gap
+    gap.BACKUP_TAG = "blinq-canonical-backup-" + os.environ["GITHUB_RUN_ID"]
     proof=assert_remote_unchanged()
     outputs={"schema":1,"run_id":os.environ.get("GITHUB_RUN_ID"),
        "started_utc":datetime.now(timezone.utc).isoformat(),
-       "backup_tag":"blinq-canonical-backup-37864914634",
+       "backup_tag":gap.BACKUP_TAG,
        "status":"running","production_mutated":False,"model_promoted":False,"provider_requests":0}
     OUT.mkdir(parents=True,exist_ok=True)
     target=f"audit/autonomous-canonical-safe-enrichment-{os.environ['GITHUB_RUN_ID']}.json"
