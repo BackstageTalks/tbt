@@ -5763,9 +5763,12 @@
     const rest=v=>valid(v)?`${num(v)} ${lcopy('days','dní','dní')}`:'—';
     const stat=(label,v1,v2,hint='')=>`<div class="comparator-stat-row"><span>${escapeHtml(label)}${hint?`<small>${escapeHtml(hint)}</small>`:''}</span><strong>${escapeHtml(String(v1))}</strong><strong>${escapeHtml(String(v2))}</strong></div>`;
     const strip=x=>(x.recent_results||[]).length?(x.recent_results||[]).map(item=>`<span class="comparator-form-chip ${item.result==='W'?'won':'lost'}" title="${escapeHtml((item.result==='W'?lcopy('Win','Výhra','Výhra'):lcopy('Loss','Prehra','Prohra'))+' · '+String(item.surface||''))}">${item.result==='W'?'W':'L'}</span>`).join(''):`<small>${escapeHtml(lcopy('No verified results','Bez dostupných výsledkov','Bez dostupných výsledků'))}</small>`;
+    const winRate=x=>Number(x?.matches)>0&&Number.isFinite(Number(x?.wins))?Math.max(0,Math.min(100,100*Number(x.wins)/Number(x.matches))):null;
+    const bar=x=>winRate(x)===null?'':`<div class="comparator-win-meter" role="img" aria-label="${escapeHtml(lcopy('Win rate','Úspešnosť','Úspěšnost')+' '+num(winRate(x))+' %')}"><span style="width:${winRate(x).toFixed(1)}%"></span></div>`;
     const playerForm=(player,x)=>`<article class="comparator-form-card">
       <h5>${escapeHtml(player.name||'—')}</h5>
       <div class="comparator-form-numbers"><span>${escapeHtml(lcopy('Last 5','Posledných 5','Posledních 5'))}<b>${escapeHtml(form(x.recent_5))}</b></span><span>${escapeHtml(lcopy('Last 10','Posledných 10','Posledních 10'))}<b>${escapeHtml(form(x.recent_10))}</b></span></div>
+      ${bar(x.recent_10)}
       <div class="comparator-form-tape" aria-label="${escapeHtml(lcopy('Results oldest to newest','Výsledky od najstaršieho','Výsledky od nejstaršího'))}">${strip(x)}</div>
       <p>${escapeHtml(lcopy('Surface last 10','Povrch · posledných 10','Povrch · posledních 10'))}: <b>${escapeHtml(form(x.surface_recent_10))}</b></p>
     </article>`;
