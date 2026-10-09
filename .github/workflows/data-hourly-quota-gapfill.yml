@@ -1,4 +1,4 @@
-name: BlinQ hourly API gapfill (95%)
+name: BlinQ hourly API gapfill (90%)
 
 # GitHub cron is intentionally forbidden by the repository contract.
 # Manual workflow_dispatch is intended for an external hourly schedule with
@@ -60,9 +60,9 @@ jobs:
           # Global provider-day spending ceilings; includes live, match, refresh,
           # history AND committed reservations, never just history calls.
           # The shared ledger and actual provider-header reserve are the
-          # authoritative caps. Fill as much as possible before 95%, not only
-          # a fixed daily/hourly portion; no cap can exceed 14,250.
-          caps = {hour: 14250 for hour in range(12, 19)}
+          # authoritative caps. Fill as much as possible before 90%, not only
+          # a fixed daily/hourly portion; no cap can exceed 13,500.
+          caps = {hour: 13500 for hour in range(12, 19)}
           print(f"Bratislava time: {local.isoformat()}; dry_run={DRY_RUN}", flush=True)
           closeout_only = local.hour == 19
           if local.hour not in caps and not closeout_only and not DRY_RUN:
@@ -116,8 +116,8 @@ jobs:
           if not isinstance(budget, dict) or (
               budget.get("window") != "provider_day_19_10_europe_bratislava"
               or budget.get("provider_plan_limit") != 15000
-              or budget.get("global_limit") != 14250
-              or budget.get("reserved_provider_headroom") != 750
+              or budget.get("global_limit") != 13500
+              or budget.get("reserved_provider_headroom") != 1500
           ):
               raise SystemExit("Unrecognized budget contract; no dispatch")
 
@@ -126,25 +126,25 @@ jobs:
           history_remaining = int(budget["remaining"]["history"])
           if closeout_only or local.hour not in caps:
               print(f"No new job outside 12:00–18:57 Europe/Bratislava; "
-                    f"shared ledger {spent}/15000, remaining to 95%={remaining}.")
+                    f"shared ledger {spent}/15000, remaining to 90%={remaining}.")
               if DRY_RUN:
                   print("DRY RUN active writer check: " + str(check_writers()))
               sys.exit(0)
-          if spent < 0 or remaining != max(0, 14250-spent):
+          if spent < 0 or remaining != max(0, 13500-spent):
               raise SystemExit("Shared budget inconsistency; no dispatch")
           reset = datetime.fromisoformat(str(budget["next_reset_utc"]).replace("Z", "+00:00"))
           if reset.tzinfo is None or reset.astimezone(ZONE).date() != local.date() or reset.astimezone(ZONE).hour != 19 or reset.astimezone(ZONE).minute != 10:
               raise SystemExit("Provider reset time inconsistent; no dispatch")
 
           limit = caps[local.hour]
-          # At most 3000 per job; the provider rechecks the 750-remaining
+          # At most 3000 per job; the provider rechecks the 1500-remaining
           # header and the shared ETag ledger before every billable attempt.
           proposed = min(3000, limit-spent, remaining, history_remaining)
           print(f"API budget: {spent}/15000 used; hourly ceiling={limit}; "
                 f"global remaining={remaining}; proposed max={proposed}", flush=True)
 
           if proposed < 1:
-              print("No request allowance left beneath the 95% ceiling.")
+              print("No request allowance left beneath the 90% ceiling.")
               sys.exit(0)
 
           active = check_writers()
