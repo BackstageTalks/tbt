@@ -518,11 +518,19 @@ def main():
                     str(match.player1_id if mapping[winner_side - 1][1] == "p1" else match.player2_id)
                     if winner_side in (1, 2) else ""
                 )
-                winner_conflict = (
-                    bool(alias_mapping is not None and expected_winner_id != str(match.winner_id or ""))
-                    if alias_mapping is not None
-                    else bool(winner_name and _winner_name(match) and winner_name != _winner_name(match))
-                )
+                if tennisvisuals_format:
+                    # Independent canonical outcome is mandatory; source winner
+                    # label is draw-oriented and cannot validate the server side.
+                    winner_conflict = (
+                        not expected_winner_id
+                        or expected_winner_id != str(match.winner_id or "")
+                    )
+                elif alias_mapping is not None:
+                    winner_conflict = expected_winner_id != str(match.winner_id or "")
+                else:
+                    winner_conflict = bool(
+                        winner_name and _winner_name(match) and winner_name != _winner_name(match)
+                    )
                 if winner_conflict:
                     counts["winner_mismatch"] += 1
                     local["winner_mismatch"] += 1
@@ -533,6 +541,20 @@ def main():
                         "match_id": str(match.match_id),
                     })
                     continue
+
+                if tennisvisuals_format:
+                    # Pair/date/winner alone cannot override a different event.
+                    source_round, canonical_round = norm_round(row.get("round")), norm_round(match.round_name)
+                    source_surface, canonical_surface = norm_surface(row.get("surface")), norm_surface(match.surface)
+                    event_conflict = (
+                        (bool(tournament and match.tournament) and tournament_score(tournament, match.tournament)[0] < 1)
+                        or (bool(source_round and canonical_round) and source_round != canonical_round)
+                        or (source_surface != "unknown" and canonical_surface != "unknown" and source_surface != canonical_surface)
+                    )
+                    if event_conflict:
+                        counts["source_event_conflicts"] += 1
+                        local["source_event_conflicts"] += 1
+                        continue
 
                 incoming = {}
                 for source_side, prefix in mapping:
