@@ -762,3 +762,75 @@ body#blinqPremium .reference-topbar #bqm-projects svg.project-rocket-icon{
   }
 }
 
+
+
+/* Branded menu control: the existing asset stays pixel-for-pixel intact.
+   Only the logo/old hamburger area changes; right-side icons are untouched. */
+body#blinqPremium .site-header .header-top > .brand .brand-menu-chevron{display:none!important}
+/* The repeated ID intentionally beats older legacy !important selectors. */
+body#blinqPremium#blinqPremium.bqm-enabled .site-header .header-top > #bqm-toggle{
+  display:none!important;
+}
+body#blinqPremium.bqm-enabled .site-header .header-top > .brand.brand-menu-trigger{
+  display:flex!important;align-items:center!important;justify-content:flex-start!important;
+  gap:2px!important;box-sizing:border-box!important;overflow:visible!important;
+  border:0!important;background:transparent!important;box-shadow:none!important;
+  cursor:pointer!important;touch-action:manipulation;
+}
+body#blinqPremium.bqm-enabled .site-header .header-top > .brand.brand-menu-trigger .brand-menu-chevron{
+  display:block!important;flex:0 0 12px!important;width:12px!important;height:12px!important;
+  min-width:12px!important;min-height:12px!important;color:#edbd48!important;
+  transition:transform .18s ease;
+}
+body#blinqPremium.bqm-enabled .site-header .header-top > .brand.brand-menu-trigger[aria-expanded="true"] .brand-menu-chevron{
+  transform:rotate(180deg);
+}
+body#blinqPremium.bqm-enabled .site-header .header-top > .brand.brand-menu-trigger:focus-visible{
+  outline:2px solid #61ecac!important;outline-offset:2px!important;border-radius:6px!important;
+}
+@media(max-width:900px){
+  body#blinqPremium.bqm-enabled .site-header .header-top > .brand.brand-menu-trigger{
+    position:relative!important;left:auto!important;top:auto!important;transform:none!important;
+    flex:0 0 102px!important;width:102px!important;min-width:102px!important;max-width:102px!important;
+    height:44px!important;margin:0!important;padding:0!important;
+  }
+  body#blinqPremium.bqm-enabled .site-header .header-top > .brand.brand-menu-trigger img.brand-source-logo{
+    flex:0 0 86px!important;width:86px!important;max-width:86px!important;
+    height:43px!important;max-height:43px!important;object-fit:contain!important;
+  }
+}
+@media(max-width:430px){
+  body#blinqPremium.bqm-enabled .site-header .header-top > .brand.brand-menu-trigger{
+    flex-basis:84px!important;width:84px!important;min-width:84px!important;max-width:84px!important;
+  }
+  body#blinqPremium.bqm-enabled .site-header .header-top > .brand.brand-menu-trigger img.brand-source-logo{
+    flex-basis:69px!important;width:69px!important;max-width:69px!important;height:38px!important;max-height:38px!important;
+  }
+}
+@media(max-width:360px){
+  body#blinqPremium.bqm-enabled .site-header .header-top > .brand.brand-menu-trigger{
+    flex-basis:65px!important;width:65px!important;min-width:65px!important;max-width:65px!important;
+  }
+  body#blinqPremium.bqm-enabled .site-header .header-top > .brand.brand-menu-trigger img.brand-source-logo{
+    flex-basis:50px!important;width:50px!important;max-width:50px!important;height:30px!important;max-height:30px!important;
+  }
+}
+@media(min-width:901px){
+  body#blinqPremium.bqm-enabled.blinq-admin .site-header .header-top{
+    display:flex!important;align-items:center!important;justify-content:flex-start!important;
+  }
+  body#blinqPremium.bqm-enabled.blinq-admin .site-header .header-top > .brand.brand-menu-trigger{
+    position:relative!important;left:auto!important;top:auto!important;transform:none!important;
+    grid-area:auto!important;grid-column:auto!important;grid-row:auto!important;
+    flex:0 0 130px!important;width:130px!important;min-width:130px!important;max-width:130px!important;
+    height:64px!important;min-height:64px!important;max-height:64px!important;
+    margin:0!important;padding:0!important;justify-self:auto!important;
+  }
+  body#blinqPremium.bqm-enabled.blinq-admin .site-header .header-top > .brand.brand-menu-trigger img.brand-source-logo{
+    flex:0 0 111px!important;width:111px!important;max-width:111px!important;
+    height:48px!important;max-height:48px!important;object-fit:contain!important;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  body#blinqPremium .brand-menu-chevron{transition:none!important}
+}
