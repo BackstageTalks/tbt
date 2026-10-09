@@ -5740,12 +5740,12 @@
   function comparatorSearchHtml(side){
     const s=comparatorState(),rows=Array.isArray(s.search?.[side])?s.search[side]:[];
     if(!rows.length)return '';
+    // The search is a player picker, not a DB debugging surface. Show a
+    // single authoritative record per evidence-backed display group; never
+    // combine IDs, match counts or histories in this presentation step.
     const groups=comparatorPlayerGroups(rows);
-    const option=(player,other=false)=>`<button type="button" class="${other?'comparator-search-alternative':'comparator-search-primary'}" data-comparator-select="${side}" data-player-id="${escapeHtml(String(player.player_id||''))}" data-player-name="${escapeHtml(String(player.name||''))}" data-player-rank="${escapeHtml(String(player.rank??''))}"><strong>${escapeHtml(player.name||'—')}</strong><span>${escapeHtml(String(player.tour||'').toUpperCase())}${Number(player.rank)>0?` · #${escapeHtml(String(player.rank))}`:''} · ${escapeHtml(String(player.matches_seen||0))} ${escapeHtml(lcopy('DB matches','zápasov v DB','zápasů v DB'))}</span></button>`;
-    return `<div class="comparator-search-results">${groups.map((group,index)=>{
-      const expanded=Boolean(s.expandedGroups?.[side]?.[index]),extra=group.rows.length-1;
-      return `<div class="comparator-search-group">${option(group.rows[0])}${extra>0?`<button type="button" class="comparator-search-more" data-comparator-expand="${index}" data-comparator-side="${side}" aria-expanded="${expanded}">${escapeHtml(expanded?lcopy('Hide other IDs','Skryť ďalšie ID','Skrýt další ID'):lcopy(`+${extra} other record${extra===1?'':'s'}`,`+${extra} ďalší${extra===1?' záznam':'e záznamy'}`,`+${extra} další záznam${extra===1?'':'y'}`))}</button>${expanded?`<div class="comparator-search-alternates"><small>${escapeHtml(lcopy('Different canonical IDs; records have not been merged.','Rôzne canonical ID; záznamy nie sú zlúčené.','Různá canonical ID; záznamy nejsou sloučené.'))}</small>${group.rows.slice(1).map(player=>option(player,true)).join('')}</div>`:''}`:''}</div>`;
-    }).join('')}</div>`;
+    const option=player=>`<button type="button" class="comparator-search-primary" data-comparator-select="${side}" data-player-id="${escapeHtml(String(player.player_id||''))}" data-player-name="${escapeHtml(String(player.name||''))}" data-player-rank="${escapeHtml(String(player.rank??''))}"><strong>${escapeHtml(player.name||'—')}</strong><span>${escapeHtml(String(player.tour||'').toUpperCase())}${Number(player.rank)>0?` · #${escapeHtml(String(player.rank))}`:''}</span></button>`;
+    return `<div class="comparator-search-results">${groups.map(group=>`<div class="comparator-search-group">${option(group.rows[0])}</div>`).join('')}</div>`;
   }
   function comparatorResultHtml(result){
     if(!result)return '';
@@ -5836,17 +5836,8 @@
         },300);
       });
     });
-    // Suggestions arrive after the initial render: delegate click and expand.
+    // Suggestions arrive after the initial render; selection is delegated.
     form.addEventListener('click',event=>{
-      const expander=event.target.closest('[data-comparator-expand]');
-      if(expander&&form.contains(expander)){
-        const side=Number(expander.dataset.comparatorSide),index=Number(expander.dataset.comparatorExpand);
-        if(![0,1].includes(side)||!Number.isSafeInteger(index)||index<0)return;
-        s.expandedGroups[side][index]=!s.expandedGroups[side][index];
-        const box=$(`comparatorSearch${side}`);
-        if(box)box.innerHTML=comparatorSearchHtml(side);
-        return;
-      }
       const button=event.target.closest('[data-comparator-select]');
       if(!button||!form.contains(button))return;
       if(comparatorSelectPlayer(Number(button.dataset.comparatorSelect),{player_id:button.dataset.playerId,name:button.dataset.playerName,rank:button.dataset.playerRank||null}))refresh();
