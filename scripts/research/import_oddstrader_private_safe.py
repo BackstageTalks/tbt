@@ -223,8 +223,13 @@ def preserve_original_context(years: list[int]) -> dict:
         if set(old["match_id"]) != set(new["match_id"]):
             raise RuntimeError("Match identity set changed: " + name)
         aligned = new.set_index("match_id").loc[list(old["match_id"])]
+        # Match IDs are the index of the aligned frame. Their uniqueness and
+        # exact set equality were already checked above, so do not try to
+        # access match_id as an ordinary column after set_index().
         for col in old.columns:
-            if col != "provider_context_json" and not old[col].equals(aligned[col].reset_index(drop=True)):
+            if col in ("provider_context_json", "match_id"):
+                continue
+            if not old[col].equals(aligned[col].reset_index(drop=True)):
                 raise RuntimeError("Immutable canonical column changed: " + name + "." + col)
 
         safe_values = []
