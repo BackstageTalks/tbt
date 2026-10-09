@@ -3,8 +3,8 @@
 ## Capacity and scope
 
 The provider plan is treated as **15,000 requests per provider billing day**.
-BlinQ enforces a fail-closed **14,250 request global ceiling** and permanently
-keeps **750 requests (5%)** as provider headroom.
+BlinQ enforces a fail-closed **14,550 request global ceiling** and permanently
+keeps **450 requests (3%)** as provider headroom.
 
 The durable ledger is aligned to the verified provider-day reset used by the
 runtime guard: **19:10 Europe/Bratislava**. Usage is stored in five-minute
@@ -16,9 +16,9 @@ rolling 24-hour window.
 | LIVE Radar | 3,000 |
 | Match Status | 2,500 |
 | Refresh (including presentation enrichment) | 5,500 |
-| History/backfill opportunistic ceiling | 14,250 |
+| History/backfill opportunistic ceiling | 14,550 |
 | **Combined, hard** | **14,250** |
-| **Provider reserve kept untouched** | **750** |
+| **Provider reserve kept untouched** | **450** |
 | **Provider plan** | **15,000** |
 
 LIVE, Match Status and Refresh retain bounded purpose allocations. History/backfill
@@ -33,16 +33,16 @@ request.
 
 The ledger protects only callers instrumented through the BlinQ shared budget
 guard. Direct/manual use of the same RapidAPI key outside BlinQ is not visible to
-this ledger, which is why the 750-request provider reserve remains mandatory.
+this ledger, which is why the 450-request provider reserve remains mandatory.
 
 ## Runtime source of truth
 
 The authoritative values live in
 `api/tbt/providers/shared_budget.py`:
 
-- `PROVIDER_PLAN_LIMIT = 7500`
+- `PROVIDER_PLAN_LIMIT = 15000`
 - `PROVIDER_RESERVE = 750`
-- `GLOBAL_CEILING = 14250`
+- `GLOBAL_CEILING = 14550`
 - reset: `19:10 Europe/Bratislava`
 - `PURPOSE_CAPS = {live: 3000, match: 2500, refresh: 5500, history: 14250}`
   (`history` is opportunistic; the shared 14,250 global ceiling still applies)
