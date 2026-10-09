@@ -5750,32 +5750,71 @@
     });
     return `<div class="comparator-search-results">${visible.map(player=>`<button type="button" class="comparator-search-primary" data-comparator-select="${side}" data-player-id="${escapeHtml(String(player.player_id||''))}" data-player-name="${escapeHtml(String(player.name||''))}" data-player-rank="${escapeHtml(String(player.rank??''))}"><strong>${escapeHtml(player.name||'—')}</strong><span>${escapeHtml(String(player.tour||'').toUpperCase())}${Number(player.rank)>0?` · #${escapeHtml(String(player.rank))}`:''}</span></button>`).join('')}</div>`;
   }
+
   function comparatorResultHtml(result){
     if(!result)return '';
-    const p1=result.player1||{},p2=result.player2||{},winner=result.winner||{},quality=result.quality||{},fresh=result.artifact||{};
-    const probability=value=>Number.isFinite(Number(value))?`${(Number(value)*100).toFixed(1)} %`:'—';
-    const odds=value=>Number.isFinite(Number(value))?Number(value).toFixed(2):'—';
-    const stat=(label,a,b)=>`<div class="comparator-stat-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(a??'—'))}</strong><strong>${escapeHtml(String(b??'—'))}</strong></div>`;
-    const factors=(result.factors||[]).map(item=>`<span class="comparator-factor">${escapeHtml(item.label||'')}: <b>${escapeHtml(String(item.advantage_player_id)===String(p1.player_id)?p1.name:p2.name)}</b></span>`).join('');
-    return `<section class="comparator-result" aria-live="polite">
-      <header class="comparator-result-head"><small>${escapeHtml(lcopy('MODEL PREDICTION','MODELOVÁ PREDIKCIA','MODELOVÁ PREDIKCE'))}</small><h3>${escapeHtml(winner.name||'—')}</h3><p>${escapeHtml(lcopy('Predicted winner','Predikovaný víťaz','Predikovaný vítěz'))}</p></header>
+    const p1=result.player1||{},p2=result.player2||{},a=p1.stats||{},b=p2.stats||{},h=result.h2h||{},fresh=result.artifact||{};
+    const valid=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));
+    const num=(v,dp=0)=>valid(v)?Number(v).toLocaleString(undefined,{minimumFractionDigits:dp,maximumFractionDigits:dp}):'—';
+    const pct=v=>valid(v)?num(Number(v)*100,1)+' %':'—';
+    const form=x=>valid(x?.matches)&&Number(x.matches)>0&&valid(x?.wins)?`${num(100*Number(x.wins)/Number(x.matches))} % (${num(x.wins)}/${num(x.matches)})`:'—';
+    const quality=(x,key)=>valid(x?.surface_quality_samples?.[key])&&Number(x.surface_quality_samples[key])>=3&&valid(x?.[`surface_${key}_quality`])
+       ?`${num(x[`surface_${key}_quality`],3)} · n=${num(x.surface_quality_samples[key])}`:'—';
+    const rest=v=>valid(v)?`${num(v)} ${lcopy('days','dní','dní')}`:'—';
+    const stat=(label,v1,v2,hint='')=>`<div class="comparator-stat-row"><span>${escapeHtml(label)}${hint?`<small>${escapeHtml(hint)}</small>`:''}</span><strong>${escapeHtml(String(v1))}</strong><strong>${escapeHtml(String(v2))}</strong></div>`;
+    const strip=x=>(x.recent_results||[]).length?(x.recent_results||[]).map(item=>`<span class="comparator-form-chip ${item.result==='W'?'won':'lost'}" title="${escapeHtml((item.result==='W'?lcopy('Win','Výhra','Výhra'):lcopy('Loss','Prehra','Prohra'))+' · '+String(item.surface||''))}">${item.result==='W'?'W':'L'}</span>`).join(''):`<small>${escapeHtml(lcopy('No verified results','Bez dostupných výsledkov','Bez dostupných výsledků'))}</small>`;
+    const winRate=x=>Number(x?.matches)>0&&Number.isFinite(Number(x?.wins))?Math.max(0,Math.min(100,100*Number(x.wins)/Number(x.matches))):null;
+    const bar=x=>winRate(x)===null?'':`<div class="comparator-win-meter" role="img" aria-label="${escapeHtml(lcopy('Win rate','Úspešnosť','Úspěšnost')+' '+num(winRate(x))+' %')}"><span style="width:${winRate(x).toFixed(1)}%"></span></div>`;
+    const playerForm=(player,x)=>`<article class="comparator-form-card">
+      <h5>${escapeHtml(player.name||'—')}</h5>
+      <div class="comparator-form-numbers"><span>${escapeHtml(lcopy('Last 5','Posledných 5','Posledních 5'))}<b>${escapeHtml(form(x.recent_5))}</b></span><span>${escapeHtml(lcopy('Last 10','Posledných 10','Posledních 10'))}<b>${escapeHtml(form(x.recent_10))}</b></span></div>
+      ${bar(x.recent_10)}
+      <div class="comparator-form-tape" aria-label="${escapeHtml(lcopy('Results oldest to newest','Výsledky od najstaršieho','Výsledky od nejstaršího'))}">${strip(x)}</div>
+      <p>${escapeHtml(lcopy('Surface last 10','Povrch · posledných 10','Povrch · posledních 10'))}: <b>${escapeHtml(form(x.surface_recent_10))}</b></p>
+    </article>`;
+    const h2h=(record,label)=>`<div class="comparator-h2h-line"><span>${escapeHtml(label)}</span><strong>${Number(record?.matches)>0?escapeHtml(`${num(record.player1_wins)} : ${num(record.player2_wins)}`):'—'}</strong><small>${Number(record?.matches)>0?escapeHtml(`${num(record.matches)} ${lcopy('matches','zápasov','zápasů')}`):escapeHtml(lcopy('No recorded meetings','Bez evidovaných zápasov','Bez evidovaných zápasů'))}</small></div>`;
+    const signals=(result.factors||[]).map(item=>`<span class="comparator-factor"><span>${escapeHtml(item.label||'')}</span><b>${escapeHtml(String(item.advantage_player_id)===String(p1.player_id)?p1.name:p2.name)}</b></span>`).join('');
+    const band=String(result.confidence?.data_band||'low').toLowerCase();
+    const sample=band==='high'?lcopy('Good sample','Dobrá vzorka','Dobrá vzorka'):band==='medium'?lcopy('Partial sample','Čiastočná vzorka','Částečný vzorek'):lcopy('Limited sample','Obmedzená vzorka','Omezený vzorek');
+    const left=valid(p1.probability)?Math.max(0,Math.min(100,Number(p1.probability)*100)):50;
+    return `<section class="comparator-result comparator-analytics" aria-live="polite">
+      <header class="comparator-result-head"><small>${escapeHtml(lcopy('MATCH ANALYSIS','ANALÝZA ZÁPASU','ANALÝZA ZÁPASU'))}</small><h3>${escapeHtml(p1.name||'—')} <em>vs</em> ${escapeHtml(p2.name||'—')}</h3><p>${escapeHtml(lcopy('Model favourite','Favorit modelu','Favorit modelu'))}: <b>${escapeHtml(result.winner?.name||'—')}</b></p></header>
       <div class="comparator-prob-grid">
-        <article><small>${escapeHtml(p1.name||'—')}</small><strong>${probability(p1.probability)}</strong><span>${escapeHtml(lcopy('Fair odds','Férový kurz','Férový kurz'))} ${odds(p1.fair_odds)}</span></article>
-        <article><small>${escapeHtml(p2.name||'—')}</small><strong>${probability(p2.probability)}</strong><span>${escapeHtml(lcopy('Fair odds','Férový kurz','Férový kurz'))} ${odds(p2.fair_odds)}</span></article>
+        <article><small>${escapeHtml(p1.name||'—')}</small><strong>${escapeHtml(pct(p1.probability))}</strong><span>${escapeHtml(lcopy('Fair odds','Férový kurz','Férový kurz'))} ${escapeHtml(num(p1.fair_odds,2))}</span></article>
+        <article><small>${escapeHtml(p2.name||'—')}</small><strong>${escapeHtml(pct(p2.probability))}</strong><span>${escapeHtml(lcopy('Fair odds','Férový kurz','Férový kurz'))} ${escapeHtml(num(p2.fair_odds,2))}</span></article>
       </div>
-      <div class="comparator-quality"><b>${escapeHtml(lcopy('Data confidence','Dátová istota','Datová jistota'))}: ${escapeHtml(String(result.confidence?.data_band||quality.band||'—').toUpperCase())}</b><span>${escapeHtml(String(result.tour||'').toUpperCase())} · ${escapeHtml(lcopy('max sets','max. setov','max. setů'))} ${escapeHtml(String(result.best_of||3))} · ${escapeHtml(String(result.surface||'').replace('_',' '))}</span></div>
-      <div class="comparator-stats">
-        <div class="comparator-stat-row comparator-stat-head"><span></span><strong>${escapeHtml(p1.name||'Hráč 1')}</strong><strong>${escapeHtml(p2.name||'Hráč 2')}</strong></div>
-        ${stat('Overall Elo',p1.stats?.overall_elo,p2.stats?.overall_elo)}
-        ${stat(lcopy('Surface Elo','Povrchové Elo','Povrchové Elo'),p1.stats?.surface_elo,p2.stats?.surface_elo)}
-        ${stat(lcopy('History matches','Historické zápasy','Historické zápasy'),p1.stats?.history_matches,p2.stats?.history_matches)}
-        ${stat(lcopy('Surface matches','Zápasy na povrchu','Zápasy na povrchu'),p1.stats?.surface_matches,p2.stats?.surface_matches)}
-        ${stat(lcopy('Recent wins / 10','Výhry / posledných 10','Výhry / posledních 10'),p1.stats?.recent_10?.wins??'—',p2.stats?.recent_10?.wins??'—')}
-        ${stat(lcopy('Surface serve','Servis na povrchu','Servis na povrchu'),p1.stats?.surface_serve_quality??'—',p2.stats?.surface_serve_quality??'—')}
-        ${stat(lcopy('Surface return','Return na povrchu','Return na povrchu'),p1.stats?.surface_return_quality??'—',p2.stats?.surface_return_quality??'—')}
+      <div class="comparator-prob-meter" role="img" aria-label="${escapeHtml(`${p1.name}: ${pct(p1.probability)}, ${p2.name}: ${pct(p2.probability)}`)}"><span style="width:${left.toFixed(2)}%"></span></div>
+      <div class="comparator-quality"><b>${escapeHtml(sample)}</b><span>${escapeHtml(String(result.tour||'').toUpperCase())} · ${escapeHtml(String(result.surface||'').replace('_',' '))} · ${escapeHtml(lcopy('max sets','max. setov','max. setů'))} ${escapeHtml(String(result.best_of||3))}</span></div>
+      <div class="comparator-analytics-body">
+        <div class="comparator-section-head"><h4>${escapeHtml(lcopy('Recent form','Aktuálna forma','Aktuální forma'))}</h4><small>${escapeHtml(lcopy('Completed matches before snapshot · oldest → newest','Zápasy pred snapshotom · od najstaršieho','Zápasy před snapshotem · od nejstaršího'))}</small></div>
+        <div class="comparator-form-cards">${playerForm(p1,a)}${playerForm(p2,b)}</div>
+        <div class="comparator-insight-grid">
+          <article class="comparator-insight-card"><h4>${escapeHtml(lcopy('Head-to-head','Vzájomné zápasy','Vzájemné zápasy'))}</h4>
+            <div class="comparator-h2h-names"><span>${escapeHtml(p1.name||'—')}</span><span>${escapeHtml(p2.name||'—')}</span></div>
+            ${h2h(h.overall,lcopy('All surfaces','Celkovo','Celkem'))}
+            ${h2h(h.surface,lcopy('Selected surface','Na povrchu','Na povrchu'))}
+          </article>
+          <article class="comparator-insight-card"><h4>${escapeHtml(lcopy('Rest & sample depth','Oddych a vzorka','Odpočinek a vzorek'))}</h4>
+            ${stat(lcopy('Days since last match','Dni od posledného zápasu','Dny od posledního zápasu'),rest(a.days_since_last_match),rest(b.days_since_last_match))}
+            ${stat(lcopy('Recorded matches','Evidované zápasy','Evidované zápasy'),num(a.history_matches),num(b.history_matches))}
+            ${stat(lcopy('Matches on surface','Zápasy na povrchu','Zápasy na povrchu'),num(a.surface_matches),num(b.surface_matches))}
+          </article>
+        </div>
+        <div class="comparator-section-head"><h4>${escapeHtml(lcopy('Performance','Výkonnosť','Výkonnost'))}</h4><small>${escapeHtml(lcopy('Measured data, not bookmaker odds','Uložené dáta, nie stávkové kurzy','Uložená data, ne sázkové kurzy'))}</small></div>
+        <div class="comparator-stats">
+          <div class="comparator-stat-row comparator-stat-head"><span></span><strong>${escapeHtml(p1.name||'—')}</strong><strong>${escapeHtml(p2.name||'—')}</strong></div>
+          ${stat(lcopy('Ranking','Rebríček','Žebříček'),valid(p1.rank)&&Number(p1.rank)>0?'#'+num(p1.rank):'—',valid(p2.rank)&&Number(p2.rank)>0?'#'+num(p2.rank):'—')}
+          ${stat(lcopy('Overall Elo','Celkové Elo','Celkové Elo'),num(a.overall_elo,1),num(b.overall_elo,1))}
+          ${stat(lcopy('Surface Elo','Povrchové Elo','Povrchové Elo'),num(a.surface_elo,1),num(b.surface_elo,1))}
+          ${stat(lcopy('Wins · last 10','Výhry · posledných 10','Výhry · posledních 10'),form(a.recent_10),form(b.recent_10))}
+          ${stat(lcopy('Wins · surface last 10','Výhry · povrch/10','Výhry · povrch/10'),form(a.surface_recent_10),form(b.surface_recent_10))}
+          ${stat(lcopy('Serve quality index','Index kvality servisu','Index kvality servisu'),quality(a,'serve'),quality(b,'serve'),lcopy('0–1 index · minimum 3 available surface samples','Index 0–1 · min. 3 dostupné vzorky na povrchu','Index 0–1 · min. 3 dostupné vzorky na povrchu'))}
+          ${stat(lcopy('Return quality index','Index kvality returnu','Index kvality returnu'),quality(a,'return'),quality(b,'return'),lcopy('0–1 index · not raw point-win percentage','Index 0–1 · nie priamo % vyhraných bodov','Index 0–1 · ne přímo % vyhraných bodů'))}
+        </div>
+        ${signals?`<div class="comparator-section-head"><h4>${escapeHtml(lcopy('Supporting signals','Podporné signály','Podpůrné signály'))}</h4><small>${escapeHtml(lcopy('Direction of evidence, not causal model attribution','Smer signálov, nie vyčíslený vplyv na model','Směr signálů, ne vyčíslený vliv na model'))}</small></div><div class="comparator-factors">${signals}</div>`:''}
+        <p class="comparator-analytics-note">${escapeHtml(lcopy('Model probabilities are estimates, not guaranteed results. Missing or limited samples are marked —. Only completed historical data before the UTC-day cutoff are used; no live odds.','Pravdepodobnosti sú odhady modelu, nie garancia. Chýbajúce alebo malé vzorky sú označené —. Používa sa len história pred dennou UTC uzávierkou, bez LIVE kurzov.','Pravděpodobnosti jsou odhady modelu, ne záruka. Chybějící nebo malé vzorky jsou označené —. Použita je jen historie před denní UTC uzávěrkou, bez LIVE kurzů.'))}</p>
       </div>
-      ${factors?`<div class="comparator-factors">${factors}</div>`:''}
-      <footer><span>${escapeHtml(lcopy('Model','Model','Model'))}: ${escapeHtml(shortModelVersion(result.model_version)||'—')}</span><span>${escapeHtml(lcopy('Snapshot age','Vek snapshotu','Stáří snapshotu'))}: ${escapeHtml(String(fresh.age_hours??'—'))} h</span></footer>
+      <footer><span>${escapeHtml(lcopy('Model','Model','Model'))}: ${escapeHtml(shortModelVersion(result.model_version)||'—')}</span><span>${escapeHtml(lcopy('Snapshot','Snapshot','Snapshot'))}: ${escapeHtml(String(fresh.generated_at||'—').replace('T',' ').slice(0,16))} UTC</span></footer>
     </section>`;
   }
   function renderComparatorRoute(){

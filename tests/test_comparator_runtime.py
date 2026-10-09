@@ -129,3 +129,52 @@ def test_public_runtime_modules_do_not_require_training_stack():
         assert "import numpy" not in source
         assert "sklearn" not in source
         assert "joblib" not in source
+
+def test_runtime_analytics_use_only_pre_cutoff_history_and_keep_winner_unchanged():
+    history = _history()
+    model = _model()
+    baseline = build_serving_artifact(model, history, now=NOW)
+    # Same-day match is not known before the UTC-day batch cutoff.
+    future = MatchRecord(
+        match_id="same-day-leakage-guard", tour="atp",
+        scheduled_at=NOW - timedelta(hours=1),
+        player1_id="a", player1_name="Alpha One",
+        player2_id="b", player2_name="Beta Two",
+        surface="hard", winner_id="b", status="completed", best_of=3,
+    )
+    guarded = build_serving_artifact(model, history + [future], now=NOW)
+    original = compare_from_artifact(baseline, player1="a", player2="b",
+        tour="atp", surface="hard", now=NOW)
+    result = compare_from_artifact(guarded, player1="a", player2="b",
+        tour="atp", surface="hard", now=NOW)
+    assert result["player1"]["probability"] == original["player1"]["probability"]
+    assert result["winner"] == original["winner"]
+    assert result["api_requests"] == 0
+    assert result["h2h"]["overall"] == {"player1_wins": 1, "player2_wins": 0, "matches": 1}
+    assert result["h2h"]["surface"] == {"player1_wins": 1, "player2_wins": 0, "matches": 1}
+    assert result["evidence"]["model_unchanged"] is True
+    assert result["evidence"]["no_odds_or_external_live_data"] is True
+    for side in ("player1", "player2"):
+        stats = result[side]["stats"]
+        assert stats["recent_5"]["matches"] <= 5
+        assert stats["recent_10"]["matches"] <= 10
+        assert stats["surface_recent_10"]["matches"] <= 10
+        assert len(stats["recent_results"]) == stats["recent_10"]["matches"]
+        assert all(x["result"] in ("W", "L") for x in stats["recent_results"])
+        assert stats["days_since_last_match"] is not None
+        assert stats["days_since_last_match"] >= 1
+        assert set(stats["surface_quality_samples"]) == {"serve", "return"}
+    assert result["quality"]["player1_matches"] == original["quality"]["player1_matches"]
+
+
+def test_runtime_h2h_orientation_on_reverse_order():
+    artifact = build_serving_artifact(_model(), _history(), now=NOW)
+    reversed_match = compare_from_artifact(artifact, player1="b", player2="a",
+        tour="atp", surface="hard", now=NOW)
+    assert reversed_match["h2h"]["overall"] == {
+        "player1_wins": 0, "player2_wins": 1, "matches": 1,
+    }
+    clay = compare_from_artifact(artifact, player1="a", player2="b",
+        tour="atp", surface="clay", now=NOW)
+    assert clay["h2h"]["surface"]["matches"] == 0
+    assert clay["h2h"]["overall"]["matches"] == 1

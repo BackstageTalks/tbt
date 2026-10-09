@@ -149,8 +149,58 @@ def main():
                 assert page.locator("#comparatorSearch1 [data-comparator-expand]").count() == 0
                 page.locator("#comparatorSearch1 [data-player-id='260122']").click()
                 assert page.evaluate("comparatorHarness.state.comparator.players[1].player_id") == "260122"
+
+                # Realistic analysis data, not decorative placeholders.
+                page.evaluate("""() => {
+                    const h=window.comparatorHarness;
+                    h.state.comparator.result={
+                        player1:{player_id:'95935',name:'Cameron Norrie',rank:27,
+                            probability:.700225,fair_odds:1.428,
+                            stats:{history_matches:598,surface_matches:240,overall_elo:1765.2,
+                                surface_elo:1735.5,recent_5:{matches:5,wins:4},
+                                recent_10:{matches:10,wins:7},surface_recent_10:{matches:10,wins:8},
+                                recent_results:[{result:'W',surface:'hard'},{result:'L',surface:'clay'},
+                                    {result:'W',surface:'hard'}],days_since_last_match:6,
+                                surface_quality_samples:{serve:9,return:1},
+                                surface_serve_quality:.624,surface_return_quality:.477}},
+                        player2:{player_id:'260122',name:'Dalibor Svrčina',rank:91,
+                            probability:.299775,fair_odds:3.336,
+                            stats:{history_matches:330,surface_matches:115,overall_elo:1590.5,
+                                surface_elo:1610,recent_5:{matches:5,wins:2},
+                                recent_10:{matches:10,wins:5},surface_recent_10:{matches:4,wins:2},
+                                recent_results:[{result:'L',surface:'hard'}],days_since_last_match:3,
+                                surface_quality_samples:{serve:0,return:0},
+                                surface_serve_quality:null,surface_return_quality:null}},
+                        h2h:{overall:{player1_wins:1,player2_wins:2,matches:3},
+                            surface:{player1_wins:1,player2_wins:0,matches:1}},
+                        winner:{name:'Cameron Norrie',player_id:'95935'},
+                        confidence:{data_band:'medium'},tour:'atp',surface:'hard',best_of:3,
+                        model_version:'v201-test',
+                        artifact:{generated_at:'2026-10-08T03:46:00+00:00'},
+                        factors:[{label:'Surface Elo',advantage_player_id:'95935'}]
+                    };
+                    document.getElementById('routePanel').innerHTML=h.renderComparatorRoute();
+                    h.wireComparator();
+                }""")
+                panel=page.locator(".comparator-analytics")
+                panel.wait_for()
+                assert panel.locator(".comparator-form-chip").count() == 4
+                assert panel.locator(".comparator-h2h-line").count() == 2
+                assert "1 : 2" in panel.locator(".comparator-h2h-line").first.inner_text()
+                assert "1 : 0" in panel.locator(".comparator-h2h-line").last.inner_text()
+                assert "70,0" in panel.inner_text() or "70.0" in panel.inner_text()
+                assert "0.624" in panel.inner_text() or "0,624" in panel.inner_text()
+                assert "0.477" not in panel.inner_text()  # only one return sample
+                assert "vymyslen" not in panel.inner_text()
+                assert panel.locator(".comparator-prob-meter span").get_attribute("style") == "width:70.02%"
+                assert not page.evaluate("""() => {
+                    const panel=document.querySelector('.comparator-analytics');
+                    const rect=panel.getBoundingClientRect();
+                    return rect.left< -2 || rect.right>innerWidth+2;
+                }"""), (width, "analysis result overflows viewport")
                 assert not errors, (width, errors)
                 page.close()
+
             print("Comparator player search click, errors, stale result and mobile: PASS")
         finally:
             browser.close()
