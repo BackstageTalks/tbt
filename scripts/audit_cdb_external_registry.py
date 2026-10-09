@@ -104,7 +104,7 @@ def audit(directory, registry_rows):
             "state": "identity_evidence_candidate_not_written",
         }
         approved.append(proposal)
-    return {"counts": dict(counts), "candidates": approved[:100], "total_candidates": len(approved)}
+    return {"counts": dict(counts), "candidates": approved, "total_candidates": len(approved)}
 
 
 def main():
@@ -115,7 +115,17 @@ def main():
     report = audit(json.loads(directory_raw), source)
     report["source"] = evidence
     report["directory_sha256"] = sha256(directory_raw).hexdigest()
-    print("CDB_ATP_ID_REGISTRY_CROSSWALK " + json.dumps(report, ensure_ascii=False, sort_keys=True), flush=True)
+    print("CDB_ATP_ID_REGISTRY_CROSSWALK " + json.dumps({
+        "counts": report["counts"],
+        "total_candidates": report["total_candidates"],
+        "source": report["source"],
+        "directory_sha256": report["directory_sha256"],
+        "candidates_sample": report["candidates"][:12],
+        "targeted": [p for p in report["candidates"] if any(
+            name in normalize_player_name(p.get("name")) for name in
+            ("bublik", "norrie", "cerundolo", "svrcina")
+        )][:15],
+    }, ensure_ascii=False, sort_keys=True), flush=True)
 
 
 if __name__ == "__main__":
