@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -222,7 +223,7 @@ def _pbpx_score_validated(parsed: dict, score: object) -> bool:
         return False
     recorded = []
     for token in tokens:
-        found = re.fullmatch(r"(\\d+)(?:\\(\\d+\\))?-(\\d+)(?:\\(\\d+\\))?", token)
+        found = re.fullmatch(r"(\d+)(?:\(\d+\))?-(\d+)(?:\(\d+\))?", token)
         if not found:
             return False
         recorded.append((int(found.group(1)), int(found.group(3))))
@@ -586,6 +587,7 @@ def main():
                         ),
                         "source_file": path.name,
                         "source_row": row_number,
+                        "source_ref": os.environ.get("SOURCE_REF", ""),
                         "source_date": source_date.isoformat(),
                         "score_validated": bool(tennisvisuals_format),
                         "evidence": [
