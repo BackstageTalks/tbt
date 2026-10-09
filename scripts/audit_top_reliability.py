@@ -53,9 +53,47 @@ def issued_snapshot(publication):
     if not isinstance(publication, dict):
         return None
     snapshot = publication.get("issued_snapshot")
-    if not isinstance(snapshot, dict) or snapshot.get("source") != "deployed_feed_at_issuance":
+    if not isinstance(snapshot, dict):
         return None
-    if not publication.get("issued_at") or snapshot.get("captured_at") != publication.get("issued_at"):
+    issued = timestamp(publication.get("issued_at"))
+    if issued is None:
+        return None
+    source = snapshot.get("source")
+    if source == "deployed_feed_at_issuance":
+        # Legacy, confirmed public-card snapshot. Never accept a later revision.
+        if snapshot.get("captured_at") != publication.get("issued_at"):
+            return None
+    elif source == "pre_deploy_feed_confirmed":
+        # New schema-2 evidence is captured before deployment then confirmed at
+        # issuance. Reject missing/rewritten preparation rather than falling
+        # through to potentially stale event-level presentation fields.
+        prepared = publication.get("prepared_snapshot")
+        if snapshot.get("schema") != 2 or not isinstance(prepared, dict):
+            return None
+        if prepared.get("schema") != 2 or prepared.get("source") != "pre_deploy_feed":
+            return None
+        if snapshot.get("confirmed_at") != publication.get("issued_at"):
+            return None
+        expected = dict(prepared)
+        expected["source"] = "pre_deploy_feed_confirmed"
+        expected["confirmed_at"] = publication.get("issued_at")
+        if snapshot != expected:
+            return None
+        prepared_at = timestamp(snapshot.get("prepared_at"))
+        quote_at = timestamp(snapshot.get("market_captured_at"))
+        if (prepared_at is None or quote_at is None
+                or not quote_at <= prepared_at <= issued):
+            return None
+        # A one-sided or unpriced quote cannot substantiate a market-aware
+        # confidence claim, even if a price happens to be present in the row.
+        market = snapshot.get("two_way_match_winner")
+        if not isinstance(market, dict):
+            return None
+        prices = (number(market.get("player1_odds")),
+                  number(market.get("player2_odds")))
+        if any(p is None or p <= 1 for p in prices):
+            return None
+    else:
         return None
     raw = number(publication.get("model_probability"))
     saved = number(snapshot.get("model_probability"))
@@ -68,7 +106,10 @@ def ranking_players(row, publication=None):
     snapshot = issued_snapshot(publication)
     if snapshot is None:
         return [row.get("player1") or {}, row.get("player2") or {}]
-    saved = snapshot.get("ranks") if isinstance(snapshot.get("ranks"), dict) else {}
+    # Pre-deploy schema 2 stores this same point-in-time identity in "players".
+    # Both sources are publication snapshots, never current mutable player data.
+    key = "players" if snapshot.get("source") == "pre_deploy_feed_confirmed" else "ranks"
+    saved = snapshot.get(key) if isinstance(snapshot.get(key), dict) else {}
     # Never substitute today's or later-enriched ranks for an issuance snapshot
     # with missing ranking evidence. Require identities to match the event.
     players = []
