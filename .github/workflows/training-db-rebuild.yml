@@ -89,6 +89,10 @@ jobs:
           ]
           if any(not p.is_file() or p.stat().st_size <= 0 for p in required):
               raise SystemExit("Refusing incomplete training DB publication")
+          import json
+          leakage=json.loads((root/"leakage_audit_report.json").read_text(encoding="utf-8"))
+          if leakage.get("status") not in ("pass", "PASS", "passed", "verified"):
+              raise SystemExit("Refusing training publication: leakage audit has no explicit PASS status")
           ReleaseStore(
               os.environ["TBT_DATA_REPOSITORY"],
               "tbt-training-table-v1",
