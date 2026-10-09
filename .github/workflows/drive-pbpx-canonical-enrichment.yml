@@ -1,4 +1,5 @@
 name: Integrate Drive TennisVisuals PBPX safely
+# Re-trigger on main after workflow registration; never bypass the dry-run and backup gates.
 
 on:
   push:
