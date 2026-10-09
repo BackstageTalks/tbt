@@ -741,9 +741,11 @@ def save_match_status_snapshot(payload: object) -> dict:
             if observed:
                 statuses[eid]["max_live_odds_at"] = observed
             statuses[eid]["live_odds_scope"] = "comeback_after_first_set_loss"
-            statuses[eid]["live_odds_observations"] = max(
-                0, min(100_000, int(value.get("live_odds_observations") or 0))
-            )
+            try:
+                observations = int(value.get("live_odds_observations") or 0)
+            except (ValueError, TypeError, OverflowError):
+                observations = 0
+            statuses[eid]["live_odds_observations"] = max(0, min(100_000, observations))
     # Compact pending identities survive the next morning's feed rollover.
     raw_pending = data.get("pending")
     raw_pending = raw_pending if isinstance(raw_pending, dict) else {}
