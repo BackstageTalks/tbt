@@ -298,7 +298,7 @@ def main():
                 assert brand.get_attribute('aria-expanded')=='true'
                 # Both triggers share one menu: account first, navigation below it.
                 section_order=page.locator('#bqm-dialog nav').evaluate(
-                    "n=>[...n.children].map(c=>c.className)"
+                    "n=>[...n.children].map(c=>c.classList[0])"
                 )
                 assert section_order==['bqm-account-switch','bqm-account-panel','bqm-navigation-switch','bqm-navigation-panel'],(width,section_order)
                 assert page.locator('#bqm-navigation-panel').is_visible(),(width,'logo should open navigation')
