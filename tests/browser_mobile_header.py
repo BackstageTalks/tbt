@@ -42,6 +42,18 @@ def main():
                     document.getElementById('projectGroupBar').onclick=e=>{const b=e.target.closest('[data-project-group-open]');if(b)groupCalls.push(b.dataset.projectGroupOpen);};
                 }''')
                 page.wait_for_timeout(200)
+                # Approved tennis-ball icon must keep two unmistakable curved seams
+                # on the actual header and its dormant mobile-navigation fallback.
+                tennis_paths=page.evaluate("""() => {
+                    const selectors=['.header-top .nav-icon-tennis',
+                                     '.mobile-icon-nav [data-route="predictions"] svg'];
+                    return selectors.map(q=>{
+                        const svg=document.querySelector(q);
+                        return svg ? [...svg.querySelectorAll('path')].map(p=>p.getAttribute('d')) : [];
+                    });
+                }""")
+                assert len(tennis_paths)==2 and tennis_paths[0]==tennis_paths[1],(width,tennis_paths)
+                assert len(tennis_paths[0])==2,(width,'expected two distinctive ball seams')
                 # Approved header: gold rocket instead of PP, no tile borders,
                 # and no second navigation row on phones.
                 assert page.locator('#bqm-projects svg.project-rocket-icon').count()==1,(width,'rocket icon missing')
