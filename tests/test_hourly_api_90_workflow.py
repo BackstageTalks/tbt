@@ -33,7 +33,7 @@ def test_97_percent_shared_budget_and_provider_headroom():
 
 def test_final_1855_new_day_1911_and_provider_reset_are_bounded():
     assert "18:45" in HOURLY
-    assert "local.minute >= 55" in HOURLY
+    assert "55 <= local.minute <= 57" in HOURLY
     assert "local.hour == 19 and local.minute == 11" in HOURLY
     assert "limit = 3000 if new_day_start else (14550 if final_topup else caps[local.hour])" in HOURLY
     assert "expected_reset_date = local.date() + timedelta(days=1) if new_day_start else local.date()" in HOURLY
