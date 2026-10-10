@@ -98,3 +98,5 @@ jobs:
           echo "CHECKBESTODDS_BLOCKED_UPSTREAM: HTTP ${{ steps.source.outputs.http_status }}." >> "$GITHUB_STEP_SUMMARY"
           echo "No scraping attempted; respecting site refusal and awaiting permitted access." >> "$GITHUB_STEP_SUMMARY"
           echo "No production CDB, Training DB or source dataset was modified." >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::CheckBestOdds acquisition NOT COMPLETE; source HTTP ${{ steps.source.outputs.http_status }}"
+          exit 2
