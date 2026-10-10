@@ -1,4 +1,4 @@
-name: Final shadow model promotion
+name: Final shadow model evaluation (no promotion)
 
 on:
   push:
@@ -54,14 +54,14 @@ jobs:
           test "$(jq -r '.canonical_mutation' .github/shadow-promotion-request.json)" = "false"
           test "$(jq -r '.promotion_policy' .github/shadow-promotion-request.json)" = "exact_shadow_tested_candidate_only"
 
-      - name: Run final same-cohort promotion gate
+      - name: Run read-only same-cohort evaluation
         run: |
           set -euo pipefail
           python scripts/finalize_shadow_promotion.py             --data-repository "$TBT_DATA_REPOSITORY"             --out .cache/tbt/shadow-promotion/final_report.json
           test -s .cache/tbt/shadow-promotion/final_report.json
           status="$(jq -r '.status' .cache/tbt/shadow-promotion/final_report.json)"
           case "$status" in
-            approved_and_promoted|rejected|already_production) ;;
+            eligible_pending_approval|rejected|already_production) ;;
             *) echo "Unexpected final promotion status: $status"; exit 1 ;;
           esac
           test "$(jq -r '.provider_requests' .cache/tbt/shadow-promotion/final_report.json)" = "0"
@@ -81,21 +81,13 @@ jobs:
             gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Persist final shadow promotion decision run $GITHUB_RUN_ID"               -f content="$encoded" >/dev/null
           fi
 
-      - name: Verify persisted decision and production readback
+      - name: Verify persisted read-only decision
         run: |
           set -euo pipefail
           path="audit/model-shadow-promotion-latest.json"
           gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .content             | tr -d '\n' | base64 -d > /tmp/readback.json
           cmp .cache/tbt/shadow-promotion/final_report.json /tmp/readback.json
           status="$(jq -r '.status' /tmp/readback.json)"
-          if [[ "$status" == "approved_and_promoted" ]]; then
-            expected="$(jq -r '.production_version_after' /tmp/readback.json)"
-            rm -rf /tmp/model-readback
-            mkdir -p /tmp/model-readback
-            gh release download tbt-model-production-v1               -R "$TBT_DATA_REPOSITORY"               -p training_report.json -D /tmp/model-readback
-            actual="$(jq -r '.promotion_decision.candidate_version // empty' /tmp/model-readback/training_report.json)"
-            test "$actual" = "$expected"
-          fi
 
       - name: Upload final evidence
         if: always()
