@@ -39,6 +39,11 @@ def _clean_float(value):
     return float(value)
 
 
+def _evaluation_disposition(eligible: bool) -> str:
+    """A metric pass authorizes review, never mutation of serving artifacts."""
+    return "eligible_pending_approval" if eligible else "rejected"
+
+
 def _metric_delta(left: dict, right: dict, key: str):
     lv = left.get(key)
     rv = right.get(key)
@@ -374,14 +379,14 @@ def main() -> None:
         "delta_vs_production": gate_report["delta_vs_production"],
         "eligible": bool(eligible),
         "promotion_requested": False,
-        "decision": "eligible_pending_approval" if eligible else "rejected",
+        "decision": _evaluation_disposition(eligible),
         "reasons": gate_reasons,
         "shadow": gate_report["shadow"],
         "artifact_policy": "promote exact shadow-tested candidate; no refit",
     }
     # No candidate or production release write is permitted by this gate.
     # A favorable result is research evidence, NOT authorization to promote.
-    status = "eligible_pending_approval" if eligible else "rejected"
+    status = _evaluation_disposition(eligible)
 
     final = {
         "schema": 1,
