@@ -28,18 +28,37 @@ def main():
         executable = os.getenv("BLINQ_BROWSER") or browser_path()
         browser = pw.chromium.launch(headless=True, executable_path=executable) if executable else pw.chromium.launch(headless=True)
         try:
-            for width in (390, 1440):
-                page = browser.new_page(viewport={"width": width, "height": 900})
+            # Android Chrome's "Desktop site" keeps mobile touch/UA but
+            # switches to a wide layout viewport. Reproduce that separately
+            # from normal narrow mobile and desktop Chromium.
+            scenarios = [
+                ("mobile", 390, False),
+                ("android-desktop-site", 980, True),
+                ("desktop", 1440, False),
+            ]
+            for scenario, width, android_desktop_site in scenarios:
+                browser_options = {"viewport": {"width": width, "height": 900}}
+                if android_desktop_site:
+                    browser_options.update({
+                        "is_mobile": True,
+                        "has_touch": True,
+                        "device_scale_factor": 2.75,
+                        "user_agent": ("Mozilla/5.0 (Linux; Android 16; Mobile) "
+                                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                       "Chrome/143.0.0.0 Mobile Safari/537.36"),
+                    })
+                context = browser.new_context(**browser_options)
+                page = context.new_page()
                 errors = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 page.route("**/*", route_request)
                 page.goto(ORIGIN + "/index.html?lang=sk", wait_until="networkidle")
                 page.wait_for_function("window.resultsMultiTest && resultsMultiTest.state.ui")
                 page.evaluate("""() => {
-                    const t=resultsMultiTest,s=t.state,when='2026-10-10T12:00:00Z';
+                    const t=resultsMultiTest,s=t.state,when=new Date(Date.now()-3600000).toISOString();
                     const publication=(section,market,selection,correct=true)=>({
                         section,market,selection,selection_id:selection,
-                        issued_at:'2026-10-10T08:00:00Z',
+                        issued_at:new Date(Date.now()-7200000).toISOString(),
                         price_status:['aces','double_faults','sets','games'].includes(market)?'projection_only':'priced',
                         odds:market==='match_winner'?1.6:null,
                         result:{status:correct?'hit':'miss',correct,
@@ -56,12 +75,13 @@ def main():
                         row('shared',[publication('top_daily','match_winner','p1'),
                                       publication('value','match_winner','p1')]),
                         row('prime',[publication('prime','match_winner','p1')]),
+                        row('doubles',[publication('doubles','match_winner','p1')]),
                         row('ace',[publication('ace','aces','p1:aces')]),
                         row('df',[publication('double_faults','double_faults','p1:df')]),
                         row('sets',[publication('sets','sets','over:2.5')]),
                         row('games',[publication('games','games','over:20.5')])
                     ];
-                    s.resultsFilters={category:'all',tour:'',surface:'',window:'all',
+                    s.resultsFilters={category:'all',tour:'',surface:'',window:'1',
                                       dateFrom:'',dateTo:'',bettingDay:true};
                     s.resultsPage=0;
                     const authDialog=document.querySelector('#authDialog');
@@ -77,8 +97,10 @@ def main():
                     t.renderRoute('results');
                 }""")
                 table = page.locator(".results-table tbody tr")
-                assert table.count() == 6, (width, table.count())
+                assert table.count() == 7, (scenario, table.count())
                 drawer = page.locator("[data-results-filter-toggle]")
+                if android_desktop_site:
+                    assert not drawer.is_visible(), scenario
                 if drawer.is_visible():
                     drawer.click()
                     assert drawer.get_attribute("aria-expanded") == "true", width
@@ -94,17 +116,24 @@ def main():
                     assert table.count() == count, (width, category, table.count())
                     if drawer.is_visible():
                         assert drawer.get_attribute('aria-expanded') == 'true', (width, category)
-                assert page.locator('.metric-card strong').last.inner_text() == '5', width
+                # This is the screenshot's exact situation: six checked
+                # categories exclude Doubles, so a successful filter may
+                # legitimately show only TOP when other kinds have no results.
+                assert table.count() == 5, (scenario, "selected six excluding doubles")
+                assert page.locator('.metric-card strong').last.inner_text() == '5', scenario
+                page.locator('input[data-result-category="doubles"]').check()
+                assert table.count() == 6, (scenario, "including doubles")
+                assert "Štvorhra" in page.locator(".results-table tbody .result-tag").all_inner_texts(), scenario
                 page.locator('input[data-result-category="top_daily"]').uncheck()
-                assert table.count() == 5
+                assert table.count() == 6
                 assert page.locator(".results-table tbody tr .result-tag").all_inner_texts().count("TOP") == 0
                 assert "Value" in page.locator(".results-table tbody tr .result-tag").all_inner_texts()
                 page.locator('input[data-result-category="all"]').check()
-                assert table.count() == 6
+                assert table.count() == 7
                 assert page.locator('input[data-result-category="all"]').is_checked()
                 assert not errors, (width, errors)
-                page.close()
-            print("Results category multi-select real-browser regression: PASS")
+                context.close()
+            print("Results category multi-select including Android Desktop site and 24h: PASS")
         finally:
             browser.close()
 
