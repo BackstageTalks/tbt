@@ -13,11 +13,11 @@ def tape():
         dict(player1="Jane", player2="Lucy", point_no=1, p1_points_won=1,
              p2_points_won=0, point_victor=1, server=1, serve_no=1,
              p1_ace=1, p2_ace=0, p1_double_fault=0, p2_double_fault=0,
-             p1_break_pt=0, p2_break_pt=0, set_victor=1),
+             p1_break_pt=0, p2_break_pt=0, game_victor=1, set_victor=1),
         dict(player1="Jane", player2="Lucy", point_no=2, p1_points_won=2,
              p2_points_won=0, point_victor=1, server=1, serve_no=2,
              p1_ace=0, p2_ace=0, p1_double_fault=0, p2_double_fault=0,
-             p1_break_pt=0, p2_break_pt=0, set_victor=1),
+             p1_break_pt=0, p2_break_pt=0, game_victor=1, set_victor=1),
     ])
 
 
@@ -80,3 +80,16 @@ def test_script_has_no_cdb_publisher():
     assert "create_release(" not in script
     assert '"production_mutated": False' in script
     assert '"write_authorized": False' in script
+
+
+def test_side_two_terminal_winner_is_understood_not_rejected_as_nonbinary():
+    group = pd.DataFrame([
+        dict(player1="Jane", player2="Lucy", point_no=i,
+             p1_points_won=0, p2_points_won=i, point_victor=2,
+             server=2, serve_no=1, p1_ace=0, p2_ace=0,
+             p1_double_fault=0, p2_double_fault=0,
+             p1_break_pt=0, p2_break_pt=0, game_victor=2,
+             set_victor=2 if i in (6, 12) else 0)
+        for i in range(1, 13)
+    ])
+    assert tape_completeness(group, 3, 2) == []
