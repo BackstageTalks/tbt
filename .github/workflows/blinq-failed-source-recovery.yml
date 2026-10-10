@@ -93,7 +93,6 @@ jobs:
               output.write("http_status=" + status + "\n")
           print("CHECKBESTODDS_STATUS", status, "eligible_to_collect", available)
           PY
-          echo "CheckBestOdds HTTP: ${{ steps.source.outputs.http_status }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Resume historical source only when access is allowed
         if: steps.source.outputs.available == 'true'
         working-directory: source
