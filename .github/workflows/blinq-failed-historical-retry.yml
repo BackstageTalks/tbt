@@ -187,6 +187,25 @@ jobs:
           timeout --signal=INT --kill-after=30s 280m python -u scripts/scrape_tennisexplorer_details.py \
             --category "$CATEGORY" --from-year "$YEAR" --to-year "$YEAR" \
             --delay 2 --retries 2 --max-consecutive-failures 3
+      - name: Verify 2026 detail coverage is actually complete
+        id: coverage
+        if: steps.details.outcome == 'success'
+        working-directory: source
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path("data/tennisexplorer/enrichment")/os.environ["CATEGORY"]/"2026.run_metadata.json"
+          if not p.is_file():
+              raise SystemExit("Missing 2026 detail completion metadata")
+          info=json.loads(p.read_text(encoding="utf-8"))
+          print("2026_DETAIL_QA",json.dumps(info,ensure_ascii=False,sort_keys=True))
+          if not info.get("complete") or info.get("pending_details") != 0:
+              raise SystemExit("Details still incomplete - checkpoint required")
+          if info.get("complete_with_gaps"):
+              raise SystemExit("Unrecoverable details in source need explicit QA")
+          PY
       - name: Save immutable private progress checkpoint even after timeout
         if: always() && steps.restore.outcome == 'success'
         shell: bash
@@ -221,7 +240,7 @@ jobs:
           echo "TennisExplorer $CATEGORY year $YEAR; source-only checkpoint kept privately." >> "$GITHUB_STEP_SUMMARY"
           echo "Listings: ${{ steps.results.outcome }}, details: ${{ steps.details.outcome }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Production CDB and Training DB unchanged." >> "$GITHUB_STEP_SUMMARY"
-          if [[ "${{ steps.results.outcome }}" != "success" || "${{ steps.details.outcome }}" != "success" ]]; then
+          if [[ "${{ steps.results.outcome }}" != "success" || "${{ steps.details.outcome }}" != "success" || "${{ steps.coverage.outcome }}" != "success" ]]; then
             echo "::error::2026 details INCOMPLETE; resume from latest private retry checkpoint"
             exit 2
           fi
