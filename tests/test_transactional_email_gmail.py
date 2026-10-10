@@ -12,6 +12,7 @@ def _config():
         blinq_smtp_username="security@example.test",
         blinq_smtp_password="test-only",
         blinq_smtp_starttls=True,
+        blinq_public_url="https://blinq.example",
     )
 
 
