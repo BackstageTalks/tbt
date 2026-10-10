@@ -256,7 +256,7 @@ def test_current_section_access_inventory_and_public_header_are_clean():
     nav = {item["content"]["route"]: item["content"]["label"] for item in nav_items}
     assert list(nav) == ["top200", "prime", "top_daily", "value", "doubles", "ace", "sg", "results"]
     assert nav["top200"] == "TOP200"
-    assert nav["prime"] == "Comebacks"
+    assert nav["prime"] == "ACCA"
     assert "predictions" not in nav  # old SIDEBAR_PREDICTIONS access stub is retired
     for removed in ("tournaments", "players", "stats", "model", "backtests", "account"):
         assert removed not in nav

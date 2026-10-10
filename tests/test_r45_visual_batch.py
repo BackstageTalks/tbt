@@ -26,7 +26,7 @@ def test_r45_time_cells_show_compact_date_under_time():
 
 
 def test_r45_short_odds_and_aces_labels_are_clean():
-    assert "prime:'COMEBACKS'" in APP
+    assert "prime:'ACCA'" in APP
     assert "ace:'ACES'" in APP
     assert UI['dashboard']['daily_hub']['tabs']['ace']['label'] == 'ACES'
     assert "?lcopy('Double Faults','Dvojchyby','Dvojchyby'):'Aces'" in APP
