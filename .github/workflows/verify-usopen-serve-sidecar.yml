@@ -46,6 +46,7 @@ jobs:
           print("SOURCE_ROWS",len(rows),flush=True)
           for row in rows[:3]:
               print("SCHEMA_KEYS",sorted(row),flush=True)
+              print("SERVE_FIELDS",sorted((row.get("player1_serve") or {}).keys()),flush=True)
               for k,v in row.items():
                   if k not in {"name","player_name","server","returner","stats","player1_name","player2_name"}:
                       print("FIELD",k,str(v)[:200],flush=True)
