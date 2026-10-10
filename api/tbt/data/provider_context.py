@@ -179,6 +179,40 @@ def minimize_provider_payload(
             ) if key in delayed
         }
 
+    # Limited research-only post-match observations (never exposed as same-match
+    # prematch feature inputs). Persist only the pinned verified source schema.
+    usopen = raw.get("_tbt_usopen_2024_serve_research")
+    if (isinstance(usopen, dict) and usopen.get("schema") == 1
+            and usopen.get("source") == "jasnwag/tennis_serve_dataset"
+            and usopen.get("source_ref_blob_sha") == "9d0a7a8c013a68d18e437f8c75f8fb7c036f1224"
+            and usopen.get("feature_policy") ==
+                "research_post_match_only; same-match fields forbidden as pre-match features; eligible only for strictly lagged chronological player-state experiments"):
+        compact = {
+            key: usopen[key] for key in (
+                "schema", "source", "source_ref_blob_sha", "source_event",
+                "source_match_id", "license", "feature_policy"
+            ) if key in usopen
+        }
+        allowed = {
+            "ace_count", "ace_rate_per_serve_row", "first_serve_speed_kmh_mean",
+            "height_cm", "opponent_return_depth_counts", "quality_label_mean",
+            "rally_count_mean", "rally_count_median", "second_serve_speed_kmh_mean",
+            "serve_depth_counts", "serve_duration_sec_mean",
+            "serve_number_1_rows", "serve_number_2_rows", "serve_rows",
+            "serve_width_counts", "service_games_observed", "sets_observed",
+            "speed_kmh_max", "speed_kmh_mean", "speed_kmh_median",
+            "speed_observations"
+        }
+        sides_ok = True
+        for side in ("player1_serve", "player2_serve"):
+            values = usopen.get(side)
+            if not isinstance(values, dict) or set(values) != allowed:
+                sides_ok = False
+                break
+            compact[side] = {k: values[k] for k in sorted(allowed)}
+        if sides_ok:
+            out["_tbt_usopen_2024_serve_research"] = compact
+
     termination = _compact_termination(raw)
     if termination is not None:
         out["_tbt_termination"] = termination
