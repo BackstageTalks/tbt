@@ -277,3 +277,29 @@ def test_paid_downgrade_runs_without_smtp_or_inactivity_worker_policy(monkeypatc
     assert result["enabled"] is False
     assert result["paid_downgraded"] == 1
     assert updates[0][1]["plan"] == "rookie"
+
+
+def test_smtp_diagnostics_reports_sender_domain_without_secrets():
+    settings = cfg()
+    settings.blinq_smtp_username = "smtp-credential@example.test"
+    settings.blinq_smtp_password = "never-show-this-password"
+    settings.blinq_smtp_from = "BlinQ <accounts@example.test>"
+    info = lifecycle.smtp_diagnostics(settings)
+    assert info["sender_domain"] == "example.test"
+    assert info["smtp_host"] == "smtp.example.test"
+    assert info["smtp_auth_configured"] is True
+    assert info["tls_mode"] == "starttls"
+    assert info["authentication_results"] == "not_verified"
+    assert "smtp-credential@example.test" not in str(info)
+    assert "never-show-this-password" not in str(info)
+    assert "accounts@example.test" not in str(info)
+
+
+def test_smtp_diagnostics_flags_unencrypted_transport_without_claiming_authentication():
+    settings = cfg()
+    settings.blinq_smtp_starttls = False
+    info = lifecycle.smtp_diagnostics(settings)
+    assert info["tls_mode"] == "unencrypted"
+    assert info["authentication_results"] == "not_verified"
+    settings.blinq_smtp_port = 465
+    assert lifecycle.smtp_diagnostics(settings)["tls_mode"] == "implicit_tls"
