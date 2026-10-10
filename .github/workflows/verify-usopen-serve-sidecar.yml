@@ -121,6 +121,32 @@ jobs:
               fh.write(f"changes={'true' if staged else 'false'}\n")
           PY
 
+      - name: Rehearse exact 2024 marker write and full readback (PR/dry-run, no publish)
+        if: ${{ steps.mode.outputs.mode == 'dry-run' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/usopen-serve
+          cp "$root/history/history-2024.parquet" "$root/rehearsal-before-2024.parquet"
+          python scripts/import_usopen_serve_metadata.py \
+            --mode write --history-dir "$root/history" \
+            --stage-file "$root/stage/verified_stage.jsonl" \
+            --out-dir "$root/rehearsal"
+          python scripts/verify_usopen_serve_readback.py \
+            --backup "$root/rehearsal-before-2024.parquet" \
+            --persisted "$root/history/history-2024.parquet" \
+            --stage "$root/stage/verified_stage.jsonl"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path(".cache/tbt/usopen-serve")
+          staged=json.loads((root/"stage/report.json").read_text())
+          rehearsal=json.loads((root/"rehearsal/report.json").read_text())
+          assert rehearsal["counts"]["updated"]==staged["counts"].get("staged",0)
+          assert rehearsal["changed_years"]==([2024] if rehearsal["counts"]["updated"] else [])
+          print("Verified local 2024 marker-only rehearsal; zero canonical remote writes.")
+          PY
+
       - name: Immutable backup and independent backup download
         if: ${{ steps.mode.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
         run: |
