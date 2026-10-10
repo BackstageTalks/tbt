@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "mode": "dry-run",
+  "source": "wta_official_2026_weekly_singles",
+  "source_sha256": "4267e37ba6357eb11cfb0e9346c3c59eac8a17431e1f19deb5fffa9573a9bf03",
+  "player_crosswalk_git_blob": "dd397c8fe1b8457f2036b8bab233daf3f2da9317",
+  "canonical_year": 2026,
+  "allow_existing_rank_overwrite": false,
+  "require_immutable_prewrite_backup": true,
+  "require_independent_full_partition_readback": true,
+  "allowed_provider_api_requests": 0,
+  "production_model_promotion": false,
+  "purpose": "Import only strictly prior weekly WTA ranks independently matched by verified canonical-to-Sackmann identities. Default fail-closed dry-run."
+}

@@ -111,7 +111,11 @@ def inspect(matches,source,crosswalk):
         values=[m.player1_rank,m.player2_rank]; expected=[pairs[0][1],pairs[1][1]]
         if any(v is not None and int(v)!=new for v,new in zip(values,expected)):
             counts["existing_conflict"]+=1; continue
-        rows.append({"match_id":str(m.match_id),"scheduled_at":m.scheduled_at.isoformat(),
+        rows.append({"schema":1,"match_id":str(m.match_id),"scheduled_at":m.scheduled_at.astimezone(timezone.utc).isoformat(),
+                     "tour":"wta","player1_id":str(m.player1_id),"player2_id":str(m.player2_id),
+                     "player1_name":str(m.player1_name),"player2_name":str(m.player2_name),
+                     "sackmann_player1_id":crosswalk[str(m.player1_id)]["sackmann_id"],
+                     "sackmann_player2_id":crosswalk[str(m.player2_id)]["sackmann_id"],
                      "ranking_as_of":pairs[0][0].isoformat(),"canonical":values,
                      "proposed":expected,"candidate_only":True})
         counts["candidate_matches"]+=1
