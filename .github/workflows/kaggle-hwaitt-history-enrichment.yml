@@ -7,6 +7,8 @@ on:
       - ".github/workflows/kaggle-hwaitt-history-enrichment.yml"
       - "scripts/link_offline_serve_return.py"
       - "scripts/import_offline_linked_serve_return.py"
+      - "scripts/offline_exact_cdb_write.py"
+      - "tests/test_offline_exact_cdb_write.py"
       - "tests/test_offline_serve_return_linker.py"
   push:
     branches: [main]
@@ -78,8 +80,8 @@ jobs:
           set -euo pipefail
           python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
           python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
-          python -m compileall -q scripts/link_offline_serve_return.py scripts/import_offline_linked_serve_return.py
-          python -m pytest tests/test_offline_serve_return_linker.py tests/test_offline_linked_serve_return_importer.py -q
+          python -m compileall -q scripts/link_offline_serve_return.py scripts/import_offline_linked_serve_return.py scripts/offline_exact_cdb_write.py
+          python -m pytest tests/test_offline_serve_return_linker.py tests/test_offline_linked_serve_return_importer.py tests/test_offline_exact_cdb_write.py -q
 
       - name: Verify private destination
         run: |
@@ -199,14 +201,151 @@ jobs:
           print(json.dumps(r,indent=2))
           PY
 
-      - name: Write verified stats into local canonical history
-        if: ${{ steps.request.outputs.mode == 'write' }}
+      - name: Prove useful non-conflicting additions and pin original manifest
+        id: gate
+        shell: bash
         run: |
           set -euo pipefail
-          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/hwaitt/link/auto_linked.jsonl             --history-dir .cache/tbt/hwaitt/history             --out-dir .cache/tbt/hwaitt/write             --write-partitions             --write-history-dir .cache/tbt/hwaitt/history
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path(".cache/tbt/hwaitt")
+          stage=json.loads((root/"dry-run/report.json").read_text())
+          counters=stage.get("counts") or {}
+          years=stage.get("changed_years") or []
+          updated=int(counters.get("updated",0))
+          if updated != sum(1 for _ in years) and updated < len(years):
+              raise SystemExit("Impossible changed years or match counts")
+          if updated and not years:
+              raise SystemExit("New stats without changed years")
+          if stage.get("production_mutated") is not False or stage.get("api_requests") != 0:
+              raise SystemExit("Offline dry-run mutated production or called API")
+          if not all(2011 <= int(y) <= 2019 for y in years):
+              raise SystemExit("Unexpected Hwaitt historical year")
+          (root/"approved-years.json").write_text(json.dumps(years))
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f:
+              f.write("changes="+str(updated>0).lower()+"\n")
+          print("HWAITT_PROVEN_ADDITIONS", json.dumps({
+              "updated":updated,
+              "fields_added":counters.get("stat_fields_added",0),
+              "quality_ready_added":stage.get("quality_ready_added",0),
+              "years":years,
+              "conflicts_quarantined":counters.get("stat_conflicts",0),
+          },sort_keys=True))
+          PY
+
+      - name: Rehearse every proposed historical stat on isolated canonical copy (PR only)
+        if: ${{ steps.request.outputs.mode == 'dry-run' && steps.gate.outputs.changes == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/hwaitt
+          cp -a --reflink=auto "$root/history" "$root/rehearsal-history"
+          python scripts/import_offline_linked_serve_return.py \
+            --stage "$root/link/auto_linked.jsonl" \
+            --history-dir "$root/rehearsal-history" \
+            --out-dir "$root/rehearsal-write" \
+            --write-partitions \
+            --write-history-dir "$root/rehearsal-history" \
+            --exact-stats-only
+          mkdir -p "$root/rehearsal-original"
+          for year in $(jq -r '.[]' "$root/approved-years.json"); do
+            cp "$root/history/history-$year.parquet" "$root/rehearsal-original/"
+          done
+          python scripts/offline_exact_cdb_write.py \
+            --before-dir "$root/rehearsal-original" \
+            --after-dir "$root/rehearsal-history" \
+            --stage "$root/link/auto_linked.jsonl" \
+            --changed-years "$(cat "$root/approved-years.json")" \
+            --output "$root/rehearsal-readback.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path(".cache/tbt/hwaitt")
+          dry=json.loads((root/"dry-run/report.json").read_text())
+          local=json.loads((root/"rehearsal-write/report.json").read_text())
+          checked=json.loads((root/"rehearsal-readback.json").read_text())
+          if dry["counts"]!=local["counts"] or dry["changed_years"]!=local["changed_years"]:
+              raise SystemExit("Historical import dry-run/write parity failure")
+          if checked["enriched_matches"] != dry["counts"].get("updated",0):
+              raise SystemExit("Full partition rehearsal changed incorrect number of matches")
+          if checked["added_values"] != dry["counts"].get("stat_fields_added",0):
+              raise SystemExit("Full partition rehearsal changed incorrect number of values")
+          if checked["existing_values_overwritten"] != 0:
+              raise SystemExit("Rehearsal overwrote existing CDB values")
+          print("HWAITT_ISOLATED_FULL_REHEARSAL_VERIFIED", json.dumps(checked))
+          PY
+
+      - name: Immutable private prewrite backups and independent digest verification
+        if: ${{ steps.request.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/hwaitt
+          mkdir -p "$root/prewrite-original" "$root/backup-readback"
+          cp "$root/history/history_manifest.json" "$root/prewrite-original/"
+          cp "$root/history/_tbt_bundle_manifest.json" "$root/prewrite-original/"
+          for year in $(jq -r '.[]' "$root/approved-years.json"); do
+            cp "$root/history/history-$year.parquet" "$root/prewrite-original/"
+          done
+          (cd "$root/prewrite-original" && sha256sum history-*.parquet history_manifest.json _tbt_bundle_manifest.json > SHA256SUMS && sha256sum -c SHA256SUMS)
+          tag="blinq-hwaitt-prewrite-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          test "$(gh release view "$tag" --repo "$TBT_DATA_REPOSITORY" --json tagName -q .tagName 2>/dev/null || true)" = "" || { echo "Immutable prewrite tag exists; refuse replacement"; exit 1; }
+          gh release create "$tag" "$root"/prewrite-original/* \
+            --repo "$TBT_DATA_REPOSITORY" \
+            --target main --title "Immutable CDB Hwaitt 2011-2019 prewrite snapshot" \
+            --notes "Original changed partitions and original manifests with SHA256SUMS. Recover before another writer if independent readback fails. Run ${GITHUB_RUN_ID}."
+          gh release download "$tag" --repo "$TBT_DATA_REPOSITORY" --dir "$root/backup-readback"
+          (cd "$root/backup-readback" && sha256sum -c SHA256SUMS)
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          base=Path(".cache/tbt/hwaitt")
+          for file in (base/"prewrite-original").iterdir():
+              other=base/"backup-readback"/file.name
+              if not other.is_file() or hashlib.sha256(file.read_bytes()).digest()!=hashlib.sha256(other.read_bytes()).digest():
+                  raise SystemExit("Independent immutable backup mismatch: "+file.name)
+          print("HWAITT_IMMUTABLE_PRIVATE_PREWRITE_BACKUP_VERIFIED")
+          PY
+
+      - name: Write verified stats into local canonical history
+        if: ${{ steps.request.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/hwaitt/link/auto_linked.jsonl             --history-dir .cache/tbt/hwaitt/history             --out-dir .cache/tbt/hwaitt/write             --write-partitions             --write-history-dir .cache/tbt/hwaitt/history --exact-stats-only
+
+      - name: Verify complete local before-after canonical diff
+        if: ${{ steps.request.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/hwaitt
+          python scripts/offline_exact_cdb_write.py \
+            --before-dir "$root/prewrite-original" \
+            --after-dir "$root/history" \
+            --stage "$root/link/auto_linked.jsonl" \
+            --changed-years "$(cat "$root/approved-years.json")" \
+            --output "$root/local-complete-readback.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path(".cache/tbt/hwaitt")
+          dry=json.loads((root/"dry-run/report.json").read_text())
+          written=json.loads((root/"write/report.json").read_text())
+          checked=json.loads((root/"local-complete-readback.json").read_text())
+          if dry["counts"]!=written["counts"] or dry["changed_years"]!=written["changed_years"]:
+              raise SystemExit("Staged dry-run/write divergence")
+          if checked["enriched_matches"]!=dry["counts"].get("updated",0):
+              raise SystemExit("Locally verified match count mismatch")
+          if checked["added_values"]!=dry["counts"].get("stat_fields_added",0):
+              raise SystemExit("Locally verified source stat fields mismatch")
+          if checked["existing_values_overwritten"]!=0:
+              raise SystemExit("Overwrote an existing canonical statistic")
+          print("HWAITT_LOCAL_FULL_READBACK_PASS", checked)
+          PY
 
       - name: Publish changed canonical history
-        if: ${{ steps.request.outputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -216,6 +355,17 @@ jobs:
           from tbt.data.history_snapshot import load_partitions
           from tbt.data.history_safety import sanitize_history_identities
           directory=Path(".cache/tbt/hwaitt/history")
+          immutable=Path(".cache/tbt/hwaitt/prewrite-original")
+          fresh=Path(".cache/tbt/hwaitt/fresh-remote-before-publish")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",fresh).download(
+              require_bundle_manifest=True
+          )
+          import hashlib
+          for filename in ("history_manifest.json","_tbt_bundle_manifest.json"):
+              current=hashlib.sha256((fresh/filename).read_bytes()).hexdigest()
+              original=hashlib.sha256((immutable/filename).read_bytes()).hexdigest()
+              if current != original:
+                  raise SystemExit("Concurrent CDB manifest/source change detected; ABORT publication")
           report=json.loads(Path(".cache/tbt/hwaitt/write/report.json").read_text())
           c=report.get("counts") or {}
           for key in ("identity_missing","identity_changed","invalid_stats","stat_conflicts"):
@@ -233,7 +383,7 @@ jobs:
           PY
 
       - name: Verify persisted readback
-        if: ${{ steps.request.outputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -250,6 +400,31 @@ jobs:
           if safety.get("quarantined_rows"):
               raise SystemExit("Persisted history identity validation failed")
           print(f"Persisted readback verified: {len(matches)} rows")
+          PY
+
+      - name: Independently compare EVERY persisted historical match and every new field
+        if: ${{ steps.request.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/hwaitt
+          python scripts/offline_exact_cdb_write.py \
+            --before-dir "$root/prewrite-original" \
+            --after-dir "$root/verify" \
+            --stage "$root/link/auto_linked.jsonl" \
+            --changed-years "$(cat "$root/approved-years.json")" \
+            --output "$root/persisted-complete-readback.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path(".cache/tbt/hwaitt")
+          persisted=json.loads((root/"persisted-complete-readback.json").read_text())
+          local=json.loads((root/"local-complete-readback.json").read_text())
+          if persisted != local or persisted["status"] != "verified":
+              raise SystemExit("Independent full persisted readback differs from local verified stage")
+          if persisted["existing_values_overwritten"] or persisted["unverified_identities"]:
+              raise SystemExit("Persisted canonical mutation violated safety contract")
+          print("HWAITT_PERSISTED_CDB_VERIFIED",json.dumps(persisted,sort_keys=True))
           PY
 
       - name: Persist audit
@@ -310,6 +485,9 @@ jobs:
             .cache/tbt/hwaitt/link/quarantine.jsonl
             .cache/tbt/hwaitt/dry-run/report.json
             .cache/tbt/hwaitt/write/report.json
+            .cache/tbt/hwaitt/local-complete-readback.json
+            .cache/tbt/hwaitt/persisted-complete-readback.json
+            .cache/tbt/hwaitt/rehearsal-readback.json
           if-no-files-found: warn
           retention-days: 14
       
