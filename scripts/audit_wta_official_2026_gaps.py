@@ -41,7 +41,47 @@ def load(source):
     if counts["source_rows"]!=16927: raise ValueError("Pinned source row count changed")
     for key in conflicts: by.pop(key,None)
     return by,dict(counts),{"headers":h,"date":d,"id":p,"rank":r,"name":n,"conflict_keys":len(conflicts)}
-def inspect(matches,source):
+
+def load_crosswalk(path):
+    """Only independently linked canonical->Sackmann ID mappings are eligible.
+
+    Conflicting or multiply owned player IDs fail closed. This sidecar was
+    derived from independently matched same-day source matches, not from the
+    official ranking source or a name-only mapping.
+    """
+    rows_by_canonical={}
+    ambiguous_canonical=set()
+    counts=Counter()
+    with gzip.open(path,"rt",encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip(): continue
+            counts["profile_rows"]+=1
+            row=json.loads(line)
+            profile=row.get("profile") or {}
+            canonical=str(row.get("player_id") or "").strip()
+            sackmann=str(profile.get("sackmann_id") or "").strip()
+            name=norm(row.get("canonical_name"))
+            if row.get("schema")!=1 or not canonical or not sackmann.isdigit() or not name or int(row.get("evidence_match_count") or 0)<1:
+                counts["excluded_without_strict_link"]+=1
+                continue
+            item={"sackmann_id":str(int(sackmann)),"name":name}
+            if canonical in rows_by_canonical and rows_by_canonical[canonical]!=item:
+                ambiguous_canonical.add(canonical)
+            else:
+                rows_by_canonical[canonical]=item
+    for canonical in ambiguous_canonical:
+        rows_by_canonical.pop(canonical,None)
+    reverse=defaultdict(set)
+    for canonical,item in rows_by_canonical.items():
+        reverse[item["sackmann_id"]].add(canonical)
+    duplicated={sid for sid,owners in reverse.items() if len(owners)!=1}
+    verified={cid:item for cid,item in rows_by_canonical.items() if item["sackmann_id"] not in duplicated}
+    counts["conflicting_canonical_ids"]=len(ambiguous_canonical)
+    counts["multiply_owned_sackmann_ids"]=len(duplicated)
+    counts["verified_crosswalk_players"]=len(verified)
+    return verified,dict(counts)
+
+def inspect(matches,source,crosswalk):
     rows=[]; counts=Counter(); dates=defaultdict(dict)
     for (when,pid),data in source.items(): dates[pid][when]=data
     for m in matches:
@@ -53,7 +93,12 @@ def inspect(matches,source):
             counts["both_present"]+=1; continue
         pairs=[]; invalid=False
         for pid,name in ((m.player1_id,m.player1_name),(m.player2_id,m.player2_name)):
-            choices=[(d,item) for d,item in dates.get(str(pid),{}).items() if 0<(current-d).days<=8]
+            identity=crosswalk.get(str(pid))
+            if identity is None or identity["name"]!=norm(name):
+                counts["missing_independent_crosswalk"]+=1
+                invalid=True; break
+            choices=[(d,item) for d,item in dates.get(identity["sackmann_id"],{}).items()
+                     if 0<(current-d).days<=8]
             if not choices: invalid=True; break
             d,(rank,source_name,verified_id)=max(choices)
             if source_name and source_name!=norm(name): invalid=True; break
@@ -76,12 +121,14 @@ def inspect(matches,source):
 def main():
     p=argparse.ArgumentParser()
     for flag in ("source","history_dir","out_dir"):p.add_argument("--"+flag.replace("_","-"),required=True,type=Path)
+    p.add_argument("--crosswalk",required=True,type=Path)
     a=p.parse_args(); by,c,s=load(a.source)
+    crosswalk,crosswalk_counts=load_crosswalk(a.crosswalk)
     matches=load_snapshot(a.history_dir/"history-2026.parquet")
-    rows,counts=inspect(matches,by)
+    rows,counts=inspect(matches,by,crosswalk)
     a.out_dir.mkdir(parents=True,exist_ok=True)
     (a.out_dir/"candidates.jsonl").write_text("".join(json.dumps(x)+"\n" for x in rows))
-    report={"schema":1,"status":"read_only","source":s,"source_counts":c,"counts":counts,
+    report={"schema":1,"status":"read_only","source":s,"source_counts":c,"crosswalk_counts":crosswalk_counts,"counts":counts,
             "stage_rows":len(rows),"canonical_year_rows":len(matches),"api_requests":0,
             "production_mutated":False,"model_promoted":False,"write_authorized":False}
     (a.out_dir/"report.json").write_text(json.dumps(report,indent=2))

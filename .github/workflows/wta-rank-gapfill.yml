@@ -105,8 +105,17 @@ jobs:
             > "$source"
           echo "4267e37ba6357eb11cfb0e9346c3c59eac8a17431e1f19deb5fffa9573a9bf03  $source" | sha256sum -c -
           gzip -t "$source"
+          # Independent exact-match player linkage: canonical ID -> Sackmann ID.
+          # Never join rankings to canonical players on numeric IDs or names alone.
+          crosswalk=.cache/tbt/wta-rank/official-source/verified_player_crosswalk.jsonl.gz
+          gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$TBT_DATA_REPOSITORY/contents/research/player_profile/livetennisapi-public-2023-2026.jsonl.gz?ref=main" \
+            > "$crosswalk"
+          test "$(git hash-object "$crosswalk")" = "dd397c8fe1b8457f2036b8bab233daf3f2da9317"
+          gzip -t "$crosswalk"
           python scripts/audit_wta_official_2026_gaps.py \
-            --source "$source" --history-dir .cache/tbt/wta-rank/history \
+            --source "$source" --crosswalk "$crosswalk" \
+            --history-dir .cache/tbt/wta-rank/history \
             --out-dir .cache/tbt/wta-rank/official-audit
           python - <<'PY'
           import json
