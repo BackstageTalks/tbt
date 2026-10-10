@@ -58,3 +58,11 @@ def _zip_stub():
     with ZipFile(handle, "w"):
         pass
     return handle.getvalue()
+
+
+def test_large_private_inventory_uses_file_upload_not_long_argv():
+    from pathlib import Path
+    workflow = (Path(__file__).resolve().parents[1] / '.github' / 'workflows' / 'tournament-logo-inventory.yml').read_text(encoding='utf-8')
+    assert '--input /tmp/blinq-logo-inventory/github-upload.json' in workflow
+    assert '-f content="$encoded"' not in workflow
+    assert 'cmp "$file" /tmp/blinq-logo-inventory/readback.json' in workflow
