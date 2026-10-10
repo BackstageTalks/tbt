@@ -1,4 +1,5 @@
 import hashlib
+import os
 import json
 import re
 import subprocess
@@ -407,6 +408,16 @@ class ReleaseStore:
         before the replacement manifest is committed so a reader can fail closed,
         but can never silently consume a stale deleted partition.
         """
+        # Cross-repository Actions concurrency does not exist. A lock check at
+        # the actual production release writer prevents future workflows from
+        # silently bypassing the explicit acquire/release job steps.
+        if (
+            self.repository == "BackstageTalks/tbt-data"
+            and self.tag in {"tbt-data-v1", "tbt-training-table-v1"}
+            and os.environ.get("GITHUB_ACTIONS") == "true"
+        ):
+            from cdb_global_writer_lock import verify
+            verify(self.repository, Path(".cdb-global-writer-lock.json"))
         files = [Path(p) for p in paths]
         removals = {str(name) for name in remove_names}
         previous = self._remote_bundle_files()
