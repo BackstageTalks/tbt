@@ -54,10 +54,24 @@ jobs:
           set -euo pipefail
           file=/tmp/blinq-logo-inventory/verified-cache-audit.json
           path="audit/tournament-logo-cache-inventory-${GITHUB_RUN_ID}.json"
-          encoded="$(base64 -w0 "$file")"
+          export BLINQ_AUDIT_REPORT="$file"
+          python - <<'PYUPLOAD'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+          raw = Path(os.environ["BLINQ_AUDIT_REPORT"]).read_bytes()
+          payload = {
+              "message": f"Read-only logo cache inventory {os.environ['GITHUB_RUN_ID']}",
+              "content": base64.b64encode(raw).decode("ascii"),
+          }
+          Path("/tmp/blinq-logo-inventory/github-upload.json").write_text(
+              json.dumps(payload, separators=(",", ":")), encoding="utf-8"
+          )
+          PYUPLOAD
+          # Avoid Linux ARG_MAX for ID-level inventories larger than 128 KiB.
           gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
-            -f message="Read-only logo cache inventory $GITHUB_RUN_ID" \
-            -f content="$encoded" >/dev/null
+            --input /tmp/blinq-logo-inventory/github-upload.json >/dev/null
           gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .content \
             | tr -d '\n' | base64 -d > /tmp/blinq-logo-inventory/readback.json
           cmp "$file" /tmp/blinq-logo-inventory/readback.json
