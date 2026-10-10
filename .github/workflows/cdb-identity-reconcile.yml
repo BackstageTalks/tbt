@@ -50,6 +50,12 @@ jobs:
           python -m pytest tests/test_cdb_identity_reconciliation.py tests/test_cdb_external_registry.py tests/test_cdb_verified_player_crosswalk.py -q
           python -m compileall -q scripts
 
+      - name: Acquire cross-repository canonical writer lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
       - name: Load independently verified private comparator snapshot
         run: |
           set -euo pipefail
@@ -146,3 +152,8 @@ jobs:
             .cache/tbt/player-identity-publish/crosswalk-integrity-report.json
           if-no-files-found: warn
           retention-days: 30
+      
+      - name: Release cross-repository canonical writer lock
+        if: always()
+        shell: bash
+        run: python scripts/cdb_global_writer_lock.py release --if-held
