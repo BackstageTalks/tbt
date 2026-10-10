@@ -112,6 +112,7 @@ def render_blinq_email(
     footer_sk: str = "",
     footer_en: str = "",
     preheader: str = "",
+    logo_url: str = "",
 ) -> tuple[str, str]:
     """Return plain + HTML bodies using the canonical BlinQ transactional style."""
     button_label = str(button_label or "").strip()
@@ -165,11 +166,25 @@ def render_blinq_email(
             + f'{safe["footer_en"]}</p>'
         )
 
+    logo_url = str(logo_url or "").strip()
+    if logo_url.startswith("https://"):
+        logo_markup = (
+            f'<img src="{html_escape(logo_url, quote=True)}" alt="BlinQ" width="210" height="105" '
+            'style="display:block;width:210px;height:105px;max-width:100%;border:0;'
+            'font-family:Arial,Helvetica,sans-serif;font-size:28px;font-weight:800;color:#f3fbf8">'
+        )
+    else:
+        logo_markup = (
+            '<span style="display:inline-block;color:#f3fbf8;font-family:Arial,Helvetica,sans-serif;'
+            'font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1.1">'
+            'Blin<span style="color:#43e6a0">Q</span></span>'
+        )
+
     html = f'''<!doctype html><html><body bgcolor="#020c0b" style="margin:0;padding:0;background:#020c0b;color:#eaf6f1;font-family:Arial,Helvetica,sans-serif">
 <div style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all">{safe["preheader"]}</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#020c0b" style="width:100%;background:#020c0b"><tr><td align="center" style="padding:28px 12px">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#061713" style="width:100%;max-width:620px;background:#061713;border:1px solid #164c3b;border-radius:18px">
-<tr><td style="padding:28px 30px 18px"><span style="display:inline-block;color:#f3fbf8;font-family:Arial,Helvetica,sans-serif;font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1.1">Blin<span style="color:#43e6a0">Q</span></span></td></tr>
+<tr><td style="padding:28px 30px 18px">{logo_markup}</td></tr>
 <tr><td style="padding:6px 30px 30px"><div style="font-size:12px;letter-spacing:.16em;color:#45e7a2;font-weight:700">{safe["eyebrow"]}</div>
 <h1 style="margin:10px 0 8px;font-size:27px;line-height:1.2;color:#f3fbf8">{safe["title_sk"]}</h1>
 <p style="margin:0;color:#a9c2b9;font-size:15px;line-height:1.65">{safe["body_sk"]}</p>
@@ -179,6 +194,14 @@ def render_blinq_email(
 <p style="margin:0;color:#8fa9a0;font-size:14px;line-height:1.65">{safe["body_en"]}</p>
 {footer}</td></tr></table></td></tr></table></body></html>'''
     return plain, html
+
+
+def _email_logo_url(cfg) -> str:
+    """Prefer the original brand artwork, hosted on the public BlinQ site."""
+    try:
+        return f"{_public_url(cfg)}/assets/blinq_logo_email.png"
+    except ValueError:
+        return ""
 
 
 def _build_transactional_message(cfg, recipient: str, subject: str, plain: str, html: str) -> EmailMessage:
@@ -260,7 +283,7 @@ def send_blinq_transactional_email(
     return True
 
 
-def _content(kind: str, action_url: str) -> tuple[str, str, str]:
+def _content(kind: str, action_url: str, *, logo_url: str = "") -> tuple[str, str, str]:
     if kind == "verify":
         subject = "BlinQ · Overenie e-mailu / Verify your email"
         plain, html = render_blinq_email(
@@ -273,6 +296,7 @@ def _content(kind: str, action_url: str) -> tuple[str, str, str]:
             button_url=action_url,
             footer_sk="Ak ste o túto správu nežiadali, môžete ju ignorovať.",
             footer_en="If you did not request this message, you can ignore it.",
+            logo_url=logo_url,
         )
     else:
         subject = "BlinQ · Obnova hesla / Reset your password"
@@ -292,7 +316,7 @@ def _content(kind: str, action_url: str) -> tuple[str, str, str]:
 
 def send_blinq_action_email(cfg, recipient: str, kind: str) -> bool:
     action_url = _firebase_action_link(cfg, kind, recipient)
-    subject, plain, html = _content(kind, action_url)
+    subject, plain, html = _content(kind, action_url, logo_url=_email_logo_url(cfg) if kind == "verify" else "")
     if not _smtp_ready(cfg):
         raise RuntimeError("SMTP is not configured")
     msg = _build_transactional_message(cfg, recipient, subject, plain, html)

@@ -12,6 +12,7 @@ def _config():
         blinq_smtp_username="security@example.test",
         blinq_smtp_password="test-only",
         blinq_smtp_starttls=True,
+        blinq_public_url="https://blinq.example",
     )
 
 
@@ -125,3 +126,22 @@ def test_transactional_mail_requires_valid_sender_mailbox():
         auth_email._build_transactional_message(
             cfg, "member@example.test", "Subject", "Plain body", "<p>HTML body</p>"
         )
+
+
+def test_verify_email_uses_original_hosted_logo_only(monkeypatch):
+    FakeSMTP.delivered = []
+    monkeypatch.setattr(auth_email.smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(
+        auth_email, "_firebase_action_link",
+        lambda _cfg, kind, _email: f"https://blinq.example/auth/action?mode={kind}&oobCode=fake",
+    )
+    assert auth_email.send_blinq_action_email(
+        _config(), "member@example.test", "verify"
+    ) is True
+    assert len(FakeSMTP.delivered) == 1
+    msg = FakeSMTP.delivered[0]
+    html = msg.get_body(preferencelist=("html",)).get_content()
+    assert '<img src="https://blinq.example/assets/blinq_logo_email.png"' in html
+    assert 'alt="BlinQ"' in html
+    assert "Overte svoj e-mail" in html
+    assert "cid:" not in html
