@@ -282,7 +282,15 @@ jobs:
               if int(c.get(key) or 0):
                   raise SystemExit(f"Strict importer rejected rows: {key}={c.get(key)}")
           if int(c.get("updated") or 0) <= 0 and int(c.get("already_present") or 0) <= 0:
-              raise SystemExit("No verified enrichment rows")
+              # On a current CDB the linker can prove all linked raw stats are
+              # already canonical, in which case it stages zero rows.
+              link=json.loads(Path(".cache/tbt/offline-enrichment/link/report.json").read_text())
+              lc=link.get("counts") or {}
+              if not (r.get("stage_rows")==0
+                      and int(lc.get("identity_linked") or 0)>0
+                      and int(lc.get("already_present") or 0)>0):
+                  raise SystemExit("No verified enrichment rows or corroborated no-op")
+              print("Already-present canonical evidence; zero new fields, no write.")
           PY
 
       - name: Verify strict staged CDB delta
