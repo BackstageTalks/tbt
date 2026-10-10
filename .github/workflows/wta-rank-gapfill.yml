@@ -78,6 +78,7 @@ jobs:
           test "$(wc -l < "$source" | tr -d ' ')" = "$EXPECTED_LINES"
 
       - name: Acquire cross-repository canonical writer lock
+        if: env.RANK_MODE == 'write'
         shell: bash
         run: |
           set -euo pipefail
@@ -215,7 +216,7 @@ jobs:
           PY
 
       - name: Persist private rank-points sidecar and audit
-        if: ${{ github.event_name != 'pull_request' }}
+        if: ${{ github.event_name != 'pull_request' && env.RANK_MODE == 'write' }}
         run: |
           set -euo pipefail
           gzip -c .cache/tbt/wta-rank/audit/rank-points-sidecar.jsonl > /tmp/wta-rank-points-2006-2026.jsonl.gz

@@ -38,3 +38,13 @@ def test_wta_rank_importer_preserves_point_in_time_provenance_contract():
     assert 'counts["existing_rank_mismatch"]' in script
     assert 'counts["player1_rank_filled"]' in script
     assert 'counts["player2_rank_filled"]' in script
+
+
+def test_readonly_wta_audits_never_acquire_global_writer_lock():
+    workflow=(ROOT/".github/workflows/wta-rank-gapfill.yml").read_text()
+    lock_block=workflow.split("      - name: Acquire cross-repository canonical writer lock", 1)[1].split("      - name:", 1)[0]
+    assert "if: env.RANK_MODE == 'write'" in lock_block
+    assert "cdb_global_writer_lock.py acquire" in lock_block
+    publish_block=workflow.split("      - name: Persist private rank-points sidecar and audit", 1)[1].split("      - name:", 1)[0]
+    assert "env.RANK_MODE == 'write'" in publish_block
+    assert "cdb_global_writer_lock.py release --if-held" in workflow
