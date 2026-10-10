@@ -1,0 +1,90 @@
+name: BlinQ ATP Leaderboards cached HTML diagnosis (no source requests)
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/blinq-leaderboard-offline-diagnosis.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      ARCHIVE: blinq-atp-leaderboards-38039406462-1.tar.gz
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      RELEASE: blinq-cloud-atptour-20261009
+    steps:
+      - name: Download latest original ATP captured HTML privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = "true"
+          mkdir -p /tmp/leaderboards
+          gh release download "$RELEASE" --repo "$PRIVATE_REPO" \
+            --pattern "$ARCHIVE" --dir /tmp/leaderboards
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check beautifulsoup4
+      - name: Analyze captured DOM, row selectors and embedded payloads, OFFLINE
+        run: |
+          python - <<'PY'
+          import gzip,json,os,re,tarfile
+          from pathlib import Path
+          from bs4 import BeautifulSoup
+          t=Path("/tmp/leaderboards")/os.environ["ARCHIVE"]
+          results=[]
+          with tarfile.open(t,"r:gz") as tar:
+              members=[x for x in tar if x.isfile()]
+              for x in members:
+                  if not x.name.endswith(".html.gz"):
+                      continue
+                  data=tar.extractfile(x).read()
+                  try:
+                      html=gzip.decompress(data).decode("utf-8",errors="replace")
+                  except (OSError,ValueError):
+                      results.append({"file":Path(x.name).name,"error":"invalid_gzip"});continue
+                  soup=BeautifulSoup(html,"html.parser")
+                  tables=soup.select("table")
+                  tbodys=soup.select("tbody")
+                  leaders=soup.select("div.leaderboard table")
+                  all_tr=soup.select("table tbody tr")
+                  rows=soup.select("div.leaderboard table tbody tr")
+                  scripts=soup.select("script")
+                  script_data=[{"id":tag.get("id","")[:70],"type":tag.get("type","")[:55],
+                      "bytes":len(tag.get_text())} for tag in scripts if len(tag.get_text())>500]
+                  results.append({
+                      "file":Path(x.name).name,"html_bytes":len(html),
+                      "title":soup.title.get_text(" ",strip=True)[:95] if soup.title else "",
+                      "tables":len(tables),"leaderboard_tables":len(leaders),
+                      "tbody":len(tbodys),"all_table_rows":len(all_tr),
+                      "leaderboard_rows":len(rows),
+                      "table_classes":[(table.get("class") or [])[:5] for table in tables[:5]],
+                      "table_ids":[table.get("id") for table in tables[:5]],
+                      "script_json_candidates":script_data[:8],
+                      "bot_wall_indicators":[term for term in ("captcha","Cloudflare","Just a moment","Access denied") if term.lower() in html.lower()],
+                      "first_row_cells":[td.get_text(" ",strip=True)[:80] for td in rows[0].select("td")[:10]] if rows else [],
+                  })
+          if not results:
+              raise SystemExit("No archived HTML found; no source request attempted")
+          report={"status":"OFFLINE_RAW_HTML_DIAGNOSIS_NOT_CDB_DATA","captured_html_count":len(results),"samples":results[:35]}
+          Path("leaderboard-dom-report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
+          print("LEADERBOARD_CACHED_DOM_REPORT",json.dumps(report,ensure_ascii=False))
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as out:
+              out.write("### ATP leaderboard cached source HTML diagnosis\n")
+              out.write("No source requests; raw files remain private.\n")
+              for item in results[:12]:
+                  out.write(f"- {item.get('file')}: table rows {item.get('leaderboard_rows')}, html bytes {item.get('html_bytes')}\n")
+          PY
+      - name: Counts-only DOM diagnostic report
+        uses: actions/upload-artifact@v4
+        with:
+          name: atp-leaderboard-cached-dom-diagnostic
+          path: leaderboard-dom-report.json
+          retention-days: 30
