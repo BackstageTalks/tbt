@@ -1,0 +1,92 @@
+name: BlinQ Private Consolidated CDB Staging Handoff
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-cdb-private-handoff.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-cdb-private-handoff
+  cancel-in-progress: false
+
+jobs:
+  cdb-handoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      HANDOFF_TAG: blinq-cdb-integration-handoff-20261010
+    steps:
+      - name: Prove private output and prepare immutable private release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = "true"
+          if ! gh release view "$HANDOFF_TAG" --repo "$PRIVATE_REPO" >/dev/null 2>&1; then
+            gh release create "$HANDOFF_TAG" --repo "$PRIVATE_REPO" --target main \
+              --title "Consolidated CDB staging manifest, NOT an import" \
+              --notes "Immutable references and SHA-256 QA for private OddsTrader and ATP archive staging. Canonical identity and timestamp gates not met. No CDB, no model promotion."
+          fi
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+          path: source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run no-network handoff safety unit tests
+        run: |
+          python -m py_compile source/scripts/build_private_cdb_handoff.py
+          python -u source/scripts/test_build_private_cdb_handoff.py
+      - name: Read private staging release asset manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/source-manifests
+          gh api "repos/$PRIVATE_REPO/releases/tags/blinq-cdb-odds-staging-20261010" > /tmp/source-manifests/odds.json
+          gh api "repos/$PRIVATE_REPO/releases/tags/blinq-cdb-atptour-staging-20261010" > /tmp/source-manifests/atp.json
+      - name: Independently download and hash 27 private staged shards, assemble unified QA manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u source/scripts/build_private_cdb_handoff.py \
+            --odds-release /tmp/source-manifests/odds.json \
+            --atp-release /tmp/source-manifests/atp.json \
+            --download-dir /tmp/private-source-staging \
+            --output /tmp/cdb-integration-handoff.json
+      - name: Persist handoff manifest privately and independently verify exact SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="blinq-cdb-handoff-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          cp /tmp/cdb-integration-handoff.json "/tmp/$name"
+          gh release upload "$HANDOFF_TAG" "/tmp/$name" --repo "$PRIVATE_REPO"
+          local_sha=$(sha256sum "/tmp/$name" | cut -d' ' -f1)
+          local_bytes=$(stat -c %s "/tmp/$name")
+          remote=$(gh api "repos/$PRIVATE_REPO/releases/tags/$HANDOFF_TAG" \
+            --jq "[.assets[] | select(.name==\"$name\") | {size,digest}] | first")
+          echo "$remote" | jq -e --arg hash "sha256:$local_sha" --argjson sz "$local_bytes" \
+            '.digest == $hash and .size == $sz' >/dev/null
+          echo "PRIVATE_INTEGRATION_HANDOFF_SHA256_VERIFIED $local_sha bytes=$local_bytes"
+          python - <<'PY'
+          import json,os
+          x=json.load(open("/tmp/cdb-integration-handoff.json"))
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as out:
+              out.write("## BlinQ private CDB integration staging handoff\n")
+              out.write("**Independent release download + SHA-256 integrity verification PASSED.**\n")
+              out.write(f"- Staged assets: {len(x['assets'])}\n")
+              for name,value in x["counts"].items():
+                  out.write(f"- {name}: {value}\n")
+              out.write("- Known gaps: ATP/WTA Odds 2015; ATP Archive 2021; TennisExplorer source/recovery.\n")
+              out.write("- Empty ATP Tour structured match stats excluded from model features.\n")
+              out.write("- Canonical match/player linking: NOT YET; production CDB/import: NOT AUTHORIZED.\n")
+          PY
