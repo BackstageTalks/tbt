@@ -50,7 +50,7 @@ def test_writer_and_two_independent_quota_guards():
     assert 'if active:' in HOURLY
     assert 'check_writers()' in HOURLY
     assert 'min(3000, limit-spent, remaining, history_remaining)' in HOURLY
-    assert 'group: tbt-history-data-writer' in DATA
+    assert 'group: tbt-crossrepo-writer-${{ github.run_id }}' in DATA
     assert 'BLINQ_PROVIDER_REQUEST_RESERVE=450' in DATA
     assert 'BLINQ_RAPIDAPI_MAX_RPS=6' in DATA
     assert '"hourly_autofill": "true"' in HOURLY
