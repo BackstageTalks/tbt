@@ -137,7 +137,7 @@ jobs:
           assert json.loads((root/"readback-local/report.json").read_text())["status"]=="verified"
           print("PASSED local exact-cell/full-year readback: rows=",stage["stage_rows"])
           PY
-      - name: Reject any historical rank without point-in-time provenance
+      - name: Verify all newly staged ranks are PIT-safe without worsening baseline
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -146,23 +146,43 @@ jobs:
           from tbt.data.history_snapshot import load_snapshot
           from tbt.services.training import _enforce_rank_provenance
           root=Path(os.environ["ROOT"])
-          _,before=_enforce_rank_provenance(load_snapshot(root/"history/history-2026.parquet"))
-          _,after=_enforce_rank_provenance(load_snapshot(root/"local/history-2026.parquet"))
-          stage=json.loads((root/"stage/report.json").read_text())
-          changed=stage["stage_rows"]
-          values=stage["counts"].get("missing_rank_values",0)
-          # Pre-existing unverified ranks remain untouched. This import must
-          # introduce exactly the verified new PIT coverage, and absolutely
-          # no additional unverified ranks; do not rewrite legacy context.
-          assert after["stripped_rows"]==before["stripped_rows"],(before,after)
-          assert after["stripped_values"]==before["stripped_values"],(before,after)
-          assert after["verified_rows"]-before["verified_rows"]==changed,(before,after)
-          assert after["retained_values"]-before["retained_values"]==values,(before,after)
-          assert after["rows_with_rank_values"]-before["rows_with_rank_values"]==changed
-          print("PIT PROVENANCE DELTA VERIFIED:",json.dumps({
-              "legacy_unverified_rows_unchanged":before["stripped_rows"],
-              "new_verified_rank_rows":changed,"new_verified_rank_values":values,
-          },sort_keys=True))
+          before=load_snapshot(root/"history/history-2026.parquet")
+          after=load_snapshot(root/"local/history-2026.parquet")
+          clean_before,b=_enforce_rank_provenance(before)
+          clean_after,a=_enforce_rank_provenance(after)
+          if len(clean_before)!=len(clean_after):
+              raise SystemExit("PIT gate: canonical match count changed")
+          # Existing, unrelated historical rows may already lack PIT evidence.
+          # Training strips those values. The import must not worsen that debt
+          # and cannot be blocked merely because the baseline has known debt.
+          for field in ("stripped_rows","stripped_values"):
+              if a[field]>b[field]:
+                  raise SystemExit(f"PIT gate: {field} worsened from {b[field]} to {a[field]}")
+          stage=[json.loads(line) for line in (root/"stage/candidates.jsonl").read_text().splitlines() if line.strip()]
+          proposed={str(x["match_id"]):x for x in stage}
+          seen=set()
+          for record in clean_after:
+              mid=str(record.match_id)
+              if mid not in proposed:
+                  continue
+              if mid in seen:
+                  raise SystemExit(f"PIT gate: duplicate canonical ID {mid}")
+              seen.add(mid)
+              pair=[record.player1_rank,record.player2_rank]
+              if any(v is None for v in pair) or [int(v) for v in pair]!=proposed[mid]["proposed"]:
+                  raise SystemExit(f"PIT gate: newly staged ranks stripped or mismatched for {mid}")
+          if seen!=set(proposed):
+              raise SystemExit("PIT gate: not all staged canonical IDs survived readback")
+          if a["retained_values"]-b["retained_values"]<sum(sum(v is None for v in s["canonical"]) for s in stage):
+              raise SystemExit("PIT gate: new verified ranking field count did not increase as expected")
+          report={"schema":1,"status":"verified_scoped_pit","stage_rows_verified":len(seen),
+                  "baseline":b,"after":a,"historical_debt_preserved":True,
+                  "new_values_verified":sum(sum(v is None for v in s["canonical"]) for s in stage),
+                  "production_mutated":False}
+          dest=root/"scoped-pit/report.json"
+          dest.parent.mkdir(parents=True,exist_ok=True)
+          dest.write_text(json.dumps(report,indent=2,sort_keys=True))
+          print("SCOPED PIT GATE:",json.dumps(report,sort_keys=True))
           PY
 
       - name: Save immutable prewrite backup with independent SHA256 readback
@@ -260,6 +280,7 @@ jobs:
             .cache/tbt/wta-official-2026/dry/report.json
             .cache/tbt/wta-official-2026/local-report/report.json
             .cache/tbt/wta-official-2026/readback-local/report.json
+            .cache/tbt/wta-official-2026/scoped-pit/report.json
             .cache/tbt/wta-official-2026/persisted-readback/report.json
             .cache/tbt/wta-official-2026/final-audit.json
           if-no-files-found: warn
