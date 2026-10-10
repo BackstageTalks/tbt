@@ -37,8 +37,13 @@ def configure(monkeypatch, binary, *, expected=None):
             assert tag == subject.RELEASE and repo == "BackstageTalks/tbt-data"
             self.root = root
 
+        def _asset_names(self):
+            return {subject.ASSET}
+
         def download(self, **kwargs):
-            assert subject.ASSET in kwargs["required_names"]
+            assert subject.ASSET in kwargs["extra_names"]
+            assert not kwargs.get("required_names")
+            assert not kwargs.get("require_bundle_manifest")
             (self.root / subject.ASSET).write_bytes(binary)
 
     monkeypatch.setattr(subject, "ReleaseStore", Release)
@@ -75,3 +80,10 @@ def test_refuses_non_24_hour_forecast(monkeypatch, tmp_path):
     with pytest.raises(ValueError, match="lead"):
         subject.restore_weather("BackstageTalks/tbt-data", tmp_path / "s", target)
     assert not target.exists()
+
+
+def test_missing_forecast_release_asset_refused(monkeypatch, tmp_path):
+    configure(monkeypatch, weather_payload())
+    monkeypatch.setattr(subject.ReleaseStore, "_asset_names", lambda self: set())
+    with pytest.raises(FileNotFoundError, match="Pinned forecast asset missing"):
+        subject.restore_weather("BackstageTalks/tbt-data", tmp_path / "sources", tmp_path / "out.csv")
