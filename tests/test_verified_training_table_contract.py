@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import pandas as pd
 import pytest
 
-from scripts.verify_training_table_contract import validate
+from scripts.verify_training_table_contract import validate, validate_weather_identity
 
 
 def fixtures(n=1200):
@@ -94,3 +94,23 @@ def test_rank_source_provenance_is_required():
     report["verified_rank_inputs"] = None
     with pytest.raises(ValueError, match="verified private ranking"):
         validate(frame, report, leakage, weather_evidence=weather)
+
+
+def test_weather_identity_uses_exact_prematch_utc_fixture(tmp_path):
+    frame, _, _, _ = fixtures()
+    weather = frame[["match_id", "scheduled_at"]].copy()
+    weather["source"] = "open-meteo-previous-runs"
+    weather["forecast_reference"] = "previous_day1"
+    weather["forecast_lead_hours"] = 24
+    out = tmp_path / "verified_weather.csv"
+    weather.to_csv(out, index=False)
+    assert validate_weather_identity(frame, out) == len(frame)
+    weather.loc[0, "scheduled_at"] = "2025-06-01T12:00:00Z"
+    weather.to_csv(out, index=False)
+    with pytest.raises(ValueError, match="match_id/date"):
+        validate_weather_identity(frame, out)
+    weather.loc[0, "scheduled_at"] = "2024-06-01T12:00:00Z"
+    weather.loc[0, "source"] = "untrusted-posthoc"
+    weather.to_csv(out, index=False)
+    with pytest.raises(ValueError, match="verified Previous Runs"):
+        validate_weather_identity(frame, out)
