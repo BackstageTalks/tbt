@@ -150,6 +150,19 @@ jobs:
         run: python scripts/audit_comparator_names_second_pass.py
 
 
+      - name: Audit 10 October Results categories (target PR only)
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'fix/results-audit-white-navigation-20261010' }}
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing read-only release token'; exit 1; }
+          python scripts/audit_results_filter_20261010.py --self-test
+          mkdir -p .cache/results-category-audit
+          gh release download tbt-predictions-v1 --repo BackstageTalks/tbt-data --pattern feed.json --dir .cache/results-category-audit --clobber
+          python scripts/audit_results_filter_20261010.py .cache/results-category-audit/feed.json
+
       - name: Audit canonical CDB identity overlaps (target PR only)
         if: ${{ github.event_name == 'pull_request' && github.head_ref == 'fix/canonical-identity-reconciliation-audit-20261009' }}
         env:
