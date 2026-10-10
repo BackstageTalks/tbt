@@ -4,7 +4,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from scripts.audit_wimbledon_2023_cdb_stage import classify, tape_completeness, clean_binary
+from scripts.audit_wimbledon_2023_cdb_stage import classify, tape_completeness, clean_binary, validated_best_of
 
 
 def tape():
@@ -93,3 +93,20 @@ def test_side_two_terminal_winner_is_understood_not_rejected_as_nonbinary():
         for i in range(1, 13)
     ])
     assert tape_completeness(group, 3, 2) == []
+
+
+def test_wimbledon_wta_2023_format_can_use_contemporaneous_official_wta_proof():
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+    m=SimpleNamespace(tour="wta",tournament="Wimbledon, London",
+                      scheduled_at=datetime(2023,7,13,tzinfo=timezone.utc),
+                      best_of=None)
+    assert validated_best_of(m)==3
+    m.best_of=5
+    assert validated_best_of(m) is None
+    m.best_of=None
+    m.tour="atp"
+    assert validated_best_of(m) is None
+    m.tour="wta"
+    m.scheduled_at=datetime(2024,7,13,tzinfo=timezone.utc)
+    assert validated_best_of(m) is None
