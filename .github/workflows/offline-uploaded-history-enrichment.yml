@@ -347,6 +347,23 @@ jobs:
           python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/offline-enrichment/link/auto_linked.jsonl             --history-dir .cache/tbt/offline-enrichment/history             --out-dir .cache/tbt/offline-enrichment/write             --write-partitions             --write-history-dir .cache/tbt/offline-enrichment/history
           python scripts/verify_cdb_enrichment.py --phase write --root .cache/tbt/offline-enrichment
 
+      - name: Independently verify every staged and unstaged local row before publish
+        if: ${{ steps.request.outputs.mode == 'write' && steps.stage_gate.outputs.changes == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.verify_cdb_enrichment import read_json, staged_entries, verify_readback
+          root = Path(".cache/tbt/offline-enrichment")
+          stage = staged_entries(root / "link/auto_linked.jsonl")
+          dry = read_json(root / "dry-run/report.json")
+          result = verify_readback(root / "backup", root / "history", stage, dry)
+          if result["persisted_enriched_matches"] != dry["counts"]["updated"]:
+              raise SystemExit("Prepublish CDB changed-row count mismatch")
+          print("PREPUBLISH_EXACT_ROW_DIFF_VERIFIED", result, flush=True)
+          PY
+
       - name: Validate and publish changed private history bundle
         if: ${{ steps.request.outputs.mode == 'write' && steps.stage_gate.outputs.changes == 'true' }}
         run: |
