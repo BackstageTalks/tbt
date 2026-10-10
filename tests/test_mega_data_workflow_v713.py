@@ -8,7 +8,7 @@ SCRIPT = (ROOT / 'scripts/run_mega_data.py').read_text(encoding='utf-8')
 
 def test_mega_data_mode_is_exposed_and_serialized():
     assert 'mega-data' in WORKFLOW
-    assert 'group: tbt-history-data-writer' in WORKFLOW
+    assert 'group: tbt-crossrepo-writer-${{ github.run_id }}' in WORKFLOW
     assert 'python scripts/run_mega_data.py' in WORKFLOW
 
 
