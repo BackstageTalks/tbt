@@ -33,7 +33,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('tbt-offline-odds-dry-run-{0}', github.ref) || 'tbt-history-data-writer' }}
+  group: ${{ github.event_name == 'pull_request' && format('tbt-offline-odds-dry-run-{0}', github.ref) || format('tbt-crossrepo-writer-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
