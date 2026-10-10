@@ -101,8 +101,8 @@ def patch(before: pd.DataFrame, records: list[dict], *, baseline_sha: str):
         if bool(orientation.get("swapped")) != (orientation.get("relation") == "reversed"):
             raise ValueError("Inconsistent source side/orientation evidence")
         source_identity = rec.get("source_identity") or {}
-        source_name = source_identity.get("original_player2" if orientation["swapped"] == (side == 1)
-                                         else "original_player1")
+        raw_side = 3 - side if orientation["swapped"] else side
+        source_name = source_identity.get(f"original_player{raw_side}")
         if orientation.get("source_subject") != source_name:
             raise ValueError("Source side identity changed")
         try:
