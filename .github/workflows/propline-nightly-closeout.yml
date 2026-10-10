@@ -1,0 +1,45 @@
+name: PropLine nightly quota closeout
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_requests:
+        description: "Maximum PropLine attempts in this run (1-750)"
+        required: false
+        type: number
+        default: 750
+
+permissions:
+  contents: read
+
+# No GitHub cron: caller owns the schedule. No overlapping closeout writers.
+concurrency:
+  group: propline-nightly-closeout
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 115
+    env:
+      PROPL: ${{ secrets.PROPL }}
+      TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      CLOSEOUT_MAX_REQUESTS: ${{ inputs.max_requests || 750 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test closeout invariants offline
+        run: python -m unittest discover -s tests -p 'test_propline_nightly_closeout.py' -v
+      - name: Collect and archive remaining useful PropLine data
+        run: python scripts/propline_nightly_closeout.py
+      - name: Preserve local batches if archival fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: propline-nightly-closeout-${{ github.run_id }}
+          path: reports/*.json.gz
+          if-no-files-found: ignore
+          retention-days: 14
