@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "mode": "dry-run",
+  "canonical_year": 2023,
+  "source": "figshare_wimbledon_2023_momentum",
+  "source_sha256": "19507e156e6ff307027d39e44000ac446a564f87b3c8d59a5225dc6d1674c512",
+  "sidecar_sha256": "8c9b00eb96582cb5bfe3449b0bdb2dffbfb11d3fc387e54e142d645e6d43e316",
+  "allowed_field_names": [
+    "p1_aces",
+    "p2_aces",
+    "p1_double_faults",
+    "p2_double_faults"
+  ],
+  "expected_new_values": 12,
+  "expected_affected_matches": 3,
+  "allow_existing_stats_overwrite": false,
+  "require_immutable_prewrite_backup": true,
+  "require_independent_full_partition_readback": true,
+  "allowed_provider_api_requests": 0,
+  "production_model_promotion": false,
+  "purpose": "Verified five-match Wimbledon 2023 source; twelve postmatch whole-match ace/DF exact cells. PR/manual runs forced dry-run. Separate authorized main commit required for single write."
+}
