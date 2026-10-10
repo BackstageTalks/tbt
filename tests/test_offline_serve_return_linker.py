@@ -311,3 +311,90 @@ def test_hwaitt_winner_conflict_fails_closed(tmp_path):
     assert not quarantine
     assert report["counts"]["weak_evidence"] == 1
     assert "winner_conflict" in review[0]["evidence"]
+
+
+def _linked_row(source, stats, index=0):
+    return {
+        "source": source, "source_match_id": f"raw-{index}",
+        "score": 12, "evidence": ["date_exact", "winner"],
+        "mapping": {"a": "p1", "b": "p2"}, "stats": stats,
+    }
+
+
+def test_reconcile_refuses_any_new_stats_from_canonical_conflicting_source():
+    from scripts.link_offline_serve_return import _reconcile_linked_fields
+    rows = [_linked_row("sackmann:atp.csv", {"p1_aces": 11, "p1_return_points_won": .40})]
+    accepted, conflicts, proven, blocked = _reconcile_linked_fields({"p1_aces": 9}, rows)
+    assert not accepted and not proven
+    assert "p1_return_points_won" in blocked
+    assert conflicts[0]["reason"] == "canonical_conflict"
+
+
+def test_reconcile_only_rescues_independently_corroborated_missing_field():
+    from scripts.link_offline_serve_return import _reconcile_linked_fields
+    rows = [
+        _linked_row("sackmann:atp.csv", {"p1_aces": 9, "p1_return_points_won": .40}, 1),
+        _linked_row("charting:tape.zip:m", {"p1_return_points_won": .40}, 2),
+        _linked_row("kaggle-hwaitt:atp.csv", {"p1_aces": 11, "p1_return_points_won": .40,
+                                             "p2_double_faults": 4}, 3),
+    ]
+    accepted, conflicts, sources, blocked = _reconcile_linked_fields({"p1_aces": 9}, rows)
+    assert accepted == {"p1_return_points_won": .40}
+    assert sources == {"p1_return_points_won": [0, 1]}
+    assert "p2_double_faults" in blocked
+    assert {c["reason"] for c in conflicts} == {"canonical_conflict"}
+
+
+def test_reconcile_source_disagreement_vetoes_field_despite_two_agreeing():
+    from scripts.link_offline_serve_return import _reconcile_linked_fields
+    rows = [
+        _linked_row("sackmann:atp.csv", {"p1_return_points_won": .40}, 1),
+        _linked_row("charting:tape.zip:m", {"p1_return_points_won": .40}, 2),
+        _linked_row("kaggle-hwaitt:atp.csv", {"p1_return_points_won": .41}, 3),
+    ]
+    accepted, conflicts, sources, blocked = _reconcile_linked_fields({}, rows)
+    assert accepted == {} and sources == {}
+    assert "p1_return_points_won" in blocked
+    assert conflicts[0]["reason"] == "source_conflict"
+
+
+def test_reconcile_archive_duplicates_not_independent_without_charting():
+    from scripts.link_offline_serve_return import _reconcile_linked_fields
+    rows = [
+        _linked_row("sackmann:atp.csv", {"p1_aces": 9, "p1_return_points_won": .40}, 1),
+        _linked_row("all-matches:atp.csv", {"p1_return_points_won": .40}, 2),
+        _linked_row("kaggle-hwaitt:atp.csv", {"p1_aces": 11}, 3),
+    ]
+    accepted, conflicts, sources, blocked = _reconcile_linked_fields({"p1_aces": 9}, rows)
+    assert accepted == {} and sources == {}
+    assert "p1_return_points_won" in blocked and conflicts
+
+
+def test_reconcile_preserves_uncontested_additive_import():
+    from scripts.link_offline_serve_return import _reconcile_linked_fields
+    rows = [_linked_row("sackmann:atp.csv", {"p1_aces": 9, "p1_return_points_won": .40})]
+    accepted, conflicts, sources, blocked = _reconcile_linked_fields({"p1_aces": 9}, rows)
+    assert accepted == {"p1_return_points_won": .40}
+    assert conflicts == [] and blocked == set() and sources == {"p1_return_points_won": [0]}
+
+
+def test_reconcile_rescued_stage_contains_only_verified_provenance(tmp_path):
+    # A canonical conflict in one source must not leak that source's marker
+    # into the accepted stage or override a populated CDB field.
+    source = tmp_path / "atp_matches_2024.csv"
+    write_source(source)
+    charting = tmp_path / "charting.zip"
+    _minimal_charting_zip(charting)
+    hwaitt = tmp_path / "hwaitt_atp.csv"
+    write_hwaitt_source(hwaitt, Aces_1="99")
+    report, staged, _, quarantine = run_linker(
+        tmp_path, [canonical(stats={"p1_aces": 9.0})],
+        source=source, charting=charting, kaggle_hwaitt=hwaitt
+    )
+    assert report["counts"]["stat_conflict_matches"] == 1
+    assert len(quarantine) == 1
+    assert "p1_aces" not in (staged[0]["incoming_stats"] if staged else {})
+    if staged:
+        assert report["counts"]["partial_staged_matches"] == 1
+        assert all(s["source"].split(":")[0] != "kaggle-hwaitt" for s in staged[0]["sources"])
+        assert "p1_return_points_won" in staged[0]["incoming_stats"]

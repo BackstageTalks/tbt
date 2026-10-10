@@ -1,10 +1,10 @@
 {
-  "mode": "write",
+  "mode": "dry-run",
   "api_requests": 0,
   "source": "user_uploaded_plus_pinned_offline",
   "requested_at_utc": "2026-10-07T09:35:00Z",
   "purpose": "Apply only identity-verified missing historical serve/return and charting facts to current CDB. Immutable prewrite backup, pinned manifest comparison and full persisted row-level readback required.",
-  "retry_reason": "Operator approved safe CDB import after no-op verifier fix; write only strictly identity-verified missing stats. If latest canonical CDB already contains all linked facts, exit with zero mutations. Preserve cross-repository writer lock, immutable prewrite backup and full independently downloaded persisted readback; never promote or train model.",
+  "retry_reason": "Conflict reconciliation is audit-only until independent source-level verification and exact-cell writer safeguards; retain immutable backup, global writer lock, full persisted readback. Do not auto-write newly rescued stats.",
   "run_guard_commit": "b2bf27e2b692b035645907bda4de0b32b0f71cdc",
   "model_promotion": false,
   "operator_approved_import": true
