@@ -1,0 +1,101 @@
+name: BlinQ CDB Source Completion Dashboard (read only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-cdb-source-completion.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-completion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - name: Authenticate private source metadata only
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = "true"
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run source manifest unit tests
+        run: python -u source/scripts/test_cdb_source_completion_manifest.py
+      - name: Read official GitHub states and checkpoint metadata, not raw source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/cdb-source-meta
+          gh api repos/BackstageTalks/tbt-data/releases/tags/blinq-tennisexplorer-cloud-20261009 > /tmp/cdb-source-meta/tennisexplorer-release.json
+          gh api repos/BackstageTalks/tbt-data/releases/tags/blinq-cloud-atptour-20261009 > /tmp/cdb-source-meta/atptour-release.json
+          gh api repos/BackstageTalks/tbt-data/releases/tags/blinq-cloud-oddstrader-20261009 > /tmp/cdb-source-meta/oddstrader-release.json
+          gh api 'repos/BackstageTalks/tbt/actions/runs/37987229156/jobs?per_page=100' > /tmp/cdb-source-meta/tennisexplorer-jobs.json
+          gh api 'repos/BackstageTalks/tbt/actions/runs/37988671325/jobs?per_page=100' > /tmp/cdb-source-meta/multi-source-jobs.json
+          gh api 'repos/BackstageTalks/tbt/actions/runs/38039406462/jobs?per_page=100' > /tmp/cdb-source-meta/recovery-jobs.json
+          gh api 'repos/BackstageTalks/tbt/actions/runs/38031381074/jobs?per_page=100' > /tmp/cdb-source-meta/singles-recovery-jobs.json
+          gh api 'repos/BackstageTalks/tbt/actions/runs/38035415594' > /tmp/cdb-source-meta/atp-singles-qa.json
+          gh api 'repos/BackstageTalks/tbt/actions/runs/38042948431' > /tmp/cdb-source-meta/oddstrader-qa.json
+      - name: Generate conservative CDB-readiness manifest
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          base=Path("/tmp/cdb-source-meta")
+          read=lambda name:json.loads((base/name).read_text())
+          releases={k:read(k+"-release.json").get("assets",[])
+                    for k in ("tennisexplorer","atptour","oddstrader")}
+          jobs={k:read(f+"-jobs.json").get("jobs",[])
+                for k,f in {
+                   "tennisexplorer":"tennisexplorer",
+                   "multi_source":"multi-source",
+                   "recovery":"recovery",
+                   "singles_recovery":"singles-recovery",
+                }.items()}
+          payload={
+              "releases":releases,
+              "jobs":jobs,
+              "validations":{
+                  "atp_singles_integrity_qa":read("atp-singles-qa.json").get("conclusion"),
+                  "oddstrader_sample_qa":read("oddstrader-qa.json").get("conclusion"),
+              }
+          }
+          Path("/tmp/cdb-source-meta/input.json").write_text(json.dumps(payload))
+          PY
+          python -u source/scripts/cdb_source_completion_manifest.py \
+            --input /tmp/cdb-source-meta/input.json \
+            --output cdb_source_completion_report.json
+      - name: Publish accurate counts only; NO CDB import
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,os
+          info=json.load(open("cdb_source_completion_report.json"))
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as out:
+              out.write("## CDB source collection readiness (NOT an import approval)\n")
+              out.write("Raw checkpoints kept only in private tbt-data releases.\n\n")
+              for family,counts in info["overview"].items():
+                  out.write(f"### {family}\n")
+                  for status,count in counts.items():
+                      out.write(f"- {status}: {count}\n")
+              out.write("\n**Blocked:** Player/event canonical crosswalk, winner and doubles checks, source completeness, pre-match odds chronology, dry-run and readback.\n")
+              out.write("\n**No CDB write; no Training DB run.**\n")
+          PY
+      - name: Attach JSON source completion manifest (no player/odds data)
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-cdb-source-completion-report
+          path: cdb_source_completion_report.json
+          retention-days: 30
