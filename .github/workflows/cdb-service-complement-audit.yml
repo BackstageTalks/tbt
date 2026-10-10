@@ -1,0 +1,80 @@
+name: Audit deterministic CDB service complements (read only)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/cdb-service-complements-audit-request.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Verify private destination, dependencies, and regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m pytest tests/test_recover_cdb_opponent_service_rates.py -q
+      - name: Download complete checksum-verified CDB snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          root=Path(".cache/tbt/cdb-complements/history")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", root).download(require_bundle_manifest=True)
+          PY
+      - name: Stage exact observed opponent complement only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/recover_cdb_opponent_service_rates.py \
+            --mode stage \
+            --history-dir .cache/tbt/cdb-complements/history \
+            --out-dir .cache/tbt/cdb-complements/stage
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/cdb-complements/stage/report.json").read_text())
+          c=r["counts"]
+          assert r["production_mutated"] is False and r["provider_requests"] == 0
+          assert c["examined"] >= 993759, "Canonical regression"
+          assert c.get("staged_matches", 0) < c["examined"]
+          assert c.get("new_stat_values", 0) >= c.get("staged_matches", 0)
+          assert r["changed_years"] == sorted(r["changed_years"])
+          print(json.dumps(r, indent=2))
+          PY
+      - name: Save read-only matched row IDs and audit counts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdb-service-complement-stage-${{ github.run_id }}
+          path: |
+            .cache/tbt/cdb-complements/stage/report.json
+            .cache/tbt/cdb-complements/stage/stage.jsonl
+          if-no-files-found: warn
+          retention-days: 30
