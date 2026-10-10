@@ -61,13 +61,21 @@ def check_reports(link: dict, dry: dict, stage: dict, write: dict | None = None)
             raise ValueError(f"Fail-closed importer: {key}={counts[key]}")
     if len(stage) != dry.get("stage_rows"):
         raise ValueError("Stage count mismatch")
-    linked = link.get("counts", {}).get("staged_matches")
+    link_counts = link.get("counts")
+    if not isinstance(link_counts, dict):
+        raise ValueError("Missing linker evidence")
+    # The linker omits staged_matches when it links only already-present
+    # observations. This is a verified no-op, not a failed partial import.
+    linked = link_counts.get("staged_matches", 0)
     if not isinstance(linked, int) or linked < len(stage):
         raise ValueError("Linker stage baseline mismatch")
-    # Linker candidates may already be present in the latest CDB: the importer
-    # legitimately produces zero pending writes. Never convert this into a write.
     if linked != len(stage) and len(stage) != 0:
         raise ValueError("Partial linker/importer stage mismatch")
+    if not stage and not (isinstance(link_counts.get("already_present"), int)
+                          and link_counts["already_present"] > 0
+                          and isinstance(link_counts.get("identity_linked"), int)
+                          and link_counts["identity_linked"] > 0):
+        raise ValueError("Missing corroborated zero-delta linker evidence")
     updated = counts.get("updated", 0)
     if not isinstance(updated, int) or updated < 0 or updated > len(stage):
         raise ValueError("Unsafe updated count")

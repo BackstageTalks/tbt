@@ -86,6 +86,7 @@ def test_rejects_overwriting_old_stats_or_unverified_new_keys():
 
 def test_zero_delta_when_linker_candidates_already_exist_in_cdb():
     link, dry, _ = report()
+    link["counts"] = {"identity_linked": 194949, "already_present": 188912}
     dry["stage_rows"] = 0
     dry["counts"]["updated"] = 0
     dry["changed_years"] = []
@@ -98,6 +99,7 @@ def test_zero_delta_when_linker_candidates_already_exist_in_cdb():
 
 def test_zero_stage_does_not_hide_a_mismatched_write():
     link, dry, _ = report()
+    link["counts"] = {"identity_linked": 194949, "already_present": 188912}
     dry["stage_rows"] = 0
     dry["counts"]["updated"] = 0
     dry["changed_years"] = []
@@ -107,3 +109,31 @@ def test_zero_stage_does_not_hide_a_mismatched_write():
         check_reports(link, dry, {}, dict(dry, local_partitions_written=True))
     with pytest.raises(ValueError, match="Stage count mismatch"):
         check_reports(link, dict(dry, stage_rows=1), {})
+
+
+def test_rejects_zero_stage_without_proven_already_present_rows():
+    link, dry, _ = report()
+    link["counts"] = {"identity_linked": 12}
+    dry["stage_rows"] = 0
+    dry["counts"]["updated"] = 0
+    dry["changed_years"] = []
+    dry["quality_ready_after"] = dry["quality_ready_before"]
+    dry["quality_ready_added"] = 0
+    with pytest.raises(ValueError, match="zero-delta linker evidence"):
+        check_reports(link, dry, {})
+
+
+def test_rejects_partial_linker_stage_even_with_proven_existing_rows():
+    link, dry, stage = report()
+    link["counts"] = {"identity_linked": 10, "already_present": 3, "staged_matches": 2}
+    with pytest.raises(ValueError, match="Partial linker/importer stage mismatch"):
+        check_reports(link, dry, stage)
+
+
+def test_offline_workflow_rejects_unstaged_prepublication_changes():
+    from pathlib import Path
+    workflow = (Path(__file__).resolve().parents[1] /
+                ".github/workflows/offline-uploaded-history-enrichment.yml").read_text()
+    assert "Independently verify every staged and unstaged local row before publish" in workflow
+    assert "verify_readback(root / \"backup\", root / \"history\", stage, dry)" in workflow
+    assert workflow.index("Independently verify every staged and unstaged local row before publish") < workflow.index("Validate and publish changed private history bundle")
