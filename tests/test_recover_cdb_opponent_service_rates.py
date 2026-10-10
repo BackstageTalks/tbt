@@ -3,8 +3,12 @@ from copy import deepcopy
 from datetime import datetime, timezone
 
 import pytest
+import hashlib
+import json
+import pandas as pd
+from tbt.data.history_snapshot import load_snapshot, update_year_manifest, write_snapshot
 
-from scripts.recover_cdb_opponent_service_rates import stage, write_local, verify_readback
+from scripts.recover_cdb_opponent_service_rates import stage, write_local, verify_readback, write_exact_stats_partition
 from tbt.schemas import MatchRecord
 
 
@@ -102,3 +106,52 @@ def test_conflicting_direct_observations_are_quarantined_without_overwrite():
     records, summary = stage([original])
     assert records == []
     assert summary["contradictory_observed_rates"] == 1
+
+
+def test_exact_stats_parquet_patch_preserves_unstaged_rows_and_provenance(tmp_path):
+    first = match("verified", stats={"p1_service_points_won": 0.62})
+    other = match("untouched", stats={"p1_aces": 7.0})
+    path = tmp_path / "history-2024.parquet"
+    meta = write_snapshot([first, other], path)
+    update_year_manifest(tmp_path, 2024, meta)
+    # Extra unrecognized context must not be deleted by a stats-only importer.
+    frame = pd.read_parquet(path)
+    frame.loc[frame.match_id == "untouched", "provider_context_json"] = json.dumps({
+        "legacy_context": {"important": "keep"},
+    })
+    frame.to_parquet(path, engine="pyarrow", compression="zstd", index=False)
+    update_year_manifest(tmp_path, 2024, {
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "bytes": path.stat().st_size, "rows": 2,
+    })
+    before = load_snapshot(path)
+    original_frame = pd.read_parquet(path)
+    staged, count = stage([first, other])
+    assert count["staged_matches"] == 1
+    write_exact_stats_partition(tmp_path, 2024, staged)
+    after_frame = pd.read_parquet(path)
+    assert original_frame.loc[original_frame.match_id == "untouched"].equals(
+        after_frame.loc[after_frame.match_id == "untouched"]
+    )
+    assert after_frame.columns.tolist() == original_frame.columns.tolist()
+    check = verify_readback(before, load_snapshot(path), staged)
+    assert check["enriched_matches"] == 1
+    assert check["existing_values_overwritten"] == 0
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == (
+        json.loads((tmp_path / "history_manifest.json").read_text())
+        ["years"]["2024"]["sha256"]
+    )
+
+
+def test_exact_stats_patch_refuses_changed_stage_without_disk_mutation(tmp_path):
+    original = match(stats={"p1_service_points_won": 0.62})
+    path = tmp_path / "history-2024.parquet"
+    meta = write_snapshot([original], path)
+    update_year_manifest(tmp_path, 2024, meta)
+    staged, _ = stage([original])
+    bad = deepcopy(staged)
+    bad[0]["additions"]["p2_return_points_won"] = 0.9
+    original_bytes = path.read_bytes()
+    with pytest.raises(ValueError, match="reproducible"):
+        write_exact_stats_partition(tmp_path, 2024, bad)
+    assert path.read_bytes() == original_bytes
