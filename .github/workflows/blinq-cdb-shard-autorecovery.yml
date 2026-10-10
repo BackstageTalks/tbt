@@ -1,0 +1,197 @@
+name: BlinQ CDB source shard recovery (checkpoint chain)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-cdb-shard-autorecovery.yml
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "One independent source shard"
+        type: choice
+        required: true
+        default: txe-atp-single-2025
+        options:
+          - txe-atp-single-2025
+          - txe-atp-double-2025
+          - txe-wta-single-2025
+          - txe-wta-double-2025
+          - atp-archive-2021
+          - atp-doubles-ranking
+      iteration:
+        description: "Bounded resume attempt (max 12)"
+        type: string
+        required: true
+        default: "1"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      iteration: ${{ steps.plan.outputs.iteration }}
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      EVENT: ${{ github.event_name }}
+      CHOSEN_TASK: ${{ inputs.task }}
+      CHOSEN_ITERATION: ${{ inputs.iteration }}
+    steps:
+      - name: Confirm private checkpoint destination
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = true
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate recovery code and fail-closed offline QA tests
+        shell: bash
+        run: |
+          python -m py_compile source/scripts/recover_cdb_source_shard.py
+          python -u source/scripts/test_recover_cdb_source_shard.py
+      - name: Select safely isolated shards
+        id: plan
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,os
+          allowed=("txe-atp-single-2025","txe-atp-double-2025",
+                   "txe-wta-single-2025","txe-wta-double-2025",
+                   "atp-archive-2021","atp-doubles-ranking")
+          if os.environ["EVENT"]=="push":
+              # WTA 2025 is already running in the original cloud collection.
+              # Do not duplicate writers or requests for the same shard.
+              items=("txe-atp-single-2025","txe-atp-double-2025",
+                     "atp-archive-2021","atp-doubles-ranking")
+              iteration=1
+          else:
+              task=os.environ["CHOSEN_TASK"]
+              if task not in allowed:
+                  raise SystemExit("Unrecognized source shard")
+              items=(task,)
+              try: iteration=int(os.environ["CHOSEN_ITERATION"])
+              except ValueError: raise SystemExit("Invalid iteration")
+          if not (1<=iteration<=12):
+              raise SystemExit("Maximum resume attempt limit exceeded")
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f:
+              f.write("matrix="+json.dumps({"include":[{"task":t} for t in items]},separators=(",",":"))+"\n")
+              f.write("iteration="+str(iteration)+"\n")
+          print("SOURCE_RECOVERY_PLAN",items,"iteration",iteration)
+          PY
+
+  collect:
+    name: "Resume ${{ matrix.task }} / attempt ${{ needs.plan.outputs.iteration }}"
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    concurrency:
+      # Two ATP Tour tasks share the same provider; never collect concurrently
+      # within this recovery workflow. For independent TennisExplorer categories
+      # original active WTA collectors are NOT restarted.
+      group: blinq-cdb-shard-${{ startsWith(matrix.task, 'atp-') && 'atptour' || matrix.task }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      TASK: ${{ matrix.task }}
+      ITERATION: ${{ needs.plan.outputs.iteration }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      GH_REPO: BackstageTalks/tbt
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install source client dependencies
+        run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+      - name: Restore latest persisted private checkpoint and resume missing data
+        id: collector
+        continue-on-error: true
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u scripts/recover_cdb_source_shard.py \
+            --task "$TASK" --duration 280m
+      - name: Assess persisted evidence and bounded continuation
+        id: assess
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path("source/.cdb_recovery_status.json")
+          if not p.is_file():
+              raise SystemExit("No persisted recovery report: collector/checkpoint failed; STOP, manual diagnosis required")
+          d=json.loads(p.read_text())
+          if d.get("task")!=os.environ["TASK"] or not d.get("new_checkpoint"):
+              raise SystemExit("Missing checkpoint/source identity evidence")
+          complete=d.get("raw_source_complete") is True
+          delta=int(d.get("progress_delta",0))
+          attempt=int(os.environ["ITERATION"])
+          nxt=not complete and delta>0 and attempt<12
+          if delta<0:
+              raise SystemExit("Source rows regressed: STOP to protect historical data")
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f:
+              f.write("complete="+str(complete).lower()+"\n")
+              f.write("continue="+str(nxt).lower()+"\n")
+              f.write("delta="+str(delta)+"\n")
+          print("VERIFIED_SOURCE_PROGRESS",json.dumps(d,sort_keys=True))
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as f:
+              f.write("## CDB source recovery (source-only, no CDB writes)\n")
+              f.write(f"- Task: {d['task']} attempt {attempt}/12\n")
+              f.write(f"- Restored: {d['source_checkpoint']}\n")
+              f.write(f"- New private checkpoint: {d['new_checkpoint']}\n")
+              f.write(f"- Progress: {d['before']} → {d['after']} (+{delta})\n")
+              f.write(f"- Source complete: {complete}; follow-up queued: {nxt}\n")
+              f.write("- Production CDB and Training DB unchanged.\n")
+          PY
+      - name: Save counts-only QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdb-shard-recovery-${{ matrix.task }}-${{ needs.plan.outputs.iteration }}
+          path: source/.cdb_recovery_status.json
+          retention-days: 30
+          if-no-files-found: warn
+      - name: Dispatch next attempt only if source progress is positive
+        if: steps.assess.outputs.continue == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEXT=$((ITERATION+1))
+          gh workflow run blinq-cdb-shard-autorecovery.yml --repo "$GH_REPO" \
+            --ref main -f task="$TASK" -f iteration="$NEXT"
+          echo "AUTOMATIC_RETRY_DISPATCHED task=$TASK attempt=$NEXT"
+      - name: Fail partial source visibly even if checkpoint upload was successful
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ steps.assess.outputs.complete }}" != "true" ]]; then
+            echo "::error::Source shard $TASK is NOT complete; checkpoint preserved privately. Check run summary for queued retry or blockers."
+            exit 2
+          fi
+          echo "SOURCE_COMPLETE_AND_CHECKPOINTED $TASK"
