@@ -196,14 +196,14 @@ def collect():
                     continue
             except ValueError:
                 continue
-            # Preserve all upcoming events in a 48h slate, nearest first.
+            # Include up to seven future days; nearer fixtures take precedence.
             if (kickoff-started).total_seconds() <= 7 * 24 * 3600:
                 future.append((kickoff, e))
         future.sort(key=lambda item: item[0])
         print(json.dumps({"eligible_events": len(future), "budget": MAX_CALLS, "scope_days": 7}), flush=True)
         discovered = []
         for kickoff, event in future:
-            if STATE["reason"]:
+            if STATE["reason"] or STATE["calls"] >= max(1, (MAX_CALLS - 1) // 2):
                 break
             eid = str(event["id"])
             markets = request(f"/sports/tennis/events/{eid}/markets")
@@ -242,7 +242,7 @@ def collect():
             if STATE["reason"]:
                 break
         if not STATE["reason"]:
-            STATE["reason"] = "useful_48h_slate_exhausted"
+            STATE["reason"] = "useful_slate_exhausted"
     finally:
         save(day, runid)
         print(json.dumps({"summary": STATE, "records_pending": len(DATA)}), flush=True)
