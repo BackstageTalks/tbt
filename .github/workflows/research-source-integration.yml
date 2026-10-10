@@ -232,6 +232,18 @@ jobs:
           },indent=2))
           PY
 
+      - name: Reject training-table rank/weather regression before publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_training_table_contract.py \
+            --table .cache/tbt/research-integration/training/training_table.parquet \
+            --report .cache/tbt/research-integration/training/training_table_report.json \
+            --leakage .cache/tbt/research-integration/training/leakage_audit_report.json \
+            --weather-evidence .cache/tbt/research-integration/audit/openmeteo-pre-match-report.json \
+            --research-ranks \
+            --out .cache/tbt/research-integration/training/prepublish_gate.json
+
       - name: Publish integrated training DB and Open-Meteo source asset
         shell: bash
         run: |
@@ -398,3 +410,16 @@ jobs:
             .cache/tbt/research-integration/training/leakage_audit_report.json
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Enforce release readback coverage and provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_training_table_contract.py \
+            --table .cache/tbt/research-integration/readback/training_table.parquet \
+            --report .cache/tbt/research-integration/readback/training_table_report.json \
+            --leakage .cache/tbt/research-integration/readback/leakage_audit_report.json \
+            --weather-evidence .cache/tbt/research-integration/audit/openmeteo-pre-match-report.json \
+            --research-ranks \
+            --out .cache/tbt/research-integration/training/readback_gate.json
+
