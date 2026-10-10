@@ -749,6 +749,13 @@ def main():
     )
     parser.add_argument("--promote", action="store_true")
     args = parser.parse_args()
+    # Issue #405: the metric flag alone is NOT operator approval or rollback proof.
+    # Fail before any canonical/model release read or write, or provider request.
+    if args.promote:
+        parser.error(
+            "Production model promotion disabled: requires separate explicit "
+            "operator approval and verified isolated champion rollback evidence"
+        )
     if not 1 <= args.max_requests <= 3000:
         parser.error("refresh allowance must be 1..3000")
     if args.market_odds_max_events < 0:
