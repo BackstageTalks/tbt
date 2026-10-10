@@ -1,0 +1,123 @@
+name: BlinQ CDB offline OddsTrader staging (24 private shards)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-cdb-oddstrader-offline-stage.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-cdb-oddstrader-offline-stage
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      DEST_RELEASE: blinq-cdb-odds-staging-20261010
+    steps:
+      - name: Verify source is private and prepare immutable staging release
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = "true"
+          if gh release view "$DEST_RELEASE" --repo "$PRIVATE_REPO" >/dev/null 2>&1; then
+            echo "PRIVATE_CDB_STAGING_RELEASE_EXISTS $DEST_RELEASE"
+          else
+            gh release create "$DEST_RELEASE" --repo "$PRIVATE_REPO" --target main \
+              --title "CDB offline staging (unlinked, no production)" \
+              --notes "Private audited OddsTrader sidecars; canonical IDs and pre-match timestamps unverified. No training, no production import."
+          fi
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Synthetic fail-closed staging QA
+        run: |
+          python -m py_compile source/scripts/prepare_oddstrader_cdb_staging.py
+          python -u source/scripts/test_prepare_oddstrader_cdb_staging.py
+
+  offline-stage:
+    name: Private offline stage / ${{ matrix.tour }} ${{ matrix.year }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        tour: [atp, wta]
+        year: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      SOURCE_RELEASE: blinq-cloud-oddstrader-20261009
+      DEST_RELEASE: blinq-cdb-odds-staging-20261010
+      TOUR: ${{ matrix.tour }}
+      YEAR: ${{ matrix.year }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore exact immutable PRIVATE odds source shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/raw
+          source_name="blinq-odds-${TOUR}-${YEAR}-37988671325-1.tar.gz"
+          gh release download "$SOURCE_RELEASE" --repo "$PRIVATE_REPO" \
+            --pattern "$source_name" --dir /tmp/raw
+          test -s "/tmp/raw/$source_name"
+          echo "SOURCE_SHARD_RESTORED $source_name"
+      - name: Strict page and row QA; construct unlinked private staging candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u source/scripts/prepare_oddstrader_cdb_staging.py \
+            --asset "/tmp/raw/blinq-odds-${TOUR}-${YEAR}-37988671325-1.tar.gz" \
+            --tour "$TOUR" --year "$YEAR" --output /tmp/stage
+      - name: Upload ONLY to private CDB staging release, not production
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive_name="cdb-odds-unlinked-${TOUR}-${YEAR}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tar.gz"
+          tar -czf "/tmp/$archive_name" -C /tmp/stage .
+          test -s "/tmp/$archive_name"
+          gh release upload "$DEST_RELEASE" "/tmp/$archive_name" --repo "$PRIVATE_REPO"
+          remote_bytes=$(gh api "repos/$PRIVATE_REPO/releases/tags/$DEST_RELEASE" \
+            --jq "[.assets[]|select(.name==\"$archive_name\")|.size] | first // 0")
+          local_bytes=$(stat -c %s "/tmp/$archive_name")
+          test "$remote_bytes" -eq "$local_bytes"
+          echo "CDB_OFFLINE_STAGING_PRIVATE_VERIFIED $archive_name bytes=$remote_bytes"
+          python - <<'PY'
+          import glob,json,os
+          p=glob.glob("/tmp/stage/*-qa.json")[0]
+          a=json.load(open(p))
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as out:
+              out.write(f"### Offline stage {a['tour'].upper()} {a['year']}\n")
+              out.write(f"- Raw SHA-256: {a['raw_sha256']}\n")
+              out.write(f"- Unique page records: {a['unique_page_keys']}/{a['expected_page_keys']}\n")
+              out.write(f"- Staged market rows: {a['counts']['staged_market_rows']}\n")
+              out.write(f"- Quote cells: {a['counts']['nonempty_price_cells']}\n")
+              out.write("- Private release readback: size verified\n")
+              out.write("- Canonical IDs: not linked; pre-match timestamps: unverified\n")
+              out.write("- Production CDB and Training DB: untouched\n")
+          PY
