@@ -1,11 +1,13 @@
 """Canonical release publication must require the private cross-repo owner lock."""
 import pytest
+import sys
 
 from scripts import cdb_global_writer_lock, release_store
 
 
 def test_canonical_upload_gate_happens_before_any_remote_release_action(monkeypatch, tmp_path):
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setitem(sys.modules, "cdb_global_writer_lock", cdb_global_writer_lock)
     obj = object.__new__(release_store.ReleaseStore)
     obj.repository = "BackstageTalks/tbt-data"
     obj.tag = "tbt-data-v1"
