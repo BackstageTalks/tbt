@@ -16,7 +16,7 @@ from datetime import timezone
 from pathlib import Path
 
 from _bootstrap import ROOT  # noqa: F401
-from tbt.data.history_snapshot import load_partitions, write_year_partition
+from tbt.data.history_snapshot import load_partitions
 from tbt.data.history_safety import sanitize_history_identities
 from tbt.data.offline_odds import norm_text
 
@@ -213,6 +213,106 @@ def write_local(matches, stage_rows):
     return sorted(changed)
 
 
+def write_exact_serve_markers(history_dir: Path, stage_rows: list[dict]) -> list[int]:
+    """Patch only staged Parquet provider_context_json cells.
+
+    A full MatchRecord -> Parquet rewrite is unsafe for this sidecar: legacy
+    unrelated rows can be re-normalized by the general snapshot serializer.
+    The prepublication full readback below still rejects ANY collateral change.
+    """
+    import pandas as pd
+
+    from tbt.data.history_snapshot import (
+        load_manifest, load_snapshot, partition_path, update_year_manifest,
+    )
+    from verify_usopen_serve_readback import verify
+
+    if not stage_rows:
+        return []
+    if len({str(r.get("match_id")) for r in stage_rows}) != len(stage_rows):
+        raise ValueError("Duplicate staged match identity")
+    years = {int(r["canonical"]["scheduled_date_utc"][:4]) for r in stage_rows}
+    if years != {2024}:
+        raise ValueError("US Open sidecar may change only UTC year 2024")
+    path = partition_path(history_dir, 2024)
+    if not path.is_file():
+        raise FileNotFoundError("Missing backed-up 2024 history partition")
+    frame = pd.read_parquet(path, engine="pyarrow")
+    required = {"match_id", "provider_context_json", "scheduled_at"}
+    if not required.issubset(frame.columns):
+        raise ValueError("Missing canonical Parquet columns")
+    ids = frame["match_id"].astype(str)
+    if ids.duplicated().any():
+        raise ValueError("Duplicate 2024 canonical match IDs")
+    by_id = dict(zip(ids, frame.index))
+    before = load_snapshot(path)
+    if len(before) != len(frame):
+        raise ValueError("Canonical partition count mismatch")
+    matches = {str(match.match_id): match for match in before}
+    if len(matches) != len(before):
+        raise ValueError("Canonical partition identity collision")
+    original_other_columns = frame.drop(columns=["provider_context_json"]).copy(deep=True)
+    unchanged_payload = frame["provider_context_json"].copy(deep=True)
+    touched: set[int] = set()
+    for item in stage_rows:
+        mid = str(item["match_id"])
+        if mid not in by_id or mid not in matches:
+            raise ValueError(f"Staged canonical identity missing: {mid}")
+        if item.get("schema") != 1 or item.get("import_ready") is not True:
+            raise ValueError("Invalid staged trust marker")
+        if _signature(matches[mid]) != item.get("canonical"):
+            raise ValueError(f"Canonical identity changed since staging: {mid}")
+        marker = item.get("marker")
+        if not isinstance(marker, dict) or marker.get("source_ref_blob_sha") != SOURCE_BLOB:
+            raise ValueError("Unverified staged source provenance")
+        row_index = by_id[mid]
+        # Use the original on-disk JSON, not the potentially normalized
+        # MatchRecord.provider_payload. Never erase any preexisting context.
+        raw = frame.at[row_index, "provider_context_json"]
+        if not isinstance(raw, str):
+            raise ValueError(f"Missing original provider context: {mid}")
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValueError(f"Invalid provider context: {mid}")
+        if payload.get(MARKER_KEY) is not None:
+            raise ValueError(f"Existing serve marker; refuse overwrite: {mid}")
+        payload[MARKER_KEY] = marker
+        frame.at[row_index, "provider_context_json"] = json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        touched.add(row_index)
+    pd.testing.assert_frame_equal(
+        frame.drop(columns=["provider_context_json"]),
+        original_other_columns,
+        check_dtype=True,
+    )
+    if not frame.loc[~frame.index.isin(touched), "provider_context_json"].equals(
+        unchanged_payload.loc[~frame.index.isin(touched)]
+    ):
+        raise ValueError("Unstaged provider context changed before write")
+    temporary = path.with_name(path.name + ".usopen-exact.tmp")
+    try:
+        frame.to_parquet(temporary, engine="pyarrow", compression="zstd", index=False)
+        if temporary.stat().st_size <= 0:
+            raise ValueError("Empty staged history partition")
+        comparison = verify(before, load_snapshot(temporary), stage_rows)
+        if comparison["enriched_matches"] != len(stage_rows):
+            raise ValueError("Incomplete local US Open marker readback")
+        meta = load_manifest(history_dir).get("years", {}).get("2024")
+        if not isinstance(meta, dict) or int(meta.get("rows", -1)) != len(frame):
+            raise ValueError("Canonical 2024 manifest row count mismatch")
+        digest = hashlib.sha256(temporary.read_bytes()).hexdigest()
+        size = temporary.stat().st_size
+        temporary.replace(path)
+        update_year_manifest(history_dir, 2024, {
+            "sha256": digest, "bytes": size, "rows": len(frame),
+        }, extra={"coverage_status": "verified_usopen_2024_serve_research"})
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+    return [2024]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--mode", choices=("stage", "write"), required=True)
@@ -241,9 +341,10 @@ def main():
             ap.error("--stage-file required for local write")
         staged = [json.loads(s) for s in args.stage_file.read_text(encoding="utf-8").splitlines() if s.strip()]
         years = write_local(matches, staged)
-        for year in years:
-            write_year_partition(matches, args.history_dir, year,
-                                 extra_manifest={"coverage_status": "verified_usopen_2024_serve_research"})
+        if years:
+            patched_years = write_exact_serve_markers(Path(args.history_dir), staged)
+            if years != patched_years:
+                raise ValueError("Parquet patch affected unexpected canonical years")
         report = {"schema": 1, "mode": "write", "canonical_rows": len(matches),
                   "counts": {"updated": len(staged)}, "source_blob": SOURCE_BLOB,
                   "changed_years": years, "api_requests": 0, "canonical_mutated": False}
