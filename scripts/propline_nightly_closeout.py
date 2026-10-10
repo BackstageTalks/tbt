@@ -30,7 +30,7 @@ MAX_CALLS = min(750, max(0, int(os.getenv("CLOSEOUT_MAX_REQUESTS", "750"))))
 BATCH_SIZE = 25
 MARKETS = ("player_double_faults", "player_aces", "h2h", "total_games",
            "totals", "total_sets", "spreads", "player_games_won")
-WAIT = 0.5
+WAIT = 0.2  # Hard pacing: at most 5 attempted PropLine requests / second
 STATE = {"calls": 0, "remaining": None, "reason": "", "batches": 0}
 DATA = []
 
