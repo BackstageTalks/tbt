@@ -76,6 +76,10 @@ def main():
                 }""")
                 table = page.locator(".results-table tbody tr")
                 assert table.count() == 6, (width, table.count())
+                drawer = page.locator("[data-results-filter-toggle]")
+                if drawer.is_visible():
+                    drawer.click()
+                    assert drawer.get_attribute("aria-expanded") == "true", width
                 page.locator(".results-category-picker summary").click()
                 page.locator('input[data-result-category="top_daily"]').check()
                 assert table.count() == 1, (width, "TOP", table.count())
