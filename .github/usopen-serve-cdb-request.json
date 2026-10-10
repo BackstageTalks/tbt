@@ -11,7 +11,7 @@
     "local_row_level_diff",
     "independent_committed_readback"
   ],
-  "execution_id": "cross-repo-global-lock-verified-usopen-retry-after-queue-fix-20261010",
+  "execution_id": "usopen-2024-exact-parquet-write-after-pr495-20261010",
   "execution_constraints": {
     "model_training": false,
     "model_promotion": false,
@@ -22,5 +22,5 @@
     ],
     "required_independent_full_readback": true
   },
-  "execution_reason": "Retry run 38059912045 cancelled before starting; PR #493 and tbt-data PR #60 fix pending run eviction; execute only under global lock with immutable backup and independent persisted readback"
+  "execution_reason": "Protected retry with source SHA pinned, local complete-year exact-cell rehearsal run 38065087692 passed, PR #495 merged, immutable backup and independent persisted readback required"
 }
