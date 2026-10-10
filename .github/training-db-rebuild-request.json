@@ -1,6 +1,9 @@
 {
   "schema": 1,
-  "requested_on": "2026-10-03",
-  "attempt": 3,
-  "purpose": "Persist, read back, and audit full-history ATP+WTA training database after TML/WTA PBP enrichment."
+  "requested_on": "2026-10-10",
+  "attempt": 4,
+  "purpose": "Restore verified ATP/WTA point-in-time rank history and pinned 24h pre-match weather in training-table-v1; enforce prepublish and independent persisted readback. Do not fit or promote any model.",
+  "source_release": "tbt-research-sources-v1",
+  "production_model_promotion": false,
+  "operator_approved": true
 }
