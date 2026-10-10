@@ -1,0 +1,276 @@
+name: BlinQ Wimbledon 2023 guarded exact twelve-cell CDB import
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/wimbledon-2023-exact-import.yml"
+      - ".github/wimbledon-2023-exact-import-request.json"
+      - "scripts/import_wimbledon_2023_exact.py"
+      - "tests/test_wimbledon_2023_exact_import.py"
+  push:
+    branches: [main]
+    paths: [".github/wimbledon-2023-exact-import-request.json"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: tbt-crossrepo-wimbledon2023-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 135
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: BackstageTalks/tbt-data
+      ROOT: .cache/tbt/wimbledon-2023-import
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Enforce explicit separate main-only write request
+        id: mode
+        run: |
+          set -euo pipefail
+          request=.github/wimbledon-2023-exact-import-request.json
+          test -n "$GH_TOKEN"
+          test "$TBT_DATA_REPOSITORY" = BackstageTalks/tbt-data
+          test "$(jq -r '.schema' "$request")" = 1
+          test "$(jq -r '.canonical_year' "$request")" = 2023
+          test "$(jq -r '.source_sha256' "$request")" = "19507e156e6ff307027d39e44000ac446a564f87b3c8d59a5225dc6d1674c512"
+          test "$(jq -r '.sidecar_sha256' "$request")" = "8c9b00eb96582cb5bfe3449b0bdb2dffbfb11d3fc387e54e142d645e6d43e316"
+          test "$(jq -r '.expected_new_values' "$request")" = 12
+          test "$(jq -r '.expected_affected_matches' "$request")" = 3
+          test "$(jq -r '.allowed_field_names | sort | join(",")' "$request")" = "p1_aces,p1_double_faults,p2_aces,p2_double_faults"
+          test "$(jq -r '.allow_existing_stats_overwrite' "$request")" = false
+          test "$(jq -r '.require_immutable_prewrite_backup' "$request")" = true
+          test "$(jq -r '.require_independent_full_partition_readback' "$request")" = true
+          test "$(jq -r '.allowed_provider_api_requests' "$request")" = 0
+          test "$(jq -r '.production_model_promotion' "$request")" = false
+          mode=dry-run
+          if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main ]]; then
+            mode="$(jq -r '.mode' "$request")"
+          fi
+          [[ "$mode" == dry-run || "$mode" == write ]]
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "Authorized mode=$mode"
+
+      - name: Focused safe patch and tape regression tests
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest jsonschema openpyxl
+          python -m pytest tests/test_wimbledon_2023_cdb_stage.py tests/test_wimbledon_2023_exact_import.py -q
+          python -m compileall -q scripts/audit_wimbledon_2023_cdb_stage.py scripts/import_wimbledon_2023_exact.py
+
+      - name: Acquire global crossrepository writer lock for publication only
+        if: steps.mode.outputs.mode == 'write'
+        run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
+      - name: Download full checksum-verified authoritative CDB
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          root=Path(os.environ["ROOT"])/"history"
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).download(require_bundle_manifest=True)
+          for name in ("history-2023.parquet","history_manifest.json","_tbt_bundle_manifest.json"):
+              assert (root/name).stat().st_size > 0
+          PY
+
+      - name: Verify original Figshare workbook and research sidecar
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/raw" "$ROOT/stage"
+          gh release download tbt-research-sources-v1 -R "$TBT_DATA_REPOSITORY" -p figshare-wimbledon-2023-ccby4.xlsx -D "$ROOT/raw"
+          gh release download tbt-research-sources-v1 -R "$TBT_DATA_REPOSITORY" -p figshare-wimbledon-2023-LICENSE-NOTE.txt -D "$ROOT/raw"
+          gh release download tbt-research-sources-v1 -R "$TBT_DATA_REPOSITORY" -p wimbledon-2023-advanced-points.jsonl.gz -D "$ROOT/raw"
+          (
+            cd "$ROOT/raw"
+            printf '%s  %s\n' \
+              19507e156e6ff307027d39e44000ac446a564f87b3c8d59a5225dc6d1674c512 figshare-wimbledon-2023-ccby4.xlsx \
+              4b1a12b70abaaa9536dc0e371c177549863d131db3bc273e6768354f3b1e1df9 figshare-wimbledon-2023-LICENSE-NOTE.txt \
+              8c9b00eb96582cb5bfe3449b0bdb2dffbfb11d3fc387e54e142d645e6d43e316 wimbledon-2023-advanced-points.jsonl.gz | sha256sum -c -
+          )
+          gh api -H "Accept: application/vnd.github.raw" "repos/$TBT_DATA_REPOSITORY/contents/audit/import-preparation/observation.schema.json?ref=main" > "$ROOT/observation.schema.json"
+          gh api "repos/$TBT_DATA_REPOSITORY/releases/tags/tbt-data-v1" > "$ROOT/history/release.json"
+
+      - name: Re-stage all raw points against frozen current canonical 2023 cells
+        run: |
+          set -euo pipefail
+          python scripts/audit_wimbledon_2023_cdb_stage.py \
+            --workbook "$ROOT/raw/figshare-wimbledon-2023-ccby4.xlsx" \
+            --license-note "$ROOT/raw/figshare-wimbledon-2023-LICENSE-NOTE.txt" \
+            --sidecar "$ROOT/raw/wimbledon-2023-advanced-points.jsonl.gz" \
+            --year-file "$ROOT/history/history-2023.parquet" \
+            --manifest "$ROOT/history/history_manifest.json" \
+            --release-metadata "$ROOT/history/release.json" \
+            --schema-file "$ROOT/observation.schema.json" \
+            --out-dir "$ROOT/stage"
+          python - <<'PY'
+          import json,os,hashlib
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          report=json.loads((root/"stage/report.json").read_text())
+          counts=report["counts"]
+          assert report["status"] == "read_only_classified"
+          assert report["production_mutated"] is False and report["model_promoted"] is False
+          assert counts["raw_points"]==774 and counts["linked_matches_compared"]==5
+          assert counts["tape_complete_matches"]==5
+          assert counts["READY_MISSING"]==12 and counts["ALREADY_PRESENT"]==8
+          assert counts.get("CONFLICT",0)==counts.get("UNRESOLVED",0)==0
+          assert report["quarantined_matches"]==0
+          print("IMMUTABLE STAGE SHA256",hashlib.sha256((root/"stage/observations.jsonl").read_bytes()).hexdigest())
+          PY
+
+      - name: Local exact-cell write and full-year independent readback
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/local"
+          for asset in history-2023.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cp "$ROOT/history/$asset" "$ROOT/local/$asset"
+          done
+          run_import() {
+            python scripts/import_wimbledon_2023_exact.py --mode "$1" \
+              --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+              --stage-file "$ROOT/stage/observations.jsonl" \
+              --stage-report "$ROOT/stage/report.json" --report "$ROOT/$2/report.json"
+          }
+          run_import dry-run dry
+          run_import write local-report
+          run_import verify local-readback
+          python - <<'PY'
+          import os,json
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          for sub in ("dry","local-report","local-readback"):
+              obj=json.loads((root/sub/"report.json").read_text())
+              assert obj["stats_fields_added"]==12 and obj["updated_matches"]==3
+              assert obj["existing_stats_overwritten"]==0
+              assert obj["canonical_rows"]==107765 and obj["rank_fields_modified"]==0
+              assert obj["production_mutated"] is False and obj["model_promoted"] is False
+          assert json.loads((root/"local-readback/report.json").read_text())["status"]=="verified"
+          print("PASSED COMPLETE 2023 YEAR exact stats parity and preservation")
+          PY
+
+      - name: Immutable prewrite CDB backup independently downloaded and SHA checked
+        if: steps.mode.outputs.mode == 'write'
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/backup" "$ROOT/backup-readback"
+          for asset in history-2023.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cp "$ROOT/history/$asset" "$ROOT/backup/$asset"
+          done
+          (cd "$ROOT/backup" && sha256sum history-2023.parquet history_manifest.json _tbt_bundle_manifest.json > SHA256SUMS && sha256sum -c SHA256SUMS)
+          tag="blinq-wimbledon2023-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" "$ROOT/backup/"* -R "$TBT_DATA_REPOSITORY" --title "Immutable prewrite canonical Wimbledon 2023 backup" --notes "Exact original 2023 partition and both manifests, retained for independent rollback."
+          gh release download "$tag" -R "$TBT_DATA_REPOSITORY" -D "$ROOT/backup-readback"
+          (cd "$ROOT/backup-readback" && sha256sum -c SHA256SUMS)
+          cmp "$ROOT/backup/history-2023.parquet" "$ROOT/backup-readback/history-2023.parquet"
+
+      - name: Under sole lock reject stale CDB base and publish exact cells
+        if: steps.mode.outputs.mode == 'write'
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          mkdir -p "$ROOT/remote-before"
+          gh release download tbt-data-v1 -R "$TBT_DATA_REPOSITORY" -p _tbt_bundle_manifest.json -D "$ROOT/remote-before"
+          cmp "$ROOT/history/_tbt_bundle_manifest.json" "$ROOT/remote-before/_tbt_bundle_manifest.json"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          root=Path(os.environ["ROOT"])/"local"
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).upload_bundle(
+              [root/"history-2023.parquet",root/"history_manifest.json"]
+          )
+          PY
+
+      - name: Independently re-download canonical release and verify all 2023 cells
+        if: steps.mode.outputs.mode == 'write'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",
+                       Path(os.environ["ROOT"])/"persisted").download(require_bundle_manifest=True)
+          PY
+          python scripts/import_wimbledon_2023_exact.py --mode verify \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/persisted" \
+            --stage-file "$ROOT/stage/observations.jsonl" \
+            --stage-report "$ROOT/stage/report.json" --report "$ROOT/persisted-readback/report.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ["ROOT"])/"persisted-readback/report.json").read_text())
+          assert r["status"]=="verified" and r["stats_fields_added"]==12
+          assert r["updated_matches"]==3 and r["existing_stats_overwritten"]==0
+          assert r["canonical_rows"]==107765
+          print("WIMBLEDON_PRODUCTION_READBACK:",json.dumps(r,sort_keys=True))
+          PY
+
+      - name: Preserve independent publication proof in private tbt-data
+        if: steps.mode.outputs.mode == 'write'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,hashlib,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          report={
+              "schema":1, "status":"published_and_independently_verified",
+              "run_id":os.environ["GITHUB_RUN_ID"],"canonical_year":2023,
+              "raw_workbook_sha256":"19507e156e6ff307027d39e44000ac446a564f87b3c8d59a5225dc6d1674c512",
+              "source_sidecar_sha256":"8c9b00eb96582cb5bfe3449b0bdb2dffbfb11d3fc387e54e142d645e6d43e316",
+              "stage_sha256":hashlib.sha256((root/"stage/observations.jsonl").read_bytes()).hexdigest(),
+              "prewrite_backup_tag":"blinq-wimbledon2023-prewrite-"+os.environ["GITHUB_RUN_ID"]+"-"+os.environ["GITHUB_RUN_ATTEMPT"],
+              "before_partition_sha256":hashlib.sha256((root/"history/history-2023.parquet").read_bytes()).hexdigest(),
+              "after_partition_sha256":hashlib.sha256((root/"persisted/history-2023.parquet").read_bytes()).hexdigest(),
+              "stage":json.loads((root/"stage/report.json").read_text()),
+              "persisted_readback":json.loads((root/"persisted-readback/report.json").read_text()),
+              "model_promoted":False,"model_training_performed":False,"provider_api_requests":0,
+          }
+          (root/"final-audit.json").write_text(json.dumps(report,ensure_ascii=False,indent=2))
+          PY
+          path=audit/wimbledon-2023-exact-stats-import-latest.json
+          audit="$(base64 -w0 "$ROOT/final-audit.json")"
+          old="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$old" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="CDB verified Wimbledon 2023 exact 12-stat import $GITHUB_RUN_ID" -f content="$audit" -f sha="$old" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="CDB verified Wimbledon 2023 exact 12-stat import $GITHUB_RUN_ID" -f content="$audit" >/dev/null
+          fi
+
+      - name: Retain source, stage and before/after evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-wimbledon-exact-2023-${{ github.run_id }}
+          path: |
+            .cache/tbt/wimbledon-2023-import/stage/report.json
+            .cache/tbt/wimbledon-2023-import/stage/observations.jsonl
+            .cache/tbt/wimbledon-2023-import/stage/quarantine.jsonl
+            .cache/tbt/wimbledon-2023-import/dry/report.json
+            .cache/tbt/wimbledon-2023-import/local-report/report.json
+            .cache/tbt/wimbledon-2023-import/local-readback/report.json
+            .cache/tbt/wimbledon-2023-import/persisted-readback/report.json
+            .cache/tbt/wimbledon-2023-import/final-audit.json
+          if-no-files-found: warn
+          retention-days: 45
+
+      - name: Release global writer lock
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
