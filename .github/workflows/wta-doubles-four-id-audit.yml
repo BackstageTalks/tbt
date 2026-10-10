@@ -1,0 +1,87 @@
+name: Read-only WTA doubles 2026 four-individual identity gate
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/wta-doubles-four-id-audit.yml"
+      - "scripts/audit_wta_doubles_four_ids.py"
+      - "tests/test_audit_wta_doubles_four_ids.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  identity-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: BackstageTalks/tbt-data
+      ROOT: .cache/tbt/wta-doubles-four-id
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Focused strict four-player identity regression tests
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m pytest -q tests/test_audit_wta_doubles_four_ids.py tests/test_wta_doubles_rank_history.py
+          python -m compileall -q scripts/audit_wta_doubles_four_ids.py
+
+      - name: Download private SHA-pinned source and current canonical 2026
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+          mkdir -p "$ROOT/source" "$ROOT/history"
+          gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$TBT_DATA_REPOSITORY/contents/research/wta-official-2026/wta_official_doubles_2026_post_sackmann.csv.gz?ref=main" \
+            > "$ROOT/source/official-doubles.csv.gz"
+          echo "9d1b7e054b1d9d0d046109066082ba0edf5737c6d211ea7d7b27acec088dd42a  $ROOT/source/official-doubles.csv.gz" | sha256sum -c -
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          root=Path(os.environ["ROOT"])/"history"
+          files=ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",
+                             root).download(require_bundle_manifest=True)
+          print("VERIFIED_CDB_BUNDLE_FILES",len(files))
+          PY
+
+      - name: Verify 19,366 rank-source rows and exact canonical identity support
+        run: |
+          set -euo pipefail
+          python scripts/audit_wta_doubles_four_ids.py \
+            --source "$ROOT/source/official-doubles.csv.gz" \
+            --year-partition "$ROOT/history/history-2026.parquet" \
+            --manifest "$ROOT/history/history_manifest.json" \
+            --output "$ROOT/wta-doubles-identity-report.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          data=json.loads((Path(os.environ["ROOT"])/"wta-doubles-identity-report.json").read_text())
+          assert data["supplement_normalized_rows"]==19366
+          assert data["write_authorized"] is False
+          assert data["canonical_mutated"] is False
+          assert data["production_model_training"] is False
+          assert data["proven_new_canonical_individual_doubles_rank_values"]==0
+          assert data["counts"]["canonical_matches_scanned"]==92525
+          print("FOUR_INDIVIDUAL_ID_CANDIDATES",data["counts"].get("matches_with_structured_four_distinct_ids",0))
+          PY
+
+      - name: Preserve immutable audit for follow-on identity linker
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-wta-doubles-four-id-audit-${{ github.run_id }}
+          path: .cache/tbt/wta-doubles-four-id/wta-doubles-identity-report.json
+          if-no-files-found: warn
+          retention-days: 45
