@@ -151,12 +151,12 @@
   },
   "elements": {
     "PRIME_PICKS_PANEL": {
-      "label": "Comebacks panel",
+      "label": "ACCA panel",
       "zone": "predictions",
       "kind": "panel",
       "order": 50,
       "content": {
-        "label": "Comebacks panel"
+        "label": "ACCA panel"
       },
       "watermark": {
         "enabled": false,
@@ -174,7 +174,7 @@
       }
     },
     "TOP_PICK_1": {
-      "label": "Comebacks card 1",
+      "label": "ACCA card 1",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 51,
@@ -195,7 +195,7 @@
       }
     },
     "TOP_PICK_2": {
-      "label": "Comebacks card 2",
+      "label": "ACCA card 2",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 52,
@@ -216,7 +216,7 @@
       }
     },
     "TOP_PICK_3": {
-      "label": "Comebacks card 3",
+      "label": "ACCA card 3",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 53,
@@ -237,7 +237,7 @@
       }
     },
     "TOP_PICK_4": {
-      "label": "Comebacks card 4",
+      "label": "ACCA card 4",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 54,
@@ -258,7 +258,7 @@
       }
     },
     "TOP_PICK_5": {
-      "label": "Comebacks card 5",
+      "label": "ACCA card 5",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 55,
@@ -279,7 +279,7 @@
       }
     },
     "TOP_PICK_6": {
-      "label": "Comebacks card 6",
+      "label": "ACCA card 6",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 56,
@@ -300,7 +300,7 @@
       }
     },
     "TOP_PICK_7": {
-      "label": "Comebacks card 7",
+      "label": "ACCA card 7",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 57,
@@ -321,7 +321,7 @@
       }
     },
     "TOP_PICK_8": {
-      "label": "Comebacks card 8",
+      "label": "ACCA card 8",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 58,
@@ -342,7 +342,7 @@
       }
     },
     "TOP_PICK_MORE": {
-      "label": "Comebacks cards 9+",
+      "label": "ACCA cards 9+",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 59,
@@ -363,12 +363,12 @@
       }
     },
     "SIDEBAR_PRIME": {
-      "label": "Comebacks",
+      "label": "ACCA",
       "zone": "sidebar",
       "kind": "navigation",
       "order": 3,
       "content": {
-        "label": "Comebacks",
+        "label": "ACCA",
         "route": "prime",
         "icon": "✦"
       },
@@ -1173,7 +1173,7 @@
     ],
     "sections": {
       "prime": {
-        "label": "Comebacks",
+        "label": "ACCA",
         "panel_id": "predictionsPanel",
         "sidebar_element": "SIDEBAR_PRIME",
         "sidebar_enabled": false,
@@ -1967,7 +1967,7 @@
           }
         },
         "prime": {
-          "label": "Comebacks",
+          "label": "ACCA",
           "enabled": true,
           "plans": {
             "trial": {
@@ -2036,7 +2036,7 @@
           }
         },
         "top": {
-          "label": "Comebacks",
+          "label": "ACCA",
           "enabled": false,
           "plans": {
             "trial": {
