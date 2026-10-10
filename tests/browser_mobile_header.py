@@ -66,7 +66,7 @@ def main():
                     };
                 }""")
                 assert menu_state['nonModal'] and menu_state['mainVisible'] and menu_state['isInline'],(width,menu_state)
-                # Gold/yellow header and menu lettering is now white on both layouts.
+                # Header icons are green, crown gold, and the two menu labels white.
                 colors=page.evaluate("""() => {
                     const read=selector=>{
                         const el=document.querySelector(selector);
@@ -74,11 +74,17 @@ def main():
                     };
                     return {
                         navigation:read('.header-top .reference-navigation[data-icon-navigation="1"] > .nav-icon-link'),
+                        rocket:read('.header-top .header-actions > #bqm-projects'),
+                        bell:read('.header-top .header-actions > #insightBell'),
+                        crown:read('.header-top .header-actions > #topUpgradeButton'),
                         chevron:read('.header-top .brand-menu-chevron'),
                         menu:read('#bqm-dialog[open] nav > .bqm-navigation-switch'),
                     };
                 }""")
-                assert colors['navigation']=='rgb(245, 251, 248)',(width,colors)
+                assert colors['navigation']=='rgb(94, 240, 167)',(width,colors)
+                for icon in ('rocket','bell'):
+                    assert colors[icon]=='rgb(94, 240, 167)',(width,icon,colors)
+                assert colors['crown']=='rgb(239, 190, 67)',(width,colors)
                 assert colors['chevron']=='rgb(245, 251, 248)',(width,colors)
                 assert colors['menu']=='rgb(245, 251, 248)',(width,colors)
                 assert menu_state['width'] < width,(width,'menu should not fill the page',menu_state)
