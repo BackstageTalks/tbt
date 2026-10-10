@@ -88,11 +88,24 @@ def admin_recipients(cfg) -> list[str]:
 
 
 def smtp_diagnostics(cfg) -> dict:
+    """Admin-only SMTP configuration status, not proof of Gmail inbox delivery.
+
+    SPF/DKIM/DMARC alignment can only be verified from a delivered message's
+    Authentication-Results and authoritative sending-domain DNS records.
+    Never expose SMTP credentials or the full sender mailbox in diagnostics.
+    """
+    from email.utils import parseaddr
+
     host = str(getattr(cfg, "blinq_smtp_host", "") or "").strip()
     sender = str(getattr(cfg, "blinq_smtp_from", "") or "").strip()
+    username = str(getattr(cfg, "blinq_smtp_username", "") or "").strip()
     port = int(getattr(cfg, "blinq_smtp_port", 587) or 587)
+    starttls = bool(getattr(cfg, "blinq_smtp_starttls", True))
+    sender_mailbox = parseaddr(sender)[1]
+    sender_domain = sender_mailbox.rpartition("@")[2].strip().lower()
     recipients = admin_recipients(cfg)
     configured = bool(host and sender and 1 <= port <= 65535)
+    tls_mode = "implicit_tls" if port == 465 else ("starttls" if starttls else "unencrypted")
     return {
         "configured": configured,
         "admin_recipient_configured": bool(recipients),
@@ -100,7 +113,14 @@ def smtp_diagnostics(cfg) -> dict:
         "host_configured": bool(host),
         "from_configured": bool(sender),
         "port": port,
-        "starttls": bool(getattr(cfg, "blinq_smtp_starttls", True)),
+        "starttls": starttls,
+        # The following fields aid SPF/DKIM/DMARC troubleshooting without
+        # guessing provider-specific DNS values or disclosing credentials.
+        "sender_domain": sender_domain or None,
+        "smtp_host": host or None,
+        "smtp_auth_configured": bool(username),
+        "tls_mode": tls_mode,
+        "authentication_results": "not_verified",
     }
 
 
