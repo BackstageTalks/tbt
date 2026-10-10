@@ -113,6 +113,40 @@ def validate(frame: pd.DataFrame, report: dict, leakage: dict, *,
             "research_rank_mode": research_ranks}
 
 
+
+def validate_weather_identity(frame: pd.DataFrame, source_csv: Path) -> int:
+    """Cross-check pinned pre-match rows against canonical match IDs and UTC starts."""
+    weather = pd.read_csv(
+        source_csv, usecols=["match_id", "scheduled_at", "forecast_lead_hours",
+                              "forecast_reference", "source"],
+        dtype={"match_id": "string"},
+    )
+    if weather.empty or weather["match_id"].isna().any() or weather["match_id"].duplicated().any():
+        raise ValueError("Weather source contains missing or duplicate match identity")
+    if not weather["source"].eq("open-meteo-previous-runs").all():
+        raise ValueError("Weather source is not the verified Previous Runs product")
+    if not pd.to_numeric(weather["forecast_lead_hours"], errors="coerce").eq(24).all():
+        raise ValueError("Weather snapshots violate the 24h point-in-time contract")
+    if not weather["forecast_reference"].eq("previous_day1").all():
+        raise ValueError("Weather snapshot reference changed")
+    starts = pd.to_datetime(weather["scheduled_at"], utc=True, errors="coerce")
+    if starts.isna().any():
+        raise ValueError("Weather snapshot scheduled_at is invalid")
+    original = frame.set_index(frame["match_id"].astype(str))["scheduled_at"]
+    matched = weather["match_id"].astype(str).isin(original.index)
+    if int(matched.sum()) < 1000:
+        raise ValueError("Weather source has too few canonical matches")
+    expected = pd.to_datetime(
+        weather.loc[matched, "match_id"].astype(str).map(original),
+        utc=True, errors="coerce"
+    )
+    if expected.isna().any() or not expected.reset_index(drop=True).equals(
+        starts.loc[matched].reset_index(drop=True)
+    ):
+        raise ValueError("Weather source match_id/date inconsistent with canonical training table")
+    return int(matched.sum())
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--table", required=True, type=Path)
@@ -137,6 +171,10 @@ def main():
     frame = pd.read_parquet(a.table, columns=required)
     result = validate(frame, report, leakage,
                       weather_evidence=source, research_ranks=a.research_ranks)
+    if a.weather_csv is not None:
+        result["verified_weather_identity_matches"] = validate_weather_identity(
+            frame, a.weather_csv
+        )
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps(result))
