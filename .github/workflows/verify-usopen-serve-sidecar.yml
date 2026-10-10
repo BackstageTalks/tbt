@@ -8,6 +8,7 @@ on:
       - "scripts/verify_usopen_serve_readback.py"
       - "api/tbt/data/provider_context.py"
       - "tests/test_import_usopen_serve_metadata.py"
+      - "tests/test_verify_usopen_serve_readback.py"
   push:
     branches: [main]
     paths: [".github/usopen-serve-cdb-request.json"]
@@ -17,7 +18,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('usopen-serve-readonly-{0}', github.ref) || 'tbt-history-data-writer' }}
+  # Even read-only full-history snapshots must not race an active canonical release writer.
+  group: tbt-history-data-writer
   cancel-in-progress: false
 
 jobs:
@@ -57,7 +59,7 @@ jobs:
           set -euo pipefail
           python -m pip install -r api/requirements.txt -r api/requirements-train.txt pytest
           python -m compileall -q scripts/import_usopen_serve_metadata.py scripts/verify_usopen_serve_readback.py api/tbt/data/provider_context.py
-          python -m pytest tests/test_import_usopen_serve_metadata.py -q
+          python -m pytest tests/test_import_usopen_serve_metadata.py tests/test_verify_usopen_serve_readback.py -q
 
       - name: Verify immutable private CC BY source
         run: |

@@ -1,18 +1,14 @@
 name: Finalize BlinQ research source integration
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/research-source-integration-request.json"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: tbt-research-source-finalize
-  cancel-in-progress: true
+  group: tbt-history-data-writer
+  cancel-in-progress: false
 
 jobs:
   finalize:
@@ -134,6 +130,18 @@ jobs:
               raise SystemExit("ATP rank history missing from integrated training table")
           print(json.dumps({"rows":r.get("rows"),"weather":weather,"wta":wta,"atp":atp},indent=2))
           PY
+
+      - name: Reject training-table rank/weather regression before publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_training_table_contract.py \
+            --table .cache/tbt/research-finalize/training/training_table.parquet \
+            --report .cache/tbt/research-finalize/training/training_table_report.json \
+            --leakage .cache/tbt/research-finalize/training/leakage_audit_report.json \
+            --weather-evidence .cache/tbt/research-finalize/audit/openmeteo-pre-match-report.json \
+            --research-ranks \
+            --out .cache/tbt/research-finalize/training/prepublish_gate.json
 
       - name: Publish integrated training DB and Open-Meteo asset
         shell: bash
@@ -314,3 +322,16 @@ jobs:
             .cache/tbt/research-finalize/training/leakage_audit_report.json
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Enforce release readback coverage and provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_training_table_contract.py \
+            --table .cache/tbt/research-finalize/readback-training/training_table.parquet \
+            --report .cache/tbt/research-finalize/readback-training/training_table_report.json \
+            --leakage .cache/tbt/research-finalize/readback-training/leakage_audit_report.json \
+            --weather-evidence .cache/tbt/research-finalize/audit/openmeteo-pre-match-report.json \
+            --research-ranks \
+            --out .cache/tbt/research-finalize/training/readback_gate.json
+

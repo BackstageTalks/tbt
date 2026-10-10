@@ -425,6 +425,9 @@ def test_only_requested_holdout_decisions_persist_before_promotion(monkeypatch, 
     if not passing:
         report['delta_vs_elo']['log_loss'] = .1
     monkeypatch.setattr(pipeline, 'ROOT', tmp_path)
+    # Unit-test only: all release/model operations are mocked. The real
+    # candidate-training backup gate remains fail-closed in production.
+    monkeypatch.setattr(pipeline, '_require_training_backup_gate', lambda: None)
     monkeypatch.setattr(pipeline, 'ReleaseStore', Store)
     monkeypatch.setattr(pipeline, 'load_partitions', lambda path: [])
     monkeypatch.setattr(
