@@ -18,7 +18,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('usopen-serve-readonly-{0}', github.ref) || 'tbt-history-data-writer' }}
+  # Even read-only full-history snapshots must not race an active canonical release writer.
+  group: tbt-history-data-writer
   cancel-in-progress: false
 
 jobs:
