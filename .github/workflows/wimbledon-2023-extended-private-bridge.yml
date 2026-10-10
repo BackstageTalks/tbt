@@ -1,0 +1,103 @@
+name: Wimbledon 2023 extended stats read-only bridge
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/wimbledon-2023-extended-private-bridge.yml
+
+permissions:
+  contents: read
+
+jobs:
+  classify-private:
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      ROOT: .cache/tbt/wimbledon-extended-bridge
+      PYTHONPATH: api:scripts:private-data/scripts
+    steps:
+      - name: Checkout app baseline (without credential persistence)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout pinned private audit source without publication
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: ed10829748d0bb249ed933c5e12e63008df1056e
+          path: private-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+      - name: Prepare isolated offline Python environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Verify source and private scope, run focused regressions
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(git -C private-data rev-parse HEAD)" = ed10829748d0bb249ed933c5e12e63008df1056e
+          test "$(gh repo view "$DATA_REPO" --json visibility -q .visibility)" = PRIVATE
+          python -m pip install -r api/requirements-train.txt pytest jsonschema openpyxl
+          python -m pytest -q private-data/tests/test_wimbledon_2023_extended_fields.py
+          python -m compileall -q private-data/scripts/audit_wimbledon_2023_extended_fields.py
+      - name: Retrieve SHA-pinned raw Wimbledon and current manifest (read-only)
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/raw" "$ROOT/cdb" "$ROOT/out"
+          gh release download tbt-research-sources-v1 -R "$DATA_REPO" -p figshare-wimbledon-2023-ccby4.xlsx -D "$ROOT/raw"
+          gh release download tbt-research-sources-v1 -R "$DATA_REPO" -p figshare-wimbledon-2023-LICENSE-NOTE.txt -D "$ROOT/raw"
+          gh release download tbt-research-sources-v1 -R "$DATA_REPO" -p wimbledon-2023-advanced-points.jsonl.gz -D "$ROOT/raw"
+          (
+            cd "$ROOT/raw"
+            printf '%s  %s\n' \
+              '19507e156e6ff307027d39e44000ac446a564f87b3c8d59a5225dc6d1674c512' figshare-wimbledon-2023-ccby4.xlsx \
+              '4b1a12b70abaaa9536dc0e371c177549863d131db3bc273e6768354f3b1e1df9' figshare-wimbledon-2023-LICENSE-NOTE.txt \
+              '8c9b00eb96582cb5bfe3449b0bdb2dffbfb11d3fc387e54e142d645e6d43e316' wimbledon-2023-advanced-points.jsonl.gz | sha256sum -c -
+          )
+          gh release download tbt-data-v1 -R "$DATA_REPO" -p history-2023.parquet -D "$ROOT/cdb"
+          gh release download tbt-data-v1 -R "$DATA_REPO" -p history_manifest.json -D "$ROOT/cdb"
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > "$ROOT/cdb/release.json"
+          gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$DATA_REPO/contents/audit/import-preparation/observation.schema.json?ref=main" > "$ROOT/observation.schema.json"
+      - name: Classify 60 exact fields and print counts only (no public source artifact)
+        run: |
+          set -euo pipefail
+          python private-data/scripts/audit_wimbledon_2023_extended_fields.py \
+            --workbook "$ROOT/raw/figshare-wimbledon-2023-ccby4.xlsx" \
+            --license-note "$ROOT/raw/figshare-wimbledon-2023-LICENSE-NOTE.txt" \
+            --sidecar "$ROOT/raw/wimbledon-2023-advanced-points.jsonl.gz" \
+            --year-file "$ROOT/cdb/history-2023.parquet" \
+            --manifest "$ROOT/cdb/history_manifest.json" \
+            --release-metadata "$ROOT/cdb/release.json" \
+            --schema-file "$ROOT/observation.schema.json" \
+            --out-dir "$ROOT/out" > "$ROOT/private-run-output.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path(os.environ['ROOT'])
+          result=json.loads((root/'out/report.json').read_text())
+          counts=result['counts']
+          assert result['status']=='read_only_classified'
+          assert result['observation_rows']==60
+          assert result['baseline_control_fields_already_present']==20
+          assert result['canonical_year_rows']==107765
+          assert counts['raw_points']==774 and counts['tape_complete_matches']==5
+          assert result['production_mutated'] is False and result['write_authorized'] is False
+          assert result['model_training_performed'] is False and result['model_promoted'] is False
+          statuses=['READY_MISSING','ALREADY_PRESENT','CONFLICT','UNRESOLVED']
+          assert sum(counts.get(k,0) for k in statuses)==60
+          # Print only aggregate counts, not private source rows, identities or files.
+          print('READ_ONLY_WIMBLEDON_EXTENDED_SUMMARY',json.dumps({
+            'cdb_partition_sha256':result['cdb_partition_sha256'],
+            'candidate_observations':60,
+            'baseline_already_present':20,
+            'states':{key:counts.get(key,0) for key in statuses},
+            'metrics':result['observations_by_metric'],
+            'write_authorized':False,
+          },sort_keys=True))
+          PY
