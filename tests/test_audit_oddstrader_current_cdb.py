@@ -4,7 +4,7 @@ import json
 import pandas as pd
 import pytest
 
-from scripts.audit_oddstrader_current_cdb import FIELDS, PRIOR_VERIFIED_MARKERS, count_markers
+from scripts.audit_oddstrader_current_cdb import FIELDS, PRIOR_VERIFIED_MARKERS, ODDSTRADER_SOURCE, count_markers
 
 
 def test_count_published_market_and_fallback_separately():
@@ -37,6 +37,21 @@ def test_omit_unknown_context_but_not_misread_market_time():
     out = count_markers(pd.Series(["a", "b"]), pd.Series([None, "{}"]))
     assert out["checked"] == 2
     assert all(out.get(field, 0) == 0 for field in FIELDS)
+
+
+
+def test_attribution_excludes_unrelated_market_providers():
+    ids = pd.Series(["m1", "m2", "m3", "m4"])
+    contexts = pd.Series([
+        json.dumps({FIELDS[0]: {"source": ODDSTRADER_SOURCE}}),
+        json.dumps({FIELDS[0]: {"source": "other_market_provider"}, FIELDS[1]: {"source": "other_market_provider"}}),
+        json.dumps({FIELDS[0]: {"source": ODDSTRADER_SOURCE}, FIELDS[1]: {"source": ODDSTRADER_SOURCE}}),
+        json.dumps({FIELDS[1]: {"source": ODDSTRADER_SOURCE}}),
+    ])
+    data = count_markers(ids, contexts)
+    assert data[FIELDS[0]] == 3 and data[FIELDS[1]] == 3
+    assert data[FIELDS[0] + "_oddstrader"] == 2
+    assert data[FIELDS[1] + "_oddstrader"] == 2
 
 
 def test_readonly_code_never_publishes():
