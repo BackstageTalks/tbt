@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: tbt-history-data-writer
+  # Run-unique waiting slot: the private global Git tag serializes writes.\n  group: tbt-crossrepo-writer-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
