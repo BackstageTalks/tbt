@@ -1,0 +1,134 @@
+name: Verified isolated champion rollback rehearsal
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/champion-rollback-rehearsal.yml'
+      - 'scripts/verify_champion_rollback.py'
+      - 'tests/test_champion_rollback_rehearsal.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-model-backup-single-writer
+  cancel-in-progress: false
+
+jobs:
+  isolated-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Private preflight and isolated runtime
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m pytest tests/test_champion_rollback_rehearsal.py -q
+      - name: Download exact production bundle
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/blinq-champion-source /tmp/blinq-champion-restored /tmp/blinq-champion-latest
+          gh release view tbt-model-production-v1 -R "$TBT_DATA_REPOSITORY" >/dev/null
+          gh release download tbt-model-production-v1 -R "$TBT_DATA_REPOSITORY" \
+            -p 'model.joblib' -p 'training_report.json' -p 'promotion_history.json' \
+            -p '_tbt_bundle_manifest.json' -D /tmp/blinq-champion-source
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from tbt.models.artifact import load_model
+          from scripts.verify_champion_rollback import verify_complete_bundle
+          d=Path('/tmp/blinq-champion-source')
+          hashes=verify_complete_bundle(d)
+          m=load_model(str(d/'model.joblib'))
+          assert m.fitted, 'Source champion must be fitted'
+          tag='tbt-champion-backup-sha256-'+hashes['model.joblib']['sha256']
+          Path('/tmp/blinq-champion-backup-tag').write_text(tag)
+          Path('/tmp/blinq-champion-version').write_text(m.version)
+          print(json.dumps({'champion_version':m.version,'backup_tag':tag,'bundle_files':len(hashes)}))
+          PY
+      - name: Create SHA-addressed backup exactly once, without overwrite
+        run: |
+          set -euo pipefail
+          tag="$(cat /tmp/blinq-champion-backup-tag)"
+          if gh release view "$tag" -R "$TBT_DATA_REPOSITORY" >/dev/null 2>/tmp/backup-lookup.err; then
+            echo "Existing digest-addressed backup, will verify bytes."
+          elif grep -Eqi 'not found|HTTP 404' /tmp/backup-lookup.err; then
+            gh release create "$tag" \
+              /tmp/blinq-champion-source/model.joblib \
+              /tmp/blinq-champion-source/training_report.json \
+              /tmp/blinq-champion-source/promotion_history.json \
+              /tmp/blinq-champion-source/_tbt_bundle_manifest.json \
+              -R "$TBT_DATA_REPOSITORY" --latest=false \
+              --title 'BlinQ champion digest-verified rollback backup' \
+              --notes 'Private backup; never clobber. Promotion requires separate user approval.'
+          else
+            echo 'Backup lookup failed; refusing write' >&2
+            exit 1
+          fi
+          gh release download "$tag" -R "$TBT_DATA_REPOSITORY" \
+            -p 'model.joblib' -p 'training_report.json' -p 'promotion_history.json' \
+            -p '_tbt_bundle_manifest.json' -D /tmp/blinq-champion-restored
+      - name: Restore verified champion and compare exact predictions
+        run: |
+          set -euo pipefail
+          python scripts/verify_champion_rollback.py \
+            --source /tmp/blinq-champion-source \
+            --restored /tmp/blinq-champion-restored \
+            --expected-version "$(cat /tmp/blinq-champion-version)" \
+            --backup-tag "$(cat /tmp/blinq-champion-backup-tag)" \
+            --out /tmp/blinq-champion-rehearsal.json
+          gh release download tbt-model-production-v1 -R "$TBT_DATA_REPOSITORY" \
+            -p 'model.joblib' -p 'training_report.json' -p 'promotion_history.json' \
+            -p '_tbt_bundle_manifest.json' -D /tmp/blinq-champion-latest
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.verify_champion_rollback import verify_complete_bundle
+          assert verify_complete_bundle(Path('/tmp/blinq-champion-source')) == \
+                 verify_complete_bundle(Path('/tmp/blinq-champion-latest')), 'Serving champion changed mid-rehearsal'
+          PY
+      - name: Persist private proof and verify independent remote read-back
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64, json, os, subprocess
+          from pathlib import Path
+          repo=os.environ['TBT_DATA_REPOSITORY']
+          target='audit/champion-rollback-rehearsal-latest.json'
+          src=Path('/tmp/blinq-champion-rehearsal.json')
+          report=json.loads(src.read_text())
+          assert report['status']=='PASS' and not report['production_mutated']
+          p=subprocess.run(['gh','api',f'repos/{repo}/contents/{target}'],
+                           text=True,capture_output=True)
+          body={'message':f"Verify isolated champion restore run {os.environ['GITHUB_RUN_ID']}",
+                'content':base64.b64encode(src.read_bytes()).decode()}
+          if p.returncode==0:
+              body['sha']=json.loads(p.stdout)['sha']
+          elif '404' not in p.stderr:
+              raise RuntimeError('Cannot inspect existing backup evidence')
+          inp=Path('/tmp/rollback-upload.json')
+          inp.write_text(json.dumps(body,separators=(',',':')))
+          subprocess.run(['gh','api','--method','PUT',f'repos/{repo}/contents/{target}',
+                          '--input',str(inp)],check=True,stdout=subprocess.DEVNULL)
+          remote=subprocess.check_output(['gh','api',f'repos/{repo}/contents/{target}','--jq','.content'])
+          assert base64.b64decode(remote)==src.read_bytes(), 'Rollback evidence readback mismatch'
+          print('Independent private rollback report readback: PASS')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: champion-rollback-rehearsal-${{ github.run_id }}
+          path: /tmp/blinq-champion-rehearsal.json
+          if-no-files-found: warn
+          retention-days: 30
