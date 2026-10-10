@@ -72,6 +72,8 @@ def main():
                     document.querySelector('#appShell').hidden=false;
                     document.querySelector('#routePanel').hidden=false;
                     s.route='results';
+                    document.body.classList.remove('blinq-home');
+                    document.body.classList.add('blinq-route');
                     t.renderRoute('results');
                 }""")
                 table = page.locator(".results-table tbody tr")
@@ -90,6 +92,8 @@ def main():
                 for category, count in [("ace", 2), ("double_faults", 3), ("sets", 4), ("games", 5)]:
                     page.locator(f'input[data-result-category="{category}"]').check()
                     assert table.count() == count, (width, category, table.count())
+                    if drawer.is_visible():
+                        assert drawer.get_attribute('aria-expanded') == 'true', (width, category)
                 assert page.locator('.metric-card strong').last.inner_text() == '5', width
                 page.locator('input[data-result-category="top_daily"]').uncheck()
                 assert table.count() == 5
