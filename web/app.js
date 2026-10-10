@@ -3257,6 +3257,15 @@
     if(window==='today'){
       const scheduled=row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0;
       if(bratislavaBettingDayKey(scheduled,6)!==bratislavaBettingDayKey(now,6))return false;
+      // Admin Results is the entire verified published ledger for this betting day.
+      // A later refresh may replace the daily offer, so comparing old settled
+      // results against only the CURRENT offer silently drops historical picks.
+      // Other plans retain the existing current-offer entitlement cohort gate.
+      if(isAdminAccount()){
+        // Both the scheduled match and its immutable issuance betting day
+        // must belong to Today; a stale/corrupt older issuance is not today's pick.
+        return resultPublicationBettingDay(row,publication)===bratislavaBettingDayKey(now,6);
+      }
       const key=resultBetIdentity(row,publication,'match_winner');
       const cohort=todayKeys||currentBettingDayPublishedKeys(now);
       return !!key&&cohort.has(key);
