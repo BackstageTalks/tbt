@@ -1,0 +1,76 @@
+name: Tournament logo archive inventory (read-only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tournament-logo-inventory.yml'
+      - 'scripts/audit_tournament_logo_cache.py'
+      - 'tests/test_audit_tournament_logo_cache.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-presentation-logo-audit
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Offline inventory regression tests
+        run: |
+          python -m pip install pytest
+          python -m pytest tests/test_audit_tournament_logo_cache.py -q
+      - name: Confirm private sources without provider API
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p /tmp/blinq-logo-inventory
+          gh release download tbt-predictions-v1 -R "$TBT_DATA_REPOSITORY" -p feed.json -D /tmp/blinq-logo-inventory
+          gh release download tbt-player-assets-v1 -R "$TBT_DATA_REPOSITORY" -p tournament_profiles.json -p tournament_logos.zip -D /tmp/blinq-logo-inventory
+      - name: Inventory cached provider IDs and hashes
+        run: |
+          set -euo pipefail
+          python scripts/audit_tournament_logo_cache.py \
+            --feed /tmp/blinq-logo-inventory/feed.json \
+            --profiles /tmp/blinq-logo-inventory/tournament_profiles.json \
+            --logos /tmp/blinq-logo-inventory/tournament_logos.zip \
+            --out /tmp/blinq-logo-inventory/verified-cache-audit.json
+      - name: Persist private audit and independently read back
+        run: |
+          set -euo pipefail
+          file=/tmp/blinq-logo-inventory/verified-cache-audit.json
+          path="audit/tournament-logo-cache-inventory-${GITHUB_RUN_ID}.json"
+          encoded="$(base64 -w0 "$file")"
+          gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
+            -f message="Read-only logo cache inventory $GITHUB_RUN_ID" \
+            -f content="$encoded" >/dev/null
+          gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .content \
+            | tr -d '\n' | base64 -d > /tmp/blinq-logo-inventory/readback.json
+          cmp "$file" /tmp/blinq-logo-inventory/readback.json
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          r = json.loads(Path('/tmp/blinq-logo-inventory/readback.json').read_text())
+          print('## Tournament logo cache audit (no new logos deployed)')
+          for key in ('current_feed_ids','unique_audited_ids','profiles','archive_provider_ids','unexpected_zip_members'):
+              print(f'- {key}: {r[key]}')
+          for k,v in sorted(r['status_counts'].items()):
+              print(f'- {k}: {v}')
+          print('- Licensed originals independently verified: NO')
+          print('- Production deployment and admin readback verified: NO')
+          print('- Provider API requests: 0')
+          print('- Detailed ID+hash+provenance report stored only in private tbt-data audit path.')
+          PY
