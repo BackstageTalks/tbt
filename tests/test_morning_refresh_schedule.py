@@ -24,7 +24,7 @@ def test_morning_refresh_is_request_capped_and_reuses_data_deploy_locks():
     assert "MORNING_MAX_REQUESTS" in MORNING
     assert "max_requests=\"$MORNING_MAX_REQUESTS\"" in MORNING
     assert "actions: write" in MORNING
-    assert "group: tbt-history-data-writer" in DATA
+    assert "group: tbt-crossrepo-writer-${{ github.run_id }}" in DATA
     assert "group: tbt-production-deploy" in DATA
     assert "group: tbt-production-deploy" in DATA
     assert "Confirm exactly deployed prediction publication" in DATA
