@@ -66,6 +66,21 @@ def main():
                     };
                 }""")
                 assert menu_state['nonModal'] and menu_state['mainVisible'] and menu_state['isInline'],(width,menu_state)
+                # Gold/yellow header and menu lettering is now white on both layouts.
+                colors=page.evaluate("""() => {
+                    const read=selector=>{
+                        const el=document.querySelector(selector);
+                        return el ? getComputedStyle(el).color : null;
+                    };
+                    return {
+                        navigation:read('.header-top .reference-navigation[data-icon-navigation="1"] > .nav-icon-link'),
+                        chevron:read('.header-top .brand-menu-chevron'),
+                        menu:read('#bqm-dialog[open] nav > .bqm-navigation-switch'),
+                    };
+                }""")
+                assert colors['navigation']=='rgb(245, 251, 248)',(width,colors)
+                assert colors['chevron']=='rgb(245, 251, 248)',(width,colors)
+                assert colors['menu']=='rgb(245, 251, 248)',(width,colors)
                 assert menu_state['width'] < width,(width,'menu should not fill the page',menu_state)
                 assert not menu_state['scrimColor'].endswith(', 1)'),(width,'scrim must preserve page context',menu_state)
 

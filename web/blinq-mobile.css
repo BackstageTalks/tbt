@@ -1138,3 +1138,14 @@ body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-account-panel button:i
 @media(prefers-reduced-motion:reduce){
   body#blinqPremium.bqm-unified-menu #bqm-dialog[open] .bqm-navigation-switch::after{transition:none!important}
 }
+
+
+/* White navigation typography/icon glyphs, 2026-10-10.
+   Change only previously gold/yellow header/menu lettering and icon strokes.
+   Preserve green LIVE, locked-state opacity and all status colors. */
+body#blinqPremium#blinqPremium .site-header.reference-topbar .reference-navigation[data-icon-navigation="1"] > .nav-icon-link,
+body#blinqPremium#blinqPremium .site-header.reference-topbar .header-actions > :is(#bqm-projects,#topUpgradeButton,#insightBell),
+body#blinqPremium#blinqPremium .site-header .header-top > .brand.brand-menu-trigger .brand-menu-chevron,
+body#blinqPremium#blinqPremium.bqm-unified-menu #bqm-dialog[open] nav > :is(.bqm-account-switch,.bqm-navigation-switch) {
+  color:#f5fbf8!important;
+}
