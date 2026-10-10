@@ -1,0 +1,157 @@
+name: BlinQ ATP Singles checkpoint integrity QA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-atp-singles-checkpoint-qa.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-atp-singles-checkpoint-qa
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      TAG: blinq-cloud-atptour-20261009
+      ASSET: blinq-atp-singles-38031381074-1.tar.gz
+      EXPECTED_SHA256: 420d0a51c3fea2e64f0ff54c84281aabf0b7acd0b5fe3dfd04465c2384889c6f
+    steps:
+      - name: Fetch the exact private checkpoint, not a live website
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = "true"
+          mkdir -p checkpoint
+          gh release download "$TAG" --repo "$PRIVATE_REPO" \
+            --pattern "$ASSET" --dir checkpoint
+      - name: Independently verify hash, contents, dates, rows and completeness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import datetime as dt
+          import hashlib
+          import json
+          import os
+          import re
+          import tarfile
+          from pathlib import Path
+
+          file=Path("checkpoint")/os.environ["ASSET"]
+          digest=hashlib.sha256()
+          with file.open("rb") as raw:
+              while part:=raw.read(4*1024*1024):
+                  digest.update(part)
+          assert digest.hexdigest()==os.environ["EXPECTED_SHA256"], "Archive SHA256 mismatch"
+
+          prefix="data/atptour/rankings/singles/"
+          dates=[]
+          total_rows=0
+          empty=0
+          invalid=0
+          duplicate_players=0
+          malformed=0
+          summary={}
+          with tarfile.open(file,"r:gz") as bundle:
+              entries=bundle.getmembers()
+              names={m.name for m in entries if m.isfile()}
+              summary_name=prefix+"_summary.json"
+              assert summary_name in names, "Missing ranking completion summary"
+              summary=json.load(bundle.extractfile(summary_name))
+              ranked=sorted(
+                  (m for m in entries if m.name.startswith(prefix)
+                   and re.fullmatch(r"\d{4}-\d{2}-\d{2}\.jsonl",m.name[len(prefix):])),
+                  key=lambda m:m.name)
+              assert len(ranked)==1374, f"Expected 1374 dated snapshots, found {len(ranked)}"
+              for member in ranked:
+                  date=member.name[len(prefix):-6]
+                  dt.date.fromisoformat(date)
+                  dates.append(date)
+                  seen=set()
+                  rows=0
+                  with bundle.extractfile(member) as handle:
+                      for data in handle:
+                          if not data.strip():
+                              continue
+                          rows+=1
+                          try:
+                              record=json.loads(data)
+                          except (ValueError,UnicodeError):
+                              malformed+=1
+                              continue
+                          if not isinstance(record,dict) or record.get("asof")!=date or record.get("category")!="singles":
+                              invalid+=1
+                              continue
+                          players=record.get("players")
+                          if not isinstance(players,list) or not players:
+                              invalid+=1
+                              continue
+                          for p in players:
+                              pid=p.get("atp_id") if isinstance(p,dict) else None
+                              if not pid:
+                                  invalid+=1
+                              elif pid in seen:
+                                  duplicate_players+=1
+                              else:
+                                  seen.add(pid)
+                  if not rows:
+                      empty+=1
+                  total_rows+=rows
+              assert len(dates)==len(set(dates)), "Duplicate date filenames"
+              assert summary.get("complete") is True, "Saved summary incomplete"
+              assert summary.get("discovered_snapshots")==1374, "Summary discovered differs"
+              assert summary.get("completed_files")==1374, "Summary files differs"
+              assert not summary.get("unverified_dates_this_run"), "Unverified dates listed"
+              assert not empty and not malformed and not invalid and not duplicate_players, \
+                  f"Row QA errors: empty={empty} malformed={malformed} invalid={invalid} duplicate_player={duplicate_players}"
+
+          report={
+              "source":"ATP Tour Official Singles",
+              "status":"RAW_CHECKPOINT_INTEGRITY_PASSED_NOT_CDB_IMPORT_APPROVED",
+              "asset":file.name,
+              "sha256":digest.hexdigest(),
+              "snapshot_count":len(dates),
+              "first_snapshot":min(dates),
+              "last_snapshot":max(dates),
+              "jsonl_rows":total_rows,
+              "empty_snapshots":empty,
+              "invalid_rows":invalid,
+              "malformed_lines":malformed,
+              "duplicate_player_ids_per_snapshot":duplicate_players,
+              "source_report_complete":summary.get("complete"),
+              "no_cdb_import":True,
+              "no_training_db":True,
+              "limitations":[
+                 "No independent ATP source recrawl or third-party date coverage audit",
+                 "Canonical player identity and chronology still require downstream QA",
+                 "Ranking snapshots are not proof of historically available pre-match features"
+              ]
+          }
+          Path("checkpoint-qa.json").write_text(
+              json.dumps(report,indent=2,ensure_ascii=False)+"\n",encoding="utf-8")
+          print("ATP_SINGLES_QA",json.dumps(report,sort_keys=True))
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as out:
+              out.write("### ATP Singles checkpoint integrity verified\n")
+              out.write(f"- Snapshot files: {len(dates)}; JSONL rows: {total_rows}\n")
+              out.write(f"- Date range: {min(dates)} to {max(dates)}\n")
+              out.write("- Hash, completion status, raw structure and within-date identity: PASS\n")
+              out.write("- CDB and Training DB: untouched\n")
+          PY
+      - name: Upload counts-only verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-atp-singles-checkpoint-integrity-report
+          path: checkpoint-qa.json
+          if-no-files-found: warn
+          retention-days: 30
