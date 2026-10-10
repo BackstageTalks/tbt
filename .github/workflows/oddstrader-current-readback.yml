@@ -58,8 +58,8 @@ jobs:
           from pathlib import Path
           r=json.loads((Path(os.environ["ROOT"])/"oddstrader-readback.json").read_text())
           assert r["status"]=="VERIFIED_CURRENT_CDB_MARKERS_READ_ONLY"
-          assert r["current_markers"]["_tbt_market_history"]>=11935
-          assert r["current_markers"]["_tbt_match_winner_odds"]>=283
+          assert r["current_markers_oddstrader"]["_tbt_market_history"]>=11935
+          assert r["current_markers_oddstrader"]["_tbt_match_winner_odds"]>=283
           assert len(r["year_partitions"])==12
           assert r["production_cdb_mutated"] is False
           assert r["model_promoted"] is False
