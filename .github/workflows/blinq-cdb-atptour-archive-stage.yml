@@ -1,4 +1,4 @@
-name: BlinQ ATP Archive CDB offline staging (private 2021-2026)
+name: BlinQ ATP Archive CDB offline staging (structured stats QA v2)
 
 on:
   push:
@@ -81,7 +81,7 @@ jobs:
           gh release download "$SOURCE_RELEASE" --repo "$PRIVATE_REPO" \
             --pattern "$name" --dir /tmp/atp-raw
           test -s "/tmp/atp-raw/$name"
-      - name: Audit match inventory, valid source IDs and post-match stats
+      - name: Audit match inventory, valid IDs and non-empty structured post-match stats
         run: |
           set -euo pipefail
           python -u source/scripts/prepare_atptour_cdb_staging.py \
@@ -107,6 +107,8 @@ jobs:
               out.write(f"- Matches: {r['counts']['staged_match_candidates']}\n")
               out.write(f"- Tournaments: {r['counts']['tournament_jsonl_files']}/{r['counts']['discovered_tournaments']}\n")
               out.write(f"- Stats missing from expected links: {r['missing_stats_count']}\n")
+              out.write(f"- Parsed structured stat files: {r['counts'].get('staged_stats', 0)}\n")
+              out.write(f"- Structured stat source coverage passed: {r['stats_coverage_complete']}\n")
               out.write("- Canonical linking: NOT YET; private archive read-back passed\n")
               out.write("- Production CDB and Training DB: unchanged by this job\n")
           PY
