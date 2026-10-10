@@ -1712,6 +1712,76 @@ def admin_api_budget(req):
         return response({"error":"api_budget_unavailable"},503)
 
 
+@app.route(route="v1/internal/live-radar-status", methods=["GET"])
+def internal_live_radar_status(req):
+    """Read back durable heartbeat and global quota without paid provider calls.
+
+    Only the existing worker token grants access; do not expose LIVE alerts,
+    user data, or any privileged Admin settings on this diagnostics endpoint.
+    """
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    try:
+        snapshot = load_live_worker_status()
+        budget = shared_api_budget_status()
+        if not isinstance(snapshot, dict):
+            return response({"ok": False, "error": "live_heartbeat_missing"}, 503)
+        last_success = str(snapshot.get("last_success_at") or (
+            snapshot.get("scanned_at") if not snapshot.get("last_error") else ""
+        )).strip()
+        try:
+            moment = datetime.fromisoformat(last_success.replace("Z", "+00:00"))
+            if moment.tzinfo is None:
+                raise ValueError("Heartbeat timestamp must be timezone-aware")
+            age = (datetime.now(timezone.utc) - moment.astimezone(timezone.utc)).total_seconds()
+            fresh = 0 <= age <= 600
+        except (TypeError, ValueError):
+            fresh = False
+        heartbeat = {
+            "scanned_at": snapshot.get("scanned_at"),
+            "updated_at": snapshot.get("updated_at"),
+            "last_success_at": last_success or None,
+            "last_error": snapshot.get("last_error"),
+            "budget_paused": bool(snapshot.get("budget_paused")),
+            "fresh": fresh,
+        }
+        # Fail closed on durable budget schema mismatch instead of guessing.
+        valid_budget = (
+            isinstance(budget, dict)
+            and budget.get("provider_plan_limit") == 15000
+            and budget.get("reserved_provider_headroom") == 450
+            and budget.get("global_limit") == 14550
+            and isinstance(budget.get("global_spent"), int)
+            and 0 <= budget["global_spent"] <= 14550
+            and isinstance(budget.get("spent"), dict)
+            and isinstance(budget.get("purpose_limits"), dict)
+            and budget["purpose_limits"].get("live") == 3000
+            and isinstance(budget["spent"].get("live"), int)
+            and 0 <= budget["spent"]["live"] <= 3000
+        )
+        if not valid_budget:
+            return response({"ok": False, "error": "api_budget_invalid"}, 503)
+        status = 200 if fresh and not snapshot.get("last_error") else 503
+        return response({
+            "ok": status == 200,
+            "heartbeat": heartbeat,
+            "budget": {
+                "provider_plan_limit": budget["provider_plan_limit"],
+                "reserved_provider_headroom": budget["reserved_provider_headroom"],
+                "global_limit": budget["global_limit"],
+                "global_spent": budget["global_spent"],
+                "live_limit": budget["purpose_limits"]["live"],
+                "live_spent": budget["spent"]["live"],
+                "next_reset_utc": budget.get("next_reset_utc"),
+            },
+        }, status)
+    except (AdminStorageUnavailable, SharedBudgetUnavailable):
+        return response({"ok": False, "error": "live_status_storage_unavailable"}, 503)
+    except Exception:
+        logging.exception("LIVE status readback failed")
+        return response({"ok": False, "error": "live_status_unavailable"}, 503)
+
+
 @app.route(route="v1/internal/live-radar-worker", methods=["POST"])
 def internal_live_radar_worker(req):
     """Secret-protected autonomous scheduler hook; never exposed to browser auth."""
