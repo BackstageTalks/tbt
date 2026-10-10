@@ -127,6 +127,12 @@ jobs:
           print(f"2020-2022 rows={count}")
           PY
 
+      - name: Acquire cross-repository canonical writer lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
       - name: Download checksum-verified canonical history
         run: |
           set -euo pipefail
@@ -349,3 +355,8 @@ jobs:
             .cache/tbt/tennis-data/write/report.json
           if-no-files-found: warn
           retention-days: 14
+      
+      - name: Release cross-repository canonical writer lock
+        if: always()
+        shell: bash
+        run: python scripts/cdb_global_writer_lock.py release --if-held
