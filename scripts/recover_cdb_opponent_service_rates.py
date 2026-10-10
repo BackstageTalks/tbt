@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from _bootstrap import ROOT  # noqa: F401
-from tbt.data.history_snapshot import load_partitions, write_year_partition
+from tbt.data.history_snapshot import load_partitions
 from tbt.data.history_safety import sanitize_history_identities
 from tbt.providers.statistics import complete_opponent_service_rates
 
@@ -173,6 +173,101 @@ def verify_readback(before_matches, after_matches, staged):
             "existing_values_overwritten": 0, "unverified_identities": 0}
 
 
+
+def write_exact_stats_partition(history_dir: Path, year: int, staged: list[dict]) -> None:
+    """Persist only staged stats_json cells; never reserialize unrelated matches.
+
+    All rows are compared against the original entire year via the standard
+    strict readback verifier before replacing any local partition.
+    """
+    import pandas as pd
+    from tbt.data.history_snapshot import (
+        load_snapshot, load_manifest, partition_path, update_year_manifest,
+    )
+
+    candidates = [row for row in staged if int(row["utc_year"]) == int(year)]
+    if not candidates:
+        raise ValueError("No staged statistics for requested partition")
+    path = partition_path(history_dir, year)
+    if not path.is_file():
+        raise FileNotFoundError("Canonical year partition missing")
+    original = load_snapshot(path)
+    by_id = _index(original)
+    frame = pd.read_parquet(path, engine="pyarrow")
+    if not {"match_id", "stats_json", "scheduled_at"}.issubset(frame.columns):
+        raise ValueError("Invalid canonical Parquet statistic schema")
+    keys = frame["match_id"].astype(str)
+    if keys.duplicated().any() or len(frame) != len(original):
+        raise ValueError("Canonical year identity collision")
+    offsets = dict(zip(keys, frame.index))
+    other_columns = frame.drop(columns=["stats_json"]).copy(deep=True)
+    original_stats_column = frame["stats_json"].copy(deep=True)
+    touched = set()
+    for row in candidates:
+        mid = str(row.get("match_id") or "")
+        record = by_id.get(mid)
+        if record is None or mid not in offsets:
+            raise ValueError("Staged canonical match not present in original partition")
+        if row.get("schema") != 1 or row.get("policy") != POLICY:
+            raise ValueError("Unverified staged complement schema")
+        if _sha(_storage(record)) != row["prewrite_hash"]:
+            raise ValueError("Canonical match changed before Parquet patch")
+        if _sha(record.stats or {}) != row["source_stats_hash"]:
+            raise ValueError("Source statistics changed before Parquet patch")
+        index = offsets[mid]
+        raw = frame.at[index, "stats_json"]
+        if not isinstance(raw, str):
+            raise ValueError("Invalid original Parquet statistics JSON")
+        stats = json.loads(raw)
+        if not isinstance(stats, dict):
+            raise ValueError("Original statistics must be a JSON object")
+        computed = dict(record.stats or {})
+        if _inconsistent_observed_pair(computed):
+            raise ValueError("Conflicting observed complement source")
+        complete_opponent_service_rates(computed)
+        expected = {k: computed[k] for k in sorted(RECOVERABLE)
+                    if (record.stats or {}).get(k) is None and computed.get(k) is not None}
+        if expected != row.get("additions") or not expected:
+            raise ValueError("Complement no longer reproducible")
+        for key, value in expected.items():
+            if stats.get(key) is not None:
+                raise ValueError("Refusing existing statistic overwrite")
+            stats[key] = value
+        frame.at[index, "stats_json"] = json.dumps(
+            stats, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            allow_nan=False,
+        )
+        touched.add(index)
+    if len(touched) != len(candidates):
+        raise ValueError("Duplicate staged match in Parquet patch")
+    pd.testing.assert_frame_equal(
+        frame.drop(columns=["stats_json"]), other_columns, check_dtype=True,
+    )
+    untouched = ~frame.index.isin(touched)
+    if not frame.loc[untouched, "stats_json"].equals(original_stats_column.loc[untouched]):
+        raise ValueError("Unstaged statistics mutated before write")
+    temporary = path.with_name(path.name + ".service-exact.tmp")
+    try:
+        frame.to_parquet(temporary, engine="pyarrow", compression="zstd", index=False)
+        comparison = verify_readback(original, load_snapshot(temporary), candidates)
+        if comparison["enriched_matches"] != len(candidates):
+            raise ValueError("Local exact-stat readback count mismatch")
+        meta = load_manifest(history_dir).get("years", {}).get(str(year))
+        if not isinstance(meta, dict) or int(meta.get("rows", -1)) != len(frame):
+            raise ValueError("Canonical manifest partition row count mismatch")
+        digest = hashlib.sha256(temporary.read_bytes()).hexdigest()
+        size = temporary.stat().st_size
+        if size <= 0:
+            raise ValueError("Empty patched canonical partition")
+        temporary.replace(path)
+        update_year_manifest(history_dir, year, {
+            "sha256": digest, "bytes": size, "rows": len(frame),
+        })
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
 def _load(directory):
     rows, safety = sanitize_history_identities(load_partitions(directory))
     if safety.get("quarantined_rows") or safety.get("changed"):
@@ -208,7 +303,7 @@ def main():
             matches = _load(a.history_dir)
             years = write_local(matches, staged)
             for year in years:
-                write_year_partition(matches, a.history_dir, year)
+                write_exact_stats_partition(a.history_dir, year, staged)
             result = {"schema": 1, "mode": "write", "changed_years": years,
                       "updated": len(staged), "production_mutated": False, "provider_requests": 0}
         else:

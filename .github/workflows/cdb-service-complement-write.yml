@@ -106,6 +106,37 @@ jobs:
           print("Verified deterministic staged rows:", counts, flush=True)
           PY
 
+      - name: Rehearse exact staged stats writes with complete CDB diff (dry-run only)
+        if: ${{ steps.request.outputs.mode == 'dry-run' && steps.gate.outputs.changes == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/cdb-complements-write
+          cp -a "$root/history" "$root/rehearsal-before"
+          python scripts/recover_cdb_opponent_service_rates.py \
+            --mode write --history-dir "$root/history" \
+            --stage-file "$root/stage/stage.jsonl" \
+            --out-dir "$root/rehearsal"
+          python scripts/recover_cdb_opponent_service_rates.py \
+            --mode verify --history-dir "$root/history" \
+            --before-dir "$root/rehearsal-before" \
+            --stage-file "$root/stage/stage.jsonl" \
+            --out-dir "$root/rehearsal-readback"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path(".cache/tbt/cdb-complements-write")
+          staged=json.loads((root/"stage/report.json").read_text())["counts"]
+          write=json.loads((root/"rehearsal/report.json").read_text())
+          checked=json.loads((root/"rehearsal-readback/report.json").read_text())
+          assert write["updated"]==staged["staged_matches"]
+          assert checked["status"]=="verified"
+          assert checked["enriched_matches"]==staged["staged_matches"]
+          assert checked["new_stat_values"]==staged["new_stat_values"]
+          assert checked["existing_values_overwritten"]==0
+          print("Dry-run exact stats mutation, complete readback verified without remote publication.")
+          PY
+
       - name: Create immutable prewrite backup and independently verify checksum
         if: ${{ steps.request.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
         shell: bash
