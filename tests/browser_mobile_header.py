@@ -296,11 +296,12 @@ def main():
                 brand.click()
                 assert page.locator('#bqm-dialog').is_visible()
                 assert brand.get_attribute('aria-expanded')=='true'
-                # Both triggers share one menu: account first, navigation below it.
+                # The logo prioritizes navigation; the avatar prioritizes
+                # the account. Order must be real DOM order, not CSS only.
                 section_order=page.locator('#bqm-dialog nav').evaluate(
                     "n=>[...n.children].map(c=>c.classList[0])"
                 )
-                assert section_order==['bqm-account-switch','bqm-account-panel','bqm-navigation-switch','bqm-navigation-panel'],(width,section_order)
+                assert section_order==['bqm-navigation-switch','bqm-navigation-panel','bqm-account-switch','bqm-account-panel'],(width,section_order)
                 assert page.locator('#bqm-navigation-panel').is_visible(),(width,'logo should open navigation')
                 assert page.locator('#bqm-account-panel').is_hidden(),(width,'logo should keep account collapsed')
                 assert page.locator('.bqm-navigation-switch').get_attribute('aria-expanded')=='true'
@@ -345,6 +346,11 @@ def main():
                     assert not page.locator('#bqm-dialog').is_visible()
                 page.locator('#profileButton').click()
                 assert page.locator('#bqm-dialog').is_visible()
+                avatar_section_order=page.locator('#bqm-dialog nav').evaluate(
+                    "n=>[...n.children].map(c=>c.classList[0])"
+                )
+                assert avatar_section_order==['bqm-account-switch','bqm-account-panel','bqm-navigation-switch','bqm-navigation-panel'],(width,avatar_section_order)
+                assert page.locator('.bqm-account-switch').get_attribute('aria-expanded')=='true'
                 assert page.locator('#profileMenu').is_hidden(),(width,'old profile dropdown must stay closed')
                 assert page.locator('#bqm-account-panel').is_visible()
                 assert page.locator('#bqm-navigation-panel').is_hidden(),(width,'avatar should collapse navigation by default')
