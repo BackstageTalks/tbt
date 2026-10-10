@@ -332,9 +332,9 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/verify_training_table_contract.py \
-            --table .cache/tbt/research-finalize/readback/training_table.parquet \
-            --report .cache/tbt/research-finalize/readback/training_table_report.json \
-            --leakage .cache/tbt/research-finalize/readback/leakage_audit_report.json \
+            --table .cache/tbt/research-finalize/readback-training/training_table.parquet \
+            --report .cache/tbt/research-finalize/readback-training/training_table_report.json \
+            --leakage .cache/tbt/research-finalize/readback-training/leakage_audit_report.json \
             --weather-evidence .cache/tbt/research-finalize/audit/openmeteo-pre-match-report.json \
             --research-ranks \
             --out .cache/tbt/research-finalize/training/readback_gate.json
