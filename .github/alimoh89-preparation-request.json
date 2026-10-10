@@ -25,5 +25,7 @@
   },
   "requested_at_utc": "2026-10-07T11:48:00Z",
   "confirmed_at_utc": "2026-10-07T12:46:00Z",
-  "write_requested_at_utc": "2026-10-07T12:35:00Z"
+  "write_requested_at_utc": "2026-10-07T12:35:00Z",
+  "audit_trigger": "read_only_exact_current_cdb_overlap_20261010",
+  "audit_goal": "Re-evaluate exact canonical net-new and contradictions; PR is forced dry-run, no CDB writes, no model activation."
 }
