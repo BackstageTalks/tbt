@@ -95,9 +95,25 @@ def audit(source: Path, partition: Path, history_manifest: Path, output: Path) -
             summaries["team_name_pattern_hints"] += 1
         if "double" in str(row.tournament_level or "").lower():
             summaries["doubles_tournament_level_hints"] += 1
-        for key in context:
+        for key, val in context.items():
+            # Enumerate ALL canonical provider-context top-level keys, not only
+            # keys that look like person identifiers; preserve counts, not
+            # source payload contents or guessed identities.
+            by_keys["root:" + str(key) + ":" + type(val).__name__] += 1
             if any(word in key.lower() for word in POTENTIAL_KEY_WORDS):
                 hints[key] += 1
+        for side in ("homeTeam", "awayTeam"):
+            obj = context.get(side)
+            if isinstance(obj, dict):
+                by_keys[side + ":dict"] += 1
+                for key, val in obj.items():
+                    by_keys[side + "." + str(key) + ":" + type(val).__name__] += 1
+                    # A list of two individuals can be useful for a future
+                    # source-specific ID crosswalk, but is NOT validated here.
+                    if isinstance(val, list):
+                        by_keys[side + "." + str(key) + ":list_len_" + str(len(val))] += 1
+            else:
+                by_keys[side + ":" + type(obj).__name__] += 1
         four = strict_four_player_ids(context)
         if four is not None:
             summaries["matches_with_structured_four_distinct_ids"] += 1
@@ -117,7 +133,8 @@ def audit(source: Path, partition: Path, history_manifest: Path, output: Path) -
         "canonical_partition_sha256": year_meta["sha256"],
         "counts": dict(summaries),
         "potential_provider_payload_key_counts": dict(hints.most_common(50)),
-        "source_status": "verified_supplement_already_published_as_governed_research_sidecar",
+        "provider_payload_shape_counts": dict(by_keys.most_common(100)),
+        "source_status": "SHA_verified_official_WTA_doubles_supplement_stored_in_private_research",
         "rank_join_policy": "four_explicit_player_ids + validated_canonical_to_sackmann_crosswalk + prior_week_asof + upstream team_side + rights",
         "exact_verified_four_id_crosswalks_to_sackmann": None,
         "proven_new_canonical_individual_doubles_rank_values": 0,
