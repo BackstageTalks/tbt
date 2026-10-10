@@ -3340,7 +3340,7 @@
         <span class="results-mobile-filter-current">${escapeHtml(mobileFilterLabel)}<i aria-hidden="true"></i></span>
       </button>
       <div class="results-filter-bar results-filter-bar-v683">
-      <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory" class="results-category-compat">${['all','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><details class="results-category-picker"><summary>${escapeHtml(resultCategoryLabel(filters.category||'all'))}</summary><div class="results-category-options">${['all','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>`<label><input type="checkbox" data-result-category="${v}" ${String(filters.category||'all').split(',').includes(v)?'checked':''}><span>${escapeHtml(resultCategoryLabel(v))}</span></label>`).join('')}</div></details></span></label>
+      <div class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory" class="results-category-compat">${['all','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><details class="results-category-picker"><summary>${escapeHtml(resultCategoryLabel(filters.category||'all'))}</summary><div class="results-category-options">${['all','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>`<label><input type="checkbox" data-result-category="${v}" ${String(filters.category||'all').split(',').includes(v)?'checked':''}><span>${escapeHtml(resultCategoryLabel(v))}</span></label>`).join('')}</div></details></span></div>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow">${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
@@ -3419,7 +3419,18 @@
         const key=canonicalResultPublicationKey(row,publication,index);
         if(cohort&&!cohort.has(key))return;
         const current=unique.get(key);
-        if(!current||new Date(publication.issued_at)<new Date(current.publication.issued_at))unique.set(key,{row,publication});
+        const market=String(publication.market||'').toLowerCase();
+        const categoryTag=({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'})[market]
+          ||String(publication.section||'');
+        if(!current){
+          unique.set(key,{row,publication,categories:categoryTag?[categoryTag]:[]});
+        }else{
+          if(categoryTag&&!current.categories.includes(categoryTag))current.categories.push(categoryTag);
+          if(new Date(publication.issued_at)<new Date(current.publication.issued_at)){
+            current.row=row;
+            current.publication=publication;
+          }
+        }
       });
     });
     return [...unique.values()].sort((a,b)=>new Date(b.row?.scheduled_at||0)-new Date(a.row?.scheduled_at||0));
@@ -3531,7 +3542,7 @@
     const pages=Math.max(1,Math.ceil(entries.length/pageSize));
     state.resultsPage=Math.max(0,Math.min(Number(state.resultsPage)||0,pages-1));
     const startIndex=state.resultsPage*pageSize,endIndex=Math.min(entries.length,startIndex+pageSize);
-    const body=entries.slice(startIndex,endIndex).map(({row:r,publication})=>{
+    const body=entries.slice(startIndex,endIndex).map(({row:r,publication,categories:publishedCategories=[]})=>{
       const p1=r.player1||{},p2=r.player2||{},outcome=publicationOutcome(publication),projection=isProjectionPublication(publication);
       const pickIdentity=resultPickIdentity(publication,r);
       const pickName=projection?(publication?.selection||pickIdentity.name||'—'):pickIdentity.name;
@@ -3540,7 +3551,17 @@
       const units=outcome.kind==='void'?0:rawUnits;
       const projectionMarket=String(publication?.market||publication?.projection_metric||'').toLowerCase();
       const tag=projection?({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'}[projectionMarket]||String(publication?.section||'projection')):String(publication?.section||'');
-      const tags=`<span class="result-tag ${escapeHtml(tag)}">${escapeHtml(projection?projectionResultTypeLabel(publication):resultCategoryLabel(tag||'all'))}</span>`;
+      // A TOP and Value publication can describe the same settled bet.
+      // Preserve one bet / one KPI unit, but show every selected category
+      // instead of making a multi-selection look like TOP-only results.
+      const visibleTags=String(category).includes(',')&&publishedCategories.length
+        ?[...publishedCategories].sort((a,b)=>['top_daily','prime','value','doubles','ace','double_faults','sets','games'].indexOf(a)-['top_daily','prime','value','doubles','ace','double_faults','sets','games'].indexOf(b))
+        :[tag];
+      const tags=visibleTags.map(value=>{
+        const metric=({ace:'aces',double_faults:'double_faults',sets:'sets',games:'games'})[value];
+        const label=metric?projectionResultTypeLabel({projection_metric:metric}):resultCategoryLabel(value||'all');
+        return `<span class="result-tag ${escapeHtml(value)}">${escapeHtml(label)}</span>`;
+      }).join('');
       const voidLabel=resultVoidLabel(outcome.reason);
       const resultHtml=outcome.kind==='win'
         ?`<b class="correct">✓ ${escapeHtml(lcopy('WIN','VÝHRA','VÝHRA'))}</b>`
@@ -3654,7 +3675,16 @@
 
   function wireResultsFilters(){
     ensureResultsCategoryDismissHandlers();
-    const rerender=()=>{state.resultsPage=0;renderRoute('results');};
+    const rerender=()=>{
+      const expanded=document.querySelector('.results-filter-shell')?.classList.contains('is-open');
+      state.resultsPage=0;
+      renderRoute('results');
+      if(expanded){
+        const shell=document.querySelector('.results-filter-shell');
+        shell?.classList.add('is-open');
+        shell?.querySelector('[data-results-filter-toggle]')?.setAttribute('aria-expanded','true');
+      }
+    };
     const mobileFilterToggle=document.querySelector('[data-results-filter-toggle]');
     if(mobileFilterToggle)mobileFilterToggle.onclick=()=>{
       const shell=mobileFilterToggle.closest('.results-filter-shell');
