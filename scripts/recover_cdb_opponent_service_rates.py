@@ -50,6 +50,23 @@ def _index(matches):
     return mapping
 
 
+def _inconsistent_observed_pair(stats):
+    """Never derive from a record with contradictory service/return evidence."""
+    import math
+    for serve, ret in (("p1_service_points_won", "p2_return_points_won"),
+                       ("p2_service_points_won", "p1_return_points_won")):
+        a, b = stats.get(serve), stats.get(ret)
+        if a is None or b is None:
+            continue
+        if (isinstance(a, bool) or isinstance(b, bool) or
+                not isinstance(a, (int, float)) or not isinstance(b, (int, float)) or
+                not math.isfinite(a) or not math.isfinite(b) or
+                not 0 <= a <= 1 or not 0 <= b <= 1 or
+                abs(float(a) + float(b) - 1.0) > 0.000001):
+            return True
+    return False
+
+
 def stage(matches, *, as_of=None):
     now = as_of or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -65,6 +82,9 @@ def stage(matches, *, as_of=None):
         stats = match.stats
         if not isinstance(stats, dict):
             summary["invalid_stats"] += 1
+            continue
+        if _inconsistent_observed_pair(stats):
+            summary["contradictory_observed_rates"] += 1
             continue
         proposed = dict(stats)
         complete_opponent_service_rates(proposed)
@@ -106,6 +126,8 @@ def write_local(matches, staged):
         if row.get("prewrite_hash") != _sha(_storage(match)):
             raise ValueError("Canonical match changed since dry-run")
         before = match.stats or {}
+        if _inconsistent_observed_pair(before):
+            raise ValueError("Conflicting observed service/return evidence")
         if row.get("source_stats_hash") != _sha(before):
             raise ValueError("Source statistics changed since dry-run")
         actual = dict(before)
