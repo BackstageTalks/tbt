@@ -53,3 +53,30 @@ def test_transactional_message_is_multipart_with_sender_domain_message_id():
     parts = parsed.get_payload()
     assert parts[0].get_content_type() == "text/plain"
     assert parts[1].get_content_type() == "text/html"
+
+
+def test_hosted_original_brand_image_and_safe_fallback():
+    from pathlib import Path
+    import hashlib
+
+    props = dict(
+        eyebrow="BLINQ", title_sk="Overte svoj e-mail", body_sk="SK",
+        title_en="Verify your email", body_en="EN",
+    )
+    plain, html = render_blinq_email(
+        **props, logo_url="https://blinq.example/assets/blinq_logo_email.png?a=1&b=2",
+    )
+    assert '<img src="https://blinq.example/assets/blinq_logo_email.png?a=1&amp;b=2"' in html
+    assert 'alt="BlinQ"' in html
+    assert "cid:" not in html
+    assert "Overte svoj e-mail" in plain
+
+    _, fallback = render_blinq_email(**props, logo_url="javascript:alert(1)")
+    assert "<img" not in fallback
+    assert "Blin<span" in fallback
+
+    root = Path(__file__).resolve().parents[1]
+    public = root / "web/assets/blinq_logo_email.png"
+    source = root / "api/tbt/assets/blinq_logo_email.png"
+    assert public.is_file() and source.is_file()
+    assert hashlib.sha256(public.read_bytes()).digest() == hashlib.sha256(source.read_bytes()).digest()
