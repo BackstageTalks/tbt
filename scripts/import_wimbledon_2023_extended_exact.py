@@ -46,7 +46,7 @@ def read_stage(path, report):
     if report.get("baseline_control_fields_already_present") != 20 or report.get("quarantined_matches") != 0:
         raise ValueError("Existing ace/DF controls and quarantine check failed")
     if (int(report["counts"].get("READY_MISSING", -1)) != 60
-            or int(report["counts"].get("ALREADY_PRESENT", -1)) != 0
+            or int(report["counts"].get("ALREADY_PRESENT", 0)) != 0
             or int(report["counts"].get("CONFLICT", 0)) != 0
             or int(report["counts"].get("UNRESOLVED", 0)) != 0):
         raise ValueError("Pilot no longer agrees with positively verified 12-field stage")
