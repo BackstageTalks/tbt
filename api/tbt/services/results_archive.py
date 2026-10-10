@@ -254,11 +254,15 @@ def read_only_archive_category_counts(
             all_sections[section] += 1
             if day_key(scheduled) != current_day:
                 continue
+            issued_snapshot = publication.get("issued_snapshot")
+            issued_snapshot = issued_snapshot if isinstance(issued_snapshot, dict) else {}
+            betting = row.get("betting")
+            betting = betting if isinstance(betting, dict) else {}
             explicit = str(
                 publication.get("betting_day")
-                or (publication.get("issued_snapshot") or {}).get("betting_day")
+                or issued_snapshot.get("betting_day")
                 or row.get("betting_day")
-                or (row.get("betting") or {}).get("betting_day")
+                or betting.get("betting_day")
                 or ""
             )
             # Mirrors the current Admin Today filter in web/app.js.
