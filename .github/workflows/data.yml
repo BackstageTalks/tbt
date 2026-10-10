@@ -82,7 +82,7 @@ permissions:
 concurrency:
   group: tbt-history-data-writer
   # Explicit replacement markers may cancel a stale writer; ordinary writers never cancel each other.
-  cancel-in-progress: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '[replace-current-refresh]') || contains(github.event.head_commit.message, '[replace-stale-data-run]')) }}
+  cancel-in-progress: false  # Never auto-cancel a run that may own a global writer lock.
 jobs:
   pipeline:
     if: (github.event_name == 'push' && (contains(github.event.head_commit.message, '[refresh-now]') || contains(github.event.head_commit.message, '[data-request]'))) || github.event_name == 'workflow_dispatch'
@@ -213,6 +213,13 @@ jobs:
       - name: Reuse current candidate without duplicate pipeline assembly
         if: env.MODE == 'deploy-current'
         run: echo "Deployment job will assemble and verify the immutable serving snapshot once."
+
+      - name: Acquire global cross-repository canonical writer
+        if: env.MODE != 'deploy-current'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
 
       - name: Execute selected operation
         shell: bash
@@ -680,6 +687,11 @@ jobs:
           python scripts/prepare_feed.py
           test -s api/data/feed.json
           python scripts/verify_presentation_feed.py api/data/feed.json --summary
+
+      - name: Release global cross-repository canonical writer
+        if: always()
+        shell: bash
+        run: python scripts/cdb_global_writer_lock.py release --if-held
 
   readiness:
     name: Update model promotion readiness
