@@ -26,6 +26,7 @@ def test_canonical_upload_gate_happens_before_any_remote_release_action(monkeypa
 
 def test_training_release_obeys_same_lock(monkeypatch, tmp_path):
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setitem(sys.modules, "cdb_global_writer_lock", cdb_global_writer_lock)
     obj = object.__new__(release_store.ReleaseStore)
     obj.repository = "BackstageTalks/tbt-data"
     obj.tag = "tbt-training-table-v1"
