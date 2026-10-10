@@ -1,9 +1,10 @@
 """Finalize BlinQ model promotion from the already-captured shadow cohort.
 
 This intentionally does NOT retrain a model and does NOT call any provider API.
-It promotes only the exact candidate artifact that generated the shadow
-probabilities, and only when the same settled cohort beats both production and
-the point-in-time Elo baseline under the existing production metric gate.
+It evaluates the exact shadow-tested candidate against production and
+point-in-time Elo on one verified fixture, but NEVER writes a model release.
+Production promotion requires separate explicit operator approval and a
+verified isolated champion rollback rehearsal (issue #405).
 """
 from __future__ import annotations
 
@@ -36,6 +37,11 @@ def _clean_float(value):
     if value is None:
         return None
     return float(value)
+
+
+def _evaluation_disposition(eligible: bool) -> str:
+    """A metric pass authorizes review, never mutation of serving artifacts."""
+    return "eligible_pending_approval" if eligible else "rejected"
 
 
 def _metric_delta(left: dict, right: dict, key: str):
@@ -372,48 +378,22 @@ def main() -> None:
         "delta_vs_elo": gate_report["delta_vs_elo"],
         "delta_vs_production": gate_report["delta_vs_production"],
         "eligible": bool(eligible),
-        "promotion_requested": True,
-        "decision": "approved" if eligible else "rejected",
+        "promotion_requested": False,
+        "decision": _evaluation_disposition(eligible),
         "reasons": gate_reasons,
         "shadow": gate_report["shadow"],
         "artifact_policy": "promote exact shadow-tested candidate; no refit",
     }
-    merged_history.append(decision)
-
-    candidate_report = read_json(candidate_dir / "training_report.json", {})
-    if not isinstance(candidate_report, dict):
-        raise ValueError("Invalid candidate training report")
-    candidate_report["promotion_decision"] = decision
-    candidate_report["shadow_promotion_gate"] = gate_report
-    candidate_report["promotion_artifact_policy"] = (
-        "exact evaluated candidate promoted without retraining or refit"
-    )
-    write_json(candidate_dir / "training_report.json", candidate_report)
-    write_json(candidate_dir / "promotion_history.json", merged_history)
-
-    # Persist the consumed governance decision even on rejection, preventing
-    # accidental repeated testing of the same exact cohort.
-    candidate.upload_bundle([
-        candidate_dir / "model.joblib",
-        candidate_dir / "training_report.json",
-        candidate_dir / "promotion_history.json",
-    ])
-
-    status = "rejected"
-    if eligible:
-        production.upload_bundle([
-            candidate_dir / "model.joblib",
-            candidate_dir / "training_report.json",
-            candidate_dir / "promotion_history.json",
-        ])
-        status = "approved_and_promoted"
+    # No candidate or production release write is permitted by this gate.
+    # A favorable result is research evidence, NOT authorization to promote.
+    status = _evaluation_disposition(eligible)
 
     final = {
         "schema": 1,
         "status": status,
         "candidate_version": candidate_version,
         "previous_production_version": production_version,
-        "production_version_after": candidate_version if eligible else production_version,
+        "production_version_after": production_version,
         "decision": decision,
         "gate_report": gate_report,
         "canonical_identity": identity,
@@ -421,7 +401,10 @@ def main() -> None:
         "provider_requests": 0,
         "retrained": False,
         "canonical_mutated": False,
-        "exact_shadow_tested_artifact_promoted": bool(eligible),
+        "exact_shadow_tested_artifact_promoted": False,
+        "operator_approval_required": bool(eligible),
+        "production_release_mutated": False,
+        "candidate_release_mutated": False,
     }
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

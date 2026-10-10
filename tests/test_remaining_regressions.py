@@ -405,7 +405,7 @@ def test_evaluation_excludes_champion_seen_days_and_overlapping_decisions():
     assert training._eligible_evaluation(frame, champion, [{}])[0].empty
 
 
-@pytest.mark.parametrize('promote,passing', [(False, False), (True, False), (False, True), (True, True)])
+@pytest.mark.parametrize('promote,passing', [(False, False), (False, True)])
 def test_only_requested_holdout_decisions_persist_before_promotion(monkeypatch, tmp_path, promote, passing):
     published = []
     class Store:
@@ -473,6 +473,18 @@ def test_only_requested_holdout_decisions_persist_before_promotion(monkeypatch, 
         assert not pipeline._holdout_already_used(published[0][1], 'fingerprint')
     assert len(published) == (2 if promote and passing else 1)
 
+
+
+@pytest.mark.parametrize("passing", [False, True])
+def test_legacy_promotion_flag_fails_before_any_release_access(monkeypatch, capsys, passing):
+    def no_release_access(*args, **kwargs):
+        raise AssertionError("Promotion flag must fail before any release access")
+    monkeypatch.setattr(pipeline, "ReleaseStore", no_release_access)
+    monkeypatch.setattr('sys.argv', ['pipeline', 'train', '--promote'])
+    with pytest.raises(SystemExit) as exc:
+        pipeline.main()
+    assert exc.value.code == 2
+    assert "verified isolated champion rollback evidence" in capsys.readouterr().err
 
 def test_release_upload_does_not_backdate_issuance(monkeypatch, tmp_path, match_factory):
     start = datetime.now(timezone.utc)
