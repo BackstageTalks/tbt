@@ -8940,6 +8940,7 @@ body#blinqPremium .results-mobile-filter-toggle{display:none}
     background:linear-gradient(180deg,rgba(5,28,24,.96),rgba(4,20,18,.94))!important;
     overflow:hidden!important;
   }
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-shell.is-open{overflow:visible!important}
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-mobile-filter-toggle{
     width:100%!important;min-height:54px!important;display:flex!important;align-items:center!important;
     justify-content:space-between!important;gap:12px!important;padding:0 14px!important;
