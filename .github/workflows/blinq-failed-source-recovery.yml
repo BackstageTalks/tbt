@@ -1,0 +1,108 @@
+name: BlinQ recovery — ATP Singles and CheckBestOdds
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-failed-source-recovery.yml
+  workflow_dispatch:
+  schedule:
+    # One bounded daily recovery, never a tight retry loop.
+    - cron: "37 3 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-failed-source-recovery
+  cancel-in-progress: false
+
+jobs:
+  atp-singles-recovery:
+    name: Resume ATP Singles ranking checkpoints
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - name: Validate private repository token and checkpoint asset
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = "true"
+          gh release view blinq-cloud-atptour-20261009 \
+            --repo BackstageTalks/tbt-data --json assets \
+            --jq '[.assets[].name | select(startswith("blinq-atp-singles-"))] | length'
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+      - name: Resume only missing ATP Singles ranking snapshots
+        working-directory: source
+        run: python -u scripts/cloud_collect_remaining_sources.py --task ATP_SINGLES --duration 295m
+      - name: Preserve accurate result
+        if: always()
+        run: |
+          echo "ATP Singles resumes from private tbt-data release, previously 1055/1374 snapshots." >> "$GITHUB_STEP_SUMMARY"
+          echo "This workflow does not modify CDB or Training DB." >> "$GITHUB_STEP_SUMMARY"
+          echo "Interrupted jobs are incomplete even if checkpoint upload succeeded." >> "$GITHUB_STEP_SUMMARY"
+
+  checkbestodds-recovery:
+    name: CheckBestOdds 403 access check and conditional retry
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+      - name: Check source once; never bypass HTTP 403 or 429
+        id: source
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, requests
+          url = "https://checkbestodds.com/historical-tennis-odds"
+          try:
+              r = requests.get(url, timeout=30, headers={
+                  "User-Agent": "Mozilla/5.0 (compatible; BlinQResearch/1.0; +https://github.com/BackstageTalks/tbt-data)"
+              })
+              status = str(r.status_code)
+          except requests.RequestException as exc:
+              print("CHECKBESTODDS_UNREACHABLE", type(exc).__name__)
+              status = "network_error"
+          available = status == "200"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("available=" + str(available).lower() + "\n")
+              output.write("http_status=" + status + "\n")
+          print("CHECKBESTODDS_STATUS", status, "eligible_to_collect", available)
+          PY
+          echo "CheckBestOdds HTTP: ${{ steps.source.outputs.http_status }}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Resume historical source only when access is allowed
+        if: steps.source.outputs.available == 'true'
+        working-directory: source
+        run: |
+          python -u scripts/cloud_collect_remaining_sources.py --task CHECKBESTODDS --duration 295m
+      - name: Explicitly report blocked upstream, not an import success
+        if: steps.source.outputs.available != 'true'
+        shell: bash
+        run: |
+          echo "CHECKBESTODDS_BLOCKED_UPSTREAM: HTTP ${{ steps.source.outputs.http_status }}." >> "$GITHUB_STEP_SUMMARY"
+          echo "No scraping attempted; respecting site refusal and awaiting permitted access." >> "$GITHUB_STEP_SUMMARY"
+          echo "No production CDB, Training DB or source dataset was modified." >> "$GITHUB_STEP_SUMMARY"
