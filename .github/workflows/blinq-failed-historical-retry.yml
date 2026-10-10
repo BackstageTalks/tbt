@@ -1,0 +1,292 @@
+name: BlinQ isolated retry of failed historical collectors
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-failed-historical-retry.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-failed-historical-retry
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - name: Confirm private repo and checkpoint releases
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = "true"
+          for tag in blinq-cloud-atptour-20261009 blinq-tennisexplorer-cloud-20261009 blinq-cloud-checkbestodds-20261009; do
+            gh release view "$tag" --repo BackstageTalks/tbt-data >/dev/null
+          done
+          echo "Private checkpoint destinations are ready. No raw files published to public tbt."
+
+  atp-doubles:
+    name: Resume ATP Doubles from saved rankings
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+      - name: Resume ATP Doubles only missing or unverified snapshots
+        working-directory: source
+        run: python -u scripts/cloud_collect_remaining_sources.py --task ATP_DOUBLES --duration 295m
+      - name: Report
+        if: always()
+        run: |
+          echo "ATP Doubles: resumable ranking collection, originally 955/1374 snapshots." >> "$GITHUB_STEP_SUMMARY"
+          echo "Any new source checkpoint is immutable and private in tbt-data." >> "$GITHUB_STEP_SUMMARY"
+
+  atp-leaderboards:
+    name: Respect ATP 429 then retry Leaderboards if allowed
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+      - name: One low-rate source probe without retry or bypass
+        id: access
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,requests
+          url="https://www.atptour.com/en/stats/leaderboard?boardType=serve&timeFrame=52week&surface=all&versusRank=all&formerNo1=false"
+          try:
+              r=requests.get(url,timeout=40,headers={"User-Agent":"Mozilla/5.0 (compatible; BlinQResearch/1.0; +https://github.com/BackstageTalks/tbt-data)"})
+              status=str(r.status_code)
+              retry_after=r.headers.get("Retry-After","unspecified")
+          except requests.RequestException as exc:
+              status="network_error";retry_after="unspecified"
+              print("ATP_LEADERBOARDS_SOURCE_ERROR",type(exc).__name__)
+          print("ATP_LEADERBOARDS_HTTP",status,"retry_after",retry_after)
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f:
+              f.write("allowed="+str(status=="200").lower()+"\n")
+              f.write("status="+status+"\n")
+          PY
+      - name: Resume leaderboard collection only when allowed
+        if: steps.access.outputs.allowed == 'true'
+        working-directory: source
+        run: python -u scripts/cloud_collect_remaining_sources.py --task ATP_LEADERBOARDS --duration 295m
+      - name: Fail visibly if still rate limited
+        if: steps.access.outputs.allowed != 'true'
+        run: |
+          echo "::error::ATP Leaderboards incomplete, source HTTP ${{ steps.access.outputs.status }}. Respect source limit."
+          echo "Source blocked; no new requests beyond one access probe." >> "$GITHUB_STEP_SUMMARY"
+          exit 2
+
+  tennisexplorer-2026:
+    name: Resume TennisExplorer 2026 / ${{ matrix.category }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        category: [atp-single, atp-double, wta-single, wta-double]
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      CATEGORY: ${{ matrix.category }}
+      YEAR: "2026"
+      RELEASE: blinq-tennisexplorer-cloud-20261009
+      PRIVATE_REPO: BackstageTalks/tbt-data
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+      - name: Restore latest PRIVATE source checkpoint
+        id: restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp_name=$(gh api "repos/$PRIVATE_REPO/releases/tags/$RELEASE" \
+            --jq "[.assets[] | select(.name | startswith(\"txe-retry-$CATEGORY-$YEAR-\"))] | sort_by(.created_at) | last | .name // empty")
+          if [[ -z "$cp_name" || "$cp_name" == "null" ]]; then
+            cp_name="txe-$CATEGORY-$YEAR.tar.gz"
+          fi
+          echo "RESTORE_SOURCE $cp_name"
+          mkdir -p /tmp/blinq-checkpoint
+          gh release download "$RELEASE" --repo "$PRIVATE_REPO" \
+            --pattern "$cp_name" --dir /tmp/blinq-checkpoint
+          ARCHIVE="/tmp/blinq-checkpoint/$cp_name" python - <<'PY'
+          import os,tarfile
+          from pathlib import Path
+          source=Path("source")
+          c=os.environ["CATEGORY"]
+          p=Path(os.environ["ARCHIVE"])
+          with tarfile.open(p,"r:gz") as tar:
+              members=tar.getmembers()
+              if not members:
+                  raise SystemExit("Checkpoint is empty")
+              for m in members:
+                  correct=(m.name.startswith(f"data/tennisexplorer/results/{c}/2026.") or
+                           m.name.startswith(f"data/tennisexplorer/enrichment/{c}/2026."))
+                  if not correct or not m.isfile() or m.issym() or m.islnk():
+                      raise SystemExit("Unexpected checkpoint member: "+m.name)
+              tar.extractall(source, filter="data")
+          print("RESTORED_CHECKPOINT_FILES",len(members))
+          PY
+      - name: Extend missing source results (no repeat completed days)
+        id: results
+        if: steps.restore.outcome == 'success'
+        continue-on-error: true
+        working-directory: source
+        shell: bash
+        run: |
+          timeout --signal=INT --kill-after=20s 20m python -u scripts/scrape_tennisexplorer_results_by_category.py \
+            --category "$CATEGORY" --from-year "$YEAR" --to-year "$YEAR" \
+            --delay 2 --retries 2 --stop-after-failures 3
+      - name: Resume missing detail rows with source-friendly pacing
+        id: details
+        if: steps.results.outcome == 'success'
+        continue-on-error: true
+        working-directory: source
+        shell: bash
+        run: |
+          timeout --signal=INT --kill-after=30s 280m python -u scripts/scrape_tennisexplorer_details.py \
+            --category "$CATEGORY" --from-year "$YEAR" --to-year "$YEAR" \
+            --delay 2 --retries 2 --max-consecutive-failures 3
+      - name: Verify 2026 detail coverage is actually complete
+        id: coverage
+        if: steps.details.outcome == 'success'
+        working-directory: source
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path("data/tennisexplorer/enrichment")/os.environ["CATEGORY"]/"2026.run_metadata.json"
+          if not p.is_file():
+              raise SystemExit("Missing 2026 detail completion metadata")
+          info=json.loads(p.read_text(encoding="utf-8"))
+          print("2026_DETAIL_QA",json.dumps(info,ensure_ascii=False,sort_keys=True))
+          if not info.get("complete") or info.get("pending_details") != 0:
+              raise SystemExit("Details still incomplete - checkpoint required")
+          if info.get("complete_with_gaps"):
+              raise SystemExit("Unrecoverable details in source need explicit QA")
+          PY
+      - name: Save immutable private progress checkpoint even after timeout
+        if: always() && steps.restore.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ASSET=$(python - <<'PY'
+          import os,tarfile
+          from pathlib import Path
+          c=os.environ["CATEGORY"]; y=os.environ["YEAR"]
+          root=Path("source")
+          paths=[]
+          for section in ("results","enrichment"):
+              paths+=list((root/"data"/"tennisexplorer"/section/c).glob(f"{y}.*"))
+          paths=sorted(p for p in paths if p.is_file() and not p.is_symlink())
+          if not paths or not any(p.suffix==".jsonl" for p in paths):
+              raise SystemExit("No valid raw detail checkpoint to publish")
+          name=f"txe-retry-{c}-{y}-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}.tar.gz"
+          dst=Path("/tmp")/name
+          with tarfile.open(dst,"w:gz") as tar:
+              for p in paths:
+                  tar.add(p,arcname=p.relative_to(root).as_posix(),recursive=False)
+          print(dst)
+          PY
+          )
+          test -s "$ASSET"
+          gh release upload "$RELEASE" "$ASSET" --repo "$PRIVATE_REPO"
+          echo "PRIVATE_RESUME_CHECKPOINT $ASSET"
+      - name: Report actual completion, not checkpoint-only success
+        if: always()
+        shell: bash
+        run: |
+          echo "TennisExplorer $CATEGORY year $YEAR; source-only checkpoint kept privately." >> "$GITHUB_STEP_SUMMARY"
+          echo "Listings: ${{ steps.results.outcome }}, details: ${{ steps.details.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Production CDB and Training DB unchanged." >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ steps.results.outcome }}" != "success" || "${{ steps.details.outcome }}" != "success" || "${{ steps.coverage.outcome }}" != "success" ]]; then
+            echo "::error::2026 details INCOMPLETE; resume from latest private retry checkpoint"
+            exit 2
+          fi
+
+  checkbestodds:
+    name: CheckBestOdds access gate; collect only on 200
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+      - name: One HTTP access probe respecting upstream refusal
+        id: access
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os,requests
+          try:
+              r=requests.get("https://checkbestodds.com/historical-tennis-odds",
+                timeout=30,headers={"User-Agent":"Mozilla/5.0 (compatible; BlinQResearch/1.0; +https://github.com/BackstageTalks/tbt-data)"})
+              status=str(r.status_code)
+          except requests.RequestException as exc:
+              status="network_error";print("CHECKBESTODDS_SOURCE_ERROR",type(exc).__name__)
+          print("CHECKBESTODDS_STATUS",status)
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f:
+              f.write("allowed="+str(status=="200").lower()+"\n")
+              f.write("status="+status+"\n")
+          PY
+      - name: Collect only if explicitly accessible
+        if: steps.access.outputs.allowed == 'true'
+        working-directory: source
+        run: python -u scripts/cloud_collect_remaining_sources.py --task CHECKBESTODDS --duration 295m
+      - name: Fail accurately if source refuses access
+        if: steps.access.outputs.allowed != 'true'
+        run: |
+          echo "::error::CheckBestOdds incomplete. HTTP ${{ steps.access.outputs.status }}; do not bypass blocked access."
+          echo "Only one probe attempted; no source dataset downloaded." >> "$GITHUB_STEP_SUMMARY"
+          exit 2
