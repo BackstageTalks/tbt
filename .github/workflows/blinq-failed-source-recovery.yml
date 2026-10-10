@@ -1,14 +1,7 @@
 name: BlinQ recovery — ATP Singles and CheckBestOdds
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/blinq-failed-source-recovery.yml
   workflow_dispatch:
-  schedule:
-    # One bounded daily recovery, never a tight retry loop.
-    - cron: "37 3 * * *"
 
 permissions:
   contents: read
