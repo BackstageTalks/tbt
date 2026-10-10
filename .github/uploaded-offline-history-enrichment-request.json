@@ -3,6 +3,7 @@
   "api_requests": 0,
   "source": "user_uploaded_plus_pinned_offline",
   "requested_at_utc": "2026-10-07T09:35:00Z",
-  "purpose": "Import uploaded ATP qualification data plus pinned ATP/Futures/Challenger and Match Charting serve-return enrichment into canonical history with fail-closed identity checks.",
-  "retry_reason": "Final production write retry queued behind active Hwaitt writer after prior pending run was cancelled by subsequent main commits."
+  "purpose": "Apply only identity-verified missing historical serve/return and charting facts to current CDB. Immutable prewrite backup, pinned manifest comparison and full persisted row-level readback required.",
+  "retry_reason": "Operator requested autonomous safe canonical enrichment; zero verified delta means no write.",
+  "run_guard_commit": "b2bf27e2b692b035645907bda4de0b32b0f71cdc"
 }
