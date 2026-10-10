@@ -88,3 +88,56 @@ jobs:
           name: atp-leaderboard-cached-dom-diagnostic
           path: leaderboard-dom-report.json
           retention-days: 30
+
+  parser-selftest:
+    name: Verify ATP JS-template detection without ATP network requests
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+      - name: Run entire ATP parser selftest suite
+        working-directory: source
+        run: python -u scripts/scrape_atptour_official.py --mode selftest
+      - name: Check invalid HTTP 200 placeholder never triggers follow-up requests
+        working-directory: source
+        shell: bash
+        run: |
+          python - <<'PY'
+          import tempfile,sys,json
+          from types import SimpleNamespace
+          from pathlib import Path
+          sys.path.insert(0,'scripts')
+          import scrape_atptour_official as s
+          blank = """<div class='leaderboard'><table><tbody>
+          <tr><td> </td><td></td><td> </td></tr>
+          <tr><td></td><td></td><td></td></tr></tbody></table></div>"""
+          class Stub:
+              calls=0
+              def get(self,url):
+                  self.calls+=1
+                  if self.calls>1:
+                      raise AssertionError("Illegal follow-up ATP source request")
+                  return blank
+          stub=Stub()
+          with tempfile.TemporaryDirectory() as d:
+              try:
+                  s.leaderboard_job(SimpleNamespace(leaderboard_frames="all"),stub,Path(d))
+              except RuntimeError as e:
+                  assert "empty template" in str(e) and "stop" in str(e)
+              else:
+                  raise AssertionError("Empty JS template was wrongly accepted")
+              assert stub.calls == 1
+              report=json.loads((Path(d)/"leaderboards"/"_unpopulated_serve.json").read_text())
+              assert report["status"]=="UNPOPULATED_DYNAMIC_LEADERBOARD"
+              assert report["valid_player_rows"]==0
+          print("ATP_LEADERBOARD_FASTFAIL_TEST_PASSED; only one mocked GET, zero upstream traffic")
+          PY
