@@ -21,7 +21,7 @@ def test_valuebet_workflow_preserves_leakage_policy():
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "opening_only_candidate; closing_validation_only" in text
     assert "_tbt_market_history" in text
-    assert "tbt-history-data-writer" in text
+    assert "group: tbt-crossrepo-writer-${{ github.run_id }}" in text
     assert "TBT_DATA_GH_TOKEN" in text
     assert "PRIVATE" in text
 
