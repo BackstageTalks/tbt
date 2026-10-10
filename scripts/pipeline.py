@@ -716,6 +716,20 @@ def _publish_predictions(
     return feed
 
 
+def _require_training_backup_gate() -> None:
+    """Fail closed until a per-run durable input+champion backup/restore gate exists.
+
+    Deliberately has no environment-variable escape hatch. Legacy unit tests
+    may monkeypatch this internal seam while mocking every release operation,
+    but no production entrypoint can bypass the missing evidence.
+    """
+    raise RuntimeError(
+        "Candidate training blocked: missing per-run immutable full-input "
+        "backup, independent hash readback and isolated champion restore. "
+        "See AGENTS.md; prior champion-only rehearsal is insufficient."
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Offline BlinQ training and prediction publication")
     parser.add_argument("mode", choices=["train", "refresh", "current-refresh", "backtest"])
@@ -749,18 +763,6 @@ def main():
     )
     parser.add_argument("--promote", action="store_true")
     args = parser.parse_args()
-    # AGENTS.md requires a NEW immutable complete champion + canonical/training
-    # input backup, independent download, hashes and isolated restore BEFORE
-    # EVERY fit (including candidate/shadow). The existing champion-only
-    # rehearsal does NOT prove this. Keep the training command fail-closed
-    # until the complete per-run executable backup/restore gate is installed.
-    # This early check is before any remote repository/provider access.
-    if args.mode == "train":
-        parser.error(
-            "Candidate training blocked: missing per-run immutable full-input "
-            "backup, independent hash readback and isolated champion restore. "
-            "See AGENTS.md; prior champion-only rehearsal is insufficient."
-        )
     # Issue #405: the metric flag alone is NOT operator approval or rollback proof.
     # Fail before any canonical/model release read or write, or provider request.
     if args.promote:
@@ -768,6 +770,13 @@ def main():
             "Production model promotion disabled: requires separate explicit "
             "operator approval and verified isolated champion rollback evidence"
         )
+    # Without an independently restored immutable complete input backup, every
+    # real candidate fit must fail before any model/CDB/network access.
+    if args.mode == "train":
+        try:
+            _require_training_backup_gate()
+        except RuntimeError as exc:
+            parser.error(str(exc))
     if not 1 <= args.max_requests <= 3000:
         parser.error("refresh allowance must be 1..3000")
     if args.market_odds_max_events < 0:
