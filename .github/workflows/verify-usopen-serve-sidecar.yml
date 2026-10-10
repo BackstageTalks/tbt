@@ -1,24 +1,31 @@
-name: Verify private US Open 2024 serve sidecar (read-only)
+name: Verified US Open serve research -> CDB (fail closed)
 
 on:
   pull_request:
     paths:
       - ".github/workflows/verify-usopen-serve-sidecar.yml"
       - "scripts/import_usopen_serve_metadata.py"
+      - "scripts/verify_usopen_serve_readback.py"
+      - "api/tbt/data/provider_context.py"
       - "tests/test_import_usopen_serve_metadata.py"
+  push:
+    branches: [main]
+    paths: [".github/usopen-serve-cdb-request.json"]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: tbt-serve-metadata-audit-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.event_name == 'pull_request' && format('usopen-serve-readonly-{0}', github.ref) || 'tbt-history-data-writer' }}
+  cancel-in-progress: false
 
 jobs:
-  inspect:
+  enrich:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 120
     env:
+      PYTHONPATH: api:scripts
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
     steps:
@@ -26,28 +33,186 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Verify immutable private evidence and inspect safe schema
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Resolve safe import mode
+        id: mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            mode="dry-run"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            mode="dry-run"
+          else
+            mode="$(jq -r '.mode // "dry-run"' .github/usopen-serve-cdb-request.json)"
+          fi
+          [[ "$mode" == "write" || "$mode" == "dry-run" ]]
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "US Open serve CDB action mode: $mode"
+
+      - name: Install dependencies and strict regression tests
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements.txt -r api/requirements-train.txt pytest
+          python -m compileall -q scripts/import_usopen_serve_metadata.py scripts/verify_usopen_serve_readback.py api/tbt/data/provider_context.py
+          python -m pytest tests/test_import_usopen_serve_metadata.py -q
+
+      - name: Verify immutable private CC BY source
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN"
           test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
-          mkdir -p .cache/tbt/usopen-source
+          mkdir -p .cache/tbt/usopen-serve
           gh api -H "Accept: application/vnd.github.raw" \
             "repos/$TBT_DATA_REPOSITORY/contents/research/serve/usopen-2024-serve-metadata.jsonl.gz?ref=1af168aa7f68ca5a1e510d3387d61bc94f45ce26" \
-            > .cache/tbt/usopen-source/metadata.jsonl.gz
-          test "$(git hash-object .cache/tbt/usopen-source/metadata.jsonl.gz)" = \
+            > .cache/tbt/usopen-serve/source.jsonl.gz
+          test "$(git hash-object .cache/tbt/usopen-serve/source.jsonl.gz)" = \
             "9d0a7a8c013a68d18e437f8c75f8fb7c036f1224"
+
+      - name: Download current checksum-verified canonical history
+        run: |
+          set -euo pipefail
           python - <<'PY'
-          import gzip,json
+          import os
           from pathlib import Path
-          path=Path(".cache/tbt/usopen-source/metadata.jsonl.gz")
-          with gzip.open(path,"rt",encoding="utf-8") as handle:
-              rows=[json.loads(line) for line in handle if line.strip()]
-          print("SOURCE_ROWS",len(rows),flush=True)
-          for row in rows[:3]:
-              print("SCHEMA_KEYS",sorted(row),flush=True)
-              print("SERVE_FIELDS",sorted((row.get("player1_serve") or {}).keys()),flush=True)
-              for k,v in row.items():
-                  if k not in {"name","player_name","server","returner","stats","player1_name","player2_name"}:
-                      print("FIELD",k,str(v)[:200],flush=True)
+          from release_store import ReleaseStore
+          root=Path(".cache/tbt/usopen-serve/history")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).download(require_bundle_manifest=True)
           PY
+
+      - name: Strict canonical identity and research-only staging
+        id: gate
+        run: |
+          set -euo pipefail
+          python scripts/import_usopen_serve_metadata.py \
+            --mode stage \
+            --history-dir .cache/tbt/usopen-serve/history \
+            --source .cache/tbt/usopen-serve/source.jsonl.gz \
+            --out-dir .cache/tbt/usopen-serve/stage
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(".cache/tbt/usopen-serve")
+          report=json.loads((root/"stage/report.json").read_text())
+          counts=report["counts"]
+          print("Serve CDB stage:",json.dumps(report),flush=True)
+          assert counts["source_rows"]==96, "Unexpected pinned source size"
+          assert counts.get("identity_missing",0)==0, "Source canonical ID no longer exists"
+          assert counts["source_rows"]==counts.get("staged",0)+counts.get("already_present",0)
+          assert report["canonical_rows"]>=993759, "Stale canonical release"
+          assert report["api_requests"]==0 and report["canonical_mutated"] is False
+          staged=[json.loads(line) for line in (root/"stage/verified_stage.jsonl").read_text().splitlines() if line.strip()]
+          assert len(staged)==counts.get("staged",0)
+          if len(staged)!=len({r["match_id"] for r in staged}):
+              raise SystemExit("Duplicate stage match ID")
+          with open(os.environ["GITHUB_OUTPUT"],"a") as fh:
+              fh.write(f"changes={'true' if staged else 'false'}\n")
+          PY
+
+      - name: Immutable backup and independent backup download
+        if: ${{ steps.mode.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
+        run: |
+          set -euo pipefail
+          root=".cache/tbt/usopen-serve"
+          mkdir -p "$root/backup"
+          cp "$root/history/history-2024.parquet" "$root/backup/"
+          cp "$root/history/history_manifest.json" "$root/backup/"
+          cp "$root/history/_tbt_bundle_manifest.json" "$root/backup/"
+          (cd "$root/backup" && sha256sum * > SHA256SUMS && sha256sum --check SHA256SUMS)
+          tag="blinq-usopen-serve-prewrite-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$root/backup/"* -R "$TBT_DATA_REPOSITORY" \
+            --title "Immutable original 2024 CDB before serve enrichment" \
+            --notes "Exact prewrite 2024 partition plus source release manifests. Retain for rollback."
+          mkdir -p "$root/backup-readback"
+          gh release download "$tag" -R "$TBT_DATA_REPOSITORY" -D "$root/backup-readback"
+          (cd "$root/backup-readback" && sha256sum --check SHA256SUMS)
+
+      - name: Write verified marker only to local canonical copy
+        if: ${{ steps.mode.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
+        run: |
+          set -euo pipefail
+          python scripts/import_usopen_serve_metadata.py \
+            --mode write \
+            --history-dir .cache/tbt/usopen-serve/history \
+            --stage-file .cache/tbt/usopen-serve/stage/verified_stage.jsonl \
+            --out-dir .cache/tbt/usopen-serve/write
+          python scripts/verify_usopen_serve_readback.py \
+            --backup .cache/tbt/usopen-serve/backup/history-2024.parquet \
+            --persisted .cache/tbt/usopen-serve/history/history-2024.parquet \
+            --stage .cache/tbt/usopen-serve/stage/verified_stage.jsonl
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path(".cache/tbt/usopen-serve")
+          dry=json.loads((root/"stage/report.json").read_text())
+          write=json.loads((root/"write/report.json").read_text())
+          assert write["counts"]["updated"]==dry["counts"]["staged"]>0
+          assert write["canonical_rows"]==dry["canonical_rows"]
+          assert write["changed_years"]==[2024]
+          PY
+
+      - name: Publish only if current CDB manifest has not changed
+        if: ${{ steps.mode.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          root=Path(".cache/tbt/usopen-serve")
+          hist=root/"history"
+          report=json.loads((root/"stage/report.json").read_text())
+          current=root/"remote-manifest"
+          current.mkdir(parents=True,exist_ok=True)
+          subprocess.run(["gh","release","download","tbt-data-v1","-R",
+              os.environ["TBT_DATA_REPOSITORY"],"-p","_tbt_bundle_manifest.json",
+              "-D",str(current)],check=True)
+          original=(root/"backup/_tbt_bundle_manifest.json").read_bytes()
+          latest=(current/"_tbt_bundle_manifest.json").read_bytes()
+          if hashlib.sha256(original).digest()!=hashlib.sha256(latest).digest():
+              raise SystemExit("Current CDB changed during enrichment, abort")
+          matches,safety=sanitize_history_identities(load_partitions(hist))
+          if len(matches)!=report["canonical_rows"] or safety.get("quarantined_rows"):
+              raise SystemExit("Canonical row/identity safety regression")
+          store=ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",hist)
+          store.upload_bundle([hist/"history-2024.parquet",hist/"history_manifest.json"])
+          PY
+
+      - name: Independently re-download and compare EVERY affected match
+        if: ${{ steps.mode.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          root=Path(".cache/tbt/usopen-serve")
+          verify=root/"verify"
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",verify).download(require_bundle_manifest=True)
+          rows,safety=sanitize_history_identities(load_partitions(verify))
+          expected=json.loads((root/"stage/report.json").read_text())["canonical_rows"]
+          if len(rows)!=expected or safety.get("quarantined_rows"):
+              raise SystemExit("Persisted canonical row count/identity changed")
+          PY
+          python scripts/verify_usopen_serve_readback.py \
+            --backup .cache/tbt/usopen-serve/backup/history-2024.parquet \
+            --persisted .cache/tbt/usopen-serve/verify/history-2024.parquet \
+            --stage .cache/tbt/usopen-serve/stage/verified_stage.jsonl
+
+      - name: Retain stage and readback evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: usopen-serve-cdb-${{ github.run_id }}
+          path: |
+            .cache/tbt/usopen-serve/stage/report.json
+            .cache/tbt/usopen-serve/stage/verified_stage.jsonl
+            .cache/tbt/usopen-serve/write/report.json
+          if-no-files-found: warn
+          retention-days: 30
