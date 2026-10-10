@@ -50,7 +50,7 @@ jobs:
           python -u source/scripts/test_prepare_oddstrader_cdb_staging.py
 
   offline-stage:
-    name: Private offline stage / ${{ matrix.tour }} ${{ matrix.year }}
+    name: Valid priced rows only / ${{ matrix.tour }} ${{ matrix.year }}
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -59,7 +59,7 @@ jobs:
       max-parallel: 2
       matrix:
         tour: [atp, wta]
-        year: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]
+        year: [2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PRIVATE_REPO: BackstageTalks/tbt-data
@@ -91,6 +91,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # 2015 ATP/WTA source-page ledgers are complete but contain ZERO quoted prices;
+          # intentionally excluded from staging pending a different verified source.
           python -u source/scripts/prepare_oddstrader_cdb_staging.py \
             --asset "/tmp/raw/blinq-odds-${TOUR}-${YEAR}-37988671325-1.tar.gz" \
             --tour "$TOUR" --year "$YEAR" --output /tmp/stage
