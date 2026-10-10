@@ -1,0 +1,108 @@
+name: BlinQ OddsTrader private archive quality check (CheckBestOdds fallback)
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/blinq-oddstrader-odds-qa.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      RELEASE: blinq-cloud-oddstrader-20261009
+    steps:
+      - name: Check private repository access and fetch existing odds checkpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = "true"
+          mkdir -p /tmp/odds
+          gh release download "$RELEASE" --repo "$PRIVATE_REPO" \
+            --pattern blinq-odds-atp-2025-37988671325-1.tar.gz \
+            --dir /tmp/odds
+          gh release download "$RELEASE" --repo "$PRIVATE_REPO" \
+            --pattern blinq-odds-wta-2026-37988671325-1.tar.gz \
+            --dir /tmp/odds
+      - name: Verify CSV source-page coverage and actual non-dash odds WITHOUT fetching websites
+        shell: bash
+        run: |
+          python - <<'PY'
+          import csv,datetime as dt,io,json,tarfile
+          from pathlib import Path
+
+          cases=[
+              ("atp",2025,"blinq-odds-atp-2025-37988671325-1.tar.gz","2025-01-01","2025-12-31"),
+              ("wta",2026,"blinq-odds-wta-2026-37988671325-1.tar.gz","2026-01-01","2026-10-09"),
+          ]
+          reports=[]
+          for tour,year,name,start,end in cases:
+              with tarfile.open(Path("/tmp/odds")/name,"r:gz") as archive:
+                  prefix=f"data/oddstrader/{tour}/{year}"
+                  pages=archive.extractfile(prefix+".pages.csv")
+                  odds=archive.extractfile(prefix+".csv")
+                  if pages is None or odds is None:
+                      raise SystemExit("Missing expected CSV files for "+tour+str(year))
+                  page_rows=list(csv.DictReader(io.TextIOWrapper(pages,encoding="utf-8-sig",newline="")))
+                  market_rows=list(csv.DictReader(io.TextIOWrapper(odds,encoding="utf-8-sig",newline="")))
+              keyset=set()
+              empty_status=0
+              suspicious=0
+              in_window=0
+              startdate=dt.date.fromisoformat(start)
+              enddate=dt.date.fromisoformat(end)
+              expected=((enddate-startdate).days+1)*8
+              for row in page_rows:
+                  date=dt.date.fromisoformat(row["date"])
+                  if date<startdate or date>enddate:
+                      continue
+                  in_window+=1
+                  key=(str(date),row["market_id"])
+                  if key in keyset:
+                      suspicious+=1
+                  keyset.add(key)
+                  if row["status"]!="ok" or row.get("http_status") not in ("200",""):
+                      empty_status+=1
+              def non_dash(row):
+                  return sum((row.get(key) or "").strip() not in ("","-") for key in
+                             ("opener","BetOnline","BetAnything","Bovada","Heritage","Bookmaker","JustBet"))
+              odds_in_year=[row for row in market_rows if row.get("date","").startswith(str(year)+"-")
+                            and dt.date.fromisoformat(row["date"])<=enddate]
+              nonempty_odds=sum(non_dash(row) for row in odds_in_year)
+              report={"tour":tour,"year":year,"date_start":start,"date_end":end,
+                      "expected_market_day_pages":expected,"completed_unique_pages":len(keyset),
+                      "duplicate_page_keys":suspicious,"invalid_page_statuses":empty_status,
+                      "rows_with_market_quotes":len(odds_in_year),"non_dash_price_cells":nonempty_odds,
+                      "snapshot_only":True,"cdb_training_approved":False}
+              reports.append(report)
+              if (len(keyset)!=expected or suspicious or empty_status or not odds_in_year
+                  or nonempty_odds==0):
+                  raise SystemExit("OddsTrader checkpoint incomplete/invalid: "+json.dumps(report))
+          result={"status":"ODDSTRADER_RAW_COVERAGE_QA_PASSED_NOT_CDB_APPROVED",
+                  "replacement_for_blocked_checkbestodds":"ONLY matching market/date coverage, not equivalent bookmaker/source",
+                  "results":reports,
+                  "limitations":["No crosswalk / chronological availability validation",
+                                 "Do not infer opening or closing status without source timestamp validation",
+                                 "CheckBestOdds dataset remains unavailable via GitHub HTTP 403"]}
+          Path("odds-coverage-qa.json").write_text(json.dumps(result,indent=2)+"\n",encoding="utf-8")
+          print("ODDS_COVERAGE_QA",json.dumps(result))
+          with open(__import__("os").environ["GITHUB_STEP_SUMMARY"],"a") as f:
+              f.write("### Raw OddsTrader fallback coverage (not CDB approval)\n")
+              for x in reports:
+                  f.write(f"- {x['tour'].upper()} {x['year']}: {x['completed_unique_pages']}/{x['expected_market_day_pages']} pages; {x['non_dash_price_cells']} numeric/display odds cells.\n")
+          PY
+      - name: Upload counts-only evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-oddstrader-checkbestodds-fallback-qa
+          path: odds-coverage-qa.json
+          if-no-files-found: warn
+          retention-days: 30
