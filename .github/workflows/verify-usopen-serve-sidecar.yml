@@ -1,0 +1,52 @@
+name: Verify private US Open 2024 serve sidecar (read-only)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/verify-usopen-serve-sidecar.yml"
+      - "scripts/import_usopen_serve_metadata.py"
+      - "tests/test_import_usopen_serve_metadata.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-serve-metadata-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify immutable private evidence and inspect safe schema
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p .cache/tbt/usopen-source
+          gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$TBT_DATA_REPOSITORY/contents/research/serve/usopen-2024-serve-metadata.jsonl.gz?ref=1af168aa7f68ca5a1e510d3387d61bc94f45ce26" \
+            > .cache/tbt/usopen-source/metadata.jsonl.gz
+          test "$(git hash-object .cache/tbt/usopen-source/metadata.jsonl.gz)" = \
+            "9d0a7a8c013a68d18e437f8c75f8fb7c036f1224"
+          python - <<'PY'
+          import gzip,json
+          from pathlib import Path
+          path=Path(".cache/tbt/usopen-source/metadata.jsonl.gz")
+          with gzip.open(path,"rt",encoding="utf-8") as handle:
+              rows=[json.loads(line) for line in handle if line.strip()]
+          print("SOURCE_ROWS",len(rows),flush=True)
+          for row in rows[:3]:
+              print("SCHEMA_KEYS",sorted(row),flush=True)
+              for k,v in row.items():
+                  if k not in {"name","player_name","server","returner","stats","player1_name","player2_name"}:
+                      print("FIELD",k,str(v)[:200],flush=True)
+          PY
