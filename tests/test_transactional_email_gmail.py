@@ -43,14 +43,19 @@ class FakeSMTP:
         self.delivered.append(msg)
 
 
-def _assert_gmail_safe(msg):
+def _assert_gmail_safe(msg, *, hosted_logo=False):
     assert msg.get_content_type() == "multipart/alternative"
     assert not list(msg.iter_attachments())
     assert all(not part.get_content_type().startswith("image/") for part in msg.walk())
     plain = msg.get_body(preferencelist=("plain",)).get_content()
     html = msg.get_body(preferencelist=("html",)).get_content()
-    assert "Blin" in html and "color:#43e6a0" in html
-    assert "<img" not in html and "cid:" not in html
+    if hosted_logo:
+        assert '<img src="https://blinq.example/assets/blinq_logo_email.png"' in html
+        assert 'alt="BlinQ"' in html
+    else:
+        assert "Blin" in html and "color:#43e6a0" in html
+        assert "<img" not in html
+    assert "cid:" not in html
     assert "blinq.png" not in str(msg)
     assert msg["Date"] and msg["Date"].endswith("+0000")
     assert msg["Message-ID"] and msg["Message-ID"].endswith("@example.test>")
@@ -58,7 +63,7 @@ def _assert_gmail_safe(msg):
     return plain, html
 
 
-def test_action_email_gmail_uses_visible_text_brand_without_cid(monkeypatch):
+def test_reset_email_uses_original_logo_without_cid(monkeypatch):
     FakeSMTP.delivered = []
     monkeypatch.setattr(auth_email.smtplib, "SMTP", FakeSMTP)
     monkeypatch.setattr(
@@ -70,9 +75,10 @@ def test_action_email_gmail_uses_visible_text_brand_without_cid(monkeypatch):
     ) is True
     assert len(FakeSMTP.delivered) == 1
     msg = FakeSMTP.delivered[0]
-    plain, html = _assert_gmail_safe(msg)
+    plain, html = _assert_gmail_safe(msg, hosted_logo=True)
     assert "Obnovte svoje heslo" in plain
     assert "Reset your password" in html
+    assert "https://blinq.example/assets/blinq_logo_email.png" not in plain
     assert "https://blinq.example/auth/action?mode=reset" in plain
     assert "&amp;oobCode=fake" in html
     assert msg["From"] == "BlinQ <security@example.test>"

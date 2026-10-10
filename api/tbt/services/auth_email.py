@@ -310,13 +310,14 @@ def _content(kind: str, action_url: str, *, logo_url: str = "") -> tuple[str, st
             button_url=action_url,
             footer_sk="Ak ste o túto správu nežiadali, môžete ju ignorovať.",
             footer_en="If you did not request this message, you can ignore it.",
+            logo_url=logo_url,
         )
     return subject, plain, html
 
 
 def send_blinq_action_email(cfg, recipient: str, kind: str) -> bool:
     action_url = _firebase_action_link(cfg, kind, recipient)
-    subject, plain, html = _content(kind, action_url, logo_url=_email_logo_url(cfg) if kind == "verify" else "")
+    subject, plain, html = _content(kind, action_url, logo_url=_email_logo_url(cfg))
     if not _smtp_ready(cfg):
         raise RuntimeError("SMTP is not configured")
     msg = _build_transactional_message(cfg, recipient, subject, plain, html)
