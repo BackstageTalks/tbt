@@ -10,5 +10,16 @@
     "manifest_freshness",
     "local_row_level_diff",
     "independent_committed_readback"
-  ]
+  ],
+  "execution_id": "cross-repo-global-lock-verified-usopen-20261010",
+  "execution_constraints": {
+    "model_training": false,
+    "model_promotion": false,
+    "api_requests": 0,
+    "release_write_scope": [
+      "history-2024.parquet",
+      "history_manifest.json"
+    ],
+    "required_independent_full_readback": true
+  }
 }
