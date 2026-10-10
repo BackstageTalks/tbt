@@ -44,7 +44,7 @@ def main():
                         odds:market==='match_winner'?1.6:null,
                         result:{status:correct?'hit':'miss',correct,
                             staked_units:market==='match_winner'?1:null,
-                            profit_units:market==='match_winner'?(correct?.6:-1):null}
+                            profit_units:market==='match_winner'?(correct ? 0.6 : -1):null}
                     });
                     const row=(event_id,pubs)=>({
                         event_id,tour:'WTA',surface:'hard',scheduled_at:when,tournament:'QA',
