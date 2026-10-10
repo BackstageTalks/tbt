@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "mode": "dry-run",
+  "workflow": "cdb-service-complement-write.yml",
+  "purpose": "Only exact complements of existing completed-match service/return points won proportions; never infer counts or modify odds, identity, rank, result, provider metadata, model, or production prediction",
+  "approved_by_operator": true,
+  "source": "canonical checksum verified CDB under global owner lock",
+  "requires": [
+    "complete-current-canonical-snapshot",
+    "deterministic-observed-opponent-complement",
+    "never-overwrite-existing-stat",
+    "immutable-affected-partition-backup",
+    "independent-backup-restore-download",
+    "unchanged-publish-manifest",
+    "full-persisted-match-by-match-readback",
+    "zero-training-or-model-activation"
+  ],
+  "api_requests": 0,
+  "model_training": false,
+  "model_promotion": false
+}
