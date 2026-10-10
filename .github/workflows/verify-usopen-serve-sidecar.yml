@@ -73,6 +73,13 @@ jobs:
           test "$(git hash-object .cache/tbt/usopen-serve/source.jsonl.gz)" = \
             "9d0a7a8c013a68d18e437f8c75f8fb7c036f1224"
 
+      - name: Acquire cross-repository canonical writer lock
+        if: ${{ steps.mode.outputs.mode == 'write' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
       - name: Download current checksum-verified canonical history
         run: |
           set -euo pipefail
@@ -218,3 +225,8 @@ jobs:
             .cache/tbt/usopen-serve/write/report.json
           if-no-files-found: warn
           retention-days: 30
+      
+      - name: Release cross-repository canonical writer lock
+        if: always()
+        shell: bash
+        run: python scripts/cdb_global_writer_lock.py release --if-held
