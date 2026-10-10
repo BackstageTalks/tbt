@@ -35,6 +35,7 @@ def download_stable(repository: str, tag: str, destination: Path, attempts: int 
             shutil.rmtree(scratch)
         scratch.mkdir(parents=True)
         store = ReleaseStore(repository, tag, scratch)
+        before = None
         try:
             # Read manifest independently both before and after the bundle.
             if MANIFEST not in store._asset_names():
@@ -60,7 +61,7 @@ def download_stable(repository: str, tag: str, destination: Path, attempts: int 
             moved = False
             try:
                 store._download_asset(MANIFEST)
-                moved = before != _sha(scratch / MANIFEST)
+                moved = before is not None and before != _sha(scratch / MANIFEST)
             except Exception:
                 pass
             if not moved or attempt == attempts:
