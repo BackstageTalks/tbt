@@ -87,3 +87,12 @@ def test_not_completed_or_future_matches_never_used():
     staged, counts = stage([future], as_of=datetime(2023, 1, 1, tzinfo=timezone.utc))
     assert staged == []
     assert counts["noncompleted_or_future"] == 1
+
+
+def test_conflicting_direct_observations_are_quarantined_without_overwrite():
+    original = match(stats={"p1_service_points_won": 0.62,
+                            "p2_return_points_won": 0.40,
+                            "p2_service_points_won": 0.59})
+    records, summary = stage([original])
+    assert records == []
+    assert summary["contradictory_observed_rates"] == 1
