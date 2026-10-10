@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "mode": "dry-run",
+  "mode": "write",
   "source": "figshare_wimbledon_2023_complete_point_tapes",
   "year": 2023,
   "raw_sha256": "19507e156e6ff307027d39e44000ac446a564f87b3c8d59a5225dc6d1674c512",
@@ -14,5 +14,7 @@
   "provider_api_requests_allowed": 0,
   "production_model_training": false,
   "production_model_promotion": false,
-  "purpose": "Audited five complete Wimbledon 2023 point tapes; strict canonical three-match twelve-field addition. Default dry-run; only main request change to write may publish after global lock, immutable backup and independent readback."
+  "purpose": "One-time operator-authorized Wimbledon 2023 exact twelve-cell publication; only guarded current-release SHA, global single-writer, independently checked backup and full persisted readback may publish. Do not train model.",
+  "requested_by": "operator",
+  "requested_date": "2026-10-10"
 }
