@@ -80,9 +80,14 @@ def main() -> None:
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--write-partitions", action="store_true")
     ap.add_argument("--write-history-dir", default="")
+    ap.add_argument("--exact-stats-only", action="store_true",
+                    help="Hwaitt import: patch ONLY verified added stats cells and full-year verify")
     args = ap.parse_args()
     if args.write_history_dir and not args.write_partitions:
         ap.error("--write-history-dir requires --write-partitions")
+    if args.exact_stats_only and (not args.write_partitions or
+            Path(args.write_history_dir).resolve() != Path(args.history_dir).resolve()):
+        ap.error("--exact-stats-only requires in-place history-dir and --write-partitions")
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -96,6 +101,9 @@ def main() -> None:
     counts = Counter()
     review = []
     changed_years = set()
+    exact_changed_ids = set()
+    if args.exact_stats_only and any(row.get("delayed_observation") is not None for row in rows):
+        raise ValueError("Delayed research observations forbidden in exact stats-only import")
     before = sum(1 for m in matches if _quality(m.stats or {}))
 
     for row in rows:
@@ -283,17 +291,28 @@ def main() -> None:
         counts["stat_fields_added"] += len(added)
         counts["updated"] += 1
         changed_years.add(match.scheduled_at.year)
+        exact_changed_ids.add(str(match.match_id))
 
     after = sum(1 for m in matches if _quality(m.stats or {}))
     target = Path(args.write_history_dir) if args.write_history_dir else out / "history"
     if args.write_partitions:
-        for year in sorted(changed_years):
-            write_year_partition(
-                matches,
-                target,
-                year,
-                extra_manifest={"coverage_status": "offline_serve_return_import_pending_review"},
-            )
+        if args.exact_stats_only:
+            from offline_exact_cdb_write import write_exact_stats_partition
+            if len(exact_changed_ids) != counts["updated"]:
+                raise ValueError("Exact stats-only changes differ from total staged writes")
+            for year in sorted(changed_years):
+                write_exact_stats_partition(
+                    args.history_dir, year, matches,
+                    {mid for mid in exact_changed_ids if by_id[mid].scheduled_at.year == year},
+                )
+        else:
+            for year in sorted(changed_years):
+                write_year_partition(
+                    matches,
+                    target,
+                    year,
+                    extra_manifest={"coverage_status": "offline_serve_return_import_pending_review"},
+                )
 
     report = {
         "schema": 1,
