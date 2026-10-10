@@ -66,12 +66,34 @@ jobs:
             --dir .cache/tbt/wta-season-stats --clobber
           echo "023849319985801b1ab0065f77ff70f7d51a4fada6db0827c22d0b84659cba02  .cache/tbt/wta-season-stats/wta_stats_2010_2026_serving_returning.csv" | sha256sum -c -
 
+      - name: Restore SHA-verified historical rank and pre-match weather inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/prepare_verified_training_weather.py \
+            --repository "$TBT_DATA_REPOSITORY" \
+            --source-dir .cache/tbt/verified-source \
+            --out .cache/tbt/verified-source/pre-match-weather.csv \
+            --report .cache/tbt/verified-source/weather-verification.json
+
       - name: Build leakage-safe ATP+WTA training DB
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/build_production_training_table.py             --history-dir .cache/tbt/history             --atp-leaderboards-csv .cache/tbt/atp-leaderboards/atp_leaderboards_1991_2026_52week_career.csv             --wta-season-stats-csv .cache/tbt/wta-season-stats/wta_stats_2010_2026_serving_returning.csv             --out .cache/tbt/training-db/training_table.parquet             --report .cache/tbt/training-db/training_table_report.json
+          python scripts/build_production_training_table.py             --history-dir .cache/tbt/history             --atp-leaderboards-csv .cache/tbt/atp-leaderboards/atp_leaderboards_1991_2026_52week_career.csv             --wta-season-stats-csv .cache/tbt/wta-season-stats/wta_stats_2010_2026_serving_returning.csv             --verified-rank-inputs-dir .cache/tbt/verified-source/rank             --pre-match-weather-csv .cache/tbt/verified-source/pre-match-weather.csv             --out .cache/tbt/training-db/training_table.parquet             --report .cache/tbt/training-db/training_table_report.json
           python scripts/audit_training_leakage.py             --history-dir .cache/tbt/history             --report .cache/tbt/training-db/leakage_audit_report.json
+
+      - name: Enforce ranking/weather point-in-time coverage BEFORE release publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_training_table_contract.py \
+            --table .cache/tbt/training-db/training_table.parquet \
+            --report .cache/tbt/training-db/training_table_report.json \
+            --leakage .cache/tbt/training-db/leakage_audit_report.json \
+            --weather-evidence .cache/tbt/verified-source/weather-verification.json \
+            --weather-csv .cache/tbt/verified-source/pre-match-weather.csv \
+            --out .cache/tbt/training-db/prepublish_gate.json
 
       - name: Publish training DB bundle
         shell: bash
@@ -167,3 +189,16 @@ jobs:
           else
             gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Verify ATP+WTA training DB" -f content="$encoded" >/dev/null
           fi
+
+      - name: Verify SHA and segment coverage on independently downloaded release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_training_table_contract.py \
+            --table .cache/tbt/training-db-readback/training_table.parquet \
+            --report .cache/tbt/training-db-readback/training_table_report.json \
+            --leakage .cache/tbt/training-db-readback/leakage_audit_report.json \
+            --weather-evidence .cache/tbt/verified-source/weather-verification.json \
+            --weather-csv .cache/tbt/verified-source/pre-match-weather.csv \
+            --out .cache/tbt/training-db/readback_gate.json
+
