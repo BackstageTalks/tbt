@@ -27,6 +27,7 @@ SOURCE_SHA = "19507e156e6ff307027d39e44000ac446a564f87b3c8d59a5225dc6d1674c512"
 SIDECAR_SHA = "8c9b00eb96582cb5bfe3449b0bdb2dffbfb11d3fc387e54e142d645e6d43e316"
 LICENSE_SHA = "4b1a12b70abaaa9536dc0e371c177549863d131db3bc273e6768354f3b1e1df9"
 DOI = "10.6084/m9.figshare.25511917"
+FORMAT_SOURCE_URL = "https://www.wtatennis.com/news/3556056/wimbledon-2023-dates-draws-prize-money-and-everything-you-need-to-know"
 FIELDS = (
     ("p1_aces", "p1_ace", "aces", 1),
     ("p2_aces", "p2_ace", "aces", 2),
@@ -61,6 +62,28 @@ def clean_binary(value):
     except (TypeError, ValueError):
         return None
     return int(number) if math.isfinite(number) and number in (0.0, 1.0) else None
+
+
+def validated_best_of(record):
+    """WTA's contemporaneous Wimbledon 2023 128-draw singles report proves BO3.
+
+    Use only for 2023 Wimbledon WTA singles, never across tours or seasons.
+    An explicitly contradictory canonical value is not silently overridden.
+    """
+    from tbt.data.offline_odds import norm_text
+    official = (str(record.tour or "").lower() == "wta"
+                and record.scheduled_at.astimezone(timezone.utc).year == 2023
+                and "wimbledon" in norm_text(record.tournament))
+    stored = record.best_of
+    if stored is not None and str(stored) not in ("", "nan", "NaN"):
+        try:
+            number = int(stored)
+            if str(stored) in (str(number), str(float(number))) and number in (3, 5):
+                return number if not official or number == 3 else None
+        except (TypeError, ValueError, OverflowError):
+            pass
+        return None
+    return 3 if official else None
 
 
 def tape_completeness(group: pd.DataFrame, best_of, winner_side: int | None) -> list[str]:
@@ -210,7 +233,7 @@ def _observation(match, source_mid, group, sidecar, field, raw_field, agg, side,
         "match_evidence": {
             "identity_policy": "year+Wimbledon+exact_normalized_pair+winner+unique_candidate",
             "evidence_references": [f"figshare:{DOI}", f"cdb-2023:{cdb_sha}",
-                                    f"sidecar-sha256:{SIDECAR_SHA}"],
+                                    f"sidecar-sha256:{SIDECAR_SHA}", FORMAT_SOURCE_URL],
             "ambiguity_candidates": 1,
         },
         "field": field, "value": value, "unit": "count", "scope": "whole_match",
@@ -315,7 +338,7 @@ def run(workbook: Path, sidecar: Path, license_note: Path, year_file: Path,
             3 - source_winner if orientation == "reversed" and source_winner in (1, 2) else None
         )
         winner_for_raw = source_winner if source_winner in (1, 2) else None
-        issues.extend(tape_completeness(group, match.best_of, winner_for_raw))
+        issues.extend(tape_completeness(group, validated_best_of(match), winner_for_raw))
         if issues:
             counts["unresolved_matches"] += 1
             review.append({"source_match_id": source_mid, "canonical_match_id": str(match.match_id),
@@ -344,6 +367,7 @@ def run(workbook: Path, sidecar: Path, license_note: Path, year_file: Path,
             stream.write(json.dumps(entry, ensure_ascii=False) + "\n")
     report = {
         "schema": 1, "status": "read_only_classified",
+        "match_format_evidence": FORMAT_SOURCE_URL,
         "source_sha256": SOURCE_SHA, "sidecar_sha256": SIDECAR_SHA,
         "license_note_sha256": LICENSE_SHA, "cdb_year": 2023,
         "cdb_partition_sha256": cdb_sha, "canonical_year_rows": len(matches),
