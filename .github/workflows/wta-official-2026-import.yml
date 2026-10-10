@@ -137,6 +137,20 @@ jobs:
           assert json.loads((root/"readback-local/report.json").read_text())["status"]=="verified"
           print("PASSED local exact-cell/full-year readback: rows=",stage["stage_rows"])
           PY
+      - name: Reject any historical rank without point-in-time provenance
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from tbt.data.history_snapshot import load_snapshot
+          from tbt.services.training import _enforce_rank_provenance
+          root=Path(os.environ["ROOT"])
+          _,report=_enforce_rank_provenance(load_snapshot(root/"local/history-2026.parquet"))
+          assert report["stripped_rows"]==0 and report["stripped_values"]==0,report
+          print("ALL RANKS CARRY VERIFIED PIT PROVENANCE:",json.dumps(report,sort_keys=True))
+          PY
+
       - name: Save immutable prewrite backup with independent SHA256 readback
         if: steps.mode.outputs.mode == 'write' && steps.candidates.outputs.changes == 'true'
         run: |
@@ -189,6 +203,38 @@ jobs:
           assert v["existing_rank_values_overwritten"]==0
           print("VERIFIED COMMITTED PIT RANKS:",v)
           PY
+      - name: Preserve completed import audit in private tbt-data
+        if: steps.mode.outputs.mode == 'write' && steps.candidates.outputs.changes == 'true'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          report={
+              "schema":1,"status":"published_and_independently_verified",
+              "run_id":os.environ["GITHUB_RUN_ID"],
+              "source_rank_sha256":"4267e37ba6357eb11cfb0e9346c3c59eac8a17431e1f19deb5fffa9573a9bf03",
+              "source_crosswalk_blob":"dd397c8fe1b8457f2036b8bab233daf3f2da9317",
+              "prewrite_backup_tag":"blinq-wta2026-rank-prewrite-"+os.environ["GITHUB_RUN_ID"]+"-"+os.environ["GITHUB_RUN_ATTEMPT"],
+              "canonical_year":2026,
+              "before_partition_sha256":hashlib.sha256((root/"history/history-2026.parquet").read_bytes()).hexdigest(),
+              "after_partition_sha256":hashlib.sha256((root/"persisted/history-2026.parquet").read_bytes()).hexdigest(),
+              "stage":json.loads((root/"stage/report.json").read_text()),
+              "persisted_readback":json.loads((root/"persisted-readback/report.json").read_text()),
+              "model_promoted":False,"provider_api_requests":0,
+          }
+          (root/"final-audit.json").write_text(json.dumps(report,ensure_ascii=False,indent=2))
+          PY
+          path=audit/wta-official-2026-exact-rank-import-latest.json
+          audit="$(base64 -w0 "$ROOT/final-audit.json")"
+          old="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$old" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="CDB verified WTA official 2026 exact rank import $GITHUB_RUN_ID" -f content="$audit" -f sha="$old" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="CDB verified WTA official 2026 exact rank import $GITHUB_RUN_ID" -f content="$audit" >/dev/null
+          fi
+
       - name: Retain stage, local and persisted audits
         if: always()
         uses: actions/upload-artifact@v4
@@ -201,6 +247,7 @@ jobs:
             .cache/tbt/wta-official-2026/local-report/report.json
             .cache/tbt/wta-official-2026/readback-local/report.json
             .cache/tbt/wta-official-2026/persisted-readback/report.json
+            .cache/tbt/wta-official-2026/final-audit.json
           if-no-files-found: warn
           retention-days: 45
       - name: Release global canonical writer lock
