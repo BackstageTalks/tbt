@@ -36,3 +36,26 @@ jobs:
             echo
             if [[ "$scan" != "6" ]]; then sleep 50; fi
           done
+          # Independent Azure storage/ledger GET: the POST acknowledgment alone
+          # does not prove the heartbeat can be read back or quota is healthy.
+          curl --fail-with-body --silent --show-error --max-time 15 \
+            -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN" \
+            "$base/api/v1/internal/live-radar-status" \
+            -o /tmp/blinq-live-status.json
+          python - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          row=json.loads(Path('/tmp/blinq-live-status.json').read_text())
+          assert row.get('ok') is True, 'LIVE readback failed'
+          heartbeat=row['heartbeat']; budget=row['budget']
+          assert heartbeat.get('fresh') is True, 'LIVE heartbeat stale'
+          assert not heartbeat.get('last_error'), 'LIVE worker error'
+          assert 0 <= budget['global_spent'] <= 14550 == budget['global_limit']
+          assert 0 <= budget['live_spent'] <= 3000 == budget['live_limit']
+          assert budget['provider_plan_limit'] == 15000
+          assert budget['reserved_provider_headroom'] == 450
+          print(json.dumps({'readback':'PASS','heartbeat':heartbeat.get('last_success_at'),
+                            'global_spent':budget['global_spent'],
+                            'live_spent':budget['live_spent']},sort_keys=True))
+          PY
