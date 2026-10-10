@@ -20,6 +20,7 @@ YEARS = tuple(range(2015, 2027))
 FIELDS = ("_tbt_market_history", "_tbt_match_winner_odds")
 PRIOR_VERIFIED_MARKERS = {"_tbt_market_history": 11935, "_tbt_match_winner_odds": 283}
 PRIOR_RUN_ID = "37906147697"
+ODDSTRADER_SOURCE = "oddstrader_atp_2015_2026"
 
 
 def sha256(path: Path) -> str:
@@ -49,8 +50,11 @@ def count_markers(ids: pd.Series, contexts: pd.Series) -> dict[str, int]:
         if not isinstance(context, dict):
             raise ValueError("Canonical context is not object for match: " + str(mid))
         for field in FIELDS:
-            if field in context and context[field] is not None:
+            marker = context.get(field)
+            if marker is not None:
                 counts[field] += 1
+                if isinstance(marker, dict) and marker.get("source") == ODDSTRADER_SOURCE:
+                    counts[field + "_oddstrader"] += 1
         counts["checked"] += 1
     return dict(counts)
 
@@ -79,12 +83,14 @@ def audit(history_dir: Path, report: Path, minimum_previous: bool = True) -> dic
             "sha256": digest,
             "market_markers": counts.get(FIELDS[0], 0),
             "match_winner_markers": counts.get(FIELDS[1], 0),
+            "oddstrader_market_markers": counts.get(FIELDS[0] + "_oddstrader", 0),
+            "oddstrader_match_winner_markers": counts.get(FIELDS[1] + "_oddstrader", 0),
             "release_asset": file.name,
         }
     regressions = {
-        field: {"previous": floor, "current": totals[field]}
+        field: {"previous": floor, "current": totals[field + "_oddstrader"]}
         for field, floor in PRIOR_VERIFIED_MARKERS.items()
-        if totals[field] < floor
+        if totals[field + "_oddstrader"] < floor
     }
     result = {
         "schema": 1,
@@ -94,7 +100,9 @@ def audit(history_dir: Path, report: Path, minimum_previous: bool = True) -> dic
         "previous_import_report": "audit/oddstrader-current-canonical-37906147697.json",
         "affected_years": list(YEARS),
         "prior_verified_marker_floor": PRIOR_VERIFIED_MARKERS,
-        "current_markers": {field: totals[field] for field in FIELDS},
+        "current_markers_all_sources": {field: totals[field] for field in FIELDS},
+        "current_markers_oddstrader": {field: totals[field + "_oddstrader"] for field in FIELDS},
+        "source_filter": ODDSTRADER_SOURCE,
         "canonical_rows_checked": totals["checked"],
         "year_partitions": by_year,
         "regressions": regressions,
