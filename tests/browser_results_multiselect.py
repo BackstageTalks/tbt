@@ -64,6 +64,9 @@ def main():
                     s.resultsFilters={category:'all',tour:'',surface:'',window:'all',
                                       dateFrom:'',dateTo:'',bettingDay:true};
                     s.resultsPage=0;
+                    const authDialog=document.querySelector('#authDialog');
+                    if(authDialog?.open)authDialog.close();
+                    authDialog?.remove();
                     document.querySelector('#bootSplash')?.remove();
                     document.querySelector('#cookieConsent')?.remove();
                     document.querySelector('#appShell').hidden=false;
