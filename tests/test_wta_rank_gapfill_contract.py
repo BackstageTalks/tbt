@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_wta_rank_audit_is_read_only_and_pinned():
     request=json.loads((ROOT/".github/wta-rank-gapfill-request.json").read_text())
-    assert request["mode"] == "write"
+    assert request["mode"] == "dry-run"
     assert request["expected_sha256"] == "cedbf748e111e1f14317a09f561f267bc4861e60dbbafa5500f2826c6d5a4c72"
     assert request["zero_provider_api_requests"] is True
     assert request["production_mutated"] is False

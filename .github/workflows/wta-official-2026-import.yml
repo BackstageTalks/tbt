@@ -1,0 +1,290 @@
+name: BlinQ exact WTA 2026 canonical PIT rank enrichment
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/wta-official-2026-import.yml"
+      - ".github/wta-official-2026-import-request.json"
+      - "scripts/audit_wta_official_2026_gaps.py"
+      - "scripts/import_wta_official_2026_exact.py"
+      - "tests/test_wta_official_2026_gaps.py"
+      - "tests/test_wta_official_2026_exact.py"
+  push:
+    branches: [main]
+    paths: [".github/wta-official-2026-import-request.json"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-crossrepo-writer-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  exact-rank-enrichment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 140
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      ROOT: .cache/tbt/wta-official-2026
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Guard fail-closed import mode
+        id: mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          request=.github/wta-official-2026-import-request.json
+          test "$TBT_DATA_REPOSITORY" = "BackstageTalks/tbt-data"
+          test -n "$GH_TOKEN"
+          test "$(jq -r '.schema' "$request")" = 1
+          test "$(jq -r '.canonical_year' "$request")" = 2026
+          test "$(jq -r '.source_sha256' "$request")" = "4267e37ba6357eb11cfb0e9346c3c59eac8a17431e1f19deb5fffa9573a9bf03"
+          test "$(jq -r '.player_crosswalk_git_blob' "$request")" = "dd397c8fe1b8457f2036b8bab233daf3f2da9317"
+          test "$(jq -r '.allow_existing_rank_overwrite' "$request")" = false
+          test "$(jq -r '.require_immutable_prewrite_backup' "$request")" = true
+          test "$(jq -r '.require_independent_full_partition_readback' "$request")" = true
+          test "$(jq -r '.production_model_promotion' "$request")" = false
+          test "$(jq -r '.allowed_provider_api_requests' "$request")" = 0
+          mode=dry-run
+          if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main ]]; then
+            mode="$(jq -r '.mode' "$request")"
+          fi
+          [[ "$mode" == dry-run || "$mode" == write ]]
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+          echo "Mode $mode (PR and manual dispatch are always dry-run)"
+      - name: Focused exact-cell and PIT tests
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements.txt -r api/requirements-train.txt pytest
+          python -m pytest -q tests/test_wta_official_2026_gaps.py tests/test_wta_official_2026_exact.py
+          python -m compileall -q scripts/audit_wta_official_2026_gaps.py scripts/import_wta_official_2026_exact.py
+      - name: Acquire global CDB writer lock for write mode
+        if: steps.mode.outputs.mode == 'write'
+        run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+      - name: Download checksum-verified authoritative CDB
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          r=Path(os.environ["ROOT"])/"history"
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",r).download(require_bundle_manifest=True)
+          for name in ("history-2026.parquet","history_manifest.json","_tbt_bundle_manifest.json"):
+              assert (r/name).stat().st_size>0
+          PY
+      - name: Verify pinned independent source bundles
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/source"
+          official="$ROOT/source/official-wta-singles-2026.csv.gz"
+          crosswalk="$ROOT/source/independent-player-crosswalk.jsonl.gz"
+          gh api -H "Accept: application/vnd.github.raw" "repos/$TBT_DATA_REPOSITORY/contents/research/wta-official-2026/wta_official_singles_2026_post_sackmann.csv.gz?ref=main" > "$official"
+          test "$(sha256sum "$official" | awk '{print $1}')" = "4267e37ba6357eb11cfb0e9346c3c59eac8a17431e1f19deb5fffa9573a9bf03"
+          gh api -H "Accept: application/vnd.github.raw" "repos/$TBT_DATA_REPOSITORY/contents/research/player_profile/livetennisapi-public-2023-2026.jsonl.gz?ref=main" > "$crosswalk"
+          test "$(git hash-object "$crosswalk")" = "dd397c8fe1b8457f2036b8bab233daf3f2da9317"
+          gzip -t "$official" "$crosswalk"
+      - name: Stage exact previous-week ranking candidates
+        id: candidates
+        run: |
+          set -euo pipefail
+          python scripts/audit_wta_official_2026_gaps.py --source "$ROOT/source/official-wta-singles-2026.csv.gz" --crosswalk "$ROOT/source/independent-player-crosswalk.jsonl.gz" --history-dir "$ROOT/history" --out-dir "$ROOT/stage"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          r=json.loads((root/"stage/report.json").read_text())
+          rows=[json.loads(x) for x in (root/"stage/candidates.jsonl").read_text().splitlines() if x.strip()]
+          assert r["status"]=="read_only" and r["production_mutated"] is False and r["model_promoted"] is False
+          assert r["api_requests"]==0 and len(rows)==r["stage_rows"]==r["counts"].get("candidate_matches",0)
+          assert r["counts"].get("missing_rank_values",0)==sum(sum(v is None for v in x["canonical"]) for x in rows)
+          assert len({x["match_id"] for x in rows})==len(rows)
+          with open(os.environ["GITHUB_OUTPUT"],"a") as out:
+              out.write("changes="+("true" if rows else "false")+"\n")
+          PY
+      - name: Local exact-cell dry-run, write and full-partition readback
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/local"
+          for asset in history-2026.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cp "$ROOT/history/$asset" "$ROOT/local/$asset"
+          done
+          python scripts/import_wta_official_2026_exact.py --mode dry-run --before-dir "$ROOT/history" --after-dir "$ROOT/local" --stage "$ROOT/stage/candidates.jsonl" --report "$ROOT/dry/report.json"
+          python scripts/import_wta_official_2026_exact.py --mode write --before-dir "$ROOT/history" --after-dir "$ROOT/local" --stage "$ROOT/stage/candidates.jsonl" --report "$ROOT/local-report/report.json"
+          python scripts/import_wta_official_2026_exact.py --mode verify --before-dir "$ROOT/history" --after-dir "$ROOT/local" --stage "$ROOT/stage/candidates.jsonl" --report "$ROOT/readback-local/report.json"
+          python - <<'PY'
+          import os,json
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          stage=json.loads((root/"stage/report.json").read_text())
+          for suffix in ("dry/report.json","local-report/report.json","readback-local/report.json"):
+              r=json.loads((root/suffix).read_text())
+              assert r["updated"]==stage["stage_rows"]
+              assert r["rank_fields_added"]==stage["counts"].get("missing_rank_values",0)
+              assert r["existing_rank_values_overwritten"]==0
+              assert r["canonical_rows"]==stage["canonical_year_rows"]
+              assert r["production_mutated"] is False and r["model_promoted"] is False
+          assert json.loads((root/"readback-local/report.json").read_text())["status"]=="verified"
+          print("PASSED local exact-cell/full-year readback: rows=",stage["stage_rows"])
+          PY
+      - name: Verify all newly staged ranks are PIT-safe without worsening baseline
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from tbt.data.history_snapshot import load_snapshot
+          from tbt.services.training import _enforce_rank_provenance
+          root=Path(os.environ["ROOT"])
+          before=load_snapshot(root/"history/history-2026.parquet")
+          after=load_snapshot(root/"local/history-2026.parquet")
+          clean_before,b=_enforce_rank_provenance(before)
+          clean_after,a=_enforce_rank_provenance(after)
+          if len(clean_before)!=len(clean_after):
+              raise SystemExit("PIT gate: canonical match count changed")
+          # Existing, unrelated historical rows may already lack PIT evidence.
+          # Training strips those values. The import must not worsen that debt
+          # and cannot be blocked merely because the baseline has known debt.
+          for field in ("stripped_rows","stripped_values"):
+              if a[field]>b[field]:
+                  raise SystemExit(f"PIT gate: {field} worsened from {b[field]} to {a[field]}")
+          stage=[json.loads(line) for line in (root/"stage/candidates.jsonl").read_text().splitlines() if line.strip()]
+          proposed={str(x["match_id"]):x for x in stage}
+          seen=set()
+          for record in clean_after:
+              mid=str(record.match_id)
+              if mid not in proposed:
+                  continue
+              if mid in seen:
+                  raise SystemExit(f"PIT gate: duplicate canonical ID {mid}")
+              seen.add(mid)
+              pair=[record.player1_rank,record.player2_rank]
+              if any(v is None for v in pair) or [int(v) for v in pair]!=proposed[mid]["proposed"]:
+                  raise SystemExit(f"PIT gate: newly staged ranks stripped or mismatched for {mid}")
+          if seen!=set(proposed):
+              raise SystemExit("PIT gate: not all staged canonical IDs survived readback")
+          if a["retained_values"]-b["retained_values"]<sum(sum(v is None for v in s["canonical"]) for s in stage):
+              raise SystemExit("PIT gate: new verified ranking field count did not increase as expected")
+          report={"schema":1,"status":"verified_scoped_pit","stage_rows_verified":len(seen),
+                  "baseline":b,"after":a,"historical_debt_preserved":True,
+                  "new_values_verified":sum(sum(v is None for v in s["canonical"]) for s in stage),
+                  "production_mutated":False}
+          dest=root/"scoped-pit/report.json"
+          dest.parent.mkdir(parents=True,exist_ok=True)
+          dest.write_text(json.dumps(report,indent=2,sort_keys=True))
+          print("SCOPED PIT GATE:",json.dumps(report,sort_keys=True))
+          PY
+
+      - name: Save immutable prewrite backup with independent SHA256 readback
+        if: steps.mode.outputs.mode == 'write' && steps.candidates.outputs.changes == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/backup" "$ROOT/backup-readback"
+          for asset in history-2026.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cp "$ROOT/history/$asset" "$ROOT/backup/$asset"
+          done
+          (cd "$ROOT/backup" && sha256sum history-2026.parquet history_manifest.json _tbt_bundle_manifest.json > SHA256SUMS && sha256sum -c SHA256SUMS)
+          tag="blinq-wta2026-rank-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" "$ROOT/backup/"* -R "$TBT_DATA_REPOSITORY" --title "Immutable prewrite canonical rank backup" --notes "Original exact 2026 partition and both manifests. Retain for verified rollback."
+          gh release download "$tag" -R "$TBT_DATA_REPOSITORY" -D "$ROOT/backup-readback"
+          (cd "$ROOT/backup-readback" && sha256sum -c SHA256SUMS)
+      - name: Publish exact cells only when global lock and canonical base are fresh
+        if: steps.mode.outputs.mode == 'write' && steps.candidates.outputs.changes == 'true'
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          mkdir -p "$ROOT/remote-before"
+          gh release download tbt-data-v1 -R "$TBT_DATA_REPOSITORY" -p _tbt_bundle_manifest.json -D "$ROOT/remote-before" --clobber
+          cmp "$ROOT/history/_tbt_bundle_manifest.json" "$ROOT/remote-before/_tbt_bundle_manifest.json"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          root=Path(os.environ["ROOT"])/"local"
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).upload_bundle([
+              root/"history-2026.parquet",root/"history_manifest.json"])
+          PY
+      - name: Independently re-download and verify all persisted 2026 cells
+        if: steps.mode.outputs.mode == 'write' && steps.candidates.outputs.changes == 'true'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          r=Path(os.environ["ROOT"])/"persisted"
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",r).download(require_bundle_manifest=True)
+          PY
+          python scripts/import_wta_official_2026_exact.py --mode verify --before-dir "$ROOT/history" --after-dir "$ROOT/persisted" --stage "$ROOT/stage/candidates.jsonl" --report "$ROOT/persisted-readback/report.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          a=json.loads((root/"stage/report.json").read_text())
+          v=json.loads((root/"persisted-readback/report.json").read_text())
+          assert v["status"]=="verified" and v["updated"]==a["stage_rows"]
+          assert v["rank_fields_added"]==a["counts"]["missing_rank_values"]
+          assert v["existing_rank_values_overwritten"]==0
+          print("VERIFIED COMMITTED PIT RANKS:",v)
+          PY
+      - name: Preserve completed import audit in private tbt-data
+        if: steps.mode.outputs.mode == 'write' && steps.candidates.outputs.changes == 'true'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          report={
+              "schema":1,"status":"published_and_independently_verified",
+              "run_id":os.environ["GITHUB_RUN_ID"],
+              "source_rank_sha256":"4267e37ba6357eb11cfb0e9346c3c59eac8a17431e1f19deb5fffa9573a9bf03",
+              "source_crosswalk_blob":"dd397c8fe1b8457f2036b8bab233daf3f2da9317",
+              "prewrite_backup_tag":"blinq-wta2026-rank-prewrite-"+os.environ["GITHUB_RUN_ID"]+"-"+os.environ["GITHUB_RUN_ATTEMPT"],
+              "canonical_year":2026,
+              "before_partition_sha256":hashlib.sha256((root/"history/history-2026.parquet").read_bytes()).hexdigest(),
+              "after_partition_sha256":hashlib.sha256((root/"persisted/history-2026.parquet").read_bytes()).hexdigest(),
+              "stage":json.loads((root/"stage/report.json").read_text()),
+              "persisted_readback":json.loads((root/"persisted-readback/report.json").read_text()),
+              "model_promoted":False,"provider_api_requests":0,
+          }
+          (root/"final-audit.json").write_text(json.dumps(report,ensure_ascii=False,indent=2))
+          PY
+          path=audit/wta-official-2026-exact-rank-import-latest.json
+          audit="$(base64 -w0 "$ROOT/final-audit.json")"
+          old="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$old" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="CDB verified WTA official 2026 exact rank import $GITHUB_RUN_ID" -f content="$audit" -f sha="$old" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="CDB verified WTA official 2026 exact rank import $GITHUB_RUN_ID" -f content="$audit" >/dev/null
+          fi
+
+      - name: Retain stage, local and persisted audits
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-exact-pit-ranks-${{ github.run_id }}
+          path: |
+            .cache/tbt/wta-official-2026/stage/report.json
+            .cache/tbt/wta-official-2026/stage/candidates.jsonl
+            .cache/tbt/wta-official-2026/dry/report.json
+            .cache/tbt/wta-official-2026/local-report/report.json
+            .cache/tbt/wta-official-2026/readback-local/report.json
+            .cache/tbt/wta-official-2026/scoped-pit/report.json
+            .cache/tbt/wta-official-2026/persisted-readback/report.json
+            .cache/tbt/wta-official-2026/final-audit.json
+          if-no-files-found: warn
+          retention-days: 45
+      - name: Release global canonical writer lock
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held

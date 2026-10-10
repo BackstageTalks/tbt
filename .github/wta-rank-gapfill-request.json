@@ -1,12 +1,12 @@
 {
   "schema": 1,
-  "mode": "write",
+  "mode": "dry-run",
   "source_ref": "source/wta-historical-odds-cedbf748",
   "source_prefix": "research/offline-sources/_staging-v2",
   "expected_sha256": "cedbf748e111e1f14317a09f561f267bc4861e60dbbafa5500f2826c6d5a4c72",
   "expected_file_lines": 45384,
   "source_label": "operator_wta_txt_2006_2026_rank",
-  "purpose": "Final closeout: re-audit the pinned WTA point-in-time rank source and write any remaining strict one-sided rank fills; ranking points remain sidecar-only and zero provider API requests are allowed.",
+  "purpose": "Pinned old rank source exhausted on 993949 CDB rows (2026-10-10 CI audit); keep fail-closed dry-run while separately verifying official 2026 weekly rank supplement via independent crosswalk.",
   "zero_provider_api_requests": true,
   "production_mutated": false,
   "requested_at_utc": "2026-10-04T19:11:00Z"
