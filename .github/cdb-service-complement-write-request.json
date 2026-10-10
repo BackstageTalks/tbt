@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "mode": "dry-run",
+  "mode": "write",
   "workflow": "cdb-service-complement-write.yml",
   "purpose": "Only exact complements of existing completed-match service/return points won proportions; never infer counts or modify odds, identity, rank, result, provider metadata, model, or production prediction",
   "approved_by_operator": true,
@@ -17,5 +17,7 @@
   ],
   "api_requests": 0,
   "model_training": false,
-  "model_promotion": false
+  "model_promotion": false,
+  "execution_id": "pending-usopen-38062494137-verified-readback",
+  "prerequisite": "Do not merge until US Open 2024 import run 38062494137 has succeeded with independent persisted readback; a merged request triggers CDB writer."
 }
