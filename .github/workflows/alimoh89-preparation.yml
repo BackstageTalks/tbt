@@ -31,7 +31,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('tbt-alimoh89-pr-{0}', github.ref) || 'tbt-alimoh-market-write-2026-10-07' }}
+  # Per-run queue avoids losing pending jobs; private global lock owns writes.
+  group: tbt-crossrepo-writer-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:

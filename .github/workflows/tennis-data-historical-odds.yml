@@ -23,7 +23,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('tbt-tennis-data-odds-pr-{0}', github.ref) || 'tbt-tennis-data-odds-write' }}
+  # Per-run queue avoids losing pending jobs; private global lock owns writes.
+  group: tbt-crossrepo-writer-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:

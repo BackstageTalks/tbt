@@ -32,6 +32,10 @@ def test_every_known_cdb_writer_obtains_and_releases_global_lock():
         assert "python scripts/cdb_global_writer_lock.py acquire" in contents, name
         assert "python scripts/cdb_global_writer_lock.py release --if-held" in contents, name
         assert "        if: always()" in contents, name
+        # GitHub retains only one pending run per concurrency.group even when
+        # cancel-in-progress=false. The global tag lock is the serializer.
+        assert "github.run_id" in contents.split("jobs:", 1)[0], name
+        assert "group: tbt-history-data-writer" not in contents, name
 
 
 def test_main_data_pipeline_never_cancels_while_owner():

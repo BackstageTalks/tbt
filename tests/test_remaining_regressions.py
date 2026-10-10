@@ -866,7 +866,7 @@ def test_workflows_confirm_publication_and_keep_deploy_lock_separate():
     ci = (root / ".github/workflows/ci.yml").read_text()
     assert "download_environment.py" not in data
     assert "backfill_venue_context.py" not in data
-    assert data.count("group: tbt-history-data-writer") >= 1
+    assert data.count("group: tbt-crossrepo-writer-${{ github.run_id }}") >= 1
     assert "group: tbt-production-deploy" in ci
     assert "group: tbt-history-data-writer" not in ci.split("  deploy:", 1)[1]
     assert "confirm_prediction_publication.py" in data

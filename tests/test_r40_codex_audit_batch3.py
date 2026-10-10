@@ -26,7 +26,7 @@ def test_release_is_r40():
 
 def test_b05_data_deploy_has_shared_production_critical_section():
     workflow = _text(".github/workflows/data.yml")
-    assert "group: tbt-history-data-writer" in workflow  # whole data writer remains serialized
+    assert "group: tbt-crossrepo-writer-${{ github.run_id }}" in workflow  # the global writer lock serializes data; pending runs are not evicted
     assert "name: Deploy current prediction generation" in workflow
     assert workflow.count("group: tbt-production-deploy") >= 1
     assert "inputs.mode == 'refresh'" in workflow

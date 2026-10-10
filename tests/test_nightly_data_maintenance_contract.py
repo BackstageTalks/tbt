@@ -41,4 +41,4 @@ def test_nightly_maintenance_rebuilds_derived_quality_reports():
         assert script in WORKFLOW
     assert "audit/nightly-data-maintenance-latest.json" in WORKFLOW
     assert "derived/nightly/player_master.json" in WORKFLOW
-    assert "group: tbt-history-data-writer" in WORKFLOW
+    assert "group: tbt-crossrepo-writer-${{ github.run_id }}" in WORKFLOW
