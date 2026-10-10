@@ -152,8 +152,10 @@ def main():
               const admin=t.filteredResults().map(row=>row.event_id);
               const adminValue=t.filteredResults({...s.resultsFilters,category:'value'})
                 .map(row=>row.event_id);
+              const previousAccount=s.feed.account;
               s.feed.account={is_admin:false,role:'rookie',plan:'rookie',status:'active'};
               const member=t.filteredResults().map(row=>row.event_id);
+              s.feed.account=previousAccount;
               return {admin,adminValue,member};
             }""")
             assert "archived-value" in archive["admin"], archive
