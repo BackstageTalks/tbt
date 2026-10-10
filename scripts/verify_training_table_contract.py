@@ -101,7 +101,7 @@ def validate(frame: pd.DataFrame, report: dict, leakage: dict, *,
             metrics[f"{tour}_{period}"] = {"rows": int(mask.sum()), "known_both_rate": rate}
     weather = frame["pre_match_weather_known"].astype(float)
     weather_section = report.get("pre_match_forecast_weather") or {}
-    if int(weather_section.get("known_rows") or -1) != int(weather.sum()):
+    if weather_section.get("known_rows") is None or int(weather_section["known_rows"]) != int(weather.sum()):
         raise ValueError("Weather report rows differ from training table")
     modern = date >= pd.Timestamp("2024-01-01", tz="UTC")
     if modern.sum() < 1000 or float(weather[modern].mean()) < 0.05:
