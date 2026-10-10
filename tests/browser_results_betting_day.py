@@ -131,6 +131,36 @@ def main():
             assert today["ids"] == ["current-day", "runtime-current"], today
             assert today["window"] == "today", today
             assert "2/64" in today["sample"], today
+
+            # A settled published Result can outlive the current daily offer.
+            # Admin sees it even if a refresh removed that offer card; non-admin
+            # still requires the original authorized current-offer cohort.
+            archive = page.evaluate("""() => {
+              const t=bettingDayTest,s=t.state;
+              const source=structuredClone(s.feed.results[0]);
+              const archived=structuredClone(source);
+              archived.event_id='archived-value';
+              archived.market_publications[0].section='value';
+              archived.runtime_result_overlay=true;
+              archived.archive_source='verified_match_status_snapshot';
+              archived.market_publications[0].result.runtime_source='match_status_snapshot';
+              const unpublished=structuredClone(source);
+              unpublished.event_id='unpublished';
+              delete unpublished.market_publications[0].issued_at;
+              unpublished.market_publications[0].result.runtime_source='';
+              s.feed.results.push(archived,unpublished);
+              const admin=t.filteredResults().map(row=>row.event_id);
+              const adminValue=t.filteredResults({...s.resultsFilters,category:'value'})
+                .map(row=>row.event_id);
+              s.feed.account={is_admin:false,role:'rookie',plan:'rookie',status:'active'};
+              const member=t.filteredResults().map(row=>row.event_id);
+              return {admin,adminValue,member};
+            }""")
+            assert "archived-value" in archive["admin"], archive
+            assert archive["adminValue"] == ["archived-value"], archive
+            assert "archived-value" not in archive["member"], archive
+            assert "unpublished" not in archive["admin"], archive
+
             page.evaluate("""() => {
               document.querySelectorAll('dialog[open]').forEach(d=>d.close());
               const t=bettingDayTest;
