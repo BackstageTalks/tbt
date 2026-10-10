@@ -184,6 +184,9 @@ def collect():
         if board is None:
             return
         events = unpack(board, ("events", "data", "results"))
+        DATA.append({"stage": "board", "captured_at_utc": now().isoformat(),
+                     "payload": board})
+        flush_if_needed(day, runid)
         future = []
         for e in events:
             if not isinstance(e, dict) or not str(e.get("id", "")).isdigit():
@@ -217,6 +220,10 @@ def collect():
                 break
             wanted = [m for m in MARKETS if m in keys]
             discovered.append((kickoff, event, keys, wanted))
+            DATA.append({"stage": "market_discovery", "event_id": eid,
+                         "captured_at_utc": now().isoformat(),
+                         "event": event, "available_markets_raw": markets})
+            flush_if_needed(day, runid)
         # Spend odds calls on sparse player props first. More than one category
         # in the same odds request costs no extra API call.
         discovered.sort(key=lambda x: (
@@ -230,7 +237,7 @@ def collect():
                 break
             eid = str(event["id"])
             # Keep one discovery record even when no desired market is offered.
-            snapshot = {"event_id": eid, "event": event, "commence_time": kickoff.isoformat(),
+            snapshot = {"stage": "odds", "event_id": eid, "event": event, "commence_time": kickoff.isoformat(),
                         "captured_at_utc": now().isoformat(),
                         "available_markets": sorted(k for k in keys if isinstance(k, str)),
                         "requested_markets": wanted, "odds": None}
