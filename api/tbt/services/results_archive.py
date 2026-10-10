@@ -203,6 +203,84 @@ def load_settled_results_archive() -> list[dict]:
         raise AdminStorageUnavailable("Unable to load match results archive") from exc
 
 
+
+def read_only_archive_category_counts(
+    archived: list[dict], *, now: datetime | None = None,
+) -> dict:
+    """Aggregate-only category readback for diagnosing Results filters.
+
+    No user, event or selection identifiers are returned; this function does
+    not mutate the Azure archive or infer settlements.
+    """
+    from collections import Counter
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+
+    bratislava = ZoneInfo("Europe/Bratislava")
+    clock = (now or datetime.now(timezone.utc)).astimezone(bratislava)
+
+    def day_key(moment: datetime) -> str:
+        local = moment.astimezone(bratislava)
+        if local.hour < 6:
+            local -= timedelta(days=1)
+        return local.date().isoformat()
+
+    current_day = day_key(clock)
+    by_section: Counter = Counter()
+    all_sections: Counter = Counter()
+    current_rows = selected_rows = mismatch = 0
+    selected = {"top_daily", "value", "ace", "double_faults", "sets", "games"}
+    for row in archived:
+        if not isinstance(row, dict):
+            continue
+        scheduled = _time(row.get("scheduled_at") or row.get("date"))
+        if scheduled is None:
+            continue
+        for publication in row.get("market_publications") or []:
+            if not isinstance(publication, dict):
+                continue
+            result = publication.get("result")
+            if not isinstance(result, dict) or (
+                result.get("correct") not in (True, False) and not result.get("void")
+            ):
+                continue
+            market = str(publication.get("market") or "").lower()
+            section = {
+                "aces": "ace", "double_faults": "double_faults",
+                "sets": "sets", "games": "games",
+            }.get(market, str(publication.get("section") or "").lower())
+            if not section:
+                continue
+            all_sections[section] += 1
+            if day_key(scheduled) != current_day:
+                continue
+            explicit = str(
+                publication.get("betting_day")
+                or (publication.get("issued_snapshot") or {}).get("betting_day")
+                or row.get("betting_day")
+                or (row.get("betting") or {}).get("betting_day")
+                or ""
+            )
+            # Mirrors the current Admin Today filter in web/app.js.
+            if explicit and explicit != current_day:
+                mismatch += 1
+                continue
+            current_rows += 1
+            by_section[section] += 1
+            if section in selected:
+                selected_rows += 1
+    return {
+        "betting_day": current_day,
+        "persisted_settled_all_time": sum(all_sections.values()),
+        "persisted_by_category_all_time": dict(sorted(all_sections.items())),
+        "persisted_settled_today": current_rows,
+        "persisted_by_category_today": dict(sorted(by_section.items())),
+        "persisted_selected_today": selected_rows,
+        "excluded_betting_day_mismatch": mismatch,
+        "selected_categories": sorted(selected),
+    }
+
+
 def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
     """Overlay settled outcomes only, preserving canonical publication metadata."""
     out = dict(feed)
