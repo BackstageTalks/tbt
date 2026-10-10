@@ -64,6 +64,12 @@ jobs:
           print(json.dumps({"sha256":actual,"rows":a.get("tabular_rows_total"),"tables":a.get("table_count")},indent=2))
           PY
 
+      - name: Acquire cross-repository canonical writer lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
       - name: Download verified canonical history
         run: |
           set -euo pipefail
@@ -280,3 +286,8 @@ jobs:
             .cache/tbt/wimbledon-link/readback-verification.json
           if-no-files-found: warn
           retention-days: 14
+      
+      - name: Release cross-repository canonical writer lock
+        if: always()
+        shell: bash
+        run: python scripts/cdb_global_writer_lock.py release --if-held
