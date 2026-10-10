@@ -10,6 +10,8 @@ on:
       - "api/tbt/data/offline_market_history.py"
       - "tests/test_alimoh89_preparation.py"
       - "tests/test_offline_market_history_v2.py"
+      - "scripts/verify_alimoh89_existing_sidecars.py"
+      - "tests/test_verify_alimoh89_existing_sidecars.py"
   push:
     branches: [main]
     paths:
@@ -85,8 +87,8 @@ jobs:
           set -euo pipefail
           python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
           python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
-          python -m compileall -q scripts/prepare_alimoh89_markets.py scripts/import_offline_market_history.py api/tbt/data/offline_market_history.py
-          python -m pytest tests/test_alimoh89_preparation.py tests/test_offline_market_history_v2.py -q
+          python -m compileall -q scripts/prepare_alimoh89_markets.py scripts/import_offline_market_history.py api/tbt/data/offline_market_history.py scripts/verify_alimoh89_existing_sidecars.py
+          python -m pytest tests/test_alimoh89_preparation.py tests/test_offline_market_history_v2.py tests/test_verify_alimoh89_existing_sidecars.py -q
 
       - name: Verify private data destination
         run: |
@@ -124,6 +126,7 @@ jobs:
           python -c 'import os; from pathlib import Path; from release_store import ReleaseStore; ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",Path(".cache/tbt/alimoh/history")).download(require_bundle_manifest=True)'
 
       - name: Build mapped rich sidecars and canonical market stage
+        id: prepared
         run: |
           set -euo pipefail
           python scripts/prepare_alimoh89_markets.py \
@@ -138,7 +141,14 @@ jobs:
           test "$(jq -r '.source.license_status' "$report")" = "operator_confirmed_compatible_for_noncommercial_blinq_use"
           test "$(jq -r '.counts.source_rows' "$report")" = "300059"
           test "$(jq -r '.staged_rows' "$report")" -ge 25000
-          test "$(jq -r '.canonical_market_stage_rows' "$report")" -gt 0
+          # Zero new canonical rows is a legitimate idempotent replay.
+          new="$(jq -r '.canonical_market_stage_rows' "$report")"
+          if (( new > 0 )); then
+            echo "canonical_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "canonical_changes=false" >> "$GITHUB_OUTPUT"
+            echo "NO_NEW_CANONICAL_MARKETS; verifying existing immutable sidecars instead of duplicating."
+          fi
           test "$(jq -r '.counts.duplicate_canonical_links // 0' "$report")" = "0"
           test "$(jq -r '.quarantine_rows' "$report")" = "0"
           test "$(jq -r '.review_rows' "$report")" -le 20
@@ -147,7 +157,7 @@ jobs:
         run: |
           set -euo pipefail
           stage=.cache/tbt/alimoh/out/canonical_market_stage.jsonl
-          test -s "$stage"
+          test -f "$stage"
           python scripts/import_offline_market_history.py \
             --stage "$stage" \
             --history-dir .cache/tbt/alimoh/history \
@@ -157,10 +167,41 @@ jobs:
             test "$(jq -r --arg k "$key" '.counts[$k] // 0' "$report")" = "0"
           done
           test "$(jq -r '.api_requests' "$report")" = "0"
-          test "$(jq -r '.counts.updated // 0' "$report")" -gt 0
+          # Exact zero-stage/zero-update replay passes; discrepancies stop the job.
+          prepared="$(jq -r '.canonical_market_stage_rows' .cache/tbt/alimoh/out/report.json)"
+          updated="$(jq -r '.counts.updated // 0' "$report")"
+          test "$updated" = "$prepared"
+
+      - name: Verify 12 existing private sidecars on canonical no-op
+        if: ${{ steps.request.outputs.mode == 'write' && steps.prepared.outputs.canonical_changes == 'false' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/alimoh/previous-remote .cache/tbt/alimoh/previous-manifest
+          path="$(jq -r '.output.sidecar_manifest_path' "$REQUEST_FILE")"
+          tag="$(jq -r '.output.sidecar_release_tag' "$REQUEST_FILE")"
+          gh api "repos/$TBT_DATA_REPOSITORY/contents/$path?ref=main" --jq .content | base64 -d \
+            > .cache/tbt/alimoh/previous-manifest/manifest.json
+          gh api "repos/$TBT_DATA_REPOSITORY/releases/tags/$tag" \
+            > .cache/tbt/alimoh/previous-manifest/release.json
+          gh release download "$tag" -R "$TBT_DATA_REPOSITORY" \
+            -D .cache/tbt/alimoh/previous-remote
+          python scripts/verify_alimoh89_existing_sidecars.py \
+            --preparation .cache/tbt/alimoh/out/report.json \
+            --manifest .cache/tbt/alimoh/previous-manifest/manifest.json \
+            --release .cache/tbt/alimoh/previous-manifest/release.json \
+            --local .cache/tbt/alimoh/out \
+            --remote .cache/tbt/alimoh/previous-remote
+          echo "CDB_NOOP_PERSISTED_SIDECARS_VERIFIED; no canonical or research overwrite."
+
+      - name: Block unprotected positive canonical market writes
+        if: ${{ steps.request.outputs.mode == 'write' && steps.prepared.outputs.canonical_changes == 'true' }}
+        run: |
+          echo "::error::Positive market delta requires a separate exact-cell writer with immutable prewrite backup and full persisted readback; broad partition rewrite is prohibited."
+          exit 1
 
       - name: Write verified market history into local canonical partitions
-        if: ${{ steps.request.outputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' && steps.prepared.outputs.canonical_changes == 'true' }}
         run: |
           set -euo pipefail
           python scripts/import_offline_market_history.py \
@@ -176,19 +217,19 @@ jobs:
           test "$(jq -r '.counts.updated // 0' "$report")" -gt 0
 
       - name: Validate and publish changed canonical history
-        if: ${{ steps.request.outputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' && steps.prepared.outputs.canonical_changes == 'true' }}
         run: |
           set -euo pipefail
           python -c 'import json,os; from pathlib import Path; from release_store import ReleaseStore; from tbt.data.history_snapshot import load_partitions; from tbt.data.history_safety import sanitize_history_identities; d=Path(".cache/tbt/alimoh/history"); r=json.loads(Path(".cache/tbt/alimoh/write/report.json").read_text()); years=[int(y) for y in r.get("changed_years") or []]; matches,safety=sanitize_history_identities(load_partitions(d)); assert not safety.get("quarantined_rows"), "identity quarantine before publish"; assert years, "no changed years"; paths=[d/f"history-{y:04d}.parquet" for y in years]+[d/"history_manifest.json"]; assert all(p.is_file() and p.stat().st_size>0 for p in paths); ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",d).upload_bundle(paths); print(json.dumps({"rows":len(matches),"changed_years":years},indent=2))'
 
       - name: Verify persisted canonical readback
-        if: ${{ steps.request.outputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' && steps.prepared.outputs.canonical_changes == 'true' }}
         run: |
           set -euo pipefail
           python -c 'import json,os; from pathlib import Path; from release_store import ReleaseStore; from tbt.data.history_snapshot import load_partitions; from tbt.data.history_safety import sanitize_history_identities; d=Path(".cache/tbt/alimoh/verify"); ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",d).download(require_bundle_manifest=True); matches,safety=sanitize_history_identities(load_partitions(d)); assert not safety.get("quarantined_rows"), "persisted identity quarantine"; by_id={str(m.match_id):m for m in matches}; staged=[json.loads(x) for x in Path(".cache/tbt/alimoh/out/canonical_market_stage.jsonl").read_text().splitlines() if x.strip()]; prefix=os.environ["SOURCE_LABEL"]+":"; missing=[str(r["match_id"]) for r in staged if by_id.get(str(r["match_id"])) is None]; bad=[str(r["match_id"]) for r in staged if by_id.get(str(r["match_id"])) is not None and not str(((by_id[str(r["match_id"])].provider_payload or {}).get("_tbt_market_history") or {}).get("source") or "").startswith(prefix)]; assert not missing and not bad, f"readback missing={len(missing)} bad={len(bad)}"; print(json.dumps({"rows":len(matches),"verified_staged":len(staged)},indent=2))'
 
       - name: Publish rich market sidecars and raw backup
-        if: ${{ steps.request.outputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' && steps.prepared.outputs.canonical_changes == 'true' }}
         run: |
           set -euo pipefail
           sidecar_tag="$(jq -r '.output.sidecar_release_tag' "$REQUEST_FILE")"
@@ -216,7 +257,7 @@ jobs:
           echo "SIDECAR_TAG=$sidecar_tag" >> "$GITHUB_ENV"
 
       - name: Persist sidecar manifest and integration audit
-        if: ${{ steps.request.outputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' && steps.prepared.outputs.canonical_changes == 'true' }}
         run: |
           set -euo pipefail
           mkdir -p /tmp/alimoh-sidecars
@@ -260,7 +301,7 @@ jobs:
           upload_json /tmp/alimoh-sidecars/manifest.json "$audit_path" "Audit integrated alimoh89 markets run $GITHUB_RUN_ID"
 
       - name: Update permanent backup manifest
-        if: ${{ steps.request.outputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' && steps.prepared.outputs.canonical_changes == 'true' }}
         run: |
           set -euo pipefail
           path="$(jq -r '.output.backup_manifest_path' "$REQUEST_FILE")"
