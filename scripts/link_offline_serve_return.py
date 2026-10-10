@@ -1005,6 +1005,99 @@ def _quality_ready(stats: dict[str, float | None]) -> bool:
     )
 
 
+
+# Conflict rescue is deliberately narrower than ordinary additive linking.
+# A row that disagrees with populated CDB statistics is not trusted for ANY
+# new field. For an otherwise disputed match, a missing field must have the
+# exact same value from independently charted points and another source.
+# ATP all-matches and Sackmann archive records count as ONE source family:
+# they can share upstream observations and are not independent votes.
+def _reconciliation_family(source: str) -> str:
+    prefix = str(source).split(":", 1)[0]
+    if prefix in {"sackmann", "all-matches"}:
+        return "atp_archive"
+    if prefix == "charting":
+        return "manual_charting"
+    if prefix == "kaggle-hwaitt":
+        return "kaggle_hwaitt"
+    # Unknown families are never independent corroborators.
+    return "uncorroborated"
+
+
+def _reconcile_linked_fields(
+    existing: dict[str, float | None],
+    rows: list[dict],
+) -> tuple[dict[str, float], list[dict], dict[str, list[int]], set[str]]:
+    """Return only additive, defensible fields; quarantine disputed evidence.
+
+    There is NO auto-resolution by source majority, tolerance, or precedence.
+    A canonical conflict taints its entire source row. A disputed field is
+    never staged. Every staged field on a contested match needs a charting
+    witness plus a non-charting witness from a different source family.
+    """
+    proposals: dict[str, list[tuple[int, float]]] = defaultdict(list)
+    conflicts: list[dict] = []
+    tainted: set[int] = set()
+    for index, row in enumerate(rows):
+        for key, raw in row["stats"].items():
+            value = float(raw)
+            old = existing.get(key)
+            if old is not None:
+                if not math.isfinite(value) or abs(float(old) - value) > 1e-6:
+                    tainted.add(index)
+                    conflicts.append({
+                        "key": key, "reason": "canonical_conflict",
+                        "existing": old, "incoming": value,
+                        "source": row["source"], "source_match_id": row["source_match_id"],
+                    })
+            elif not math.isfinite(value):
+                tainted.add(index)
+                conflicts.append({
+                    "key": key, "reason": "invalid_source_value",
+                    "source": row["source"], "source_match_id": row["source_match_id"],
+                })
+            else:
+                proposals[key].append((index, value))
+
+    # Compare ALL observed values, including values from tainted source rows.
+    # An outlying source can therefore veto the field, never silently be ignored.
+    disputed: set[str] = set()
+    for key, observations in proposals.items():
+        reference = observations[0][1]
+        if any(abs(value - reference) > 1e-6 for _, value in observations[1:]):
+            disputed.add(key)
+            conflicts.append({
+                "key": key, "reason": "source_conflict",
+                "observations": [
+                    {"source": rows[index]["source"],
+                     "source_match_id": rows[index]["source_match_id"], "value": value}
+                    for index, value in observations
+                ],
+            })
+
+    contested = bool(conflicts)
+    accepted: dict[str, float] = {}
+    field_sources: dict[str, list[int]] = {}
+    blocked: set[str] = set(disputed)
+    for key, observations in proposals.items():
+        if key in disputed:
+            continue
+        trusted = [(i, value) for i, value in observations if i not in tainted]
+        if not trusted:
+            blocked.add(key)
+            continue
+        if contested:
+            families = {_reconciliation_family(rows[i]["source"]) for i, _ in trusted}
+            # Only independently charted match facts can corroborate a
+            # disputed record; two archives of the same upstream are not enough.
+            if "manual_charting" not in families or not (families - {"manual_charting", "uncorroborated"}):
+                blocked.add(key)
+                continue
+        accepted[key] = trusted[0][1]
+        field_sources[key] = sorted({i for i, _ in trusted})
+    return accepted, conflicts, field_sources, blocked
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--history-dir", required=True)
@@ -1113,27 +1206,33 @@ def main() -> None:
     for mid, rows in linked.items():
         match = by_id[mid]
         existing = dict(match.stats or {})
-        merged: dict[str, float] = {}
-        conflict = []
-        provenance = []
-        for row in rows:
-            provenance.append({k: row[k] for k in ("source", "source_match_id", "score", "evidence", "mapping")})
-            for key, value in row["stats"].items():
-                old = existing.get(key)
-                prior = merged.get(key)
-                if old is not None and abs(float(old) - float(value)) > 1e-6:
-                    conflict.append({"key": key, "reason": "canonical_conflict", "existing": old, "incoming": value})
-                elif prior is not None and abs(float(prior) - float(value)) > 1e-6:
-                    conflict.append({"key": key, "reason": "source_conflict", "existing": prior, "incoming": value})
-                elif old is None:
-                    merged[key] = float(value)
+        merged, conflict, field_sources, blocked = _reconcile_linked_fields(existing, rows)
         if conflict:
             counts["stat_conflict_matches"] += 1
-            quarantine.append({"match_id": mid, "conflicts": conflict, "sources": provenance})
-            continue
+            counts["conflicted_stat_fields"] += len({item["key"] for item in conflict})
+            counts["blocked_conflicted_fields"] += len(blocked)
+            quarantine.append({
+                "match_id": mid,
+                "conflicts": conflict,
+                "blocked_missing_fields": sorted(blocked),
+                "rescued_fields": sorted(merged),
+                "sources": [
+                    {k: row[k] for k in ("source", "source_match_id", "score", "evidence", "mapping")}
+                    for row in rows
+                ],
+            })
+            if merged:
+                counts["partial_staged_matches"] += 1
+                counts["rescued_stat_fields"] += len(merged)
         if not merged:
-            counts["already_present"] += 1
+            if not conflict:
+                counts["already_present"] += 1
             continue
+        used_indices = sorted({index for indices in field_sources.values() for index in indices})
+        provenance = [
+            {k: rows[index][k] for k in ("source", "source_match_id", "score", "evidence", "mapping")}
+            for index in used_indices
+        ]
 
         projected = dict(existing)
         projected.update(merged)
@@ -1165,6 +1264,10 @@ def main() -> None:
             },
             "incoming_stats": merged,
             "sources": provenance,
+            "field_source_indices": {
+                key: [used_indices.index(i) for i in indices]
+                for key, indices in sorted(field_sources.items())
+            },
             "quality_ready_before": was_ready,
             "quality_ready_after": is_ready,
             "import_ready": True,
