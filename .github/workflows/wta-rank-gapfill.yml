@@ -20,7 +20,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: tbt-history-data-writer
+  # Global Git tag owns write serialization; run-unique queue prevents pending eviction.
+  group: tbt-crossrepo-writer-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
