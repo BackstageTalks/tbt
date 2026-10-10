@@ -49,8 +49,14 @@ def test_local_import_refuses_changed_stat_or_identity():
     with pytest.raises(ValueError, match="changed since dry-run"):
         write_local([changed], staged)
     other = deepcopy(original)
-    other.player1_id = "different"
+    other.player2_name = "Different"
     with pytest.raises(ValueError, match="changed since dry-run"):
+        write_local([other], staged)
+    # Changing the winning player ID invalidates completion, which must fail
+    # even earlier than the canonical snapshot hash check.
+    other = deepcopy(original)
+    other.player1_id = "different"
+    with pytest.raises(ValueError, match="Staged identity missing or match not completed"):
         write_local([other], staged)
 
 
