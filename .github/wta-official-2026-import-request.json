@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "mode": "dry-run",
+  "mode": "write",
   "source": "wta_official_2026_weekly_singles",
   "source_sha256": "4267e37ba6357eb11cfb0e9346c3c59eac8a17431e1f19deb5fffa9573a9bf03",
   "player_crosswalk_git_blob": "dd397c8fe1b8457f2036b8bab233daf3f2da9317",
@@ -10,5 +10,5 @@
   "require_independent_full_partition_readback": true,
   "allowed_provider_api_requests": 0,
   "production_model_promotion": false,
-  "purpose": "Import only strictly prior weekly WTA ranks independently matched by verified canonical-to-Sackmann identities. Default fail-closed dry-run."
+  "purpose": "Execute only 4240 uniquely linked official WTA 2026 PIT match rank fills / 8480 missing rank values following PR #509 successful full 92525-row local exact-cell/readback and scoped PIT evidence; enforce global canonical writer lock, immutable checksum-verified remote prewrite backup, live release manifest freshness, independent persisted readback, zero model promotion and zero external provider requests. Fail closed on any new CDB differences."
 }
