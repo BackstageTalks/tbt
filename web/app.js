@@ -3261,7 +3261,11 @@
       // A later refresh may replace the daily offer, so comparing old settled
       // results against only the CURRENT offer silently drops historical picks.
       // Other plans retain the existing current-offer entitlement cohort gate.
-      if(isAdminAccount())return true;
+      if(isAdminAccount()){
+        // Both the scheduled match and its immutable issuance betting day
+        // must belong to Today; a stale/corrupt older issuance is not today's pick.
+        return resultPublicationBettingDay(row,publication)===bratislavaBettingDayKey(now,6);
+      }
       const key=resultBetIdentity(row,publication,'match_winner');
       const cohort=todayKeys||currentBettingDayPublishedKeys(now);
       return !!key&&cohort.has(key);
