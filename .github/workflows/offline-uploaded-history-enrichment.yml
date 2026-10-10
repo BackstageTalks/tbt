@@ -83,7 +83,7 @@ jobs:
           python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
           python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
           python -m compileall -q scripts/link_offline_serve_return.py scripts/import_offline_linked_serve_return.py
-          python -m pytest tests/test_offline_serve_return_linker.py tests/test_offline_linked_serve_return_importer.py -q
+          python -m pytest tests/test_offline_serve_return_linker.py tests/test_offline_linked_serve_return_importer.py tests/test_verify_cdb_enrichment.py -q
 
       - name: Verify private history destination
         run: |
