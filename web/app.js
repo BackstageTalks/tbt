@@ -3675,7 +3675,16 @@
 
   function wireResultsFilters(){
     ensureResultsCategoryDismissHandlers();
-    const rerender=()=>{state.resultsPage=0;renderRoute('results');};
+    const rerender=()=>{
+      const expanded=document.querySelector('.results-filter-shell')?.classList.contains('is-open');
+      state.resultsPage=0;
+      renderRoute('results');
+      if(expanded){
+        const shell=document.querySelector('.results-filter-shell');
+        shell?.classList.add('is-open');
+        shell?.querySelector('[data-results-filter-toggle]')?.setAttribute('aria-expanded','true');
+      }
+    };
     const mobileFilterToggle=document.querySelector('[data-results-filter-toggle]');
     if(mobileFilterToggle)mobileFilterToggle.onclick=()=>{
       const shell=mobileFilterToggle.closest('.results-filter-shell');
