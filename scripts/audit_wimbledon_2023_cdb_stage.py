@@ -19,7 +19,7 @@ import pandas as pd
 from _bootstrap import ROOT  # noqa: F401
 from link_wimbledon_2023_advanced import (
     REQUIRED, _canonical_index, _canonical_winner_side, _safe_scalar,
-    _source_to_canonical_orientation, _validate_group, _winner_from_sets,
+    _source_to_canonical_orientation, _validate_group, _winner_from_sets, _int,
 )
 from tbt.data.history_snapshot import load_manifest, load_snapshot
 
@@ -85,8 +85,20 @@ def tape_completeness(group: pd.DataFrame, best_of, winner_side: int | None) -> 
             problems.append("missing_or_excess_terminal_set")
         if winner_side not in (1, 2) or (n1 if winner_side == 1 else n2) != required:
             problems.append("set_victor_not_canonical_winner")
-        if clean_binary(rows["set_victor"].iloc[-1]) != winner_side:
+        if _int(rows["set_victor"].iloc[-1]) != winner_side:
             problems.append("last_point_not_match_terminal_set")
+    # A winning set must end on a won game; an implausibly short point tape
+    # cannot masquerade as a fully observed tennis match.
+    game_winners = pd.to_numeric(rows["game_victor"], errors="coerce")
+    games1 = int(game_winners.eq(1).sum())
+    games2 = int(game_winners.eq(2).sum())
+    if _int(rows["set_victor"].iloc[-1]) in (1, 2):
+        if _int(rows["game_victor"].iloc[-1]) != winner_side:
+            problems.append("terminal_set_without_game_victor")
+    if n1 > 0 and games1 < 6 * n1:
+        problems.append("implausibly_few_games_for_player1_sets")
+    if n2 > 0 and games2 < 6 * n2:
+        problems.append("implausibly_few_games_for_player2_sets")
     for _, raw_field, _, _ in FIELDS:
         if any(clean_binary(x) is None for x in rows[raw_field]):
             problems.append(f"missing_or_invalid_point_flags:{raw_field}")
