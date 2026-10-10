@@ -80,7 +80,9 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: tbt-history-data-writer
+  # Unique waiting slots: GitHub replaces older PENDING runs sharing a group.
+  # The private global Git tag lock, not this queue, serializes CDB publication.
+  group: tbt-crossrepo-writer-${{ github.run_id }}
   # Explicit replacement markers may cancel a stale writer; ordinary writers never cancel each other.
   cancel-in-progress: false  # Never auto-cancel a run that may own a global writer lock.
 jobs:
