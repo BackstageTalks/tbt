@@ -70,6 +70,12 @@ jobs:
               print(f"Verified private input {name}: {len(rows)} rows")
           PY
 
+      - name: Acquire cross-repository canonical writer lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
       - name: Download current checksum-verified private canonical history
         shell: bash
         run: |
@@ -282,3 +288,8 @@ jobs:
           else
             gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Audit Drive PBPX canonical import $GITHUB_RUN_ID" -f content="$content" > /dev/null
           fi
+      
+      - name: Release cross-repository canonical writer lock
+        if: always()
+        shell: bash
+        run: python scripts/cdb_global_writer_lock.py release --if-held

@@ -1,0 +1,66 @@
+name: Validate cross-repository CDB writer lock
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/cdb_global_writer_lock.py'
+      - 'scripts/release_store.py'
+      - 'tests/test_cdb_global_writer_lock.py'
+      - 'tests/test_cdb_writer_workflow_coverage.py'
+      - 'tests/test_release_store_requires_global_lock.py'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lock-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout app candidate
+        uses: actions/checkout@v4
+
+      - name: Checkout paired private data candidate
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: fix/cdb-global-single-writer-20261010
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: private-data
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install offline contract test runner
+        run: python -m pip install pytest
+
+      - name: Check app lock and final release-store write boundary
+        env:
+          PYTHONPATH: scripts:api
+        run: |
+          set -euo pipefail
+          python -m pytest -q \
+            tests/test_cdb_global_writer_lock.py \
+            tests/test_cdb_writer_workflow_coverage.py \
+            tests/test_release_store_requires_global_lock.py
+
+      - name: Check private data lock from its own checkout
+        working-directory: private-data
+        env:
+          PYTHONPATH: .:scripts
+        run: |
+          set -euo pipefail
+          python -m compileall -q scripts/cdb_global_writer_lock.py
+          python -m pytest -q \
+            tests/test_cdb_global_writer_lock.py \
+            tests/test_cdb_writer_workflow_coverage.py
+
+      - name: Reject divergent global lock implementations
+        run: |
+          set -euo pipefail
+          cmp scripts/cdb_global_writer_lock.py private-data/scripts/cdb_global_writer_lock.py
+          echo 'App and private-data repositories share identical global lock implementation.'

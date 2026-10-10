@@ -126,6 +126,12 @@ jobs:
           print("Nightly job uses zero TennisAPI requests; Open-Meteo/geocoder cap:", cap)
           PY
 
+      - name: Acquire global cross-repository CDB/training writer lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
       - name: Phase 1 - reuse verified environment cache (zero network)
         shell: bash
         run: |
@@ -398,3 +404,8 @@ jobs:
             .cache/tbt/nightly/derived/*.json
             .cache/tbt/nightly/derived/*.md
           if-no-files-found: warn
+
+      - name: Release global cross-repository CDB/training writer lock
+        if: always()
+        shell: bash
+        run: python scripts/cdb_global_writer_lock.py release --if-held

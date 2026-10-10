@@ -40,6 +40,12 @@ jobs:
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
           test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
 
+      - name: Acquire cross-repository canonical writer lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
       - name: Download canonical history and enrichment sources
         shell: bash
         run: |
@@ -401,4 +407,8 @@ jobs:
             --weather-evidence .cache/tbt/verified-source/weather-verification.json \
             --weather-csv .cache/tbt/verified-source/pre-match-weather.csv \
             --out .cache/tbt/training-db/readback_gate.json
-
+      
+      - name: Release cross-repository canonical writer lock
+        if: always()
+        shell: bash
+        run: python scripts/cdb_global_writer_lock.py release --if-held

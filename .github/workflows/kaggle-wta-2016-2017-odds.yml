@@ -181,6 +181,13 @@ jobs:
           print(json.dumps(audit,indent=2))
           PY
 
+      - name: Acquire cross-repository canonical writer lock
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
       - name: Download checksum-verified canonical history
         run: |
           set -euo pipefail
@@ -414,3 +421,8 @@ jobs:
             .cache/tbt/kaggle-wta/write/report.json
           if-no-files-found: warn
           retention-days: 14
+      
+      - name: Release cross-repository canonical writer lock
+        if: always()
+        shell: bash
+        run: python scripts/cdb_global_writer_lock.py release --if-held
