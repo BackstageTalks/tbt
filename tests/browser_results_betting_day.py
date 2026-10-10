@@ -14,7 +14,7 @@ def route_request(route):
         assert source.count(marker) == 1
         source = source.replace(
             marker,
-            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,wireResultsFilters,bratislavaBettingDayKey,resultPublicationMatchesWindow};\n"
+            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow};\n"
             + marker,
         )
         route.fulfill(content_type="application/javascript", body=source)
@@ -198,6 +198,25 @@ def main():
               };
             }""")
             assert ranges=={'before':False,'start':True,'end':False,'rolling':True,'aligned':False,'threeStart':True,'threeBefore':False,'winterBefore':False,'winterStart':True},ranges
+            # An empty Today selection must not silently display all time.
+            empty_today=page.evaluate("""() => {
+                const t=bettingDayTest,s=t.state;
+                const settled=structuredClone(s.feed.results[0]);
+                const prev=t.bratislavaBettingDayKey(Date.now()-2*86400000,6);
+                settled.scheduled_at=prev+'T12:00:00Z';
+                settled.market_publications[0].betting_day=prev;
+                s.feed.results=[settled];
+                s.feed.account={is_admin:true,role:'admin',plan:'admin',status:'active'};
+                s.resultsFilters={category:'all',tour:'',surface:'',window:'today',
+                    dateFrom:'',dateTo:'',bettingDay:true};
+                s.route='results';
+                t.renderRoute('results');
+                const text=document.querySelector('#routePanel')?.textContent||'';
+                return {period:s.resultsFilters.window,rows:t.filteredResults().length,
+                    empty:text.includes('Zatiaľ nie sú dostupné vyhodnotené'),
+                    selector:document.querySelector('#resultsWindow')?.value};
+            }""")
+            assert empty_today=={'period':'today','rows':0,'empty':True,'selector':'today'},empty_today
             assert not errors, errors
             print("Results current betting-day cohort + 06:00 custom filter contract: PASS")
         finally:
