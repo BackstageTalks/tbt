@@ -106,12 +106,13 @@ def patch(before: pd.DataFrame, records: list[dict], *, baseline_sha: str):
         if orientation.get("source_subject") != source_name:
             raise ValueError("Source side identity changed")
         try:
-            source_stats = json.loads(before_row["stats_json"])
+            original_stats = json.loads(before_row["stats_json"])
+            accumulated_stats = json.loads(target.at[by_id[mid], "stats_json"])
         except (TypeError, ValueError) as exc:
             raise ValueError("Malformed canonical stats") from exc
-        if not isinstance(source_stats, dict):
+        if not isinstance(original_stats, dict) or not isinstance(accumulated_stats, dict):
             raise ValueError("Canonical stats must be object")
-        baseline = _count(source_stats.get(field))
+        baseline = _count(original_stats.get(field))
         expected = rec["validation"]["expected_original_value"]
         if _count(expected) != baseline:
             raise ValueError("Canonical original cell changed")
@@ -121,9 +122,9 @@ def patch(before: pd.DataFrame, records: list[dict], *, baseline_sha: str):
         if state == "READY_MISSING":
             if baseline is not None or rec.get("import_eligibility") != "candidate_after_package_review":
                 raise ValueError("Attempted overwrite or unapproved write")
-            source_stats[field] = observed
+            accumulated_stats[field] = observed
             target.at[by_id[mid], "stats_json"] = json.dumps(
-                source_stats, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+                accumulated_stats, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
             )
             ready += 1
             patched_ids.add(mid)
