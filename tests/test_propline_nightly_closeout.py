@@ -27,7 +27,7 @@ class CloseoutContractTests(unittest.TestCase):
     def test_git_blob_sha_uses_nul_byte(self):
         import hashlib
         payload = b"test"
-        expected = hashlib.sha1(b"blob 4\\0" + payload).hexdigest()
+        expected = hashlib.sha1(b"blob 4" + bytes([0]) + payload).hexdigest()
         self.assertEqual(mod.blob_sha(payload), expected)
 
     def test_capped_before_provider_request(self):
