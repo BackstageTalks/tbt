@@ -46,7 +46,7 @@ def allowed(t):
 
 
 def blob_sha(data):
-    return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\\0" + data).hexdigest()
+    return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
 
 
 def github(path, method="GET", content=None, optional=False):
@@ -197,10 +197,11 @@ def collect():
             except ValueError:
                 continue
             # Preserve all upcoming events in a 48h slate, nearest first.
-            if (kickoff-started).total_seconds() <= 48 * 3600:
+            if (kickoff-started).total_seconds() <= 7 * 24 * 3600:
                 future.append((kickoff, e))
         future.sort(key=lambda item: item[0])
-        print(json.dumps({"eligible_events": len(future), "budget": MAX_CALLS}), flush=True)
+        print(json.dumps({"eligible_events": len(future), "budget": MAX_CALLS, "scope_days": 7}), flush=True)
+        discovered = []
         for kickoff, event in future:
             if STATE["reason"]:
                 break
@@ -215,6 +216,19 @@ def collect():
                 STATE["reason"] = "invalid_market_shape"
                 break
             wanted = [m for m in MARKETS if m in keys]
+            discovered.append((kickoff, event, keys, wanted))
+        # Spend odds calls on sparse player props first. More than one category
+        # in the same odds request costs no extra API call.
+        discovered.sort(key=lambda x: (
+            0 if "player_double_faults" in x[2] else
+            1 if "player_aces" in x[2] else
+            2 if "h2h" in x[2] else
+            3 if ({"total_games", "totals", "total_sets"} & x[2]) else 4,
+            x[0]))
+        for kickoff, event, keys, wanted in discovered:
+            if STATE["reason"]:
+                break
+            eid = str(event["id"])
             # Keep one discovery record even when no desired market is offered.
             snapshot = {"event_id": eid, "event": event, "commence_time": kickoff.isoformat(),
                         "captured_at_utc": now().isoformat(),
