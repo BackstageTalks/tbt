@@ -82,3 +82,9 @@ def test_final_shadow_gate_cannot_write_any_model_release():
     assert '"promotion_requested": False' in script
     assert "eligible_pending_approval|rejected|already_production" in workflow
     assert "approved_and_promoted" not in workflow
+    legacy_pipeline = (root / "scripts" / "pipeline.py").read_text(encoding="utf-8")
+    args_pos = legacy_pipeline.index("    args = parser.parse_args()")
+    guard_pos = legacy_pipeline.index("    if args.promote:", args_pos)
+    first_release_io = legacy_pipeline.index("    history_store.download()", args_pos)
+    assert args_pos < guard_pos < first_release_io
+    assert "verified isolated champion rollback evidence" in legacy_pipeline
