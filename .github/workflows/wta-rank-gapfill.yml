@@ -74,6 +74,12 @@ jobs:
           test "$(sha256sum "$source" | awk '{print $1}')" = "$EXPECTED_SHA"
           test "$(wc -l < "$source" | tr -d ' ')" = "$EXPECTED_LINES"
 
+      - name: Acquire cross-repository canonical writer lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
       - name: Download canonical history
         run: |
           python - <<'PY'
@@ -201,3 +207,8 @@ jobs:
             .cache/tbt/wta-rank/write/report.json
           if-no-files-found: warn
           retention-days: 14
+      
+      - name: Release cross-repository canonical writer lock
+        if: always()
+        shell: bash
+        run: python scripts/cdb_global_writer_lock.py release --if-held
