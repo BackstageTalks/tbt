@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "mode": "write",
+  "mode": "dry-run",
   "source": {
     "platform": "Kaggle",
     "slug": "alimoh89/tennis-results-and-betting-odds-20142025",
@@ -27,5 +27,8 @@
   "confirmed_at_utc": "2026-10-07T12:46:00Z",
   "write_requested_at_utc": "2026-10-07T12:35:00Z",
   "audit_trigger": "read_only_exact_current_cdb_overlap_20261010",
-  "audit_goal": "Re-evaluate exact canonical net-new and contradictions; PR is forced dry-run, no CDB writes, no model activation."
+  "audit_goal": "Re-evaluate exact canonical net-new and contradictions; PR is forced dry-run, no CDB writes, no model activation.",
+  "latest_current_cdb_audit_run_id": 38071900568,
+  "zero_delta_observed": true,
+  "reason_for_readonly": "Current CDB contains all safely linked reference markers. WTA 863/863 already present; alimoh89 historical market stage zero net-new among 27,751 linked; do not rerun old write path or mislabel no-op as error."
 }
