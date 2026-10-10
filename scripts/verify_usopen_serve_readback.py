@@ -11,7 +11,17 @@ from import_usopen_serve_metadata import MARKER_KEY
 
 
 def _dump(match):
-    return match.model_dump(mode="json") if hasattr(match, "model_dump") else match.dict()
+    """Use the canonical MatchRecord serialization contract, not Pydantic APIs.
+
+    MatchRecord is a dataclass. An unsupported object must fail closed rather
+    than silently dropping fields from the before/after comparison.
+    """
+    if not callable(getattr(match, "to_storage_dict", None)):
+        raise TypeError("Serve readback requires canonical MatchRecord.to_storage_dict()")
+    value = match.to_storage_dict()
+    if not isinstance(value, dict):
+        raise TypeError("Invalid canonical storage representation")
+    return value
 
 
 def verify(before, after, stage):
