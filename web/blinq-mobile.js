@@ -293,6 +293,12 @@
       navigationToggle.classList.toggle('is-open', navigationExpanded);
       navigationPanel.hidden = !navigationExpanded;
       nav.append(navigationToggle, navigationPanel);
+      // Logo opens navigation first; avatar opens membership first.
+      // Move the actual DOM sections, not just their CSS order, to keep
+      // screen-reader and keyboard navigation consistent with the view.
+      if (dialog.dataset.anchor !== 'account') {
+        nav.prepend(navigationToggle, navigationPanel);
+      }
     } else if (level === 'predictions') {
       proxy('Všetky predikcie', () => document.querySelector('.reference-navigation [data-route="predictions"]'));
       document.querySelectorAll('#dailyHubTabs [data-daily-hub-tab]').forEach(source => {
