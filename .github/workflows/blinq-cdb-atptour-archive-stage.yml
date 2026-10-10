@@ -1,0 +1,112 @@
+name: BlinQ ATP Archive CDB offline staging (private 2021-2026)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-cdb-atptour-archive-stage.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-cdb-atptour-archive-offline-stage
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      DEST_RELEASE: blinq-cdb-atptour-staging-20261010
+    steps:
+      - name: Verify private storage and create immutable stage release
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/$PRIVATE_REPO --jq .private)" = "true"
+          if ! gh release view "$DEST_RELEASE" --repo "$PRIVATE_REPO" >/dev/null 2>&1; then
+            gh release create "$DEST_RELEASE" --repo "$PRIVATE_REPO" --target main \
+              --title "ATP Tour source-scoped post-match CDB staging" \
+              --notes "Historical source match and stats candidates, private only. No pre-match feature or production approval."
+          fi
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test fail-closed archive staging contract
+        run: |
+          python -m py_compile source/scripts/prepare_atptour_cdb_staging.py
+          python -u source/scripts/test_prepare_atptour_cdb_staging.py
+
+  archive-stage:
+    name: ATP archive post-match QA / ${{ matrix.year }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        year: [2021, 2022, 2023, 2024, 2025, 2026]
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      YEAR: ${{ matrix.year }}
+      SOURCE_RELEASE: blinq-cloud-atptour-20261009
+      DEST_RELEASE: blinq-cdb-atptour-staging-20261010
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read exact 2021-2026 PRIVATE source checkpoint
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/atp-raw
+          name="blinq-atp-archive-${YEAR}-37988671325-1.tar.gz"
+          gh release download "$SOURCE_RELEASE" --repo "$PRIVATE_REPO" \
+            --pattern "$name" --dir /tmp/atp-raw
+          test -s "/tmp/atp-raw/$name"
+      - name: Audit match inventory, valid source IDs and post-match stats
+        run: |
+          set -euo pipefail
+          python -u source/scripts/prepare_atptour_cdb_staging.py \
+            --asset "/tmp/atp-raw/blinq-atp-archive-${YEAR}-37988671325-1.tar.gz" \
+            --year "$YEAR" --output /tmp/atp-stage
+      - name: Persist verified source-scoped stage in private tbt-data only
+        run: |
+          set -euo pipefail
+          asset="cdb-atp-unlinked-${YEAR}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tar.gz"
+          tar -czf "/tmp/$asset" -C /tmp/atp-stage .
+          test -s "/tmp/$asset"
+          gh release upload "$DEST_RELEASE" "/tmp/$asset" --repo "$PRIVATE_REPO"
+          remote=$(gh api "repos/$PRIVATE_REPO/releases/tags/$DEST_RELEASE" \
+            --jq "[.assets[]|select(.name==\"$asset\")|.size] | first // 0")
+          test "$remote" -eq "$(stat -c %s "/tmp/$asset")"
+          python - <<'PY'
+          import glob,json,os
+          r=json.load(open(glob.glob("/tmp/atp-stage/*-qa.json")[0]))
+          print("PRIVATE_POSTMATCH_STAGE_VERIFIED",r["year"],r["status"],
+                json.dumps(r["counts"]), "missing_stats",r["missing_stats_count"])
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as out:
+              out.write(f"### ATP Archive {r['year']} QA: {r['status']}\n")
+              out.write(f"- Matches: {r['counts']['staged_match_candidates']}\n")
+              out.write(f"- Tournaments: {r['counts']['tournament_jsonl_files']}/{r['counts']['discovered_tournaments']}\n")
+              out.write(f"- Stats missing from expected links: {r['missing_stats_count']}\n")
+              out.write("- Canonical linking: NOT YET; private archive read-back passed\n")
+              out.write("- Production CDB and Training DB: unchanged by this job\n")
+          PY
