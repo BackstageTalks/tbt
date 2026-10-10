@@ -130,6 +130,7 @@ from tbt.services.match_status import (
 from tbt.services.results_archive import (
     settled_archive_candidates, save_settled_results_archive,
     load_settled_results_archive, merge_settled_results,
+    read_only_archive_category_counts,
 )
 from tbt.services.comparator_runtime import (
     RuntimeComparatorError,
@@ -1923,6 +1924,11 @@ def internal_match_status_worker(req):
         # already deployed immutable offer. Readback is required to pass cron.
         saved["results_archive"] = save_settled_results_archive(
             settled_archive_candidates(feed_payload, saved.get("statuses") or {})
+        )
+        # Trusted worker response only: verify persisted Results category coverage,
+        # without names, match IDs, selections, writes or provider API calls.
+        saved["results_archive"]["category_readback"] = read_only_archive_category_counts(
+            load_settled_results_archive()
         )
         live_results = {"saved": 0, "comeback": 0, "set2": 0}
         try:
