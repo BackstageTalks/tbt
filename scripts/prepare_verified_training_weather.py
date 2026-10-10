@@ -29,8 +29,15 @@ def restore_weather(repository: str, source_dir: Path, out: Path) -> dict:
         raise ValueError("Private destination repository is required")
     source_dir.mkdir(parents=True, exist_ok=True)
     release = ReleaseStore(repository, RELEASE, source_dir)
-    release.download(extra_names=(ASSET,), required_names=(ASSET,))
+    # Research-source release is an immutable-pinned source collection, NOT a
+    # canonical bundle: it has no _tbt_bundle_manifest.json. Requiring
+    # required_names here accidentally demands that unrelated manifest.
+    if ASSET not in release._asset_names():
+        raise FileNotFoundError("Pinned forecast asset missing from research release")
+    release.download(extra_names=(ASSET,))
     compressed = source_dir / ASSET
+    if not compressed.is_file() or not compressed.stat().st_size:
+        raise FileNotFoundError("Downloaded forecast asset missing or empty")
     manifest_entry = _manifest_asset(_source_manifest(repository), ASSET)
     sha = _sha256(compressed)
     if sha != manifest_entry["sha256"]:
