@@ -59,8 +59,15 @@ def check_reports(link: dict, dry: dict, stage: dict, write: dict | None = None)
     for key in REJECT_COUNTS:
         if counts.get(key, 0):
             raise ValueError(f"Fail-closed importer: {key}={counts[key]}")
-    if len(stage) != dry.get("stage_rows") or len(stage) != link.get("counts", {}).get("staged_matches"):
+    if len(stage) != dry.get("stage_rows"):
         raise ValueError("Stage count mismatch")
+    linked = link.get("counts", {}).get("staged_matches")
+    if not isinstance(linked, int) or linked < len(stage):
+        raise ValueError("Linker stage baseline mismatch")
+    # Linker candidates may already be present in the latest CDB: the importer
+    # legitimately produces zero pending writes. Never convert this into a write.
+    if linked != len(stage) and len(stage) != 0:
+        raise ValueError("Partial linker/importer stage mismatch")
     updated = counts.get("updated", 0)
     if not isinstance(updated, int) or updated < 0 or updated > len(stage):
         raise ValueError("Unsafe updated count")

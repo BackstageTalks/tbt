@@ -82,3 +82,28 @@ def test_rejects_overwriting_old_stats_or_unverified_new_keys():
     for invalid in ({"p2_aces": 3, "p1_aces": 4}, {"p2_aces": 2, "p1_aces": 4, "p2_return_points_won": .5}):
         with pytest.raises(ValueError, match="stats changed"):
             verify_partition_records(old, [record("m1", invalid)], stage)
+
+
+def test_zero_delta_when_linker_candidates_already_exist_in_cdb():
+    link, dry, _ = report()
+    dry["stage_rows"] = 0
+    dry["counts"]["updated"] = 0
+    dry["changed_years"] = []
+    dry["quality_ready_after"] = dry["quality_ready_before"]
+    dry["quality_ready_added"] = 0
+    assert check_reports(link, dry, {}) == 0
+    write = dict(dry, local_partitions_written=False)
+    assert check_reports(link, dry, {}, write) == 0
+
+
+def test_zero_stage_does_not_hide_a_mismatched_write():
+    link, dry, _ = report()
+    dry["stage_rows"] = 0
+    dry["counts"]["updated"] = 0
+    dry["changed_years"] = []
+    dry["quality_ready_after"] = dry["quality_ready_before"]
+    dry["quality_ready_added"] = 0
+    with pytest.raises(ValueError, match="Local write not confirmed"):
+        check_reports(link, dry, {}, dict(dry, local_partitions_written=True))
+    with pytest.raises(ValueError, match="Stage count mismatch"):
+        check_reports(link, dict(dry, stage_rows=1), {})
