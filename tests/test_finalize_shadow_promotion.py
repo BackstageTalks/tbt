@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 from scripts.finalize_shadow_promotion import (
     _build_gate_report,
+    _evaluation_disposition,
     _fingerprint,
 )
 
@@ -63,3 +65,20 @@ def test_shadow_gate_rejects_ongoing_utc_day_without_changing_cohort():
     assert "shadow_holdout_contains_incomplete_utc_day" in (
         report["evaluation_governance"]["eligibility_reasons"]
     )
+
+
+def test_evaluation_requires_separate_operator_approval():
+    assert _evaluation_disposition(True) == "eligible_pending_approval"
+    assert _evaluation_disposition(False) == "rejected"
+
+
+def test_final_shadow_gate_cannot_write_any_model_release():
+    root = Path(__file__).resolve().parents[1]
+    script = (root / "scripts" / "finalize_shadow_promotion.py").read_text(encoding="utf-8")
+    workflow = (root / ".github" / "workflows" / "final-shadow-promotion.yml").read_text(encoding="utf-8")
+    assert "upload_bundle(" not in script
+    assert '"approved_and_promoted"' not in script
+    assert '"production_version_after": production_version' in script
+    assert '"promotion_requested": False' in script
+    assert "eligible_pending_approval|rejected|already_production" in workflow
+    assert "approved_and_promoted" not in workflow
