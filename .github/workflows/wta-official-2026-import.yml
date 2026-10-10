@@ -146,9 +146,23 @@ jobs:
           from tbt.data.history_snapshot import load_snapshot
           from tbt.services.training import _enforce_rank_provenance
           root=Path(os.environ["ROOT"])
-          _,report=_enforce_rank_provenance(load_snapshot(root/"local/history-2026.parquet"))
-          assert report["stripped_rows"]==0 and report["stripped_values"]==0,report
-          print("ALL RANKS CARRY VERIFIED PIT PROVENANCE:",json.dumps(report,sort_keys=True))
+          _,before=_enforce_rank_provenance(load_snapshot(root/"history/history-2026.parquet"))
+          _,after=_enforce_rank_provenance(load_snapshot(root/"local/history-2026.parquet"))
+          stage=json.loads((root/"stage/report.json").read_text())
+          changed=stage["stage_rows"]
+          values=stage["counts"].get("missing_rank_values",0)
+          # Pre-existing unverified ranks remain untouched. This import must
+          # introduce exactly the verified new PIT coverage, and absolutely
+          # no additional unverified ranks; do not rewrite legacy context.
+          assert after["stripped_rows"]==before["stripped_rows"],(before,after)
+          assert after["stripped_values"]==before["stripped_values"],(before,after)
+          assert after["verified_rows"]-before["verified_rows"]==changed,(before,after)
+          assert after["retained_values"]-before["retained_values"]==values,(before,after)
+          assert after["rows_with_rank_values"]-before["rows_with_rank_values"]==changed
+          print("PIT PROVENANCE DELTA VERIFIED:",json.dumps({
+              "legacy_unverified_rows_unchanged":before["stripped_rows"],
+              "new_verified_rank_rows":changed,"new_verified_rank_values":values,
+          },sort_keys=True))
           PY
 
       - name: Save immutable prewrite backup with independent SHA256 readback
