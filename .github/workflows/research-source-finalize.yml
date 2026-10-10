@@ -7,8 +7,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: tbt-research-source-finalize
-  cancel-in-progress: true
+  group: tbt-history-data-writer
+  cancel-in-progress: false
 
 jobs:
   finalize:
