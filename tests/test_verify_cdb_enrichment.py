@@ -128,3 +128,12 @@ def test_rejects_partial_linker_stage_even_with_proven_existing_rows():
     link["counts"] = {"identity_linked": 10, "already_present": 3, "staged_matches": 2}
     with pytest.raises(ValueError, match="Partial linker/importer stage mismatch"):
         check_reports(link, dry, stage)
+
+
+def test_offline_workflow_rejects_unstaged_prepublication_changes():
+    from pathlib import Path
+    workflow = (Path(__file__).resolve().parents[1] /
+                ".github/workflows/offline-uploaded-history-enrichment.yml").read_text()
+    assert "Independently verify every staged and unstaged local row before publish" in workflow
+    assert "verify_readback(root / \"backup\", root / \"history\", stage, dry)" in workflow
+    assert workflow.index("Independently verify every staged and unstaged local row before publish") < workflow.index("Validate and publish changed private history bundle")
