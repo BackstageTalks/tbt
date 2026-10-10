@@ -1,0 +1,14 @@
+{
+  "mode": "write",
+  "purpose": "Publish exactly the verified US Open 2024 historical serve observations to existing canonical match provider_payload; no stats/rank/result edits.",
+  "source_blob": "9d0a7a8c013a68d18e437f8c75f8fb7c036f1224",
+  "safety_commit": "daeea88a4e02587895f5db06ae05f7fa611ad5e2",
+  "require": [
+    "current_canonical_identity",
+    "no_stats_mutation",
+    "immutable_prewrite_backup",
+    "manifest_freshness",
+    "local_row_level_diff",
+    "independent_committed_readback"
+  ]
+}
