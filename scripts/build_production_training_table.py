@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -281,11 +282,35 @@ def main() -> None:
             "Only fixed 24h pre-match forecasts are accepted."
         ),
     )
+    parser.add_argument(
+        "--verified-rank-inputs-dir", default="",
+        help="Load SHA-256-verified private weekly rank sources and fail-closed WTA crosswalk; no provider calls.",
+    )
     args = parser.parse_args()
+    if args.verified_rank_inputs_dir and (
+        args.atp_rank_history_sqlite or args.atp_rank_history_players_csv
+        or args.atp_rank_history_csv or args.wta_rank_history_players_csv
+        or args.wta_rank_history_csv or args.wta_rank_history_supplement_csv
+        or args.wta_rank_history_crosswalk
+    ):
+        parser.error("Verified rank inputs cannot be mixed with ad-hoc ranking sources")
 
     matches, identity_safety = sanitize_history_identities(load_partitions(Path(args.history_dir)))
     matches, quality = audit_history(matches)
     matches, rank_provenance = _enforce_rank_provenance(matches)
+    verified_ranks = None
+    if args.verified_rank_inputs_dir:
+        from rank_feature_inputs import load_rank_feature_inputs
+        repository = os.environ.get("TBT_DATA_REPOSITORY", "")
+        if not repository:
+            raise ValueError("TBT_DATA_REPOSITORY is mandatory for verified rank inputs")
+        verified_ranks = load_rank_feature_inputs(
+            repository, Path(args.verified_rank_inputs_dir), matches
+        )
+        if verified_ranks.report.get("status") != "verified" or (
+            verified_ranks.report.get("provider_requests") != 0
+        ):
+            raise ValueError("Verified rank-source acquisition failed closed")
     frame = FeatureBuilder().build_training_frame(matches).sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
 
     # Historical weather is retained only for audit/research and remains masked
@@ -370,7 +395,13 @@ def main() -> None:
 
     atp_rank_history_rows = []
     atp_rank_history_source = ""
-    if args.atp_rank_history_players_csv and args.atp_rank_history_csv:
+    if verified_ranks is not None:
+        atp_rank_history_source = "sha256_verified_private_sackmann_weekly"
+        rank_history = verified_ranks.atp
+        for match_id in frame["match_id"]:
+            oriented, _ = FeatureBuilder.orient_for_training(source[match_id])
+            atp_rank_history_rows.append(rank_history.features_for_match(oriented))
+    elif args.atp_rank_history_players_csv and args.atp_rank_history_csv:
         if args.atp_rank_history_sqlite:
             raise ValueError("Choose either Sackmann ATP rank CSVs or ATP rank SQLite, not both")
         rank_history = ATPRankHistory.from_sackmann(
@@ -416,7 +447,12 @@ def main() -> None:
     court_speed_coverage = court_speed_coverage_summary(court_speed_rows)
 
     wta_rank_history_rows = []
-    if args.wta_rank_history_players_csv and args.wta_rank_history_csv:
+    if verified_ranks is not None:
+        rank_history = verified_ranks.wta
+        for match_id in frame["match_id"]:
+            oriented, _ = FeatureBuilder.orient_for_training(source[match_id])
+            wta_rank_history_rows.append(rank_history.features_for_match(oriented))
+    elif args.wta_rank_history_players_csv and args.wta_rank_history_csv:
         rank_history = WTARankHistory.from_sackmann(
             args.wta_rank_history_players_csv,
             args.wta_rank_history_csv,
@@ -604,6 +640,7 @@ def main() -> None:
         "features": list(PRE_MATCH_FORECAST_FEATURES),
         "reason": "requires chronological ablation and fresh unseen gate before production activation",
     }
+    report["verified_rank_inputs"] = verified_ranks.report if verified_ranks is not None else None
     report["identity_safety"] = identity_safety
     report["output"] = str(out)
     report_path = Path(args.report); report_path.parent.mkdir(parents=True, exist_ok=True)
