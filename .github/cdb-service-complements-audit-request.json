@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "mode": "dry-run",
+  "workflow": "cdb-service-complement-audit.yml",
+  "reason": "Stage exact observed post-match service/return complements on verified current CDB; zero canonical/model changes",
+  "approved_by_operator": true
+}
