@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "mode": "write",
+  "mode": "dry-run",
   "source": "wta_official_2026_weekly_singles",
   "source_sha256": "4267e37ba6357eb11cfb0e9346c3c59eac8a17431e1f19deb5fffa9573a9bf03",
   "player_crosswalk_git_blob": "dd397c8fe1b8457f2036b8bab233daf3f2da9317",
