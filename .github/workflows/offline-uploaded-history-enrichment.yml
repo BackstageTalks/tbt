@@ -278,14 +278,62 @@ jobs:
               raise SystemExit("No verified enrichment rows")
           PY
 
+      - name: Verify strict staged CDB delta
+        id: stage_gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_cdb_enrichment.py --phase dry --root .cache/tbt/offline-enrichment
+          updated="$(python - <<'PY'
+          import json
+          print(json.load(open(".cache/tbt/offline-enrichment/dry-run/report.json"))["counts"].get("updated",0))
+          PY
+          )"
+          if (( updated > 0 )); then
+            echo "changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changes=false" >> "$GITHUB_OUTPUT"
+            echo "No verified missing CDB facts: no canonical write."
+          fi
+
+      - name: Immutable prewrite CDB backup and independent checksum readback
+        if: ${{ steps.request.outputs.mode == 'write' && steps.stage_gate.outputs.changes == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=".cache/tbt/offline-enrichment"
+          mkdir -p "$root/backup"
+          cp "$root/history/history_manifest.json" "$root/backup/"
+          cp "$root/history/_tbt_bundle_manifest.json" "$root/backup/"
+          mapfile -t years < <(python - <<'PY'
+          import json
+          report=json.load(open(".cache/tbt/offline-enrichment/dry-run/report.json"))
+          for year in report["changed_years"]:
+              print(int(year))
+          PY
+          )
+          test "${#years[@]}" -gt 0
+          for year in "${years[@]}"; do
+            cp "$root/history/history-${year}.parquet" "$root/backup/"
+          done
+          (cd "$root/backup" && sha256sum * > SHA256SUMS && sha256sum --check SHA256SUMS)
+          tag="blinq-offline-prewrite-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$root/backup/"* -R "$TBT_DATA_REPOSITORY" \
+            --title "Immutable prewrite verified enrichment backup $GITHUB_RUN_ID" \
+            --notes "Affected original canonical partitions/manifests; retain for rollback."
+          mkdir -p "$root/backup-verify"
+          gh release download "$tag" -R "$TBT_DATA_REPOSITORY" -D "$root/backup-verify"
+          (cd "$root/backup-verify" && sha256sum --check SHA256SUMS)
+
       - name: Write verified enrichment into local private history
-        if: ${{ steps.request.outputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' && steps.stage_gate.outputs.changes == 'true' }}
         run: |
           set -euo pipefail
           python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/offline-enrichment/link/auto_linked.jsonl             --history-dir .cache/tbt/offline-enrichment/history             --out-dir .cache/tbt/offline-enrichment/write             --write-partitions             --write-history-dir .cache/tbt/offline-enrichment/history
+          python scripts/verify_cdb_enrichment.py --phase write --root .cache/tbt/offline-enrichment
 
       - name: Validate and publish changed private history bundle
-        if: ${{ steps.request.outputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' && steps.stage_gate.outputs.changes == 'true' }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -311,12 +359,29 @@ jobs:
               raise SystemExit("Changed history bundle is incomplete")
 
           store = ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", directory)
+          # Abort if any other writer changed the release since this run began.
+          import hashlib
+          import subprocess
+          remote_dir=directory.parent/"current-manifest"
+          remote_dir.mkdir(parents=True, exist_ok=True)
+          subprocess.run([
+              "gh","release","download","tbt-data-v1","-R",
+              os.environ["TBT_DATA_REPOSITORY"],"-p",
+              "_tbt_bundle_manifest.json","-D",str(remote_dir)
+          ],check=True)
+          original=directory.parent/"backup"/"_tbt_bundle_manifest.json"
+          current=remote_dir/"_tbt_bundle_manifest.json"
+          if hashlib.sha256(original.read_bytes()).digest()!=hashlib.sha256(current.read_bytes()).digest():
+              raise SystemExit("Canonical release changed since staging; refusing to publish")
+          prior=json.loads(Path(".cache/tbt/offline-enrichment/link/report.json").read_text())
+          if len(matches)!=prior["canonical_rows"]:
+              raise SystemExit("Canonical match row regression/expansion; refusing to publish")
           store.upload_bundle(paths)
           print(f"Published offline enrichment for years: {years}")
           PY
 
       - name: Verify committed private release
-        if: ${{ steps.request.outputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' && steps.stage_gate.outputs.changes == 'true' }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -332,8 +397,12 @@ jobs:
           matches, safety = sanitize_history_identities(load_partitions(directory))
           if safety.get("quarantined_rows"):
               raise SystemExit("Committed history identity validation failed")
+          baseline=__import__("json").load(open(".cache/tbt/offline-enrichment/link/report.json"))["canonical_rows"]
+          if len(matches) != baseline:
+              raise SystemExit("Persisted canonical row count mismatch")
           print(f"Committed private history verified: {len(matches)} rows")
           PY
+          python scripts/verify_cdb_enrichment.py --phase readback --root .cache/tbt/offline-enrichment
 
       - name: Persist latest enrichment audit in private data repo
         if: always()
