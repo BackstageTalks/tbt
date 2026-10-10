@@ -138,8 +138,13 @@ def patch(frame, stage, cdb_sha):
                 raise ValueError("Repeated candidate cell")
             all_ready.add(ready)
             delta.setdefault(mid, {})[field] = observed
-            stats[field] = observed
-            out.at[ix, "stats_json"] = json.dumps(stats, ensure_ascii=False,
+            # Keep all earlier exact-cell additions in this same match.
+            # Baseline checks above still use frame, never the staged copy.
+            patched_stats = json.loads(out.at[ix, "stats_json"])
+            if patched_stats.get(field) is not None:
+                raise ValueError("Duplicate candidate unexpectedly overwrote local field")
+            patched_stats[field] = observed
+            out.at[ix, "stats_json"] = json.dumps(patched_stats, ensure_ascii=False,
                 sort_keys=True, separators=(",", ":"), allow_nan=False)
         elif state == "ALREADY_PRESENT":
             if _rankless_count(existing) != observed or validation.get("expected_original_value") != existing:
