@@ -92,13 +92,6 @@ def acquire(repository: str, state_file: Path, *, wait_seconds: int = 1800,
         try:
             _api(repository, "git/refs", method="POST",
                  data={"ref": LOCK_REF, "sha": tag_sha})
-            state = {"schema": 1, "repository": repository,
-                     "owner": owner, "tag_sha": tag_sha}
-            state_file.parent.mkdir(parents=True, exist_ok=True)
-            state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
-            _assert_ownership(repository, state)
-            print(f"CDB global lock acquired: {owner}", flush=True)
-            return state
         except RuntimeError:
             remote = _remote_lock(repository)
             if remote is None:
@@ -110,6 +103,16 @@ def acquire(repository: str, state_file: Path, *, wait_seconds: int = 1800,
                     "Inspect the lock tag and owner before manual cleanup."
                 )
             time.sleep(max(1, interval_seconds))
+            continue
+        state = {"schema": 1, "repository": repository,
+                 "owner": owner, "tag_sha": tag_sha}
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        # Verification failure after acquisition is fatal, not a reason to
+        # retry creation against our own lock.
+        _assert_ownership(repository, state)
+        print(f"CDB global lock acquired: {owner}", flush=True)
+        return state
 
 
 def verify(repository: str, state_file: Path) -> dict:
