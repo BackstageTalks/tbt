@@ -6,6 +6,7 @@ on:
       - ".github/workflows/verify-usopen-serve-sidecar.yml"
       - "scripts/import_usopen_serve_metadata.py"
       - "scripts/verify_usopen_serve_readback.py"
+      - "scripts/download_stable_cdb.py"
       - "api/tbt/data/provider_context.py"
       - "tests/test_import_usopen_serve_metadata.py"
       - "tests/test_verify_usopen_serve_readback.py"
@@ -76,13 +77,10 @@ jobs:
       - name: Download current checksum-verified canonical history
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import os
-          from pathlib import Path
-          from release_store import ReleaseStore
-          root=Path(".cache/tbt/usopen-serve/history")
-          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).download(require_bundle_manifest=True)
-          PY
+          python scripts/download_stable_cdb.py \
+            --repository "$TBT_DATA_REPOSITORY" \
+            --out .cache/tbt/usopen-serve/history \
+            --report .cache/tbt/usopen-serve/stable-cdb-report.json
 
       - name: Strict canonical identity and research-only staging
         id: gate
@@ -213,6 +211,7 @@ jobs:
         with:
           name: usopen-serve-cdb-${{ github.run_id }}
           path: |
+            .cache/tbt/usopen-serve/stable-cdb-report.json
             .cache/tbt/usopen-serve/stage/report.json
             .cache/tbt/usopen-serve/stage/verified_stage.jsonl
             .cache/tbt/usopen-serve/write/report.json
