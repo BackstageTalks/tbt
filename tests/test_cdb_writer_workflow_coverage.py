@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1] / ".github" / "workflows"
 WRITERS = (
     "alimoh89-preparation.yml",
     "cdb-identity-reconcile.yml",
+    "cdb-service-complement-write.yml",
     "data.yml",
     "drive-pbpx-canonical-enrichment.yml",
     "kaggle-hwaitt-history-enrichment.yml",
