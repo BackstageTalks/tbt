@@ -52,7 +52,9 @@ jobs:
           test "$(jq -r '.provider_requests' .github/shadow-promotion-request.json)" = "0"
           test "$(jq -r '.retrain' .github/shadow-promotion-request.json)" = "false"
           test "$(jq -r '.canonical_mutation' .github/shadow-promotion-request.json)" = "false"
-          test "$(jq -r '.promotion_policy' .github/shadow-promotion-request.json)" = "exact_shadow_tested_candidate_only"
+          test "$(jq -r '.promotion_policy' .github/shadow-promotion-request.json)" = "research_only_no_promotion"
+          test "$(jq -r '.production_mutation' .github/shadow-promotion-request.json)" = "false"
+          test "$(jq -r '.approval_policy' .github/shadow-promotion-request.json)" = "separate_explicit_operator_approval_and_verified_rollback_required"
 
       - name: Run read-only same-cohort evaluation
         run: |
