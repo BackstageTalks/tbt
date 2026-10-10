@@ -60,7 +60,7 @@ def test_only_twelve_missing_stats_add_and_every_unstaged_cell_preserved():
 
 
 @pytest.mark.parametrize("transform", [
-    lambda r: r.update(value=3),
+    lambda r: r.update(value=201),
     lambda r: r.update(field="p1_winners"),
     lambda r: r["source_version"].update(content_sha256="0" * 64),
     lambda r: r.update(available_at="2023-07-11T00:00:00Z"),
