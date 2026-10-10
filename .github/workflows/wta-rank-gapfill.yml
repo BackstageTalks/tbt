@@ -8,6 +8,8 @@ on:
       - "scripts/audit_offline_wta_rank_points.py"
       - "scripts/import_offline_wta_rank_fill.py"
       - "tests/test_wta_rank_gapfill_contract.py"
+      - "scripts/audit_wta_official_2026_gaps.py"
+      - "tests/test_wta_official_2026_gaps.py"
   push:
     branches: [main]
     paths:
@@ -61,7 +63,7 @@ jobs:
       - name: Install dependencies and focused test
         run: |
           python -m pip install -r api/requirements-train.txt pytest
-          python -m pytest tests/test_wta_rank_gapfill_contract.py -q
+          python -m pytest tests/test_wta_rank_gapfill_contract.py tests/test_wta_official_2026_gaps.py -q
 
       - name: Reassemble pinned source
         run: |
@@ -89,6 +91,32 @@ jobs:
           from release_store import ReleaseStore
           directory=Path(".cache/tbt/wta-rank/history")
           ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", directory).download(require_bundle_manifest=True)
+          PY
+
+      - name: Audit official WTA 2026 supplement against current CDB (PR/read-only)
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/wta-rank/official-source .cache/tbt/wta-rank/official-audit
+          source=.cache/tbt/wta-rank/official-source/wta_singles_2026.csv.gz
+          gh api -H "Accept: application/vnd.github.raw" \
+            "repos/$TBT_DATA_REPOSITORY/contents/research/wta-official-2026/wta_official_singles_2026_post_sackmann.csv.gz?ref=main" \
+            > "$source"
+          echo "4267e37ba6357eb11cfb0e9346c3c59eac8a17431e1f19deb5fffa9573a9bf03  $source" | sha256sum -c -
+          gzip -t "$source"
+          python scripts/audit_wta_official_2026_gaps.py \
+            --source "$source" --history-dir .cache/tbt/wta-rank/history \
+            --out-dir .cache/tbt/wta-rank/official-audit
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path=Path(".cache/tbt/wta-rank/official-audit/report.json")
+          data=json.loads(path.read_text())
+          assert data["status"] == "read_only" and data["production_mutated"] is False
+          assert data["write_authorized"] is False and data["api_requests"] == 0
+          assert data["stage_rows"] == data["counts"].get("candidate_matches",0)
+          print("OFFICIAL_WTA_2026_READONLY_AUDIT:",json.dumps(data,sort_keys=True))
           PY
 
       - name: Audit point-in-time ranks and points
@@ -206,6 +234,8 @@ jobs:
             .cache/tbt/wta-rank/audit/rank-fill-candidates.jsonl
             .cache/tbt/wta-rank/dry/report.json
             .cache/tbt/wta-rank/write/report.json
+            .cache/tbt/wta-rank/official-audit/report.json
+            .cache/tbt/wta-rank/official-audit/candidates.jsonl
           if-no-files-found: warn
           retention-days: 14
       
