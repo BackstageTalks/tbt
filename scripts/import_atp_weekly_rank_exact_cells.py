@@ -102,7 +102,7 @@ def stage_rows(file):
     return items
 
 
-def apply(before, rows):
+def apply(before, rows, *, expected_matches=2034, expected_fields=4068, expected_stale=42):
     out = {year: frame.copy(deep=True) for year, frame in before.items()}
     indexes = {year: dict(zip(frame["match_id"].astype(str), frame.index)) for year,frame in before.items()}
     counts = Counter()
@@ -155,9 +155,9 @@ def apply(before, rows):
                 counts[key+"_filled"] += 1
         counts["changed_matches"] += 1
         modified.add((year,mid))
-    if (counts["changed_matches"]!=2034 or
-            sum(counts[k+"_filled"] for k in FIELDS)!=4068 or
-            counts["stale_or_same_day_excluded"]!=42):
+    if (counts["changed_matches"]!=expected_matches or
+            sum(counts[k+"_filled"] for k in FIELDS)!=expected_fields or
+            counts["stale_or_same_day_excluded"]!=expected_stale):
         raise ValueError("Unexpected source/CDB delta; stop rather than publish")
     # Entire-source other columns and all non-updated rows must be unchanged.
     for year in YEARS:
