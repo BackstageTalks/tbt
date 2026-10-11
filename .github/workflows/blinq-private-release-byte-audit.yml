@@ -1,0 +1,90 @@
+name: BlinQ every private Release asset full byte SHA256 audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-private-release-byte-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-full-release-asset-bytes
+  cancel-in-progress: false
+
+jobs:
+  audit-all-active-release-assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      AUDIT_RELEASE: blinq-complete-git-byte-audit-20261011-38119153567
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify fail-closed byte-auditor with offline substitution tests
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          python -m py_compile scripts/audit_all_private_release_assets.py
+          python -m pip install pytest
+          python -m pytest --noconftest tests/test_audit_all_private_release_assets.py -q
+      - name: Freeze active private Release asset IDs, sizes and SHA256
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/blinq-all-release-audit
+          gh api "repos/$PRIVATE_REPO/releases?per_page=100" \
+            > /tmp/blinq-all-release-audit/release-snapshot.json
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/blinq-all-release-audit/release-snapshot.json'))
+          assert len(p)>=47
+          total=sum(len(r.get('assets',[])) for r in p)
+          assert total>=426
+          assert all(a.get('digest','').startswith('sha256:')
+                     for r in p for a in r.get('assets',[]))
+          print('FULL_RELEASE_SNAPSHOT',len(p),total)
+          PY
+      - name: Download each current Release asset and independently hash exact bytes
+        timeout-minutes: 75
+        run: |
+          set -euo pipefail
+          python -u scripts/audit_all_private_release_assets.py \
+            --repo "$PRIVATE_REPO" \
+            --snapshot /tmp/blinq-all-release-audit/release-snapshot.json \
+            --work /tmp/blinq-all-release-audit/work \
+            --summary /tmp/blinq-all-release-audit/release-byte-summary.json \
+            --private-index /tmp/blinq-all-release-audit/release-byte-index.jsonl.gz
+      - name: Preserve complete byte verification in immutable private audit Release
+        if: always()
+        run: |
+          set -euo pipefail
+          cd /tmp/blinq-all-release-audit
+          test -s release-byte-summary.json
+          test -s release-byte-index.jsonl.gz
+          sha256sum release-byte-summary.json release-byte-index.jsonl.gz > release-byte-SHA256SUMS
+          sha256sum --check release-byte-SHA256SUMS
+          gh release upload "$AUDIT_RELEASE" \
+            release-byte-summary.json release-byte-index.jsonl.gz release-byte-SHA256SUMS \
+            -R "$PRIVATE_REPO"
+          mkdir -p readback
+          gh release download "$AUDIT_RELEASE" \
+            -R "$PRIVATE_REPO" \
+            -p 'release-byte-*' -D readback
+          (cd readback && sha256sum --check release-byte-SHA256SUMS)
+          python - <<'PY'
+          import json
+          x=json.load(open('readback/release-byte-summary.json'))
+          print("ALL_RELEASE_BYTES_PERSISTED_AND_READBACK", x["status"],
+                "SNAPSHOT_ASSETS", x["snapshot"]["snapshot_assets"],
+                "FULL_BYTES_VERIFIED", x["counts"].get("assets_byte_verified",0),
+                "ISSUES", x["assets_not_byte_verified"])
+          if x["assets_not_byte_verified"]:
+              raise SystemExit(2)
+          PY
