@@ -63,7 +63,8 @@ jobs:
             --uploaded /tmp/blinq-cell-gap/sources \
             --market /tmp/blinq-cell-gap/market \
             --source source \
-            --output /tmp/blinq-cell-gap/results/source-to-cdb-cell-delta.json
+            --output /tmp/blinq-cell-gap/results/source-to-cdb-cell-delta.json \
+            --stage-output /tmp/blinq-cell-gap/results/preconditioned-score-candidates.jsonl.gz
           python - <<'PY'
           import json
           r=json.load(open('/tmp/blinq-cell-gap/results/source-to-cdb-cell-delta.json'))
@@ -73,6 +74,8 @@ jobs:
           assert r['safety']['no_cdb_writes']
           assert r['safety']['no_provider_requests']
           assert r['canonical']['year_partitions']==78
+          assert r['candidate_stage_rows']==r['completed_match_score_comparison']['stageable_score_matches_read_only']
+          assert r['safety']['actual_write_authorized'] is False
           print("BLINQ_CDB_FIELD_DELTA_VERIFIED",r['canonical'],
                 "CORE_MISSING",r['core_missing_cells_by_field'],
                 "SCORE_MISSING",r['completed_match_score_comparison'])
@@ -83,12 +86,13 @@ jobs:
           set -euo pipefail
           cd /tmp/blinq-cell-gap/results
           test -s source-to-cdb-cell-delta.json
-          sha256sum source-to-cdb-cell-delta.json > SHA256SUMS
+          test -s preconditioned-score-candidates.jsonl.gz
+          sha256sum source-to-cdb-cell-delta.json preconditioned-score-candidates.jsonl.gz > SHA256SUMS
           sha256sum --check SHA256SUMS
           gh release create "$PRIVATE_TAG" -R "$PRIVATE_REPO" --target main \
             --title "Field-level current CDB vs audited operator raw sources" \
             --notes "78 manifest-verified years and 12,807 exact source-to-CDB match ID links. Read-only source field delta, no model train, no CDB writes."
-          gh release upload "$PRIVATE_TAG" source-to-cdb-cell-delta.json SHA256SUMS -R "$PRIVATE_REPO"
+          gh release upload "$PRIVATE_TAG" source-to-cdb-cell-delta.json preconditioned-score-candidates.jsonl.gz SHA256SUMS -R "$PRIVATE_REPO"
           mkdir -p readback
           gh release download "$PRIVATE_TAG" -R "$PRIVATE_REPO" -D readback
           (cd readback && sha256sum -c SHA256SUMS)
@@ -96,5 +100,11 @@ jobs:
           import json
           r=json.load(open('readback/source-to-cdb-cell-delta.json'))
           assert r['safety']['no_cdb_writes'] and r['safety']['no_provider_requests']
+          import gzip
+          with gzip.open('readback/preconditioned-score-candidates.jsonl.gz','rt') as f:
+              stages=[json.loads(x) for x in f if x.strip()]
+          assert len(stages)==r['candidate_stage_rows']
+          assert sum(len(x['add_only_missing_score_fields']) for x in stages)==r['completed_match_score_comparison']['stageable_score_missing_cells_read_only']
+          assert len({x['canonical_match_id'] for x in stages})==len(stages)
           print("BLINQ_SOURCE_FIELD_DELTA_INDEPENDENT_PERSISTED_READBACK",r['canonical']['exact_id_matched'],r['score_missing_cells_by_field'])
           PY
