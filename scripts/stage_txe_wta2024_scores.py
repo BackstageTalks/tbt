@@ -13,6 +13,7 @@ import csv
 import hashlib
 import io
 import json
+import os
 import re
 import tarfile
 from collections import Counter, defaultdict
@@ -25,10 +26,13 @@ from _bootstrap import ROOT  # noqa: F401
 from tbt.data.offline_odds import tournament_score
 from audit_tennisexplorer_wta2024_cdb_overlap import norm, result_side
 
-YEAR = 2024
-SOURCE_SHA = "27c779c73bcfaf089e362f3480c4201f032e15fefbc3a0fadaa39bfce9f5956b"
-RESULT_MEMBER = "data/tennisexplorer/results/wta-single/2024.csv"
-DETAIL_MEMBER = "data/tennisexplorer/enrichment/wta-single/2024.jsonl"
+YEAR = int(os.environ.get("BLINQ_SCORE_YEAR", "2024"))
+TOUR = os.environ.get("BLINQ_SCORE_TOUR", "wta").lower()
+SOURCE_SHA = os.environ.get("BLINQ_SCORE_SOURCE_SHA", "27c779c73bcfaf089e362f3480c4201f032e15fefbc3a0fadaa39bfce9f5956b")
+if YEAR not in (2024, 2025, 2026) or TOUR not in ("wta", "atp") or not re.fullmatch(r"[a-f0-9]{64}", SOURCE_SHA):
+    raise ValueError("Only pinned, verified TennisExplorer tour-year source packages are supported")
+RESULT_MEMBER = f"data/tennisexplorer/results/{TOUR}-single/{YEAR}.csv"
+DETAIL_MEMBER = f"data/tennisexplorer/enrichment/{TOUR}-single/{YEAR}.jsonl"
 FIELD_NAMES = frozenset(("total_sets", "total_games", "deciding_set",
     "p1_first_set_won", "p2_first_set_won", "p1_second_set_won",
     "p2_second_set_won", "p1_games_won", "p2_games_won",
@@ -70,8 +74,8 @@ def load_archive(path, expected_sha=SOURCE_SHA):
             rows = list(csv.DictReader(f))
         with io.TextIOWrapper(details, encoding="utf-8-sig") as f:
             enriched = [json.loads(line) for line in f if line.strip()]
-    if len(rows) != 45143 or len(enriched) != 8524:
-        raise ValueError("Source year cardinality drift")
+    if not rows or not enriched or (YEAR == 2024 and TOUR == "wta" and (len(rows) != 45143 or len(enriched) != 8524)):
+        raise ValueError("Original source year missing or pinned 2024 cardinality drift")
     return rows, enriched
 
 
@@ -112,7 +116,7 @@ def score_values(row):
         sets = [int(str(row[f"side{x}_sets_won"]).strip()) for x in (1, 2)]
     except (TypeError, KeyError, ValueError):
         return None
-    if sorted(sets) not in ([0, 2], [1, 2]):
+    if sorted(sets) not in (([0, 2], [1, 2]) if TOUR == "wta" else ([0, 2], [1, 2], [0, 3], [1, 3], [2, 3])):
         return None
     played = sum(sets)
     parsed = []
@@ -148,7 +152,7 @@ def canonical_year(frame):
     pairs = defaultdict(list)
     ids = defaultdict(list)
     for _, r in frame.iterrows():
-        if str(r["tour"]).lower() != "wta":
+        if str(r["tour"]).lower() != TOUR:
             continue
         day = pd.Timestamp(r["scheduled_at"]).date()
         if day.year != YEAR:
@@ -180,7 +184,7 @@ def _matching_rows(candidates, row, side, score, *, direct):
         if not canonical_winner or canonical_winner != expected:
             continue
         # Source score already established winner. No match merely on name/day.
-        if score["sets"][side-1] != 2:
+        if score["sets"][side-1] != max(score["sets"]):
             continue
         result.append(target)
     return list({str(r["match_id"]): r for r in result}.values())
@@ -216,7 +220,7 @@ def classify(rows, details, frame, cdb_sha):
     anchors = {}
     for row in rows:
         sid = str(row.get("match_id") or "")
-        if (not sid or sid in source_ids or row.get("category") != "wta-single"):
+        if (not sid or sid in source_ids or row.get("category") != f"{TOUR}-single"):
             raise ValueError("Duplicate/missing/wrong source match")
         source_ids.add(sid)
         slugs, score = result_slugs(row), score_values(row)
@@ -328,7 +332,7 @@ def classify(rows, details, frame, cdb_sha):
             counts["fully_existing_score_matches"] += 1
             continue
         stage.append({
-            "schema": 1, "source": "tennisexplorer_wta2024_complete_match_results",
+            "schema": 1, "source": f"tennisexplorer_{TOUR}{YEAR}_complete_match_results",
             "source_id": sid, "match_id": mid, "year": YEAR,
             "source_sha256": SOURCE_SHA, "cdb_sha256": cdb_sha,
             "expected_identity": {k: str(can[k]) for k in (
@@ -362,11 +366,11 @@ def main():
     if digests.get(args.manifest.name) != "sha256:" + sha256(args.manifest):
         raise ValueError("Release manifest digest mismatch")
     meta = json.loads(args.manifest.read_text())["years"][str(YEAR)]
-    if meta.get("sha256") != cdb_sha or int(meta.get("rows", -1)) != 113733:
+    if meta.get("sha256") != cdb_sha or int(meta.get("rows", -1)) < 1000:
         raise ValueError("Year manifest mismatch")
     frame = pd.read_parquet(args.history)
-    if len(frame) != 113733:
-        raise ValueError("2024 row count drift")
+    if len(frame) != int(meta["rows"]):
+        raise ValueError("Canonical year row count drift")
     stage, quarantined, counts = classify(rows, details, frame, cdb_sha)
     out = args.out
     out.mkdir(parents=True, exist_ok=True)
