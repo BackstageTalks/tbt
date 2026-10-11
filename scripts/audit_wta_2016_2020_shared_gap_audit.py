@@ -9,6 +9,8 @@ import argparse
 import gzip
 import hashlib
 import json
+import re
+import sys
 from pathlib import Path
 
 import audit_wta_2023_2024_verified_rank_gaps as core
@@ -44,6 +46,30 @@ def sha(path):
     return h.hexdigest()
 
 
+def download_consistent_history(store):
+    """Retry one full verified snapshot after an in-flight canonical partition swap.
+
+    Never accept a checksum mismatch, reuse mixed manifest generations, or
+    retry unrelated integrity/source failures. ReleaseStore re-downloads the
+    bundle manifest and all annual assets on each attempt.
+    """
+    for attempt in (1, 2):
+        try:
+            return store.download(require_bundle_manifest=True)
+        except RuntimeError as exc:
+            transient_partition = re.fullmatch(
+                r"Release bundle checksum mismatch for history-\\d{4}\\.parquet",
+                str(exc),
+            )
+            if attempt == 2 or not transient_partition:
+                raise
+            print(
+                "Canonical partition changed during full verified download; "
+                "retrying once from fresh release manifests (still fail-closed)",
+                file=sys.stderr,
+            )
+
+
 def main():
     from _bootstrap import ROOT  # noqa: F401
     from release_store import ReleaseStore
@@ -56,7 +82,7 @@ def main():
     args = p.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     history = args.out / "history"
-    ReleaseStore(args.repo, "tbt-data-v1", history).download(require_bundle_manifest=True)
+    download_consistent_history(ReleaseStore(args.repo, "tbt-data-v1", history))
     matches, safety = sanitize_history_identities(load_partitions(history))
     if safety.get("quarantined_rows") or len(matches) < 994101:
         raise ValueError("Canonical full release incomplete or identity unsafe")
