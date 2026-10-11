@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from ..errors import ProviderError
 from ..providers.statistics import (NoSupportedStatisticsError, complete_opponent_service_rates, parse_statistics)
+from .statistics_gapfill import event_id as resolve_event_id, missing_fields, retry_due
 
 
 # V3 re-reads previously count-only V2 rows to capture the provider's
@@ -16,18 +17,19 @@ STATISTICS_SCHEMA_VERSION = 3
 class StatisticsEnricher:
     """Reuse settled statistics and verified identity to avoid redundant calls."""
 
-    def __init__(self, provider, cache_path):
+    def __init__(self, provider, cache_path, *, targeted=False):
         self.provider = provider
+        self.targeted = targeted
         self.cache = sqlite3.connect(str(cache_path))
         self.cache.execute("CREATE TABLE IF NOT EXISTS responses (path TEXT PRIMARY KEY, fetched REAL, body TEXT)")
 
     def close(self):
         self.cache.close()
 
-    def _get(self, path):
+    def _get(self, path, max_age=7 * 86400):
         now = datetime.now(timezone.utc).timestamp()
         row = self.cache.execute("SELECT fetched, body FROM responses WHERE path=?", (path,)).fetchone()
-        if row is not None and now - row[0] < 7 * 86400:
+        if row is not None and now - row[0] < max_age:
             return json.loads(row[1])
         payload = self.provider._get(path, enrichment=True)
         if not isinstance(payload, dict):
@@ -41,23 +43,25 @@ class StatisticsEnricher:
         if not match.is_completed or match.scheduled_at >= datetime.now(timezone.utc):
             return "ineligible"
         raw = match.provider_payload or {}
-        event_id = next((raw.get(k) for k in ("_tbt_provider_event_id", "provider_event_id", "event_id", "eventId", "id") if raw.get(k)), None)
-        if event_id is None or not str(event_id).isascii() or not str(event_id).isdigit():
+        event_id = resolve_event_id(match)
+        if event_id is None:
             return "missing_event_id"
         # Repair existing schema-3 return-only snapshots locally before the
         # normal cache check. This requires zero provider/API requests.
         marker = raw.get("_tbt_statistics", {})
+        if not isinstance(marker, dict):
+            marker = {}
         if (marker.get("schema") == STATISTICS_SCHEMA_VERSION
                 and marker.get("event_id") == str(event_id)
                 and marker.get("status") == "available"
-                and complete_opponent_service_rates(match.stats)):
+                and complete_opponent_service_rates(match.stats)
+                and (not self.targeted or not missing_fields(match))):
             return "enriched"
-        if marker.get("schema") == STATISTICS_SCHEMA_VERSION and marker.get("event_id") == str(event_id):
-            checked = datetime.fromisoformat(marker["fetched_at"])
-            # Completed historical statistics persist in Parquet, not just the
-            # ephemeral runner cache. Missing coverage gets a monthly retry.
-            if marker.get("status") == "available" or (datetime.now(timezone.utc) - checked).total_seconds() < 30 * 86400:
-                return "cached"
+        legacy_available = (not self.targeted and marker.get("schema") == STATISTICS_SCHEMA_VERSION
+                            and marker.get("event_id") == str(event_id)
+                            and marker.get("status") == "available")
+        if legacy_available or not retry_due(match, STATISTICS_SCHEMA_VERSION):
+            return "cached"
         # Resolve identity from the same event ID as the statistics. Canonical
         # match order can differ from provider home/away, including archived rows.
         identity = raw.get("_tbt_event_identity", {})
@@ -72,7 +76,12 @@ class StatisticsEnricher:
                 return "not_finished"
         if {home, away} != {match.player1_id, match.player2_id} or home == away:
             raise ProviderError("Event player identity mismatch; refusing statistics attachment")
-        payload = self._get(f"/api/tennis/event/{event_id}/statistics")
+        # Retain verified detail identity so later missing-field retries need
+        # only the statistics endpoint, including after the runner is replaced.
+        raw = {**raw, "_tbt_event_identity": {
+            "event_id": str(event_id), "home": home, "away": away, "status": "finished",
+        }}
+        payload = self._get(f"/api/tennis/event/{event_id}/statistics", max_age=86400)
         try:
             stats = parse_statistics(payload, home_is_player1=home == match.player1_id)
         except NoSupportedStatisticsError:
@@ -127,7 +136,20 @@ class StatisticsEnricher:
             }}
             return "unavailable"
 
-        match.stats = {**match.stats, **stats}
+        # A paid response is not permission to replace authoritative history.
+        # Reject the entire conflicting response, including unrelated additions.
+        conflicts = [key for key, value in stats.items()
+                     if (match.stats or {}).get(key) is not None
+                     and match.stats[key] != value]
+        if conflicts:
+            match.provider_payload = {**raw, "_tbt_statistics": {
+                "schema": STATISTICS_SCHEMA_VERSION, "event_id": str(event_id),
+                "source": "tennisapi1", "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "status": "conflict", "reason": "existing_canonical_stat_conflict",
+                "unsupported_keys": sorted(conflicts)[:40],
+            }}
+            return "conflict"
+        match.stats = {**(match.stats or {}), **stats}
         match.provider_payload = {**raw, "_tbt_statistics": {
             "schema": STATISTICS_SCHEMA_VERSION, "event_id": str(event_id), "source": "tennisapi1",
             "fetched_at": datetime.now(timezone.utc).isoformat(),

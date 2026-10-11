@@ -1,4 +1,4 @@
-name: BlinQ hourly API gapfill (90% staged, 97% closeout)
+name: BlinQ targeted CDB API gapfill (90% staged, 97% closeout)
 
 # GitHub cron is intentionally forbidden by the repository contract.
 # Manual workflow_dispatch is intended for an external hourly schedule with
@@ -154,7 +154,10 @@ jobs:
               print("Canonical writer active/queued; no dispatch: " + "; ".join(active))
               sys.exit(0)
 
-          # Statistics mode uses canonical identity, quality-ready skip logic,
+          # hourly_autofill enables a missing-field queue in data.yml:
+          # canonical event identity, retry cooldown, recent-year priority,
+          # and ace/DF gaps even when serve/return rates are already present.
+          # Statistics mode uses canonical identity, missing-field skip logic,
           # and fail-closed provider-header quota checks. Stop well BEFORE the
           # verified 19:10 provider reset; do not use old-day quota after 19:08.
           cutoff_date = local.date() + timedelta(days=1) if new_day_start else local.date()
