@@ -42,6 +42,7 @@ def _status(**extra):
         "status": "win", "winner_id": "11",
         "provider_status": "finished ended",
         "provider_home_id": "11",
+        "provider_away_id": "22",
         "checked_at": "2026-10-11T12:00:00Z",
         **extra,
     }}
