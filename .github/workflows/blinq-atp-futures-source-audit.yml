@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      PYTHONPATH: api:scripts
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
