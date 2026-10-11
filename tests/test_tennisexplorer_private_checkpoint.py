@@ -20,7 +20,7 @@ R = f"data/tennisexplorer/results/{CATEGORY}/{YEAR}"
 D = f"data/tennisexplorer/enrichment/{CATEGORY}/{YEAR}"
 
 
-def fixture(tmp: Path, *, complete=True, bad_year=False, bad_source=False, dup_member=False):
+def fixture(tmp: Path, *, complete=True, bad_year=False, bad_source=False, dup_member=False, no_detail_meta=False):
     days = []
     day = date(YEAR, 1, 1)
     while day.year == YEAR:
@@ -43,6 +43,8 @@ def fixture(tmp: Path, *, complete=True, bad_year=False, bad_source=False, dup_m
         D + ".jsonl": json.dumps(detail) + "\n",
         D + ".run_metadata.json": json.dumps(detailmeta),
     }
+    if no_detail_meta:
+        del members[D + ".run_metadata.json"]
     path = tmp / "data.tar.gz"
     with tarfile.open(path, "w:gz") as t:
         for name, text in members.items():
@@ -74,7 +76,7 @@ def test_partial_coverage_is_quarantined():
     with tempfile.TemporaryDirectory() as folder:
         archive, digest = fixture(Path(folder), complete=False)
         report = audit(archive, CATEGORY, YEAR, digest)
-        assert report["status"] == "PARTIAL_OR_CONFLICTED_QUARANTINE_NO_CDB"
+        assert report["status"] == "RESULTS_INCOMPLETE_QUARANTINE_NO_CDB"
         assert report["counts"]["missing_successful_days"] == 363
 
 
@@ -110,3 +112,15 @@ def test_duplicate_tar_member_rejected():
             assert False, "duplicate member was accepted"
         except ValueError as exc:
             assert "Duplicate archive member" in str(exc)
+
+
+def test_daily_results_remain_reviewable_when_detail_ledger_missing():
+    with tempfile.TemporaryDirectory() as folder:
+        archive, digest = fixture(Path(folder), no_detail_meta=True)
+        report = audit(archive, CATEGORY, YEAR, digest)
+        assert report["status"] == "RESULTS_COMPLETE_DETAILS_PARTIAL_NO_CDB"
+        assert report["results_source_state"] == "COMPLETE_SOURCE_SCOPED_RESULTS_PENDING_CDB_LINK_AND_RIGHTS"
+        assert report["details_source_state"] == "PARTIAL_DETAILS_QUARANTINED"
+        assert report["result_rows_eligible_for_further_source_scoped_review"] == 1
+        assert report["canonical_cell_delta_approved"] == 0
+        assert not report["source_use_rights_verified"]
