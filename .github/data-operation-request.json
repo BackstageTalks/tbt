@@ -1,12 +1,12 @@
 {
   "schema": 1,
-  "mode": "deploy-current",
+  "mode": "production-preflight",
   "promote": false,
-  "purpose": "Deploy verified Match Comparator UX cleanup only: maximum-set labels, ATP Grand Slam seasonal defaults, WTA 3-set safety, canonical player-name autocomplete and reduced duplicate copy. Reuse immutable prediction generation; no provider data collection, no model promotion, no canonical history mutation.",
-  "requested_on": "2026-10-08",
+  "purpose": "Read-only current CDB pre-training readiness: canonical history, player/tournament identities, leakage, training feature coverage. No training, model promotion, provider requests, CDB write, comparator publish or web deployment.",
+  "requested_on": "2026-10-11",
   "max_requests": 1,
   "start": "",
   "end": "",
-  "training_scope": "deployment_only",
+  "training_scope": "read_only_pretraining_audit",
   "historical_match_winner_odds_as_model_feature": false
 }
