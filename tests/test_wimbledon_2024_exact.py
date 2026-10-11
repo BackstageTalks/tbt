@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from stage_wimbledon_2024_cdb import classify, count, digest
+from stage_wimbledon_2024_cdb import classify, integer as count, digest
 from import_wimbledon_2024_exact import _patch, _validated_stage
 from stage_wimbledon_2024_cdb import MATCH_SHA, POINT_SHA
 
