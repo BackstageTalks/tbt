@@ -1,0 +1,169 @@
+name: BlinQ manual serve statistics current-CDB proof (read-only)
+
+# Explicit manual or internal PR invocation. No schedule, no canonical writes,
+# no application deploy and no provider sports API collection.
+'on':
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-manual-servestats-cdb-preflight-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  exact-current-source-delta:
+    if: ${{ github.repository == 'BackstageTalks/tbt' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      DATA_REPO: BackstageTalks/tbt-data
+      SOURCE_DRIVE_ID: 1mQSFEhzefyD1SdlGJf9wwCcabHtpxvG3
+      EXPECTED_SOURCE_SHA256: 9207c7a32e5a53586e3aa8bd8dedb6e8a0cf0dcf4bc452225bbc7ba7c2b9f2a3
+      PYTHONPATH: scripts:private/scripts
+    steps:
+      - name: Check exact private trust boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "BackstageTalks/tbt"
+          test -n "$GH_TOKEN"
+          test -n "$BLINQ_DRIVE_READER_JSON"
+          test "$(gh repo view "$DATA_REPO" --json visibility -q .visibility)" = PRIVATE
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Pull original private reconciliation code
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: main
+          path: private
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install data-only read dependencies and run strict regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet "pandas>=2,<3" pyarrow google-auth requests
+          python -m unittest discover -s private/tests -p test_audit_manual_servestats_cdb.py -q
+          python -m py_compile scripts/preflight_manual_servestats_current_cdb.py
+      - name: Download current CDB 2025-2026 and private Drive source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/cdb work/source work/stage work/readback
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > work/release-before.json
+          gh release download tbt-data-v1 -R "$DATA_REPO" -D work/cdb \
+            -p history-2025.parquet -p history-2026.parquet -p history_manifest.json
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          from google.oauth2.service_account import Credentials
+          from google.auth.transport.requests import AuthorizedSession
+          release=json.loads(Path("work/release-before.json").read_text())
+          assets={x["name"]:x for x in release["assets"]}
+          for year in ("2025","2026"):
+              name=f"history-{year}.parquet"
+              actual=hashlib.sha256((Path("work/cdb")/name).read_bytes()).hexdigest()
+              assert assets[name]["digest"]=="sha256:"+actual,"CDB asset SHA mismatch"
+              manifest=json.loads(Path("work/cdb/history_manifest.json").read_text())
+              assert manifest["years"][year]["sha256"]==actual,"CDB year manifest SHA mismatch"
+          creds=Credentials.from_service_account_info(
+              json.loads(os.environ["BLINQ_DRIVE_READER_JSON"]),
+              scopes=["https://www.googleapis.com/auth/drive.readonly"])
+          session=AuthorizedSession(creds)
+          url="https://www.googleapis.com/drive/v3/files/"+os.environ["SOURCE_DRIVE_ID"]
+          with session.get(url,params={"alt":"media","supportsAllDrives":"true"},
+                           stream=True,timeout=75) as response:
+              response.raise_for_status()
+              with open("work/source/provider_responses.jsonl","wb") as target:
+                  for part in response.iter_content(1024*1024):
+                      if part:target.write(part)
+          sha=hashlib.sha256(Path("work/source/provider_responses.jsonl").read_bytes()).hexdigest()
+          assert sha==os.environ["EXPECTED_SOURCE_SHA256"], "Original Drive source SHA mismatch"
+          print("SOURCE_AND_CDB_SHA256_VERIFIED")
+          PY
+      - name: Stage exact event, player side, missing cells (PRIVATE ONLY)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/preflight_manual_servestats_current_cdb.py \
+            --source work/source/provider_responses.jsonl \
+            --year work/cdb/history-2025.parquet \
+            --year work/cdb/history-2026.parquet \
+            --output work/stage > work/counts-only.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path("work/stage/report.json").read_text())
+          assert report["source_sha256"]=="9207c7a32e5a53586e3aa8bd8dedb6e8a0cf0dcf4bc452225bbc7ba7c2b9f2a3"
+          assert report["counts"]["unique_source_matches"]==575
+          assert report["canonical_writer_invoked"] is False
+          assert report["write_authorized"] is False and report["production_mutated"] is False
+          assert report["rights_evidence_verified"] is False
+          assert report["provider_api_requests"]==0
+          print("READ_ONLY_CURRENT_CDB_SOURCE_COMPARISON_PASS")
+          print(json.dumps(report["counts"],sort_keys=True))
+          PY
+      - name: Reconfirm live release digest did not change during audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > work/release-after.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          def digests(p):
+              data=json.loads(Path(p).read_text())
+              return {x["name"]:x["digest"] for x in data["assets"]
+                      if x["name"] in ("history-2025.parquet","history-2026.parquet","history_manifest.json")}
+          assert digests("work/release-before.json")==digests("work/release-after.json")
+          print("CANONICAL_RELEASE_STILL_PINNED")
+          PY
+      - name: Private audit receipt and independent SHA readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="blinq-manual-servestats-cdb-readonly-${GITHUB_RUN_ID}"
+          # A legitimate no-op has ZERO candidate rows; GitHub rejects uploads
+          # with Content-Length=0. Publish the report alone for that case.
+          if gh release view "$tag" -R "$DATA_REPO" >/dev/null 2>&1; then
+            gh release upload "$tag" work/stage/report.json -R "$DATA_REPO" --clobber >/dev/null
+          else
+            gh release create "$tag" -R "$DATA_REPO" --target main \
+              --title "BlinQ original API 575 current CDB gated staging" \
+              --notes "Private, evidence-only; rights and participant identity still gate any canonical write." \
+              work/stage/report.json >/dev/null
+          fi
+          gh release download "$tag" -R "$DATA_REPO" -D work/readback -p report.json --clobber
+          cmp work/stage/report.json work/readback/report.json
+          if [[ -s work/stage/research-only-candidates.jsonl ]]; then
+            gh release upload "$tag" work/stage/research-only-candidates.jsonl -R "$DATA_REPO" --clobber >/dev/null
+            gh release download "$tag" -R "$DATA_REPO" -D work/readback \
+              -p research-only-candidates.jsonl --clobber
+            cmp work/stage/research-only-candidates.jsonl work/readback/research-only-candidates.jsonl
+          else
+            echo "ZERO_NEW_CELLS_EXISTING_CDB_COMPLETE; no empty asset published"
+          fi
+          echo "PRIVATE_READONLY_STAGING_REMOTE_READBACK_PASS"
+          echo "Private report release tag: $tag" >> "$GITHUB_STEP_SUMMARY"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          report=json.loads(Path("work/stage/report.json").read_text())
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as out:
+              out.write("No CDB writes; no training. Rights and orientation remain explicit gates.\n")
+              out.write("Source overlap / research-only candidate counts: `" +
+                        json.dumps(report["counts"],sort_keys=True) + "`\n")
+          PY
+      - name: Remove any private original and intermediate row copies
+        if: always()
+        shell: bash
+        run: rm -rf work/source work/cdb work/stage work/readback work/release-before.json work/release-after.json work/counts-only.json
