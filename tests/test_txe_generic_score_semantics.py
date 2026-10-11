@@ -67,3 +67,18 @@ def test_no_weak_fullname_identity(monkeypatch):
     assert stage.full_name("Bondar Anna") == ("anna", "bondar")
     assert stage.player_slug("https://evil.example/player/anna-bondar/") is None
     assert stage.player_slug("https://www.tennisexplorer.com/player/anna-bondar/") == "anna-bondar"
+
+def test_already_imported_zero_delta_is_idempotent(tmp_path):
+    import json
+    from import_txe_wta2024_scores_exact import read_stage
+    from stage_txe_wta2024_scores import sha256, SOURCE_SHA, YEAR
+    p = tmp_path / "stage.jsonl"
+    p.write_text("")
+    report = {"schema": 1, "status": "read_only_score_delta",
+              "cdb_sha256": "a"*64, "source_sha256": SOURCE_SHA, "year": YEAR,
+              "stage_sha256": sha256(p), "production_mutated": False,
+              "model_trained": False, "counts": {}}
+    r = tmp_path / "report.json"
+    r.write_text(json.dumps(report))
+    entries, _ = read_stage(p, r, "a"*64)
+    assert entries == []
