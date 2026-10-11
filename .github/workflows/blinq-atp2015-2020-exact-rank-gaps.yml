@@ -6,9 +6,7 @@ on:
       - scripts/audit_atp_weekly_rank_history.py
       - scripts/import_atp_weekly_rank_fill.py
       - tests/test_atp_rank_history_contract.py
-  push:
-    branches: [main]
-    paths: [.github/workflows/blinq-atp2015-2020-exact-rank-gaps.yml]
+  workflow_dispatch:
 permissions:
   contents: read
   actions: read
@@ -33,7 +31,7 @@ jobs:
           python -m pytest -q tests/test_atp_rank_history_contract.py
           python -m compileall -q scripts/audit_atp_weekly_rank_history.py scripts/import_atp_weekly_rank_fill.py
   read-only-stage:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch'
     needs: [guard-tests]
     runs-on: ubuntu-latest
     timeout-minutes: 95
@@ -149,7 +147,11 @@ jobs:
           mkdir -p "$ROOT/private" "$ROOT/independent"
           cp "$ROOT/source/source-pin.json" "$ROOT/private/"
           cp "$ROOT/stage/report.json" "$ROOT/private/source-stage-report.json"
-          cp "$ROOT/stage/rank-fill-candidates.jsonl" "$ROOT/private/rank-fill-candidates.jsonl"
+          if [[ -s "$ROOT/stage/rank-fill-candidates.jsonl" ]]; then
+            cp "$ROOT/stage/rank-fill-candidates.jsonl" "$ROOT/private/rank-fill-candidates.jsonl"
+          else
+            echo "No safe new ATP ranking cells in audited cohort; do not upload zero-byte stage."
+          fi
           cp "$ROOT/stage/rank-points-sidecar.jsonl" "$ROOT/private/rank-points-sidecar.jsonl"
           cp "$ROOT/dry/report.json" "$ROOT/private/rank-dry-report.json"
           (
