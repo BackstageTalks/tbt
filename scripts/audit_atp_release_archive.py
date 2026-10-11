@@ -108,6 +108,7 @@ def audit(archive_path, year, digest):
 
     missing_stats = 0
     nonempty_table_stats = 0
+    usable_stats = 0
     for event_id, match_id in required_stats:
         member_name = stats_prefix + event_id + "/" + match_id + ".json"
         data = stats.get(member_name)
@@ -115,9 +116,20 @@ def audit(archive_path, year, digest):
                 or data.get("source_match_id") !=
                 f"atptour:{year}:{event_id}:{match_id}"):
             missing_stats += 1
-        elif data.get("tables") and any(x.get("rows") for x in data["tables"]
-                                         if isinstance(x, dict)):
-            nonempty_table_stats += 1
+        else:
+            valid_tables = bool(data.get("tables") and
+                                any(x.get("rows") for x in data["tables"]
+                                    if isinstance(x, dict)))
+            raw = data.get("visible_text") or ""
+            valid_text = (isinstance(raw, str)
+                          and re.search(r"\\b(?:aces?|double faults?|break points?|"
+                                        r"first serve|second serve|1st serve|2nd serve)\\b",
+                                        raw, re.I)
+                          and len(re.findall(r"[0-9]", raw)) >= 6)
+            if valid_tables:
+                nonempty_table_stats += 1
+            if valid_tables or valid_text:
+                usable_stats += 1
 
     # Payload usability is separate from structural checkpoint completion.
     # Report counts only: never print full private HTML or player text.
@@ -132,6 +144,7 @@ def audit(archive_path, year, digest):
                       and keywords.search(t) and len(re.findall(r"[0-9]", t)) >= 6)
     complete = bool(urls and not missing_tournaments
                     and not bad_tournament_rows and not missing_stats)
+    payload_complete = bool(required_stats and usable_stats == len(required_stats))
     return {
         "year": year,
         "sha256_verified": True,
@@ -145,6 +158,9 @@ def audit(archive_path, year, digest):
         "linked_match_stats": len(required_stats),
         "missing_match_stats": missing_stats,
         "stats_with_nonempty_tables": nonempty_table_stats,
+        "linked_stats_with_usable_payload": usable_stats,
+        "source_stats_payload_complete": payload_complete,
+        "source_archive_usable_for_stats": bool(complete and payload_complete),
         "stats_json_files": len(stats),
         "stats_with_text_over_100_chars": with_text,
         "stats_with_numeric_serve_text": metric_text,
