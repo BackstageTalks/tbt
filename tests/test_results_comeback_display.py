@@ -15,13 +15,12 @@ def test_results_desktop_names_wrap_instead_of_ellipsis():
     assert "text-overflow:clip!important" in block
 
 
-def test_short_odds_comeback_badge_is_fail_closed():
+def test_comeback_arrow_removed_from_results():
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-    assert "function resultComebackIcon(publication,outcome)" in app
-    assert "section!=='prime'" in app
-    assert "first_set_outcome||''" in app
-    assert "result-comeback-icon" in app
-    assert "↻" in app
+    css = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
+    assert "function resultComebackIcon" not in app
+    assert "result-comeback-icon" not in app
+    assert "result-comeback-icon" not in css
 
 
 def test_player_fallback_handles_itf_women_and_is_eager():
@@ -33,12 +32,18 @@ def test_player_fallback_handles_itf_women_and_is_eager():
     assert 'loading="eager"' in app
 
 
-def test_results_live_max_odds_stays_inline_and_informational():
+def test_results_live_max_odds_only_for_confirmed_comeback_below_price():
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     css = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
-    assert "function resultLiveMaxOddsHtml(publication,publishedOdds)" in app
-    assert "result.max_live_odds" in app
-    assert "MAX " in app
-    assert "ROI uses the published pre-match price" in app
-    assert ".result-live-max" in css
-    assert "display:inline!important" in css
+    block = app.split("function resultLiveMaxOddsHtml(publication,publishedOdds,outcome){", 1)[1].split("  function renderResults(){", 1)[0]
+    assert "outcome?.kind!=='win'" in block
+    assert "result.first_set_outcome||''" in block
+    assert "toLowerCase()!=='loss'" in block
+    assert "result.max_live_odds" in block
+    assert "peak<=base+0.005" in block
+    assert "ROI uses the published pre-match price" in block
+    assert "resultLiveMaxOddsHtml(publication,odds,outcome)" in app
+    css_block = css.split("body#blinqPremium .result-live-max{", 1)[1].split("}", 1)[0]
+    assert "display:block!important" in css_block
+    assert "margin:3px 0 0!important" in css_block
+    assert "color:#ff8a2a!important" in css_block
