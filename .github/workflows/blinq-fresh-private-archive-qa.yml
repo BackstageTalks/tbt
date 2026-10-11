@@ -34,7 +34,7 @@ jobs:
         run: |
           python -m py_compile scripts/audit_tennisexplorer_private_checkpoint.py
           python -m pip install pytest
-          python -m pytest tests/test_tennisexplorer_private_checkpoint.py -q
+          python -m pytest --noconftest tests/test_tennisexplorer_private_checkpoint.py -q
 
   inspect:
     if: github.event_name != 'pull_request'
