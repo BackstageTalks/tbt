@@ -58,6 +58,9 @@ def main():
             proof[name] = digest
         if remaining:
             raise ValueError('Missing enriched matches in persisted partitions')
+    collection = json.loads((root/'download_report.json').read_text())
+    if count != collection.get('statistics_data_value', {}).get('new_statistic_values', 0):
+        raise ValueError('Collector field count differs from independent readback')
     report = {'status':'VERIFIED' if count else 'VERIFIED_NO_NEW_FIELDS',
               'persisted_new_statistic_values':count, 'partition_sha256':proof,
               'note':'Exact remote/local partition hashes and all proposed new fields verified; no accuracy claim.'}
