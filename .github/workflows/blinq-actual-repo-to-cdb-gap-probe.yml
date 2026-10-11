@@ -1,0 +1,166 @@
+name: BlinQ read-only actual audited-source vs current CDB gap probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-actual-repo-to-cdb-gap-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-repo-to-cdb-probe
+  cancel-in-progress: false
+
+jobs:
+  compare-real-source-records:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: main
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install small parquet reader and validate source destination
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          python -m pip install --quiet pyarrow "pandas>=2,<3"
+      - name: Freeze current production history and audited source sidecars
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/blinq-source-compare/history /tmp/blinq-source-compare/uploaded /tmp/blinq-source-compare/market
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > /tmp/blinq-source-compare/release.json
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -D /tmp/blinq-source-compare/history \
+            -p 'history-*.parquet' -p 'history_manifest.json'
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -D /tmp/blinq-source-compare/uploaded \
+            -p 'blinq-uploaded-match-enrichment-*.jsonl.gz' -p 'blinq-uploaded-td-atp-2025-enrichment.jsonl.gz'
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -D /tmp/blinq-source-compare/market \
+            -p 'market-sidecar-*.jsonl.gz'
+      - name: Independently inspect match-ID matched values and actual source shapes
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from collections import Counter,defaultdict
+          import gzip,hashlib,json,math,re
+          from pathlib import Path
+          import pandas as pd
+
+          root=Path("/tmp/blinq-source-compare")
+          rel=json.loads((root/"release.json").read_text())
+          assets={a["name"]:a for a in rel["assets"]}
+          mf=json.loads((root/"history/history_manifest.json").read_text())["years"]
+          data={}
+          id_owner=set()
+          for p in sorted((root/"history").glob("history-*.parquet")):
+              year=re.search(r"history-(\d{4})\.parquet",p.name).group(1)
+              sha=hashlib.sha256(p.read_bytes()).hexdigest()
+              assert sha==mf[year]["sha256"] and assets[p.name]["digest"]=="sha256:"+sha
+              df=pd.read_parquet(p,columns=["match_id","tour","stats_json","surface","round_name","best_of","indoor","player1_rank","player2_rank","provider_context_json"])
+              for match in df.itertuples(index=False):
+                  ident=str(match.match_id)
+                  assert ident not in id_owner
+                  id_owner.add(ident)
+                  data[ident]=match
+          assert len(data)>=994101
+          result={"schema":1,"status":"read_only_repository_source_probe",
+                  "canonical_rows":len(data),"canonical_years":len(mf),
+                  "source_main_sha":__import__('subprocess').check_output(['git','-C','source','rev-parse','HEAD'],text=True).strip(),
+                  "types":{},"derived_service_complements":{},"no_cdb_changes":True,
+                  "provider_api_requests":0}
+          core=Counter()
+          for m in data.values():
+              st=json.loads(m.stats_json or "{}")
+              valid=True
+              for a,b in [("p1_service_points_won","p2_return_points_won"),("p2_service_points_won","p1_return_points_won")]:
+                  if st.get(a) is not None and st.get(b) is not None and abs(st[a]+st[b]-1)>0.000001:
+                      valid=False
+              if not valid:
+                  core["contradictory_rate_matches"]+=1
+                  continue
+              for a,b in [("p1_service_points_won","p2_return_points_won"),("p2_service_points_won","p1_return_points_won")]:
+                  if st.get(a) is None and st.get(b) is not None and 0<=st[b]<=1:
+                      core["missing_complement_cells"]+=1
+                      core["missing_complement_match_ids_"+a]+=1
+                  if st.get(b) is None and st.get(a) is not None and 0<=st[a]<=1:
+                      core["missing_complement_cells"]+=1
+                      core["missing_complement_match_ids_"+b]+=1
+          result["derived_service_complements"]=dict(core)
+          for family,pathset in [
+                ("uploaded",sorted((root/"uploaded").glob("*.gz"))),
+                ("market",sorted((root/"market").glob("*.gz"))),
+                ("charting",sorted((Path("source")/"tennis/charting").glob("matches.json.gz"))),
+                ("historical_market",sorted((Path("source")/"research/historical_market").glob("**/*.jsonl.gz"))[:3]),
+                ("identities",sorted((Path("source")/"research/player_identity").glob("*.jsonl.gz")))]:
+              x=Counter()
+              shape_keys=Counter()
+              sample_shapes=[]
+              for p in pathset:
+                  x["files"]+=1
+                  try:
+                      with gzip.open(p,"rt",encoding="utf-8") as f:
+                          sample=f.read(500)
+                      # JSON object or list archives are treated as structure only.
+                      if not sample.lstrip().startswith("{"):
+                          x["non_jsonl_first_byte"]+=1
+                          continue
+                      with gzip.open(p,"rt",encoding="utf-8") as f:
+                          for line_no,line in enumerate(f):
+                              if not line.strip(): continue
+                              obj=json.loads(line)
+                              if not isinstance(obj,dict):
+                                  x["non_object_records"]+=1
+                                  continue
+                              x["records"]+=1
+                              shape_keys.update(obj.keys())
+                              for k in ("match_id","canonical_match_id","canonical_id","event_id","provider_event_id"):
+                                  v=obj.get(k)
+                                  if v and str(v) in data:
+                                      x["canonical_id_matches_"+k]+=1
+                              if len(sample_shapes)<4:
+                                  sample_shapes.append({"asset":p.name,"keys":sorted(obj.keys()),
+                                                         "nested":{k:sorted(v)[:35] for k,v in obj.items() if isinstance(v,dict)}})
+                  except Exception as e:
+                      x["parse_or_shape_errors"]+=1
+                      sample_shapes.append({"asset":p.name,"failure_type":type(e).__name__})
+              result["types"][family]={"counts":dict(x),"top_keys":shape_keys.most_common(40),"examples":sample_shapes}
+          out=root/"probe.json"
+          out.write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n")
+          print("ACTUAL_REPO_CDB_PROBE",json.dumps(result,ensure_ascii=False,sort_keys=True))
+          PY
+      - name: Preserve independent read-only probe as private immutable Release
+        if: always()
+        run: |
+          set -euo pipefail
+          cd /tmp/blinq-source-compare
+          test -s probe.json
+          sha256sum probe.json > SHA256SUMS
+          tag="blinq-repo-source-gap-probe-${GITHUB_RUN_ID}"
+          gh release create "$tag" -R "$PRIVATE_REPO" --target main \
+            --title "Read-only audited source to current CDB comparison" \
+            --notes "Exact source record key/ID coverage, canonical full-year SHA readback, 0 CDB writes, 0 external tennis API requests."
+          gh release upload "$tag" probe.json SHA256SUMS -R "$PRIVATE_REPO"
+          mkdir -p reread
+          gh release download "$tag" -R "$PRIVATE_REPO" -D reread
+          (cd reread && sha256sum --check SHA256SUMS)
+          python - <<'PY'
+          import json
+          x=json.load(open("reread/probe.json"))
+          print("ACTUAL_REPO_CDB_PROBE_VERIFIED", x["canonical_rows"],
+                x["derived_service_complements"],{k:v["counts"] for k,v in x["types"].items()})
+          PY
