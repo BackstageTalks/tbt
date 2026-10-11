@@ -59,6 +59,11 @@ jobs:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: api/requirements-train.txt
+      - name: Install writer and regression dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install -q -r api/requirements-train.txt pytest
+          python -m pytest -q tests/test_wta2023_2024_verified_rank_exact_cells.py tests/test_wta2023_2024_verified_rank_gaps.py
       - name: Validate private provenance, SHA pins and writer flags
         id: gate
         run: |
@@ -79,11 +84,6 @@ jobs:
           PY
           echo "mode=$(jq -r .mode "$r")" >> "$GITHUB_OUTPUT"
           echo "stage_tag=$(jq -r .source_tag "$r")" >> "$GITHUB_OUTPUT"
-      - name: Install writer and regression dependencies
-        run: |
-          set -euo pipefail
-          python -m pip install -q -r api/requirements-train.txt pytest
-          python -m pytest -q tests/test_wta2023_2024_verified_rank_exact_cells.py tests/test_wta2023_2024_verified_rank_gaps.py
       - name: Read back pinned private audit source and current full canonical year
         env:
           STAGE_TAG: ${{ steps.gate.outputs.stage_tag }}
