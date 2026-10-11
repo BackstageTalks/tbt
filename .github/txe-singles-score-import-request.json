@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "mode": "dry-run",
+  "mode": "write",
   "sources": [
     {
       "tour": "wta",
