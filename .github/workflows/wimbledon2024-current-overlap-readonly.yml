@@ -1,0 +1,185 @@
+name: Read-only current Wimbledon 2024 source to CDB overlap
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/wimbledon2024-current-overlap-readonly.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  current-overlap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated canonical reader
+        run: python -m pip install -q -r api/requirements-train.txt
+      - name: Download and hash verify ONLY 2024 partition and existing private research
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$DATA_REPO" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p .cache/w24/{canonical,source,meta,output}
+          gh release download tbt-data-v1 -R "$DATA_REPO" -D .cache/w24/canonical \
+            -p history-2024.parquet -p history_manifest.json -p _tbt_bundle_manifest.json
+          cp .cache/w24/canonical/_tbt_bundle_manifest.json .cache/w24/meta/before.json
+          gh release download blinq-kaggle-research-integration-2026-10-07 -R "$DATA_REPO" -D .cache/w24/source \
+            -p wimbledon-2024-match-level.jsonl.gz -p wimbledon-2024-points.jsonl.gz
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > .cache/w24/meta/cdb-release.json
+          gh api "repos/$DATA_REPO/releases/tags/blinq-kaggle-research-integration-2026-10-07" > .cache/w24/meta/source-release.json
+          gh release download tbt-data-v1 -R "$DATA_REPO" -D .cache/w24/canonical -p _tbt_bundle_manifest.json --clobber
+          cmp .cache/w24/meta/before.json .cache/w24/canonical/_tbt_bundle_manifest.json
+      - name: Audit current exact canonical gap and raw point-row uniqueness without any write
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import gzip,hashlib,json,math,unicodedata,re
+          from pathlib import Path
+          from collections import Counter
+          from tbt.data.history_snapshot import load_snapshot
+          r=Path('.cache/w24')
+          a=json.loads((r/'meta/cdb-release.json').read_text())
+          b=json.loads((r/'meta/source-release.json').read_text())
+          known={x['name']:x for x in a['assets']}
+          sources={x['name']:x for x in b['assets']}
+          def digest(p,asset):
+              result=hashlib.sha256(p.read_bytes()).hexdigest()
+              assert asset['digest']=='sha256:'+result, 'release bytes changed'
+              return result
+          yearsha=digest(r/'canonical/history-2024.parquet',known['history-2024.parquet'])
+          manifest=json.loads((r/'canonical/history_manifest.json').read_text())
+          assert manifest['years']['2024']['sha256']==yearsha
+          rows=load_snapshot(r/'canonical/history-2024.parquet')
+          matches={str(m.match_id):m for m in rows}
+          assert len(matches)==len(rows) and all(m.scheduled_at.year==2024 for m in rows)
+          def norm(value):
+              text=unicodedata.normalize('NFKD',str(value or ''))
+              return re.sub(r'[^a-z0-9]+',' ',''.join(c for c in text if not unicodedata.combining(c)).lower()).strip()
+          count=Counter()
+          source_matches={}
+          source_ids=set()
+          mapping={}
+          fields={
+            'aces':'aces','double_faults':'double_faults',
+            'unforced_errors':'unforced_errors',
+            'net_points':'net_points','net_points_won':'net_points_won'
+          }
+          matchpath=r/'source/wimbledon-2024-match-level.jsonl.gz'
+          ppath=r/'source/wimbledon-2024-points.jsonl.gz'
+          matchsha=digest(matchpath,sources[matchpath.name])
+          pointsha=digest(ppath,sources[ppath.name])
+          assert matchsha=='4f237750020852e933e9fa43394d9e1002b032ba99506e9065a09d524954c4f1'
+          assert pointsha=='4d76d0861fc74c47810cae562e323b48cdbdbbb8cec13960e70e6efebbf503ef'
+          for line in gzip.open(matchpath,'rt',encoding='utf-8'):
+              if not line.strip(): continue
+              row=json.loads(line);count['match_sidecar_rows']+=1
+              mid=str(row.get('canonical_match_id') or '')
+              source_mid=str(row.get('source_match_id') or '')
+              if not mid or not source_mid or mid in source_matches or source_mid in source_ids:
+                  count['duplicate_or_missing_match_identity']+=1
+                  continue
+              source_matches[mid]=row;source_ids.add(source_mid)
+              match=matches.get(mid)
+              if match is None:
+                  count['missing_current_canonical_match']+=1
+                  continue
+              if 'wimbledon' not in norm(match.tournament) or match.scheduled_at.year!=2024:
+                  count['tournament_year_mismatch']+=1
+                  continue
+              src=(norm(row.get('player1_name')),norm(row.get('player2_name')))
+              canon=(norm(match.player1_name),norm(match.player2_name))
+              if src==canon:side_map={'player1':'p1','player2':'p2'};count['direct_orientation']+=1
+              elif src==canon[::-1]:side_map={'player1':'p2','player2':'p1'};count['reversed_orientation']+=1
+              else:
+                  count['invalid_player_crosswalk']+=1
+                  continue
+              mapping[source_mid]=mid
+              assert row.get('model_policy','').startswith('research_only')
+              stat_count=Counter()
+              for srcside,cdbside in side_map.items():
+                  for srcfield,canonical in fields.items():
+                      value=row.get(srcside+'_'+srcfield)
+                      if value is None:continue
+                      count['numeric_source_stats']+=1
+                      if isinstance(value,bool) or not isinstance(value,(float,int)) or not math.isfinite(value) or value<0 or not float(value).is_integer():
+                          stat_count['invalid_source_stat']+=1
+                          continue
+                      ckey=cdbside+'_'+canonical
+                      original=(match.stats or {}).get(ckey)
+                      if original is None:
+                          stat_count['missing_current_cdb_cell_research_only']+=1
+                      elif isinstance(original,bool) or not isinstance(original,(float,int)) or not math.isfinite(float(original)):
+                          stat_count['invalid_stored_stat']+=1
+                      elif abs(float(original)-float(value)) <= 1e-6:
+                          stat_count['already_present_equal_cell']+=1
+                      else:
+                          stat_count['conflicting_nonnull_cell']+=1
+              count.update(stat_count)
+              if stat_count['conflicting_nonnull_cell'] or stat_count['invalid_stored_stat'] or stat_count['invalid_source_stat']:
+                  count['matches_with_stat_disagreement']+=1
+              else:
+                  count['matches_without_stat_disagreement']+=1
+          assert count['match_sidecar_rows']==250, 'sidecar match-row count drift'
+          source_pids=Counter()
+          seen_points=set()
+          for line in gzip.open(ppath,'rt',encoding='utf-8'):
+              if not line.strip(): continue
+              row=json.loads(line);count['point_sidecar_rows']+=1
+              sid=str(row.get('source_match_id') or '')
+              cid=str(row.get('canonical_match_id') or '')
+              if sid not in mapping or mapping[sid]!=cid:
+                  count['point_unproven_match_link']+=1
+                  continue
+              coords=(row.get('set_number'),row.get('game_number'),row.get('point_number_in_game'))
+              if any(isinstance(v,bool) or not isinstance(v,int) or v<=0 for v in coords):
+                  count['invalid_point_coordinate']+=1
+                  continue
+              key=(sid,)+coords
+              if key in seen_points:
+                  count['duplicate_point_coordinate']+=1
+                  continue
+              seen_points.add(key)
+              source_pids[sid]+=1
+              count['point_rows_unique_linked']+=1
+          assert count['point_sidecar_rows']==47717,'sidecar point row count drift'
+          report={'schema':1,'status':'READ_ONLY_FRESH_CDB_SOURCE_CELL_RECONCILED',
+              'source_family':'rewantbhriguvanshi_wimbledon_2024_kaggle',
+              'source_license_clearance':'NOT_INDEPENDENTLY_VERIFIED_DO_NOT_WRITE',
+              'source_current_sha256':{'match_level':matchsha,'points':pointsha},
+              'current_2024_partition':{'rows':len(rows),'sha256':yearsha},
+              'counts':dict(count),
+              'safety':{'source_original_kaggle_raw_bytes_verified':False,
+                'complete_point_tape_verified':False,'provider_source_license_cleared':False,
+                'canonical_cell_write_authorized':False,'model_training_authorized':False,
+                'point_in_time_pre_match_usage_authorized':False,
+                'cdb_written':False,'bundle_before_after_equal':True},
+              'provider_api_requests':0,
+              'conclusion':'Research-only candidate counts; null CDB cells NOT approved for import until original source rights, completeness, identity evidence and per-cell proof reviewed'}
+          path=r/'output/wimbledon-2024-current-cdb-audit.json'
+          path.write_text(json.dumps(report,sort_keys=True,indent=2)+'\n',encoding='utf-8')
+          print('WIMBLEDON_2024_CURRENT_CDB_AGGREGATES',json.dumps({
+             'counts':report['counts'],'canonical_rows':len(rows),
+             'private_report_sha256':hashlib.sha256(path.read_bytes()).hexdigest(),
+             'write_authorized':False
+          },sort_keys=True))
+          PY
+          path=audit/import-preparation/wimbledon-2024-current-cdb-overlap-20261011.json
+          file=.cache/w24/output/wimbledon-2024-current-cdb-audit.json
+          api="repos/$DATA_REPO/contents/$path"
+          if gh api "$api?ref=main" > .cache/w24/meta/current.json 2>/dev/null; then
+            gh api "$api?ref=main" --jq .content | base64 -d > .cache/w24/output/prior.json
+            cmp "$file" .cache/w24/output/prior.json || { echo 'Private audit changed; fail closed'; exit 1; }
+          else
+            gh api --method PUT "$api" -f message="audit(cdb): classify current Wimbledon 2024 source overlap safely" -f content="$(base64 -w0 "$file")" > .cache/w24/output/receipt.json
+          fi
+          gh api "$api?ref=main" --jq .content | base64 -d > .cache/w24/output/verified.json
+          cmp "$file" .cache/w24/output/verified.json
+          echo "PRIVATE_WIMBLEDON_2024_SOURCE_QA_PERSISTENCE_VERIFIED"
