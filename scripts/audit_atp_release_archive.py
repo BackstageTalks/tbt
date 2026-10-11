@@ -78,7 +78,7 @@ def audit(archive_path, year, digest):
     required_stats = set()
     for url in urls:
         m = re.fullmatch(
-            rf"/en/scores/archive/([^/]+)/(\\d+)/{year}/(?:results|country-results)",
+            rf"/en/scores/archive/([^/]+)/([0-9]+)/{year}/(?:results|country-results)",
             urlparse(url).path,
         )
         if not m:
