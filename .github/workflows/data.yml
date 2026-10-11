@@ -262,6 +262,7 @@ jobs:
             python scripts/run_mega_data.py "${args[@]}"
           elif [[ "$MODE" == history || "$MODE" == statistics ]]; then
             args=(--publish --data-repository "$TBT_DATA_REPOSITORY" --mode "$MODE" --lookback-days "$LOOKBACK_DAYS" --max-requests "$MAX_REQUESTS")
+            if [[ "${{ inputs.hourly_autofill || 'false' }}" == "true" ]]; then args+=(--targeted-statistics); fi
             if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
             if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
             python scripts/download_tennis_history.py "${args[@]}"
@@ -408,6 +409,10 @@ jobs:
             fi
             python scripts/pipeline.py "${args[@]}"
           fi
+
+      - name: Independently verify hourly CDB statistics publication
+        if: ${{ success() && inputs.hourly_autofill && env.MODE == 'statistics' }}
+        run: python scripts/verify_targeted_statistics.py --data-repository "$TBT_DATA_REPOSITORY"
 
       - name: Persist training decision audit
         if: ${{ always() && env.MODE == 'train' }}
@@ -596,6 +601,8 @@ jobs:
           path: |
             .cache/tbt/history/download_report.json
             .cache/tbt/history/download_progress.json
+            .cache/tbt/history/statistics_gap_plan.json
+            .cache/tbt/history/statistics_readback.json
           if-no-files-found: warn
 
       - name: Upload production prediction audit

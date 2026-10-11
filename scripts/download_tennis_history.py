@@ -22,6 +22,8 @@ from tbt.data.history_safety import sanitize_history_identities, quarantine_budg
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.statistics_enrichment import StatisticsEnricher
+from tbt.services.statistics_enrichment import STATISTICS_SCHEMA_VERSION
+from tbt.services.statistics_gapfill import event_id, missing_fields, retry_due
 
 
 from release_store import ReleaseStore
@@ -210,7 +212,7 @@ def reopen_history_gap_days(matches, progress, start, end, existing_years):
     }
 
 
-def _statistics_candidates(matches, start, end):
+def _statistics_candidates(matches, start, end, *, targeted=False):
     """Prioritize real serve/return gaps and skip rows already quality-ready."""
     in_window = [
         match for match in matches
@@ -226,18 +228,29 @@ def _statistics_candidates(matches, start, end):
             bucket_ready[key] += 1
 
     candidates = []
+    skipped = Counter()
     for match in in_window:
         stats = match.stats if isinstance(match.stats, dict) else {}
         p1_ready = _quality_ready(stats, "p1")
         p2_ready = _quality_ready(stats, "p2")
-        if p1_ready and p2_ready:
+        if targeted:
+            if not missing_fields(match):
+                skipped["target_fields_present"] += 1
+                continue
+            if event_id(match) is None:
+                skipped["missing_or_conflicting_event_id"] += 1
+                continue
+            if not retry_due(match, STATISTICS_SCHEMA_VERSION):
+                skipped["retry_not_due"] += 1
+                continue
+        elif p1_ready and p2_ready:
             continue
         key = (str(match.tour or "unknown").lower(), int(match.scheduled_at.year))
         coverage = bucket_ready[key] / max(1, bucket_total[key])
         populated = sum(value is not None for value in stats.values())
         partial_priority = 0 if (p1_ready or p2_ready) else 1 if populated else 2
         candidates.append((
-            coverage,
+            -match.scheduled_at.year if targeted else coverage,
             partial_priority,
             -populated,
             -match.scheduled_at.timestamp(),
@@ -249,6 +262,8 @@ def _statistics_candidates(matches, start, end):
         "window_completed": len(in_window),
         "already_quality_ready": sum(bucket_ready.values()),
         "candidate_rows": len(candidates),
+        "targeted": targeted,
+        "skipped": dict(skipped),
         "bucket_coverage": {
             f"{tour}:{year}": {
                 "completed": bucket_total[(tour, year)],
@@ -268,6 +283,8 @@ def main():
     parser.add_argument("--end", default=None, help="Optional newest date; default yesterday UTC")
     parser.add_argument("--lookback-days", type=int, default=1095)
     parser.add_argument("--mode", choices=["history", "statistics"], default="history")
+    parser.add_argument("--targeted-statistics", action="store_true",
+                        help="Queue only identifiable missing fields whose retry is due, recent years first")
     parser.add_argument("--max-requests", type=int, default=4000)
     parser.add_argument("--history-dir", default=str(ROOT / ".cache/tbt/history"))
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", ""))
@@ -401,6 +418,8 @@ def main():
     provider.request_limit = allocation
     report = Counter()
     statistics_value = Counter()
+    expected_statistics = {}
+    statistics_changed_years = set()
     provider_quarantine = []
     enricher = None
     primary_error = None
@@ -410,25 +429,37 @@ def main():
         if args.mode == "history":
             download_days(provider, matches, progress, start, end, checkpoint, provider_quarantine)
         else:
-            enricher = StatisticsEnricher(provider, directory / "statistics_cache.sqlite")
+            enricher = StatisticsEnricher(provider, directory / "statistics_cache.sqlite",
+                                         targeted=args.targeted_statistics)
             changed = set()
-            statistics_candidates, statistics_plan = _statistics_candidates(matches, start, end)
+            statistics_candidates, statistics_plan = _statistics_candidates(
+                matches, start, end, targeted=args.targeted_statistics)
+            write_json(directory / "statistics_gap_plan.json", statistics_plan)
             report["statistics_candidate_rows"] = int(statistics_plan["candidate_rows"])
             report["statistics_already_quality_ready"] = int(statistics_plan["already_quality_ready"])
             print(json.dumps({"statistics_gap_plan": statistics_plan}, ensure_ascii=False), flush=True)
+            processed = 0
             for match in statistics_candidates:
+                processed += 1
                 stats_before = dict(match.stats or {})
                 requests_before = provider.request_count
                 status = enricher.enrich(match)
                 value_change = statistics_value_change(stats_before, match.stats)
+                if args.targeted_statistics and value_change["new_statistic_values"]:
+                    expected_statistics[str(match.match_id)] = {
+                        key: value for key, value in match.stats.items()
+                        if value is not None and stats_before.get(key) is None
+                    }
                 statistics_value.update(value_change)
                 source = "api" if provider.request_count > requests_before else "local_or_cache"
                 statistics_value[source + "_new_quality_ready_rows"] += value_change["new_quality_ready_rows"]
+                statistics_value[source + "_new_statistic_values"] += value_change["new_statistic_values"]
                 report[status] += 1
-                if status in {"enriched", "unavailable"}:
+                if status in {"enriched", "unavailable", "conflict"}:
+                    statistics_changed_years.add(match.scheduled_at.year)
                     changed.add(match.scheduled_at.year)
                     pending_years.add(match.scheduled_at.year)
-                    if sum(report.values()) % 50 == 0:
+                    if processed % (250 if args.targeted_statistics else 50) == 0:
                         checkpoint(changed, True)
                         changed.clear()
             checkpoint(changed, True)
@@ -468,6 +499,11 @@ def main():
                     "policy": "Actual full serve+return readiness transitions; cache/local gains separated. Denominator includes provider retries/failures. Not an estimate of model accuracy gain.",
                 }
             write_json(directory / "download_report.json", output_report)
+            if args.targeted_statistics:
+                write_json(directory / "statistics_expected.json", {
+                    "years": sorted(statistics_changed_years),
+                    "added_fields": expected_statistics,
+                })
             print(json.dumps(output_report, indent=2), flush=True)
         except Exception as exc:
             secondary_errors.append(("download report", exc))
