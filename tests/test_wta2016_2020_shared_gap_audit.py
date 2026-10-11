@@ -57,3 +57,57 @@ def test_snapshot_other_integrity_failures_are_never_retried(error):
     with pytest.raises(RuntimeError, match="checksum|coverage"):
         a.download_consistent_history(store)
     assert store.attempts == 1
+
+
+class _MatchCohort:
+    def __init__(self, count):
+        self.count = count
+
+    def __len__(self):
+        return self.count
+
+
+def _full_manifest(count=994101):
+    return {"years": {str(year): {"rows": count if year == 2020 else 0}
+                       for year in range(1943, 2021)}}
+
+
+def _identity_safety(input_rows=994101, output_rows=994101, quarantine=0, merged=0):
+    return {"input_rows": input_rows, "output_rows": output_rows,
+            "rows_after_proven_merges": input_rows - merged,
+            "merged_rows_removed": merged, "quarantined_rows": quarantine,
+            "affected_years": []}
+
+
+def test_verified_manifest_and_safe_canonical_pass():
+    result = a.verify_full_canonical_identity(
+        _MatchCohort(994101), _identity_safety(), _full_manifest())
+    assert result["manifest_expected_rows"] == 994101
+    assert result["manifest_partition_count"] == 78
+    assert result["quarantined_rows"] == 0
+
+
+def test_reject_truncated_raw_snapshot_even_without_identity_collision():
+    with pytest.raises(ValueError, match="manifest vs loaded"):
+        a.verify_full_canonical_identity(
+            _MatchCohort(994100), _identity_safety(input_rows=994100, output_rows=994100),
+            _full_manifest())
+
+
+def test_reject_identity_quarantine_with_exact_manifest_count():
+    with pytest.raises(ValueError, match="identity unsafe"):
+        a.verify_full_canonical_identity(
+            _MatchCohort(994099),
+            _identity_safety(output_rows=994099, quarantine=2),
+            _full_manifest())
+
+
+def test_reject_missing_manifest_rows_or_partition():
+    short = _full_manifest()
+    short["years"].pop("1943")
+    with pytest.raises(ValueError, match="year inventory"):
+        a.verify_full_canonical_identity(_MatchCohort(994101), _identity_safety(), short)
+    invalid = _full_manifest()
+    invalid["years"]["2020"].pop("rows")
+    with pytest.raises(ValueError, match="missing row counts"):
+        a.verify_full_canonical_identity(_MatchCohort(994101), _identity_safety(), invalid)
