@@ -136,14 +136,26 @@ jobs:
         run: |
           set -euo pipefail
           tag="blinq-manual-servestats-cdb-readonly-${GITHUB_RUN_ID}"
-          gh release create "$tag" -R "$DATA_REPO" --target main \
-            --title "BlinQ original API 575 current CDB gated staging" \
-            --notes "Private, evidence-only; rights and participant identity still gate any canonical write." \
-            work/stage/report.json work/stage/research-only-candidates.jsonl >/dev/null
-          gh release download "$tag" -R "$DATA_REPO" -D work/readback \
-            -p report.json -p research-only-candidates.jsonl
+          # A legitimate no-op has ZERO candidate rows; GitHub rejects uploads
+          # with Content-Length=0. Publish the report alone for that case.
+          if gh release view "$tag" -R "$DATA_REPO" >/dev/null 2>&1; then
+            gh release upload "$tag" work/stage/report.json -R "$DATA_REPO" --clobber >/dev/null
+          else
+            gh release create "$tag" -R "$DATA_REPO" --target main \
+              --title "BlinQ original API 575 current CDB gated staging" \
+              --notes "Private, evidence-only; rights and participant identity still gate any canonical write." \
+              work/stage/report.json >/dev/null
+          fi
+          gh release download "$tag" -R "$DATA_REPO" -D work/readback -p report.json --clobber
           cmp work/stage/report.json work/readback/report.json
-          cmp work/stage/research-only-candidates.jsonl work/readback/research-only-candidates.jsonl
+          if [[ -s work/stage/research-only-candidates.jsonl ]]; then
+            gh release upload "$tag" work/stage/research-only-candidates.jsonl -R "$DATA_REPO" --clobber >/dev/null
+            gh release download "$tag" -R "$DATA_REPO" -D work/readback \
+              -p research-only-candidates.jsonl --clobber
+            cmp work/stage/research-only-candidates.jsonl work/readback/research-only-candidates.jsonl
+          else
+            echo "ZERO_NEW_CELLS_EXISTING_CDB_COMPLETE; no empty asset published"
+          fi
           echo "PRIVATE_READONLY_STAGING_REMOTE_READBACK_PASS"
           echo "Private report release tag: $tag" >> "$GITHUB_STEP_SUMMARY"
           python - <<'PY'
