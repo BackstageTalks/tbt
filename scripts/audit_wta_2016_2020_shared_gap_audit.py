@@ -84,8 +84,24 @@ def main():
     history = args.out / "history"
     download_consistent_history(ReleaseStore(args.repo, "tbt-data-v1", history))
     matches, safety = sanitize_history_identities(load_partitions(history))
-    if safety.get("quarantined_rows") or len(matches) < 994101:
-        raise ValueError("Canonical full release incomplete or identity unsafe")
+    year_manifest = load_manifest(history)["years"]
+    manifest_rows = sum(int(value.get("rows", 0)) for value in year_manifest.values())
+    integrity = {
+        "schema": 1, "status": "READ_ONLY_CANONICAL_IDENTITY_GATE",
+        "canonical_rows_after_sanitize": len(matches),
+        "year_partition_count": len(year_manifest),
+        "manifest_declared_match_rows": manifest_rows,
+        "historic_verified_floor": 994101,
+        "quarantined_rows": safety.get("quarantined_rows"),
+        "duplicate_match_id_count": len(safety.get("duplicate_match_ids") or []),
+        "duplicate_event_id_count": len(safety.get("duplicate_provider_event_ids") or []),
+        "write_authorized": False, "canonical_mutated": False,
+    }
+    (args.out / "integrity-gate.json").write_text(json.dumps(integrity, indent=2, sort_keys=True) + "\n")
+    print("WTA_OLDER_CANONICAL_INTEGRITY_GATE", json.dumps(integrity, sort_keys=True), flush=True)
+    if (integrity["quarantined_rows"] or len(matches) < 994101
+            or manifest_rows != len(matches) or len(year_manifest) != 78):
+        raise ValueError("Canonical full release incomplete or identity unsafe; see aggregate-only integrity-gate.json")
     ranking = load_rank_feature_inputs(args.repo, args.out/"rank-inputs", matches)
     manifest = load_manifest(history)["years"]
     source_sha = {key: value["sha256"] for key, value in ranking.report["sources"].items()}
