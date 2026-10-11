@@ -1,1 +1,1 @@
-[refresh-now] [current-refresh] Rebuild Match Comparator serving artifact on fixed main. 2026-10-07 17:49 UTC.
+[refresh-now] [current-refresh] 2026-10-11: explicit on-demand BlinQ prediction publication recovery. Preserve existing morning run and production writer locks.
