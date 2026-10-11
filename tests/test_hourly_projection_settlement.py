@@ -43,6 +43,8 @@ def _status(**extra):
         "provider_status": "finished ended",
         "provider_home_id": "11",
         "provider_away_id": "22",
+        "projection_stats_p1_id": "11",
+        "projection_stats_p2_id": "22",
         "checked_at": "2026-10-11T12:00:00Z",
         **extra,
     }}
