@@ -127,7 +127,7 @@ def main():
         summary.update(verify_full_canonical_identity(matches, safety, manifest))
     finally:
         (args.out/"identity-preflight-counts.json").write_text(
-            json.dumps(summary, indent=2, sort_keys=True)+"\\n"
+            json.dumps(summary, indent=2, sort_keys=True)+"\n"
         )
         print("WTA_CANONICAL_IDENTITY_PREFLIGHT_COUNTS", json.dumps(summary, sort_keys=True), flush=True)
     ranking = load_rank_feature_inputs(args.repo, args.out/"rank-inputs", matches)
