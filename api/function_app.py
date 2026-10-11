@@ -1901,8 +1901,10 @@ def internal_match_status_worker(req):
             checked_stats = 0
             unavailable_stats = 0
             quota_paused = False
+            before_stat_requests = client.request_count
             for event, row in stat_rows.items():
-                if checked_stats >= 2 or time.monotonic() - worker_started >= 19.0:
+                # Leave time for provider timeout and Azure snapshot readback.
+                if checked_stats >= 2 or time.monotonic() - worker_started + 5.0 >= 22.0:
                     break
                 if client.request_count >= client.request_limit - 1:
                     break
@@ -1957,6 +1959,9 @@ def internal_match_status_worker(req):
                 }
                 entry["projection_stats_checked_at"] = datetime.now(timezone.utc).isoformat()
                 checked_stats += 1
+            snapshot["provider_requests"] = int(snapshot.get("provider_requests") or 0) + max(
+                0, client.request_count - before_stat_requests
+            )
             snapshot["projection_statistics_checked"] = checked_stats
             snapshot["projection_statistics_unavailable"] = unavailable_stats
             snapshot["projection_statistics_budget_paused"] = quota_paused
