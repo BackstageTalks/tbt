@@ -137,3 +137,25 @@ def test_clv_workflow_uploads_raw_snapshot_fallback():
         encoding="utf-8"
     )
     assert "reports/propline_clv_snapshot.json.gz" in workflow
+
+
+def test_clv_research_pacing_keeps_late_day_capacity_without_expanding_quota():
+    from datetime import timedelta
+    limit = collector.paced_daily_limit
+    assert limit(datetime(2026, 10, 11, 2, tzinfo=timezone.utc)) == 70
+    assert limit(datetime(2026, 10, 11, 8, tzinfo=timezone.utc)) == 140
+    assert limit(datetime(2026, 10, 11, 14, tzinfo=timezone.utc)) == 200
+    assert limit(datetime(2026, 10, 11, 20, tzinfo=timezone.utc)) == 250
+    assert collector.DAILY_LIMIT == 250
+    # Boundaries use UTC independently from runner's local timezone.
+    assert limit(datetime(2026, 10, 11, 21, tzinfo=timezone(timedelta(hours=3)))) == 250
+    # The same research run cannot exceed the real 250/day allowance.
+    assert max(limit(datetime(2026, 10, 11, hour, tzinfo=timezone.utc))
+               for hour in range(24)) == collector.DAILY_LIMIT
+
+
+def test_targeted_propline_markets_include_break_points_without_extra_endpoint():
+    assert "player_aces" in collector.MARKETS
+    assert "player_double_faults" in collector.MARKETS
+    assert "player_break_points_won" in collector.MARKETS
+    assert "total_tiebreaks" in collector.MARKETS
