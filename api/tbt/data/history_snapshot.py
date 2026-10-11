@@ -12,6 +12,7 @@ import pandas as pd
 from tbt.schemas import MatchRecord
 from tbt.utils import deterministic_id, is_rate_stat_field
 from .provider_context import merge_provider_context, minimize_provider_payload
+from .offline_odds import norm_text
 
 SNAPSHOT_SCHEMA_VERSION = 2
 MANIFEST_SCHEMA_VERSION = 1
@@ -79,6 +80,58 @@ def _validate_stats(stats: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"Rate statistic out of range for {key}: {value!r}")
         validated[key] = numeric
     return validated
+
+
+# A pinned 2023 Wimbledon pilot imported five count-valued source cells using
+# a key otherwise reserved for a fractional break-point win rate.  Keep the CDB
+# bytes untouched, but expose these proven counts under an explicit count key
+# instead of allowing a raw 4 to become a model input rate.  This narrow
+# compatibility rule can be retired after a separately audited CDB migration.
+_WIMBLEDON_2023_COUNT_PAIRS = frozenset({
+    frozenset(("ons jabeur", "elena rybakina")),
+    frozenset(("madison keys", "aryna sabalenka")),
+    frozenset(("ons jabeur", "aryna sabalenka")),
+    frozenset(("elina svitolina", "marketa vondrousova")),
+    frozenset(("marketa vondrousova", "ons jabeur")),
+})
+
+
+def _interpret_wimbledon_2023_count_fields(
+    stats: dict[str, Any], *, tour: str, scheduled_at: datetime,
+    tournament: str, player1_name: str, player2_name: str,
+) -> dict[str, Any]:
+    """Preserve pinned pilot counts without treating them as probability rates."""
+    from numbers import Real
+    import math
+
+    if (
+        tour.lower() != "wta"
+        or scheduled_at.year != 2023
+        or "wimbledon" not in norm_text(tournament)
+        or frozenset((norm_text(player1_name), norm_text(player2_name)))
+        not in _WIMBLEDON_2023_COUNT_PAIRS
+    ):
+        return stats
+
+    translated = dict(stats)
+    for side in ("p1", "p2"):
+        rate_key = f"{side}_break_points_won"
+        if rate_key not in translated or translated[rate_key] is None:
+            continue
+        count = translated.pop(rate_key)
+        if (
+            isinstance(count, bool)
+            or not isinstance(count, Real)
+            or not math.isfinite(float(count))
+            or not float(count).is_integer()
+            or not 0 <= count <= 200
+        ):
+            raise ValueError(f"Invalid pinned Wimbledon count for {rate_key}: {count!r}")
+        count_key = f"{rate_key}_count"
+        if count_key in translated:
+            raise ValueError(f"Conflicting pinned Wimbledon count field: {count_key}")
+        translated[count_key] = count
+    return translated
 
 
 def _dt(value: Any) -> datetime:
@@ -230,10 +283,17 @@ def load_snapshot(path: str | Path, before: datetime | None = None) -> list[Matc
                 best_of=_none_if_na(row.get("best_of")),
                 indoor=_none_if_na(row.get("indoor")),
                 stats=_validate_stats(
-                    _json_loads(
-                        row.get("stats_json"),
-                        field="stats_json",
-                        strict=True,
+                    _interpret_wimbledon_2023_count_fields(
+                        _json_loads(
+                            row.get("stats_json"),
+                            field="stats_json",
+                            strict=True,
+                        ),
+                        tour=_text_or_empty(row.get("tour")),
+                        scheduled_at=scheduled_at,
+                        tournament=_text_or_empty(row.get("tournament")),
+                        player1_name=_text_or_empty(row.get("player1_name")),
+                        player2_name=_text_or_empty(row.get("player2_name")),
                     )
                 ),
                 provider_payload=_json_loads(row.get("provider_context_json")),
