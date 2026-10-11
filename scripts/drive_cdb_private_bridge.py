@@ -7,11 +7,14 @@ tbt-data release, never to public artifacts or an Actions cache.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
+import tempfile
 
 CHECKPOINT_SCHEMA = 1
 REQUIRED_FILES = (
@@ -68,41 +71,91 @@ def validate(report_dir: Path, folder_id: str) -> dict:
 
 
 def write_checkpoint(cache_file: Path, code_file: Path, folder_id: str, output: Path) -> None:
+    """Store the complete SQLite cache compressed, with both byte hashes.
+
+    GitHub Release assets are bounded; the former 1 GiB *raw* SQLite guard
+    failed on otherwise successful audit runs. No cache rows are omitted.
+    """
     safe_id(folder_id)
     if not cache_file.is_file() or cache_file.stat().st_size <= 0:
         raise ValueError('No completed audit cache to persist')
     output.mkdir(parents=True, exist_ok=True)
-    data_copy = output / 'audit.sqlite'
-    shutil.copyfile(cache_file, data_copy)
+    data_copy = output / 'audit.sqlite.gz'
+    with cache_file.open('rb') as original, data_copy.open('wb') as destination:
+        with gzip.GzipFile(filename='', fileobj=destination, mode='wb',
+                           compresslevel=6, mtime=0) as packed:
+            shutil.copyfileobj(original, packed, length=1024 * 1024)
     manifest = {
-        'schema': CHECKPOINT_SCHEMA,
+        'schema': 2,
         'folder_id': folder_id,
         'source_audit_code_sha256': digest(code_file),
+        'checkpoint_file': data_copy.name,
         'checkpoint_sha256': digest(data_copy),
         'checkpoint_bytes': data_copy.stat().st_size,
+        'uncompressed_checkpoint_sha256': digest(cache_file),
+        'uncompressed_checkpoint_bytes': cache_file.stat().st_size,
     }
-    (output / 'checkpoint.json').write_text(json.dumps(manifest, sort_keys=True) + '\n', encoding='utf-8')
+    (output / 'checkpoint.json').write_text(
+        json.dumps(manifest, sort_keys=True) + '\\n', encoding='utf-8')
 
 
 def restore_checkpoint(source: Path, code_file: Path, folder_id: str, dest: Path) -> bool:
+    """Validate private byte/code/root binding before atomic decompression.
+
+    Schema 1 remains readable for previously published .sqlite checkpoints.
+    A corrupt gzip or mismatched raw checksum never replaces the destination.
+    """
     safe_id(folder_id)
     meta = source / 'checkpoint.json'
-    blob = source / 'audit.sqlite'
-    if not (meta.is_file() and blob.is_file()):
+    if not meta.is_file():
         return False
     try:
         manifest = json.loads(meta.read_text(encoding='utf-8'))
-        if (manifest.get('schema') != CHECKPOINT_SCHEMA or
-            manifest.get('folder_id') != folder_id or
-            manifest.get('source_audit_code_sha256') != digest(code_file) or
+        schema = manifest.get('schema')
+        if schema not in (1, 2):
+            return False
+        if (manifest.get('folder_id') != folder_id or
+            manifest.get('source_audit_code_sha256') != digest(code_file)):
+            return False
+        filename = 'audit.sqlite.gz' if schema == 2 else 'audit.sqlite'
+        if schema == 2 and manifest.get('checkpoint_file') != filename:
+            return False
+        blob = source / filename
+        if (not blob.is_file() or
             manifest.get('checkpoint_bytes') != blob.stat().st_size or
             manifest.get('checkpoint_sha256') != digest(blob)):
             return False
-    except (OSError, ValueError, TypeError):
+        if schema == 1:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(blob, dest)
+            return True
+        limit = manifest.get('uncompressed_checkpoint_bytes')
+        expected = manifest.get('uncompressed_checkpoint_sha256')
+        if (type(limit) is not int or limit <= 0 or limit > 20 * 1024**3 or
+            not isinstance(expected, str) or
+            not re.fullmatch(r'[0-9a-f]{64}', expected)):
+            return False
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix='.drive-cdb-cache-', dir=dest.parent)
+        temp_path = Path(temporary)
+        try:
+            total = 0
+            digest_raw = hashlib.sha256()
+            with os.fdopen(fd, 'wb') as target, gzip.open(blob, 'rb') as packed:
+                for chunk in iter(lambda: packed.read(1024 * 1024), b''):
+                    total += len(chunk)
+                    if total > limit:
+                        return False
+                    digest_raw.update(chunk)
+                    target.write(chunk)
+            if total != limit or digest_raw.hexdigest() != expected:
+                return False
+            os.replace(temp_path, dest)
+            return True
+        finally:
+            temp_path.unlink(missing_ok=True)
+    except (OSError, ValueError, TypeError, EOFError, json.JSONDecodeError):
         return False
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(blob, dest)
-    return True
 
 
 def main() -> None:
