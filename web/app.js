@@ -3378,12 +3378,17 @@
     const scope=String(publication?.projection_scope||'').trim().toLowerCase();
     const metric=String(publication?.projection_metric||'').trim().toLowerCase();
     const selection=String(publication?.selection_id||publication?.selection||'').trim().toLowerCase();
-    if(eventId&&selection)return `${eventId}::${market}::${scope}::${metric}::${selection}`;
+    // Player total O/U lines are distinct immutable wagers even for the same
+    // player and event. Do not collapse Over 4.5 with Under 5.5.
+    const totalContract=String(publication?.price_contract||'').toLowerCase()==='player_total_ou'
+      ?'::'+String(publication?.ou_side||'').toLowerCase()+'::'+String(publication?.market_line??'')
+      :'';
+    if(eventId&&selection)return `${eventId}::${market}::${scope}::${metric}::${selection}${totalContract}`;
     const p1=String(row?.player1?.id||row?.player1?.name||'').trim().toLowerCase();
     const p2=String(row?.player2?.id||row?.player2?.name||'').trim().toLowerCase();
     const players=[p1,p2].filter(Boolean).sort().join('::');
     const scheduled=String(row?.scheduled_at||'').trim();
-    if((scheduled||players)&&selection)return `${scheduled}::${players}::${market}::${scope}::${metric}::${selection}`;
+    if((scheduled||players)&&selection)return `${scheduled}::${players}::${market}::${scope}::${metric}::${selection}${totalContract}`;
     return String(publication?.selection_key||publication?.publication_key||`${scheduled}::${players}::${publication?.section||''}::${selection||index}`);
   }
   function memberResultCohort(plan){
