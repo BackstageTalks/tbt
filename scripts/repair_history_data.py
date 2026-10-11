@@ -22,7 +22,10 @@ import pandas as pd
 
 from _bootstrap import ROOT
 from release_store import ReleaseStore
-from tbt.data.history_snapshot import load_snapshot, write_year_partition, load_manifest
+from tbt.data.history_snapshot import (
+    load_snapshot, write_year_partition, load_manifest,
+    _interpret_wimbledon_2023_count_fields,
+)
 from tbt.data.history_safety import sanitize_history_identities, quarantine_budget
 from tbt.services.data_quality import audit_history
 from tbt.utils import is_rate_stat_field
@@ -42,7 +45,7 @@ def clean_text(value) -> str:
     return "" if text.casefold() in NULLISH else text
 
 
-def _valid_stats_json(value) -> bool:
+def _valid_stats_json(value, *, row=None) -> bool:
     if value in (None, ""):
         return True
     try:
@@ -56,6 +59,22 @@ def _valid_stats_json(value) -> bool:
         return False
     if not isinstance(data, dict):
         return False
+    if row is not None:
+        # Match the canonical reader's narrowly pinned Wimbledon 2023
+        # count-vs-rate compatibility rule before classifying a RAW row
+        # as invalid. The raw bytes are preserved; we do not normalize
+        # other matches or relax bounds on genuine rate statistics.
+        try:
+            data = _interpret_wimbledon_2023_count_fields(
+                data,
+                tour=clean_text(row.get("tour")),
+                scheduled_at=pd.to_datetime(row.get("scheduled_at"), utc=True),
+                tournament=clean_text(row.get("tournament")),
+                player1_name=clean_text(row.get("player1_name")),
+                player2_name=clean_text(row.get("player2_name")),
+            )
+        except (ValueError, TypeError):
+            return False
     for key, item in data.items():
         if item in (None, ""):
             continue
@@ -85,7 +104,7 @@ def invalid_reason(row) -> str | None:
             return "invalid_scheduled_at"
     except Exception:
         return "invalid_scheduled_at"
-    if not _valid_stats_json(row.get("stats_json")):
+    if not _valid_stats_json(row.get("stats_json"), row=row):
         return "invalid_statistics"
     return None
 
