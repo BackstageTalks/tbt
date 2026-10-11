@@ -1,0 +1,103 @@
+name: BlinQ WTA 2025 verified-ID ranking delta audit
+on:
+  pull_request:
+    paths:
+      - scripts/audit_wta2025_verified_rank_gaps.py
+      - tests/test_wta2025_verified_rank_gaps.py
+      - .github/workflows/blinq-wta2025-verified-rank-gaps.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/audit_wta2025_verified_rank_gaps.py
+      - tests/test_wta2025_verified_rank_gaps.py
+      - .github/workflows/blinq-wta2025-verified-rank-gaps.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: blinq-wta2025-rank-audit-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate exact-ID rank and point-in-time tests
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pytest
+          python -m pytest -q tests/test_wta2025_verified_rank_gaps.py
+          python -m compileall -q scripts/audit_wta2025_verified_rank_gaps.py
+  audit:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      ROOT: .cache/tbt/wta2025-rank-gaps
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Confirm private source and install pinned research reader
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$DATA_REPO" --jq .private)" = true
+          python -m pip install --quiet --retries 6 -r api/requirements-train.txt
+      - name: Verify CDB and source hashes and measure current exact null field delta
+        run: |
+          set -euo pipefail
+          python scripts/audit_wta2025_verified_rank_gaps.py --repo "$DATA_REPO" --out "$ROOT"
+          test "$(jq -r .status "$ROOT/report.json")" = READ_ONLY_WTA2025_ID_RANK_CDB_GAPS
+          test "$(jq -r .write_authorized "$ROOT/report.json")" = false
+          test "$(jq -r .canonical_mutated "$ROOT/report.json")" = false
+          test "$(jq -r .model_promoted "$ROOT/report.json")" = false
+          test "$(jq -r .provider_api_requests "$ROOT/report.json")" = 0
+      - name: Save immutable private source stage and independently read back SHA-256
+        run: |
+          set -euo pipefail
+          cd "$ROOT"
+          sha256sum report.json wta2025-rank-null-candidates.jsonl.gz > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          tag="blinq-wta2025-id-ranked-null-audit-$GITHUB_RUN_ID"
+          gh release create "$tag" -R "$DATA_REPO" --target main \
+            --title "Private read-only verified-ID historical ranking gap audit" \
+            --notes "Current 2025 CDB field-level delta; no model, provider API or CDB writes."
+          gh release upload "$tag" report.json wta2025-rank-null-candidates.jsonl.gz SHA256SUMS -R "$DATA_REPO"
+          mkdir -p reread
+          gh release download "$tag" -R "$DATA_REPO" -D reread
+          (cd reread && sha256sum -c SHA256SUMS)
+          cmp report.json reread/report.json
+          python - <<'PY'
+          import gzip,hashlib,json
+          from pathlib import Path
+          d=json.loads(Path("reread/report.json").read_text())
+          f=Path("reread/wta2025-rank-null-candidates.jsonl.gz")
+          assert hashlib.sha256(f.read_bytes()).hexdigest()==d["stage_sha256"]
+          with gzip.open(f,"rt") as stream:
+              total=sum(1 for row in stream if row.strip())
+          assert total==d["counts"].get("candidate_matches",0)
+          assert d["canonical_mutated"] is False and d["provider_api_requests"]==0
+          print("WTA_RANK_GAP_PRIVATE_READBACK_VERIFIED",d["counts"])
+          PY
+      - name: Keep only aggregate QA on public CI artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wta2025-ranked-null-aggregate-${{ github.run_id }}
+          path: .cache/tbt/wta2025-rank-gaps/report.json
+          retention-days: 30
+          if-no-files-found: warn
