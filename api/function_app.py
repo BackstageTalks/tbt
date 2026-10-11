@@ -1879,7 +1879,7 @@ def internal_match_status_worker(req):
                 # be checked in one run. 20 near calls + one live call stays
                 # below the hard client cap of 24.
                 max_near_checks=20,
-                max_wall_seconds=18.0,
+                max_wall_seconds=22.0,
             )
             # Only issued Aces/DF offers qualify for post-match statistics.
             # Reuse the same client/quota; never start an unbounded enrichment.
