@@ -17,6 +17,13 @@ from pathlib import Path
 REPO = os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data")
 TOKEN = os.getenv("TBT_DATA_GH_TOKEN", "").strip()
 ROOT = "research/propline_clv"
+# These raw markets are already present in the archived bookmaker snapshots.
+# Compare only identical bookmaker, named player, line and side.
+MARKETS_WITH_CLV = frozenset({
+    "h2h", "spreads", "totals", "total_games", "total_sets",
+    "total_tiebreaks", "player_aces", "player_double_faults",
+    "total_aces", "player_games_won", "player_break_points_won",
+})
 
 def gh_contents(path):
     if not TOKEN:
@@ -116,8 +123,7 @@ def evaluate(snapshots):
                 book_id = book.get("key") or book.get("title") or book.get("name")
                 for market in book.get("markets", []):
                     market_id = market.get("key")
-                    if market_id not in ("h2h", "spreads", "totals", "total_games",
-                                         "total_sets", "total_tiebreaks"):
+                    if market_id not in MARKETS_WITH_CLV:
                         continue
                     for outcome in market.get("outcomes", []):
                         odds = decimal(outcome.get("price"))
