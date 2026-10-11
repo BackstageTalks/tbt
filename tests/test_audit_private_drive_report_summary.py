@@ -9,7 +9,8 @@ from scripts.audit_private_drive_report_summary import summarize
 
 YEAR = 'a' * 64
 
-def create_bundle(where, candidate_lines=(), report_overrides=None, tamper_digest=False):
+def create_bundle(where, candidate_lines=(), report_overrides=None, tamper_digest=False,
+                  file_rows=None):
     files = {
         'report.json': json.dumps({
             'inventory_complete': True, 'cdb_writes': 0, 'approved_fields': 0,
@@ -20,7 +21,7 @@ def create_bundle(where, candidate_lines=(), report_overrides=None, tamper_diges
             **(report_overrides or {})
         }).encode(),
         'candidate-fields.jsonl': b''.join(json.dumps(x).encode() + b'\n' for x in candidate_lines),
-        'files.json': b'[{},{}]',
+        'files.json': json.dumps(file_rows if file_rows is not None else [{},{}]).encode(),
         'run-evidence.txt': b'audit_outcome=success\n'
     }
     files['SHA256SUMS'] = ''.join(f'{hashlib.sha256(v).hexdigest()}  {k}\n'
@@ -54,6 +55,20 @@ class SummaryTests(unittest.TestCase):
             found = summarize(path, digest, YEAR)
             self.assertEqual(found['candidate_evidence_identity_kinds'], {'sackmann_research': 1})
             self.assertEqual(found['approved_to_import'], 0)
+
+    def test_unsupported_format_census_never_leaks_filename(self):
+        with tempfile.TemporaryDirectory() as d:
+            names = [
+                {'name':'PERSONAL-PRIVATE-CASE.tar.gz', 'status':'NEEDS_FORMAT_ADAPTER'},
+                {'name':'another-private-source.json', 'status':'NEEDS_FORMAT_ADAPTER'}
+            ]
+            path, digest = create_bundle(Path(d), file_rows=names,
+                 report_overrides={'file_statuses': {'NEEDS_FORMAT_ADAPTER':2}})
+            found = summarize(path, digest, YEAR)
+            self.assertEqual(found['unprocessed_extensions_by_status'],
+                {'NEEDS_FORMAT_ADAPTER': {'.tar.gz':1, '.json':1}})
+            self.assertNotIn('PERSONAL', json.dumps(found))
+            self.assertNotIn('another-private', json.dumps(found))
 
     def test_bad_bundle_sha(self):
         with tempfile.TemporaryDirectory() as d:
