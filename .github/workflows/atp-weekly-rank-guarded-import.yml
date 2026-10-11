@@ -1,0 +1,286 @@
+name: BlinQ governed ATP weekly historical rank CDB import
+
+on:
+  pull_request:
+    paths:
+      - "scripts/import_atp_weekly_rank_exact_cells.py"
+      - "tests/test_atp_weekly_rank_exact_cells.py"
+      - ".github/workflows/atp-weekly-rank-guarded-import.yml"
+      - ".github/atp-weekly-rank-publish-request.json"
+  push:
+    branches: [main]
+    paths: [".github/atp-weekly-rank-publish-request.json"]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: blinq-atp-weekly-rank-guarded-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  guarded-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      ROOT: .cache/tbt/atp-weekly-rank-publish
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      STAGE_TAG: blinq-atp-weekly-rank-current-38124276216
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate exact operator-approved import request
+        id: gate
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$PRIVATE_REPO" --json visibility -q .visibility)" = PRIVATE
+          r=.github/atp-weekly-rank-publish-request.json
+          test "$(jq -r .schema "$r")" = 1
+          test "$(jq -r .source_tag "$r")" = "$STAGE_TAG"
+          test "$(jq -r .source_run_id "$r")" = 38124276216
+          test "$(jq -c .affected_years "$r")" = '[2024,2025,2026]'
+          test "$(jq -r .expected_stage_rows "$r")" = 2076
+          test "$(jq -r .expected_eligible_matches "$r")" = 2034
+          test "$(jq -r .expected_added_ranks "$r")" = 4068
+          test "$(jq -r .allow_existing_overwrite "$r")" = false
+          test "$(jq -r .require_global_lock "$r")" = true
+          test "$(jq -r .require_immutable_backup "$r")" = true
+          test "$(jq -r .require_full_year_readback "$r")" = true
+          test "$(jq -r .train_model "$r")" = false
+          test "$(jq -r .promote_model "$r")" = false
+          test "$(jq -r .rapidapi_requests "$r")" = 0
+          mode=dry-run
+          if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main ]]; then
+            mode="$(jq -r .mode "$r")"
+          fi
+          [[ "$mode" == dry-run || "$mode" == write ]]
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+      - name: Focused rank source, PIT, no-overwrite regression
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements.txt -r api/requirements-train.txt pytest
+          python -m pytest -q tests/test_atp_weekly_rank_exact_cells.py tests/test_atp_rank_history_contract.py
+          python -m compileall -q scripts/import_atp_weekly_rank_exact_cells.py
+
+      - name: Download source-stage rows into private runner; pin SHA of all assets
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/stage" "$ROOT/baseline" "$ROOT/local" "$ROOT/dry"
+          gh release download "$STAGE_TAG" -R "$PRIVATE_REPO" -D "$ROOT/stage"
+          (cd "$ROOT/stage" && sha256sum -c SHA256SUMS)
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])/"stage"
+          meta=json.loads((root/"atp-rank-source-pin.json").read_text())
+          report=json.loads((root/"atp-rank-dry-report.json").read_text())
+          assert report["stage_rows"]==2076
+          assert report["counts"]["updated"]==2034
+          assert report["counts"]["player1_rank_filled"]==2034
+          assert report["counts"]["player2_rank_filled"]==2034
+          assert report["counts"]["stale_snapshot_rejected"]==42
+          assert meta["upstream_git_commit"]=="247f2f5e86b9e142a7ead7b0e8b3dfb5ee6abb28"
+          assert meta["production_mutated"] is False
+          print("ATP_RANK_PRIVATE_SOURCE_STAGE_PINNED",meta["upstream_source_sha256"])
+          PY
+
+      - name: Download latest private CDB and verify source cohort's original year SHAs
+        run: |
+          set -euo pipefail
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -D "$ROOT/baseline" \
+            -p history-2024.parquet -p history-2025.parquet -p history-2026.parquet \
+            -p history_manifest.json -p _tbt_bundle_manifest.json
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > "$ROOT/baseline/release.json"
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          d=root/"baseline"
+          pin=json.loads((root/"stage/atp-rank-source-pin.json").read_text())
+          manifest=json.loads((d/"history_manifest.json").read_text())
+          bundle=json.loads((d/"_tbt_bundle_manifest.json").read_text())
+          release=json.loads((d/"release.json").read_text())
+          digests={a["name"]:a["digest"] for a in release["assets"]}
+          assert set(pin["years"])=={"2024","2025","2026"}
+          for year in ("2024","2025","2026"):
+            name=f"history-{year}.parquet"
+            hash_=hashlib.sha256((d/name).read_bytes()).hexdigest()
+            assert pin["years"][year]==hash_, f"{year}: stale stage/CDB"
+            assert manifest["years"][year]["sha256"]==hash_
+            assert bundle["files"][name]["sha256"]==hash_
+            assert digests[name]=="sha256:"+hash_
+          for name in ("history_manifest.json","_tbt_bundle_manifest.json"):
+            hash_=hashlib.sha256((d/name).read_bytes()).hexdigest()
+            assert digests[name]=="sha256:"+hash_
+          assert bundle["files"]["history_manifest.json"]["sha256"]==hashlib.sha256((d/"history_manifest.json").read_bytes()).hexdigest()
+          print("ATP_RANK_CDB_3_YEAR_SOURCE_BASELINE_SHA_MATCH")
+          PY
+
+      - name: Strict original-cell dry-run and full-year isolated patch/readback
+        run: |
+          set -euo pipefail
+          stage="$ROOT/stage/atp-rank-fill-candidates.jsonl"
+          pin="$ROOT/stage/atp-rank-source-pin.json"
+          report="$ROOT/stage/atp-rank-dry-report.json"
+          python scripts/import_atp_weekly_rank_exact_cells.py --mode dry-run \
+            --before-dir "$ROOT/baseline" --after-dir "$ROOT/local" \
+            --stage-file "$stage" --pin-file "$pin" --dry-report-file "$report" \
+            --out "$ROOT/dry/counts.json"
+          test "$(jq -r .counts.changed_matches "$ROOT/dry/counts.json")" = 2034
+          test "$(jq -r '.counts.player1_rank_filled+.counts.player2_rank_filled' "$ROOT/dry/counts.json")" = 4068
+          python scripts/import_atp_weekly_rank_exact_cells.py --mode write \
+            --before-dir "$ROOT/baseline" --after-dir "$ROOT/local" \
+            --stage-file "$stage" --pin-file "$pin" --dry-report-file "$report" \
+            --out "$ROOT/dry/local-write.json"
+          python scripts/import_atp_weekly_rank_exact_cells.py --mode verify \
+            --before-dir "$ROOT/baseline" --after-dir "$ROOT/local" \
+            --stage-file "$stage" --pin-file "$pin" --dry-report-file "$report" \
+            --out "$ROOT/dry/local-verified.json"
+          test "$(jq -r .existing_nonnull_ranks_overwritten "$ROOT/dry/local-verified.json")" = 0
+          test "$(jq -r .status "$ROOT/dry/local-verified.json")" = verified_exact_full_year
+
+      - name: Acquire global private CDB writer lock
+        if: steps.gate.outputs.mode == 'write'
+        run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1800
+
+      - name: CAS reverify original canonical years and both remote manifests
+        if: steps.gate.outputs.mode == 'write'
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          mkdir -p "$ROOT/remote-before"
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -D "$ROOT/remote-before" \
+            -p history-2024.parquet -p history-2025.parquet -p history-2026.parquet \
+            -p history_manifest.json -p _tbt_bundle_manifest.json
+          for name in history-2024.parquet history-2025.parquet history-2026.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cmp "$ROOT/baseline/$name" "$ROOT/remote-before/$name"
+          done
+
+      - name: Publish and independently read back immutable prewrite backup
+        if: steps.gate.outputs.mode == 'write'
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/backup" "$ROOT/backup-readback"
+          for name in history-2024.parquet history-2025.parquet history-2026.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cp "$ROOT/baseline/$name" "$ROOT/backup/$name"
+          done
+          cp "$ROOT/stage/atp-rank-source-pin.json" "$ROOT/backup/source-pin.json"
+          cp "$ROOT/stage/atp-rank-stage-report.json" "$ROOT/backup/source-report.json"
+          cp "$ROOT/stage/atp-rank-fill-candidates.jsonl" "$ROOT/backup/source-stage.jsonl"
+          (
+            cd "$ROOT/backup"
+            sha256sum history-*.parquet history_manifest.json _tbt_bundle_manifest.json source* > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          tag="blinq-atp-weekly-rank-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" "$ROOT/backup/"* -R "$PRIVATE_REPO" \
+            --title "ATP historical rank prewrite immutable complete affected-year backup" \
+            --notes "Three full original canonical years, source stage and manifests; rollback."
+          gh release download "$tag" -R "$PRIVATE_REPO" -D "$ROOT/backup-readback"
+          (cd "$ROOT/backup-readback" && sha256sum -c SHA256SUMS)
+
+      - name: Publish three rank-patched years and bundle manifest LAST
+        if: steps.gate.outputs.mode == 'write'
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from cdb_global_writer_lock import verify
+          root=Path(os.environ["ROOT"])
+          repo=os.environ["PRIVATE_REPO"]
+          old=json.loads((root/"baseline/_tbt_bundle_manifest.json").read_text())["files"]
+          def compare_immediately():
+              verify(repo,Path(".cdb-global-writer-lock.json"))
+              remote=ReleaseStore(repo,"tbt-data-v1",root/"cas-remote")
+              current=remote._remote_bundle_files()
+              if current!=old:
+                  raise ValueError("CAS failed: another writer modified release manifest")
+          ReleaseStore(repo,"tbt-data-v1",root/"local").upload_bundle(
+              [root/f"local/history-{y}.parquet" for y in (2024,2025,2026)]+
+              [root/"local/history_manifest.json"],
+              before_upload=compare_immediately)
+          PY
+
+      - name: Re-download and full-year compare all 2024–2026 canonical records
+        if: steps.gate.outputs.mode == 'write'
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/production-readback" "$ROOT/verified"
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -D "$ROOT/production-readback" \
+            -p history-2024.parquet -p history-2025.parquet -p history-2026.parquet \
+            -p history_manifest.json -p _tbt_bundle_manifest.json
+          python scripts/import_atp_weekly_rank_exact_cells.py --mode verify \
+            --before-dir "$ROOT/baseline" --after-dir "$ROOT/production-readback" \
+            --stage-file "$ROOT/stage/atp-rank-fill-candidates.jsonl" \
+            --pin-file "$ROOT/stage/atp-rank-source-pin.json" \
+            --dry-report-file "$ROOT/stage/atp-rank-dry-report.json" \
+            --out "$ROOT/verified/full-three-year-readback.json"
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          r=json.loads((root/"verified/full-three-year-readback.json").read_text())
+          assert r["status"]=="verified_exact_full_year"
+          assert r["counts"]["changed_matches"]==2034
+          assert r["counts"]["player1_rank_filled"]+r["counts"]["player2_rank_filled"]==4068
+          assert r["existing_nonnull_ranks_overwritten"]==0
+          for y in (2024,2025,2026):
+              name=f"history-{y}.parquet"
+              assert hashlib.sha256((root/"local"/name).read_bytes()).hexdigest()==hashlib.sha256((root/"production-readback"/name).read_bytes()).hexdigest()
+          assert (root/"local/history_manifest.json").read_bytes()==(root/"production-readback/history_manifest.json").read_bytes()
+          print("ATP_RANK_PRODUCTION_FULL_3_YEAR_READBACK_PASS",json.dumps(r,sort_keys=True))
+          PY
+
+      - name: Persist successful rank import proof in PRIVATE data repo
+        if: steps.gate.outputs.mode == 'write'
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg run "$GITHUB_RUN_ID" --arg sha "$GITHUB_SHA" \
+            --arg backup "blinq-atp-weekly-rank-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --slurpfile proof "$ROOT/verified/full-three-year-readback.json" \
+            --slurpfile src "$ROOT/stage/atp-rank-source-pin.json" \
+            '{schema:1,status:"published_and_independently_verified",run_id:$run,app_sha:$sha,
+              immutable_prewrite_backup:$backup,stage_source_pin:$src[0],
+              full_year_readback:$proof[0],source_uses_pre_match_weekly_pit:true,
+              overwritten_existing_ranks:0,model_trained:false,model_promoted:false,provider_requests:0}' \
+              > "$ROOT/verified/private-persisted-report.json"
+          path=audit/atp-weekly-rank-2024-2026-import-latest.json
+          b64="$(base64 -w0 "$ROOT/verified/private-persisted-report.json")"
+          old="$(gh api "repos/$PRIVATE_REPO/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$old" ]]; then
+            gh api -X PUT "repos/$PRIVATE_REPO/contents/$path" \
+              -f message="Record verified ATP rank import $GITHUB_RUN_ID" -f content="$b64" -f sha="$old" >/dev/null
+          else
+            gh api -X PUT "repos/$PRIVATE_REPO/contents/$path" \
+              -f message="Record verified ATP rank import $GITHUB_RUN_ID" -f content="$b64" >/dev/null
+          fi
+
+      - name: Save counts ONLY as public Actions artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-atp-weekly-rank-import-counts-${{ github.run_id }}
+          path: |
+            .cache/tbt/atp-weekly-rank-publish/dry/counts.json
+            .cache/tbt/atp-weekly-rank-publish/dry/local-write.json
+            .cache/tbt/atp-weekly-rank-publish/dry/local-verified.json
+            .cache/tbt/atp-weekly-rank-publish/verified/full-three-year-readback.json
+          retention-days: 45
+          if-no-files-found: warn
+
+      - name: Release global writer lock, including failure paths
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
