@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "mode": "dry-run",
+  "year": 2026,
+  "stage_release": "blinq-wta2026-id-ranked-null-audit-38124637314",
+  "stage_sha256": "d8353bb92c8fbca596cf8d423ef926bbeb2d6ae51d3e4ddd686d23837d3976f4",
+  "original_year_sha256": "b945528573a8488a5c03eec66b0987791939313cc1099b12d44a9d4a95893bc6",
+  "expected_added_rank_values": 19688,
+  "expected_changed_matches": 9844,
+  "allow_existing_overwrite": false,
+  "require_global_lock": true,
+  "require_immutable_backup": true,
+  "require_full_year_readback": true,
+  "train_model": false,
+  "promote_model": false,
+  "provider_api_requests": 0
+}
