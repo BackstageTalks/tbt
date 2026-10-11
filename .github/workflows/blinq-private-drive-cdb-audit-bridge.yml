@@ -273,3 +273,53 @@ jobs:
             echo 'Check the checkpoint step before claiming this batch can resume. Full evidence is in the private tbt-data releases.'
             echo 'No schedule is installed. External cron can invoke workflow_dispatch on main with batch_files and download_mb.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  private-data-pr137-synthetic:
+    # Temporary trusted same-repository PR test vehicle; no private source
+    # files printed/uploaded; no live Drive scan or CDB writers.
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    permissions:
+      contents: read
+    steps:
+      - name: Verify private-source token is present
+        env:
+          PRIVATE_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          test -n "$PRIVATE_TOKEN" || { echo 'PRIVATE_TEST_TOKEN_UNAVAILABLE'; exit 1; }
+      - name: Check out SHA-pinned private PR code (do not expose contents)
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 8c7f15e730b4a660aab3b47037a1ccabdde7b809
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run synthetic scanner safety tests with private-only logs
+        shell: bash
+        working-directory: private
+        run: |
+          set -euo pipefail
+          mkdir -p ../work-private
+          if python -m unittest discover -s tests -p test_drive_cdb_audit.py -v > ../work-private/tests.log 2>&1 &&
+             python -m unittest discover -s tests -p test_wta_xlsx_research.py -v >> ../work-private/tests.log 2>&1 &&
+             python -m compileall -q scripts/drive_cdb_audit.py; then
+            echo PRIVATE_DRIVE_SCAN_PRIORITIZATION_SYNTHETIC_TESTS_PASS
+          else
+            echo PRIVATE_DRIVE_SCAN_PRIORITIZATION_SYNTHETIC_TESTS_FAILED
+            exit 1
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('scripts/drive_cdb_audit.py').read_text()
+          assert "action='store_true'" in s
+          assert 'else inventory' in s
+          assert "'approved_fields': 0, 'cdb_writes': 0" in s
+          assert "'import_ready': False" in s
+          assert 'for item in ordered:' in s
+          print('PRIVATE_DRIVE_SCAN_ZERO_WRITE_AND_OPT_IN_GATE_PASS')
+          PY
