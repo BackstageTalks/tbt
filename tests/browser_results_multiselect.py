@@ -129,7 +129,14 @@ def main():
                 page.locator('input[data-result-category="doubles"]').check()
                 assert table.count() == 6, (scenario, "including doubles")
                 assert "Štvorhra" in page.locator(".results-table tbody .result-tag").all_inner_texts(), scenario
+                # Simulate the reported mismatch: boxes visually remain
+                # checked, but the previously serialized category is stale.
+                # A checkbox change must recompute the union from the DOM.
+                page.evaluate("resultsMultiTest.state.resultsFilters.category='top_daily'")
                 page.locator('input[data-result-category="top_daily"]').uncheck()
+                assert page.evaluate("resultsMultiTest.state.resultsFilters.category") == (
+                    'value,ace,double_faults,sets,games,doubles'
+                ), scenario
                 assert table.count() == 6
                 assert page.locator(".results-table tbody tr .result-tag").all_inner_texts().count("TOP") == 0
                 assert "Value" in page.locator(".results-table tbody tr .result-tag").all_inner_texts()
