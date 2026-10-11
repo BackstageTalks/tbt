@@ -1,0 +1,78 @@
+name: BlinQ Wimbledon 2023 exact 72-cell retention audit (read only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-wimbledon2023-retention72-readonly.yml
+      - scripts/audit_wimbledon2023_retention72.py
+      - tests/test_audit_wimbledon2023_retention72.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-wimbledon2023-retention72-readonly
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run seven synthetic fail-closed tests
+        run: python -m unittest discover -s tests -p test_audit_wimbledon2023_retention72.py -v
+      - name: Check private read access
+        run: |
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = true
+      - name: Install local Parquet-only verifier dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow
+      - name: Download SHA-pinned published source and immutable evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/retention72/{current,prewrite,first,extended}
+          gh release download tbt-data-v1 --repo BackstageTalks/tbt-data \
+            --pattern history-2023.parquet --dir .cache/retention72/current
+          gh release download blinq-wimbledon2023-five-prewrite-38139123689-1 \
+            --repo BackstageTalks/tbt-data --pattern history-2023.parquet \
+            --dir .cache/retention72/prewrite
+          gh release download blinq-wimbledon2023-prewrite-38088710208-1 \
+            --repo BackstageTalks/tbt-data --pattern observations.jsonl \
+            --dir .cache/retention72/first
+          gh release download blinq-wimbledon2023-extended-prewrite-38096066251-1 \
+            --repo BackstageTalks/tbt-data --pattern observations.jsonl \
+            --dir .cache/retention72/extended
+      - name: Independently verify 107760 rows and all 72 values, read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/audit_wimbledon2023_retention72.py \
+            --prewrite .cache/retention72/prewrite/history-2023.parquet \
+            --current .cache/retention72/current/history-2023.parquet \
+            --first .cache/retention72/first/observations.jsonl \
+            --extended .cache/retention72/extended/observations.jsonl \
+            --report .cache/retention72/retention-result.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('.cache/retention72/retention-result.json').read_text())
+          assert d['status']=='EXACT_72_HISTORIC_CELLS_RETAINED'
+          assert d['verified_values']==72 and d['verified_matches']==5
+          assert d['existing_rows_exactly_preserved']==107760
+          assert d['restored_rows_exactly_5']==5
+          assert d['existing_values_overwritten']==0
+          assert d['cdb_writes']==0 and d['model_training'] is False
+          print('READ_ONLY_WIMBLEDON2023_VERIFIED 72 historical fields, 5 restored rows, 107760 common rows exact')
+          PY
+      - name: Remove private source bytes even on failure
+        if: always()
+        run: rm -rf .cache/retention72
