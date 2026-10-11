@@ -1,0 +1,56 @@
+name: BlinQ WTA 2024 score and game observations from pinned source
+on:
+  pull_request:
+    paths:
+      - "scripts/prepare_wta2024_score_observations.py"
+      - "tests/test_wta2024_score_observations.py"
+      - ".github/workflows/wta2024-score-observations.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: wta2024-score-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  parse-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Exact finished set and game regression
+        run: |
+          python -m pip install pytest
+          python -m pytest --noconftest -q tests/test_wta2024_score_observations.py
+          python -m py_compile scripts/prepare_wta2024_score_observations.py
+      - name: SHA-verified real archived WTA singles 2024 source extract
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/wta2024/inputs .cache/wta2024/stage
+          gh release download blinq-tennisexplorer-cloud-20261009 -R BackstageTalks/tbt-data \
+            -p txe-wta-single-2024.tar.gz -D .cache/wta2024/inputs
+          python scripts/prepare_wta2024_score_observations.py \
+            --archive .cache/wta2024/inputs/txe-wta-single-2024.tar.gz \
+            --out .cache/wta2024/stage
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path(".cache/wta2024/stage/report.json")
+          r=json.loads(p.read_text())
+          assert r["counts"]["source_rows"]==45143
+          assert r["counts"]["parsed_completed_score_rows"]>0
+          assert r["cdb_writes"]==0 and r["trained_or_promoted"] is False
+          print("REAL_SOURCE_SCORE_COUNTS",json.dumps(r["counts"],sort_keys=True))
+          PY
+      - name: Store immutable stage/report for next exact ID intersection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-wta2024-source-scores-${{ github.run_id }}
+          path: .cache/wta2024/stage/
+          retention-days: 45
+          if-no-files-found: warn
