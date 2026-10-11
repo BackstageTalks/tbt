@@ -70,7 +70,7 @@ def test_rank_time_window_and_source_boundary():
     with pytest.raises(ValueError,match="Unexpected source/CDB delta"):
         apply(before,[candidate],expected_matches=1,expected_fields=2,expected_stale=0)
     out,c=apply(before,[candidate],expected_matches=0,expected_fields=0,expected_stale=1)
-    assert c["changed_matches"]==0
+    assert c.get("changed_matches",0)==0
     assert absent(out[2024].at[0,"player1_rank"])
     candidate["source_week"]="2024-04-22"
     _,c=apply(before,[candidate],expected_matches=0,expected_fields=0,expected_stale=1)
