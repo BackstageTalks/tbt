@@ -1,0 +1,69 @@
+name: One-time safe resume WTA Singles 2025
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-once-resume-wta-single-2025.yml
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: blinq-cdb-shard-txe-wta-single-2025
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    if: startsWith(github.event.head_commit.message, 'One-time safe resume WTA Singles 2025')
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check exact failed source shard and provider capacity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          jobs=$(gh api 'repos/BackstageTalks/tbt/actions/runs/37987229156/jobs?per_page=100')
+          failed=$(jq '[.jobs[] | select(.name == "collect (wta-single, 2025)" and .conclusion == "failure")] | length' <<<"$jobs")
+          original_active=$(jq '[.jobs[] | select(.status == "in_progress" and (.name | startswith("collect (")))] | length' <<<"$jobs")
+          if [[ "$failed" != 1 ]]; then echo 'Original shard not failed; abort' >&2; exit 2; fi
+          recovery=$(gh api 'repos/BackstageTalks/tbt/actions/runs?status=in_progress&per_page=100')
+          current_recovery=$(jq '[.workflow_runs[] | select(.name == "BlinQ CDB source shard recovery (checkpoint chain)")] | length' <<<"$recovery")
+          if (( original_active + current_recovery >= 4 )); then
+            echo "Capacity full: original=$original_active recovery=$current_recovery. No extra provider requests." >&2
+            exit 2
+          fi
+          # The original failed job is disjoint from any active job for this exact year/category.
+          same_active=$(jq '[.jobs[] | select(.name == "collect (wta-single, 2025)" and .status == "in_progress")] | length' <<<"$jobs")
+          [[ "$same_active" == 0 ]] || { echo 'Duplicate active source job; abort' >&2; exit 2; }
+      - name: Verify SHA-pinned private release checkpoint exists
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          gh api 'repos/BackstageTalks/tbt-data/releases/tags/blinq-tennisexplorer-cloud-20261009' > /tmp/source-release.json
+          python - <<'PY'
+          import json,re
+          data=json.load(open('/tmp/source-release.json'))
+          assets=[a for a in data.get('assets',[])
+             if a.get('name') == 'txe-wta-single-2025.tar.gz'
+             and a.get('size',0) > 1000000
+             and re.fullmatch(r'sha256:[a-fA-F0-9]{64}',a.get('digest') or '')]
+          if len(assets) != 1:
+              raise SystemExit('No eligible private source checkpoint with SHA-256; no dispatch')
+          print('SOURCE_CHECKPOINT_FOUND',assets[0]['name'],assets[0]['size'])
+          PY
+      - name: Dispatch one checkpoint resume, no database writes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run blinq-cdb-shard-autorecovery.yml --repo BackstageTalks/tbt --ref main \
+             -f task=txe-wta-single-2025 -f iteration=1
+          echo 'DISPATCHED_ONE source-only txe-wta-single-2025; existing shards unchanged'
