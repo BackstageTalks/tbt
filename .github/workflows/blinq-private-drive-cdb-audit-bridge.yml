@@ -182,6 +182,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p work/cache-export work/cache-verify
+          cache_bytes="$(stat -c '%s' work/cache/audit.sqlite)"
+          if (( cache_bytes > 268435456 )); then
+            echo 'CHECKPOINT_OVER_256_MIB_SKIPPED_NO_EXTRA_STORAGE'
+            exit 0
+          fi
           python scripts/drive_cdb_private_bridge.py write-checkpoint --cache-file work/cache/audit.sqlite --code-file private/scripts/drive_cdb_audit.py --folder-id "$DRIVE_ROOT" --output work/cache-export
           if ! gh release view "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" >/dev/null 2>&1; then
             gh release create "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" --target main --title 'Private read-only Drive source checkpoint' --notes 'Cached observations only. Not an import.' >/dev/null
