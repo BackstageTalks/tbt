@@ -25,6 +25,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install already-used ATP parser dependency
+        run: python -m pip install --disable-pip-version-check beautifulsoup4
       - name: Validate regex and bounded archive inspection on offline fixtures
         run: |
           python -m py_compile scripts/inspect_atp_rejected_source.py scripts/test_inspect_atp_rejected_source.py
@@ -45,6 +47,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install already-used ATP parser dependency
+        run: python -m pip install --disable-pip-version-check beautifulsoup4
       - name: Read exactly one SHA-verified 2006 rejected source sample
         shell: bash
         run: |
