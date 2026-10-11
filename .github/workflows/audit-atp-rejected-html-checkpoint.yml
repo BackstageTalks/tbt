@@ -1,0 +1,70 @@
+name: Inspect rejected ATP HTML private source checkpoint
+
+on:
+  pull_request:
+    paths:
+      - scripts/inspect_atp_rejected_source.py
+      - scripts/test_inspect_atp_rejected_source.py
+      - .github/workflows/audit-atp-rejected-html-checkpoint.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/inspect_atp_rejected_source.py
+      - scripts/test_inspect_atp_rejected_source.py
+      - .github/workflows/audit-atp-rejected-html-checkpoint.yml
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate regex and bounded archive inspection on offline fixtures
+        run: |
+          python -m py_compile scripts/inspect_atp_rejected_source.py scripts/test_inspect_atp_rejected_source.py
+          python scripts/test_inspect_atp_rejected_source.py
+
+  inspect-private-checkpoint:
+    needs: offline
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      REPO: BackstageTalks/tbt-data
+      TAG: blinq-cloud-atptour-20261009
+      ASSET: blinq-atp-archive-2006-37988671325-1.tar.gz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read exactly one SHA-verified 2006 rejected source sample
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          gh api "repos/$REPO/releases/tags/$TAG" > /tmp/blinq-release.json
+          digest=$(python - <<'PY'
+          import json,os,re
+          data=json.load(open("/tmp/blinq-release.json"))
+          candidates=[a for a in data["assets"] if a["name"]==os.environ["ASSET"]]
+          if len(candidates)!=1:
+              raise SystemExit("Expected one immutable named private archive")
+          sha=candidates[0].get("digest") or ""
+          if not re.fullmatch(r"sha256:[0-9a-fA-F]{64}",sha):
+              raise SystemExit("Release asset is missing SHA-256")
+          print(sha)
+          PY
+          )
+          mkdir -p /tmp/blinq-atp-rejected
+          gh release download "$TAG" --repo "$REPO" --pattern "$ASSET" --dir /tmp/blinq-atp-rejected
+          python scripts/inspect_atp_rejected_source.py \
+            --checkpoint "/tmp/blinq-atp-rejected/$ASSET" --sha256 "$digest"
+          echo "Source-only forensic diagnostic, 0 ATP requests and 0 CDB writes"
