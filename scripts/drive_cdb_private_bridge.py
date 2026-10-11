@@ -96,7 +96,7 @@ def write_checkpoint(cache_file: Path, code_file: Path, folder_id: str, output: 
         'uncompressed_checkpoint_bytes': cache_file.stat().st_size,
     }
     (output / 'checkpoint.json').write_text(
-        json.dumps(manifest, sort_keys=True) + '\\n', encoding='utf-8')
+        json.dumps(manifest, sort_keys=True) + '\n', encoding='utf-8')
 
 
 def restore_checkpoint(source: Path, code_file: Path, folder_id: str, dest: Path) -> bool:
