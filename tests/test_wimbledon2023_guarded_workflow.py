@@ -39,3 +39,15 @@ def test_global_writer_lock_and_immutable_full_remote_readback():
     assert "remote-after/history-2023.parquet" in text
     assert "prewrite-readback" in text
     assert "sha256sum -c SHA256SUMS" in text
+
+
+
+def test_publish_installs_parquet_dependencies_before_first_validator_import():
+    """Regression: first publish failed at pandas import before the pip install."""
+    text = FLOW.read_text()
+    start = text.index("name: Require private release and immutable pinned one-time request")
+    stop = text.index("name: Independently verify immutable source", start)
+    validation_step = text[start:stop]
+    install = validation_step.index("python -m pip install -q -r api/requirements-train.txt")
+    check = validation_step.index("python scripts/prepare_wimbledon2023_guarded_restore.py")
+    assert install < check, "pandas is imported by the validator before dependency setup"
