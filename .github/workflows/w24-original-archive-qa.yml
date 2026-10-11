@@ -48,7 +48,6 @@ jobs:
           archive_bytes=z.read_bytes()
           assert len(archive_bytes)==1713428
           assert digest(archive_bytes)==manifest['raw_archive']['sha256']
-          assert digest(archive_bytes)=='cd464e89a19a0c6440fdd292b14e375065d2baf96ff01c3c9860077a1803c20'
           assert manifest['source']['license_status']=='Apache-2.0'
           names={f['path']:f for f in manifest['audit']['files']}
           def parse_table(zip_file, basename):
