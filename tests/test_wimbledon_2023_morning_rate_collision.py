@@ -72,3 +72,73 @@ def test_pinned_bad_counts_fail_closed(bad):
             tournament="Wimbledon", player1_name="Ons Jabeur",
             player2_name="Elena Rybakina",
         )
+
+
+
+@pytest.mark.parametrize("player1,player2,date", [
+    ("Ons Jabeur", "Elena Rybakina", "2023-07-12T12:00:00Z"),
+    ("Madison Keys", "Aryna Sabalenka", "2023-07-12T12:30:00Z"),
+    ("Ons Jabeur", "Aryna Sabalenka", "2023-07-13T12:30:00Z"),
+    ("Elina Svitolina", "Marketa Vondrousova", "2023-07-13T14:15:00Z"),
+    ("Marketa Vondrousova", "Ons Jabeur", "2023-07-15T13:00:00Z"),
+])
+def test_repair_raw_wimbledon_2023_count_rows_match_canonical_reader(
+    player1, player2, date
+):
+    import json
+    from scripts.repair_history_data import invalid_reason
+
+    row = {
+        "match_id": "wimbledon-fixture",
+        "player1_id": "101",
+        "player2_id": "202",
+        "player1_name": player1,
+        "player2_name": player2,
+        "tour": "wta",
+        "tournament": "Wimbledon",
+        "scheduled_at": date,
+        "stats_json": json.dumps({
+            "p1_break_points_won": 4,
+            "p2_break_points_won": 0,
+            "p1_aces": 8,
+        }),
+    }
+    assert invalid_reason(row) is None
+
+
+@pytest.mark.parametrize("changes", [
+    {"tour": "atp"},
+    {"tournament": "US Open"},
+    {"scheduled_at": "2024-07-12T12:00:00Z"},
+    {"player2_name": "Unrelated Player"},
+])
+def test_repair_still_quarantines_other_out_of_range_rate_rows(changes):
+    import json
+    from scripts.repair_history_data import invalid_reason
+
+    row = {
+        "match_id": "not-pinned",
+        "player1_id": "101", "player2_id": "202",
+        "player1_name": "Ons Jabeur", "player2_name": "Elena Rybakina",
+        "tour": "wta", "tournament": "Wimbledon",
+        "scheduled_at": "2023-07-12T12:00:00Z",
+        "stats_json": json.dumps({"p2_break_points_won": 4}),
+        **changes,
+    }
+    assert invalid_reason(row) == "invalid_statistics"
+
+
+@pytest.mark.parametrize("bad", [-1, 0.5, 201, True])
+def test_repair_rejects_invalid_pinned_count_even_for_known_match(bad):
+    import json
+    from scripts.repair_history_data import invalid_reason
+
+    row = {
+        "match_id": "pinned-bad-count",
+        "player1_id": "101", "player2_id": "202",
+        "player1_name": "Ons Jabeur", "player2_name": "Elena Rybakina",
+        "tour": "wta", "tournament": "Wimbledon",
+        "scheduled_at": "2023-07-12T12:00:00Z",
+        "stats_json": json.dumps({"p2_break_points_won": bad}),
+    }
+    assert invalid_reason(row) == "invalid_statistics"
