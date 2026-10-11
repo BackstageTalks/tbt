@@ -54,7 +54,7 @@ def validate_request(value: dict) -> dict:
     for key in GATES:
         if value.get(key) is not True:
             raise ValueError(f"Missing mandatory writer guard {key}")
-    if set(value) != set(expected) | set(GATES):
+    if set(value) != {"schema"} | set(expected) | set(GATES):
         raise ValueError("Unexpected restore request keys")
     return value
 
