@@ -62,8 +62,9 @@ jobs:
           test -n "$GH_TOKEN"
           test "$(gh api "repos/$DATA_REPO" --jq .private)" = true
           test -s .github/wimbledon2023-five-restore-request.json
-          python scripts/prepare_wimbledon2023_guarded_restore.py --request .github/wimbledon2023-five-restore-request.json
+          # Validator imports the Parquet-backed audit module; install its dependencies first.
           python -m pip install -q -r api/requirements-train.txt
+          python scripts/prepare_wimbledon2023_guarded_restore.py --request .github/wimbledon2023-five-restore-request.json
       - name: Independently verify immutable source, fresh CDB and full local five-row output
         run: |
           set -euo pipefail
