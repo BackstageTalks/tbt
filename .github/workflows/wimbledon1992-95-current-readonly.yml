@@ -1,0 +1,203 @@
+name: Reconcile historical Wimbledon 1992-95 against current CDB (read-only)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/wimbledon1992-95-current-readonly.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  current-four-year-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install canonical history reader
+        run: |
+          set -euo pipefail
+          python -m pip install -q -r api/requirements-train.txt
+      - name: Pin and privately download research source and canonical 4 years
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$DATA_REPO" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p .cache/cdb-recheck/{data,source,report}
+          gh release download tbt-data-v1 -R "$DATA_REPO" -p _tbt_bundle_manifest.json -p history_manifest.json -D .cache/cdb-recheck/data
+          cp .cache/cdb-recheck/data/_tbt_bundle_manifest.json .cache/cdb-recheck/report/bundle-before.json
+          for year in 1992 1993 1994 1995; do
+            gh release download tbt-data-v1 -R "$DATA_REPO" -p "history-$year.parquet" -D .cache/cdb-recheck/data
+          done
+          gh release download tbt-research-sources-v1 -R "$DATA_REPO" -p wimbledon-1992-1995-pbp-sidecar.jsonl.gz -D .cache/cdb-recheck/source
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > .cache/cdb-recheck/report/release-meta.json
+          gh api "repos/$DATA_REPO/releases/tags/tbt-research-sources-v1" > .cache/cdb-recheck/report/source-meta.json
+          gh release download tbt-data-v1 -R "$DATA_REPO" -p _tbt_bundle_manifest.json --clobber -D .cache/cdb-recheck/data
+          cmp .cache/cdb-recheck/data/_tbt_bundle_manifest.json .cache/cdb-recheck/report/bundle-before.json
+      - name: Match current exact cells, print aggregates only, preserve report PRIVATE
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import gzip,hashlib,json,math,os
+          from collections import Counter
+          from pathlib import Path
+          from tbt.data.history_snapshot import load_snapshot
+          root=Path('.cache/cdb-recheck')
+          data=root/'data'
+          manifest=json.loads((data/'history_manifest.json').read_text())
+          rel=json.loads((root/'report/release-meta.json').read_text())
+          srcrel=json.loads((root/'report/source-meta.json').read_text())
+          asset={x['name']:x for x in rel['assets']}
+          srcasset={x['name']:x for x in srcrel['assets']}
+          def checked(path, meta):
+              digest=hashlib.sha256(path.read_bytes()).hexdigest()
+              assert meta['digest']=='sha256:'+digest,(path.name,'release digest changed')
+              return digest
+          annual={}
+          byid={}
+          for year in range(1992,1996):
+              key='history-%d.parquet'%year
+              path=data/key
+              digest=checked(path,asset[key])
+              assert digest == manifest['years'][str(year)]['sha256'], 'canonical yearly manifest SHA changed'
+              rows=load_snapshot(path)
+              annual[str(year)]={'sha256':digest,'rows':len(rows)}
+              for match in rows:
+                  mid=str(match.match_id)
+                  assert mid not in byid,'duplicate match id'
+                  assert match.scheduled_at.year==year
+                  byid[mid]=match
+          srcname='wimbledon-1992-1995-pbp-sidecar.jsonl.gz'
+          srcpath=root/'source'/srcname
+          srcsha=checked(srcpath,srcasset[srcname])
+          assert srcsha=='3141b6496a308995df152d1f10dd125e6c02168dccb66d54e22e2afcce3ee264','wrong source lineage'
+          allowed=('aces','double_faults','first_serve_win','second_serve_win',
+                   'service_points_won','return_points_won','break_point_serve_win','break_point_return_win')
+          counts=Counter()
+          byyear={}
+          seen=set()
+          with gzip.open(srcpath,'rt',encoding='utf-8') as src:
+              for raw in src:
+                  if not raw.strip():continue
+                  row=json.loads(raw)
+                  counts['sidecar_matches']+=1
+                  mid=str(row.get('match_id') or '')
+                  if not mid or mid in seen:
+                      counts['duplicate_source_match_ids']+=1
+                      continue
+                  seen.add(mid)
+                  match=byid.get(mid)
+                  if match is None:
+                      counts['no_current_canonical_match']+=1
+                      continue
+                  expected={
+                    'tour':str(match.tour or '').lower(),
+                    'scheduled_date_utc':match.scheduled_at.date().isoformat(),
+                    'player1_id':str(match.player1_id),
+                    'player1_name':str(match.player1_name),
+                    'player2_id':str(match.player2_id),
+                    'player2_name':str(match.player2_name),
+                    'surface':str(match.surface or ''),
+                    'tournament':str(match.tournament or ''),
+                    'round_name':str(match.round_name or ''),
+                    'winner_id':str(match.winner_id or ''),
+                  }
+                  if row.get('canonical') != expected or row.get('license')!='CC BY 4.0' or row.get('source')!='klaassen_magnus_wimbledon_1992_1995':
+                      counts['source_canonical_identity_or_license_changed']+=1
+                      continue
+                  agg=row.get('aggregates') or {}
+                  values={}
+                  invalid=False
+                  for side in ('p1','p2'):
+                      obs=agg.get('canonical_'+side)
+                      if not isinstance(obs,dict):
+                          invalid=True
+                          break
+                      for key in allowed:
+                          v=obs.get(key)
+                          if v is None:continue
+                          if isinstance(v,bool) or not isinstance(v,(float,int)) or not math.isfinite(v) or v<0:
+                              invalid=True;break
+                          if key not in ('aces','double_faults') and v>1:
+                              invalid=True;break
+                          if key in ('aces','double_faults') and not float(v).is_integer():
+                              invalid=True;break
+                          values[side+'_'+key]=float(v)
+                  if invalid or not values:
+                      counts['invalid_source_stats']+=1
+                      continue
+                  existing=match.stats or {}
+                  changed=[]
+                  missing=[]
+                  present=[]
+                  for key,value in values.items():
+                      old=existing.get(key)
+                      if old is None:
+                          missing.append(key)
+                      elif isinstance(old,bool) or not isinstance(old,(float,int)) or not math.isfinite(float(old)):
+                          changed.append(key)
+                      elif abs(float(old)-value)>1e-6:
+                          changed.append(key)
+                      else:
+                          present.append(key)
+                  year=str(match.scheduled_at.year)
+                  y=byyear.setdefault(year,dict(Counter()))
+                  if changed:
+                      counts['matches_with_conflicts']+=1
+                      counts['conflicting_cells']+=len(changed)
+                      counts['missing_on_conflicting_matches']+=len(missing)
+                      y['conflicts']=y.get('conflicts',0)+1
+                  else:
+                      counts['uniquely_identified_matches_no_conflict']+=1
+                      counts['already_present_equal_cells']+=len(present)
+                      counts['missing_cells_after_conflict_gate']+=len(missing)
+                      if missing:counts['matches_with_missing_cells']+=1
+                      else:counts['matches_fully_already_present']+=1
+                      y['safe_missing_cells']=y.get('safe_missing_cells',0)+len(missing)
+                  counts['total_proposed_source_cells']+=len(values)
+          assert counts['sidecar_matches']==403,'source inventory count changed'
+          assert sum(counts[k] for k in ('duplicate_source_match_ids','no_current_canonical_match',
+                     'source_canonical_identity_or_license_changed','invalid_source_stats',
+                     'matches_with_conflicts','uniquely_identified_matches_no_conflict'))==403,'unaccounted source match'
+          report={
+             'schema':1,'status':'READ_ONLY_CURRENT_FOUR_YEAR_CDB_RECHECK',
+             'source_family':'klaassen_magnus_wimbledon_1992_1995',
+             'source_license':'CC BY 4.0',
+             'source_sidecar_sha256':srcsha,
+             'historical_original_workbook_sha256_prior_provenance':'5608fababf14e326ac585d7b1b61a8f408abc7d1b998718e82ae760a1b2fcb82',
+             'canonical_partition_proof':annual,
+             'bundle_manifest_before_after_identical':True,
+             'counts':dict(counts),'by_year':byyear,
+             'limitations':{'original_workbook_not_reprocessed_in_this_run':True,
+               'research_sidecar_not_independent_second_provider':True,
+               'full_repo_cdb_not_loaded':True,'fresh_production_readback_of_selected_partitions':True,
+               'write_authorized':False,'model_training_authorized':False},
+             'provider_requests':0,'canonical_write_performed':False
+          }
+          dest=root/'report/current-cdb-source-recheck.json'
+          dest.write_text(json.dumps(report,sort_keys=True,indent=2)+'\n')
+          print('WIMBLEDON_HISTORICAL_CURRENT_CDB_AGGREGATES',json.dumps({
+             'counts':report['counts'],'years':{k:v['rows'] for k,v in annual.items()},
+             'report_sha256':hashlib.sha256(dest.read_bytes()).hexdigest(),
+             'write_authorized':False
+          },sort_keys=True))
+          PY
+          path=audit/import-preparation/wimbledon-1992-1995-current-cdb-recheck-20261011.json
+          file=.cache/cdb-recheck/report/current-cdb-source-recheck.json
+          url="repos/$DATA_REPO/contents/$path"
+          if gh api "$url?ref=main" >/dev/null 2>&1; then
+            gh api "$url?ref=main" --jq .content | base64 -d > .cache/cdb-recheck/report/previous.json
+            cmp "$file" .cache/cdb-recheck/report/previous.json ||
+              { echo 'Immutable report conflict; no overwrite'; exit 1; }
+          else
+            gh api --method PUT "$url" -f message="audit(cdb): current 1992-95 point sidecar exact-cell status" -f content="$(base64 -w0 "$file")" > .cache/cdb-recheck/report/receipt.json
+          fi
+          gh api "$url?ref=main" --jq .content | base64 -d > .cache/cdb-recheck/report/persisted.json
+          cmp "$file" .cache/cdb-recheck/report/persisted.json
+          echo "HISTORICAL_READ_ONLY_REPORT_PRIVATE_PERSISTENCE_VERIFIED"
