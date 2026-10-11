@@ -21,7 +21,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PRIVATE_REPO: BackstageTalks/tbt-data
-      PRIVATE_RELEASE: blinq-complete-git-byte-audit-20261011-38119153567
+      PRIVATE_RELEASE: blinq-full-app-byte-audit-20261011-${{ github.run_id }}
       SCANNER_SHA: 6e0ada97acb49771560b0e2ce2afe6ad893fb894
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +43,7 @@ jobs:
           test -n "$GH_TOKEN"
           test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
           python -u auditor/scripts/test_audit_full_git_content.py
-          gh release view "$PRIVATE_RELEASE" -R "$PRIVATE_REPO" >/dev/null
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
       - name: Read and checksum every tracked app Git file
         run: |
           set -euo pipefail
@@ -83,6 +83,9 @@ jobs:
           cd /tmp/app-full-audit
           sha256sum app-whole-repo-summary.json app-whole-repo-file-index.jsonl.gz > app-SHA256SUMS
           sha256sum -c app-SHA256SUMS
+          gh release create "$PRIVATE_RELEASE" -R "$PRIVATE_REPO" --target main \
+            --title "Immutable app full Git byte audit 2026-10-11" \
+            --notes "App whole-file byte inventory pinned to current source commit; CDB and model unchanged."
           gh release upload "$PRIVATE_RELEASE" \
             app-whole-repo-summary.json app-whole-repo-file-index.jsonl.gz app-SHA256SUMS \
             -R "$PRIVATE_REPO"
