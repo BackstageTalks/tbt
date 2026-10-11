@@ -1,0 +1,105 @@
+name: BlinQ WTA 2016-2020 shared-download exact ID gap audit
+on:
+  pull_request:
+    paths:
+      - scripts/audit_wta_2016_2020_shared_gap_audit.py
+      - tests/test_wta2016_2020_shared_gap_audit.py
+      - .github/workflows/blinq-wta2016-2020-shared-gap-audit.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/audit_wta_2016_2020_shared_gap_audit.py
+      - tests/test_wta2016_2020_shared_gap_audit.py
+      - .github/workflows/blinq-wta2016-2020-shared-gap-audit.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: wta2016-2020-shared-readonly-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          set -euo pipefail
+          python -m pip install -q pytest
+          python -m pytest -q tests/test_wta2016_2020_shared_gap_audit.py tests/test_wta2023_2024_verified_rank_gaps.py
+          python -m compileall -q scripts/audit_wta_2016_2020_shared_gap_audit.py
+  audit:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      ROOT: .cache/tbt/wta2016-2020-shared-rank-gap
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Validate private source and install pinned reader
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$DATA_REPO" --jq .private)" = true
+          python -m pip install --quiet --retries 6 -r api/requirements-train.txt
+      - name: One CDB download and independently SHA-checked 2016-2020 gaps
+        run: |
+          set -euo pipefail
+          python scripts/audit_wta_2016_2020_shared_gap_audit.py --repo "$DATA_REPO" --out "$ROOT"
+          for y in 2016 2017 2018 2019 2020; do
+            test "$(jq -r .status "$ROOT/$y/report.json")" = "READ_ONLY_WTA${y}_ID_RANK_CDB_GAPS"
+            test "$(jq -r .write_authorized "$ROOT/$y/report.json")" = false
+            test "$(jq -r .canonical_mutated "$ROOT/$y/report.json")" = false
+            test "$(jq -r .provider_api_requests "$ROOT/$y/report.json")" = 0
+            test "$(jq -r '.counts.candidate_rank_cells == (.counts.candidate_matches * 2)' "$ROOT/$y/report.json")" = true
+          done
+      - name: Immutable private stages with independent byte reread
+        run: |
+          set -euo pipefail
+          for y in 2016 2017 2018 2019 2020; do
+            cd "$GITHUB_WORKSPACE/$ROOT/$y"
+            sha256sum report.json "wta${y}-rank-null-candidates.jsonl.gz" > SHA256SUMS
+            sha256sum -c SHA256SUMS
+            tag="blinq-wta${y}-id-ranked-null-audit-$GITHUB_RUN_ID"
+            gh release create "$tag" -R "$DATA_REPO" --target main --title "Private exact-ID WTA $y historical rank NULL audit" --notes "Read-only original source, linked PIT values, no CDB/model/API writes."
+            gh release upload "$tag" report.json "wta${y}-rank-null-candidates.jsonl.gz" SHA256SUMS -R "$DATA_REPO"
+            mkdir -p readback
+            gh release download "$tag" -R "$DATA_REPO" -D readback
+            (cd readback && sha256sum -c SHA256SUMS)
+            cmp report.json readback/report.json
+            python - "$y" <<'PY'
+          import gzip,hashlib,json,sys
+          from pathlib import Path
+          y=sys.argv[1]; report=json.loads(Path("readback/report.json").read_text())
+          stage=Path(f"readback/wta{y}-rank-null-candidates.jsonl.gz")
+          assert hashlib.sha256(stage.read_bytes()).hexdigest()==report["stage_sha256"]
+          with gzip.open(stage,"rt") as f: n=sum(1 for line in f if line.strip())
+          assert n==report["counts"]["candidate_matches"]
+          assert report["counts"]["candidate_rank_cells"]==2*n
+          assert report["write_authorized"] is False and report["canonical_mutated"] is False
+          print("WTA_OLDER_SHARED_STAGE_REREAD_OK",y,report["counts"])
+          PY
+            cd "$GITHUB_WORKSPACE"
+          done
+      - name: Public artifact aggregate only, no source ID disclosure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wta2016-2020-readonly-summaries-${{ github.run_id }}
+          path: .cache/tbt/wta2016-2020-shared-rank-gap/overview.json
+          retention-days: 30
+          if-no-files-found: warn
