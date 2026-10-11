@@ -139,3 +139,57 @@ jobs:
         shell: bash
         run: |
           echo "Private manual serve/return CDB candidate audit: Python unit tests and read-only contract passed on public app runner. No source rows or artifacts published; CDB untouched." >> "$GITHUB_STEP_SUMMARY"
+
+  private-drive-null-gate-contract:
+    # One-off SHA-pinned synthetic verification of the private gate while
+    # private Actions runners cannot start. Never expose private file content.
+    if: ${{ github.repository == 'BackstageTalks/tbt' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    permissions:
+      contents: read
+    steps:
+      - name: Verify trusted private checkout access
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view BackstageTalks/tbt-data --json visibility -q .visibility)" = PRIVATE
+      - name: Read pinned private CDB gate branch, no source data download
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 9b0766fcb9e911288e41337f2780de0548ac6616
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run isolated current-null and identity/rights/PIT tests
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ../private-test-results
+          if python -m unittest discover -s tests -p test_drive_cdb_current_null_gate.py -v > ../private-test-results/tests.log 2>&1 &&
+             python -m compileall -q scripts/drive_cdb_current_null_gate.py; then
+            echo PRIVATE_DRIVE_CURRENT_NULL_GATE_SYNTHETIC_TESTS_PASS
+          else
+            echo PRIVATE_DRIVE_CURRENT_NULL_GATE_SYNTHETIC_TESTS_FAIL
+            exit 1
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          s = Path("scripts/drive_cdb_current_null_gate.py").read_text()
+          assert '"ready_for_production_write": 0' in s
+          assert '"write_authorized": False' in s
+          assert "upload_bundle(" not in s and "write_snapshot(" not in s
+          assert "gh release" not in s
+          print("PRIVATE_DRIVE_GATE_ZERO_WRITE_CONTRACT_PASS")
+          PY
+      - name: Publish status marker only
+        if: success()
+        run: echo 'Private Drive CDB current-NULL gate: synthetic regressions PASS, no canonical write and no source bytes published.' >> "$GITHUB_STEP_SUMMARY"
