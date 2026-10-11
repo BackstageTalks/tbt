@@ -31,7 +31,24 @@ DAILY_LIMIT = 250  # shared 1000/day: reserve up to 604 for 4x75 live refreshes
 MIN_PROVIDER_REMAINING = 150
 MARKETS = ("h2h", "spreads", "totals", "total_games", "total_sets",
            "total_tiebreaks", "player_aces", "player_double_faults",
-           "total_aces", "player_games_won")
+           "total_aces", "player_games_won", "player_break_points_won")
+
+
+def paced_daily_limit(utc_now):
+    """Keep scarce CLV quota for later start-time and near-close observations.
+
+    The research ledger uses UTC-day filenames. No quota is added; these are
+    cumulative ceilings, and leftover early capacity carries forward.
+    """
+    hour = utc_now.astimezone(timezone.utc).hour
+    if hour < 6:
+        return 70
+    if hour < 12:
+        return 140
+    if hour < 18:
+        return 200
+    return DAILY_LIMIT
+
 if not PROPL or not GH_TOKEN:
     sys.exit("Missing PROPL or TBT_DATA_GH_TOKEN")
 quota = {}
@@ -285,12 +302,17 @@ def main():
     now = datetime.now(timezone.utc)
     folder = ROOT + "/" + now.strftime("%Y-%m-%d")
     already = today_usage(folder)
-    remaining = DAILY_LIMIT - already
+    pacing_cap = paced_daily_limit(now)
+    remaining = max(0, min(DAILY_LIMIT, pacing_cap) - already)
     report = {"schema": 1, "captured_at": now.isoformat(), "api_calls": 0,
               "previous_calls_today": already, "quota": {}, "events": [],
-              "window_hours": 48, "research_only": True}
+              "window_hours": 48, "research_only": True,
+              "research_daily_cap": DAILY_LIMIT,
+              "research_paced_cap": pacing_cap,
+              "research_paced_remaining": remaining}
     if remaining < 3:
-        report["status"] = "Daily local research budget exhausted"
+        report["status"] = ("Daily local research budget exhausted" if already >= DAILY_LIMIT
+                            else "CLV quota reserved for later UTC windows")
     else:
         try:
             priority_pairs = blinq_priority_pairs(now)
