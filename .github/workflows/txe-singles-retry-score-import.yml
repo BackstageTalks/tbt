@@ -1,0 +1,276 @@
+name: BlinQ updated ATP WTA retry archive guarded CDB score import
+on:
+  pull_request:
+    paths:
+      - .github/workflows/txe-singles-retry-score-import.yml
+      - .github/txe-retry-score-import-request.json
+      - scripts/stage_txe_wta2024_scores.py
+      - scripts/import_txe_wta2024_scores_exact.py
+      - tests/test_txe_generic_score_semantics.py
+  push:
+    branches: [main]
+    paths: [.github/txe-retry-score-import-request.json]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: blinq-singles-retry-guarded-import-${{ github.run_id }}
+  cancel-in-progress: false
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - {tour: atp, year: 2025, archive: txe-retry-atp-single-2025-38113629706-1.tar.gz, hash: "8c2eede289a871fd269cddc669faf16a45cc872ddfc2d011188452f52da48130"}
+          - {tour: wta, year: 2026, archive: txe-retry-wta-single-2026-38039406462-1.tar.gz, hash: "2845c31bd9d01d4f1fc12468f209c5635e810dad9559e964dc9c24db39088f83"}
+          - {tour: atp, year: 2026, archive: txe-retry-atp-single-2026-38039406462-1.tar.gz, hash: "cbaf89c1fc987718e06decc5a43b65179881e0072c29052ed16f28112fd9af6c"}
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      BLINQ_SCORE_TOUR: ${{ matrix.tour }}
+      BLINQ_SCORE_YEAR: ${{ matrix.year }}
+      BLINQ_SCORE_SOURCE_SHA: ${{ matrix.hash }}
+      SOURCE_ARCHIVE: ${{ matrix.archive }}
+      ROOT: .cache/tbt/txe-singles-retry-write-${{ matrix.tour }}-${{ matrix.year }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Explicit request and source SHA guard (PR is always read-only)
+        id: control
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$PRIVATE_REPO" --json visibility -q .visibility)" = PRIVATE
+          req=.github/txe-retry-score-import-request.json
+          test "$(jq -r .schema "$req")" = 1
+          test "$(jq -r .allow_existing_overwrite "$req")" = false
+          test "$(jq -r .global_writer_lock "$req")" = true
+          test "$(jq -r .immutable_backup "$req")" = true
+          test "$(jq -r .full_year_readback "$req")" = true
+          test "$(jq -r .model_training "$req")" = false
+          test "$(jq -r .model_promotion "$req")" = false
+          test "$(jq -r .provider_api_requests "$req")" = 0
+          selected="$(jq -r --arg t "$BLINQ_SCORE_TOUR" --argjson y "$BLINQ_SCORE_YEAR" \
+            '.sources[] | select(.tour == $t and .year == $y) | .sha256' "$req")"
+          test "$selected" = "$BLINQ_SCORE_SOURCE_SHA"
+          mode=dry-run
+          if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main ]]; then
+            mode="$(jq -r .mode "$req")"
+          fi
+          [[ "$mode" == dry-run || "$mode" == write ]]
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+      - name: Run source result/slug and exact add-only regression tests
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements.txt -r api/requirements-train.txt pytest
+          python -m pytest -q tests/test_txe_generic_score_semantics.py
+          (
+            export BLINQ_SCORE_TOUR=wta BLINQ_SCORE_YEAR=2024 \
+              BLINQ_SCORE_SOURCE_SHA=27c779c73bcfaf089e362f3480c4201f032e15fefbc3a0fadaa39bfce9f5956b
+            python -m pytest -q tests/test_txe_wta2024_scores_exact.py
+          )
+          python -m compileall -q scripts/stage_txe_wta2024_scores.py scripts/import_txe_wta2024_scores_exact.py
+
+      - name: Stage current pinned source and canonical partition OUTSIDE lock
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/source" "$ROOT/history" "$ROOT/stage" "$ROOT/local"
+          gh release download blinq-tennisexplorer-cloud-20261009 -R "$PRIVATE_REPO" \
+            -p "$SOURCE_ARCHIVE" -D "$ROOT/source"
+          echo "$BLINQ_SCORE_SOURCE_SHA  $ROOT/source/$SOURCE_ARCHIVE" | sha256sum -c -
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
+            -p "history-$BLINQ_SCORE_YEAR.parquet" -p history_manifest.json \
+            -p _tbt_bundle_manifest.json -D "$ROOT/history"
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > "$ROOT/history/release.json"
+          python scripts/stage_txe_wta2024_scores.py --source "$ROOT/source/$SOURCE_ARCHIVE" \
+            --history "$ROOT/history/history-$BLINQ_SCORE_YEAR.parquet" \
+            --manifest "$ROOT/history/history_manifest.json" \
+            --release "$ROOT/history/release.json" --out "$ROOT/stage"
+          test "$(jq -r .production_mutated "$ROOT/stage/report.json")" = false
+
+      - name: Create and independently verify exact local year's null-only delta
+        id: prepared
+        env:
+          CONTROLLED_MODE: ${{ steps.control.outputs.mode }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/dry" "$ROOT/local-write" "$ROOT/local-verify"
+          for f in "history-$BLINQ_SCORE_YEAR.parquet" history_manifest.json _tbt_bundle_manifest.json; do
+            cp "$ROOT/history/$f" "$ROOT/local/$f"
+          done
+          python scripts/import_txe_wta2024_scores_exact.py --mode dry-run \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/dry/report.json"
+          additions="$(jq -r .added_values "$ROOT/dry/report.json")"
+          echo "additions=$additions" >> "$GITHUB_OUTPUT"
+          if [[ "$additions" -eq 0 ]]; then
+            if [[ "$CONTROLLED_MODE" == write ]]; then
+              echo "Zero positive delta - safe no-op, publishing forbidden"
+            fi
+            exit 0
+          fi
+          python scripts/import_txe_wta2024_scores_exact.py --mode write \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/local-write/report.json"
+          python scripts/import_txe_wta2024_scores_exact.py --mode verify \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/local-verify/report.json"
+          test "$(jq -r .existing_values_overwritten "$ROOT/local-verify/report.json")" = 0
+          test "$(jq -r .added_values "$ROOT/local-verify/report.json")" = "$additions"
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          year=int(os.environ["BLINQ_SCORE_YEAR"])
+          paths=("source/"+os.environ["SOURCE_ARCHIVE"],"stage/stage.jsonl",
+                 "stage/report.json",f"history/history-{year}.parquet",
+                 "history/history_manifest.json","history/_tbt_bundle_manifest.json",
+                 f"local/history-{year}.parquet")
+          replay=json.loads((root/"local-verify/report.json").read_text())
+          p={"schema":1,"year":year,"tour":os.environ["BLINQ_SCORE_TOUR"],
+             "source_sha256":os.environ["BLINQ_SCORE_SOURCE_SHA"],
+             "added_values":replay["added_values"],"changed_matches":replay["changed_matches"],
+             "overwrites":0,"model_training":False,
+             "files_sha256":{x:hashlib.sha256((root/x).read_bytes()).hexdigest() for x in paths}}
+          (root/"package.json").write_text(json.dumps(p,sort_keys=True,indent=2))
+          PY
+
+      - name: Acquire shared crossrepo writer lock for positive production delta
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
+      - name: Under lock compare unmodified current remote year and both manifests
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          mkdir -p "$ROOT/remote-before"
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
+            -p "history-$BLINQ_SCORE_YEAR.parquet" -p history_manifest.json \
+            -p _tbt_bundle_manifest.json -D "$ROOT/remote-before"
+          for f in "history-$BLINQ_SCORE_YEAR.parquet" history_manifest.json _tbt_bundle_manifest.json; do
+            cmp "$ROOT/history/$f" "$ROOT/remote-before/$f"
+          done
+
+      - name: Immutable private prewrite 2024-2026 partition backup and reread
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/backup" "$ROOT/backup-readback"
+          cp "$ROOT/history/history-$BLINQ_SCORE_YEAR.parquet" "$ROOT/backup/"
+          cp "$ROOT/history/history_manifest.json" "$ROOT/backup/"
+          cp "$ROOT/history/_tbt_bundle_manifest.json" "$ROOT/backup/"
+          cp "$ROOT/stage/stage.jsonl" "$ROOT/backup/"
+          cp "$ROOT/stage/report.json" "$ROOT/backup/source-report.json"
+          cp "$ROOT/package.json" "$ROOT/backup/"
+          (
+            cd "$ROOT/backup"
+            sha256sum history-"$BLINQ_SCORE_YEAR".parquet history_manifest.json \
+              _tbt_bundle_manifest.json stage.jsonl source-report.json package.json > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          tag="blinq-txe-retry-scores-$BLINQ_SCORE_TOUR-$BLINQ_SCORE_YEAR-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" "$ROOT/backup/"* -R "$PRIVATE_REPO" \
+            --title "Immutable ATP/WTA exact match score CDB prewrite backup" \
+            --notes "Year partition, manifests, exact verified source stage and rollback metadata."
+          gh release download "$tag" -R "$PRIVATE_REPO" -D "$ROOT/backup-readback"
+          (cd "$ROOT/backup-readback" && sha256sum -c SHA256SUMS)
+          cmp "$ROOT/backup-readback/package.json" "$ROOT/package.json"
+
+      - name: Publish only the affected year with last-moment CDB CAS
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from cdb_global_writer_lock import verify
+          root=Path(os.environ["ROOT"]); repo=os.environ["PRIVATE_REPO"]
+          year=int(os.environ["BLINQ_SCORE_YEAR"])
+          def freshness():
+              verify(repo,Path(".cdb-global-writer-lock.json"))
+              pinned=json.loads((root/"history/_tbt_bundle_manifest.json").read_text())["files"]
+              actual=ReleaseStore(repo,"tbt-data-v1",root/"freshness")._remote_bundle_files()
+              if actual != pinned:
+                  raise ValueError("Fresh canonical bundle differs, cannot publish stale scores")
+          ReleaseStore(repo,"tbt-data-v1",root/"local").upload_bundle([
+              root/f"local/history-{year}.parquet",
+              root/"local/history_manifest.json"
+          ],before_upload=freshness)
+          PY
+
+      - name: Independent remote persisted complete year readback
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/persisted" "$ROOT/remote-verify"
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
+            -p "history-$BLINQ_SCORE_YEAR.parquet" -p history_manifest.json \
+            -p _tbt_bundle_manifest.json -D "$ROOT/persisted"
+          python scripts/import_txe_wta2024_scores_exact.py --mode verify \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/persisted" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/remote-verify/report.json"
+          test "$(jq -r .status "$ROOT/remote-verify/report.json")" = verified
+          test "$(jq -r .existing_values_overwritten "$ROOT/remote-verify/report.json")" = 0
+          test "$(jq -r .added_values "$ROOT/remote-verify/report.json")" = "$(jq -r .added_values "$ROOT/package.json")"
+
+      - name: Store verified import proof for each source privately
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          tag="blinq-txe-retry-scores-$BLINQ_SCORE_TOUR-$BLINQ_SCORE_YEAR-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          jq -n --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg sha "$GITHUB_SHA" --arg tag "$tag" \
+            --arg tour "$BLINQ_SCORE_TOUR" --argjson year "$BLINQ_SCORE_YEAR" \
+            --slurpfile stage "$ROOT/stage/report.json" \
+            --slurpfile saved "$ROOT/remote-verify/report.json" \
+            '{schema:1,status:"published_and_independently_verified",
+              run_id:$run,attempt:$attempt,app_sha:$sha,backup_tag:$tag,
+              tour:$tour,year:$year,source_stage:$stage[0],
+              independent_full_year_readback:$saved[0],
+              existing_values_overwritten:0,model_trained:false,model_promoted:false,
+              provider_api_requests:0}' > "$ROOT/final-audit.json"
+          path="audit/txe-retry-$BLINQ_SCORE_TOUR-$BLINQ_SCORE_YEAR-score-import-latest.json"
+          encoded="$(base64 -w0 "$ROOT/final-audit.json")"
+          old="$(gh api "repos/$PRIVATE_REPO/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$old" ]]; then
+            gh api --method PUT "repos/$PRIVATE_REPO/contents/$path" \
+              -f message="Verify exact $BLINQ_SCORE_TOUR $BLINQ_SCORE_YEAR source-score import $GITHUB_RUN_ID" \
+              -f content="$encoded" -f sha="$old" >/dev/null
+          else
+            gh api --method PUT "repos/$PRIVATE_REPO/contents/$path" \
+              -f message="Verify exact $BLINQ_SCORE_TOUR $BLINQ_SCORE_YEAR source-score import $GITHUB_RUN_ID" \
+              -f content="$encoded" >/dev/null
+          fi
+
+      - name: Preserve only aggregate public artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-txe-singles-retry-${{ matrix.tour }}-${{ matrix.year }}-${{ github.run_id }}
+          path: |
+            .cache/tbt/txe-singles-retry-write-${{ matrix.tour }}-${{ matrix.year }}/stage/report.json
+            .cache/tbt/txe-singles-retry-write-${{ matrix.tour }}-${{ matrix.year }}/dry/report.json
+            .cache/tbt/txe-singles-retry-write-${{ matrix.tour }}-${{ matrix.year }}/local-verify/report.json
+            .cache/tbt/txe-singles-retry-write-${{ matrix.tour }}-${{ matrix.year }}/remote-verify/report.json
+            .cache/tbt/txe-singles-retry-write-${{ matrix.tour }}-${{ matrix.year }}/final-audit.json
+          retention-days: 35
+          if-no-files-found: warn
+
+      - name: Release crossrepository global writer lock even on failure
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
