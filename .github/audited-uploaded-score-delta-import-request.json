@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "mode": "dry-run",
+  "mode": "write",
   "source_tag": "blinq-audited-source-cell-delta-38123115526",
   "stage_sha256": "73387f3febca5c44ed4187d0b0e5fd0abe57a23e325e1c615332d7315d634f8c",
   "report_sha256": "4cd96d2237c51fb530a60cdfda12d2a80ea1dfc292491b9db62f17da87b83c55",
