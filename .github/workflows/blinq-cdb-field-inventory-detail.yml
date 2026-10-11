@@ -1,0 +1,41 @@
+name: BlinQ print exhaustive verified CDB field names (read only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-cdb-field-inventory-detail.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  print-exact-source-keys:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      SOURCE_REPORT: blinq-cdb-field-gap-inventory-20261011-38122014891
+    steps:
+      - name: Independently fetch latest completed full scan source report
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          mkdir -p /tmp/blinq-field-detail
+          gh release download "$SOURCE_REPORT" -R "$PRIVATE_REPO" -D /tmp/blinq-field-detail
+          cd /tmp/blinq-field-detail
+          sha256sum -c SHA256SUMS
+          python - <<'PY'
+          import json
+          d=json.load(open("full-cdb-field-coverage.json"))
+          assert d["year_partitions"]==78 and d["canonical_match_rows"]==994101
+          assert d["observed_stat_field_count"]==len(d["observed_stats"])
+          for x in d["observed_stats"]:
+              print("EXACT_CDB_STAT_FIELD",json.dumps(x,sort_keys=True))
+          print("EXACT_CDB_TOUR_CORES",json.dumps(d["per_tour"],sort_keys=True))
+          print("EXACT_CDB_TOP_LEVEL",json.dumps(d["top_level"],sort_keys=True))
+          print("EXACT_CDB_FIELDS_TOTAL",len(d["observed_stats"]),flush=True)
+          PY
