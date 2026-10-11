@@ -3,10 +3,6 @@ name: BlinQ manual serve statistics current-CDB proof (read-only)
 # Explicit manual or internal PR invocation. No schedule, no canonical writes,
 # no application deploy and no provider sports API collection.
 'on':
-  pull_request:
-    paths:
-      - '.github/workflows/blinq-manual-servestats-current-cdb-preflight.yml'
-      - 'scripts/preflight_manual_servestats_current_cdb.py'
   workflow_dispatch: {}
 
 permissions:
@@ -18,7 +14,7 @@ concurrency:
 
 jobs:
   exact-current-source-delta:
-    if: ${{ github.repository == 'BackstageTalks/tbt' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ github.repository == 'BackstageTalks/tbt' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
