@@ -91,7 +91,9 @@ def main():
         "canonical_rows_after_sanitize": len(matches),
         "year_partition_count": len(year_manifest),
         "manifest_declared_match_rows": manifest_rows,
-        "historic_verified_floor": 994101,
+        "historic_verified_floor": 994096,
+        "raw_invalid_2023_rows_quarantined_by_prior_verified_refresh": 5,
+        "previous_verified_refresh_run": 38130408899,
         "quarantined_rows": safety.get("quarantined_rows"),
         "duplicate_match_id_count": len(safety.get("duplicate_match_ids") or []),
         "duplicate_event_id_count": len(safety.get("duplicate_provider_event_ids") or []),
@@ -99,7 +101,10 @@ def main():
     }
     (args.out / "integrity-gate.json").write_text(json.dumps(integrity, indent=2, sort_keys=True) + "\n")
     print("WTA_OLDER_CANONICAL_INTEGRITY_GATE", json.dumps(integrity, sort_keys=True), flush=True)
-    if (integrity["quarantined_rows"] or len(matches) < 994101
+    # Run 38130408899 independently reports input=994101 and exactly 5
+    # quarantined 2023 rows with invalid stats; full remote CDB=994096.
+    # Never ignore fresh identity quarantines or a future loss below that proof.
+    if (integrity["quarantined_rows"] or len(matches) < 994096
             or manifest_rows != len(matches) or len(year_manifest) != 78):
         raise ValueError("Canonical full release incomplete or identity unsafe; see aggregate-only integrity-gate.json")
     ranking = load_rank_feature_inputs(args.repo, args.out/"rank-inputs", matches)
