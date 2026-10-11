@@ -741,6 +741,8 @@ def classify_finished_event(
     provider_players = {str(home.get("id") or "").strip(), str(away.get("id") or "").strip()}
     if "" in feed_players or "" in provider_players or feed_players != provider_players:
         return None
+    base["provider_home_id"] = str(home.get("id") or "")
+    base["provider_away_id"] = str(away.get("id") or "")
     if retired:
         return {**base, "status": "retired"}
     if void:
