@@ -54,7 +54,7 @@ jobs:
           while IFS='|' read -r YEAR ASSET EXPECT; do
             [[ -n "$YEAR" ]] || continue
             export ASSET
-            DIGEST=$(gh api "repos/$REPO/releases/tags/$RELEASE" --jq '.assets[] | select(.name == env.ASSET) | .digest')
+            DIGEST=$(gh api "repos/$REPO/releases/tags/$RELEASE" | python -c 'import json,os,sys; print(next((a.get("digest", "") for a in json.load(sys.stdin).get("assets", []) if a.get("name") == os.environ["ASSET"]), ""))')
             if [[ ! "$DIGEST" =~ ^sha256:[0-9a-fA-F]{64}$ ]]; then
               echo "Missing SHA-256 digest in private Release metadata: $ASSET" >&2
               exit 2
