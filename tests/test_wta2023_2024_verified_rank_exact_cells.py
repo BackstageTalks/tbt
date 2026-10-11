@@ -1,4 +1,4 @@
-"""Regression gates for WTA 2023/2024 year-pinned null-only rank publisher."""
+"""Regression gates for WTA 2021-2024 year-pinned null-only rank publisher."""
 import json
 from datetime import date
 from pathlib import Path
@@ -39,7 +39,7 @@ def sample(year):
     return before,row
 
 
-@pytest.mark.parametrize("year",[2023,2024])
+@pytest.mark.parametrize("year",[2021,2022,2023,2024])
 def test_two_nulls_with_provenance_no_other_cell_changed(year):
     w.configure(request(year))
     frame,row=sample(year)
@@ -55,7 +55,7 @@ def test_two_nulls_with_provenance_no_other_cell_changed(year):
     assert ctx["_tbt_wta_rank_provenance"]["source_player1_id"]=="id-1"
 
 
-@pytest.mark.parametrize("year",[2023,2024])
+@pytest.mark.parametrize("year",[2021,2022,2023,2024])
 def test_unchanged_whole_wta_cohort_and_changed_player_identity_fails(year):
     w.configure(request(year))
     before,row=sample(year)
@@ -68,7 +68,7 @@ def test_unchanged_whole_wta_cohort_and_changed_player_identity_fails(year):
         w.apply(changed,[row])
 
 
-@pytest.mark.parametrize("year",[2023,2024])
+@pytest.mark.parametrize("year",[2021,2022,2023,2024])
 def test_no_overwrite_unknown_week_or_conflicting_provenance(year):
     w.configure(request(year))
     before,row=sample(year)
@@ -85,7 +85,7 @@ def test_no_overwrite_unknown_week_or_conflicting_provenance(year):
         w.apply(before,[row])
 
 
-@pytest.mark.parametrize("year",[2023,2024])
+@pytest.mark.parametrize("year",[2021,2022,2023,2024])
 def test_missing_invalid_mismatched_required_pins_fail_closed(year):
     good=request(year)
     for delta in [
@@ -103,7 +103,7 @@ def test_missing_invalid_mismatched_required_pins_fail_closed(year):
             w.configure(bad)
 
 
-@pytest.mark.parametrize("year",[2023,2024])
+@pytest.mark.parametrize("year",[2021,2022,2023,2024])
 def test_invalid_rank_and_duplicate_exact_match_fail(year):
     w.configure(request(year))
     frame,row=sample(year)
