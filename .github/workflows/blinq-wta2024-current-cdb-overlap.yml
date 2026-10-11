@@ -48,7 +48,7 @@ jobs:
       SOURCE_ASSET: txe-wta-single-2024.tar.gz
       SOURCE_SHA256: 27c779c73bcfaf089e362f3480c4201f032e15fefbc3a0fadaa39bfce9f5956b
       CDB_TAG: tbt-data-v1
-      CDB_SHA256: 30ca16e36649c5639ff2ec5ad964e73514b602933db8b73bac1f87589538a22c
+      CDB_SHA256: 7b649f60ab3b5d7d6b2687d3fd8296d62d849af9cdf63b7f5b05f17f7fa68a74
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
