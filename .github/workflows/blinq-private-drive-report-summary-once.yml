@@ -192,4 +192,5 @@ jobs:
           PY
       - name: Publish status marker only
         if: success()
-        run: echo 'Private Drive CDB current-NULL gate: synthetic regressions PASS, no canonical write and no source bytes published.' >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo 'Private Drive CDB current-NULL gate: synthetic regressions PASS, no canonical write and no source bytes published.' >> "$GITHUB_STEP_SUMMARY"
