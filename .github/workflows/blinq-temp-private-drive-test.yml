@@ -1,0 +1,37 @@
+name: Temporary private BlinQ Drive audit PR103 regression
+on:
+  pull_request:
+    paths:
+      - .github/workflows/blinq-temp-private-drive-test.yml
+permissions:
+  contents: read
+jobs:
+  test-pinned-private-synthetic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 87b26bee70da00f43330cfd8f891430996b76146
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Audit synthetic source/CDB regression (no secrets or provider calls)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s private/tests -p test_drive_cdb_audit.py -v 2>&1 | tee private-drive-regression-log.txt
+          python -m compileall -q private/scripts/drive_cdb_audit.py
+      - name: Keep only synthetic test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drive-cdb-private-synthetic-test-${{ github.run_id }}
+          path: private-drive-regression-log.txt
+          if-no-files-found: warn
+          retention-days: 3
