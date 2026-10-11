@@ -1,0 +1,48 @@
+name: Private Drive CDB audit exact pinned PR regression (temporary runner bridge)
+on:
+  pull_request:
+    paths:
+      - .github/workflows/blinq-private-drive-pr94-audit-ci-bridge.yml
+permissions:
+  contents: read
+jobs:
+  private-drive-audit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify configured private repository credentials without disclosing source
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = true
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 57e63ae4760297747c055772739fd0d5852d6f35
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+          path: private-data
+          sparse-checkout: |
+            scripts/drive_cdb_audit.py
+            tests/test_drive_cdb_audit.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Independently test pinned private Drive audit without connecting Drive or CDB
+        run: |
+          set -euo pipefail
+          test "$(git -C private-data rev-parse HEAD)" = 57e63ae4760297747c055772739fd0d5852d6f35
+          python -m unittest discover -s private-data/tests -p test_drive_cdb_audit.py -v
+          python -m compileall -q private-data/scripts/drive_cdb_audit.py
+          python - <<'PY'
+          from pathlib import Path
+          code = Path("private-data/scripts/drive_cdb_audit.py").read_text(encoding="utf-8")
+          for forbidden in ("upload_bundle(", "write_snapshot(", "model.fit(", "train_model(", "gh release upload"):
+              assert forbidden not in code, "Unsafe operation in read-only test target"
+          print("PRIVATE_DRIVE_AUDIT_PINNED_SHA_READ_ONLY_REGRESSION_PASS")
+          PY
