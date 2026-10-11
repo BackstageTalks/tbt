@@ -65,7 +65,7 @@ def test_full_verified_final_score_only():
     incomplete["awayScore"].pop("period3")
     assert _verified_final_score_stats(base, incomplete) == {}
     interrupted = _event()
-    interrupted["homeScore"]["period2"] = 0
+    interrupted["homeScore"]["period2"] = 5
     assert _verified_final_score_stats(base, interrupted) == {}
     gap = _event()
     gap["homeScore"].pop("period2")
