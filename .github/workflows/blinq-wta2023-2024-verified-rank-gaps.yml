@@ -1,4 +1,4 @@
-name: BlinQ WTA 2023-2024 ID-verified ranking gap audit
+name: BlinQ WTA 2021-2022 ID-verified ranking gap audit
 on:
   pull_request:
     paths:
@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        year: [2023, 2024]
+        year: [2021, 2022]
     env:
       PYTHONPATH: api:scripts
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
@@ -103,7 +103,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: wta-old-year-${{ matrix.year }}-rank-gaps-${{ github.run_id }}
+          name: wta-2021-2022-${{ matrix.year }}-rank-gaps-${{ github.run_id }}
           path: .cache/tbt/wta${{ matrix.year }}-rank-gaps/report.json
           retention-days: 30
           if-no-files-found: warn
