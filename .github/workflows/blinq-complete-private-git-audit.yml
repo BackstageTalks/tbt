@@ -1,0 +1,118 @@
+name: BlinQ complete private Git byte audit (no data writes)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-complete-private-git-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-private-git-byte-audit
+  cancel-in-progress: false
+
+jobs:
+  audit-entire-private-tree:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      SOURCE_REF: audit/complete-git-byte-reconciliation-20261011
+      AUDIT_TAG: blinq-complete-git-byte-audit-20261011-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          ref: ${{ env.SOURCE_REF }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run isolated fail-closed source integrity contract tests
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          python -m py_compile source/scripts/audit_full_git_content.py
+          python -u source/scripts/test_audit_full_git_content.py
+      - name: Enumerate all currently active private release assets
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/private-audit
+          gh api "repos/$PRIVATE_REPO/releases?per_page=100" > /tmp/private-audit/releases.json
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/private-audit/releases.json'))
+          assert len(p)>=46
+          assert sum(len(r.get('assets',[])) for r in p)>=420
+          print('PRIVATE_RELEASE_METADATA_ENUMERATED',len(p),
+                sum(len(r.get('assets',[])) for r in p))
+          PY
+      - name: Hash ALL tracked Git bytes and check supported file formats
+        timeout-minutes: 25
+        run: |
+          set -euo pipefail
+          python -u source/scripts/audit_full_git_content.py \
+            --repo source \
+            --releases-json /tmp/private-audit/releases.json \
+            --report /tmp/private-audit/whole-repo-summary.json \
+            --private-index /tmp/private-audit/whole-repo-file-index.jsonl.gz \
+            > /tmp/private-audit/private-checker-log.txt
+          python - <<'PY'
+          import gzip,json
+          from pathlib import Path
+          root=Path('/tmp/private-audit')
+          x=json.loads((root/'whole-repo-summary.json').read_text())
+          g=x['tracked_git']; a=x['releases']
+          assert x['cdb_cells_added_by_this_audit']==0
+          assert x['cdb_modified_by_this_audit'] is False
+          assert x['model_training_or_promotion'] is False
+          assert g['files']>=2936 and g['all_filenames_processed']
+          assert g['all_git_bytes_sha256_read'], 'Whole-Git source byte traversal not complete'
+          assert a['active_asset_metadata_rows']>=420
+          with gzip.open(root/'whole-repo-file-index.jsonl.gz','rt') as f:
+              count=sum(1 for _ in f)
+          assert count==g['files'], 'Private path-by-path index incomplete'
+          print('WHOLE_PRIVATE_GIT_BYTES_VERIFIED',g['files'],
+                'BYTES',g['bytes_read_at_least_once'],
+                'STRUCTURED_CHECKED',g['checked_structures'],
+                'CONTENT_ISSUES',g['failed_file_checks'],
+                'PARTIAL_CHECKS',g['partial_content_checks'])
+          print('PRIVATE_RELEASE_METADATA',a['release_count'],
+                a['active_asset_metadata_rows'], 'DIGEST_MISSING',
+                a['assets_without_sha256_digest'],
+                'ASSET_BYTES_NOT_DOWNLOADED',a['asset_bytes_total_metadata_only'])
+          print('SOURCE_FAMILY_OBJECT_COUNTS',json.dumps(g['families'],sort_keys=True))
+          PY
+      - name: Persist full audit artifacts in private release with source SHA
+        run: |
+          set -euo pipefail
+          source_commit=$(git -C source rev-parse HEAD)
+          test -n "$source_commit"
+          cd /tmp/private-audit
+          sha256sum whole-repo-summary.json whole-repo-file-index.jsonl.gz > SHA256SUMS
+          sha256sum --check SHA256SUMS
+          gh release create "$AUDIT_TAG" --repo "$PRIVATE_REPO" --target "$source_commit" \
+            --title "Full private Git byte+format inventory 2026-10-11" \
+            --notes "Complete Git-byte SHA256+format audit at commit $source_commit. Private release index; 420 existing release assets metadata-only, not independently byte-downloaded. No CDB or model changes."
+          gh release upload "$AUDIT_TAG" \
+            whole-repo-summary.json whole-repo-file-index.jsonl.gz SHA256SUMS \
+            --repo "$PRIVATE_REPO"
+          mkdir -p readback
+          gh release download "$AUDIT_TAG" --repo "$PRIVATE_REPO" \
+            --pattern 'whole-repo-*' --pattern 'SHA256SUMS' --dir readback
+          (cd readback && sha256sum --check SHA256SUMS)
+          python - <<'PY'
+          import json
+          r=json.load(open('readback/whole-repo-summary.json'))
+          print('PRIVATE_WHOLE_REPO_AUDIT_PERSISTED_AND_READBACK',
+                r['pinned_git_commit'],
+                r['tracked_git']['files'],
+                r['tracked_git']['failed_file_checks'])
+          PY
