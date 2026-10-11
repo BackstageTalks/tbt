@@ -39,3 +39,13 @@ def test_global_writer_lock_and_immutable_full_remote_readback():
     assert "remote-after/history-2023.parquet" in text
     assert "prewrite-readback" in text
     assert "sha256sum -c SHA256SUMS" in text
+
+
+
+def test_publish_dependency_install_precedes_every_python_source_import():
+    text = FLOW.read_text()
+    first = text.split("- name: Require private release and immutable pinned one-time request", 1)[1]
+    first = first.split("- name: Independently verify immutable source", 1)[0]
+    assert first.index("python -m pip install -q -r api/requirements-train.txt") < first.index(
+        "python scripts/prepare_wimbledon2023_guarded_restore.py"
+    )
