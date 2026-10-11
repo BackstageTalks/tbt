@@ -137,3 +137,31 @@ def test_identical_surname_initial_collisions_rejected():
               side2_players_json='["Smith J."]')]
     diag=name_format_diagnostics(rows,[cdb()])
     assert diag["counts"].get("surname_initial_pair_day_candidate_rows_research_only",0)==0
+
+
+def test_abbreviated_unique_pair_day_and_winner_is_only_research():
+    row=src(side1_players_json='["Swiatek I."]',
+            side2_players_json='["Two P."]')
+    diag=name_format_diagnostics([row],[cdb()])
+    z=diag["counts"]
+    assert z["surname_initial_unique_pair_day_provisional_only"]==1
+    assert z["provisional_cdb_winner_agrees_research_only"]==1
+    assert z["venue_shared_distinctive_tokens_1"]==1
+    assert z["venue_token_containment_at_least_half_research_only"]==1
+    assert diag["new_cdb_cells_approved"]==0
+    assert diag["canonical_link_approved"] is False
+
+
+def test_abbreviated_outcome_conflict_is_quarantined():
+    row=src(side1_players_json='["Swiatek I."]',
+            side2_players_json='["Two P."]',side1_sets_won="0",side2_sets_won="2")
+    diag=name_format_diagnostics([row],[cdb()])
+    assert diag["counts"]["provisional_cdb_winner_disagrees_quarantined"]==1
+    assert diag["new_cdb_cells_approved"]==0
+
+
+def test_multiple_canonical_name_day_candidates_not_given_provisional_winner():
+    row=src(side1_players_json='["Swiatek I."]',side2_players_json='["Two P."]')
+    diag=name_format_diagnostics([row],[cdb(),cdb(match_id="canonical-2")])
+    assert diag["counts"]["surname_initial_multiple_canonical_event_candidates"]==1
+    assert diag["counts"].get("provisional_cdb_winner_agrees_research_only",0)==0

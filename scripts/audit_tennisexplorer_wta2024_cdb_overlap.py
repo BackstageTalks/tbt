@@ -274,6 +274,52 @@ def name_format_diagnostics(source: list[dict], canonical: list[dict]) -> dict:
                     counts["surname_initial_unique_match_candidate_rows_research_only"] += 1
             elif not full_matches:
                 counts["surname_initial_day_only_tournament_mismatch_rows"] += 1
+
+            if len(abbr_matches) != 1:
+                counts["surname_initial_multiple_canonical_event_candidates"] += 1
+                continue
+            counts["surname_initial_unique_pair_day_provisional_only"] += 1
+            m = abbr_matches[0]
+            # Venue is *diagnostic* only: shared words are not proof that
+            # two differently labelled tournaments are the same event.
+            generic = {"wta", "atp", "itf", "women", "men", "singles",
+                       "doubles", "open", "tennis", "tournament", "tour"}
+            src_tokens = {x for x in norm(row.get("tournament")).split()
+                          if x not in generic and not x.isdecimal()}
+            cdb_tokens = {x for x in norm(m.get("tournament")).split()
+                          if x not in generic and not x.isdecimal()}
+            common = len(src_tokens & cdb_tokens)
+            counts["venue_shared_distinctive_tokens_" + str(min(common, 4))] += 1
+            if common and (src_tokens and cdb_tokens):
+                ratio = common / min(len(src_tokens), len(cdb_tokens))
+                if ratio >= 0.5:
+                    counts["venue_token_containment_at_least_half_research_only"] += 1
+            variants = []
+            for name in (norm(m.get("player1_name")), norm(m.get("player2_name"))):
+                tk = name.split()
+                variants.append(
+                    {(tk[-1], tk[0][0]), (tk[0], tk[-1][0])} if len(tk)>=2 else set()
+                )
+            direct = si[0] in variants[0] and si[1] in variants[1]
+            swapped = si[0] in variants[1] and si[1] in variants[0]
+            if direct == swapped:
+                counts["provisional_player_orientation_ambiguous"] += 1
+                continue
+            side = result_side(row)
+            if side is None:
+                counts["provisional_source_winner_unverifiable"] += 1
+                continue
+            source_winner_cdb_side = side if direct else 3-side
+            expected = str(m["player1_id"] if source_winner_cdb_side==1
+                           else m["player2_id"])
+            value = m.get("winner_id")
+            actual = str(value) if value is not None and not pd.isna(value) else ""
+            if not actual:
+                counts["provisional_cdb_winner_missing_research_only"] += 1
+            elif actual == expected:
+                counts["provisional_cdb_winner_agrees_research_only"] += 1
+            else:
+                counts["provisional_cdb_winner_disagrees_quarantined"] += 1
     return {
         "counts": dict(sorted(counts.items())),
         "identity_policy": "RESEARCH_ONLY; surname and first initial are not independently verified source player IDs",
