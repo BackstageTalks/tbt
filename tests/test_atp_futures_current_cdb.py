@@ -54,3 +54,47 @@ def test_raw_ids_not_equal_remain_quarantined():
     r=a.strict_id_evidence(stage,original,[match])
     assert r["counts"]["raw_ids_not_equal_to_canonical_ids"]==1
     assert not r["counts"].get("direct_id_winner_event_cells")
+
+
+def test_atp_futures_name_linked_candidates_are_not_verified_id_imports():
+    source = {
+        "canonical_rows": 994096, "production_mutated": False, "api_requests": 0,
+        "source_rows": 27821,
+        "counts": {"staged_matches": 321, "identity_linked": 12131,
+                   "name_linked": 12131, "verified_id_linked": 0},
+        "staged_field_counts": {"p1_break_point_return_win": 321,
+                                "p1_break_point_serve_win": 299,
+                                "p2_break_point_return_win": 299,
+                                "p2_break_point_serve_win": 321},
+        "matching_strategy": "verified_ids",
+        "verified_crosswalk_sha256": None,
+        "quality_ready_projected_added": 0,
+    }
+    evidence = a.summarized(source, {"quarantined_rows": 0}, range(994096), "a" * 64)
+    assert evidence["link_staged_fields_total"] == 1240
+    assert evidence["name_only_linked_source_rows"] == 12131
+    assert evidence["verified_id_linked_source_rows"] == 0
+    assert evidence["identity_verified_candidate_fields"] == 0
+    assert evidence["write_approved_statistic_values"] == 0
+    assert evidence["source_to_current_cdb_write_authorized"] is False
+    assert evidence["identity_provenance"] == "NAME_MATCHED_CANDIDATES_ONLY_NO_VERIFIED_ID_CROSSWALK"
+
+
+def test_futures_does_not_accept_unsupported_verified_id_claim():
+    source = {
+        "canonical_rows": 994096, "production_mutated": False, "api_requests": 0,
+        "counts": {"identity_linked": 1, "verified_id_linked": 1, "name_linked": 0},
+        "staged_field_counts": {}, "verified_crosswalk_sha256": None,
+    }
+    with pytest.raises(ValueError, match="without SHA-pinned"):
+        a.summarized(source, {"quarantined_rows": 0}, range(994096), "a" * 64)
+
+
+def test_futures_rejects_unattributed_linked_identity_counts():
+    source = {
+        "canonical_rows": 994096, "production_mutated": False, "api_requests": 0,
+        "counts": {"identity_linked": 5, "verified_id_linked": 1, "name_linked": 1},
+        "staged_field_counts": {}, "verified_crosswalk_sha256": "a" * 64,
+    }
+    with pytest.raises(ValueError, match="Incomplete linker identity attribution"):
+        a.summarized(source, {"quarantined_rows": 0}, range(994096), "a" * 64)
