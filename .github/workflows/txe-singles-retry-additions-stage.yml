@@ -6,6 +6,10 @@ on:
       - scripts/import_txe_wta2024_scores_exact.py
       - tests/test_txe_generic_score_semantics.py
       - .github/workflows/txe-singles-retry-additions-stage.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/txe-singles-retry-additions-stage.yml
   workflow_dispatch:
 permissions:
   contents: read
