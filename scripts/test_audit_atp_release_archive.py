@@ -49,6 +49,8 @@ class ArchiveAuditTests(unittest.TestCase):
             self.assertEqual(result["stats_with_nonempty_tables"], 1)
             self.assertEqual(result["stats_with_text_over_100_chars"], 1)
             self.assertEqual(result["stats_with_numeric_serve_text"], 1)
+            self.assertTrue(result["source_stats_payload_complete"])
+            self.assertTrue(result["source_archive_usable_for_stats"])
 
     def test_missing_tournament_not_green(self):
         with tempfile.TemporaryDirectory() as d:
@@ -63,6 +65,7 @@ class ArchiveAuditTests(unittest.TestCase):
             result = audit(path, 2008, sha)
             self.assertFalse(result["source_archive_complete"])
             self.assertEqual(result["missing_match_stats"], 1)
+            self.assertFalse(result["source_archive_usable_for_stats"])
 
     def test_sha_mismatch_is_rejected(self):
         with tempfile.TemporaryDirectory() as d:
