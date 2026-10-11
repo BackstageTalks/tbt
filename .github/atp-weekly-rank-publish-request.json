@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "mode": "dry-run",
+  "source_tag": "blinq-atp-weekly-rank-current-38124276216",
+  "source_run_id": 38124276216,
+  "affected_years": [
+    2024,
+    2025,
+    2026
+  ],
+  "expected_stage_rows": 2076,
+  "expected_eligible_matches": 2034,
+  "expected_added_ranks": 4068,
+  "allow_existing_overwrite": false,
+  "require_global_lock": true,
+  "require_immutable_backup": true,
+  "require_full_year_readback": true,
+  "train_model": false,
+  "promote_model": false,
+  "rapidapi_requests": 0
+}
