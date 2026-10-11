@@ -105,7 +105,11 @@ def main():
                     drawer.click()
                     assert drawer.get_attribute("aria-expanded") == "true", width
                 page.locator(".results-category-picker summary").click()
+                # The open checkbox element must survive re-rendering: desktop
+                # and Android desktop-site must support consecutive selections.
+                page.evaluate("window.__resultsPicker= document.querySelector('.results-category-picker')")
                 page.locator('input[data-result-category="top_daily"]').check()
+                assert page.evaluate("document.querySelector('.results-category-picker') === window.__resultsPicker"), scenario
                 assert table.count() == 1, (width, "TOP", table.count())
                 page.locator('input[data-result-category="value"]').check()
                 assert table.count() == 1, (width, "TOP+Value dedup", table.count())
@@ -114,6 +118,7 @@ def main():
                 for category, count in [("ace", 2), ("double_faults", 3), ("sets", 4), ("games", 5)]:
                     page.locator(f'input[data-result-category="{category}"]').check()
                     assert table.count() == count, (width, category, table.count())
+                    assert page.evaluate("document.querySelector('.results-category-picker') === window.__resultsPicker"), (scenario, category)
                     if drawer.is_visible():
                         assert drawer.get_attribute('aria-expanded') == 'true', (width, category)
                 # This is the screenshot's exact situation: six checked
