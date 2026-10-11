@@ -1,0 +1,212 @@
+name: BlinQ original-upload six-year exact score guarded import
+on:
+  pull_request:
+    paths:
+      - scripts/import_audited_uploaded_score_delta.py
+      - tests/test_audited_uploaded_score_delta.py
+      - .github/workflows/blinq-audited-uploaded-score-import.yml
+      - .github/audited-uploaded-score-delta-import-request.json
+  push:
+    branches: [main]
+    paths: [.github/audited-uploaded-score-delta-import-request.json]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: blinq-upload-score-sixyear-${{ github.run_id }}
+  cancel-in-progress: false
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      TAG: blinq-audited-source-cell-delta-38123115526
+      ROOT: .cache/tbt/audited-uploaded-score
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate controlled request; PR can never publish
+        id: control
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          f=.github/audited-uploaded-score-delta-import-request.json
+          test "$(jq -r .schema "$f")" = 1
+          test "$(jq -r .source_tag "$f")" = "$TAG"
+          test "$(jq -r .stage_sha256 "$f")" = 73387f3febca5c44ed4187d0b0e5fd0abe57a23e325e1c615332d7315d634f8c
+          test "$(jq -r .report_sha256 "$f")" = 4cd96d2237c51fb530a60cdfda12d2a80ea1dfc292491b9db62f17da87b83c55
+          test "$(jq -c .years "$f")" = '[2020,2021,2022,2023,2024,2025]'
+          test "$(jq -r .expected_missing_values "$f")" = 111653
+          test "$(jq -r .expected_matches "$f")" = 8685
+          test "$(jq -r .allow_existing_overwrite "$f")" = false
+          test "$(jq -r .global_writer_lock "$f")" = true
+          test "$(jq -r .immutable_backup "$f")" = true
+          test "$(jq -r .full_year_readback "$f")" = true
+          test "$(jq -r .model_training "$f")" = false
+          test "$(jq -r .model_promotion "$f")" = false
+          test "$(jq -r .provider_api_requests "$f")" = 0
+          mode=dry-run
+          if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main ]]; then
+            mode="$(jq -r .mode "$f")"
+          fi
+          [[ "$mode" == dry-run || "$mode" == write ]]
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+      - name: Run focused additive score and immutable-source regression
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements.txt -r api/requirements-train.txt pytest
+          python -m pytest -q tests/test_audited_uploaded_score_delta.py
+          python -m compileall -q scripts/import_audited_uploaded_score_delta.py
+      - name: Download verified immutable candidate source and current six years
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/input" "$ROOT/history" "$ROOT/local" "$ROOT/dry" "$ROOT/local-verify" "$ROOT/local-write"
+          gh release download "$TAG" -R "$PRIVATE_REPO" -D "$ROOT/input"
+          (cd "$ROOT/input" && sha256sum -c SHA256SUMS)
+          for y in 2020 2021 2022 2023 2024 2025; do
+            gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p "history-$y.parquet" -D "$ROOT/history"
+          done
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p history_manifest.json -p _tbt_bundle_manifest.json -D "$ROOT/history"
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > "$ROOT/history/release.json"
+          cp "$ROOT/history/history_manifest.json" "$ROOT/local/"
+          cp "$ROOT/history/_tbt_bundle_manifest.json" "$ROOT/local/"
+      - name: Exact positive delta and isolated full-year write/readback
+        id: prepared
+        run: |
+          set -euo pipefail
+          python scripts/import_audited_uploaded_score_delta.py --mode dry-run \
+            --stage "$ROOT/input/preconditioned-score-candidates.jsonl.gz" \
+            --report "$ROOT/input/source-to-cdb-cell-delta.json" \
+            --before "$ROOT/history" --after "$ROOT/local" \
+            --release-json "$ROOT/history/release.json" --out "$ROOT/dry/report.json"
+          test "$(jq -r .added_values "$ROOT/dry/report.json")" = 111653
+          echo "additions=111653" >> "$GITHUB_OUTPUT"
+          for mode in write verify; do
+            python scripts/import_audited_uploaded_score_delta.py --mode "$mode" \
+              --stage "$ROOT/input/preconditioned-score-candidates.jsonl.gz" \
+              --report "$ROOT/input/source-to-cdb-cell-delta.json" \
+              --before "$ROOT/history" --after "$ROOT/local" \
+              --release-json "$ROOT/history/release.json" --out "$ROOT/local-$mode/report.json"
+          done
+          test "$(jq -r .status "$ROOT/local-verify/report.json")" = verified
+          test "$(jq -r .existing_values_overwritten "$ROOT/local-verify/report.json")" = 0
+          test "$(jq -r .added_values "$ROOT/local-verify/report.json")" = 111653
+          test "$(jq -r .changed_matches "$ROOT/local-verify/report.json")" = 8685
+          cp "$ROOT/local-verify/report.json" "$ROOT/package.json"
+      - name: Acquire GLOBAL CDB writer lock
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions == '111653'
+        run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+      - name: Under lock verify source baseline all six years plus both manifests
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions == '111653'
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          mkdir -p "$ROOT/remote-before"
+          for y in 2020 2021 2022 2023 2024 2025; do
+            gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p "history-$y.parquet" -D "$ROOT/remote-before"
+            cmp "$ROOT/history/history-$y.parquet" "$ROOT/remote-before/history-$y.parquet"
+          done
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p history_manifest.json -p _tbt_bundle_manifest.json -D "$ROOT/remote-before"
+          cmp "$ROOT/history/history_manifest.json" "$ROOT/remote-before/history_manifest.json"
+          cmp "$ROOT/history/_tbt_bundle_manifest.json" "$ROOT/remote-before/_tbt_bundle_manifest.json"
+      - name: Immutable prewrite backup and independent SHA256 reread
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions == '111653'
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/backup" "$ROOT/backup-readback"
+          for y in 2020 2021 2022 2023 2024 2025; do cp "$ROOT/history/history-$y.parquet" "$ROOT/backup/"; done
+          cp "$ROOT/history/history_manifest.json" "$ROOT/backup/"
+          cp "$ROOT/history/_tbt_bundle_manifest.json" "$ROOT/backup/"
+          cp "$ROOT/input/preconditioned-score-candidates.jsonl.gz" "$ROOT/backup/"
+          cp "$ROOT/input/source-to-cdb-cell-delta.json" "$ROOT/backup/"
+          cp "$ROOT/package.json" "$ROOT/backup/"
+          (cd "$ROOT/backup" && sha256sum ./* > SHA256SUMS && sha256sum -c SHA256SUMS)
+          tag="blinq-audited-uploaded-scores-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" "$ROOT/backup/"* -R "$PRIVATE_REPO" \
+            --title "Immutable CDB 2020-2025 score backup" \
+            --notes "Six entire canonical years, previous manifests, source stage and byte checksums"
+          gh release download "$tag" -R "$PRIVATE_REPO" -D "$ROOT/backup-readback"
+          (cd "$ROOT/backup-readback" && sha256sum -c SHA256SUMS)
+          cmp "$ROOT/package.json" "$ROOT/backup-readback/package.json"
+      - name: Manifest-last six-year protected upload and CAS
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions == '111653'
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from cdb_global_writer_lock import verify
+          root=Path(os.environ["ROOT"])
+          repo=os.environ["PRIVATE_REPO"]
+          def freshness():
+              verify(repo,Path(".cdb-global-writer-lock.json"))
+              pinned=json.loads((root/"history/_tbt_bundle_manifest.json").read_text())["files"]
+              now=ReleaseStore(repo,"tbt-data-v1",root/"freshness")._remote_bundle_files()
+              if now!=pinned: raise ValueError("Concurrent CDB movement, refuse stale write")
+          changed=[root/f"local/history-{year}.parquet" for year in range(2020,2026)]
+          changed.append(root/"local/history_manifest.json")
+          ReleaseStore(repo,"tbt-data-v1",root/"local").upload_bundle(changed,before_upload=freshness)
+          PY
+      - name: Independently reread all persisted rows across 2020-2025
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions == '111653'
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/persisted" "$ROOT/remote-verify"
+          for y in 2020 2021 2022 2023 2024 2025; do
+            gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p "history-$y.parquet" -D "$ROOT/persisted"
+          done
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p history_manifest.json -p _tbt_bundle_manifest.json -D "$ROOT/persisted"
+          python scripts/import_audited_uploaded_score_delta.py --mode verify \
+            --stage "$ROOT/input/preconditioned-score-candidates.jsonl.gz" \
+            --report "$ROOT/input/source-to-cdb-cell-delta.json" \
+            --before "$ROOT/history" --after "$ROOT/persisted" \
+            --release-json "$ROOT/history/release.json" \
+            --out "$ROOT/remote-verify/report.json"
+          test "$(jq -r .status "$ROOT/remote-verify/report.json")" = verified
+          test "$(jq -r .added_values "$ROOT/remote-verify/report.json")" = 111653
+          test "$(jq -r .changed_matches "$ROOT/remote-verify/report.json")" = 8685
+          test "$(jq -r .existing_values_overwritten "$ROOT/remote-verify/report.json")" = 0
+      - name: Save independently confirmed postwrite audit to private CDB repo
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions == '111653'
+        run: |
+          set -euo pipefail
+          jq -n --arg run "$GITHUB_RUN_ID" --arg sha "$GITHUB_SHA" \
+            --arg backup "blinq-audited-uploaded-scores-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --slurpfile proof "$ROOT/remote-verify/report.json" \
+            '{schema:1,status:"published_and_independently_verified",
+              run_id:$run,app_sha:$sha,backup_tag:$backup,independent_full_year_readback:$proof[0],
+              source_tag:"blinq-audited-source-cell-delta-38123115526",
+              existing_values_overwritten:0,model_trained:false,provider_requests:0}' > "$ROOT/final-audit.json"
+          path=audit/audited-uploaded-scores-2020-2025-import-latest.json
+          encoded="$(base64 -w0 "$ROOT/final-audit.json")"
+          old="$(gh api "repos/$PRIVATE_REPO/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$old" ]]; then
+            gh api --method PUT "repos/$PRIVATE_REPO/contents/$path" \
+              -f message="Verify multi-year score source import $GITHUB_RUN_ID" -f content="$encoded" -f sha="$old" >/dev/null
+          else
+            gh api --method PUT "repos/$PRIVATE_REPO/contents/$path" \
+              -f message="Verify multi-year score source import $GITHUB_RUN_ID" -f content="$encoded" >/dev/null
+          fi
+      - name: Preserve aggregate score import proofs (no player-level public artifacts)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-audited-uploaded-scores-${{ github.run_id }}
+          path: |
+            .cache/tbt/audited-uploaded-score/dry/report.json
+            .cache/tbt/audited-uploaded-score/local-verify/report.json
+            .cache/tbt/audited-uploaded-score/remote-verify/report.json
+            .cache/tbt/audited-uploaded-score/final-audit.json
+          retention-days: 35
+          if-no-files-found: warn
+      - name: Release global CDB writer lock whether published or stopped
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
