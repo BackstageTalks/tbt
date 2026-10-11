@@ -101,7 +101,7 @@ def test_identity_drift_and_non_null_source_validation():
     with pytest.raises(ValueError, match="identity/context drift"):
         _patch(frame, stage)
     frame.at[0, "player1_id"] = "id1"
-    stage[0]["additions"]["p2_aces"] = True
+    stage[0]["additions"]["p1_aces"] = 7
     with pytest.raises(ValueError, match="non-null CDB overwrite"):
         _patch(frame, stage)
 
