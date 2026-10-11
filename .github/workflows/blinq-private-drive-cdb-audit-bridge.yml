@@ -26,7 +26,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: blinq-private-drive-cdb-audit-bridge
+  # PR safety checks never acquire the long-running private scan slot.
+  # All workflow_dispatch scans keep the original single-writer audit queue.
+  group: ${{ github.event_name == 'pull_request' && format('blinq-private-drive-cdb-audit-bridge-pr-{0}', github.event.pull_request.number) || 'blinq-private-drive-cdb-audit-bridge' }}
   cancel-in-progress: false
 
 jobs:
