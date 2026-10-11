@@ -30,6 +30,19 @@ def summarized(linker, safety, history, original_sha):
         raise ValueError("Canonical identity/floor changed")
     if linker.get("canonical_rows") != len(history):
         raise ValueError("Linker used a different canonical input")
+    verified_links = int(counts.get("verified_id_linked") or 0)
+    name_links = int(counts.get("name_linked") or 0)
+    if verified_links < 0 or name_links < 0:
+        raise ValueError("Invalid linker identity attribution")
+    if verified_links + name_links != int(counts.get("identity_linked") or 0):
+        raise ValueError("Incomplete linker identity attribution")
+    attested_crosswalk = linker.get("verified_crosswalk_sha256")
+    if verified_links and not attested_crosswalk:
+        raise ValueError("Claimed verified-ID matches without SHA-pinned crosswalk")
+    identity_provenance = (
+        "VERIFIED_IDS_PINNED_CROSSWALK" if verified_links
+        else "NAME_MATCHED_CANDIDATES_ONLY_NO_VERIFIED_ID_CROSSWALK"
+    )
     return {
         "schema": 1, "status": "READ_ONLY_SOURCE_TO_CDB_FIELD_DELTA_NOT_WRITE_APPROVED",
         "source_filename": "blinq_atp_futures_quali_2018_2026.csv",
@@ -40,13 +53,19 @@ def summarized(linker, safety, history, original_sha):
         "link_counts": counts,
         "link_staged_field_counts": field_counts,
         "link_staged_fields_total": sum(int(v) for v in field_counts.values()),
+        "verified_id_linked_source_rows": verified_links,
+        "name_only_linked_source_rows": name_links,
+        "verified_player_crosswalk_sha256": attested_crosswalk,
+        "identity_provenance": identity_provenance,
+        "write_approved_statistic_values": 0,
+        "identity_verified_candidate_fields": 0 if not verified_links else None,
         "quality_ready_projected_added": linker.get("quality_ready_projected_added"),
         "matching_strategy": linker.get("matching_strategy"),
         "source_to_current_cdb_write_authorized": False,
         "immutable_backup_created": False,
         "production_cdb_mutated": False, "provider_requests": 0,
         "model_trained": False, "cron_created": False,
-        "note": "Read-only link candidates only. Fresh CDB exact identity, source license, and writer lease/backup/CAS/remote proof required before any import.",
+        "note": "Link candidates are not ID-verified without a SHA-pinned, independently attested player crosswalk. Source license is uncleared. Zero fields authorized for write; require fresh identity, source-rights, writer lease/backup/CAS/remote proof.",
     }
 
 
