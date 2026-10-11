@@ -25,7 +25,7 @@ jobs:
       - name: Exact finished set and game regression
         run: |
           python -m pip install pytest
-          python -m pytest -q tests/test_wta2024_score_observations.py
+          python -m pytest --noconftest -q tests/test_wta2024_score_observations.py
           python -m py_compile scripts/prepare_wta2024_score_observations.py
       - name: SHA-verified real archived WTA singles 2024 source extract
         run: |
