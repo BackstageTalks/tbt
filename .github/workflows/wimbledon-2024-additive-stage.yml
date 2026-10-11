@@ -1,0 +1,114 @@
+name: BlinQ Wimbledon 2024 exact add-only real CDB stage
+
+on:
+  pull_request:
+    paths:
+      - "scripts/stage_wimbledon_2024_cdb.py"
+      - "scripts/import_wimbledon_2024_exact.py"
+      - "tests/test_wimbledon_2024_exact.py"
+      - ".github/workflows/wimbledon-2024-additive-stage.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: blinq-wimbledon2024-readonly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      ROOT: .cache/tbt/wimbledon2024-exact
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Test stage and strict local CDB writer
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements.txt -r api/requirements-train.txt pytest
+          python -m pytest -q tests/test_wimbledon_2024_exact.py
+          python -m compileall -q scripts/stage_wimbledon_2024_cdb.py scripts/import_wimbledon_2024_exact.py
+
+      - name: Download source and CDB; verify original source bytes
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$PRIVATE_REPO" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p "$ROOT/source" "$ROOT/history" "$ROOT/stage" "$ROOT/local"
+          gh release download blinq-kaggle-backup-2026-10-07 -R "$PRIVATE_REPO" \
+            -p 'rewantbhriguvanshi_wimbledon-2024-point-and-match-level-statistics-cd464e89a19a.zip' -D "$ROOT/source"
+          (
+            cd "$ROOT/source"
+            echo 'cd464e89a19a0c6440fdd2928d14e375065d2baf96ff01c3c9860077a1803c20  rewantbhriguvanshi_wimbledon-2024-point-and-match-level-statistics-cd464e89a19a.zip' | sha256sum -c -
+            unzip -q rewantbhriguvanshi_wimbledon-2024-point-and-match-level-statistics-cd464e89a19a.zip
+            echo '974c6c7509f341ca6a1cf5a7e69e721a7c515a1449bf014219983ef303eee2cf  wimbledon_2024.csv' | sha256sum -c -
+            echo '6424486fd7eb7e21aa1a57232e7f56dc0e5f34e39c63642a89973a7a535f1299  wimbledon_2024_match_level.csv' | sha256sum -c -
+          )
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -D "$ROOT/history" \
+            -p history-2024.parquet -p history_manifest.json -p _tbt_bundle_manifest.json
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > "$ROOT/history/release.json"
+
+      - name: Real-source match/field classification and conflict quarantine
+        run: |
+          set -euo pipefail
+          python scripts/stage_wimbledon_2024_cdb.py \
+            --match-csv "$ROOT/source/wimbledon_2024_match_level.csv" \
+            --point-csv "$ROOT/source/wimbledon_2024.csv" \
+            --cdb-year "$ROOT/history/history-2024.parquet" \
+            --manifest "$ROOT/history/history_manifest.json" \
+            --release-json "$ROOT/history/release.json" --out "$ROOT/stage"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ["ROOT"])/"stage/report.json").read_text())
+          assert r["counts"]["source_matches"]==252 and r["write_performed"] is False
+          assert r["model_trained"] is False and r["counts"]["staged_fields"]>=0
+          print("WIMBLEDON2024_CDB_DELTA:",json.dumps(r["counts"],sort_keys=True))
+          PY
+
+      - name: Isolated full-year add-only patch and readback (never publish)
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/dry" "$ROOT/local-write" "$ROOT/local-verify"
+          for file in history-2024.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cp "$ROOT/history/$file" "$ROOT/local/$file"
+          done
+          python scripts/import_wimbledon_2024_exact.py --mode dry-run \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/dry/report.json"
+          if [[ "$(jq -r '.counts.staged_fields' "$ROOT/stage/report.json")" -gt 0 ]]; then
+            python scripts/import_wimbledon_2024_exact.py --mode write \
+              --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+              --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+              --out "$ROOT/local-write/report.json"
+            python scripts/import_wimbledon_2024_exact.py --mode verify \
+              --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+              --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+              --out "$ROOT/local-verify/report.json"
+            test "$(jq -r '.existing_values_overwritten' "$ROOT/local-verify/report.json")" = 0
+          else
+            echo "Verified no-op: no published changes"
+          fi
+
+      - name: Upload real-source stage and local independent readback evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-wimbledon2024-exact-${{ github.run_id }}
+          path: |
+            .cache/tbt/wimbledon2024-exact/stage/
+            .cache/tbt/wimbledon2024-exact/dry/
+            .cache/tbt/wimbledon2024-exact/local-write/
+            .cache/tbt/wimbledon2024-exact/local-verify/
+          retention-days: 45
+          if-no-files-found: warn
