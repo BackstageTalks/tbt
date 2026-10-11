@@ -145,3 +145,65 @@ def test_readback_requires_all_exact_added_values(match_factory):
         verify_added_fields([], {'x': {'p1_aces': 0}})
     with pytest.raises(ValueError):
         verify_added_fields([m, m], {'x': {'p1_aces': 0}})
+
+
+def test_targeted_outcome_evidence_separates_paid_gains_and_unavailable_reasons(match_factory):
+    from collections import Counter
+    from download_tennis_history import _record_targeted_statistics_outcome, _statistics_segment_yield
+
+    segments = {}
+    reasons = Counter()
+    match = match_factory('audit', 'A', 'B', 'A')
+    match.tour = 'atp'
+    match.scheduled_at = datetime(2026, 5, 15, tzinfo=timezone.utc)
+    _record_targeted_statistics_outcome(
+        segments, reasons, match, 'enriched', 2,
+        {'new_statistic_values': 8, 'new_quality_ready_rows': 1, 'new_ace_df_values': 4},
+    )
+    match.provider_payload = {'_tbt_statistics': {
+        'status': 'unavailable', 'reason': 'no_supported_fields'}}
+    _record_targeted_statistics_outcome(
+        segments, reasons, match, 'unavailable', 1,
+        {'new_statistic_values': 0, 'new_quality_ready_rows': 0, 'new_ace_df_values': 0},
+    )
+    # A cache/local hit must never be counted as provider yield.
+    _record_targeted_statistics_outcome(
+        segments, reasons, match, 'enriched', 0,
+        {'new_statistic_values': 2, 'new_quality_ready_rows': 0, 'new_ace_df_values': 0},
+    )
+    data = _statistics_segment_yield(segments)['atp:2026']
+    assert data['processed_matches'] == 3
+    assert data['api_requests_including_retries'] == 3
+    assert data['matches_with_provider_requests'] == 2
+    assert data['status_enriched'] == 2
+    assert data['status_unavailable'] == 1
+    assert data['unavailable_no_supported_fields'] == 1
+    assert reasons == {'no_supported_fields': 1}
+    assert data['new_statistic_values'] == 10
+    assert data['api_new_statistic_values'] == 8
+    assert data['local_or_cache_new_statistic_values'] == 2
+    assert data['api_new_quality_ready_rows'] == 1
+    assert data['api_new_ace_df_values'] == 4
+    assert data['api_new_statistic_values_per_1000_requests'] == 8000/3
+    assert data['api_new_quality_ready_rows_per_1000_requests'] == 1000/3
+
+
+def test_targeted_outcome_unknown_coverage_reason_and_zero_request_denominator(match_factory):
+    from collections import Counter
+    from download_tennis_history import _record_targeted_statistics_outcome, _statistics_segment_yield
+
+    match = match_factory('audit', 'A', 'B', 'A')
+    match.tour = 'wta'
+    match.scheduled_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    match.provider_payload = {'_tbt_statistics': {'status':'unavailable',
+                                                  'reason':'provider_private_data_secret'}}
+    segments = {}
+    reasons = Counter()
+    _record_targeted_statistics_outcome(
+        segments, reasons, match, 'unavailable', 0, {})
+    data = _statistics_segment_yield(segments)['wta:2025']
+    assert data['unavailable_unspecified'] == 1
+    assert reasons == {'unspecified': 1}
+    assert data['api_requests_including_retries'] == 0
+    assert data['api_new_statistic_values_per_1000_requests'] is None
+    assert data['api_new_quality_ready_rows_per_1000_requests'] is None
