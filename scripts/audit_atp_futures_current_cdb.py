@@ -141,6 +141,121 @@ def strict_id_evidence(staged, original_source, matches):
     }
 
 
+
+def existing_identity_sidecar_diagnostic(staged, original_source, matches, crosswalk_rows):
+    """Read-only what-if join through an independently released ATP ID sidecar.
+
+    The original CSV's numeric player IDs are NOT proven to belong to the
+    historical Sackmann namespace. Prefixing them is a diagnostic hypothesis,
+    not evidence of the match's player or event identity. Never authorize a
+    current CDB write based on this join alone.
+    """
+    mapping = {}
+    for entry in crosswalk_rows:
+        if entry.get("tour") != "atp":
+            continue
+        old = str(entry.get("source_player_id") or "")
+        new = str(entry.get("canonical_player_id") or "")
+        if not old.startswith("hist-js:atp:") or not new or old == new:
+            raise ValueError("Unexpected ATP player identity sidecar key")
+        if entry.get("evidence") != "official_atp_identifier_unique_registry_full_name_and_nonconflicting_cdb":
+            raise ValueError("Player sidecar has untrusted identity evidence")
+        if old in mapping:
+            raise ValueError("Non-unique historical crosswalk owner")
+        mapping[old] = new
+
+    source_keys = {}
+    for stage in staged:
+        sources = stage.get("sources") or []
+        if len(sources) != 1:
+            continue
+        event_key = str(sources[0].get("source_match_id") or "")
+        if not event_key or ":" not in event_key:
+            raise ValueError("Missing unique staged original event key")
+        source_keys[event_key] = None
+
+    source_records = csv.DictReader(io.StringIO(original_source.decode("utf-8-sig"), newline=""))
+    for item in source_records:
+        event_key = str(item.get("tourney_id") or "") + ":" + str(item.get("match_num") or "")
+        if event_key in source_keys:
+            if source_keys[event_key] is not None:
+                raise ValueError("Ambiguous repeated raw original tournament/match key")
+            source_keys[event_key] = item
+
+    current = {str(m.match_id): m for m in matches}
+    if len(current) != len(matches):
+        raise ValueError("Duplicate canonical player/event match key")
+    counts = Counter()
+    for stage in staged:
+        counts["staged_matches"] += 1
+        sources = stage.get("sources") or []
+        if len(sources) != 1 or not stage.get("incoming_stats"):
+            counts["source_ambiguous_or_no_new_stat_values"] += 1
+            continue
+        event_key = str(sources[0].get("source_match_id") or "")
+        source = source_keys.get(event_key)
+        m = current.get(str(stage.get("match_id") or ""))
+        if source is None or m is None:
+            raise ValueError("Staged source event or canonical match missing")
+        counts["exact_raw_event_record_read"] += 1
+        raw_winner = str(source.get("winner_id") or "")
+        raw_loser = str(source.get("loser_id") or "")
+        if not raw_winner or not raw_loser or raw_winner == raw_loser:
+            counts["source_player_pair_invalid"] += 1
+            continue
+        winner = mapping.get("hist-js:atp:" + raw_winner)
+        loser = mapping.get("hist-js:atp:" + raw_loser)
+        if winner:
+            counts["hypothetical_sackmann_winner_id_bridge"] += 1
+        if loser:
+            counts["hypothetical_sackmann_loser_id_bridge"] += 1
+        if not winner or not loser:
+            counts["at_least_one_player_missing_crosswalk"] += 1
+            continue
+        counts["both_player_id_hypothetical_bridges"] += 1
+        canonical_pair = {str(m.player1_id), str(m.player2_id)}
+        if winner == loser or {winner, loser} != canonical_pair:
+            counts["full_pair_not_equal_current_canonical"] += 1
+            continue
+        if str(m.winner_id) != winner:
+            counts["full_pair_winner_conflict"] += 1
+            continue
+        counts["hypothetical_full_player_pair_and_winner_equal"] += 1
+        counts["hypothetical_candidate_statistic_cells"] += len(stage["incoming_stats"])
+    return {
+        "counts": dict(counts),
+        "known_verified_atp_sidecar_links": len(mapping),
+        "original_raw_source_player_id_namespace_independently_attested_as_sackmann": False,
+        "existing_sidecar_source_snapshot_revalidated_against_new_2023_CDB": False,
+        "original_match_to_canonical_event_id_independently_proven": False,
+        "source_reuse_rights_approved": False,
+        "new_verifiable_write_approved_fields": 0,
+        "source_to_current_cdb_write_authorized": False,
+        "provider_requests": 0,
+        "note": "Crosswalk comparison is only a diagnostic under an explicitly UNPROVEN source namespace assumption. Do not import its matching cells without original CSV provenance, exact event and participant proofs, rights and fresh current gap validation.",
+    }
+
+
+def load_verified_player_sidecar(root):
+    """Download the independently published identity sidecar with SHA readback."""
+    target = root / "identity-sidecar"
+    store = ReleaseStore(REPO, "tbt-canonical-identity-links-v1", target)
+    store.download(
+        extra_names=("player-identity-crosswalk.jsonl", "crosswalk-integrity-report.json"),
+        required_names=("player-identity-crosswalk.jsonl", "crosswalk-integrity-report.json"),
+        require_bundle_manifest=True,
+    )
+    contents = (target / "player-identity-crosswalk.jsonl").read_bytes()
+    summary = json.loads((target / "crosswalk-integrity-report.json").read_text())
+    digest = hashlib.sha256(contents).hexdigest()
+    if digest != summary.get("sidecar_sha256"):
+        raise ValueError("Verified crosswalk sidecar SHA mismatch")
+    rows = [json.loads(x) for x in contents.splitlines() if x.strip()]
+    if len(rows) != int(summary.get("crosswalk_rows") or 0):
+        raise ValueError("Verified crosswalk sidecar row count mismatch")
+    return rows, digest
+
+
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--out-dir", required=True, type=Path)
@@ -166,6 +281,9 @@ def main():
     result=summarized(report,safety,matches,hashlib.sha256(original).hexdigest())
     staged = [json.loads(line) for line in (linked/"auto_linked.jsonl").read_text().splitlines() if line.strip()]
     result["raw_source_direct_identity_evidence"] = strict_id_evidence(staged, original, matches)
+    identity_rows, sidecar_sha = load_verified_player_sidecar(root)
+    result["previously_published_player_sidecar_sha256"] = sidecar_sha
+    result["hypothetical_scoped_player_bridge_readonly"] = existing_identity_sidecar_diagnostic(staged, original, matches, identity_rows)
     result["canonical_manifest_sha256"]=hashlib.sha256(
         (history/"history_manifest.json").read_bytes()).hexdigest()
     result["canonical_bundle_sha256"]=hashlib.sha256(
