@@ -64,7 +64,7 @@ def load_archive(path, expected_sha=SOURCE_SHA):
         entries = {x.name: x for x in names}
         if RESULT_MEMBER not in entries or DETAIL_MEMBER not in entries:
             raise ValueError("Missing original match/detail members")
-        if entries[RESULT_MEMBER].size > 32 * 1024 ** 2 or entries[DETAIL_MEMBER].size > 256 * 1024 ** 2:
+        if entries[RESULT_MEMBER].size > 256 * 1024 ** 2 or entries[DETAIL_MEMBER].size > 768 * 1024 ** 2:
             raise ValueError("Source members too large")
         result = tar.extractfile(entries[RESULT_MEMBER])
         details = tar.extractfile(entries[DETAIL_MEMBER])
