@@ -37,3 +37,12 @@ def test_score_single_values():
     assert score("RET") is None
     assert score("7(5)")==7
     assert score("6")==6
+
+def test_model_feature_set_observations():
+    a=parse_completed(row())
+    assert a["deciding_set"] == 1
+    assert (a["side1_first_set_won"],a["side2_first_set_won"]) == (1,0)
+    assert (a["side1_second_set_won"],a["side2_second_set_won"]) == (0,1)
+    b=parse_completed(row("2","0",((6,2),(7,6))))
+    assert b["deciding_set"] == 0
+    assert b["side1_second_set_won"] == 1
