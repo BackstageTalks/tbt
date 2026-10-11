@@ -28,7 +28,7 @@ class ArchiveAuditTests(unittest.TestCase):
         if include_stats:
             asset[prefix + "match_stats/2008/777/ms001.json"] = json.dumps(
                 {"source_match_id": "atptour:2008:777:ms001",
-                 "tables": [{"rows": [["1", "2"]]}]}).encode()
+                 "tables": [{"rows": [["1", "2"]]}], "visible_text": "Aces 5 7 Break Points 2 3 1st Serve 65% 70% " * 4}).encode()
         if malicious:
             asset["../../outside.json"] = b"{}"
         with tarfile.open(path, "w:gz") as tar:
@@ -47,6 +47,8 @@ class ArchiveAuditTests(unittest.TestCase):
             self.assertEqual(result["tournaments_found"], 1)
             self.assertEqual(result["linked_match_stats"], 1)
             self.assertEqual(result["stats_with_nonempty_tables"], 1)
+            self.assertEqual(result["stats_with_text_over_100_chars"], 1)
+            self.assertEqual(result["stats_with_numeric_serve_text"], 1)
 
     def test_missing_tournament_not_green(self):
         with tempfile.TemporaryDirectory() as d:
