@@ -3704,13 +3704,41 @@
         shell?.querySelector('[data-results-filter-toggle]')?.setAttribute('aria-expanded','true');
       }
     };
+    // Update only the Results data after a checkbox change. Replacing the
+    // entire route destroys the active <details> / checkbox during a desktop
+    // click, making further selections unreliable (especially touch desktop).
+    const refreshCategoryResults=()=>{
+      const host=$('routePanel');
+      const metrics=host?.querySelector('.route-card-clean > .metric-cards');
+      const listing=host?.querySelector('.results-section-head');
+      if(!metrics||!listing){rerender();return;}
+      state.resultsPage=0;
+      metrics.outerHTML=resultsSummary();
+      listing.innerHTML=renderResults();
+      const picker=host.querySelector('.results-category-picker');
+      if(picker){
+        const selected=new Set(String(state.resultsFilters.category||'all').split(','));
+        const summary=picker.querySelector('summary');
+        if(summary)summary.textContent=resultCategoryLabel(state.resultsFilters.category||'all');
+        picker.querySelectorAll('[data-result-category]').forEach(box=>{
+          box.checked=selected.has(box.dataset.resultCategory);
+        });
+        picker.open=true;
+      }
+      const mobileCurrent=host.querySelector('.results-mobile-filter-current');
+      if(mobileCurrent&&mobileCurrent.firstChild?.nodeType===Node.TEXT_NODE){
+        mobileCurrent.firstChild.nodeValue=resultCategoryLabel(state.resultsFilters.category||'all');
+      }
+      // The pagination controls are replaced with the listing, so bind again.
+      wireResultsFilters();
+    };
     const mobileFilterToggle=document.querySelector('[data-results-filter-toggle]');
     if(mobileFilterToggle)mobileFilterToggle.onclick=()=>{
       const shell=mobileFilterToggle.closest('.results-filter-shell');
       const open=Boolean(shell?.classList.toggle('is-open'));
       mobileFilterToggle.setAttribute('aria-expanded',open?'true':'false');
     };
-    document.querySelectorAll('[data-result-category]').forEach(el=>el.onchange=()=>{const chosen=new Set(String(state.resultsFilters.category||'all').split(','));const value=el.dataset.resultCategory;if(value==='all'){chosen.clear();}else{chosen.delete('all');if(el.checked)chosen.add(value);else chosen.delete(value);}state.resultsFilters.category=chosen.size?[...chosen].join(','):'all';rerender();const menu=document.querySelector('.results-category-picker');if(menu)menu.open=true;});
+    document.querySelectorAll('[data-result-category]').forEach(el=>el.onchange=()=>{const chosen=new Set(String(state.resultsFilters.category||'all').split(','));const value=el.dataset.resultCategory;if(value==='all'){chosen.clear();}else{chosen.delete('all');if(el.checked)chosen.add(value);else chosen.delete(value);}state.resultsFilters.category=chosen.size?[...chosen].join(','):'all';refreshCategoryResults();});
     [['resultsCategory','category'],['resultsTour','tour'],['resultsSurface','surface']].forEach(([id,key])=>{const el=$(id);if(el)el.onchange=()=>{state.resultsFilters[key]=el.value;rerender();};});
     document.querySelectorAll('input[name=resultsMembership]').forEach(el=>el.onchange=()=>{state.resultsFilters.membership=el.value;rerender();});
     const period=$('resultsWindow');if(period)period.onchange=()=>{state.resultsFilters.window=period.value||'all';if(state.resultsFilters.window!=='custom'){state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}rerender();if(state.resultsFilters.window==='custom')openResultsRange(rerender);};
