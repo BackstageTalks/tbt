@@ -55,7 +55,7 @@ def main():
                 page.goto(ORIGIN + "/index.html?lang=sk", wait_until="networkidle")
                 page.wait_for_function("window.resultsMultiTest && resultsMultiTest.state.ui")
                 page.evaluate("""() => {
-                    const t=resultsMultiTest,s=t.state,when=new Date(Date.now()-3600000).toISOString();
+                    const t=resultsMultiTest,s=t.state,when=new Date().toISOString();
                     const publication=(section,market,selection,correct=true)=>({
                         section,market,selection,selection_id:selection,
                         issued_at:new Date(Date.now()-7200000).toISOString(),
