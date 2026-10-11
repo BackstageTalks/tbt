@@ -55,7 +55,7 @@ jobs:
       PRIVATE_REPO: BackstageTalks/tbt-data
       DRIVE_ROOT: 17UChTTWLpC-7tZIbvTXKA4_2eqooV44A
       PRIVATE_CACHE_RELEASE: blinq-drive-cdb-audit-cache-v1
-      SOURCE_REF: fb82ce4b9931dd951488fc88342f8dca93fc9784
+      SOURCE_REF: cf96b6085f93696eb7c319e9109a2040a04cfc4
       PYTHONPATH: api:scripts:private/scripts
     steps:
       - name: Preflight trust and private-only credentials
@@ -171,6 +171,37 @@ jobs:
           python scripts/drive_cdb_private_bridge.py validate --report-dir work/report --folder-id "$DRIVE_ROOT"
           echo READ_ONLY_AUDIT_VALIDATED_NO_CANONICAL_WRITES
 
+      - name: Recheck exact current CDB NULLs and source provenance privately
+        id: current_null_review
+        if: steps.audit.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/private-current-null-review
+          # Never pass unverified license/identity files. Research-only
+          # source links remain blocked. Source and CDB are SHA-bound.
+          if python private/scripts/drive_cdb_current_null_gate.py \
+            --source-audit work/report \
+            --history-dir work/history \
+            --out work/private-current-null-review >work/private-current-null.log 2>&1; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          gate = json.loads(Path('work/private-current-null-review/report.json').read_text())
+          audit = json.loads(Path('work/report/report.json').read_text())
+          assert gate['status'] == 'READ_ONLY_CURRENT_NULL_GATE'
+          assert gate['production_mutated'] is False
+          assert gate['write_authorized'] is False
+          assert gate['ready_for_production_write'] == 0
+          assert gate['canonical_rows'] == audit['canonical_rows']
+          assert gate['source_candidates_checked'] == audit['comparison'].get('candidate_missing_fields', 0)
+          PY
+            echo PRIVATE_CURRENT_NULL_RECHECK_PASS_NO_WRITES
+          else
+            echo PRIVATE_CURRENT_NULL_RECHECK_BLOCKED_DETAILS_PRIVATE
+            exit 1
+          fi
+
       - name: Publish private report and logs ONLY into private Release with readback
         id: private_report
         if: always() && steps.source_repo.outcome == 'success'
@@ -178,13 +209,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p work/private-output work/report-readback
-          for file in work/private-tests.log work/private-cdb.log work/private-audit.log; do
+          for file in work/private-tests.log work/private-cdb.log work/private-audit.log work/private-current-null.log; do
             if test -f "$file"; then cp "$file" work/private-output/; fi
           done
           for name in drive-inventory.json files.json candidate-fields.jsonl report.json; do
             if test -f "work/report/$name"; then cp "work/report/$name" work/private-output/; fi
           done
           printf '%s\n' "source_ref=$SOURCE_REF" "drive_root=$DRIVE_ROOT" "run=$GITHUB_RUN_ID" "attempt=$GITHUB_RUN_ATTEMPT" "audit_outcome=${{ steps.audit.outcome }}" >work/private-output/run-evidence.txt
+          if test -f work/private-current-null-review/report.json; then
+            cp work/private-current-null-review/report.json work/private-output/current-null-review-report.json
+            cp work/private-current-null-review/review-candidates.jsonl work/private-output/current-null-review-candidates.jsonl
+          fi
           (cd work/private-output; sha256sum -- * > SHA256SUMS)
           # Upload one nonempty container: GitHub Release uploads reject
           # zero-byte candidate-fields.jsonl (HTTP 400 Bad Content-Length).
@@ -202,7 +237,7 @@ jobs:
           echo PRIVATE_AUDIT_REPORT_INDEPENDENT_SHA256_READBACK_PASS
 
       - name: Store verified private checkpoint only after success
-        if: steps.audit.outcome == 'success' && steps.private_report.outcome == 'success'
+        if: always() && steps.audit.outcome == 'success' && steps.private_report.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -233,7 +268,7 @@ jobs:
         run: |
           {
             echo '## Drive batch: read-only candidate discovery'
-            echo "Audit step: $AUDIT_OUTCOME; private report: $REPORT_OUTCOME."
+            echo "Audit step: $AUDIT_OUTCOME; private report: $REPORT_OUTCOME. Current NULL review must pass independently."
             echo 'Canonical imports: none. Candidate values require identity, rights, time and governed-writer gates.'
             echo 'Check the checkpoint step before claiming this batch can resume. Full evidence is in the private tbt-data releases.'
             echo 'No schedule is installed. External cron can invoke workflow_dispatch on main with batch_files and download_mb.'
