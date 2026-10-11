@@ -50,4 +50,11 @@ class WTAReadOnlyContract(unittest.TestCase):
     def test_duplicate_canonical_ids_rejected(self):
         with self.assertRaisesRegex(ValueError,"Duplicate or absent"):a.compare([source()],[record(),record()])
 
+
+    def test_nan_rank_is_missing_not_a_conflict(self):
+        r=a.compare([source()],[record(player1_rank=float("nan"))])
+        self.assertEqual(r["RESEARCH_rank_null_NOT_WRITEABLE"],1)
+        self.assertNotIn("rank_conflict_or_different_snapshot",r)
+        self.assertEqual(r["approved_added_values"],0)
+
 if __name__=="__main__":unittest.main()
