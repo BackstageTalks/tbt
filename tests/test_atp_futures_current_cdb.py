@@ -98,3 +98,65 @@ def test_futures_rejects_unattributed_linked_identity_counts():
     }
     with pytest.raises(ValueError, match="Incomplete linker identity attribution"):
         a.summarized(source, {"quarantined_rows": 0}, range(994096), "a" * 64)
+
+
+
+def test_existing_verified_player_sidecar_bridge_is_only_diagnostic():
+    from types import SimpleNamespace
+    original = ("tourney_id,match_num,winner_id,loser_id\n"
+                "2024-M-ITF-X,12,123456,987654\n").encode()
+    staged = [{"match_id": "m1",
+               "sources": [{"source_match_id": "2024-M-ITF-X:12"}],
+               "incoming_stats": {"p1_break_point_serve_win": 0.5,
+                                  "p2_break_point_return_win": 0.42}}]
+    match = SimpleNamespace(match_id="m1", player1_id="11", player2_id="22",
+                            winner_id="11")
+    approved = "official_atp_identifier_unique_registry_full_name_and_nonconflicting_cdb"
+    rows = [{"tour": "atp", "source_player_id": "hist-js:atp:123456",
+             "canonical_player_id": "11", "evidence": approved},
+            {"tour": "atp", "source_player_id": "hist-js:atp:987654",
+             "canonical_player_id": "22", "evidence": approved}]
+    report = a.existing_identity_sidecar_diagnostic(staged, original, [match], rows)
+    assert report["known_verified_atp_sidecar_links"] == 2
+    assert report["counts"]["hypothetical_full_player_pair_and_winner_equal"] == 1
+    assert report["counts"]["hypothetical_candidate_statistic_cells"] == 2
+    assert report["original_raw_source_player_id_namespace_independently_attested_as_sackmann"] is False
+    assert report["new_verifiable_write_approved_fields"] == 0
+    assert report["source_to_current_cdb_write_authorized"] is False
+
+
+def test_existing_player_sidecar_never_accepts_identity_collision_or_fake_proof():
+    from types import SimpleNamespace
+    original = b"tourney_id,match_num,winner_id,loser_id\nX,1,111,222\n"
+    staged = [{"match_id": "m", "sources": [{"source_match_id": "X:1"}],
+               "incoming_stats": {"p1_aces": 1}}]
+    match = SimpleNamespace(match_id="m", player1_id="a", player2_id="b",
+                            winner_id="a")
+    approved = "official_atp_identifier_unique_registry_full_name_and_nonconflicting_cdb"
+    row = {"tour": "atp", "source_player_id": "hist-js:atp:111",
+           "canonical_player_id": "a", "evidence": approved}
+    with pytest.raises(ValueError, match="Non-unique"):
+        a.existing_identity_sidecar_diagnostic(staged, original, [match], [row, row])
+    with pytest.raises(ValueError, match="untrusted identity"):
+        a.existing_identity_sidecar_diagnostic(
+            staged, original, [match], [{**row, "evidence": "name_only"}])
+
+
+def test_existing_player_sidecar_blocks_wrong_winner_and_unmapped_opponent():
+    from types import SimpleNamespace
+    raw = b"tourney_id,match_num,winner_id,loser_id\nX,2,333,444\n"
+    stages = [{"match_id": "m", "sources": [{"source_match_id": "X:2"}],
+               "incoming_stats": {"p1_aces": 1}}]
+    match = SimpleNamespace(match_id="m", player1_id="a", player2_id="b",
+                            winner_id="a")
+    approved = "official_atp_identifier_unique_registry_full_name_and_nonconflicting_cdb"
+    rows = [{"tour": "atp", "source_player_id": "hist-js:atp:333",
+             "canonical_player_id": "b", "evidence": approved},
+            {"tour": "atp", "source_player_id": "hist-js:atp:444",
+             "canonical_player_id": "a", "evidence": approved}]
+    r = a.existing_identity_sidecar_diagnostic(stages, raw, [match], rows)
+    assert r["counts"]["full_pair_winner_conflict"] == 1
+    assert not r["counts"].get("hypothetical_candidate_statistic_cells")
+    r = a.existing_identity_sidecar_diagnostic(stages, raw, [match], rows[:1])
+    assert r["counts"]["at_least_one_player_missing_crosswalk"] == 1
+    assert r["new_verifiable_write_approved_fields"] == 0
