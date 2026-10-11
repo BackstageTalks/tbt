@@ -122,8 +122,8 @@ def audit(archive_path, year, digest):
                                     if isinstance(x, dict)))
             raw = data.get("visible_text") or ""
             valid_text = (isinstance(raw, str)
-                          and re.search(r"\\b(?:aces?|double faults?|break points?|"
-                                        r"first serve|second serve|1st serve|2nd serve)\\b",
+                          and re.search(r"\b(?:aces?|double faults?|break points?|"
+                                        r"first serve|second serve|1st serve|2nd serve)\b",
                                         raw, re.I)
                           and len(re.findall(r"[0-9]", raw)) >= 6)
             if valid_tables:
