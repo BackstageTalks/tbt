@@ -185,12 +185,51 @@ def audit(path: Path, category: str, year: int, expected_sha256: str) -> dict:
         if counts["missing_successful_days"]:
             issues.append("INCOMPLETE_DAILY_SOURCE_COVERAGE")
         issues += hard_errors
-        status = ("SOURCE_STRUCTURALLY_COMPLETE_CDB_LINK_PENDING"
-                  if not issues else "PARTIAL_OR_CONFLICTED_QUARANTINE_NO_CDB")
+        result_issues = {
+            "invalid_result_rows", "invalid_match_year",
+            "duplicate_result_event_ids", "cross_category_result_rows",
+            "page_wrong_year", "page_bad_date"
+        }
+        detail_issues = {
+            "invalid_details", "details_missing_id", "duplicate_detail_ids",
+            "unmatched_detail_ids"
+        }
+        results_complete = (
+            counts["result_rows"] > 0
+            and all(name in by_name for name in (csv_name, page_name, result_meta))
+            and counts["missing_successful_days"] == 0
+            and not any(counts[k] for k in result_issues)
+            and not any(x.startswith("RESULT_") for x in issues)
+        )
+        details_complete = (
+            results_complete
+            and details_name in by_name and detail_meta in by_name
+            and counts["result_ids_without_details"] == 0
+            and not any(counts[k] for k in detail_issues)
+            and not any("DETAIL_" in x for x in issues)
+        )
+        # A missing details ledger cannot invalidate 366 independently
+        # accounted-for daily result pages. Keep the two feature families apart.
+        status = (
+            "RESULTS_INCOMPLETE_QUARANTINE_NO_CDB" if not results_complete else
+            "SOURCE_STRUCTURALLY_COMPLETE_CDB_LINK_PENDING" if details_complete else
+            "RESULTS_COMPLETE_DETAILS_PARTIAL_NO_CDB"
+        )
     return {
         "schema": 1, "source": "TennisExplorer", "category": category, "year": year,
         "asset": path.name, "raw_sha256_verified": actual_sha,
         "status": status, "counts": dict(sorted(counts.items())),
+        "results_source_state": (
+            "COMPLETE_SOURCE_SCOPED_RESULTS_PENDING_CDB_LINK_AND_RIGHTS"
+            if results_complete else "INCOMPLETE_QUARANTINED"
+        ),
+        "details_source_state": (
+            "COMPLETE_SOURCE_SCOPED_DETAILS_PENDING_CDB_LINK_AND_RIGHTS"
+            if details_complete else "PARTIAL_DETAILS_QUARANTINED"
+        ),
+        "result_rows_eligible_for_further_source_scoped_review": (
+            counts["result_rows"] if results_complete else 0
+        ),
         "issues": sorted(set(issues)), "canonical_identity_verified": False,
         "doubles_team_identity_verified": False,
         "market_quote_timestamp_verified": False,
@@ -213,7 +252,7 @@ def main():
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print("TENNISEXPLORER_CHECKPOINT_QA", json.dumps(result, sort_keys=True))
-    if result["status"] != "SOURCE_STRUCTURALLY_COMPLETE_CDB_LINK_PENDING":
+    if result["results_source_state"] != "COMPLETE_SOURCE_SCOPED_RESULTS_PENDING_CDB_LINK_AND_RIGHTS":
         raise SystemExit(2)
 
 
