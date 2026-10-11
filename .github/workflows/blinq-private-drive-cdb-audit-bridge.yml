@@ -1,0 +1,197 @@
+name: BlinQ private Drive CDB audit - bounded free public runner
+
+# No automatic schedule or push collection. No CDB writes or public artifacts.
+'on':
+  workflow_dispatch:
+    inputs:
+      batch_files:
+        type: choice
+        description: Maximum changed source files for read-only pilot
+        required: true
+        default: '10'
+        options: ['10', '25', '50']
+  pull_request:
+    paths:
+      - .github/workflows/blinq-private-drive-cdb-audit-bridge.yml
+      - scripts/drive_cdb_private_bridge.py
+      - tests/test_drive_cdb_private_bridge.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-private-drive-cdb-audit-bridge
+  cancel-in-progress: false
+
+jobs:
+  safety-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test private report and checkpoint guards (no secrets)
+        run: python -m unittest discover -s tests -p test_drive_cdb_private_bridge.py -v
+
+  private-drive-audit:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: safety-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      DRIVE_ROOT: 17UChTTWLpC-7tZIbvTXKA4_2eqooV44A
+      PRIVATE_CACHE_RELEASE: blinq-drive-cdb-audit-cache-v1
+      SOURCE_REF: 5166c9695269fa3c570e5a42f6e2f7a8133b554a
+      PYTHONPATH: api:scripts:private/scripts
+    steps:
+      - name: Preflight trust and private-only credentials
+        id: preflight
+        env:
+          DRIVE_CREDENTIALS: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = BackstageTalks/tbt
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test -n "$GH_TOKEN" || { echo 'BLOCKED: missing private GitHub token'; exit 1; }
+          test -n "$DRIVE_CREDENTIALS" || { echo 'BLOCKED: add BLINQ_DRIVE_READER_JSON secret to tbt'; exit 1; }
+          test "$(gh api repos/$PRIVATE_REPO --jq .private)" = true
+          test "$(gh api repos/$GITHUB_REPOSITORY --jq .private)" = false
+          echo 'PRIVATE_DESTINATION_AND_TRUST_GATES_PASS'
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        id: source_repo
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          ref: ${{ env.SOURCE_REF }}
+          path: private
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+          export_environment_variables: true
+
+      - name: Install private audit read-only Python dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet google-auth requests 'pandas>=2,<3' pyarrow numpy pydantic pydantic-settings
+
+      - name: Run pinned private audit synthetic tests without exposing logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work
+          if python -m unittest discover -s private/tests -p test_drive_cdb_audit.py >work/private-tests.log 2>&1; then
+            echo PRIVATE_AUDIT_SYNTHETIC_TESTS_PASS
+          else
+            echo 'BLOCKED: private tests failed; details will stay private'
+            exit 1
+          fi
+
+      - name: Restore SHA-256-checked checkpoint from private Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/cache work/cache-input
+          if gh release view "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" >/dev/null 2>&1; then
+            if gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p audit.sqlite -p checkpoint.json -D work/cache-input >/dev/null 2>&1 &&
+               python scripts/drive_cdb_private_bridge.py restore-checkpoint --folder-id "$DRIVE_ROOT" --code-file private/scripts/drive_cdb_audit.py --source work/cache-input --dest work/cache/audit.sqlite; then
+              echo VERIFIED_PRIVATE_CHECKPOINT_RESTORED
+            else
+              echo INVALID_OR_STALE_PRIVATE_CHECKPOINT_IGNORED
+            fi
+          else
+            echo NO_PREVIOUS_PRIVATE_CHECKPOINT
+          fi
+
+      - name: Download and checksum-verify canonical CDB privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/history
+          python - <<'PY' >work/private-cdb.log 2>&1
+          from pathlib import Path
+          from release_store import ReleaseStore
+          ReleaseStore('BackstageTalks/tbt-data', 'tbt-data-v1', Path('work/history')).download(require_bundle_manifest=True)
+          PY
+          echo CDB_BUNDLE_VERIFIED_PRIVATELY
+
+      - name: Run bounded Drive versus CDB audit with private output only
+        id: audit
+        shell: bash
+        env:
+          BATCH_FILES: ${{ inputs.batch_files }}
+        run: |
+          set -euo pipefail
+          case "$BATCH_FILES" in 10|25|50) ;; *) echo 'Invalid batch size'; exit 1;; esac
+          mkdir -p work/report work/cache
+          set +e
+          python -u private/scripts/drive_cdb_audit.py --folder-id "$DRIVE_ROOT" --history-dir work/history --cache work/cache/audit.sqlite --out work/report --max-files "$BATCH_FILES" --max-download-mb 256 >work/private-audit.log 2>&1
+          code=$?
+          set -e
+          if [[ "$code" -ne 0 ]]; then
+            echo PRIVATE_AUDIT_FAILED_DETAILS_PRIVATE_ONLY
+            exit "$code"
+          fi
+          python scripts/drive_cdb_private_bridge.py validate --report-dir work/report --folder-id "$DRIVE_ROOT"
+          echo READ_ONLY_AUDIT_VALIDATED_NO_CANONICAL_WRITES
+
+      - name: Publish private report and logs ONLY into private Release with readback
+        id: private_report
+        if: always() && steps.source_repo.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/private-output work/report-readback
+          for file in work/private-tests.log work/private-cdb.log work/private-audit.log; do
+            if test -f "$file"; then cp "$file" work/private-output/; fi
+          done
+          for name in drive-inventory.json files.json candidate-fields.jsonl report.json; do
+            if test -f "work/report/$name"; then cp "work/report/$name" work/private-output/; fi
+          done
+          printf '%s\n' "source_ref=$SOURCE_REF" "drive_root=$DRIVE_ROOT" "run=$GITHUB_RUN_ID" "attempt=$GITHUB_RUN_ATTEMPT" "audit_outcome=${{ steps.audit.outcome }}" >work/private-output/run-evidence.txt
+          (cd work/private-output; sha256sum -- * > SHA256SUMS)
+          report_tag="blinq-drive-cdb-audit-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$report_tag" -R "$PRIVATE_REPO" --target main --title 'Private bounded Drive/CDB read-only audit' --notes 'PRIVATE only. No canonical writes, scraping or training.' >/dev/null
+          gh release upload "$report_tag" work/private-output/* -R "$PRIVATE_REPO" >/dev/null
+          gh release download "$report_tag" -R "$PRIVATE_REPO" -D work/report-readback >/dev/null
+          (cd work/report-readback; sha256sum -c SHA256SUMS >/dev/null)
+          echo PRIVATE_AUDIT_REPORT_INDEPENDENT_SHA256_READBACK_PASS
+
+      - name: Store verified private checkpoint only after success
+        if: steps.audit.outcome == 'success' && steps.private_report.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/cache-export work/cache-verify
+          cache_bytes="$(stat -c '%s' work/cache/audit.sqlite)"
+          if (( cache_bytes > 268435456 )); then
+            echo 'CHECKPOINT_OVER_256_MIB_SKIPPED_NO_EXTRA_STORAGE'
+            exit 0
+          fi
+          python scripts/drive_cdb_private_bridge.py write-checkpoint --cache-file work/cache/audit.sqlite --code-file private/scripts/drive_cdb_audit.py --folder-id "$DRIVE_ROOT" --output work/cache-export
+          if ! gh release view "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" >/dev/null 2>&1; then
+            gh release create "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" --target main --title 'Private read-only Drive source checkpoint' --notes 'Cached observations only. Not an import.' >/dev/null
+          fi
+          gh release upload "$PRIVATE_CACHE_RELEASE" work/cache-export/audit.sqlite work/cache-export/checkpoint.json -R "$PRIVATE_REPO" --clobber >/dev/null
+          gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p audit.sqlite -p checkpoint.json -D work/cache-verify >/dev/null
+          python scripts/drive_cdb_private_bridge.py restore-checkpoint --folder-id "$DRIVE_ROOT" --code-file private/scripts/drive_cdb_audit.py --source work/cache-verify --dest work/cache/verified-persisted.sqlite
+          echo PRIVATE_CHECKPOINT_INDEPENDENT_SHA256_READBACK_PASS
