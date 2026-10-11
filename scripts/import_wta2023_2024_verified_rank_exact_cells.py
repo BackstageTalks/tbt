@@ -1,4 +1,4 @@
-"""Fail-closed null-only WTA 2021-2024 historical ranking publisher (local bytes only).
+"""Fail-closed null-only WTA 2016-2024 historical ranking publisher (local bytes only).
 
 A workflow owns remote lock, immutable backup, fresh CAS publication and readback.
 Verified canonical WTA rows MUST be byte-semantically identical between the
@@ -33,8 +33,8 @@ def configure(request):
     if request.get("schema") != 1 or type(request.get("year")) is not int:
         raise ValueError("Invalid request schema/year")
     year = request["year"]
-    if year not in (2021, 2022, 2023, 2024):
-        raise ValueError("Only WTA 2021-2024 with individual pre-audited source pins is supported")
+    if year not in range(2016, 2025):
+        raise ValueError("Only WTA 2016-2024 with individual pre-audited source pins is supported")
     run = str(request.get("source_audit_run") or "")
     tag = str(request.get("source_tag") or "")
     if not run.isdecimal() or tag != f"blinq-wta{year}-id-ranked-null-audit-{run}":
