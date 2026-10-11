@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from hashlib import sha256
 import json
 import subprocess
 import sys
@@ -41,7 +42,7 @@ def canonical(*, match_id="m1", tournament="Brisbane", round_name="QF", stats=No
 def write_source(path: Path, **overrides):
     fields = [
         "tourney_id","tourney_name","surface","tourney_date","match_num",
-        "winner_name","loser_name","score","best_of","round",
+        "winner_name","loser_name","winner_id","loser_id","score","best_of","round",
         "w_ace","w_df","w_svpt","w_1stIn","w_1stWon","w_2ndWon",
         "l_ace","l_df","l_svpt","l_1stIn","l_1stWon","l_2ndWon",
     ]
@@ -49,6 +50,7 @@ def write_source(path: Path, **overrides):
         "tourney_id":"2024-0339","tourney_name":"Brisbane","surface":"Hard",
         "tourney_date":"20240105","match_num":"296",
         "winner_name":"Roman Safiullin","loser_name":"Matteo Arnaldi",
+        "winner_id":"", "loser_id":"",
         "score":"7-6(4) 6-2","best_of":"3","round":"QF",
         "w_ace":"9","w_df":"3","w_svpt":"73","w_1stIn":"43","w_1stWon":"36","w_2ndWon":"14",
         "l_ace":"3","l_df":"2","l_svpt":"69","l_1stIn":"37","l_1stWon":"27","l_2ndWon":"16",
@@ -60,7 +62,8 @@ def write_source(path: Path, **overrides):
         writer.writerow(row)
 
 
-def run_linker(tmp_path: Path, matches: list[MatchRecord], source: Path | None = None, charting: Path | None = None, kaggle_hwaitt: Path | None = None):
+def run_linker(tmp_path: Path, matches: list[MatchRecord], source: Path | None = None, charting: Path | None = None, kaggle_hwaitt: Path | None = None,
+               verified_player_crosswalk: Path | None = None, crosswalk_sha: str = "", matching_strategy: str = "verified_ids"):
     history = tmp_path / "history"
     history.mkdir()
     write_year_partition(matches, history, 2024)
@@ -76,6 +79,10 @@ def run_linker(tmp_path: Path, matches: list[MatchRecord], source: Path | None =
         cmd += ["--charting-zip", str(charting)]
     if kaggle_hwaitt is not None:
         cmd += ["--kaggle-hwaitt-csv", str(kaggle_hwaitt)]
+    if verified_player_crosswalk is not None:
+        cmd += ["--verified-player-crosswalk", str(verified_player_crosswalk),
+                "--verified-player-crosswalk-sha256", crosswalk_sha]
+    cmd += ["--matching-strategy", matching_strategy]
     subprocess.run(cmd, cwd=ROOT, check=True)
     report = json.loads((out / "report.json").read_text())
     staged = [json.loads(x) for x in (out / "auto_linked.jsonl").read_text().splitlines() if x.strip()]
@@ -398,3 +405,110 @@ def test_reconcile_rescued_stage_contains_only_verified_provenance(tmp_path):
         assert report["counts"]["partial_staged_matches"] == 1
         assert all(s["source"].split(":")[0] != "kaggle-hwaitt" for s in staged[0]["sources"])
         assert "p1_return_points_won" in staged[0]["incoming_stats"]
+
+
+def _verified_crosswalk_fixture(path: Path, identities: dict[str, str], *, verified: bool = True) -> str:
+    payload = {
+        "schema": 1,
+        "players": [
+            {
+                "source_id_namespace": "sackmann",
+                "tour": "atp",
+                "source_player_id": source_id,
+                "canonical_player_id": canonical_id,
+                "independently_verified": verified,
+                "evidence_ref": "synthetic-independent-identity-fixture",
+            }
+            for source_id, canonical_id in sorted(identities.items())
+        ],
+    }
+    path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    return sha256(path.read_bytes()).hexdigest()
+
+
+def test_verified_ids_recover_renamed_players_without_relaxing_match_gates(tmp_path):
+    source = tmp_path / "atp_matches_2024.csv"
+    write_source(source, winner_id="77", loser_id="88",
+                 winner_name="R. Safiullin", loser_name="M. Arnaldi")
+    crosswalk = tmp_path / "verified.json"
+    digest = _verified_crosswalk_fixture(crosswalk, {"77": "p1", "88": "p2"})
+    before, after = tmp_path / "name-only", tmp_path / "verified"
+    before.mkdir()
+    after.mkdir()
+    old, old_staged, _, _ = run_linker(
+        before, [canonical()], source=source, matching_strategy="name_only"
+    )
+    new, new_staged, review, quarantine = run_linker(
+        after, [canonical()], source=source,
+        verified_player_crosswalk=crosswalk, crosswalk_sha=digest,
+    )
+    assert old["counts"]["unmatched"] == 1
+    assert not old_staged
+    assert new["counts"]["verified_id_linked"] == 1
+    assert new["counts"]["staged_matches"] == 1
+    assert new["verified_crosswalk_sha256"] == digest
+    assert new_staged[0]["match_id"] == "m1"
+    assert "verified_player_id_pair" in new_staged[0]["sources"][0]["evidence"]
+    assert new_staged[0]["incoming_stats"]["p1_aces"] == 9
+    assert not review and not quarantine
+
+
+def test_verified_id_winner_disagreement_never_auto_links(tmp_path):
+    source = tmp_path / "atp_matches_2024.csv"
+    write_source(source, winner_id="77", loser_id="88",
+                 winner_name="R. Safiullin", loser_name="M. Arnaldi")
+    crosswalk = tmp_path / "verified.json"
+    digest = _verified_crosswalk_fixture(crosswalk, {"77": "p2", "88": "p1"})
+    report, staged, review, _ = run_linker(
+        tmp_path, [canonical()], source=source,
+        verified_player_crosswalk=crosswalk, crosswalk_sha=digest,
+    )
+    assert not staged
+    assert report["counts"]["weak_evidence"] == 1
+    assert "winner_id_conflict" in review[0]["evidence"]
+
+
+def test_verified_id_round_conflict_still_fails_closed(tmp_path):
+    source = tmp_path / "atp_matches_2024.csv"
+    write_source(source, winner_id="77", loser_id="88", round="SF")
+    crosswalk = tmp_path / "verified.json"
+    digest = _verified_crosswalk_fixture(crosswalk, {"77": "p1", "88": "p2"})
+    report, staged, review, _ = run_linker(
+        tmp_path, [canonical()], source=source,
+        verified_player_crosswalk=crosswalk, crosswalk_sha=digest,
+    )
+    assert not staged
+    assert report["counts"]["weak_evidence"] == 1
+    assert "round_conflict" in review[0]["evidence"]
+
+
+def test_partial_verified_player_identity_is_quarantined(tmp_path):
+    source = tmp_path / "atp_matches_2024.csv"
+    write_source(source, winner_id="77", loser_id="88")
+    crosswalk = tmp_path / "verified.json"
+    digest = _verified_crosswalk_fixture(crosswalk, {"77": "p1"})
+    report, staged, review, _ = run_linker(
+        tmp_path, [canonical()], source=source,
+        verified_player_crosswalk=crosswalk, crosswalk_sha=digest,
+    )
+    assert not staged
+    assert report["counts"]["identity_crosswalk_quarantined"] == 1
+    assert review[0]["reason"] == "partial_verified_player_ids"
+
+
+def test_unverified_crosswalk_rejected_even_with_correct_digest(tmp_path):
+    source = tmp_path / "atp_matches_2024.csv"
+    write_source(source, winner_id="77", loser_id="88")
+    crosswalk = tmp_path / "candidate-only.json"
+    digest = _verified_crosswalk_fixture(crosswalk, {"77": "p1", "88": "p2"}, verified=False)
+    history = tmp_path / "history"
+    history.mkdir()
+    write_year_partition([canonical()], history, 2024)
+    proc = subprocess.run([
+        sys.executable, str(SCRIPT), "--history-dir", str(history),
+        "--source-csv", str(source), "--out-dir", str(tmp_path / "out"),
+        "--verified-player-crosswalk", str(crosswalk),
+        "--verified-player-crosswalk-sha256", digest,
+    ], cwd=ROOT, capture_output=True, text=True)
+    assert proc.returncode != 0
+    assert "unverified identity" in proc.stderr

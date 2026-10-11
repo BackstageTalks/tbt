@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from hashlib import sha256
 import json
 import math
 import re
@@ -224,6 +225,9 @@ class OfflineMatch:
     best_of: int | None
     stats_a: dict[str, float]
     stats_b: dict[str, float]
+    source_player_a_id: str = ""
+    source_player_b_id: str = ""
+    source_id_namespace: str = ""
 
     @property
     def pair_key(self) -> tuple[str, str]:
@@ -305,6 +309,9 @@ def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                     best_of=int(bo) if bo in (3.0, 5.0) else None,
                     stats_a=w_stats,
                     stats_b=l_stats,
+                    source_player_a_id=str(row.get("winner_id") or "").strip(),
+                    source_player_b_id=str(row.get("loser_id") or "").strip(),
+                    source_id_namespace="sackmann",
                 )
 
 
@@ -369,6 +376,9 @@ def _all_matches_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                     best_of=None,
                     stats_a=stats,
                     stats_b={},
+                    source_player_a_id=str(row.get("player_id") or "").strip(),
+                    source_player_b_id=str(row.get("opponent_id") or "").strip(),
+                    source_id_namespace="all-matches",
                 )
 
 
@@ -860,6 +870,59 @@ def _livetennisapi_derived_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                 )
 
 
+def _read_verified_player_crosswalk(path: str, expected_sha256: str) -> dict[tuple[str, str, str], str]:
+    """Load only explicitly independently verified, SHA-pinned player links.
+
+    A candidate name crosswalk (including build_crosswalk's unique-alias rows)
+    is NOT an independent identity attestation and must not be used here.
+    Source namespaces prevent conflating unrelated providers' numeric IDs.
+    """
+    if not path and not expected_sha256:
+        return {}
+    if not path or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+        raise ValueError("Verified crosswalk requires both path and pinned SHA-256")
+    raw = Path(path).read_bytes()
+    if sha256(raw).hexdigest() != expected_sha256:
+        raise ValueError("Verified crosswalk SHA-256 mismatch")
+    payload = json.loads(raw)
+    if not isinstance(payload, dict) or payload.get("schema") != 1 or not isinstance(payload.get("players"), list):
+        raise ValueError("Invalid verified player crosswalk contract")
+    links: dict[tuple[str, str, str], str] = {}
+    for row in payload["players"]:
+        if not isinstance(row, dict) or row.get("independently_verified") is not True:
+            raise ValueError("Crosswalk contains unverified identity; fail closed")
+        namespace = str(row.get("source_id_namespace") or "")
+        tour = str(row.get("tour") or "").lower()
+        source_id = str(row.get("source_player_id") or "").strip()
+        canonical_id = str(row.get("canonical_player_id") or "").strip()
+        evidence = str(row.get("evidence_ref") or "").strip()
+        if namespace not in {"sackmann", "all-matches"} or tour not in {"atp", "wta"} or not all((source_id, canonical_id, evidence)):
+            raise ValueError("Crosswalk missing source namespace, identity or independent evidence")
+        key = namespace, tour, source_id
+        if key in links:
+            raise ValueError("Duplicate verified crosswalk source ID; fail closed")
+        links[key] = canonical_id
+    return links
+
+
+def _verified_ids(source: OfflineMatch, links: dict[tuple[str, str, str], str]
+                  ) -> tuple[tuple[str, str] | None, str | None]:
+    if not source.source_id_namespace:
+        return None, None
+    a, b = source.source_player_a_id, source.source_player_b_id
+    if not a or not b:
+        return None, None
+    left = links.get((source.source_id_namespace, source.tour, a))
+    right = links.get((source.source_id_namespace, source.tour, b))
+    if left or right:
+        if not left or not right:
+            return None, "partial_verified_player_ids"
+        if left == right:
+            return None, "colliding_verified_player_ids"
+        return (left, right), None
+    return None, None
+
+
 def _tournament_score(a: str, b: str) -> tuple[int, str]:
     na, nb = _norm_text(a), _norm_text(b)
     if not na or not nb:
@@ -881,12 +944,20 @@ def _canonical_winner_name(match) -> str:
     return ""
 
 
-def _candidate_score(source: OfflineMatch, match) -> tuple[int, list[str], bool]:
+def _candidate_score(source: OfflineMatch, match,
+                     verified_ids: tuple[str, str] | None = None) -> tuple[int, list[str], bool]:
     evidence: list[str] = []
     score = 0
     source_names = source.pair_key
     canonical_names = tuple(sorted((_norm_name(match.player1_name), _norm_name(match.player2_name))))
-    if source_names != canonical_names or source.tour != str(match.tour or "").lower():
+    if source.tour != str(match.tour or "").lower():
+        return -100, ["pair_or_tour_mismatch"], False
+    if verified_ids:
+        canonical_ids = {str(match.player1_id), str(match.player2_id)}
+        if set(verified_ids) != canonical_ids:
+            return -100, ["verified_player_id_pair_mismatch"], False
+        evidence.append("verified_player_id_pair")
+    elif source_names != canonical_names:
         return -100, ["pair_or_tour_mismatch"], False
 
     signed_delta = (match.scheduled_at.astimezone(timezone.utc).date() - source.event_date).days
@@ -940,7 +1011,18 @@ def _candidate_score(source: OfflineMatch, match) -> tuple[int, list[str], bool]
         if not canonical_winner:
             evidence.append("canonical_winner_missing")
             return score, evidence, False
-        if _norm_name(source.winner) != _norm_name(canonical_winner):
+        if verified_ids:
+            if _norm_name(source.winner) == _norm_name(source.player_a):
+                winning_id = verified_ids[0]
+            elif _norm_name(source.winner) == _norm_name(source.player_b):
+                winning_id = verified_ids[1]
+            else:
+                evidence.append("source_winner_unresolved")
+                return score, evidence, False
+            if str(match.winner_id) != winning_id:
+                evidence.append("winner_id_conflict")
+                return score, evidence, False
+        elif _norm_name(source.winner) != _norm_name(canonical_winner):
             evidence.append("winner_conflict")
             return score, evidence, False
         score += 3
@@ -975,13 +1057,26 @@ def _candidate_score(source: OfflineMatch, match) -> tuple[int, list[str], bool]
         accepted = "date_exact" in evidence and "winner" in evidence and score >= 8
     else:
         accepted = "winner" in evidence and score >= 8
+    # Verified player IDs resolve identity, not the match. Never accept a
+    # conflicting event, round or venue by virtue of the crosswalk alone.
+    if verified_ids and any(reason in evidence for reason in (
+        "round_conflict", "tournament_mismatch", "tournament_missing"
+    )):
+        accepted = False
     return score, evidence, accepted
 
 
-def _orientation(source: OfflineMatch, match) -> tuple[dict[str, float], dict[str, str]] | None:
+def _orientation(source: OfflineMatch, match, verified_ids: tuple[str, str] | None = None) -> tuple[dict[str, float], dict[str, str]] | None:
     a, b = _norm_name(source.player_a), _norm_name(source.player_b)
     p1, p2 = _norm_name(match.player1_name), _norm_name(match.player2_name)
-    if a == p1 and b == p2:
+    if verified_ids:
+        if verified_ids == (str(match.player1_id), str(match.player2_id)):
+            mapping = {"a": "p1", "b": "p2"}
+        elif verified_ids == (str(match.player2_id), str(match.player1_id)):
+            mapping = {"a": "p2", "b": "p1"}
+        else:
+            return None
+    elif a == p1 and b == p2:
         mapping = {"a": "p1", "b": "p2"}
     elif a == p2 and b == p1:
         mapping = {"a": "p2", "b": "p1"}
@@ -1108,7 +1203,15 @@ def main() -> None:
     ap.add_argument("--livetennisapi-reconstructed-csv", action="append", default=[])
     ap.add_argument("--livetennisapi-derived-csv", action="append", default=[])
     ap.add_argument("--out-dir", required=True)
+    ap.add_argument("--verified-player-crosswalk", default="")
+    ap.add_argument("--verified-player-crosswalk-sha256", default="")
+    ap.add_argument("--matching-strategy", choices=("name_only", "verified_ids"), default="verified_ids")
     args = ap.parse_args()
+    links = _read_verified_player_crosswalk(
+        args.verified_player_crosswalk, args.verified_player_crosswalk_sha256
+    ) if args.matching_strategy == "verified_ids" else {}
+    if args.matching_strategy == "name_only" and (args.verified_player_crosswalk or args.verified_player_crosswalk_sha256):
+        raise ValueError("name_only comparison must not load a verified crosswalk")
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -1117,10 +1220,14 @@ def main() -> None:
         raise SystemExit("Canonical history has identity quarantine; refusing offline linking")
 
     canonical_by_day_pair: dict[tuple[str, date, tuple[str, str]], list] = defaultdict(list)
+    canonical_by_day_ids: dict[tuple[str, date, frozenset[str]], list] = defaultdict(list)
     by_id = {str(m.match_id): m for m in matches}
     for match in matches:
         pair = tuple(sorted((_norm_name(match.player1_name), _norm_name(match.player2_name))))
-        canonical_by_day_pair[(str(match.tour or "").lower(), match.scheduled_at.date(), pair)].append(match)
+        tour = str(match.tour or "").lower()
+        day = match.scheduled_at.astimezone(timezone.utc).date()
+        canonical_by_day_pair[(tour, day, pair)].append(match)
+        canonical_by_day_ids[(tour, day, frozenset((str(match.player1_id), str(match.player2_id))))].append(match)
 
     sources: list[OfflineMatch] = list(_sackmann_rows(args.source_csv))
     sources.extend(_all_matches_rows(args.all_matches_csv))
@@ -1138,16 +1245,27 @@ def main() -> None:
     for source in sources:
         counts["source_rows"] += 1
         per_source[source.source] += 1
+        verified_ids, identity_error = _verified_ids(source, links)
+        if identity_error:
+            counts["identity_crosswalk_quarantined"] += 1
+            weak_review.append({
+                "source": source.source, "source_match_id": source.source_match_id,
+                "reason": identity_error,
+            })
+            continue
         candidates = []
         deltas = range(-1, 17) if source.source.startswith(("sackmann:", "all-matches:")) else (-1, 0, 1)
         for delta in deltas:
             day = source.event_date + timedelta(days=delta)
-            candidates.extend(canonical_by_day_pair.get((source.tour, day, source.pair_key), []))
+            if verified_ids:
+                candidates.extend(canonical_by_day_ids.get((source.tour, day, frozenset(verified_ids)), []))
+            else:
+                candidates.extend(canonical_by_day_pair.get((source.tour, day, source.pair_key), []))
         # Same canonical row can only appear once, but de-duplicate defensively.
         unique = {str(m.match_id): m for m in candidates}
         scored = []
         for match in unique.values():
-            score, evidence, accepted = _candidate_score(source, match)
+            score, evidence, accepted = _candidate_score(source, match, verified_ids)
             if score > -100:
                 scored.append((score, accepted, match, evidence))
         scored.sort(key=lambda item: item[0], reverse=True)
@@ -1179,7 +1297,7 @@ def main() -> None:
                 "evidence": evidence,
             })
             continue
-        oriented = _orientation(source, match)
+        oriented = _orientation(source, match, verified_ids)
         if not oriented:
             counts["orientation_unverified"] += 1
             continue
@@ -1188,6 +1306,10 @@ def main() -> None:
             counts["no_supported_stats"] += 1
             continue
         counts["identity_linked"] += 1
+        if verified_ids:
+            counts["verified_id_linked"] += 1
+        else:
+            counts["name_linked"] += 1
         linked[str(match.match_id)].append({
             "source": source.source,
             "source_match_id": source.source_match_id,
@@ -1286,6 +1408,9 @@ def main() -> None:
         "quality_ready_projected_added": projected_quality - quality_before,
         "production_mutated": False,
         "api_requests": 0,
+        "matching_strategy": args.matching_strategy,
+        "verified_crosswalk_sha256": args.verified_player_crosswalk_sha256 or None,
+        "verified_crosswalk_entries": len(links),
         "note": "Read-only linker. No canonical history write and no provider call occurred.",
     }
     (out / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
