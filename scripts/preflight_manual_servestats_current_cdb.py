@@ -172,6 +172,9 @@ def stage(source, years, output):
     detailed = audit(source, canon, wit, expected_source_sha256=sha256(source),
                      expected_canonical_sha256=sha256(canon))
     counters.update(detailed["counts"])
+    # Counter.update ADDS shared keys. Source records were counted once above;
+    # prevent audit output from falsely reporting the same 575 twice.
+    counters["source_rows"] = len(input_rows)
     safe = {
         "schema": 1, "status": "CDB_CURRENT_TWO_YEAR_SOURCE_NULL_PREFLIGHT",
         "scope": "2025-2026",
