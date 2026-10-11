@@ -80,7 +80,7 @@ def summarize(bundle, expected_bundle_sha256, current_year_sha256):
             if name.endswith(compound):
                 return compound
         ext = Path(name).suffix
-        return ext if re.fullmatch(r'\\.[a-z0-9]{1,12}', ext) else '[unknown]'
+        return ext if re.fullmatch(r'\.[a-z0-9]{1,12}', ext) else '[unknown]'
     for rec in file_items:
         if not isinstance(rec, dict):
             raise ValueError('Malformed private file status record')
