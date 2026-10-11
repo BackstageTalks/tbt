@@ -212,6 +212,49 @@ def reopen_history_gap_days(matches, progress, start, end, existing_years):
     }
 
 
+def _record_targeted_statistics_outcome(segments, unavailable_reasons, match, status,
+                                        requests, value_change):
+    """Account for actual per-match provider spend and CDB gains by tour/year."""
+    key = f"{str(match.tour or 'unknown').lower()}:{match.scheduled_at.year}"
+    counts = segments.setdefault(key, Counter())
+    counts["processed_matches"] += 1
+    counts[f"status_{status}"] += 1
+    counts["api_requests_including_retries"] += requests
+    source = "api" if requests else "local_or_cache"
+    if requests:
+        counts["matches_with_provider_requests"] += 1
+    for metric in ("new_statistic_values", "new_quality_ready_rows", "new_ace_df_values"):
+        value = int(value_change.get(metric, 0))
+        counts[metric] += value
+        counts[f"{source}_{metric}"] += value
+    if status == "unavailable":
+        marker = (getattr(match, "provider_payload", None) or {}).get("_tbt_statistics")
+        reason = marker.get("reason") if isinstance(marker, dict) else None
+        # Bound categories to the provider adapter's known coverage states;
+        # never emit raw provider payloads or player identities in this report.
+        if reason not in {"no_supported_fields", "missing_unambiguous_all_period"}:
+            reason = "unspecified"
+        counts[f"unavailable_{reason}"] += 1
+        unavailable_reasons[reason] += 1
+
+
+def _statistics_segment_yield(segments):
+    """Compact, denominator-aware outcome evidence for the next API schedule."""
+    result = {}
+    for key, counts in sorted(segments.items(), reverse=True):
+        requests = counts["api_requests_including_retries"]
+        result[key] = {
+            **dict(counts),
+            "api_new_statistic_values_per_1000_requests": (
+                1000 * counts["api_new_statistic_values"] / requests if requests else None
+            ),
+            "api_new_quality_ready_rows_per_1000_requests": (
+                1000 * counts["api_new_quality_ready_rows"] / requests if requests else None
+            ),
+        }
+    return result
+
+
 def _statistics_candidates(matches, start, end, *, targeted=False):
     """Prioritize real serve/return gaps and skip rows already quality-ready."""
     in_window = [
@@ -432,6 +475,8 @@ def main():
     provider.request_limit = allocation
     report = Counter()
     statistics_value = Counter()
+    statistics_segments = {}
+    statistics_unavailable_reasons = Counter()
     expected_statistics = {}
     statistics_changed_years = set()
     provider_quarantine = []
@@ -468,6 +513,11 @@ def main():
                 source = "api" if provider.request_count > requests_before else "local_or_cache"
                 statistics_value[source + "_new_quality_ready_rows"] += value_change["new_quality_ready_rows"]
                 statistics_value[source + "_new_statistic_values"] += value_change["new_statistic_values"]
+                if args.targeted_statistics:
+                    _record_targeted_statistics_outcome(
+                        statistics_segments, statistics_unavailable_reasons,
+                        match, status, provider.request_count - requests_before, value_change,
+                    )
                 report[status] += 1
                 if status in {"enriched", "unavailable", "conflict"}:
                     statistics_changed_years.add(match.scheduled_at.year)
@@ -515,6 +565,13 @@ def main():
                     ),
                     "policy": "Actual full serve+return readiness transitions; cache/local gains separated. Denominator includes provider retries/failures. Not an estimate of model accuracy gain.",
                 }
+            if args.targeted_statistics:
+                output_report["statistics_segment_yield"] = _statistics_segment_yield(statistics_segments)
+                output_report["statistics_unavailable_reasons"] = dict(statistics_unavailable_reasons)
+                output_report["statistics_segment_yield_policy"] = (
+                    "Tour/year diagnostic only; per-match API request deltas include detail "
+                    "lookups and retries; local/cache gains are separate; no extra API calls."
+                )
             write_json(directory / "download_report.json", output_report)
             if args.targeted_statistics:
                 write_json(directory / "statistics_expected.json", {
