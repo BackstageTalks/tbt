@@ -108,7 +108,7 @@ def test_repair_raw_wimbledon_2023_count_rows_match_canonical_reader(
 
 @pytest.mark.parametrize("changes", [
     {"tour": "atp"},
-    {"tournament": "Not Wimbledon"},
+    {"tournament": "US Open"},
     {"scheduled_at": "2024-07-12T12:00:00Z"},
     {"player2_name": "Unrelated Player"},
 ])
