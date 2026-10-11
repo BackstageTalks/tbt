@@ -733,6 +733,11 @@ def save_match_status_snapshot(payload: object) -> dict:
                 and re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", away)):
             statuses[eid]["provider_home_id"] = home
             statuses[eid]["provider_away_id"] = away
+            source_p1 = str(value.get("projection_stats_p1_id") or "").strip()[:64]
+            source_p2 = str(value.get("projection_stats_p2_id") or "").strip()[:64]
+            if source_p1 != source_p2 and {source_p1, source_p2} == {home, away}:
+                statuses[eid]["projection_stats_p1_id"] = source_p1
+                statuses[eid]["projection_stats_p2_id"] = source_p2
             stats = value.get("projection_stats")
             if isinstance(stats, dict):
                 clean = {}
