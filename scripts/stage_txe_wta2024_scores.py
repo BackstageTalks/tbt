@@ -29,7 +29,7 @@ from audit_tennisexplorer_wta2024_cdb_overlap import norm, result_side
 YEAR = int(os.environ.get("BLINQ_SCORE_YEAR", "2024"))
 TOUR = os.environ.get("BLINQ_SCORE_TOUR", "wta").lower()
 SOURCE_SHA = os.environ.get("BLINQ_SCORE_SOURCE_SHA", "27c779c73bcfaf089e362f3480c4201f032e15fefbc3a0fadaa39bfce9f5956b")
-if YEAR not in (2024, 2025, 2026) or TOUR not in ("wta", "atp") or not re.fullmatch(r"[a-f0-9]{64}", SOURCE_SHA):
+if YEAR not in (2023, 2024, 2025, 2026) or TOUR not in ("wta", "atp") or not re.fullmatch(r"[a-f0-9]{64}", SOURCE_SHA):
     raise ValueError("Only pinned, verified TennisExplorer tour-year source packages are supported")
 RESULT_MEMBER = f"data/tennisexplorer/results/{TOUR}-single/{YEAR}.csv"
 DETAIL_MEMBER = f"data/tennisexplorer/enrichment/{TOUR}-single/{YEAR}.jsonl"
