@@ -1,0 +1,207 @@
+name: BlinQ Wimbledon 2023 five-row guarded recovery
+on:
+  pull_request:
+    paths:
+      - scripts/prepare_wimbledon2023_guarded_restore.py
+      - scripts/restore_wimbledon2023_exact_five.py
+      - tests/test_prepare_wimbledon2023_guarded_restore.py
+      - tests/test_wimbledon2023_guarded_workflow.py
+      - .github/workflows/blinq-wimbledon2023-five-row-guarded-publish.yml
+      - .github/wimbledon2023-five-restore-request.json
+  push:
+    branches: [main]
+    paths:
+      - .github/wimbledon2023-five-restore-request.json
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: blinq-one-time-wimbledon2023-guarded-recovery
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - run: |
+          set -euo pipefail
+          python -m pip install -q -r api/requirements-train.txt pytest
+          python -m pytest -q tests/test_prepare_wimbledon2023_guarded_restore.py tests/test_wimbledon2023_guarded_workflow.py tests/test_restore_wimbledon2023_exact_five.py tests/test_wimbledon2023_recovery_readonly.py tests/test_wimbledon_2023_morning_rate_collision.py
+          python -m compileall -q scripts/prepare_wimbledon2023_guarded_restore.py scripts/restore_wimbledon2023_exact_five.py
+          if test -f .github/wimbledon2023-five-restore-request.json; then
+            python scripts/prepare_wimbledon2023_guarded_restore.py --request .github/wimbledon2023-five-restore-request.json
+          fi
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 85
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      DATA_REPO: BackstageTalks/tbt-data
+      ROOT: .cache/tbt/wimbledon2023-exact-five-restoration
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Require private release and immutable pinned one-time request
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$DATA_REPO" --jq .private)" = true
+          test -s .github/wimbledon2023-five-restore-request.json
+          python scripts/prepare_wimbledon2023_guarded_restore.py --request .github/wimbledon2023-five-restore-request.json
+          python -m pip install -q -r api/requirements-train.txt
+      - name: Independently verify immutable source, fresh CDB and full local five-row output
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT" "$ROOT/local"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from audit_wimbledon2023_recovery_readonly import verified_release, BACKUP, CURRENT, BACKUP_SHA
+          from prepare_wimbledon2023_guarded_restore import verify_release_inputs, validate_request
+          root=Path(os.environ["ROOT"])
+          req=validate_request(json.loads(Path(".github/wimbledon2023-five-restore-request.json").read_text()))
+          backup=verified_release(BACKUP,root/"source")
+          current=verified_release(CURRENT,root/"before")
+          assert backup["sha256"]==BACKUP_SHA
+          assert current["sha256"]==req["expected_current_year_sha256"]
+          print("SOURCE_AND_FRESH_CURRENT_2023_BYTE_READBACK",backup["sha256"],current["sha256"])
+          print("CURRENT_2023_COUNT_PROOF",verify_release_inputs(root/"before",req))
+          PY
+          python scripts/restore_wimbledon2023_exact_five.py --backup "$ROOT/source/history-2023.parquet" --before "$ROOT/before/history-2023.parquet" --after "$ROOT/local/history-2023.parquet" --mode write --report "$ROOT/local/exact-five-local.json"
+          python scripts/prepare_wimbledon2023_guarded_restore.py --request .github/wimbledon2023-five-restore-request.json --before-dir "$ROOT/before" --proposed-year "$ROOT/local/history-2023.parquet" --output-manifest "$ROOT/local/history_manifest.json" --report "$ROOT/local/manifest-local.json"
+          python scripts/restore_wimbledon2023_exact_five.py --backup "$ROOT/source/history-2023.parquet" --before "$ROOT/before/history-2023.parquet" --after "$ROOT/local/history-2023.parquet" --mode verify --report "$ROOT/local/exact-five-verified.json"
+      - name: Acquire cross-repository writer lock
+        run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1800
+      - name: Fresh full 2023 canonical CAS under lock
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from audit_wimbledon2023_recovery_readonly import verified_release,CURRENT
+          from prepare_wimbledon2023_guarded_restore import verify_release_inputs
+          root=Path(os.environ["ROOT"])
+          request=json.loads(Path(".github/wimbledon2023-five-restore-request.json").read_text())
+          verified_release(CURRENT,root/"recheck")
+          verify_release_inputs(root/"recheck",request)
+          for name in ("history-2023.parquet","history_manifest.json","_tbt_bundle_manifest.json"):
+              if (root/"before"/name).read_bytes() != (root/"recheck"/name).read_bytes():
+                  raise RuntimeError("CDB release generation moved: abort without writing")
+          print("FIVE_ROW_CAS_FRESHNESS_VERIFIED_UNDER_GLOBAL_LEASE")
+          PY
+      - name: Save immutable private prewrite current year and independently reread it
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          mkdir -p "$ROOT/prewrite" "$ROOT/prewrite-readback"
+          for f in history-2023.parquet history_manifest.json _tbt_bundle_manifest.json; do cp "$ROOT/before/$f" "$ROOT/prewrite/$f"; done
+          cp "$ROOT/local/exact-five-verified.json" "$ROOT/prewrite/local-exact-verify.json"
+          cp .github/wimbledon2023-five-restore-request.json "$ROOT/prewrite/request.json"
+          (cd "$ROOT/prewrite"; sha256sum history-2023.parquet history_manifest.json _tbt_bundle_manifest.json local-exact-verify.json request.json > SHA256SUMS; sha256sum -c SHA256SUMS)
+          tag="blinq-wimbledon2023-five-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" "$ROOT/prewrite/"* -R "$DATA_REPO" --title "2023 exact five-row prewrite immutable backup" --notes "Canonical prewrite and exact source/target gate, no inference."
+          gh release download "$tag" -R "$DATA_REPO" -D "$ROOT/prewrite-readback"
+          (cd "$ROOT/prewrite-readback" && sha256sum -c SHA256SUMS)
+      - name: Publish exact 2023 year and updated manifest with bundle SHA committed last
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from cdb_global_writer_lock import verify
+          from release_store import ReleaseStore
+          root=Path(os.environ["ROOT"])
+          repo=os.environ["DATA_REPO"]
+          baseline=json.loads((root/"before/_tbt_bundle_manifest.json").read_text())["files"]
+          def fresh_cas():
+              verify(repo, Path(".cdb-global-writer-lock.json"))
+              remote=ReleaseStore(repo,"tbt-data-v1",root/"live-cas")._remote_bundle_files()
+              if remote != baseline:
+                  raise RuntimeError("Production bundle changed; CAS failed closed before publication")
+          ReleaseStore(repo,"tbt-data-v1",root/"local").upload_bundle(
+              [root/"local/history-2023.parquet",root/"local/history_manifest.json"],
+              before_upload=fresh_cas,
+          )
+          print("FIVE_ROW_CDB_BUNDLE_PUBLISHED_WITH_CAS")
+          PY
+      - name: Independently reread remote release and prove every one of 107760 original rows
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from audit_wimbledon2023_recovery_readonly import verified_release,CURRENT
+          from audit_wimbledon2023_recovery_readonly import sha256
+          root=Path(os.environ["ROOT"])
+          verified_release(CURRENT,root/"remote-after")
+          for name in ("history-2023.parquet","history_manifest.json"):
+              if (root/"remote-after"/name).read_bytes() != (root/"local"/name).read_bytes():
+                  raise RuntimeError("Published asset differs from independently verified local proof")
+          years=json.loads((root/"remote-after/history_manifest.json").read_text())["years"]
+          assert len(years)==78 and sum(int(x["rows"]) for x in years.values())==994101
+          print("REMOTE_YEAR_AND_ALL_YEAR_MANIFEST_SHA_VERIFIED",sha256(root/"remote-after/history-2023.parquet"))
+          PY
+          python scripts/restore_wimbledon2023_exact_five.py --backup "$ROOT/source/history-2023.parquet" --before "$ROOT/before/history-2023.parquet" --after "$ROOT/remote-after/history-2023.parquet" --mode verify --report "$ROOT/remote-after/five-remote-verified.json"
+          test "$(jq -r .new_rows "$ROOT/remote-after/five-remote-verified.json")" = 5
+          test "$(jq -r .overwritten_existing_values "$ROOT/remote-after/five-remote-verified.json")" = 0
+      - name: Persist private verified restoration receipt and reread Git commit
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          result=json.loads((root/"remote-after/five-remote-verified.json").read_text())
+          result.update({
+              "schema":1,"status":"RESTORED_EXACT_FIVE_WIMBLEDON2023_PRODUCTION_AND_VERIFIED",
+              "run_id":os.environ["GITHUB_RUN_ID"],
+              "app_git_sha":os.environ["GITHUB_SHA"],
+              "prewrite_tag":f"blinq-wimbledon2023-five-prewrite-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}",
+              "source_backup_release":"blinq-wta2023-ranks-prewrite-38129131702-1",
+              "no_training":True,"api_requests":0,"new_scheduled_jobs":0,
+          })
+          assert result["new_rows"]==5 and result["existing_rows_preserved"]==107760
+          (root/"remote-after/private-persisted-proof.json").write_text(json.dumps(result,indent=2,sort_keys=True)+"\n")
+          PY
+          path="audit/wimbledon2023-exact-five-restoration-latest.json"
+          encoded="$(base64 -w0 "$ROOT/remote-after/private-persisted-proof.json")"
+          existing="$(gh api "repos/$DATA_REPO/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$existing" ]]; then
+            gh api -X PUT "repos/$DATA_REPO/contents/$path" -f message="CDB 2023 exact five readback $GITHUB_RUN_ID" -f content="$encoded" -f sha="$existing" >/dev/null
+          else
+            gh api -X PUT "repos/$DATA_REPO/contents/$path" -f message="CDB 2023 exact five readback $GITHUB_RUN_ID" -f content="$encoded" >/dev/null
+          fi
+          gh api -H "Accept: application/vnd.github.raw+json" "repos/$DATA_REPO/contents/$path" | jq -e --arg run "$GITHUB_RUN_ID" '.status=="RESTORED_EXACT_FIVE_WIMBLEDON2023_PRODUCTION_AND_VERIFIED" and .run_id==$run and .existing_rows_preserved==107760 and .new_rows==5 and .overwritten_existing_values==0'
+      - name: Public aggregate report only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wimbledon2023-five-restore-summary-${{ github.run_id }}
+          path: |
+            .cache/tbt/wimbledon2023-exact-five-restoration/local/exact-five-verified.json
+            .cache/tbt/wimbledon2023-exact-five-restoration/local/manifest-local.json
+            .cache/tbt/wimbledon2023-exact-five-restoration/remote-after/five-remote-verified.json
+          retention-days: 30
+          if-no-files-found: warn
+      - name: Release cross-repo writer lock even on failure
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
