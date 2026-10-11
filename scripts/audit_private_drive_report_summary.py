@@ -68,14 +68,34 @@ def summarize(bundle, expected_bundle_sha256, current_year_sha256):
     statuses = report.get('file_statuses', {})
     if not isinstance(statuses, dict) or sum(statuses.values()) != report.get('inventory_files'):
         raise ValueError('File statuses/inventory mismatch')
-    if len(json.loads(documents['files.json'])) != report.get('inventory_files'):
+    file_items = json.loads(documents['files.json'])
+    if len(file_items) != report.get('inventory_files'):
         raise ValueError('File status rows/inventory mismatch')
+    # Report *only* extension/status aggregates; never disclose path, file ID,
+    # archive member, filename, candidate value or private individual record.
+    grouped_extensions = collections.defaultdict(collections.Counter)
+    def suffix(name):
+        name = str(name or '').lower()
+        for compound in ('.tar.gz', '.csv.gz', '.jsonl.gz', '.json.gz', '.tsv.gz'):
+            if name.endswith(compound):
+                return compound
+        ext = Path(name).suffix
+        return ext if re.fullmatch(r'\\.[a-z0-9]{1,12}', ext) else '[unknown]'
+    for rec in file_items:
+        if not isinstance(rec, dict):
+            raise ValueError('Malformed private file status record')
+        status = rec.get('status')
+        if status in ('NEEDS_FORMAT_ADAPTER', 'DEFERRED_BUDGET',
+                      'QUARANTINE', 'NEEDS_LARGE_FILE_SHARD'):
+            grouped_extensions[status][suffix(rec.get('name'))] += 1
     return {
         'status': 'VERIFIED_SOURCE_AUDIT_SUMMARY_ONLY',
         'archive_sha_verified': True, 'inner_files_sha_verified': True,
         'snapshot_2026_digest_matches_current_release': True,
         'inventory_files': report['inventory_files'],
         'statuses': {str(k): int(v) for k, v in sorted(statuses.items())},
+        'unprocessed_extensions_by_status': {k: dict(v.most_common(30))
+                                           for k, v in sorted(grouped_extensions.items())},
         'new_downloads': report.get('download_attempts'),
         'distinct_profiled_contents': report.get('unique_profiled_contents'),
         'canonical_match_rows': report.get('canonical_rows'),
