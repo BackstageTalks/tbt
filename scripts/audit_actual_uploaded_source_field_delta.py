@@ -166,6 +166,7 @@ def audit(history,release,uploaded,market,source):
     missing_core_fields=Counter()
     matched_ids=0
     reviewed=[]
+    proposed_stage=[]
     annual=defaultdict(Counter)
     for mid,src in original.items():
         m=matches.get(mid)
@@ -248,6 +249,22 @@ def audit(history,release,uploaded,market,source):
             annual[year]["new_score_matches"]+=1
             annual[year]["new_score_fields"]+=len(missing)
             for key in missing:missing_score_fields[key]+=1
+            proposed_stage.append({
+                "schema": 1,
+                "policy": "READ_ONLY_CANDIDATE_NOT_WRITER_APPROVED_POSTMATCH_ONLY",
+                "canonical_match_id": mid,
+                "canonical_year": int(year),
+                "canonical_year_sha256": years[str(year)]["sha256"],
+                "canonical_existing_stats_sha256": sha256(str(m["stats_json"]).encode("utf-8")).hexdigest(),
+                "source_sha256": src.get("source_file_sha256"),
+                "source_observation_sha256": sha256(json.dumps(src,sort_keys=True,ensure_ascii=False,allow_nan=False).encode("utf-8")).hexdigest(),
+                "source_link": src.get("link"),
+                "source_record_date": src["scheduled_date_utc"],
+                "match_player1_id": str(m["player1_id"]),
+                "match_player2_id": str(m["player2_id"]),
+                "match_winner_id": str(m["winner_id"]),
+                "add_only_missing_score_fields": dict(sorted(missing.items())),
+            })
         else:
             score["all_score_values_already_present"]+=1
         score["already_equal_score_cells"]+=equals
@@ -298,6 +315,7 @@ def audit(history,release,uploaded,market,source):
         "core_missing_cells_by_field":dict(missing_core_fields),
         "completed_match_score_comparison":dict(score),
         "score_missing_cells_by_field":dict(missing_score_fields),
+        "candidate_stage_rows":len(proposed_stage),
         "score_conflicting_cells_by_field":dict(conflict_score_fields),
         "by_year":{str(y):dict(x) for y,x in sorted(annual.items())},
         "market_sidecar_overlap_in_uploaded_cohort":dict(side),
@@ -306,17 +324,25 @@ def audit(history,release,uploaded,market,source):
                   "actual_write_authorized":False,
                   "score_candidates_read_only":True,
                   "require_independent_score_source_corroboration_and_fresh_sha_before_writer":True}
-    }
+    }, proposed_stage
 
 def main():
     parser=argparse.ArgumentParser()
     for k in ("history","release-json","uploaded","market","source","output"):
         parser.add_argument("--"+k,required=True,type=Path)
+    parser.add_argument("--stage-output",type=Path)
     args=parser.parse_args()
-    d=audit(args.history,json.loads(args.release_json.read_text()),
+    d,stages=audit(args.history,json.loads(args.release_json.read_text()),
             args.uploaded,args.market,args.source)
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(d,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
+    if args.stage_output:
+        args.stage_output.parent.mkdir(parents=True,exist_ok=True)
+        with gzip.open(args.stage_output,"wt",encoding="utf-8") as fh:
+            for item in stages:
+                fh.write(json.dumps(item,sort_keys=True,ensure_ascii=False)+"\n")
+        assert len(stages)==d["completed_match_score_comparison"]["stageable_score_matches_read_only"]
+        assert sum(len(v["add_only_missing_score_fields"]) for v in stages)==d["completed_match_score_comparison"]["stageable_score_missing_cells_read_only"]
     print("BLINQ_ACTUAL_SOURCE_TO_CDB_FIELD_GAPS",json.dumps({k:v for k,v in d.items() if k not in ("sources","by_year")},sort_keys=True))
     print("BLINQ_GAP_BY_YEAR",json.dumps(d["by_year"],sort_keys=True))
 if __name__=="__main__":main()
