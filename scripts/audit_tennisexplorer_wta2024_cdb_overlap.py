@@ -223,9 +223,15 @@ def name_format_diagnostics(source: list[dict], canonical: list[dict]) -> dict:
             continue
         full_token_ix[frozenset((tuple(sorted(a.split())),
                                 tuple(sorted(b.split()))))].append((day, row))
-        ai, bi = _surname_initial(a, source=False), _surname_initial(b, source=False)
-        if ai and bi and ai != bi:
-            initial_ix[frozenset((ai, bi))].append((day, row))
+        # Both source and canonical providers sometimes reverse given/family
+        # order. Index both structural interpretations only as weak diagnostics.
+        ta, tb = a.split(), b.split()
+        fa = {(ta[-1], ta[0][0]), (ta[0], ta[-1][0])} if len(ta) >= 2 else set()
+        fb = {(tb[-1], tb[0][0]), (tb[0], tb[-1][0])} if len(tb) >= 2 else set()
+        for ai in fa:
+            for bi in fb:
+                if ai != bi:
+                    initial_ix[frozenset((ai, bi))].append((day, row))
 
     counts = Counter()
     for row in source:
@@ -253,8 +259,11 @@ def name_format_diagnostics(source: list[dict], canonical: list[dict]) -> dict:
         si = tuple(_surname_initial(n, source=True) for n in pp)
         if None in si or si[0] == si[1]:
             continue
-        abbr_matches = [m for dt, m in initial_ix.get(frozenset(si), ())
-                        if abs((dt-day).days) <= 1]
+        abbr_candidates = [m for dt, m in initial_ix.get(frozenset(si), ())
+                           if abs((dt-day).days) <= 1]
+        # A canonical match can be reachable through several name-order forms.
+        # Count unique canonical identities rather than repeated index entries.
+        abbr_matches = list({str(m.get("match_id")): m for m in abbr_candidates}.values())
         if abbr_matches:
             counts["surname_initial_pair_day_candidate_rows_research_only"] += 1
             agree = [m for m in abbr_matches
