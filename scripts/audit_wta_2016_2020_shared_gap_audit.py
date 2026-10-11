@@ -70,6 +70,37 @@ def download_consistent_history(store):
             )
 
 
+def verify_full_canonical_identity(matches, safety, manifest):
+    """Counted identity gate before deriving stages (never waives quarantine).
+
+    A historical total is not proof of current full-release completeness;
+    current manifest row counts must match the verified downloaded snapshots.
+    Counts-only diagnostics remain available when the gate fails.
+    """
+    years = manifest.get("years") if isinstance(manifest, dict) else None
+    if not isinstance(years, dict) or len(years) < 78:
+        raise ValueError("Missing full canonical year inventory")
+    try:
+        expected = sum(int(meta["rows"]) for meta in years.values())
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Canonical year inventory missing row counts") from exc
+    summary = {
+        "manifest_partition_count": len(years),
+        "manifest_expected_rows": expected,
+        "input_rows": int(safety.get("input_rows") or 0),
+        "rows_after_proven_merges": int(safety.get("rows_after_proven_merges") or 0),
+        "merged_rows_removed": int(safety.get("merged_rows_removed") or 0),
+        "quarantined_rows": int(safety.get("quarantined_rows") or 0),
+        "safe_rows": len(matches),
+        "affected_year_count": len(safety.get("affected_years") or ()),
+    }
+    if expected != summary["input_rows"]:
+        raise ValueError("Canonical manifest vs loaded rows mismatch: " + json.dumps(summary, sort_keys=True))
+    if summary["quarantined_rows"] or len(matches) < 994101:
+        raise ValueError("Canonical full release incomplete or identity unsafe: " + json.dumps(summary, sort_keys=True))
+    return summary
+
+
 def main():
     from _bootstrap import ROOT  # noqa: F401
     from release_store import ReleaseStore
@@ -84,10 +115,23 @@ def main():
     history = args.out / "history"
     download_consistent_history(ReleaseStore(args.repo, "tbt-data-v1", history))
     matches, safety = sanitize_history_identities(load_partitions(history))
-    if safety.get("quarantined_rows") or len(matches) < 994101:
-        raise ValueError("Canonical full release incomplete or identity unsafe")
+    manifest = load_manifest(history)
+    summary = {
+        "identity_input_rows": int(safety.get("input_rows") or 0),
+        "identity_safe_rows": len(matches),
+        "identity_quarantined_rows": int(safety.get("quarantined_rows") or 0),
+        "identity_merged_rows_removed": int(safety.get("merged_rows_removed") or 0),
+        "identity_affected_year_count": len(safety.get("affected_years") or ()),
+    }
+    try:
+        summary.update(verify_full_canonical_identity(matches, safety, manifest))
+    finally:
+        (args.out/"identity-preflight-counts.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True)+"\\n"
+        )
+        print("WTA_CANONICAL_IDENTITY_PREFLIGHT_COUNTS", json.dumps(summary, sort_keys=True), flush=True)
     ranking = load_rank_feature_inputs(args.repo, args.out/"rank-inputs", matches)
-    manifest = load_manifest(history)["years"]
+    manifest = manifest["years"]
     source_sha = {key: value["sha256"] for key, value in ranking.report["sources"].items()}
     overview = []
     for year in YEARS:
