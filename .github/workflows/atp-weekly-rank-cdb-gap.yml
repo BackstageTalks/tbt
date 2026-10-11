@@ -135,16 +135,34 @@ jobs:
           print("ATP_WEEKLY_RANK_CURRENT_NULL_ONLY_DELTA",json.dumps(r,sort_keys=True))
           PY
 
-      - name: Preserve source-scoped rank candidates and positive field evidence
+      - name: Persist source-scoped candidate rows privately; do not publish on public runner
+        run: |
+          set -euo pipefail
+          test -s "$ROOT/dry/report.json"
+          mkdir -p "$ROOT/private-archive"
+          cp "$ROOT/source/pin.json" "$ROOT/private-archive/atp-rank-source-pin.json"
+          cp "$ROOT/stage/report.json" "$ROOT/private-archive/atp-rank-stage-report.json"
+          cp "$ROOT/stage/rank-fill-candidates.jsonl" "$ROOT/private-archive/atp-rank-fill-candidates.jsonl"
+          cp "$ROOT/stage/rank-points-sidecar.jsonl" "$ROOT/private-archive/atp-rank-points-sidecar.jsonl"
+          cp "$ROOT/dry/report.json" "$ROOT/private-archive/atp-rank-dry-report.json"
+          (
+            cd "$ROOT/private-archive"
+            sha256sum *.json *.jsonl > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          tag="blinq-atp-weekly-rank-current-${{ github.run_id }}"
+          gh release create "$tag" "$ROOT/private-archive/"*             -R BackstageTalks/tbt-data             --title "Private ATP 2024-2026 exact-match weekly rank dry-run stage"             --notes "Read-only, exact SHA of pinned historical source and CDB; no canonical mutation."
+          mkdir -p "$ROOT/private-readback"
+          gh release download "$tag" -R BackstageTalks/tbt-data -D "$ROOT/private-readback"
+          (cd "$ROOT/private-readback" && sha256sum -c SHA256SUMS)
+
+      - name: Public runner artifacts contain aggregate evidence ONLY
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: blinq-atp-weekly-rank-current-${{ github.run_id }}
+          name: blinq-atp-weekly-rank-counts-${{ github.run_id }}
           path: |
-            .cache/tbt/atp-weekly-rank-real-gap/source/pin.json
             .cache/tbt/atp-weekly-rank-real-gap/stage/report.json
-            .cache/tbt/atp-weekly-rank-real-gap/stage/rank-fill-candidates.jsonl
-            .cache/tbt/atp-weekly-rank-real-gap/stage/rank-points-sidecar.jsonl
             .cache/tbt/atp-weekly-rank-real-gap/dry/report.json
           retention-days: 45
           if-no-files-found: warn
