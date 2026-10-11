@@ -100,6 +100,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wta2016-2020-readonly-summaries-${{ github.run_id }}
-          path: .cache/tbt/wta2016-2020-shared-rank-gap/overview.json
+          path: |
+            .cache/tbt/wta2016-2020-shared-rank-gap/overview.json
+            .cache/tbt/wta2016-2020-shared-rank-gap/identity-preflight-counts.json
           retention-days: 30
           if-no-files-found: warn
