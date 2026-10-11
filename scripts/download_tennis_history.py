@@ -249,9 +249,23 @@ def _statistics_candidates(matches, start, end, *, targeted=False):
         coverage = bucket_ready[key] / max(1, bucket_total[key])
         populated = sum(value is not None for value in stats.values())
         partial_priority = 0 if (p1_ready or p2_ready) else 1 if populated else 2
+        # Within a recent year, complete missing serve/return quality before
+        # spending the same budget on ace/DF-only gaps in already-ready rows.
+        # Existing complete, verified identity also saves an event-detail call.
+        identity = (match.provider_payload or {}).get("_tbt_event_identity")
+        verified_identity = (
+            isinstance(identity, dict)
+            and identity.get("event_id") == event_id(match)
+            and identity.get("status") == "finished"
+            and {identity.get("home"), identity.get("away")}
+                == {match.player1_id, match.player2_id}
+            and identity.get("home") != identity.get("away")
+        ) if targeted else False
         candidates.append((
             -match.scheduled_at.year if targeted else coverage,
+            int(p1_ready and p2_ready) if targeted else 0,
             partial_priority,
+            int(not verified_identity) if targeted else 0,
             -populated,
             -match.scheduled_at.timestamp(),
             str(match.match_id),
@@ -495,6 +509,9 @@ def main():
                     **dict(statistics_value),
                     "api_quality_ready_rows_per_1000_requests": (
                         1000 * statistics_value["api_new_quality_ready_rows"] / requests if requests else None
+                    ),
+                    "api_new_statistic_values_per_1000_requests": (
+                        1000 * statistics_value["api_new_statistic_values"] / requests if requests else None
                     ),
                     "policy": "Actual full serve+return readiness transitions; cache/local gains separated. Denominator includes provider retries/failures. Not an estimate of model accuracy gain.",
                 }
