@@ -1,4 +1,6 @@
 import json
+import hashlib
+import sqlite3
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import sys
@@ -24,8 +26,85 @@ class PrivateBridgeTest(unittest.TestCase):
             self.assertFalse(restore_checkpoint(target, code, 'other-folder-abc', p / 'bad.sqlite'))
             code.write_text('v2')
             self.assertFalse(restore_checkpoint(target, code, FOLDER, p / 'bad2.sqlite'))
-            code.write_text('v1'); (target / 'audit.sqlite').write_bytes(b'tampered')
+            code.write_text('v1'); (target / 'audit.sqlite.gz').write_bytes(b'tampered')
             self.assertFalse(restore_checkpoint(target, code, FOLDER, p / 'bad3.sqlite'))
+
+    def test_compressed_real_sqlite_roundtrip_preserves_rows(self):
+        with TemporaryDirectory() as d:
+            p = Path(d)
+            db = p / 'cache.sqlite'
+            with sqlite3.connect(db) as conn:
+                conn.execute('CREATE TABLE evidence(id INTEGER PRIMARY KEY, value TEXT)')
+                conn.executemany('INSERT INTO evidence(value) VALUES (?)',
+                                 [('important source evidence ' + str(i),) for i in range(1000)])
+            code = p / 'reader.py'; code.write_text('v1')
+            checkpoint = p / 'checkpoint'
+            write_checkpoint(db, code, FOLDER, checkpoint)
+            metadata = json.loads((checkpoint / 'checkpoint.json').read_text())
+            self.assertEqual(metadata['schema'], 2)
+            self.assertEqual(metadata['encoding'], 'gzip')
+            self.assertEqual(metadata['uncompressed_sha256'], hashlib.sha256(db.read_bytes()).hexdigest())
+            self.assertLess((checkpoint / 'audit.sqlite.gz').stat().st_size, db.stat().st_size)
+            self.assertFalse((checkpoint / 'audit.sqlite').exists())
+            restored = p / 'restored.sqlite'
+            self.assertTrue(restore_checkpoint(checkpoint, code, FOLDER, restored))
+            self.assertEqual(restored.read_bytes(), db.read_bytes())
+            with sqlite3.connect(restored) as conn:
+                self.assertEqual(conn.execute('SELECT count(*) FROM evidence').fetchone()[0], 1000)
+
+    def test_legacy_raw_checkpoint_is_backward_compatible(self):
+        with TemporaryDirectory() as d:
+            p = Path(d)
+            code = p / 'parser.py'; code.write_text('unchanged-pinned-reader')
+            folder = p / 'previous'; folder.mkdir()
+            old = folder / 'audit.sqlite'; old.write_bytes(b'previous-private-cache')
+            manifest = {
+                'schema': 1, 'folder_id': FOLDER,
+                'source_audit_code_sha256': hashlib.sha256(code.read_bytes()).hexdigest(),
+                'checkpoint_sha256': hashlib.sha256(old.read_bytes()).hexdigest(),
+                'checkpoint_bytes': old.stat().st_size,
+            }
+            (folder / 'checkpoint.json').write_text(json.dumps(manifest))
+            dest = p / 'restored.sqlite'
+            self.assertTrue(restore_checkpoint(folder, code, FOLDER, dest))
+            self.assertEqual(dest.read_bytes(), old.read_bytes())
+            manifest['checkpoint_sha256'] = 'a'*64
+            (folder / 'checkpoint.json').write_text(json.dumps(manifest))
+            self.assertFalse(restore_checkpoint(folder, code, FOLDER, dest))
+            self.assertEqual(dest.read_bytes(), old.read_bytes())
+
+    def test_bad_gzip_and_wrong_raw_digest_fail_without_wiping_existing_cache(self):
+        with TemporaryDirectory() as d:
+            p = Path(d); code = p / 'parser.py'; code.write_text('v1')
+            source = p / 'source.sqlite'; source.write_bytes(b'important old cache'*2000)
+            folder = p / 'checkpoint'
+            write_checkpoint(source, code, FOLDER, folder)
+            dest = p / 'restored.sqlite'; dest.write_bytes(b'KEEP')
+            metadata = json.loads((folder / 'checkpoint.json').read_text())
+            metadata['uncompressed_sha256'] = 'a'*64
+            (folder / 'checkpoint.json').write_text(json.dumps(metadata))
+            self.assertFalse(restore_checkpoint(folder, code, FOLDER, dest))
+            self.assertEqual(dest.read_bytes(), b'KEEP')
+            self.assertFalse((p / 'restored.sqlite.pending').exists())
+            write_checkpoint(source, code, FOLDER, folder)
+            (folder / 'audit.sqlite.gz').write_bytes(b'corrupt gzip bytes')
+            self.assertFalse(restore_checkpoint(folder, code, FOLDER, dest))
+            self.assertEqual(dest.read_bytes(), b'KEEP')
+
+    def test_cache_bounds_fail_closed_before_writing_checkpoint(self):
+        from unittest.mock import patch
+        with TemporaryDirectory() as d:
+            p = Path(d)
+            code = p / 'parser.py'; code.write_text('v1')
+            source = p / 'source.sqlite'; source.write_bytes(b'x'*128)
+            with patch('drive_cdb_private_bridge.MAX_RAW_CHECKPOINT_BYTES', 100):
+                with self.assertRaises(ValueError):
+                    write_checkpoint(source, code, FOLDER, p / 'too-big')
+            with patch('drive_cdb_private_bridge.MAX_COMPRESSED_CHECKPOINT_BYTES', 5):
+                with self.assertRaises(ValueError):
+                    write_checkpoint(source, code, FOLDER, p / 'not-uploaded')
+            self.assertFalse((p / 'not-uploaded' / 'checkpoint.json').exists())
+            self.assertFalse((p / 'not-uploaded' / 'audit.sqlite.gz.pending').exists())
 
     def test_report_blocks_missing_or_unsafe_gate(self):
         with TemporaryDirectory() as d:

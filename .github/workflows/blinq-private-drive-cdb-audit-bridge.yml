@@ -26,7 +26,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: blinq-private-drive-cdb-audit-bridge
+  # PR safety tests must not wait for a multi-hour read-only Drive batch;
+  # dispatched scans retain the original single-run concurrency key.
+  group: ${{ github.event_name == 'pull_request' && 'blinq-private-drive-audit-pr-ci' || 'blinq-private-drive-cdb-audit-bridge' }}
   cancel-in-progress: false
 
 jobs:
@@ -118,9 +120,16 @@ jobs:
           set -euo pipefail
           mkdir -p work/cache work/cache-input
           if gh release view "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" >/dev/null 2>&1; then
-            if gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p audit.sqlite -p checkpoint.json -D work/cache-input >/dev/null 2>&1 &&
-               python scripts/drive_cdb_private_bridge.py restore-checkpoint --folder-id "$DRIVE_ROOT" --code-file private/scripts/drive_cdb_audit.py --source work/cache-input --dest work/cache/audit.sqlite; then
-              echo VERIFIED_PRIVATE_CHECKPOINT_RESTORED
+            # Prefer SHA-checked compressed v2; legacy raw v1 is still readable.
+            if gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p checkpoint.json -D work/cache-input >/dev/null 2>&1; then
+              if ! gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p audit.sqlite.gz -D work/cache-input >/dev/null 2>&1; then
+                gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p audit.sqlite -D work/cache-input >/dev/null 2>&1 || true
+              fi
+              if python scripts/drive_cdb_private_bridge.py restore-checkpoint --folder-id "$DRIVE_ROOT" --code-file private/scripts/drive_cdb_audit.py --source work/cache-input --dest work/cache/audit.sqlite; then
+                echo VERIFIED_PRIVATE_CHECKPOINT_RESTORED
+              else
+                echo INVALID_OR_STALE_PRIVATE_CHECKPOINT_IGNORED
+              fi
             else
               echo INVALID_OR_STALE_PRIVATE_CHECKPOINT_IGNORED
             fi
@@ -198,24 +207,21 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p work/cache-export work/cache-verify
-          cache_bytes="$(stat -c '%s' work/cache/audit.sqlite)"
-          if (( cache_bytes > 1073741824 )); then
-            echo 'BLOCKED: checkpoint exceeds 1 GiB; do not claim resumable success'
-            exit 1
-          fi
+          # The writer enforces 4 GiB raw and 1.8 GB gzip bounds.
+          # Preserve immutable checkpoint and independent SHA-256 readback.
           python scripts/drive_cdb_private_bridge.py write-checkpoint --cache-file work/cache/audit.sqlite --code-file private/scripts/drive_cdb_audit.py --folder-id "$DRIVE_ROOT" --output work/cache-export
           # Retain an immutable per-run checkpoint before updating the rolling
           # pointer. A partial pointer upload must not lose the completed batch.
           checkpoint_tag="blinq-drive-cdb-checkpoint-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           gh release create "$checkpoint_tag" -R "$PRIVATE_REPO" --target main --title 'Private Drive audit batch checkpoint' --notes 'Immutable source-observation checkpoint. No canonical writes.' >/dev/null
-          gh release upload "$checkpoint_tag" work/cache-export/audit.sqlite work/cache-export/checkpoint.json -R "$PRIVATE_REPO" >/dev/null
-          gh release download "$checkpoint_tag" -R "$PRIVATE_REPO" -p audit.sqlite -p checkpoint.json -D work/cache-verify >/dev/null
+          gh release upload "$checkpoint_tag" work/cache-export/audit.sqlite.gz work/cache-export/checkpoint.json -R "$PRIVATE_REPO" >/dev/null
+          gh release download "$checkpoint_tag" -R "$PRIVATE_REPO" -p audit.sqlite.gz -p checkpoint.json -D work/cache-verify >/dev/null
           python scripts/drive_cdb_private_bridge.py restore-checkpoint --folder-id "$DRIVE_ROOT" --code-file private/scripts/drive_cdb_audit.py --source work/cache-verify --dest work/cache/verified-persisted.sqlite
           if ! gh release view "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" >/dev/null 2>&1; then
             gh release create "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" --target main --title 'Private read-only Drive source checkpoint' --notes 'Cached observations only. Not an import.' >/dev/null
           fi
-          gh release upload "$PRIVATE_CACHE_RELEASE" work/cache-export/audit.sqlite work/cache-export/checkpoint.json -R "$PRIVATE_REPO" --clobber >/dev/null
-          gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p audit.sqlite -p checkpoint.json -D work/cache-verify --clobber >/dev/null
+          gh release upload "$PRIVATE_CACHE_RELEASE" work/cache-export/audit.sqlite.gz work/cache-export/checkpoint.json -R "$PRIVATE_REPO" --clobber >/dev/null
+          gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p audit.sqlite.gz -p checkpoint.json -D work/cache-verify --clobber >/dev/null
           python scripts/drive_cdb_private_bridge.py restore-checkpoint --folder-id "$DRIVE_ROOT" --code-file private/scripts/drive_cdb_audit.py --source work/cache-verify --dest work/cache/verified-persisted.sqlite
           echo PRIVATE_CHECKPOINT_INDEPENDENT_SHA256_READBACK_PASS
 
