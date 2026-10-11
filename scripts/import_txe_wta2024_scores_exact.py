@@ -25,9 +25,9 @@ def read_stage(path, report_path, before_sha):
             or report.get("model_trained") is not False):
         raise ValueError("Stale/unverified WTA 2024 stage")
     items = [json.loads(row) for row in Path(path).read_text().splitlines() if row.strip()]
-    if (len(items) != report.get("counts", {}).get("staged_matches")
+    if (len(items) != report.get("counts", {}).get("staged_matches", 0)
             or sum(len(r.get("additions", {})) for r in items)
-            != report.get("counts", {}).get("staged_fields")):
+            != report.get("counts", {}).get("staged_fields", 0)):
         raise ValueError("Score stage cardinality changed")
     used = set()
     for r in items:
