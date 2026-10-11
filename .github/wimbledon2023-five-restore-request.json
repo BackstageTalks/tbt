@@ -9,9 +9,9 @@
   "expected_restored_rows": 107765,
   "expected_new_match_ids": [
     "30a913dc3fa280dbf4838d9d",
+    "5a07b3bb8817fd24d70ececa",
     "93e0cf24456ba6f6bb83fe8b",
     "9be0b0ae278ac43da93b6419",
-    "5a07b3bb8817fd24d70ececa",
     "d70725c4dace6ab1811b0360"
   ],
   "provider_api_requests": 0,
