@@ -53,7 +53,7 @@ def inspect_html(html):
                         if any(cell.get_text(" ", strip=True)
                                for cell in tr.select("th,td")))
     table_labels = bool(re.search(
-        r"\\b(?:aces?|double faults?|break points?|first serve|second serve)\\b",
+        r"\b(?:aces?|double faults?|break points?|first serve|second serve)\b",
         " ".join(x.get_text(" ", strip=True) for x in soup.select("table")),
         re.I))
     return {
