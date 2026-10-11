@@ -95,7 +95,7 @@ def test_missing_invalid_mismatched_required_pins_fail_closed(year):
         {"overwrite_existing_rank":True},
         {"require_global_lock":False},
         {"provider_api_requests":1},
-        {"model_promoted":True},
+        {"promote_model":True},
         {"source_stage_sha256":"bad"},
     ]:
         bad=good|delta
