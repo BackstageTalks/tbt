@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "mode": "dry-run",
+  "mode": "write",
   "year": 2024,
   "source_zip_sha256": "cd464e89a19a0c6440fdd2928d14e375065d2baf96ff01c3c9860077a1803c20",
   "allow_existing_overwrite": false,
