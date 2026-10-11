@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "source_tag": "blinq-wta2026-id-ranked-null-audit-38124637314",
+  "source_stage_sha256": "d8353bb92c8fbca596cf8d423ef926bbeb2d6ae51d3e4ddd686d23837d3976f4",
+  "source_report_sha256": "d70c7dce0ce8fc413a226ebff68ab2ae4628e2f8799ec26af6e2980a8f8cf086",
+  "original_cdb_2026_sha256": "b945528573a8488a5c03eec66b0987791939313cc1099b12d44a9d4a95893bc6",
+  "original_backup_tag": "blinq-atp-weekly-rank-prewrite-38124799583-1",
+  "expected_matches": 9844,
+  "expected_rank_values": 19688,
+  "require_verified_id": true,
+  "require_source_before_match": true,
+  "require_wta_full_year_rebase": true,
+  "allow_existing_overwrite": false,
+  "global_writer_lock": true,
+  "immutable_backup": true,
+  "full_year_readback": true,
+  "model_training": false,
+  "model_promotion": false,
+  "provider_api_requests": 0
+}
