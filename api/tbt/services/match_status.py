@@ -15,6 +15,7 @@ are changed here.
 from __future__ import annotations
 
 from copy import deepcopy
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 import re
 import time
@@ -58,6 +59,8 @@ _PUBLIC_MATCH_WINNER_KEYS = (
     "value_picks",
     "doubles_picks",
 )
+_PUBLIC_PROJECTION_KEYS = ("ace_picks", "sg_picks")
+_PROJECTION_MARKETS = {"aces", "double_faults", "sets", "games"}
 LEGACY_PENDING_CARRY_HOURS = 48
 
 
@@ -161,6 +164,35 @@ def prediction_rows(
         # keys above, so generic model-board rows are never queued there.
         add_rows(feed.get("upcoming"))
 
+    # Stat-only published fixtures must enter the same bounded finished-event
+    # lookup. Prefer existing winner rows, and never treat an O/U selection ID
+    # (e.g. sets:over:2.5) as the predicted match winner.
+    if public_contract_present:
+        for key in _PUBLIC_PROJECTION_KEYS:
+            for row in feed.get(key, []) or []:
+                if not isinstance(row, dict) or not _scheduled_in_current_betting_day(row, now):
+                    continue
+                eid = _event_id(row)
+                if not eid or eid in out:
+                    continue
+                publications = row.get("market_publications") or []
+                if not any(
+                    isinstance(p, dict)
+                    and str(p.get("market") or "").lower() in _PROJECTION_MARKETS
+                    and p.get("issued_at")
+                    and str(p.get("publication_status") or "") == "published"
+                    for p in publications
+                ):
+                    continue
+                p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
+                anchor = str(row.get("winner_id") or "").strip()
+                if not p1 or not p2 or p1 == p2 or anchor not in {p1, p2}:
+                    continue
+                safe_row = dict(row)
+                safe_row["betting"] = {}
+                safe_row["selection_id"] = anchor
+                out[eid] = safe_row
+
     return out
 
 
@@ -175,6 +207,8 @@ _RUNTIME_RESULT_SOURCE_KEYS = (
     "top_daily_picks",
     "value_picks",
     "doubles_picks",
+    "ace_picks",
+    "sg_picks",
 )
 
 _RUNTIME_RESULT_SOURCE_SECTIONS = {
@@ -365,7 +399,8 @@ def runtime_settled_results(
                 market = str(publication.get("market") or "").strip().lower()
                 if not market and section in {"top200", "top_daily", "prime", "value", "doubles"}:
                     market = "match_winner"
-                if market != "match_winner":
+                projection = market in _PROJECTION_MARKETS
+                if market != "match_winner" and not projection:
                     continue
                 publication_status = str(
                     publication.get("publication_status") or "published"
@@ -378,7 +413,7 @@ def runtime_settled_results(
                     or publication.get("pick_id")
                     or ""
                 ).strip()
-                if expected_selection and selection and selection != expected_selection:
+                if not projection and expected_selection and selection and selection != expected_selection:
                     continue
 
                 key = _runtime_publication_key(row, publication, index)
@@ -389,6 +424,42 @@ def runtime_settled_results(
                     or identity in seen_identities
                     or identity in runtime_seen_identities
                 ):
+                    continue
+
+                if projection:
+                    stats = status_row.get("projection_stats")
+                    stats = stats if isinstance(stats, dict) else {}
+                    if not stats and status not in {"retired", "void"}:
+                        continue
+                    # The exact issued contract is graded with the same offline
+                    # settlement rules as refresh; never infer aces from winner.
+                    from .engine import (
+                        _settle_projection_publications, _settle_sg_projection_publications,
+                    )
+                    match = SimpleNamespace(
+                        player1_id=_player_id(row, "player1"),
+                        player2_id=_player_id(row, "player2"),
+                        scheduled_at=_parse_time(row.get("scheduled_at")),
+                        status="retired" if status == "retired" else "cancelled" if status == "void" else "finished",
+                        provider_payload={}, stats=stats,
+                    )
+                    if match.scheduled_at is None or not match.player1_id or not match.player2_id:
+                        continue
+                    scored = deepcopy(publication)
+                    wrapper = {"market_publications": [scored]}
+                    if market in {"aces", "double_faults"}:
+                        _settle_projection_publications(wrapper, match, _parse_time(status_row.get("checked_at")) or datetime.now(timezone.utc))
+                    else:
+                        _settle_sg_projection_publications(wrapper, match, _parse_time(status_row.get("checked_at")) or datetime.now(timezone.utc))
+                    graded = scored.get("result")
+                    if not isinstance(graded, dict) or graded.get("status") not in {"hit", "miss", "void"}:
+                        continue
+                    graded["runtime_overlay"] = True
+                    graded["runtime_source"] = "match_status_snapshot"
+                    graded["void"] = graded.get("status") == "void"
+                    overlay_publications.append(scored)
+                    runtime_seen.add(key)
+                    runtime_seen_identities.add(identity)
                     continue
 
                 result = publication.get("result")
@@ -615,9 +686,59 @@ def classify_finished_event(
         **base,
         "status": "win" if predicted == provider_winner else "loss",
         "winner_id": provider_winner,
+        "provider_home_id": str(home.get("id") or ""),
+        "projection_stats": _verified_final_score_stats(row, event),
         **({"first_set_outcome": first_set_outcome, "first_set_score": first_set_score}
            if first_set_outcome else {}),
     }
+
+
+def _verified_final_score_stats(row: dict[str, Any], event: dict[str, Any]) -> dict[str, int]:
+    """Require a complete, identity-matched, terminal tennis score.
+
+    Incomplete period data and super-tiebreak ambiguity are left ungraded.
+    Match winner and publisher identities were checked by classify_finished_event.
+    """
+    home = event.get("homeScore") if isinstance(event.get("homeScore"), dict) else {}
+    away = event.get("awayScore") if isinstance(event.get("awayScore"), dict) else {}
+    winner_code = event.get("winnerCode")
+    try:
+        winner_code = int(winner_code)
+    except (TypeError, ValueError):
+        return {}
+    if winner_code not in (1, 2):
+        return {}
+    sets = []
+    seen_gap = False
+    for index in range(1, 6):
+        a, b = home.get(f"period{index}"), away.get(f"period{index}")
+        if a is None and b is None:
+            seen_gap = True
+            continue
+        if seen_gap or a is None or b is None:
+            return {}
+        try:
+            ga, gb = int(a), int(b)
+        except (TypeError, ValueError):
+            return {}
+        if ga < 0 or gb < 0 or ga == gb:
+            return {}
+        high, low = max(ga, gb), min(ga, gb)
+        if not ((high == 6 and low <= 4) or (high == 7 and low in (5, 6))):
+            return {}
+        sets.append((ga, gb))
+    if len(sets) not in (2, 3, 4, 5):
+        return {}
+    home_wins = sum(a > b for a, b in sets)
+    away_wins = len(sets) - home_wins
+    target = 3 if len(sets) >= 4 or row.get("best_of") == 5 else 2
+    if max(home_wins, away_wins) != target:
+        return {}
+    if (home_wins > away_wins) != (winner_code == 1):
+        return {}
+    if row.get("best_of") == 3 and len(sets) > 3:
+        return {}
+    return {"total_sets": len(sets), "total_games": sum(a+b for a, b in sets)}
 
 
 def _second_set_outcome(row: dict[str, Any], event: dict[str, Any]) -> str:
