@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - .github/workflows/blinq-cdb-shard-autorecovery.yml
+  pull_request:
+    paths:
+      - .github/workflows/blinq-cdb-shard-autorecovery.yml
   workflow_dispatch:
     inputs:
       task:
@@ -71,9 +74,9 @@ jobs:
           allowed=("txe-atp-single-2025","txe-atp-double-2025",
                    "txe-wta-single-2025","txe-wta-double-2025",
                    "atp-archive-2021","atp-doubles-ranking")
-          if os.environ["EVENT"]=="push":
-              # WTA 2025 is already running in the original cloud collection.
-              # Do not duplicate writers or requests for the same shard.
+          if os.environ["EVENT"] in ("push","pull_request"):
+              # Validate safely on PR/push without collecting anything.
+              # Collect job has a separate explicit dispatch-only guard.
               items=("txe-atp-single-2025","txe-atp-double-2025",
                      "atp-archive-2021","atp-doubles-ranking")
               iteration=1
