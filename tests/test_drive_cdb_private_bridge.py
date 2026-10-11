@@ -24,7 +24,7 @@ class PrivateBridgeTest(unittest.TestCase):
             self.assertFalse(restore_checkpoint(target, code, 'other-folder-abc', p / 'bad.sqlite'))
             code.write_text('v2')
             self.assertFalse(restore_checkpoint(target, code, FOLDER, p / 'bad2.sqlite'))
-            code.write_text('v1'); (target / 'audit.sqlite').write_bytes(b'tampered')
+            code.write_text('v1'); (target / 'audit.sqlite.gz').write_bytes(b'tampered')
             self.assertFalse(restore_checkpoint(target, code, FOLDER, p / 'bad3.sqlite'))
 
     def test_report_blocks_missing_or_unsafe_gate(self):
@@ -85,6 +85,61 @@ class PrivateBridgeTest(unittest.TestCase):
             p = Path(d); code = p / 'parser.py'; code.write_text('v1')
             self.assertFalse(restore_checkpoint(p, code, FOLDER, p / 'output.sqlite'))
             self.assertFalse((p / 'output.sqlite').exists())
+
+
+    def test_checkpoint_is_compressed_checks_raw_bytes_and_restores_atomically(self):
+        import hashlib
+        with TemporaryDirectory() as d:
+            p = Path(d)
+            cache = p / 'audit.sqlite'
+            cache.write_bytes(b'sqlite-test-payload' * 15000)
+            code = p / 'audit.py'
+            code.write_text('one')
+            out = p / 'checkpoint'
+            write_checkpoint(cache, code, FOLDER, out)
+            packed = out / 'audit.sqlite.gz'
+            self.assertTrue(packed.is_file())
+            self.assertFalse((out / 'audit.sqlite').exists())
+            self.assertLess(packed.stat().st_size, cache.stat().st_size)
+            manifest = json.loads((out / 'checkpoint.json').read_text())
+            self.assertEqual(manifest['schema'], 2)
+            self.assertEqual(manifest['checkpoint_file'], 'audit.sqlite.gz')
+            self.assertEqual(manifest['uncompressed_checkpoint_bytes'], cache.stat().st_size)
+            self.assertEqual(manifest['uncompressed_checkpoint_sha256'],
+                             hashlib.sha256(cache.read_bytes()).hexdigest())
+            recovered = p / 'recovered.sqlite'
+            self.assertTrue(restore_checkpoint(out, code, FOLDER, recovered))
+            self.assertEqual(cache.read_bytes(), recovered.read_bytes())
+            # An otherwise correctly checksummed gzip must not restore
+            # if its uncompressed content differs from the pinned manifest.
+            manifest['uncompressed_checkpoint_sha256'] = '0' * 64
+            (out / 'checkpoint.json').write_text(json.dumps(manifest))
+            recovered.write_bytes(b'preserve-existing')
+            self.assertFalse(restore_checkpoint(out, code, FOLDER, recovered))
+            self.assertEqual(recovered.read_bytes(), b'preserve-existing')
+
+    def test_legacy_v1_checkpoint_remains_readable(self):
+        import hashlib
+        with TemporaryDirectory() as d:
+            p = Path(d)
+            code = p / 'audit.py'
+            code.write_text('old')
+            source = p / 'cache'
+            source.mkdir()
+            blob = source / 'audit.sqlite'
+            blob.write_bytes(b'legacy-cache')
+            sha = lambda b: hashlib.sha256(b).hexdigest()
+            (source / 'checkpoint.json').write_text(json.dumps({
+                'schema': 1,
+                'folder_id': FOLDER,
+                'source_audit_code_sha256': sha(code.read_bytes()),
+                'checkpoint_sha256': sha(blob.read_bytes()),
+                'checkpoint_bytes': blob.stat().st_size,
+            }))
+            dest = p / 'legacy-restored.sqlite'
+            self.assertTrue(restore_checkpoint(source, code, FOLDER, dest))
+            self.assertEqual(dest.read_bytes(), blob.read_bytes())
+
 
 
 if __name__ == '__main__':
