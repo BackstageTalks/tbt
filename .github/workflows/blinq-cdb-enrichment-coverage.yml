@@ -1,0 +1,88 @@
+name: BlinQ CDB full enrichment field coverage audit (no writes)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-cdb-enrichment-coverage.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-complete-cdb-field-coverage
+  cancel-in-progress: false
+
+jobs:
+  full-historical-field-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      RELEASE_TAG: tbt-data-v1
+      REPORT_TAG: blinq-cdb-field-gap-inventory-20261011-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Read-only tool setup
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          python -m pip install "pandas>=2,<3" pyarrow
+          python -m py_compile scripts/audit_all_cdb_enrichment_fields.py
+      - name: Independently download all years and current release metadata
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/enrichment-audit/years /tmp/enrichment-audit/reports
+          gh api "repos/$PRIVATE_REPO/releases/tags/$RELEASE_TAG" > /tmp/enrichment-audit/release.json
+          gh release download "$RELEASE_TAG" -R "$PRIVATE_REPO" \
+            -p 'history-*.parquet' -p 'history_manifest.json' \
+            -D /tmp/enrichment-audit/years
+          test "$(find /tmp/enrichment-audit/years -name 'history-*.parquet' | wc -l)" -eq 78
+      - name: Parse every match and every existing statistic field in CDB
+        timeout-minutes: 25
+        run: |
+          set -euo pipefail
+          python -u scripts/audit_all_cdb_enrichment_fields.py \
+            --years-dir /tmp/enrichment-audit/years \
+            --release-json /tmp/enrichment-audit/release.json \
+            --output /tmp/enrichment-audit/reports/full-cdb-field-coverage.json
+          python - <<'PY'
+          import json
+          a=json.load(open('/tmp/enrichment-audit/reports/full-cdb-field-coverage.json'))
+          assert a['canonical_match_rows']>=994101
+          assert a['year_partitions']==78
+          assert a['observed_stat_field_count']>=20
+          assert a['canonical_db_mutated']==False
+          assert a['tennis_provider_requests']==0
+          assert all(x['present']+x['missing_or_unknown']==a['canonical_match_rows'] for x in a['top_level'])
+          print('ENRICHMENT_ALL_FIELD_COVERAGE_PASS',a['canonical_match_rows'],
+                'TOP_LEVEL',len(a['top_level']),
+                'STATS',a['observed_stat_field_count'])
+          PY
+      - name: Save immutable PRIVATE field inventory and read back SHA
+        if: always()
+        run: |
+          set -euo pipefail
+          cd /tmp/enrichment-audit/reports
+          test -s full-cdb-field-coverage.json
+          sha256sum full-cdb-field-coverage.json > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          gh release create "$REPORT_TAG" -R "$PRIVATE_REPO" --target main \
+            --title "Current all-match CDB nested field coverage 2026-10-11" \
+            --notes "Read-only 78-year full CDB field and missing-value inventory, exact source year partition SHA. No CDB write or provider requests."
+          gh release upload "$REPORT_TAG" full-cdb-field-coverage.json SHA256SUMS -R "$PRIVATE_REPO"
+          mkdir -p readback
+          gh release download "$REPORT_TAG" -R "$PRIVATE_REPO" -D readback
+          (cd readback && sha256sum --check SHA256SUMS)
+          python - <<'PY'
+          import json
+          a=json.load(open('readback/full-cdb-field-coverage.json'))
+          print('ENRICHMENT_FIELD_INVENTORY_PERSISTED_AND_VERIFIED',
+                a['canonical_match_rows'],a['observed_stat_field_count'])
+          PY
