@@ -94,3 +94,51 @@ def test_source_count_rate_outside_pinned_pair_blocks_approval():
     proof = compare_years(source, current)
     assert proof["five_failed_validation"] == 1
     assert proof["exact_five_can_be_reviewed_for_restoration"] is False
+
+
+
+def test_local_append_preserves_every_current_value_and_deletes_staging(tmp_path):
+    from audit_wimbledon2023_recovery_readonly import simulate_exact_five_append
+    original = fixture_rows()
+    current = original.loc[original["match_id"] == "safe-other"].copy()
+    current["stats_json"] = '{"p1_aces": 999}'
+    proof = simulate_exact_five_append(original, current, tmp_path)
+    assert proof["current_rows_preserved_exact"] == 1
+    assert proof["five_backup_rows_appended_exact"] == 5
+    assert proof["simulated_total_rows"] == 6
+    assert proof["existing_rows_or_cells_overwritten"] == 0
+    assert proof["production_cdb_mutated"] is False
+    assert len(proof["simulated_parquet_sha256"]) == 64
+    assert not list(tmp_path.glob("**/*.parquet"))
+    # Simulator must not mutate the input frames.
+    assert current.iloc[0]["stats_json"] == '{"p1_aces": 999}'
+    assert len(original) == 6
+
+
+def test_local_append_blocks_incompatible_schema(tmp_path):
+    from audit_wimbledon2023_recovery_readonly import simulate_exact_five_append
+    original = fixture_rows()
+    current = original.loc[original["match_id"] == "safe-other"].copy()
+    original["invented_column"] = 1
+    with pytest.raises(ValueError, match="column inventory differs"):
+        simulate_exact_five_append(original, current, tmp_path)
+    assert not list(tmp_path.glob("**/*.parquet"))
+
+
+def test_local_append_fails_on_any_unrelated_missing_match(tmp_path):
+    from audit_wimbledon2023_recovery_readonly import simulate_exact_five_append
+    source = fixture_rows()
+    current = source.iloc[0:0].copy()
+    with pytest.raises(ValueError, match="must first pass"):
+        simulate_exact_five_append(source, current, tmp_path)
+    assert not list(tmp_path.glob("**/*.parquet"))
+
+
+def test_local_append_blocks_invalid_one_of_five(tmp_path):
+    from audit_wimbledon2023_recovery_readonly import simulate_exact_five_append
+    source = fixture_rows()
+    current = source.loc[source["match_id"] == "safe-other"].copy()
+    source.loc[source["match_id"] == sorted(TARGET_IDS)[0], "stats_json"] = '{"p1_break_points_won": 500}'
+    with pytest.raises(ValueError, match="must first pass"):
+        simulate_exact_five_append(source, current, tmp_path)
+    assert not list(tmp_path.glob("**/*.parquet"))
