@@ -1,0 +1,199 @@
+name: Read-only original Wimbledon 2024 research ZIP QA
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/w24-original-archive-qa.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  original-source-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download original private archive and stored research-derived tapes
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$DATA_REPO" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p .cache/w24source/{raw,meta,report}
+          gh release download blinq-kaggle-backup-2026-10-07 -R "$DATA_REPO" -D .cache/w24source/raw \
+            -p rewantbhriguvanshi_wimbledon-2024-point-and-match-level-statistics-cd464e89a19a.zip
+          gh release download blinq-kaggle-research-integration-2026-10-07 -R "$DATA_REPO" -D .cache/w24source/raw \
+            -p wimbledon-2024-match-level.jsonl.gz -p wimbledon-2024-points.jsonl.gz
+          gh api -H 'Accept: application/vnd.github.raw' \
+            "repos/$DATA_REPO/contents/backup/kaggle/2026-10-07/rewantbhriguvanshi_wimbledon-2024-point-and-match-level-statistics/manifest.json?ref=main" \
+            > .cache/w24source/meta/manifest.json
+      - name: Read every raw match and point, enforce source SHA, count code anomalies
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv, gzip, hashlib, io, json
+          from collections import Counter, defaultdict
+          from pathlib import Path
+          from zipfile import ZipFile
+          root=Path('.cache/w24source')
+          raw=root/'raw'
+          manifest=json.loads((root/'meta/manifest.json').read_text())
+          z=raw/manifest['raw_archive']['asset_name']
+          digest=lambda buf: hashlib.sha256(buf).hexdigest()
+          archive_bytes=z.read_bytes()
+          assert len(archive_bytes)==1713428
+          assert digest(archive_bytes)==manifest['raw_archive']['sha256']
+          assert digest(archive_bytes)=='cd464e89a19a0c6440fdd292b14e375065d2baf96ff01c3c9860077a1803c20'
+          assert manifest['source']['license_status']=='Apache-2.0'
+          names={f['path']:f for f in manifest['audit']['files']}
+          def parse_table(zip_file, basename):
+              target=[i for i in zip_file.infolist() if i.filename.split('/')[-1]==basename]
+              assert len(target)==1,'ambiguous CSV member'
+              member=target[0]
+              assert member.file_size<30000000 and member.compress_size>0
+              assert member.file_size<=250*member.compress_size,'excess ZIP expansion'
+              data=zip_file.read(member)
+              assert digest(data)==names[basename]['sha256'],'source file digest mismatch'
+              return list(csv.DictReader(io.StringIO(data.decode('utf-8-sig'))))
+          with ZipFile(z) as archive:
+              assert len(archive.infolist())<50
+              points=parse_table(archive,'wimbledon_2024.csv')
+              match_rows=parse_table(archive,'wimbledon_2024_match_level.csv')
+          assert len(points)==48155 and len(match_rows)==252
+          bysource={}
+          for row in match_rows:
+              source_mid=str(row['match_id']).strip()
+              assert source_mid and source_mid not in bysource
+              bysource[source_mid]=row
+          derived={}
+          for line in gzip.open(raw/'wimbledon-2024-match-level.jsonl.gz','rt',encoding='utf-8'):
+              if not line.strip():continue
+              row=json.loads(line)
+              mid=str(row['source_match_id']).strip()
+              assert mid in bysource and mid not in derived
+              derived[mid]=row
+          assert len(derived)==250
+          counts=Counter()
+          summary=Counter()
+          compare={
+            'player1_aces':'Player1Ace','player2_aces':'Player2Ace',
+            'player1_double_faults':'Player1DoubleFault','player2_double_faults':'Player2DoubleFault',
+            'player1_unforced_errors':'Player1UnforcedError','player2_unforced_errors':'Player2UnforcedError',
+            'player1_net_points':'Player1NetPoint','player2_net_points':'Player2NetPoint',
+            'player1_net_points_won':'Player1NetPointWon','player2_net_points_won':'Player2NetPointWon'
+          }
+          for mid,row in derived.items():
+              source=bysource[mid]
+              if row['player1_name'].strip()!=source['Player1Name'].strip() or row['player2_name'].strip()!=source['Player2Name'].strip():
+                  counts['derived_match_name_drift']+=1
+              for dest,origin in compare.items():
+                  value=int(float(source[origin]))
+                  if row[dest]!=value:counts['derived_match_stats_drift']+=1
+                  else:counts['derived_match_stats_equal']+=1
+          for line in gzip.open(raw/'wimbledon-2024-points.jsonl.gz','rt',encoding='utf-8'):
+              if line.strip():
+                  row=json.loads(line)
+                  assert row['source_match_id'] in derived
+                  summary['derived_point_rows']+=1
+          assert summary['derived_point_rows']==47717
+          seen=set()
+          pergame=Counter()
+          flags=defaultdict(Counter)
+          def v_int(rawtext):
+              try:
+                  x=int(str(rawtext).strip())
+                  return x
+              except (ValueError,TypeError):
+                  return None
+          def truth(rawtext):
+              v=str(rawtext or '').strip().lower()
+              if v in ('true','1','yes'):return True
+              if v in ('false','0','no',''):return False
+              return None
+          for row in points:
+              mid=str(row['match_id']).strip()
+              assert mid in bysource
+              if mid not in derived:
+                  counts['raw_points_for_excluded_matches']+=1
+                  continue
+              counts['raw_points_mapped']+=1
+              coords=[v_int(row[k]) for k in ('SetNumber','GameNumber','PointNumberInGame')]
+              for key,value in zip(('set','game','point'),coords):
+                  if value is None:counts['invalid_'+key+'_nonnumeric']+=1
+                  elif value==0:counts['invalid_'+key+'_zero']+=1
+                  elif value<0:counts['invalid_'+key+'_negative']+=1
+              if all(i is not None and i>0 for i in coords):
+                  key=(mid,*coords)
+                  if key in seen:counts['duplicate_positive_point_key']+=1
+                  seen.add(key)
+                  counts['raw_valid_positive_point_locations']+=1
+              else:counts['raw_nonpositive_or_invalid_point_locations']+=1
+              ace=truth(row.get('IsAcePoint'))
+              df=truth(row.get('IsDoubleFaultPoint'))
+              if ace is None or df is None:
+                  counts['unparseable_point_ace_df_flags']+=1
+                  continue
+              server=row.get('PointServerPlayer','').strip()
+              m=bysource[mid]
+              if server==m['Player1Name'].strip():side='player1'
+              elif server==m['Player2Name'].strip():side='player2'
+              else:
+                  counts['unresolved_point_server_identity']+=1
+                  continue
+              if ace:flags[mid][side+'_aces']+=1
+              if df:flags[mid][side+'_double_faults']+=1
+          assert counts['raw_points_mapped']==47717
+          assert counts['raw_points_for_excluded_matches']==438
+          for mid in derived:
+              row=derived[mid]
+              disagreements=[]
+              for key in ('player1_aces','player2_aces','player1_double_faults','player2_double_faults'):
+                  expected=row[key]
+                  observed=flags[mid][key]
+                  if observed!=expected:disagreements.append(key)
+                  else:counts['wholematch_ace_df_point_tape_equal']+=1
+              if disagreements:
+                  counts['matches_disagree_ace_df_point_tape']+=1
+                  counts['ace_df_source_cells_disagree']+=len(disagreements)
+              else:counts['matches_ace_df_fully_consistent']+=1
+          report={
+            'schema':1,'status':'RAW_ORIGINAL_BYTES_VERIFIED_SOURCE_SEMANTIC_GATE',
+            'source_family':'rewantbhriguvanshi_wimbledon_2024_kaggle',
+            'original_zip_sha256':digest(archive_bytes),
+            'raw_csv_sha256':{k:names[k]['sha256'] for k in ('wimbledon_2024.csv','wimbledon_2024_match_level.csv')},
+            'raw_match_rows':len(match_rows),'raw_point_rows':len(points),
+            'derived_match_rows':len(derived),'derived_point_rows':summary['derived_point_rows'],
+            'counts':dict(counts),
+            'licensing':{'source_manifest_declares':'Apache-2.0',
+              'independent_upstream_licensing_and_redistribution_clearance':False},
+            'safety':{'research_only':True,'source_original_zip_verified':True,
+              'full_match_point_tape_completeness_verified':False,
+              'canonical_2024_exact_cell_current_readback_in_separate_audit':True,
+              'write_authorized':False,'model_training_authorized':False},
+            'provider_requests':0,'canonical_mutated':False,
+            'notes':'Reason-coded 0-based/missing point positions and point-flag-vs-match ace/DF checks; raw capture available_at, event provider method, completeness and upstream legal provenance still require independent checks.'
+          }
+          p=root/'report/wimbledon-2024-original-source-quality.json'
+          p.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print('WIMBLEDON_2024_ORIGINAL_SOURCE_AUDIT',json.dumps({'counts':dict(counts),
+             'report_sha256':digest(p.read_bytes()),'raw_source_sha256':digest(archive_bytes),
+             'write_authorized':False},sort_keys=True))
+          PY
+          path=audit/import-preparation/wimbledon-2024-original-source-quality-20261011.json
+          file=.cache/w24source/report/wimbledon-2024-original-source-quality.json
+          url="repos/$DATA_REPO/contents/$path"
+          if gh api "$url?ref=main" >/dev/null 2>&1; then
+            gh api "$url?ref=main" --jq .content | base64 -d > .cache/w24source/report/existing.json
+            cmp "$file" .cache/w24source/report/existing.json || { echo 'Immutable report collision'; exit 1; }
+          else
+            gh api --method PUT "$url" -f message="audit(wimbledon2024): original research ZIP provenance and point-level contradictions" \
+              -f content="$(base64 -w0 "$file")" > .cache/w24source/report/write.json
+          fi
+          gh api "$url?ref=main" --jq .content | base64 -d > .cache/w24source/report/readback.json
+          cmp "$file" .cache/w24source/report/readback.json
+          echo ORIGINAL_WIMBLEDON_2024_PRIVATE_REPORT_REREAD_VERIFIED
