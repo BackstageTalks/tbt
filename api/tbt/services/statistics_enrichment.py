@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from ..errors import ProviderError
 from ..providers.statistics import (NoSupportedStatisticsError, complete_opponent_service_rates, parse_statistics)
-from .statistics_gapfill import event_id as resolve_event_id, retry_due
+from .statistics_gapfill import event_id as resolve_event_id, missing_fields, retry_due
 
 
 # V3 re-reads previously count-only V2 rows to capture the provider's
@@ -54,7 +54,8 @@ class StatisticsEnricher:
         if (marker.get("schema") == STATISTICS_SCHEMA_VERSION
                 and marker.get("event_id") == str(event_id)
                 and marker.get("status") == "available"
-                and complete_opponent_service_rates(match.stats)):
+                and complete_opponent_service_rates(match.stats)
+                and (not self.targeted or not missing_fields(match))):
             return "enriched"
         legacy_available = (not self.targeted and marker.get("schema") == STATISTICS_SCHEMA_VERSION
                             and marker.get("event_id") == str(event_id)
