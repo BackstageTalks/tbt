@@ -1,4 +1,4 @@
-"""Read-only WTA 2023/2024 exact canonical-ID historical ranking NULL audit.
+"""Read-only WTA 2021-2024 exact canonical-ID historical ranking NULL audit.
 
 Never match using name fallback; source ranking snapshot must strictly predate
 the match by 1..14 calendar days. No CDB or model writes.
@@ -97,7 +97,7 @@ def main():
     from tbt.data.history_safety import sanitize_history_identities
     ap=argparse.ArgumentParser()
     ap.add_argument("--repo",default="BackstageTalks/tbt-data")
-    ap.add_argument("--year",required=True,type=int,choices=(2023,2024))
+    ap.add_argument("--year",required=True,type=int,choices=(2021,2022,2023,2024))
     ap.add_argument("--out",required=True,type=Path)
     a=ap.parse_args()
     global YEAR
