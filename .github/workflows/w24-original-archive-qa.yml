@@ -135,7 +135,9 @@ jobs:
                   if key in seen:counts['duplicate_positive_point_key']+=1
                   seen.add(key)
                   counts['raw_valid_positive_point_locations']+=1
-              else:counts['raw_nonpositive_or_invalid_point_locations']+=1
+              else:
+                  counts['raw_nonpositive_or_invalid_point_locations']+=1
+                  continue  # audit-only: 0X/0Y/D rows are NOT scored, located point events
               ace=truth(row.get('IsAcePoint'))
               df=truth(row.get('IsDoubleFaultPoint'))
               if ace is None or df is None:
@@ -144,8 +146,8 @@ jobs:
               server=row.get('PointServerPlayer','').strip()
               server_labels[server]+=1
               m=bysource[mid]
-              if server==m['Player1Name'].strip():side='player1'
-              elif server==m['Player2Name'].strip():side='player2'
+              if server=='1':side='player1'
+              elif server=='2':side='player2'
               else:
                   counts['unresolved_point_server_identity']+=1
                   continue
@@ -166,7 +168,7 @@ jobs:
                   counts['ace_df_source_cells_disagree']+=len(disagreements)
               else:counts['matches_ace_df_fully_consistent']+=1
           report={
-            'schema':2,'status':'RAW_ORIGINAL_BYTES_VERIFIED_SEMANTIC_MAPPING_REQUIRED',
+            'schema':3,'status':'RAW_ORIGINAL_BYTES_VERIFIED_ACE_DF_EVENT_RECONCILIATION',
             'source_family':'rewantbhriguvanshi_wimbledon_2024_kaggle',
             'original_zip_sha256':digest(archive_bytes),
             'raw_csv_sha256':{k:names[k]['sha256'] for k in ('wimbledon_2024.csv','wimbledon_2024_match_level.csv')},
@@ -178,7 +180,8 @@ jobs:
               'server_label_examples':server_labels.most_common(16),
               'invalid_point_number_literals':bad_point_literals.most_common(16),
               'ace_df_event_comparison_valid':counts['unresolved_point_server_identity']==0,
-              'first_run_ace_df_disagreement_counts_not_interpretable_due_to_unresolved_server_identity':True,
+              'source_server_label_interpretation':'numeric player1=1, player2=2; server0/0X/0Y or D location is non-point and excluded',
+              'prior_v1_unresolved_server_comparison_superseded':True,
             },
             'licensing':{'source_manifest_declares':'Apache-2.0',
               'independent_upstream_licensing_and_redistribution_clearance':False},
@@ -189,14 +192,14 @@ jobs:
             'provider_requests':0,'canonical_mutated':False,
             'notes':'Reason-coded 0-based/missing point positions and point-flag-vs-match ace/DF checks; raw capture available_at, event provider method, completeness and upstream legal provenance still require independent checks.'
           }
-          p=root/'report/wimbledon-2024-original-source-quality-semantics-v2.json'
+          p=root/'report/wimbledon-2024-original-source-quality-semantics-v3.json'
           p.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
           print('WIMBLEDON_2024_ORIGINAL_SOURCE_AUDIT',json.dumps({'counts':dict(counts),
              'report_sha256':digest(p.read_bytes()),'raw_source_sha256':digest(archive_bytes),
              'write_authorized':False},sort_keys=True))
           PY
-          path=audit/import-preparation/wimbledon-2024-original-source-quality-semantics-v2-20261011.json
-          file=.cache/w24source/report/wimbledon-2024-original-source-quality-semantics-v2.json
+          path=audit/import-preparation/wimbledon-2024-original-source-quality-semantics-v3-20261011.json
+          file=.cache/w24source/report/wimbledon-2024-original-source-quality-semantics-v3.json
           url="repos/$DATA_REPO/contents/$path"
           if gh api "$url?ref=main" >/dev/null 2>&1; then
             gh api "$url?ref=main" --jq .content | base64 -d > .cache/w24source/report/existing.json
