@@ -11,7 +11,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: blinq-once-retry-txe-atp-single-2025
+  # Coordinate with the real recovery collect job; never run concurrently.
+  group: blinq-cdb-shard-txe-atp-single-2025
   cancel-in-progress: false
 
 jobs:
