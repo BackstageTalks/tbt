@@ -4,6 +4,9 @@ Results are aggregate-only; no ambiguous IDs are asserted or published.
 """
 from __future__ import annotations
 import argparse
+import csv
+import io
+from collections import Counter
 import hashlib
 import json
 import subprocess
@@ -50,6 +53,75 @@ def summarized(linker, safety, history, original_sha):
     }
 
 
+
+def strict_id_evidence(staged, original_source, matches):
+    """Count exact player-ID and original-event witnesses; never approve by name."""
+    refs = {}
+    for stage in staged:
+        sources = stage.get("sources") or []
+        for src in sources:
+            key = str(src.get("source_match_id") or "")
+            if ":" not in key:
+                raise ValueError("Source event identity missing")
+            refs[key] = None
+    original = csv.DictReader(io.StringIO(original_source.decode("utf-8-sig"), newline=""))
+    for row in original:
+        key = str(row.get("tourney_id") or "") + ":" + str(row.get("match_num") or "")
+        if key in refs:
+            if refs[key] is not None:
+                raise ValueError("Duplicate source tournament/match key; cannot verify unique identity")
+            refs[key] = row
+    canonical = {str(m.match_id): m for m in matches}
+    if len(canonical) != len(matches):
+        raise ValueError("Duplicate canonical match ID")
+    counts = Counter()
+    for stage in staged:
+        mid = str(stage.get("match_id") or "")
+        if mid not in canonical:
+            raise ValueError("Candidate match missing in complete canonical CDB")
+        counts["staged_matches_checked"] += 1
+        match = canonical[mid]
+        sources = stage.get("sources") or []
+        incoming = stage.get("incoming_stats") or {}
+        if len(sources) != 1 or not incoming:
+            counts["multiple_or_missing_source_witnesses"] += 1
+            continue
+        source = refs.get(str(sources[0]["source_match_id"]))
+        if source is None:
+            counts["missing_source_original_event"] += 1
+            continue
+        counts["source_original_event_unique"] += 1
+        ids = {str(source.get("winner_id") or ""), str(source.get("loser_id") or "")}
+        canon_ids = {str(match.player1_id), str(match.player2_id)}
+        if "" in ids or len(ids) != 2 or ids != canon_ids:
+            counts["raw_ids_not_equal_to_canonical_ids"] += 1
+            continue
+        counts["source_ids_equal_canonical_ids"] += 1
+        if str(match.winner_id) != str(source["winner_id"]):
+            counts["direct_id_winner_conflict"] += 1
+            continue
+        counts["source_winner_id_equal_canonical_winner"] += 1
+        ctx = match.provider_payload if isinstance(match.provider_payload,dict) else {}
+        def witnessed(v):
+            if isinstance(v, dict):
+                if (str(v.get("tourney_id") or "") == str(source["tourney_id"]) and
+                    str(v.get("match_num") or "") == str(source["match_num"])):
+                    return True
+                return any(witnessed(child) for child in v.values())
+            if isinstance(v,list):
+                return any(witnessed(item) for item in v)
+            return False
+        if witnessed(ctx):
+            counts["direct_id_winner_and_event_context_witness"] += 1
+            counts["direct_id_winner_event_cells"] += len(incoming)
+    return {
+        "counts": dict(counts),
+        "canonical_and_source_ids_share_credentialed_namespace": False,
+        "write_authorized": False,
+        "note": "Matching numeric IDs or names alone cannot certify that namespaces coincide. Direct witnessed event keys are diagnostic only pending source rights and strong provenance.",
+    }
+
+
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--out-dir", required=True, type=Path)
@@ -73,6 +145,8 @@ def main():
                    stdout=subprocess.DEVNULL)
     report=json.loads((linked/"report.json").read_text())
     result=summarized(report,safety,matches,hashlib.sha256(original).hexdigest())
+    staged = [json.loads(line) for line in (linked/"auto_linked.jsonl").read_text().splitlines() if line.strip()]
+    result["raw_source_direct_identity_evidence"] = strict_id_evidence(staged, original, matches)
     result["canonical_manifest_sha256"]=hashlib.sha256(
         (history/"history_manifest.json").read_bytes()).hexdigest()
     result["canonical_bundle_sha256"]=hashlib.sha256(
