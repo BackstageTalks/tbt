@@ -94,6 +94,92 @@ class CloseoutContractTests(unittest.TestCase):
         self.assertEqual(odds[1][0], "/sports/tennis/events/101/odds")
         self.assertEqual(odds[1][1]["markets"], "h2h")
 
+
+    def test_player_game_probe_targets_only_unambiguous_atp_wta_singles(self):
+        future = [
+            (datetime(2026, 10, 12, tzinfo=timezone.utc),
+             {"tour": "ATP", "home_team": "Carlos Alcaraz", "away_team": "Novak Djokovic"}),
+            (datetime(2026, 10, 13, tzinfo=timezone.utc),
+             {"tour": "WTA", "home_team": "Iga Swiatek", "away_team": "Carlos Alcaraz"}),
+            (datetime(2026, 10, 14, tzinfo=timezone.utc),
+             {"tour": "ITF", "home_team": "Other Player", "away_team": "Another Person"}),
+            (datetime(2026, 10, 15, tzinfo=timezone.utc),
+             {"tour": "ATP", "home_team": "Player A / Player B", "away_team": "Fake Pair"}),
+        ]
+        self.assertEqual(mod.select_player_game_targets(future),
+                         ["Carlos Alcaraz", "Novak Djokovic", "Iga Swiatek"])
+
+    def test_player_game_probe_is_research_only_and_excludes_partial_values(self):
+        payload = {"games": [
+            {"status": "final", "stats": {"aces": 5, "dblfaults": 2, "breakpts_w": 3}},
+            {"status": "in_progress", "stats": {"aces": 99}},
+            {"status": "final", "stats": {"aces": None, "sets_won": 2}},
+            {"status": "final", "stats": {"aces": True}},
+        ]}
+        summary = mod.summarize_player_games(payload)
+        self.assertTrue(summary["response_shape_valid"])
+        self.assertEqual(summary["games"], 4)
+        self.assertEqual(summary["completed_with_focus"], 2)
+        self.assertEqual(summary["focus_fields"],
+                         {"aces": 1, "dblfaults": 1, "breakpts_w": 1, "sets_won": 1})
+        self.assertFalse(mod.summarize_player_games({"other": []})["response_shape_valid"])
+
+    def test_nightly_player_game_probe_archives_raw_and_keeps_max_750_and_same_odds_paths(self):
+        utc = datetime(2026, 10, 11, 21, 0, tzinfo=timezone.utc)
+        calls = []
+        stored = []
+        def fake_request(path, params=None, **kw):
+            calls.append((path, params, kw))
+            if path == "/sports/tennis/events":
+                return {"events": [
+                    {"id": "17", "tour": "ATP", "home_team": "Carlos Alcaraz",
+                     "away_team": "Novak Djokovic",
+                     "commence_time": "2026-10-12T01:00:00Z"},
+                ]}
+            if path.endswith("/games"):
+                return {"player_name": "Carlos Alcaraz", "games": [
+                    {"status": "final", "event_id": "1", "stats":
+                     {"aces": 12, "dblfaults": 2}},
+                ]}
+            if path.endswith("/markets"):
+                return {"markets": [{"key": "player_aces"}]}
+            if path.endswith("/odds"):
+                return {"bookmakers": []}
+            raise AssertionError(path)
+        def flush(day, runid):
+            stored.extend(mod.DATA)
+            mod.DATA.clear()
+
+        with mock.patch.object(mod, "KEY", "offline"), \
+             mock.patch.object(mod, "TOKEN", "offline"), \
+             mock.patch.object(mod, "now", return_value=utc), \
+             mock.patch.object(mod, "request", side_effect=fake_request), \
+             mock.patch.object(mod, "save", side_effect=lambda *a: flush(*a)), \
+             mock.patch.object(mod, "flush_if_needed"):
+            mod.collect()
+        player_calls = [x for x in calls if x[0].endswith("/games")]
+        self.assertEqual(len(player_calls), 2)
+        self.assertTrue(all(x[1] == {"limit": 100} for x in player_calls))
+        self.assertTrue(all(x[2].get("allow_not_found") is True for x in player_calls))
+        self.assertEqual(len([x for x in calls if x[0].endswith("/odds")]), 1)
+        raw = [x for x in stored if x.get("stage") == "player_game_stats_probe"]
+        self.assertEqual(len(raw), 2)
+        self.assertEqual(raw[0]["summary"]["focus_fields"]["aces"], 1)
+        self.assertEqual(raw[0]["payload"]["games"][0]["stats"]["dblfaults"], 2)
+        self.assertTrue(raw[0]["research_only"])
+        self.assertEqual(mod.MAX_CALLS, 750)
+
+    def test_missing_player_game_log_does_not_block_night_odds(self):
+        utc = datetime(2026, 10, 11, 22, tzinfo=timezone.utc)
+        error = HTTPError("https://api.prop-line.com/v1/x", 404, "Not Found", {}, None)
+        with mock.patch.object(mod, "now", return_value=utc), \
+             mock.patch.object(mod.urllib.request, "urlopen", side_effect=error), \
+             mock.patch.object(mod.time, "sleep", return_value=None):
+            self.assertIsNone(mod.request("/sports/tennis/players/A/games",
+                                          allow_not_found=True))
+        self.assertEqual(mod.STATE["reason"], "")
+        self.assertEqual(mod.STATE["calls"], 1)
+
     def test_save_batch_preserves_on_readback_failure(self):
         mod.DATA.append({"event_id": "123", "odds": {"bookmakers": []}})
         with mock.patch.object(mod, "github", return_value=None), mock.patch("pathlib.Path.write_bytes", return_value=1):
