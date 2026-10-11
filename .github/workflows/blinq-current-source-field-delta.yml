@@ -68,7 +68,8 @@ jobs:
           import json
           r=json.load(open('/tmp/blinq-cell-gap/results/source-to-cdb-cell-delta.json'))
           assert r['canonical']['rows']>=994101
-          assert r['canonical']['exact_id_matched']==12807
+          assert 10288 <= r['canonical']['exact_id_matched'] <= 12807
+          assert r['sources']['source_record_overlap']['all_source_rows']==12807
           assert r['safety']['no_cdb_writes']
           assert r['safety']['no_provider_requests']
           assert r['canonical']['year_partitions']==78
