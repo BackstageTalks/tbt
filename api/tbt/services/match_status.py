@@ -379,6 +379,9 @@ def _grade_runtime_projection(
             p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
             if not p1 or not p2 or p1 == p2 or selected not in {p1, p2}:
                 return None
+            if (str(status_row.get("projection_stats_p1_id") or "") != p1
+                    or str(status_row.get("projection_stats_p2_id") or "") != p2):
+                return None
             own = "p1" if selected == p1 else "p2"
             opponent = "p2" if own == "p1" else "p1"
             actual = _finite_count(stats.get(f"{own}_{market}"))
