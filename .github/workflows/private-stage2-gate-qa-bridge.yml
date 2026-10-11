@@ -1,0 +1,52 @@
+name: Private prepared-observation JSON evidence gate regression on app runner
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/private-stage2-gate-qa-bridge.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  private-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: private-data
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 8badf9fcd1535ef0479ec91c548a5a9011960ff5
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: private-data
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/audit_prepared_evidence_gate.py
+            tests/test_audit_prepared_evidence_gate.py
+            audit/import-preparation/observation.schema.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate SHA, real private Draft2020 schema, strict fail-closed tests
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(git -C private-data rev-parse HEAD)" = 8badf9fcd1535ef0479ec91c548a5a9011960ff5
+          test "$(gh repo view BackstageTalks/tbt-data --json visibility -q .visibility)" = PRIVATE
+          python -m pip install "jsonschema>=4.18,<5"
+          python -m unittest discover -s private-data/tests -p test_audit_prepared_evidence_gate.py -v
+          python -m compileall -q private-data/scripts/audit_prepared_evidence_gate.py
+          python - <<'PY'
+          from pathlib import Path
+          code=Path("private-data/scripts/audit_prepared_evidence_gate.py").read_text()
+          assert "'write_authorized': False" in code
+          for forbidden in ('upload_bundle(', 'write_snapshot(', 'update_year_manifest(', 'gh release'):
+            assert forbidden not in code, forbidden
+          print('PRIVATE_OBSERVATION_GATE_READ_ONLY_ASSERTIONS_PASS')
+          PY
