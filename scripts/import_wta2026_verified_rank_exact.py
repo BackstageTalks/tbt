@@ -129,7 +129,7 @@ def ensure_wta_rebase_identical(old,current):
     return len(a)
 
 
-def patch(current, rows):
+def patch(current, rows, *, expected_matches=EXPECTED_MATCHES, expected_values=EXPECTED_VALUES):
     out=current.copy(deep=True)
     ix=dict(zip(current["match_id"].astype(str),current.index))
     counts=Counter()
@@ -168,8 +168,8 @@ def patch(current, rows):
             out.at[idx,key]=item["add_only_null_fields"][key]
             counts[key+"_filled"]+=1
         counts["changed_matches"]+=1
-    if (counts["changed_matches"]!=EXPECTED_MATCHES
-            or counts["player1_rank_filled"]+counts["player2_rank_filled"]!=EXPECTED_VALUES):
+    if (counts["changed_matches"]!=expected_matches
+            or counts["player1_rank_filled"]+counts["player2_rank_filled"]!=expected_values):
         raise ValueError("Unexpected WTA additive rank stage output")
     other=[k for k in current.columns if k not in ALLOWED|{"provider_context_json"}]
     pd.testing.assert_frame_equal(out[other],current[other],check_dtype=True)
