@@ -12,7 +12,7 @@ from numbers import Integral
 import pandas as pd
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_manifest, update_year_manifest
-from stage_txe_wta2024_scores import FIELD_NAMES, SOURCE_SHA, YEAR, sha256
+from stage_txe_wta2024_scores import FIELD_NAMES, SOURCE_SHA, YEAR, TOUR, sha256
 
 
 def read_stage(path, report_path, before_sha):
@@ -25,16 +25,16 @@ def read_stage(path, report_path, before_sha):
             or report.get("model_trained") is not False):
         raise ValueError("Stale/unverified WTA 2024 stage")
     items = [json.loads(row) for row in Path(path).read_text().splitlines() if row.strip()]
-    if (len(items) != report.get("counts", {}).get("staged_matches")
+    if (len(items) != report.get("counts", {}).get("staged_matches", 0)
             or sum(len(r.get("additions", {})) for r in items)
-            != report.get("counts", {}).get("staged_fields")):
+            != report.get("counts", {}).get("staged_fields", 0)):
         raise ValueError("Score stage cardinality changed")
     used = set()
     for r in items:
         values = r.get("additions")
         match_id = str(r.get("match_id") or "")
         if (not match_id or match_id in used or r.get("schema") != 1
-                or r.get("source") != "tennisexplorer_wta2024_complete_match_results"
+                or r.get("source") != f"tennisexplorer_{TOUR}{YEAR}_complete_match_results"
                 or r.get("source_sha256") != SOURCE_SHA or r.get("cdb_sha256") != before_sha
                 or r.get("year") != YEAR or not isinstance(values, dict) or not values
                 or not set(values).issubset(FIELD_NAMES)

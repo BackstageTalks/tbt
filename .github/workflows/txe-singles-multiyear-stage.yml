@@ -1,0 +1,95 @@
+name: BlinQ ATP WTA singles multi-year exact CDB delta stages
+on:
+  pull_request:
+    paths:
+      - scripts/stage_txe_wta2024_scores.py
+      - scripts/import_txe_wta2024_scores_exact.py
+      - tests/test_txe_generic_score_semantics.py
+      - .github/workflows/txe-singles-multiyear-stage.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: blinq-multiyear-readonly-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {tour: wta, year: 2025, archive: txe-wta-single-2025.tar.gz, hash: "7c0349254347bfdaaf43b7f4806f3e2ac4592a334d30832f36214e4ae12f6030"}
+          - {tour: wta, year: 2026, archive: txe-wta-single-2026.tar.gz, hash: "da5ad41efcf5afcc3b40ca2ad9ae7cce8493aa9866a8e565321baaf3d6d7c049"}
+          - {tour: atp, year: 2024, archive: txe-atp-single-2024.tar.gz, hash: "5e5c6608d01be244e6fdb0e4f7b8290dd1f1e21ad4fd4d0848cf671c3b98c4ae"}
+          - {tour: atp, year: 2025, archive: txe-atp-single-2025.tar.gz, hash: "4aa542febefcd5d710a91c0785fc5ca99f690557db3ccdfff03edef49ac57ed8"}
+          - {tour: atp, year: 2026, archive: txe-atp-single-2026.tar.gz, hash: "98d2b3e54914cea91c95ad8a4a7573d378818bb59927577672bdc3bb1807d870"}
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      BLINQ_SCORE_YEAR: ${{ matrix.year }}
+      BLINQ_SCORE_TOUR: ${{ matrix.tour }}
+      BLINQ_SCORE_SOURCE_SHA: ${{ matrix.hash }}
+      SOURCE_ARCHIVE: ${{ matrix.archive }}
+      ROOT: .cache/tbt/singles-score-${{ matrix.tour }}-${{ matrix.year }}
+      DATA_REPO: BackstageTalks/tbt-data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Regression and generic ATP/WTA score consistency
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements.txt -r api/requirements-train.txt pytest
+          (
+            export BLINQ_SCORE_YEAR=2024 BLINQ_SCORE_TOUR=wta BLINQ_SCORE_SOURCE_SHA=27c779c73bcfaf089e362f3480c4201f032e15fefbc3a0fadaa39bfce9f5956b
+            python -m pytest -q tests/test_txe_wta2024_scores_exact.py
+          )
+          python -m pytest -q tests/test_txe_generic_score_semantics.py
+          python -m compileall -q scripts/stage_txe_wta2024_scores.py scripts/import_txe_wta2024_scores_exact.py
+      - name: Independently retrieve pinned source and current CDB year
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$DATA_REPO" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p "$ROOT/source" "$ROOT/history" "$ROOT/stage" "$ROOT/local"
+          gh release download blinq-tennisexplorer-cloud-20261009 -R "$DATA_REPO" -p "$SOURCE_ARCHIVE" -D "$ROOT/source"
+          echo "$BLINQ_SCORE_SOURCE_SHA  $ROOT/source/$SOURCE_ARCHIVE" | sha256sum -c -
+          gh release download tbt-data-v1 -R "$DATA_REPO" -p "history-$BLINQ_SCORE_YEAR.parquet" -p history_manifest.json -p _tbt_bundle_manifest.json -D "$ROOT/history"
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > "$ROOT/history/release.json"
+      - name: Actual provider source and canonical identity/score delta
+        run: |
+          set -euo pipefail
+          python scripts/stage_txe_wta2024_scores.py --source "$ROOT/source/$SOURCE_ARCHIVE" --history "$ROOT/history/history-$BLINQ_SCORE_YEAR.parquet" --manifest "$ROOT/history/history_manifest.json" --release "$ROOT/history/release.json" --out "$ROOT/stage"
+          jq '.counts' "$ROOT/stage/report.json"
+          test "$(jq -r .production_mutated "$ROOT/stage/report.json")" = false
+          test "$(jq -r .counts.source_rows "$ROOT/stage/report.json")" -gt 0
+      - name: Full affected-year strictly add-only local patch and reread
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/dry" "$ROOT/local-write" "$ROOT/local-verify"
+          for f in "history-$BLINQ_SCORE_YEAR.parquet" history_manifest.json _tbt_bundle_manifest.json; do cp "$ROOT/history/$f" "$ROOT/local/$f"; done
+          python scripts/import_txe_wta2024_scores_exact.py --mode dry-run --before-dir "$ROOT/history" --after-dir "$ROOT/local" --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" --out "$ROOT/dry/report.json"
+          delta="$(jq -r .added_values "$ROOT/dry/report.json")"
+          if [[ "$delta" -gt 0 ]]; then
+            python scripts/import_txe_wta2024_scores_exact.py --mode write --before-dir "$ROOT/history" --after-dir "$ROOT/local" --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" --out "$ROOT/local-write/report.json"
+            python scripts/import_txe_wta2024_scores_exact.py --mode verify --before-dir "$ROOT/history" --after-dir "$ROOT/local" --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" --out "$ROOT/local-verify/report.json"
+            test "$(jq -r .existing_values_overwritten "$ROOT/local-verify/report.json")" = 0
+            test "$(jq -r .added_values "$ROOT/local-verify/report.json")" = "$delta"
+          fi
+          echo "POSITIVE_EXACT_SCORE_CELLS: $delta"
+      - name: Aggregate-only artifact, no source identities or private rows
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-singles-${{ matrix.tour }}-${{ matrix.year }}-${{ github.run_id }}
+          path: |
+            .cache/tbt/singles-score-${{ matrix.tour }}-${{ matrix.year }}/stage/report.json
+            .cache/tbt/singles-score-${{ matrix.tour }}-${{ matrix.year }}/dry/report.json
+            .cache/tbt/singles-score-${{ matrix.tour }}-${{ matrix.year }}/local-write/report.json
+            .cache/tbt/singles-score-${{ matrix.tour }}-${{ matrix.year }}/local-verify/report.json
+          retention-days: 35
+          if-no-files-found: warn
