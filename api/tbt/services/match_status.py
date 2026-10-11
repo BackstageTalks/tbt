@@ -221,6 +221,19 @@ _RUNTIME_RESULT_SOURCE_SECTIONS = {
 }
 
 
+def _projection_contract_identity(publication: dict[str, Any]) -> str:
+    """Do not deduplicate distinct player O/U lines on the same fixture."""
+    explicit = str(publication.get("publication_key") or "").strip()
+    if explicit:
+        return "|" + explicit
+    return "|" + "|".join((
+        str(publication.get("price_contract") or ""),
+        str(publication.get("ou_side") or publication.get("projection_direction") or ""),
+        str(publication.get("market_line") if publication.get("market") in {"aces", "double_faults"}
+            else publication.get("reference_projection")),
+    ))
+
+
 def _runtime_result_identity(
     row: dict[str, Any], publication: dict[str, Any], index: int = 0
 ) -> str:
@@ -237,7 +250,8 @@ def _runtime_result_identity(
         or ""
     ).strip()
     if event_id and section and market and selection:
-        return f"{event_id}|{section}|{market}|{scope}|{metric}|{selection}"
+        base = f"{event_id}|{section}|{market}|{scope}|{metric}|{selection}"
+        return base + _projection_contract_identity(publication) if market in _PROJECTION_MARKETS else base
     return f"{event_id}|{section}|{market}|{scope}|{metric}|{selection}|{index}"
 
 
@@ -324,9 +338,10 @@ def _runtime_publication_key(
         or ""
     ).strip()
     issued_at = str(publication.get("issued_at") or "").strip()
+    extra = _projection_contract_identity(publication) if market in _PROJECTION_MARKETS else ""
     if event_id and selection and issued_at:
-        return f"{event_id}|{section}|{market}|{selection}|{issued_at}"
-    return f"{event_id}|{section}|{market}|{selection}|{issued_at}|{index}"
+        return f"{event_id}|{section}|{market}|{selection}|{issued_at}{extra}"
+    return f"{event_id}|{section}|{market}|{selection}|{issued_at}{extra}|{index}"
 
 
 def _finite_count(raw: Any) -> float | None:
