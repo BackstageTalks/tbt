@@ -1,0 +1,88 @@
+name: Read-only entire private charting profile integrity audit
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/charting-1742-private-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-offline-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: private-data
+      DATA_REPO: BackstageTalks/tbt-data
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - name: Checkout app without retained credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout SHA-pinned private source (sparse only)
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 59c345c8ca4b1e7ee05aedf382d656f3212191ea
+          path: private-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/audit_charting_profile_bytes.py
+            tests/test_audit_charting_profile_bytes.py
+            tennis/charting
+      - name: Verify immutable source, private rights and run source regression tests
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(git -C private-data rev-parse HEAD)" = 59c345c8ca4b1e7ee05aedf382d656f3212191ea
+          test "$(gh repo view "$DATA_REPO" --json visibility -q .visibility)" = PRIVATE
+          python -m unittest discover -s private-data/tests -p test_audit_charting_profile_bytes.py -v
+          python -m compileall -q private-data/scripts/audit_charting_profile_bytes.py
+      - name: Inspect every private derived profile and index (read-only)
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt-private-charting
+          python private-data/scripts/audit_charting_profile_bytes.py \
+            --root private-data/tennis/charting \
+            --out .cache/tbt-private-charting/report.json > .cache/tbt-private-charting/output.txt
+          python - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          from hashlib import sha256
+          import json
+          p=Path('.cache/tbt-private-charting/report.json')
+          report=json.loads(p.read_text())
+          summary=report['summary']
+          checks=report['checks']
+          assert checks['all_gzip_profiles_read'] is True
+          assert checks['write_authorized'] is False
+          assert checks['cdb_current_cell_readback'] is False
+          assert checks['raw_csv_zip_verified'] is False
+          assert report['source_manifest_issues_count']==0
+          assert summary['profiles']==1742
+          assert summary['indexed_links']==23651
+          assert summary['indexed_overviews']==23624
+          assert report['status']=='QUARANTINE_EXISTS'
+          reasons=Counter(reason for row in report['anomalies'] for reason in row['reasons'])
+          count_missing=sum(len(row['unobserved_match_ids']) for row in report['anomalies'])
+          count_dup=sum(len(row['duplicate_overview_match_ids']) for row in report['anomalies'])
+          count_foreign=sum(len(row['foreign_overview_match_ids']) for row in report['anomalies'])
+          print('PRIVATE_CHARTING_PROFILE_AUDIT_AGGREGATES',json.dumps({
+            'source_sha':'59c345c8ca4b1e7ee05aedf382d656f3212191ea',
+            'players_index_sha256':report['players_index_sha256'],
+            'status':report['status'],
+            'summary':summary,
+            'reason_counts':dict(reasons),
+            'missing_source_links':count_missing,
+            'duplicate_overview_match_keys':count_dup,
+            'foreign_overview_match_keys':count_foreign,
+            'private_report_sha256':sha256(p.read_bytes()).hexdigest(),
+            'write_authorized':False,
+            'raw_zip_verified':False,
+            'cdb_delta_verified':False,
+          },sort_keys=True))
+          PY
