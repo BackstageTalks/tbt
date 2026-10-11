@@ -7,6 +7,7 @@ tbt-data release, never to public artifacts or an Actions cache.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -67,42 +68,111 @@ def validate(report_dir: Path, folder_id: str) -> dict:
     return report
 
 
+# Never put raw multi-GiB SQLite files directly into release assets.
+# GitHub Release assets are capped at 2 GiB; preserve headroom for metadata.
+MAX_RAW_CHECKPOINT_BYTES = 4 * 1024 ** 3
+MAX_COMPRESSED_CHECKPOINT_BYTES = 1_800_000_000
+
+
 def write_checkpoint(cache_file: Path, code_file: Path, folder_id: str, output: Path) -> None:
+    """Emit bounded gzip checkpoint with independently verifiable raw and packed SHA."""
     safe_id(folder_id)
-    if not cache_file.is_file() or cache_file.stat().st_size <= 0:
-        raise ValueError('No completed audit cache to persist')
+    if (not cache_file.is_file() or not 0 < cache_file.stat().st_size <= MAX_RAW_CHECKPOINT_BYTES):
+        raise ValueError('Missing or over-limit completed audit cache')
     output.mkdir(parents=True, exist_ok=True)
-    data_copy = output / 'audit.sqlite'
-    shutil.copyfile(cache_file, data_copy)
-    manifest = {
-        'schema': CHECKPOINT_SCHEMA,
-        'folder_id': folder_id,
-        'source_audit_code_sha256': digest(code_file),
-        'checkpoint_sha256': digest(data_copy),
-        'checkpoint_bytes': data_copy.stat().st_size,
-    }
-    (output / 'checkpoint.json').write_text(json.dumps(manifest, sort_keys=True) + '\n', encoding='utf-8')
+    blob = output / 'audit.sqlite.gz'
+    pending = output / 'audit.sqlite.gz.pending'
+    raw_hash = hashlib.sha256()
+    raw_bytes = 0
+    try:
+        with cache_file.open('rb') as source, pending.open('wb') as target:
+            with gzip.GzipFile(filename='', mode='wb', fileobj=target,
+                               compresslevel=1, mtime=0) as packed:
+                for chunk in iter(lambda: source.read(1024 * 1024), b''):
+                    raw_bytes += len(chunk)
+                    if raw_bytes > MAX_RAW_CHECKPOINT_BYTES:
+                        raise ValueError('Checkpoint grew beyond raw size limit')
+                    raw_hash.update(chunk)
+                    packed.write(chunk)
+        if pending.stat().st_size > MAX_COMPRESSED_CHECKPOINT_BYTES:
+            raise ValueError('Compressed checkpoint too large for private release')
+        if (raw_bytes != cache_file.stat().st_size
+                or raw_hash.hexdigest() != digest(cache_file)):
+            raise ValueError('Cache changed while writing checkpoint')
+        pending.replace(blob)
+        manifest = {
+            'schema': 2,
+            'encoding': 'gzip',
+            'folder_id': folder_id,
+            'source_audit_code_sha256': digest(code_file),
+            'checkpoint_sha256': digest(blob),
+            'checkpoint_bytes': blob.stat().st_size,
+            'uncompressed_sha256': raw_hash.hexdigest(),
+            'uncompressed_bytes': raw_bytes,
+        }
+        (output / 'checkpoint.json').write_text(
+            json.dumps(manifest, sort_keys=True) + '\n', encoding='utf-8')
+    finally:
+        pending.unlink(missing_ok=True)
 
 
 def restore_checkpoint(source: Path, code_file: Path, folder_id: str, dest: Path) -> bool:
+    """Accept legacy raw v1 and compressed v2, never leave a partial restored DB."""
     safe_id(folder_id)
     meta = source / 'checkpoint.json'
-    blob = source / 'audit.sqlite'
-    if not (meta.is_file() and blob.is_file()):
+    if not meta.is_file():
         return False
     try:
         manifest = json.loads(meta.read_text(encoding='utf-8'))
-        if (manifest.get('schema') != CHECKPOINT_SCHEMA or
-            manifest.get('folder_id') != folder_id or
-            manifest.get('source_audit_code_sha256') != digest(code_file) or
-            manifest.get('checkpoint_bytes') != blob.stat().st_size or
-            manifest.get('checkpoint_sha256') != digest(blob)):
+        schema = manifest.get('schema')
+        if (schema not in (1, 2) or manifest.get('folder_id') != folder_id
+                or manifest.get('source_audit_code_sha256') != digest(code_file)):
             return False
-    except (OSError, ValueError, TypeError):
+        blob = source / ('audit.sqlite.gz' if schema == 2 else 'audit.sqlite')
+        if not blob.is_file():
+            return False
+        if (manifest.get('checkpoint_bytes') != blob.stat().st_size
+                or manifest.get('checkpoint_sha256') != digest(blob)):
+            return False
+        if schema == 1:
+            if blob.stat().st_size > MAX_RAW_CHECKPOINT_BYTES:
+                return False
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            tmp = dest.with_name(dest.name + '.pending')
+            try:
+                shutil.copyfile(blob, tmp)
+                tmp.replace(dest)
+            finally:
+                tmp.unlink(missing_ok=True)
+            return True
+        if (manifest.get('encoding') != 'gzip'
+                or not isinstance(manifest.get('uncompressed_bytes'), int)
+                or not 0 < manifest['uncompressed_bytes'] <= MAX_RAW_CHECKPOINT_BYTES
+                or not isinstance(manifest.get('uncompressed_sha256'), str)
+                or not re.fullmatch('[0-9a-f]{64}', manifest['uncompressed_sha256'])
+                or blob.stat().st_size > MAX_COMPRESSED_CHECKPOINT_BYTES):
+            return False
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dest.with_name(dest.name + '.pending')
+        raw_hash = hashlib.sha256()
+        total = 0
+        try:
+            with gzip.open(blob, 'rb') as packed, tmp.open('wb') as target:
+                for chunk in iter(lambda: packed.read(1024 * 1024), b''):
+                    total += len(chunk)
+                    if total > MAX_RAW_CHECKPOINT_BYTES:
+                        raise ValueError('Decompressed checkpoint exceeds size limit')
+                    raw_hash.update(chunk)
+                    target.write(chunk)
+            if (total != manifest['uncompressed_bytes']
+                    or raw_hash.hexdigest() != manifest['uncompressed_sha256']):
+                return False
+            tmp.replace(dest)
+            return True
+        finally:
+            tmp.unlink(missing_ok=True)
+    except (OSError, ValueError, TypeError, EOFError):
         return False
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(blob, dest)
-    return True
 
 
 def main() -> None:
