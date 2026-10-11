@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "mode": "dry-run",
+  "mode": "write",
   "source_tag": "blinq-atp-weekly-rank-current-38124276216",
   "source_run_id": 38124276216,
   "affected_years": [
