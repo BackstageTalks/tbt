@@ -125,8 +125,8 @@ def audit(archive_path, year, digest):
              if isinstance(v, dict)]
     text_counts = [len(t.strip()) if isinstance(t, str) else 0 for t in texts]
     with_text = sum(n >= 100 for n in text_counts)
-    keywords = re.compile(r"\\b(?:aces?|double faults?|break points?|"
-                          r"first serve|second serve|1st serve|2nd serve)\\b",
+    keywords = re.compile(r"\b(?:aces?|double faults?|break points?|"
+                          r"first serve|second serve|1st serve|2nd serve)\b",
                           flags=re.I)
     metric_text = sum(1 for t in texts if isinstance(t, str)
                       and keywords.search(t) and len(re.findall(r"[0-9]", t)) >= 6)
