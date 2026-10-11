@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: BackstageTalks/tbt-data
-          ref: 8badf9fcd1535ef0479ec91c548a5a9011960ff5
+          ref: 256d2aa3d9e42f9a3118f1c71847121eb018c143
           path: private-data
           token: ${{ secrets.TBT_DATA_GH_TOKEN }}
           persist-credentials: false
@@ -32,7 +32,7 @@ jobs:
       - name: Verify pinned source and run REAL schema tests
         run: |
           set -euo pipefail
-          test "$(git -C private-data rev-parse HEAD)" = 8badf9fcd1535ef0479ec91c548a5a9011960ff5
+          test "$(git -C private-data rev-parse HEAD)" = 256d2aa3d9e42f9a3118f1c71847121eb018c143
           python -m pip install -q 'jsonschema>=4.18,<5'
           python -m unittest discover -s private-data/tests -p test_audit_prepared_evidence_gate.py -v
           python -m compileall -q private-data/scripts/audit_prepared_evidence_gate.py
