@@ -1,0 +1,258 @@
+name: BlinQ Wimbledon 2024 guarded exact-cell CDB import
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/wimbledon-2024-exact-import.yml"
+      - ".github/wimbledon-2024-import-request.json"
+      - "scripts/stage_wimbledon_2024_cdb.py"
+      - "scripts/import_wimbledon_2024_exact.py"
+      - "tests/test_wimbledon_2024_exact.py"
+  push:
+    branches: [main]
+    paths: [".github/wimbledon-2024-import-request.json"]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: blinq-wimbledon2024-cdb-import-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      ROOT: .cache/tbt/wimbledon2024-publish
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate controlled request; PR cannot publish
+        id: control
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$PRIVATE_REPO" --json visibility -q .visibility)" = PRIVATE
+          req=.github/wimbledon-2024-import-request.json
+          test "$(jq -r .schema "$req")" = 1
+          test "$(jq -r .year "$req")" = 2024
+          test "$(jq -r .source_zip_sha256 "$req")" = cd464e89a19a0c6440fdd2928d14e375065d2baf96ff01c3c9860077a1803c20
+          test "$(jq -r .allow_existing_overwrite "$req")" = false
+          test "$(jq -r .immutable_backup_required "$req")" = true
+          test "$(jq -r .full_year_readback_required "$req")" = true
+          test "$(jq -r .provider_api_requests_allowed "$req")" = 0
+          test "$(jq -r .model_training "$req")" = false
+          test "$(jq -r .model_promotion "$req")" = false
+          mode=dry-run
+          if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main ]]; then
+            mode="$(jq -r .mode "$req")"
+          fi
+          [[ "$mode" == dry-run || "$mode" == write ]]
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "CDB mode: $mode"
+
+      - name: Focused additive source and writer regression
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements.txt -r api/requirements-train.txt pytest
+          python -m pytest tests/test_wimbledon_2024_exact.py -q
+          python -m compileall -q scripts/stage_wimbledon_2024_cdb.py scripts/import_wimbledon_2024_exact.py
+
+      - name: Prepare verified original source and fresh CDB OUTSIDE lock
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/source" "$ROOT/history" "$ROOT/stage" "$ROOT/local"
+          gh release download blinq-kaggle-backup-2026-10-07 -R "$PRIVATE_REPO" \
+            -p rewantbhriguvanshi_wimbledon-2024-point-and-match-level-statistics-cd464e89a19a.zip -D "$ROOT/source"
+          (
+            cd "$ROOT/source"
+            echo 'cd464e89a19a0c6440fdd2928d14e375065d2baf96ff01c3c9860077a1803c20  rewantbhriguvanshi_wimbledon-2024-point-and-match-level-statistics-cd464e89a19a.zip' | sha256sum -c -
+            unzip -q rewantbhriguvanshi_wimbledon-2024-point-and-match-level-statistics-cd464e89a19a.zip
+            echo '974c6c7509f341ca6a1cf5a7e69e721a7c515a1449bf014219983ef303eee2cf  wimbledon_2024.csv' | sha256sum -c -
+            echo '6424486fd7eb7e21aa1a57232e7f56dc0e5f34e39c63642a89973a7a535f1299  wimbledon_2024_match_level.csv' | sha256sum -c -
+          )
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
+            -p history-2024.parquet -p history_manifest.json \
+            -p _tbt_bundle_manifest.json -D "$ROOT/history"
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > "$ROOT/history/release.json"
+          python scripts/stage_wimbledon_2024_cdb.py \
+            --match-csv "$ROOT/source/wimbledon_2024_match_level.csv" \
+            --point-csv "$ROOT/source/wimbledon_2024.csv" \
+            --cdb-year "$ROOT/history/history-2024.parquet" \
+            --manifest "$ROOT/history/history_manifest.json" \
+            --release-json "$ROOT/history/release.json" --out "$ROOT/stage"
+
+      - name: Isolated source snapshot, null-only delta and full-year local verification
+        id: prepared
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/dry" "$ROOT/local-write" "$ROOT/local-verify"
+          for name in history-2024.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cp "$ROOT/history/$name" "$ROOT/local/$name"
+          done
+          python scripts/import_wimbledon_2024_exact.py --mode dry-run \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/dry/report.json"
+          additions="$(jq -r .added_values "$ROOT/dry/report.json")"
+          test "$additions" -ge 0
+          CONTROLLED_MODE="${{ steps.control.outputs.mode }}"
+          echo "additions=$additions" >> "$GITHUB_OUTPUT"
+          if [[ "$additions" -eq 0 ]]; then
+            test "$CONTROLLED_MODE" != write || { echo "No positive delta, refusing zero-cell production replay"; exit 1; }
+            echo "PREPARED_NOOP: no positive source cells"
+            exit 0
+          fi
+          python scripts/import_wimbledon_2024_exact.py --mode write \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/local-write/report.json"
+          python scripts/import_wimbledon_2024_exact.py --mode verify \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/local-verify/report.json"
+          test "$(jq -r .existing_values_overwritten "$ROOT/local-verify/report.json")" = 0
+          test "$(jq -r .added_values "$ROOT/local-verify/report.json")" = "$additions"
+          test "$(jq -r .canonical_rows_checked "$ROOT/local-verify/report.json")" = 113733
+          jq -n --argjson cells "$additions" \
+            --arg base "$(sha256sum "$ROOT/history/history-2024.parquet" | cut -d' ' -f1)" \
+            --arg delta "$(sha256sum "$ROOT/stage/stage.jsonl" | cut -d' ' -f1)" \
+            '{schema:1,year:2024,candidate_cells:$cells,baseline_sha256:$base,stage_sha256:$delta,
+              overwrite:false,training:false}' > "$ROOT/package.json"
+
+      - name: Acquire global cross-repository CDB writer lock
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
+      - name: Confirm current remote baseline UNDER lock
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          mkdir -p "$ROOT/remote-before"
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
+            -p history-2024.parquet -p history_manifest.json \
+            -p _tbt_bundle_manifest.json -D "$ROOT/remote-before"
+          for name in history-2024.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cmp "$ROOT/history/$name" "$ROOT/remote-before/$name"
+          done
+
+      - name: Create and independently verify immutable prewrite backup
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/backup" "$ROOT/backup-readback"
+          cp "$ROOT/history/history-2024.parquet" "$ROOT/backup/"
+          cp "$ROOT/history/history_manifest.json" "$ROOT/backup/"
+          cp "$ROOT/history/_tbt_bundle_manifest.json" "$ROOT/backup/"
+          cp "$ROOT/stage/stage.jsonl" "$ROOT/backup/"
+          cp "$ROOT/stage/report.json" "$ROOT/backup/source-report.json"
+          cp "$ROOT/package.json" "$ROOT/backup/"
+          (
+            cd "$ROOT/backup"
+            sha256sum history-2024.parquet history_manifest.json _tbt_bundle_manifest.json \
+              stage.jsonl source-report.json package.json > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          tag="blinq-wimbledon2024-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" "$ROOT/backup/"* -R "$PRIVATE_REPO" \
+            --title "Immutable prewrite Wimbledon 2024 exact-cell canonical backup" \
+            --notes "2024 entire partition, prior release manifests and SHA256-pinned stage; rollback."
+          gh release download "$tag" -R "$PRIVATE_REPO" -D "$ROOT/backup-readback"
+          (cd "$ROOT/backup-readback" && sha256sum -c SHA256SUMS)
+          cmp "$ROOT/backup-readback/package.json" "$ROOT/package.json"
+
+      - name: Publish year 2024 to canonical private release with last-moment CAS
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from cdb_global_writer_lock import verify
+          root=Path(os.environ["ROOT"])
+          repo=os.environ["PRIVATE_REPO"]
+          def freshness():
+              verify(repo,Path(".cdb-global-writer-lock.json"))
+              origin=root/"history/_tbt_bundle_manifest.json"
+              current=ReleaseStore(repo,"tbt-data-v1",root/"freshness")
+              latest=current._remote_bundle_files()
+              import json
+              pinned=json.loads(origin.read_text())["files"]
+              if latest != pinned:
+                  raise ValueError("CDB remote bundle moved since source stage; stop publication")
+          ReleaseStore(repo,"tbt-data-v1",root/"local").upload_bundle([
+            root/"local/history-2024.parquet",
+            root/"local/history_manifest.json",
+          ],before_upload=freshness)
+          PY
+
+      - name: Independently download and verify entire persisted 2024 year
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/persisted" "$ROOT/remote-verify"
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
+            -p history-2024.parquet -p history_manifest.json -p _tbt_bundle_manifest.json \
+            -D "$ROOT/persisted"
+          python scripts/import_wimbledon_2024_exact.py --mode verify \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/persisted" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/remote-verify/report.json"
+          test "$(jq -r .status "$ROOT/remote-verify/report.json")" = verified
+          test "$(jq -r .existing_values_overwritten "$ROOT/remote-verify/report.json")" = 0
+          test "$(jq -r .added_values "$ROOT/remote-verify/report.json")" = "$(jq -r .candidate_cells "$ROOT/package.json")"
+          test "$(jq -r .canonical_rows_checked "$ROOT/remote-verify/report.json")" = 113733
+
+      - name: Persist verified source/CDB import evidence privately
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          path=audit/wimbledon-2024-exact-import-latest.json
+          jq -n \
+            --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg sha "$GITHUB_SHA" --arg tag "blinq-wimbledon2024-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --slurpfile stage "$ROOT/stage/report.json" \
+            --slurpfile persisted "$ROOT/remote-verify/report.json" \
+            '{schema:1,status:"published_and_independently_verified",run_id:$run,
+              attempt:$attempt,app_sha:$sha,backup_tag:$tag,source_stage:$stage[0],
+              independent_full_year_readback:$persisted[0],
+              model_trained:false,model_promoted:false,provider_api_requests:0}' \
+            > "$ROOT/final-audit.json"
+          encoded="$(base64 -w0 "$ROOT/final-audit.json")"
+          old="$(gh api "repos/$PRIVATE_REPO/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$old" ]]; then
+            gh api --method PUT "repos/$PRIVATE_REPO/contents/$path" \
+              -f message="Verify 2024 CDB exact-cell import run $GITHUB_RUN_ID" -f content="$encoded" -f sha="$old" >/dev/null
+          else
+            gh api --method PUT "repos/$PRIVATE_REPO/contents/$path" \
+              -f message="Verify 2024 CDB exact-cell import run $GITHUB_RUN_ID" -f content="$encoded" >/dev/null
+          fi
+
+      - name: Save read-only and persisted evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-wimbledon2024-cdb-publish-${{ github.run_id }}
+          path: |
+            .cache/tbt/wimbledon2024-publish/stage/
+            .cache/tbt/wimbledon2024-publish/dry/
+            .cache/tbt/wimbledon2024-publish/local-verify/
+            .cache/tbt/wimbledon2024-publish/remote-verify/
+            .cache/tbt/wimbledon2024-publish/final-audit.json
+          retention-days: 45
+          if-no-files-found: warn
+
+      - name: Release global canonical writer lock
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
