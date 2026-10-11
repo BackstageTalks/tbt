@@ -89,7 +89,13 @@ def rank(v):
     except (TypeError,ValueError):return None
 
 def empty(v):
-    return v is None or isinstance(v,str) and v.strip().lower() in ("","nan","null","none")
+    if v is None or isinstance(v,str) and v.strip().lower() in ("","nan","null","none"):
+        return True
+    try:
+        import math
+        return math.isnan(float(v))
+    except (TypeError,ValueError,OverflowError):
+        return False
 
 def compare(source,current):
     counts=Counter();idx=defaultdict(list);seen=set()
