@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "mode": "dry-run",
+  "sources": [
+    {
+      "tour": "wta",
+      "year": 2025,
+      "sha256": "7c0349254347bfdaaf43b7f4806f3e2ac4592a334d30832f36214e4ae12f6030"
+    },
+    {
+      "tour": "wta",
+      "year": 2026,
+      "sha256": "da5ad41efcf5afcc3b40ca2ad9ae7cce8493aa9866a8e565321baaf3d6d7c049"
+    },
+    {
+      "tour": "atp",
+      "year": 2024,
+      "sha256": "5e5c6608d01be244e6fdb0e4f7b8290dd1f1e21ad4fd4d0848cf671c3b98c4ae"
+    },
+    {
+      "tour": "atp",
+      "year": 2025,
+      "sha256": "4aa542febefcd5d710a91c0785fc5ca99f690557db3ccdfff03edef49ac57ed8"
+    },
+    {
+      "tour": "atp",
+      "year": 2026,
+      "sha256": "98d2b3e54914cea91c95ad8a4a7573d378818bb59927577672bdc3bb1807d870"
+    }
+  ],
+  "allow_existing_overwrite": false,
+  "global_writer_lock": true,
+  "immutable_backup": true,
+  "full_year_readback": true,
+  "model_training": false,
+  "model_promotion": false,
+  "provider_api_requests": 0
+}
