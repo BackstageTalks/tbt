@@ -180,6 +180,28 @@ class CloseoutContractTests(unittest.TestCase):
         self.assertEqual(mod.STATE["reason"], "")
         self.assertEqual(mod.STATE["calls"], 1)
 
+
+    def test_optional_player_games_403_does_not_starve_existing_night_odds(self):
+        utc = datetime(2026, 10, 11, 22, tzinfo=timezone.utc)
+        error = HTTPError("https://api.prop-line.com/v1/x", 403, "Forbidden", {}, None)
+        with mock.patch.object(mod, "now", return_value=utc), \
+             mock.patch.object(mod.urllib.request, "urlopen", side_effect=error), \
+             mock.patch.object(mod.time, "sleep", return_value=None):
+            with self.assertRaises(mod.OptionalStatsAccessUnavailable):
+                mod.request("/sports/tennis/players/A/games", allow_not_found=True)
+        self.assertEqual(mod.STATE["reason"], "")
+        self.assertEqual(mod.STATE["calls"], 1)
+        targets = [(utc, {"tour": "ATP", "home_team": "Carlos Alcaraz",
+                          "away_team": "Novak Djokovic"})]
+        attempts = []
+        def unsupported(*args, **kwargs):
+            attempts.append(args)
+            raise mod.OptionalStatsAccessUnavailable()
+        with mock.patch.object(mod, "request", side_effect=unsupported):
+            mod.probe_player_games(targets, "2026-10-11", "123")
+        self.assertEqual(len(attempts), 1)
+        self.assertEqual(mod.STATE["reason"], "")
+
     def test_save_batch_preserves_on_readback_failure(self):
         mod.DATA.append({"event_id": "123", "odds": {"bookmakers": []}})
         with mock.patch.object(mod, "github", return_value=None), mock.patch("pathlib.Path.write_bytes", return_value=1):
