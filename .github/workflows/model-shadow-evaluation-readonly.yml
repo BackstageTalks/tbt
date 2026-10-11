@@ -1,0 +1,66 @@
+name: BlinQ read-only champion vs challenger shadow audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/model-shadow-evaluation-readonly.yml
+      - scripts/audit_model_shadow_readonly.py
+      - tests/test_audit_model_shadow_readonly.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-model-shadow-readonly
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install existing model dependencies
+        run: python -m pip install -r api/requirements-train.txt pytest
+      - name: Run read-only shadow integrity and evaluation unit tests
+        run: python -m pytest tests/test_audit_model_shadow_readonly.py tests/test_shadow_evaluation.py -q
+      - name: Independently read current champion, challenger and private issued shadow ledger
+        run: python scripts/audit_model_shadow_readonly.py --out .cache/tbt/model-shadow-audit/report.json
+      - name: Publish aggregate summary only
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          r=json.loads(Path('.cache/tbt/model-shadow-audit/report.json').read_text())
+          summary=[
+            '### Current frozen champion versus challenger',
+            f"Status: {r['status']}",
+            f"Champion: {r['production_model_version']}",
+            f"Challenger: {r['challenger_model_version']}",
+            f"Matched / settled: {r['cohort']['captured']} / {r['cohort']['settled']}",
+            f"Sample gate: {r['gate']['minimum_matches_met']}; days gate: {r['gate']['minimum_days_met']}",
+            f"Full aggregate metrics: {r['overall']}",
+            'No model training, production promotion, CDB write or provider calls.',
+          ]
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('\n'.join(summary)+'\n')
+          PY
+      - name: Keep verified private-only aggregate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-model-shadow-audit-${{ github.run_id }}
+          path: .cache/tbt/model-shadow-audit/report.json
+          if-no-files-found: warn
+          retention-days: 14
