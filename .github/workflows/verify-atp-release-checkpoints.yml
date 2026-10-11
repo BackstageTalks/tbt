@@ -31,6 +31,39 @@ jobs:
           python -m py_compile scripts/audit_atp_release_archive.py scripts/test_audit_atp_release_archive.py
           python -u scripts/test_audit_atp_release_archive.py
 
+  private-parser-selftest:
+    if: github.event_name != 'pull_request'
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Retrieve candidate private ATP parser by immutable commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          gh api 'repos/BackstageTalks/tbt-data/contents/scripts/scrape_atptour_official.py?ref=d5f8bb18860d821eb0b4b04275fe9a9e09b96368' > /tmp/atp_source.json
+          python - <<'PY'
+          import base64,json
+          from pathlib import Path
+          data=json.loads(Path('/tmp/atp_source.json').read_text())
+          if data.get('encoding')!='base64':
+              raise SystemExit('Private parser not available for source QA')
+          Path('/tmp/scrape_atptour_official.py').write_bytes(base64.b64decode(data['content']))
+          PY
+      - name: Run actual private parser offline completion contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check requests beautifulsoup4
+          python -m py_compile /tmp/scrape_atptour_official.py
+          python /tmp/scrape_atptour_official.py --mode selftest
+
   private-release-audit:
     if: github.event_name != 'pull_request'
     needs: offline
