@@ -51,7 +51,7 @@ jobs:
           gh release download tbt-data-v1 -R "$PRIVATE_REPO" -D /tmp/blinq-cell-gap/years \
             -p 'history-*.parquet' -p 'history_manifest.json'
           gh release download tbt-data-v1 -R "$PRIVATE_REPO" -D /tmp/blinq-cell-gap/sources \
-            -p 'blinq-uploaded-match-enrichment-*.jsonl.gz'
+            -p 'blinq-uploaded-match-enrichment-*.jsonl.gz' -p 'blinq-uploaded-td-atp-2025-enrichment.jsonl.gz'
           gh release download tbt-data-v1 -R "$PRIVATE_REPO" -D /tmp/blinq-cell-gap/market \
             -p 'market-sidecar-*.jsonl.gz'
       - name: Field-by-field compare 12,807 linked source rows and CDB 994,101 matches
