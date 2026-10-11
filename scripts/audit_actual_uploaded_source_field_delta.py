@@ -59,9 +59,12 @@ def compare_field(counters, field, current, proposed):
     if is_missing(current):
         counters[field+"_missing_valid_source"]+=1
         return "missing"
-    equal=(abs(float(current)-float(proposed))<1e-7 if
-           numeric(current) is not None and numeric(proposed) is not None
-           else cleanstr(current)==cleanstr(proposed))
+    if isinstance(current,bool):
+        equal=(proposed in (0,1,False,True) and int(current)==int(proposed))
+    else:
+        equal=(abs(float(current)-float(proposed))<1e-7 if
+               numeric(current) is not None and numeric(proposed) is not None
+               else cleanstr(current)==cleanstr(proposed))
     counters[field+"_already_equal" if equal else field+"_conflict"]+=1
     return "equal" if equal else "conflict"
 
