@@ -99,9 +99,9 @@ jobs:
         with:
           name: blinq-wta2024-scores-${{ github.run_id }}
           path: |
-            .cache/tbt/wta2024-scores/stage/
-            .cache/tbt/wta2024-scores/dry/
-            .cache/tbt/wta2024-scores/local-write/
-            .cache/tbt/wta2024-scores/local-verify/
+            .cache/tbt/wta2024-scores/stage/report.json
+            .cache/tbt/wta2024-scores/dry/report.json
+            .cache/tbt/wta2024-scores/local-write/report.json
+            .cache/tbt/wta2024-scores/local-verify/report.json
           retention-days: 40
           if-no-files-found: warn
