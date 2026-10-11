@@ -1,0 +1,109 @@
+name: BlinQ WTA 2024 exact canonical overlap (read only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/audit_tennisexplorer_wta2024_cdb_overlap.py
+      - tests/test_tennisexplorer_wta2024_cdb_overlap.py
+      - .github/workflows/blinq-wta2024-current-cdb-overlap.yml
+  pull_request:
+    paths:
+      - scripts/audit_tennisexplorer_wta2024_cdb_overlap.py
+      - tests/test_tennisexplorer_wta2024_cdb_overlap.py
+      - .github/workflows/blinq-wta2024-current-cdb-overlap.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-wta2024-cdb-overlap-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  synthetic-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Prove event identity, result orientation, collision and no-write gates
+        run: |
+          python -m pip install "pandas>=2,<3" pyarrow pytest
+          python -m py_compile scripts/audit_tennisexplorer_wta2024_cdb_overlap.py
+          python -m pytest --noconftest tests/test_tennisexplorer_wta2024_cdb_overlap.py -q
+
+  independent-cdb-read:
+    if: github.event_name != 'pull_request'
+    needs: synthetic-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      SOURCE_TAG: blinq-tennisexplorer-cloud-20261009
+      SOURCE_ASSET: txe-wta-single-2024.tar.gz
+      SOURCE_SHA256: 27c779c73bcfaf089e362f3480c4201f032e15fefbc3a0fadaa39bfce9f5956b
+      CDB_TAG: tbt-data-v1
+      CDB_SHA256: 30ca16e36649c5639ff2ec5ad964e73514b602933db8b73bac1f87589538a22c
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install read-only parquet and source audit dependencies
+        run: python -m pip install "pandas>=2,<3" pyarrow
+      - name: Read immutable private source and checksum-verifiable canonical partition
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          mkdir -p .cache/qa-source .cache/qa-cdb .cache/qa-reports
+          gh release download "$SOURCE_TAG" -R "$PRIVATE_REPO" -p "$SOURCE_ASSET" -D .cache/qa-source
+          gh release download "$CDB_TAG" -R "$PRIVATE_REPO" -p history-2024.parquet -p _tbt_bundle_manifest.json -D .cache/qa-cdb
+          echo "$SOURCE_SHA256  .cache/qa-source/$SOURCE_ASSET" | sha256sum --check
+          echo "$CDB_SHA256  .cache/qa-cdb/history-2024.parquet" | sha256sum --check
+      - name: Revalidate 366 daily result pages before comparing current CDB
+        run: |
+          python - <<'PY'
+          import json,os,sys
+          from pathlib import Path
+          sys.path.insert(0,"scripts")
+          from audit_tennisexplorer_private_checkpoint import audit
+          x=audit(Path(".cache/qa-source")/os.environ["SOURCE_ASSET"],"wta-single",2024,os.environ["SOURCE_SHA256"])
+          assert x["results_source_state"]=="COMPLETE_SOURCE_SCOPED_RESULTS_PENDING_CDB_LINK_AND_RIGHTS", x["issues"]
+          assert x["production_cdb_modified"] is False
+          print("WTA2024_SOURCE_366_DAYS",x["counts"]["unique_successful_days"])
+          PY
+      - name: Strict exact intersection, counts only; no CDB mutation
+        run: |
+          python scripts/audit_tennisexplorer_wta2024_cdb_overlap.py \
+            --source ".cache/qa-source/$SOURCE_ASSET" \
+            --source-sha256 "$SOURCE_SHA256" \
+            --canonical ".cache/qa-cdb/history-2024.parquet" \
+            --canonical-sha256 "$CDB_SHA256" \
+            --bundle ".cache/qa-cdb/_tbt_bundle_manifest.json" \
+            --out ".cache/qa-reports/wta2024-exact-overlap.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path(".cache/qa-reports/wta2024-exact-overlap.json")
+          x=json.loads(p.read_text())
+          assert x["canonical_writes"]==0
+          assert x["model_training_or_promotion"] is False
+          assert x["independently_approved_missing_cdb_cells"]==0
+          assert x["source_proposals_exported"] is False
+          assert x["counts"].get("source_rows")==45143, "Source cardinality changed; rebaseline first"
+          assert x["canonical_rows_in_year"]>1000
+          PY
+      - name: Retain safe counts only, not source rows or matched identities
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-wta2024-exact-current-cdb-counts-${{ github.run_id }}
+          path: .cache/qa-reports/wta2024-exact-overlap.json
+          if-no-files-found: warn
+          retention-days: 30
