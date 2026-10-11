@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "mode": "dry-run",
+  "sources": [
+    {
+      "tour": "atp",
+      "year": 2025,
+      "sha256": "8c2eede289a871fd269cddc669faf16a45cc872ddfc2d011188452f52da48130"
+    },
+    {
+      "tour": "wta",
+      "year": 2026,
+      "sha256": "2845c31bd9d01d4f1fc12468f209c5635e810dad9559e964dc9c24db39088f83"
+    },
+    {
+      "tour": "atp",
+      "year": 2026,
+      "sha256": "cbaf89c1fc987718e06decc5a43b65179881e0072c29052ed16f28112fd9af6c"
+    }
+  ],
+  "allow_existing_overwrite": false,
+  "global_writer_lock": true,
+  "immutable_backup": true,
+  "full_year_readback": true,
+  "model_training": false,
+  "model_promotion": false,
+  "provider_api_requests": 0
+}
