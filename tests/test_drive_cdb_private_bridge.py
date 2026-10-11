@@ -51,6 +51,35 @@ class PrivateBridgeTest(unittest.TestCase):
             (p / 'candidate-fields.jsonl').write_text(json.dumps({'import_ready': True}) + '\n')
             with self.assertRaises(ValueError): validate(p, FOLDER)
 
+    def test_empty_candidate_fields_survives_private_tar_report_roundtrip(self):
+        # Prior live audit #38151013504 verified CDB read-only but failed
+        # to publish because gh release upload rejects a zero-byte asset.
+        # One nonempty archive must preserve the original zero-byte file.
+        import subprocess
+        with TemporaryDirectory() as d:
+            p = Path(d)
+            source = p / 'private-output'
+            source.mkdir()
+            (source / 'candidate-fields.jsonl').write_bytes(b'')
+            (source / 'report.json').write_text('{"cdb_writes":0}')
+            expected = {}
+            import hashlib
+            for name in ('candidate-fields.jsonl', 'report.json'):
+                expected[name] = hashlib.sha256((source / name).read_bytes()).hexdigest()
+            (source / 'SHA256SUMS').write_text(
+                ''.join(f'{digest}  {name}\n' for name, digest in expected.items()))
+            bundle = p / 'drive-cdb-audit-bundle.tar.gz'
+            subprocess.run(['tar', '-czf', str(bundle), '-C', str(source), '.'], check=True)
+            self.assertGreater(bundle.stat().st_size, 0)
+            readback = p / 'readback'
+            readback.mkdir()
+            subprocess.run(['tar', '-xzf', str(bundle), '-C', str(readback)], check=True)
+            subprocess.run(['sha256sum', '-c', 'SHA256SUMS'], cwd=readback,
+                           check=True, capture_output=True)
+            self.assertEqual((readback / 'candidate-fields.jsonl').stat().st_size, 0)
+            self.assertEqual((readback / 'report.json').read_bytes(),
+                             (source / 'report.json').read_bytes())
+
     def test_missing_cache_is_not_false_success(self):
         with TemporaryDirectory() as d:
             p = Path(d); code = p / 'parser.py'; code.write_text('v1')

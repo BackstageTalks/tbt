@@ -169,11 +169,19 @@ jobs:
           done
           printf '%s\n' "source_ref=$SOURCE_REF" "drive_root=$DRIVE_ROOT" "run=$GITHUB_RUN_ID" "attempt=$GITHUB_RUN_ATTEMPT" "audit_outcome=${{ steps.audit.outcome }}" >work/private-output/run-evidence.txt
           (cd work/private-output; sha256sum -- * > SHA256SUMS)
+          # Upload one nonempty container: GitHub Release uploads reject
+          # zero-byte candidate-fields.jsonl (HTTP 400 Bad Content-Length).
+          # The tar preserves the exact empty file plus all source checksums.
+          tar -czf work/drive-cdb-audit-bundle.tar.gz -C work/private-output .
+          test -s work/drive-cdb-audit-bundle.tar.gz
           report_tag="blinq-drive-cdb-audit-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           gh release create "$report_tag" -R "$PRIVATE_REPO" --target main --title 'Private bounded Drive/CDB read-only audit' --notes 'PRIVATE only. No canonical writes, scraping or training.' >/dev/null
-          gh release upload "$report_tag" work/private-output/* -R "$PRIVATE_REPO" >/dev/null
-          gh release download "$report_tag" -R "$PRIVATE_REPO" -D work/report-readback >/dev/null
-          (cd work/report-readback; sha256sum -c SHA256SUMS >/dev/null)
+          gh release upload "$report_tag" work/drive-cdb-audit-bundle.tar.gz -R "$PRIVATE_REPO" >/dev/null
+          gh release download "$report_tag" -R "$PRIVATE_REPO" -p drive-cdb-audit-bundle.tar.gz -D work/report-readback >/dev/null
+          cmp work/drive-cdb-audit-bundle.tar.gz work/report-readback/drive-cdb-audit-bundle.tar.gz
+          mkdir -p work/report-readback/contents
+          tar -xzf work/report-readback/drive-cdb-audit-bundle.tar.gz -C work/report-readback/contents
+          (cd work/report-readback/contents; sha256sum -c SHA256SUMS >/dev/null)
           echo PRIVATE_AUDIT_REPORT_INDEPENDENT_SHA256_READBACK_PASS
 
       - name: Store verified private checkpoint only after success
