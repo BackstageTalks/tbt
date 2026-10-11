@@ -5,6 +5,7 @@ on:
       - scripts/prepare_wimbledon2023_guarded_restore.py
       - scripts/restore_wimbledon2023_exact_five.py
       - tests/test_prepare_wimbledon2023_guarded_restore.py
+      - tests/test_wimbledon2023_guarded_workflow.py
       - .github/workflows/blinq-wimbledon2023-five-row-guarded-publish.yml
       - .github/wimbledon2023-five-restore-request.json
   push:
@@ -33,7 +34,7 @@ jobs:
       - run: |
           set -euo pipefail
           python -m pip install -q -r api/requirements-train.txt pytest
-          python -m pytest -q tests/test_prepare_wimbledon2023_guarded_restore.py tests/test_restore_wimbledon2023_exact_five.py tests/test_wimbledon2023_recovery_readonly.py tests/test_wimbledon_2023_morning_rate_collision.py
+          python -m pytest -q tests/test_prepare_wimbledon2023_guarded_restore.py tests/test_wimbledon2023_guarded_workflow.py tests/test_restore_wimbledon2023_exact_five.py tests/test_wimbledon2023_recovery_readonly.py tests/test_wimbledon_2023_morning_rate_collision.py
           python -m compileall -q scripts/prepare_wimbledon2023_guarded_restore.py scripts/restore_wimbledon2023_exact_five.py
           if test -f .github/wimbledon2023-five-restore-request.json; then
             python scripts/prepare_wimbledon2023_guarded_restore.py --request .github/wimbledon2023-five-restore-request.json
