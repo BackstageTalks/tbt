@@ -32,6 +32,38 @@ def test_rates_do_not_hide_missing_ace_and_df_fields(match_factory):
     assert set(missing_fields(m)) == {'p1_aces','p2_aces','p1_double_faults','p2_double_faults'}
 
 
+
+def test_targeted_collector_fills_ace_df_when_service_rates_are_ready(match_factory, tmp_path):
+    class Provider:
+        def __init__(self):
+            self.calls = 0
+
+        def _get(self, path, **kwargs):
+            self.calls += 1
+            assert path == '/api/tennis/event/123/statistics'
+            return {'statistics': [{'period': 'ALL', 'groups': [{'statisticsItems': [
+                {'name': 'Aces', 'home': '5', 'away': '3'},
+                {'name': 'Double faults', 'home': '2', 'away': '1'}]}]}]}
+
+    m = match_factory('x', 'A', 'B', 'A')
+    m.stats = {f'{p}_{f}': .5 for p in ('p1', 'p2')
+               for f in ('service_points_won', 'return_points_won')}
+    m.provider_payload = {'id': '123', '_tbt_event_identity': {
+        'event_id':'123', 'status':'finished', 'home':'A', 'away':'B'},
+        '_tbt_statistics': {'schema': STATISTICS_SCHEMA_VERSION, 'event_id': '123',
+                            'status': 'available',
+                            'fetched_at': (datetime.now(timezone.utc) - timedelta(days=31)).isoformat()}}
+    provider = Provider()
+    enricher = StatisticsEnricher(provider, tmp_path/'cache.sqlite', targeted=True)
+    try:
+        assert enricher.enrich(m) == 'enriched'
+        assert provider.calls == 1
+        assert (m.stats['p1_aces'], m.stats['p2_aces']) == (5, 3)
+        assert (m.stats['p1_double_faults'], m.stats['p2_double_faults']) == (2, 1)
+    finally:
+        enricher.close()
+
+
 def test_conflicting_response_never_overwrites_or_adds_other_fields(match_factory, tmp_path):
     class Provider:
         calls = 0
