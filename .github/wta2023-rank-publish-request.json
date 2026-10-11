@@ -22,5 +22,7 @@
   "train_model": false,
   "promote_model": false,
   "create_cron": false,
-  "provider_api_requests": 0
+  "provider_api_requests": 0,
+  "execution_attempt": 2,
+  "previous_attempt_run": 38128699749
 }
