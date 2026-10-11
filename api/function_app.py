@@ -1948,6 +1948,8 @@ def internal_match_status_worker(req):
                     logging.warning("Post-match statistics unavailable: %s", type(exc).__name__)
                     parsed = {}
                     unavailable_stats += 1
+                entry["projection_stats_p1_id"] = p1
+                entry["projection_stats_p2_id"] = p2
                 entry["projection_stats"] = {
                     **evidence,
                     **{k: v for k, v in parsed.items()
