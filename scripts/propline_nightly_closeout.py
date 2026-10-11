@@ -74,6 +74,12 @@ def select_player_game_targets(future, limit=PLAYER_GAMES_PROBE_MAX):
         tour = str(event.get("tour") or "").strip().upper()
         if tour not in {"ATP", "WTA"}:
             continue
+        # A doubles fixture can contain one pair and one misleading plain name.
+        # Skip the whole fixture rather than querying a pseudo-player.
+        if any(marker in str(event.get(side) or "")
+               for side in ("home_team", "away_team")
+               for marker in ("/", " & ", " + ")):
+            continue
         for field in ("home_team", "away_team"):
             name = str(event.get(field) or "").strip()
             # Do not look up doubles pairs or guessed/corrupted player identities.
