@@ -3727,7 +3727,21 @@
       const open=Boolean(shell?.classList.toggle('is-open'));
       mobileFilterToggle.setAttribute('aria-expanded',open?'true':'false');
     };
-    document.querySelectorAll('[data-result-category]').forEach(el=>el.onchange=()=>{const chosen=new Set(String(state.resultsFilters.category||'all').split(','));const value=el.dataset.resultCategory;if(value==='all'){chosen.clear();}else{chosen.delete('all');if(el.checked)chosen.add(value);else chosen.delete(value);}state.resultsFilters.category=chosen.size?[...chosen].join(','):'all';refreshCategoryResults();});
+    document.querySelectorAll('[data-result-category]').forEach(el=>el.onchange=()=>{
+      // The visible checked boxes are the source of truth for a multi-select.
+      // Reusing the previous serialized category value can silently drop
+      // checked categories if state and the open picker become out of sync.
+      const picker=el.closest('.results-category-picker');
+      const checked=[...(picker?.querySelectorAll('input[data-result-category]:checked')||[])]
+        .map(box=>box.dataset.resultCategory).filter(Boolean);
+      if(el.dataset.resultCategory==='all'&&el.checked){
+        state.resultsFilters.category='all';
+      }else{
+        const chosen=new Set(checked.filter(value=>value!=='all'));
+        state.resultsFilters.category=chosen.size?[...chosen].join(','):'all';
+      }
+      refreshCategoryResults();
+    });
     [['resultsCategory','category'],['resultsTour','tour'],['resultsSurface','surface']].forEach(([id,key])=>{const el=$(id);if(el)el.onchange=()=>{state.resultsFilters[key]=el.value;rerender();};});
     document.querySelectorAll('input[name=resultsMembership]').forEach(el=>el.onchange=()=>{state.resultsFilters.membership=el.value;rerender();});
     const period=$('resultsWindow');if(period)period.onchange=()=>{state.resultsFilters.window=period.value||'all';if(state.resultsFilters.window!=='custom'){state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}rerender();if(state.resultsFilters.window==='custom')openResultsRange(rerender);};
