@@ -67,7 +67,7 @@ class PrivateBridgeTest(unittest.TestCase):
             for name in ('candidate-fields.jsonl', 'report.json'):
                 expected[name] = hashlib.sha256((source / name).read_bytes()).hexdigest()
             (source / 'SHA256SUMS').write_text(
-                ''.join(f'{digest}  {name}\\n' for name, digest in expected.items()))
+                ''.join(f'{digest}  {name}\n' for name, digest in expected.items()))
             bundle = p / 'drive-cdb-audit-bundle.tar.gz'
             subprocess.run(['tar', '-czf', str(bundle), '-C', str(source), '.'], check=True)
             self.assertGreater(bundle.stat().st_size, 0)
