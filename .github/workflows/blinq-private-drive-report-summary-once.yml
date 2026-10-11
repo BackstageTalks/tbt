@@ -86,3 +86,56 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           rm -rf work/private-summary
+
+  private-servestats-contract:
+    # Private Actions jobs currently terminate before running any steps;
+    # use the already functional PUBLIC app runner with trusted private checkout.
+    # Never expose private source rows, create artifacts, modify CDB or deploy UI.
+    if: ${{ github.repository == 'BackstageTalks/tbt' && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Verify private checkout is authorized
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view BackstageTalks/tbt-data --json visibility -q .visibility)" = PRIVATE
+      - name: Check out private audit code, no persisted credentials
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: main
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Execute isolated source-to-CDB gate regressions
+        shell: bash
+        working-directory: private
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_audit_manual_servestats_cdb.py -v
+          python -m compileall -q scripts/audit_manual_servestats_cdb.py
+          python - <<'PY'
+          from pathlib import Path
+          p=Path("scripts/audit_manual_servestats_cdb.py")
+          code=p.read_text(encoding="utf-8")
+          assert '"write_authorized": False' in code
+          assert '"production_mutated": False' in code
+          assert 'verify_player_orientation' in code
+          for forbidden in ("gh release", "upload_bundle(", "write_snapshot(", "requests.post("):
+              assert forbidden not in code, forbidden
+          print("PRIVATE_CDB_SOURCE_GATE_READONLY_PASS")
+          PY
+      - name: Record counts-only CI result
+        if: success()
+        shell: bash
+        run: |
+          echo "Private manual serve/return CDB candidate audit: Python unit tests and read-only contract passed on public app runner. No source rows or artifacts published; CDB untouched." >> "$GITHUB_STEP_SUMMARY"
