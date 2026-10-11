@@ -38,8 +38,8 @@ class PrivateBridgeTest(unittest.TestCase):
                           f'history-{year}.parquet': 'a' * 64 for year in range(1950, 2028)
                       }, 'comparison': {'candidate_missing_fields': 0}}
             (p / 'report.json').write_text(json.dumps(report))
-            (p / 'files.json').write_text('[]')
-            (p / 'drive-inventory.json').write_text('[]')
+            (p / 'files.json').write_text('[{"id":"one"}]')
+            (p / 'drive-inventory.json').write_text('[{"id":"one"}]')
             (p / 'candidate-fields.jsonl').write_text('')
             self.assertEqual(validate(p, FOLDER)['canonical_rows'], 994101)
             with self.assertRaises(ValueError): validate(p, 'different-root-id')
