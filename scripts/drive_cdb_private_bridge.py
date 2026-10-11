@@ -54,10 +54,11 @@ def validate(report_dir: Path, folder_id: str) -> dict:
         raise ValueError('CDB canonical snapshot pinning invalid')
     if not isinstance(report.get('comparison'), dict):
         raise ValueError('Missing actual CDB comparison')
-    if not isinstance(json.loads((report_dir / 'drive-inventory.json').read_text(encoding='utf-8')), list):
-        raise ValueError('Invalid Drive inventory')
-    if not isinstance(json.loads((report_dir / 'files.json').read_text(encoding='utf-8')), list):
-        raise ValueError('Invalid source status report')
+    inventory = json.loads((report_dir / 'drive-inventory.json').read_text(encoding='utf-8'))
+    files = json.loads((report_dir / 'files.json').read_text(encoding='utf-8'))
+    if (not isinstance(inventory, list) or not isinstance(files, list) or
+        len(inventory) != report['inventory_files'] or len(files) != len(inventory)):
+        raise ValueError('Partial or inconsistent source inventory')
     for line in (report_dir / 'candidate-fields.jsonl').read_text(encoding='utf-8').splitlines():
         if line.strip():
             row = json.loads(line)
