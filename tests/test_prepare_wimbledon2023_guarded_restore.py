@@ -54,7 +54,7 @@ def test_prepares_manifest_but_keeps_all_other_years(tmp_path, monkeypatch):
     # Tiny synthetic 78-year metadata fixtures, no private bytes.
     years = {str(y): {"year": y, "rows": 1, "sha256": "a"*64,
                        "asset": f"history-{y}.parquet"} for y in range(1949, 2027)}
-    years["2023"]["rows"] = r.EXPECTED_OLD_ROWS
+    years["2023"]["rows"] = 2
     before = tmp_path / "before"
     before.mkdir()
     rows = [{"match_id": f"m{i}"} for i in range(2)]
@@ -64,8 +64,8 @@ def test_prepares_manifest_but_keeps_all_other_years(tmp_path, monkeypatch):
     sha = r.sha256(file)
     monkeypatch.setattr(r, "CURRENT_SHA", sha)
     years["2023"].update({"sha256": sha, "bytes": file.stat().st_size})
-    # 78 partitions in real data are 1949..2026 = 78. Stub elsewhere 1 row.
-    years["2026"]["rows"] = 994096 - r.EXPECTED_OLD_ROWS - 76
+    # 78 years total to the production baseline 994096; tiny 2023 dummy rows.
+    years["2026"]["rows"] = 994096 - 2 - 76
     source_manifest = {"years": years, "generated_at": "old",
                        "storage_policy": {"year_independent": True}}
     (before / r.MANIFEST).write_text(json.dumps(source_manifest))
@@ -74,16 +74,20 @@ def test_prepares_manifest_but_keeps_all_other_years(tmp_path, monkeypatch):
         r.MANIFEST: {"sha256": r.sha256(before / r.MANIFEST)}
     }}))
     proposed = tmp_path / "proposed.parquet"
-    candidate = pd.DataFrame({"match_id": ["a", "b"]})
-    candidate.to_parquet(proposed)
-    monkeypatch.setattr(r, "EXPECTED_NEW_ROWS", 2)
+    pd.DataFrame({"match_id": ["m0", "m1", "x1", "x2", "x3", "x4", "x5"]}).to_parquet(proposed)
+    monkeypatch.setattr(r, "EXPECTED_NEW_ROWS", 7)
     monkeypatch.setattr(r, "EXPECTED_OLD_ROWS", 2)
-    monkeypatch.setattr(r, "TARGET_IDS", frozenset({"a", "b"}))
-    # Stub 2023 row count adjusts the global row-count invariant as well.
-    # These requirements are intentionally hard-coded production pins: synthetic
-    # partial inputs cannot accidentally satisfy real writer conditions.
-    with pytest.raises(ValueError):
-        r.prepare_updated_manifest(before, proposed, tmp_path / "out.json", request())
+    monkeypatch.setattr(r, "TARGET_IDS", frozenset(("x1", "x2", "x3", "x4", "x5")))
+    dest = tmp_path / "out.json"
+    report = r.prepare_updated_manifest(before, proposed, dest, request())
+    assert report["total_canonical_rows_after"] == 994101
+    assert report["other_77_year_entries_unchanged"]
+    assert report["production_mutated"] is False
+    result = json.loads(dest.read_text())
+    assert result["years"]["2023"]["rows"] == 7
+    assert result["years"]["2023"]["sha256"] == r.sha256(proposed)
+    assert result["years"]["2025"] == years["2025"]
+    assert result["storage_policy"] == source_manifest["storage_policy"]
 
 
 def test_missing_file_or_wrong_release_checksum_fails_closed(tmp_path):
