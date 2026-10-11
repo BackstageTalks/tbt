@@ -1,0 +1,150 @@
+name: BlinQ fresh 5 archive byte-level QA (no CDB writes)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-fresh-private-archive-qa.yml
+      - scripts/audit_tennisexplorer_private_checkpoint.py
+      - tests/test_tennisexplorer_private_checkpoint.py
+  pull_request:
+    paths:
+      - .github/workflows/blinq-fresh-private-archive-qa.yml
+      - scripts/audit_tennisexplorer_private_checkpoint.py
+      - tests/test_tennisexplorer_private_checkpoint.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-fresh-private-archive-qa-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  synthetic-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile and prove fail-closed WTA raw archive gates
+        run: |
+          python -m py_compile scripts/audit_tennisexplorer_private_checkpoint.py
+          python -m pip install pytest
+          python -m pytest tests/test_tennisexplorer_private_checkpoint.py -q
+
+  inspect:
+    if: github.event_name != 'pull_request'
+    needs: synthetic-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - family: tennisexplorer
+            category: wta-single
+            year: 2024
+            release: blinq-tennisexplorer-cloud-20261009
+            asset: txe-wta-single-2024.tar.gz
+            sha256: 27c779c73bcfaf089e362f3480c4201f032e15fefbc3a0fadaa39bfce9f5956b
+          - family: tennisexplorer
+            category: wta-double
+            year: 2024
+            release: blinq-tennisexplorer-cloud-20261009
+            asset: txe-wta-double-2024.tar.gz
+            sha256: de44c2eabe1ae5ac184eb64e8ef5399de1d434f3253313a290db613b9b627cd5
+          - family: atptour
+            category: atp
+            year: 2008
+            release: blinq-cloud-atptour-20261009
+            asset: blinq-atp-archive-2008-37988671325-1.tar.gz
+            sha256: d78e20f53af341942c4d02484945a3c0a2c17251c8f150fe05bba3114539717e
+          - family: atptour
+            category: atp
+            year: 2011
+            release: blinq-cloud-atptour-20261009
+            asset: blinq-atp-archive-2011-37988671325-1.tar.gz
+            sha256: 87285232fe461eb6376923ae4937171de6f89e19974da7042ffe4954e3bfe1a3
+          - family: atptour
+            category: atp
+            year: 2012
+            release: blinq-cloud-atptour-20261009
+            asset: blinq-atp-archive-2012-37988671325-1.tar.gz
+            sha256: c237b1899cecf731937a94adddf4512b45113c75bdb563b93a57677ab39a232e
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      FAMILY: ${{ matrix.family }}
+      CATEGORY: ${{ matrix.category }}
+      YEAR: ${{ matrix.year }}
+      RELEASE: ${{ matrix.release }}
+      ASSET: ${{ matrix.asset }}
+      EXPECTED_SHA256: ${{ matrix.sha256 }}
+      PINNED_PRIVATE_CODE: 083d9c0952b6f9bcaea8f80499e7aff9137f5a9f
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Obtain original private archive without provider requests
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$DATA_REPO" --jq .private)" = true
+          mkdir -p .cache/private-qa
+          gh release download "$RELEASE" --repo "$DATA_REPO" --pattern "$ASSET" --dir .cache/private-qa
+          echo "$EXPECTED_SHA256  .cache/private-qa/$ASSET" | sha256sum --check
+      - name: Check exact source structure (do not touch CDB)
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/private-qa/report
+          if [ "$FAMILY" = "tennisexplorer" ]; then
+            python scripts/audit_tennisexplorer_private_checkpoint.py \
+              --asset ".cache/private-qa/$ASSET" \
+              --expected-sha256 "$EXPECTED_SHA256" \
+              --category "$CATEGORY" --year "$YEAR" \
+              --report ".cache/private-qa/report/$FAMILY-$CATEGORY-$YEAR.json"
+          else
+            gh api "repos/$DATA_REPO/contents/scripts/prepare_atptour_cdb_staging.py?ref=$PINNED_PRIVATE_CODE" \
+              --jq .content | base64 --decode > .cache/private-qa/atp_stage.py
+            python .cache/private-qa/atp_stage.py \
+              --asset ".cache/private-qa/$ASSET" --year "$YEAR" \
+              --output .cache/private-qa/atp-stage
+            cp ".cache/private-qa/atp-stage/atptour-$YEAR-qa.json" \
+              ".cache/private-qa/report/$FAMILY-$CATEGORY-$YEAR.json"
+          fi
+      - name: Assert QA never claims canonical import, and report counts
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import glob,json,os
+          files=glob.glob('.cache/private-qa/report/*.json')
+          if not files:
+              print('QA did not produce an independently usable report; archive remains BLOCKED')
+              raise SystemExit(2)
+          for p in files:
+              v=json.load(open(p))
+              assert v.get('production_cdb_modified') is False
+              assert v.get('point_in_time_training_approved', False) is False
+              assert v.get('canonical_match_ids_verified', False) is False
+              print('PRIVATE_RAW_SOURCE_QA',p,v.get('status'),v.get('counts'),v.get('issues', []))
+              with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:
+                  out.write(f"### {v.get('source')} {v.get('year')} {v.get('category','ATP')}\n")
+                  out.write(f"State: {v.get('status')}\n")
+                  out.write(f"Counts: {json.dumps(v.get('counts',{}))}\n")
+                  out.write("No current canonical comparison, CDB import or model activation.\n")
+          PY
+      - name: Upload counts-only QA, never upload raw source or staged player rows
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-source-qa-${{ matrix.family }}-${{ matrix.category }}-${{ matrix.year }}
+          path: .cache/private-qa/report/*.json
+          if-no-files-found: warn
+          retention-days: 30
