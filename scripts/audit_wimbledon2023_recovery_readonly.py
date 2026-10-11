@@ -138,6 +138,67 @@ def compare_years(original, current, *, target_ids=TARGET_IDS):
     }
 
 
+
+def simulate_exact_five_append(backup, current, scratch):
+    """Simulate an additive recovery locally, preserving every current field.
+
+    No upload, no production lock, no CDB release mutation. Abort on even one
+    changed historical value, schema drift or a failed parquet reread.
+    The scratch file is removed whether validation succeeds or fails.
+    """
+    proof = compare_years(backup, current)
+    if not proof["exact_five_can_be_reviewed_for_restoration"]:
+        raise ValueError("Five-row recovery must first pass all identity and count gates")
+    if list(backup.columns) != list(current.columns):
+        raise ValueError("Current vs immutable backup column inventory differs")
+    if not backup.dtypes.equals(current.dtypes):
+        raise ValueError("Parquet column dtypes changed since immutable source")
+    addition = backup.loc[backup["match_id"].isin(TARGET_IDS)].copy()
+    if len(addition) != 5:
+        raise ValueError("Expected exactly five pinned source rows")
+    for _, row in addition.iterrows():
+        if invalid_reason(row) is not None:
+            raise ValueError("Pinned source row fails canonical quality preflight")
+
+    proposed = pd.concat([current, addition], ignore_index=True)
+    if len(proposed) != len(current) + 5 or proposed["match_id"].duplicated().any():
+        raise ValueError("Local stage has duplicate or missing IDs")
+    if not proposed.dtypes.equals(current.dtypes):
+        raise ValueError("Append changed canonical parquet value types")
+    local = Path(scratch) / "history-2023-simulation-only.parquet"
+    local.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        proposed.to_parquet(local, engine="pyarrow", compression="zstd", index=False)
+        reread = pd.read_parquet(local, engine="pyarrow")
+        if len(reread) != len(current) + 5:
+            raise ValueError("Local reread has wrong row count")
+        pd.testing.assert_frame_equal(
+            reread.iloc[:len(current)].reset_index(drop=True),
+            current.reset_index(drop=True), check_exact=True,
+        )
+        pd.testing.assert_frame_equal(
+            reread.iloc[len(current):].reset_index(drop=True),
+            addition.reset_index(drop=True), check_exact=True,
+        )
+        sha = sha256(local)
+        return {
+            "status": "LOCAL_APPEND_SIMULATION_VERIFIED_NO_PRODUCTION_WRITE",
+            "stage_year": 2023,
+            "current_rows_preserved_exact": len(current),
+            "five_backup_rows_appended_exact": len(addition),
+            "simulated_total_rows": len(reread),
+            "current_columns_preserved": len(current.columns),
+            "existing_rows_or_cells_overwritten": 0,
+            "simulated_parquet_sha256": sha,
+            "simulated_parquet_uploaded": False,
+            "writer_lease_taken": False,
+            "production_cdb_mutated": False,
+            "requires_fresh_write_CAS_and_backup": True,
+        }
+    finally:
+        local.unlink(missing_ok=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
@@ -155,7 +216,9 @@ def main():
         raise ValueError("Backup row count inconsistent with signed release")
     if len(now) != current_proof["year_declared_rows"]:
         raise ValueError("Current row count inconsistent with signed release")
+    local_simulation = simulate_exact_five_append(original, now, args.out / "simulation")
     result = {
+        "local_append_simulation": local_simulation,
         "schema": 1,
         "status": "READ_ONLY_WIMBLEDON2023_FIVE_ROW_BACKUP_COMPARISON",
         "private_repo": REPO,
@@ -173,6 +236,7 @@ def main():
         "counts": result["counts"], "write_authorized": False,
         "backup_sha256": backup_proof["sha256"],
         "current_sha256": current_proof["sha256"],
+        "simulation": local_simulation,
     }, sort_keys=True), flush=True)
 
 
