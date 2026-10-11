@@ -66,6 +66,11 @@ def parse_completed(row):
         "side1_games":sum(a for a,_ in sets),
         "side2_games":sum(b for _,b in sets),
         "total_games":sum(a+b for a,b in sets),
+        "deciding_set":int(len(sets) == 3),
+        "side1_first_set_won":int(sets[0][0] > sets[0][1]),
+        "side2_first_set_won":int(sets[0][1] > sets[0][0]),
+        "side1_second_set_won":int(sets[1][0] > sets[1][1]),
+        "side2_second_set_won":int(sets[1][1] > sets[1][0]),
         "set_scores":sets,
     }
 
