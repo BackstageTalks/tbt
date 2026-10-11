@@ -1865,6 +1865,7 @@ def internal_match_status_worker(req):
         client.request_limit = 24
         client.retry_attempts = 1
         client.client.timeout = 4.0
+        worker_started = time.monotonic()
         try:
             snapshot = scan_match_statuses(
                 feed_payload,
@@ -1878,8 +1879,84 @@ def internal_match_status_worker(req):
                 # be checked in one run. 20 near calls + one live call stays
                 # below the hard client cap of 24.
                 max_near_checks=20,
-                max_wall_seconds=22.0,
+                max_wall_seconds=18.0,
             )
+            # Only issued Aces/DF offers qualify for post-match statistics.
+            # Reuse the same client/quota; never start an unbounded enrichment.
+            from tbt.providers.statistics import parse_statistics
+            stat_rows = {}
+            for row in feed_payload.get("ace_picks", []) or []:
+                if not isinstance(row, dict):
+                    continue
+                event = str(row.get("event_id") or "").strip()
+                publications = row.get("market_publications") or []
+                if event and any(
+                    isinstance(p, dict)
+                    and str(p.get("market") or "") in {"aces", "double_faults"}
+                    and str(p.get("publication_status") or "") == "published"
+                    and p.get("issued_at")
+                    for p in publications
+                ):
+                    stat_rows.setdefault(event, row)
+            checked_stats = 0
+            unavailable_stats = 0
+            quota_paused = False
+            for event, row in stat_rows.items():
+                if checked_stats >= 2 or time.monotonic() - worker_started >= 19.0:
+                    break
+                if client.request_count >= client.request_limit - 1:
+                    break
+                entry = (snapshot.get("statuses") or {}).get(event)
+                if not isinstance(entry, dict) or entry.get("status") not in {"win", "loss"}:
+                    continue
+                p1 = str((row.get("player1") or {}).get("id") or "")
+                p2 = str((row.get("player2") or {}).get("id") or "")
+                home = str(entry.get("provider_home_id") or "")
+                if not p1 or not p2 or p1 == p2 or home not in {p1, p2}:
+                    continue
+                evidence = entry.get("projection_stats")
+                evidence = evidence if isinstance(evidence, dict) else {}
+                markets = {
+                    str(p.get("market") or "")
+                    for p in row.get("market_publications") or []
+                    if isinstance(p, dict) and p.get("issued_at")
+                }
+                fields = set()
+                for market in markets & {"aces", "double_faults"}:
+                    fields.update({f"p1_{market}", f"p2_{market}"})
+                if fields and all(field in evidence for field in fields):
+                    continue
+                last = entry.get("projection_stats_checked_at")
+                try:
+                    last_time = datetime.fromisoformat(str(last).replace("Z", "+00:00"))
+                    if last_time.tzinfo is None:
+                        last_time = last_time.replace(tzinfo=timezone.utc)
+                except (TypeError, ValueError):
+                    last_time = None
+                if last_time and (datetime.now(timezone.utc) - last_time).total_seconds() < 3600:
+                    continue
+                try:
+                    payload = client.event_statistics(event)
+                    parsed = parse_statistics(payload, home_is_player1=home == p1)
+                except (SharedBudgetExhausted, SharedBudgetUnavailable):
+                    quota_paused = True
+                    break
+                except Exception as exc:
+                    # Missing provider coverage remains pending. Retry after
+                    # an hour, never turn absent stats into zero counts.
+                    logging.warning("Post-match statistics unavailable: %s", type(exc).__name__)
+                    parsed = {}
+                    unavailable_stats += 1
+                entry["projection_stats"] = {
+                    **evidence,
+                    **{k: v for k, v in parsed.items()
+                       if k in {"p1_aces", "p2_aces", "p1_double_faults", "p2_double_faults"}}
+                }
+                entry["projection_stats_checked_at"] = datetime.now(timezone.utc).isoformat()
+                checked_stats += 1
+            snapshot["projection_statistics_checked"] = checked_stats
+            snapshot["projection_statistics_unavailable"] = unavailable_stats
+            snapshot["projection_statistics_budget_paused"] = quota_paused
         finally:
             try:
                 client.close()
