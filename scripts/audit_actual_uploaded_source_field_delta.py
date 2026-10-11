@@ -112,6 +112,7 @@ def valid_set_score(sets, p1_sets, p2_sets, winner_player, best_of):
 def load_sidecars(path):
     result={}
     sha={}
+    overlap=Counter()
     source_files = (sorted(path.glob("blinq-uploaded-match-enrichment-*.jsonl.gz")) +
                     sorted(path.glob("blinq-uploaded-td-atp-2025-enrichment.jsonl.gz")))
     for p in source_files:
@@ -121,12 +122,21 @@ def load_sidecars(path):
                 if not line.strip():continue
                 v=json.loads(line)
                 mid=str(v.get("match_id") or "")
-                if not mid or mid in result:raise ValueError("Missing or duplicated exact source match ID")
+                if not mid:
+                    raise ValueError("Missing exact source match ID")
+                overlap["all_source_rows"]+=1
+                if mid in result:
+                    # Two independently archived source rows about the SAME CDB
+                    # match are not two new matches. Prefer already normalized
+                    # multi-set source, retain overlap count for separate audit.
+                    overlap["same_canonical_match_id_source_overlap"]+=1
+                    continue
                 result[mid]=v
-    return result,sha
+    overlap["unique_exact_match_ids"]=len(result)
+    return result,sha,dict(overlap)
 
 def audit(history,release,uploaded,market,source):
-    original,raw_sha=load_sidecars(uploaded)
+    original,raw_sha,source_overlap=load_sidecars(uploaded)
     assets={v["name"]:v for v in release["assets"]}
     for name,d in raw_sha.items():
         assert assets[name]["digest"]=="sha256:"+d, "Source digest drift: "+name
@@ -282,7 +292,7 @@ def audit(history,release,uploaded,market,source):
                     if r.get("hand_qids"):ident["cohort_players_with_handedness_identifiers"]+=1
     return {
         "schema":1,"status":"read_only_current_source_to_cdb_comparison",
-        "sources":{"uploaded_matches":len(original),"source_sha256":raw_sha,"private_repo_commit":__import__("subprocess").check_output(["git","-C",str(source),"rev-parse","HEAD"],text=True).strip()},
+        "sources":{"uploaded_matches":len(original),"source_record_overlap":source_overlap,"source_sha256":raw_sha,"private_repo_commit":__import__("subprocess").check_output(["git","-C",str(source),"rev-parse","HEAD"],text=True).strip()},
         "canonical":{"year_partitions":len(per_year),"rows":sum(per_year.values()),"exact_id_matched":matched_ids},
         "core_observation_comparison":dict(core),
         "core_missing_cells_by_field":dict(missing_core_fields),
