@@ -1,0 +1,88 @@
+name: BlinQ SHA-verified private Drive candidate report summary
+
+# One source-locked readback when this workflow is introduced/edited.
+# No Drive API, no provider calls, no canonical writer or cron.
+'on':
+  pull_request:
+    paths:
+      - .github/workflows/blinq-private-drive-report-summary-once.yml
+      - scripts/audit_private_drive_report_summary.py
+      - tests/test_audit_private_drive_report_summary.py
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-private-drive-report-summary-once.yml
+      - scripts/audit_private_drive_report_summary.py
+      - tests/test_audit_private_drive_report_summary.py
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-private-drive-cdb-report-summary-once
+  cancel-in-progress: false
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test fail-closed SHA and report-only source summarizer
+        run: python -m unittest discover -s tests -p test_audit_private_drive_report_summary.py -v
+
+  summary-on-private-report:
+    needs: unit-tests
+    if: github.repository == 'BackstageTalks/tbt' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      PRIVATE_TAG: blinq-drive-cdb-audit-38161326646-1
+      EXPECTED_SHA256: a5d43ac0a55cc0d0fa7bf79c8dac0135054d905434e2a642944f2353a3b71af4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read SHA-pinned PRIVATE archive, emit numeric metrics only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'BackstageTalks/tbt'
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test -n "$GH_TOKEN" || { echo BLOCKED_MISSING_PRIVATE_READER; exit 1; }
+          test "$(gh api "repos/$PRIVATE_REPO" --jq '.private')" = 'true'
+          mkdir -p work/private-summary
+          gh release download "$PRIVATE_TAG" -R "$PRIVATE_REPO" \
+            -p drive-cdb-audit-bundle.tar.gz -D work/private-summary >/dev/null
+          remote_asset_sha="$(gh api "repos/$PRIVATE_REPO/releases/tags/$PRIVATE_TAG" \
+            --jq '.assets[] | select(.name=="drive-cdb-audit-bundle.tar.gz") | .digest')"
+          test "$remote_asset_sha" = "sha256:$EXPECTED_SHA256"
+          current_year_sha="$(gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" \
+            --jq '.assets[] | select(.name=="history-2026.parquet") | .digest')"
+          test "${current_year_sha#sha256:}" != "$current_year_sha"
+          python scripts/audit_private_drive_report_summary.py \
+            --bundle work/private-summary/drive-cdb-audit-bundle.tar.gz \
+            --expected-bundle-sha256 "$EXPECTED_SHA256" \
+            --current-year-sha256 "${current_year_sha#sha256:}" \
+            > work/private-summary/safe-counts.json
+          echo PRIVATE_AUDIT_REPORT_VERIFIED_COUNTS_ONLY
+          cat work/private-summary/safe-counts.json
+          {
+            echo '### Private Drive audit — SHA-verified aggregate counts only'
+            echo 'Source names, individual matches and values stay private.'
+            echo '```json'
+            cat work/private-summary/safe-counts.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          rm -rf work/private-summary
