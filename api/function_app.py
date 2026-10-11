@@ -1912,7 +1912,8 @@ def internal_match_status_worker(req):
                 p1 = str((row.get("player1") or {}).get("id") or "")
                 p2 = str((row.get("player2") or {}).get("id") or "")
                 home = str(entry.get("provider_home_id") or "")
-                if not p1 or not p2 or p1 == p2 or home not in {p1, p2}:
+                away = str(entry.get("provider_away_id") or "")
+                if not p1 or not p2 or p1 == p2 or {p1, p2} != {home, away}:
                     continue
                 evidence = entry.get("projection_stats")
                 evidence = evidence if isinstance(evidence, dict) else {}
