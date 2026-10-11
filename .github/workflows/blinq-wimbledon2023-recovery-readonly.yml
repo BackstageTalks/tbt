@@ -1,0 +1,71 @@
+name: BlinQ Wimbledon 2023 immutable backup five-row recovery audit
+on:
+  pull_request:
+    paths:
+      - scripts/audit_wimbledon2023_recovery_readonly.py
+      - tests/test_wimbledon2023_recovery_readonly.py
+      - .github/workflows/blinq-wimbledon2023-recovery-readonly.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/audit_wimbledon2023_recovery_readonly.py
+      - tests/test_wimbledon2023_recovery_readonly.py
+      - .github/workflows/blinq-wimbledon2023-recovery-readonly.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: blinq-wimbledon2023-backup-readonly-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - run: |
+          set -euo pipefail
+          python -m pip install -q -r api/requirements-train.txt pytest
+          python -m pytest -q tests/test_wimbledon2023_recovery_readonly.py tests/test_wimbledon_2023_morning_rate_collision.py
+          python -m compileall -q scripts/audit_wimbledon2023_recovery_readonly.py
+  audit:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Check private source and install SHA-verified reader
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = true
+          python -m pip install -q -r api/requirements-train.txt
+      - name: Independently SHA-verify both 2023 years and compare lost rows read-only
+        run: |
+          set -euo pipefail
+          python scripts/audit_wimbledon2023_recovery_readonly.py --out .cache/tbt/wimbledon2023-five-row-compare
+          jq -e '.write_authorized==false and .production_mutated==false and .restoration_executed==false and .provider_requests==0' .cache/tbt/wimbledon2023-five-row-compare/aggregate-readonly-report.json
+      - name: Publish only aggregate proof (no private match rows)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wimbledon2023-five-row-compare-${{ github.run_id }}
+          path: .cache/tbt/wimbledon2023-five-row-compare/aggregate-readonly-report.json
+          retention-days: 30
+          if-no-files-found: warn
