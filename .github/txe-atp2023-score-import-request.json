@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "mode": "dry-run",
+  "sources": [
+    {
+      "tour": "atp",
+      "year": 2023,
+      "sha256": "90185eec963889ac144f3179cf937063cad45873a1bbfe8af95a39bb53db93d7"
+    }
+  ],
+  "allow_existing_overwrite": false,
+  "global_writer_lock": true,
+  "immutable_backup": true,
+  "full_year_readback": true,
+  "model_training": false,
+  "model_promotion": false,
+  "provider_api_requests": 0
+}
