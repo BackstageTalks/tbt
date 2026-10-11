@@ -1,0 +1,51 @@
+name: Independent private Stage2 observation contract tests (read-only)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/private-stage2-pr64-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-original-private-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout app code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout SHA pinned private contract source
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 8badf9fcd1535ef0479ec91c548a5a9011960ff5
+          path: private-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/audit_prepared_evidence_gate.py
+            tests/test_audit_prepared_evidence_gate.py
+            audit/import-preparation/observation.schema.json
+      - name: Verify pinned source and run REAL schema tests
+        run: |
+          set -euo pipefail
+          test "$(git -C private-data rev-parse HEAD)" = 8badf9fcd1535ef0479ec91c548a5a9011960ff5
+          python -m pip install -q 'jsonschema>=4.18,<5'
+          python -m unittest discover -s private-data/tests -p test_audit_prepared_evidence_gate.py -v
+          python -m compileall -q private-data/scripts/audit_prepared_evidence_gate.py
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import subprocess
+          root = Path('private-data')
+          src = (root/'scripts/audit_prepared_evidence_gate.py').read_text()
+          schema = json.loads((root/'audit/import-preparation/observation.schema.json').read_text())
+          assert len(schema['required']) >= 18
+          assert "'write_authorized': False" in src
+          for forbidden in ('upload_bundle(', 'gh release', 'write_snapshot(', 'update_year_manifest('):
+              assert forbidden not in src
+          print('PRIVATE_STAGE2_CONTRACT_VERIFIED aggregate_only schema_required=',len(schema['required']), 'source_sha=',subprocess.check_output(['git','-C','private-data','rev-parse','HEAD'],text=True).strip())
+          PY
