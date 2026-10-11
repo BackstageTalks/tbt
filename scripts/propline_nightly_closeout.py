@@ -4,7 +4,8 @@
 Collection contract:
   1) All future tennis events with complete numeric IDs; no identity guessing.
   2) Discover markets per event; pull exactly one all-relevant-markets odds snapshot.
-  3) Prioritize double faults, aces, h2h, games, sets, then CLV snapshots.
+  3) Prioritize niche priced tennis props not covered as such by Tennis API PRO.
+     Retain the existing double-fault/ace/regular markets as fallback.
   4) Preserve unmodified provider payload + UTC capture time + provider event ID.
   5) Flush immutable batches every 25 attempted requests; read back blob SHA/size.
   6) Never promote, train, import to CDB, or modify publication.
@@ -28,8 +29,26 @@ KEY = os.getenv("PROPL", "")
 TOKEN = os.getenv("TBT_DATA_GH_TOKEN", "")
 MAX_CALLS = min(750, max(0, int(os.getenv("CLOSEOUT_MAX_REQUESTS", "750"))))
 BATCH_SIZE = 25
-MARKETS = ("player_double_faults", "player_aces", "h2h", "total_games",
-           "totals", "total_sets", "spreads", "player_games_won")
+# Night-only research: additional priced player and match totals, which
+# Tennis API PRO's historical match stats do not supply as bookmaker lines.
+# Market discovery must advertise a key before any odds request includes it.
+SPECIAL_MARKETS = ("player_break_points_won", "total_tiebreaks", "total_aces",
+                   "player_games_won")
+MARKETS = SPECIAL_MARKETS + ("player_double_faults", "player_aces", "h2h",
+                             "total_games", "totals", "total_sets", "spreads")
+
+
+def odds_priority(market_keys):
+    """Use scarce night closeout odds requests on rarer priced props first."""
+    priority = (
+        *SPECIAL_MARKETS, "player_double_faults", "player_aces",
+        "h2h", "total_games", "totals", "total_sets", "spreads",
+    )
+    for index, key in enumerate(priority):
+        if key in market_keys:
+            return index
+    return len(priority)
+
 WAIT = 0.2  # Hard pacing: at most 5 attempted PropLine requests / second
 STATE = {"calls": 0, "remaining": None, "reason": "", "batches": 0}
 DATA = []
@@ -224,14 +243,9 @@ def collect():
                          "captured_at_utc": now().isoformat(),
                          "event": event, "available_markets_raw": markets})
             flush_if_needed(day, runid)
-        # Spend odds calls on sparse player props first. More than one category
-        # in the same odds request costs no extra API call.
-        discovered.sort(key=lambda x: (
-            0 if "player_double_faults" in x[2] else
-            1 if "player_aces" in x[2] else
-            2 if "h2h" in x[2] else
-            3 if ({"total_games", "totals", "total_sets"} & x[2]) else 4,
-            x[0]))
+        # Spend night-only odds calls on specific priced markets first.
+        # The available markets are combined into ONE odds request per event.
+        discovered.sort(key=lambda x: (odds_priority(x[2]), x[0]))
         for kickoff, event, keys, wanted in discovered:
             if STATE["reason"]:
                 break
