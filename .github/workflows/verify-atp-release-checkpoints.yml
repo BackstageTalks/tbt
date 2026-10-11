@@ -1,0 +1,74 @@
+name: Independent private ATP release checkpoint QA
+
+on:
+  pull_request:
+    paths:
+      - scripts/audit_atp_release_archive.py
+      - scripts/test_audit_atp_release_archive.py
+      - .github/workflows/verify-atp-release-checkpoints.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/audit_atp_release_archive.py
+      - scripts/test_audit_atp_release_archive.py
+      - .github/workflows/verify-atp-release-checkpoints.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline source integrity tests (no provider network)
+        run: |
+          python -m py_compile scripts/audit_atp_release_archive.py scripts/test_audit_atp_release_archive.py
+          python -u scripts/test_audit_atp_release_archive.py
+
+  private-release-audit:
+    if: github.event_name != 'pull_request'
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      REPO: BackstageTalks/tbt-data
+      RELEASE: blinq-cloud-atptour-20261009
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify metadata and actual bytes from four existing private assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          mkdir -p /tmp/atp_release_qa
+          while IFS='|' read -r YEAR ASSET EXPECT; do
+            [[ -n "$YEAR" ]] || continue
+            export ASSET
+            DIGEST=$(gh api "repos/$REPO/releases/tags/$RELEASE" --jq '.assets[] | select(.name == env.ASSET) | .digest')
+            if [[ ! "$DIGEST" =~ ^sha256:[0-9a-fA-F]{64}$ ]]; then
+              echo "Missing SHA-256 digest in private Release metadata: $ASSET" >&2
+              exit 2
+            fi
+            gh release download "$RELEASE" --repo "$REPO" \
+              --pattern "$ASSET" --dir /tmp/atp_release_qa
+            python -u scripts/audit_atp_release_archive.py \
+              --archive "/tmp/atp_release_qa/$ASSET" \
+              --year "$YEAR" --expected-digest "$DIGEST" --expect "$EXPECT"
+            rm "/tmp/atp_release_qa/$ASSET"
+          done <<'CHECKPOINTS'
+          2008|blinq-atp-archive-2008-37988671325-1.tar.gz|complete
+          2021|blinq-atp-archive-2021-38070926249-1.tar.gz|complete
+          2011|blinq-atp-archive-2011-37988671325-1.tar.gz|incomplete
+          2018|blinq-atp-archive-2018-37988671325-1.tar.gz|incomplete
+          CHECKPOINTS
+          echo "Read-only private checkpoint QA finished; no provider calls, no CDB writes."
