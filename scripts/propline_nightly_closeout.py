@@ -8,7 +8,9 @@ Collection contract:
      Retain the existing double-fault/ace/regular markets as fallback.
   4) Preserve unmodified provider payload + UTC capture time + provider event ID.
   5) Flush immutable batches every 25 attempted requests; read back blob SHA/size.
-  6) Never promote, train, import to CDB, or modify publication.
+  6) At most 16 nightly FREE player-game log calls; archive Aces/DF/break
+     points as research, never assert new CDB coverage without exact linking.
+  7) Never promote, train, import to CDB, or modify publication.
 """
 import base64
 import gzip
@@ -48,6 +50,111 @@ def odds_priority(market_keys):
         if key in market_keys:
             return index
     return len(priority)
+
+# Only the 23:00 closeout probes player game logs; daytime CLV is separate.
+# The 2026 API PRO audit left many matches unavailable, especially Aces/DF.
+# PropLine advertises up to 100 finished player games in a single FREE call,
+# but tennis serve-detail coverage is explicitly thin. Research first; only
+# an independent exact CDB gap comparison may authorize later import.
+PLAYER_GAMES_PROBE_MAX = 16
+PLAYER_GAMES_LIMIT = 100
+PLAYER_STATS_FOCUS = ("aces", "dblfaults", "breakpts", "breakpts_w",
+                      "tiebreaks", "tiebreaks_w", "total_games", "sets_won")
+
+
+class OptionalStatsAccessUnavailable(Exception):
+    """Optional free-player-game endpoint unavailable; continue normal odds."""
+
+
+def select_player_game_targets(future, limit=PLAYER_GAMES_PROBE_MAX):
+    """Distinct single-player names from already-fetched upcoming ATP/WTA slate."""
+    seen = set()
+    selected = []
+    for _kickoff, event in future:
+        tour = str(event.get("tour") or "").strip().upper()
+        if tour not in {"ATP", "WTA"}:
+            continue
+        # A doubles fixture can contain one pair and one misleading plain name.
+        # Skip the whole fixture rather than querying a pseudo-player.
+        if any(marker in str(event.get(side) or "")
+               for side in ("home_team", "away_team")
+               for marker in ("/", " & ", " + ")):
+            continue
+        for field in ("home_team", "away_team"):
+            name = str(event.get(field) or "").strip()
+            # Do not look up doubles pairs or guessed/corrupted player identities.
+            if (len(name) < 5 or len(name) > 100 or "/" in name
+                    or " & " in name or " + " in name or "," in name):
+                continue
+            norm = " ".join(name.casefold().split())
+            if norm not in seen:
+                seen.add(norm)
+                selected.append(name)
+            if len(selected) >= limit:
+                return selected
+    return selected
+
+
+def summarize_player_games(payload):
+    """Diagnostic only: counts raw useful tennis stats, NOT new CDB cells."""
+    games = payload.get("games") if isinstance(payload, dict) else None
+    if not isinstance(games, list):
+        return {"response_shape_valid": False, "games": 0,
+                "completed_with_focus": 0, "focus_fields": {}}
+    field_counts = {key: 0 for key in PLAYER_STATS_FOCUS}
+    completed = 0
+    for item in games:
+        if not isinstance(item, dict) or item.get("status") != "final":
+            continue
+        stats = item.get("stats")
+        if not isinstance(stats, dict):
+            continue
+        found = False
+        for key in PLAYER_STATS_FOCUS:
+            value = stats.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                field_counts[key] += 1
+                found = True
+        if found:
+            completed += 1
+    return {"response_shape_valid": True, "games": len(games),
+            "completed_with_focus": completed,
+            "focus_fields": {k: n for k, n in field_counts.items() if n}}
+
+
+def probe_player_games(future, day, runid):
+    """Bounded, research-only historical stats audit; no canonical writes."""
+    targets = select_player_game_targets(future)
+    examined = 0
+    attempted = 0
+    with_stats = 0
+    for name in targets:
+        if STATE["reason"] or STATE["calls"] >= MAX_CALLS:
+            break
+        path = "/sports/tennis/players/" + urllib.parse.quote(name, safe="") + "/games"
+        attempted += 1
+        try:
+            result = request(path, {"limit": PLAYER_GAMES_LIMIT}, allow_not_found=True)
+        except OptionalStatsAccessUnavailable:
+            # Not entitled to this optional endpoint. Do not waste the nightly
+            # quota retrying other names; preserve the existing odds closeout.
+            print(json.dumps({"player_games_probe": "not_entitled_or_disabled"}), flush=True)
+            break
+        if result is None:
+            if STATE["reason"]:
+                break
+            continue
+        summary = summarize_player_games(result)
+        examined += 1
+        with_stats += summary["completed_with_focus"]
+        DATA.append({"stage": "player_game_stats_probe", "player_name": name,
+                     "captured_at_utc": now().isoformat(), "summary": summary,
+                     "payload": result, "research_only": True})
+        flush_if_needed(day, runid)
+    print(json.dumps({"player_games_probe": {"attempted": attempted,
+                      "responses": examined, "games_with_relevant_stats": with_stats,
+                      "new_cdb_cells_verified": None}}), flush=True)
+
 
 WAIT = 0.2  # Hard pacing: at most 5 attempted PropLine requests / second
 STATE = {"calls": 0, "remaining": None, "reason": "", "batches": 0}
@@ -120,7 +227,7 @@ def flush_if_needed(day, runid):
         save(day, runid)
 
 
-def request(path, params=None):
+def request(path, params=None, *, allow_not_found=False):
     if STATE["calls"] >= MAX_CALLS:
         STATE["reason"] = "run_cap"
         return None
@@ -158,6 +265,11 @@ def request(path, params=None):
             rem = exc.headers.get("X-Daily-Remaining")
             if rem is not None:
                 STATE["remaining"] = int(rem)
+            # Missing player logs are normal; do not poison unrelated night odds.
+            if allow_not_found and exc.code == 404:
+                return None
+            if allow_not_found and exc.code == 403:
+                raise OptionalStatsAccessUnavailable() from None
             if exc.code == 429:
                 retry = exc.headers.get("Retry-After", "1")
                 try:
@@ -223,9 +335,13 @@ def collect():
                 future.append((kickoff, e))
         future.sort(key=lambda item: item[0])
         print(json.dumps({"eligible_events": len(future), "budget": MAX_CALLS, "scope_days": 7}), flush=True)
+        # The extra calls are drawn ONLY from the existing nightly 750 cap.
+        # They target raw completed-match stats, not offered betting lines.
+        probe_player_games(future, day, runid)
         discovered = []
+        discovery_call_cap = max(0, (MAX_CALLS - STATE["calls"]) // 2)
         for kickoff, event in future:
-            if STATE["reason"] or STATE["calls"] >= max(1, (MAX_CALLS - 1) // 2):
+            if STATE["reason"] or len(discovered) >= discovery_call_cap:
                 break
             eid = str(event["id"])
             markets = request(f"/sports/tennis/events/{eid}/markets")
