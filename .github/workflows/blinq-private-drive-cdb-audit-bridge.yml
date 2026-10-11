@@ -47,7 +47,7 @@ jobs:
       PRIVATE_REPO: BackstageTalks/tbt-data
       DRIVE_ROOT: 17UChTTWLpC-7tZIbvTXKA4_2eqooV44A
       PRIVATE_CACHE_RELEASE: blinq-drive-cdb-audit-cache-v1
-      SOURCE_REF: 5166c9695269fa3c570e5a42f6e2f7a8133b554a
+      SOURCE_REF: fb82ce4b9931dd951488fc88342f8dca93fc9784
       PYTHONPATH: api:scripts:private/scripts
     steps:
       - name: Preflight trust and private-only credentials
