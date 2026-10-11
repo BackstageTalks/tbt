@@ -17,6 +17,25 @@ class RejectedHtmlTests(unittest.TestCase):
         self.assertTrue(result["client_rendered_shell"])
         self.assertFalse(result["serve_stat_terms"])
 
+    def test_empty_main_hides_populated_body(self):
+        html=('<html><body><main></main><section>'
+              'Aces 2 7. First Serve 61% 72%. Break Points 1/3.'
+              '</section></body></html>')
+        report=inspect_html(html)
+        self.assertTrue(report["main_present"])
+        self.assertEqual(report["main_visible_chars"],0)
+        self.assertGreater(report["body_visible_chars"],0)
+        self.assertEqual(report["original_selector_visible_chars"],0)
+        self.assertTrue(report["body_serve_terms"])
+        self.assertFalse(report["original_selector_serve_terms"])
+
+    def test_table_stats_rows_detected(self):
+        html='<main><table><tr><td>Aces</td><td>5</td><td>8</td></tr></table></main>'
+        report=inspect_html(html)
+        self.assertEqual(report["table_count"],1)
+        self.assertEqual(report["nonempty_table_rows"],1)
+        self.assertTrue(report["table_contains_serve_labels"])
+
     def test_provider_denial_detected(self):
         result=inspect_html("<html>Access denied — please wait</html>")
         self.assertTrue(result["blocked_or_denied"])
