@@ -123,7 +123,8 @@ def main():
     p.add_argument("--archive",type=Path,required=True)
     p.add_argument("--source-sha256",default=SOURCE_SHA256)
     p.add_argument("--out",type=Path,required=True)
-    print(json.dumps(extract(**vars(p.parse_args())),sort_keys=True))
+    a=p.parse_args()
+    print(json.dumps(extract(a.archive,a.source_sha256,a.out),sort_keys=True))
 
 if __name__=="__main__":
     main()
