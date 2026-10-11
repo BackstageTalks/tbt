@@ -15,7 +15,7 @@ are changed here.
 from __future__ import annotations
 
 from copy import deepcopy
-from types import SimpleNamespace
+import math
 from datetime import datetime, timedelta, timezone
 import re
 import time
@@ -329,6 +329,128 @@ def _runtime_publication_key(
     return f"{event_id}|{section}|{market}|{selection}|{issued_at}|{index}"
 
 
+def _finite_count(raw: Any) -> float | None:
+    if isinstance(raw, bool) or raw is None:
+        return None
+    try:
+        n = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return n if math.isfinite(n) and n >= 0 else None
+
+
+def _grade_runtime_projection(
+    row: dict[str, Any], publication: dict[str, Any], status_row: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Apply the frozen offline market rules without importing ML dependencies.
+
+    Only verified full-match evidence from the same event can settle a market.
+    Partial provider counts and unpriced projections never invent betting ROI.
+    """
+    market = str(publication.get("market") or "").lower()
+    scheduled = _parse_time(row.get("scheduled_at"))
+    issued = _parse_time(publication.get("issued_at"))
+    if scheduled is None or issued is None or issued >= scheduled:
+        return None
+    state = str(status_row.get("status") or "").lower()
+    if state not in TERMINAL_STATUSES:
+        return None
+    base = {
+        "settled_at": status_row.get("checked_at") or scheduled.isoformat(),
+        "scheduled_at": scheduled.isoformat(),
+        "runtime_overlay": True,
+        "runtime_source": "match_status_snapshot",
+    }
+    if state in {"retired", "void"}:
+        result = {**base, "status": "void", "reason": state,
+                  "correct": None, "void": True,
+                  "staked_units": 0.0, "return_units": 0.0, "profit_units": 0.0}
+    else:
+        stats = status_row.get("projection_stats")
+        if not isinstance(stats, dict):
+            return None
+        actual = other = reference = None
+        selected = str(publication.get("selection_id") or "")
+        if market in {"aces", "double_faults"}:
+            p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
+            if not p1 or not p2 or p1 == p2 or selected not in {p1, p2}:
+                return None
+            own = "p1" if selected == p1 else "p2"
+            opponent = "p2" if own == "p1" else "p1"
+            actual = _finite_count(stats.get(f"{own}_{market}"))
+            other = _finite_count(stats.get(f"{opponent}_{market}"))
+            if actual is None:
+                return None
+            contract = str(publication.get("price_contract") or "").lower()
+            if contract == "player_total_ou":
+                direction = str(publication.get("ou_side") or "").lower()
+                reference = _finite_count(publication.get("market_line"))
+                if reference is None or direction not in {"over", "under"}:
+                    return None
+                correct = actual > reference if direction == "over" else actual < reference
+                equal = actual == reference
+            elif contract in {"", "player_superiority"}:
+                if other is None:
+                    return None
+                correct = actual > other
+                equal = actual == other
+            else:
+                return None
+        elif market in {"sets", "games"}:
+            actual = _finite_count(stats.get("total_sets" if market == "sets" else "total_games"))
+            if actual is None or actual <= 0:
+                return None
+            if market == "sets":
+                parts = selected.lower().split(":")
+                if len(parts) < 3 or parts[0] != "sets" or parts[1] not in {"over", "under"}:
+                    return None
+                direction = parts[1]
+                reference = _finite_count(parts[2])
+            else:
+                direction = str(publication.get("projection_direction") or "").lower()
+                if not direction and selected.lower().startswith("games:"):
+                    direction = selected.lower().split(":", 1)[1]
+                reference = _finite_count(publication.get("reference_projection"))
+                if direction not in {"high", "low"}:
+                    return None
+            if reference is None:
+                return None
+            correct = actual > reference if direction in {"over", "high"} else actual < reference
+            equal = actual == reference
+        else:
+            return None
+        status = "void" if equal else "hit" if correct else "miss"
+        result = {
+            **base, "status": status, "correct": None if equal else correct,
+            "void": equal, "actual_count": actual,
+            "projection": publication.get("projection"),
+            "projection_scope": publication.get("projection_scope") or (
+                "player" if market in {"aces", "double_faults"} else "match_total"
+            ),
+            "projection_metric": publication.get("projection_metric") or market,
+            "data_depth": publication.get("data_depth"),
+        }
+        if other is not None:
+            result["opponent_actual_count"] = other
+        if market in {"aces", "double_faults"}:
+            result["opponent_projection"] = publication.get("opponent_projection")
+        else:
+            result["reference_projection"] = reference
+        if equal:
+            result.update(staked_units=0.0, return_units=0.0, profit_units=0.0)
+        elif str(publication.get("price_status") or "").lower() == "priced_projection":
+            odds = _finite_count(publication.get("odds"))
+            if odds is not None and odds > 1:
+                result.update(
+                    staked_units=1.0,
+                    return_units=odds if correct else 0.0,
+                    profit_units=odds - 1.0 if correct else -1.0,
+                )
+    scored = deepcopy(publication)
+    scored["result"] = result
+    return scored
+
+
 def runtime_settled_results(
     feed: dict[str, Any], statuses: dict[str, Any] | None
 ) -> list[dict[str, Any]]:
@@ -427,36 +549,9 @@ def runtime_settled_results(
                     continue
 
                 if projection:
-                    stats = status_row.get("projection_stats")
-                    stats = stats if isinstance(stats, dict) else {}
-                    if not stats and status not in {"retired", "void"}:
+                    scored = _grade_runtime_projection(row, publication, status_row)
+                    if scored is None:
                         continue
-                    # The exact issued contract is graded with the same offline
-                    # settlement rules as refresh; never infer aces from winner.
-                    from .engine import (
-                        _settle_projection_publications, _settle_sg_projection_publications,
-                    )
-                    match = SimpleNamespace(
-                        player1_id=_player_id(row, "player1"),
-                        player2_id=_player_id(row, "player2"),
-                        scheduled_at=_parse_time(row.get("scheduled_at")),
-                        status="retired" if status == "retired" else "cancelled" if status == "void" else "finished",
-                        provider_payload={}, stats=stats,
-                    )
-                    if match.scheduled_at is None or not match.player1_id or not match.player2_id:
-                        continue
-                    scored = deepcopy(publication)
-                    wrapper = {"market_publications": [scored]}
-                    if market in {"aces", "double_faults"}:
-                        _settle_projection_publications(wrapper, match, _parse_time(status_row.get("checked_at")) or datetime.now(timezone.utc))
-                    else:
-                        _settle_sg_projection_publications(wrapper, match, _parse_time(status_row.get("checked_at")) or datetime.now(timezone.utc))
-                    graded = scored.get("result")
-                    if not isinstance(graded, dict) or graded.get("status") not in {"hit", "miss", "void"}:
-                        continue
-                    graded["runtime_overlay"] = True
-                    graded["runtime_source"] = "match_status_snapshot"
-                    graded["void"] = graded.get("status") == "void"
                     overlay_publications.append(scored)
                     runtime_seen.add(key)
                     runtime_seen_identities.add(identity)
