@@ -112,7 +112,9 @@ def valid_set_score(sets, p1_sets, p2_sets, winner_player, best_of):
 def load_sidecars(path):
     result={}
     sha={}
-    for p in sorted(path.glob("blinq-uploaded-match-enrichment-*.jsonl.gz")):
+    source_files = (sorted(path.glob("blinq-uploaded-match-enrichment-*.jsonl.gz")) +
+                    sorted(path.glob("blinq-uploaded-td-atp-2025-enrichment.jsonl.gz")))
+    for p in source_files:
         sha[p.name]=dump_hash(p)
         with gzip.open(p,"rt",encoding="utf-8") as f:
             for line in f:
