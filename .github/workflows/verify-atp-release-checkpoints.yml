@@ -42,27 +42,35 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Retrieve candidate private ATP parser by immutable commit
+      - name: Retrieve candidate source and recovery QA from pinned private commit
         shell: bash
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN"
-          gh api 'repos/BackstageTalks/tbt-data/contents/scripts/scrape_atptour_official.py?ref=d5f8bb18860d821eb0b4b04275fe9a9e09b96368' > /tmp/atp_source.json
           python - <<'PY'
-          import base64,json
+          import base64,json,subprocess
           from pathlib import Path
-          data=json.loads(Path('/tmp/atp_source.json').read_text())
-          if data.get('encoding')!='base64':
-              raise SystemExit('Private parser not available for source QA')
-          Path('/tmp/scrape_atptour_official.py').write_bytes(base64.b64decode(data['content']))
+          commit="f2c1a38ac6efdbaa429ed96710338844a94ebf26"
+          scripts=("scrape_atptour_official.py","recover_cdb_source_shard.py",
+                   "test_recover_cdb_source_shard.py","scrape_tennisexplorer_details.py")
+          for name in scripts:
+              endpoint=f"repos/BackstageTalks/tbt-data/contents/scripts/{name}?ref={commit}"
+              proc=subprocess.run(["gh","api",endpoint],text=True,
+                                  capture_output=True,check=True)
+              obj=json.loads(proc.stdout)
+              if obj.get("encoding")!="base64":
+                  raise SystemExit("Private source unavailable: "+name)
+              Path("/tmp",name).write_bytes(base64.b64decode(obj["content"]))
+          print("PINNED_PRIVATE_PARSER_LOADED",commit,len(scripts))
           PY
-      - name: Run actual private parser offline completion contract
+      - name: Run actual private parser and recovery offline contracts
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check requests beautifulsoup4
-          python -m py_compile /tmp/scrape_atptour_official.py
+          python -m py_compile /tmp/scrape_atptour_official.py /tmp/recover_cdb_source_shard.py /tmp/test_recover_cdb_source_shard.py
           python /tmp/scrape_atptour_official.py --mode selftest
+          python /tmp/test_recover_cdb_source_shard.py
 
   private-release-audit:
     if: github.event_name != 'pull_request'
