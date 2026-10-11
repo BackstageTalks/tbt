@@ -187,6 +187,102 @@ def compare(source: list[dict], canonical: list[dict]) -> dict:
     }
 
 
+
+def _surname_initial(name: str, *, source: bool) -> tuple[str, str] | None:
+    tokens = norm(name).split()
+    if len(tokens) < 2:
+        return None
+    if source and len(tokens[-1]) == 1:
+        family, initial = tokens[-2], tokens[-1]
+    elif source and len(tokens[0]) == 1:
+        family, initial = tokens[-1], tokens[0]
+    else:
+        family, initial = tokens[-1], tokens[0][0]
+    if not family or not initial:
+        return None
+    return family, initial[0]
+
+
+def name_format_diagnostics(source: list[dict], canonical: list[dict]) -> dict:
+    """Aggregate research-only alternate-name hit rates, with no links exported.
+
+    The surname+first-initial representation is NOT an independently proven
+    player crosswalk. It is only a diagnostic to explain strict zero-overlap.
+    """
+    full_token_ix = defaultdict(list)
+    initial_ix = defaultdict(list)
+    for row in canonical:
+        if str(row.get("tour") or "").lower() != "wta":
+            continue
+        a, b = norm(row.get("player1_name")), norm(row.get("player2_name"))
+        if not a or not b or a == b:
+            continue
+        try:
+            day = pd.Timestamp(row["scheduled_at"]).date()
+        except (ValueError, TypeError):
+            continue
+        full_token_ix[frozenset((tuple(sorted(a.split())),
+                                tuple(sorted(b.split()))))].append((day, row))
+        # Both source and canonical providers sometimes reverse given/family
+        # order. Index both structural interpretations only as weak diagnostics.
+        ta, tb = a.split(), b.split()
+        fa = {(ta[-1], ta[0][0]), (ta[0], ta[-1][0])} if len(ta) >= 2 else set()
+        fb = {(tb[-1], tb[0][0]), (tb[0], tb[-1][0])} if len(tb) >= 2 else set()
+        for ai in fa:
+            for bi in fb:
+                if ai != bi:
+                    initial_ix[frozenset((ai, bi))].append((day, row))
+
+    counts = Counter()
+    for row in source:
+        if row.get("category") != "wta-single":
+            continue
+        pp = source_players(row)
+        if pp is None:
+            continue
+        counts["source_rows_with_two_source_player_names"] += 1
+        if any(len(tok) == 1 for n in pp for tok in n.split()):
+            counts["source_rows_containing_a_single_letter_token"] += 1
+        try:
+            day = date.fromisoformat(str(row["date"]))
+        except (ValueError, KeyError, TypeError):
+            continue
+        fullkey = frozenset(tuple(sorted(name.split())) for name in pp)
+        full_matches = [m for dt, m in full_token_ix.get(fullkey, ())
+                        if abs((dt-day).days) <= 1]
+        if full_matches:
+            counts["unordered_full_token_pair_day_candidate_rows"] += 1
+            if any(norm(m.get("tournament")) == norm(row.get("tournament"))
+                   for m in full_matches):
+                counts["unordered_full_token_pair_day_tournament_candidate_rows"] += 1
+
+        si = tuple(_surname_initial(n, source=True) for n in pp)
+        if None in si or si[0] == si[1]:
+            continue
+        abbr_candidates = [m for dt, m in initial_ix.get(frozenset(si), ())
+                           if abs((dt-day).days) <= 1]
+        # A canonical match can be reachable through several name-order forms.
+        # Count unique canonical identities rather than repeated index entries.
+        abbr_matches = list({str(m.get("match_id")): m for m in abbr_candidates}.values())
+        if abbr_matches:
+            counts["surname_initial_pair_day_candidate_rows_research_only"] += 1
+            agree = [m for m in abbr_matches
+                     if norm(m.get("tournament")) == norm(row.get("tournament"))]
+            if agree:
+                counts["surname_initial_pair_day_tournament_candidate_rows_research_only"] += 1
+                if len(agree) == 1:
+                    counts["surname_initial_unique_match_candidate_rows_research_only"] += 1
+            elif not full_matches:
+                counts["surname_initial_day_only_tournament_mismatch_rows"] += 1
+    return {
+        "counts": dict(sorted(counts.items())),
+        "identity_policy": "RESEARCH_ONLY; surname and first initial are not independently verified source player IDs",
+        "canonical_link_approved": False,
+        "new_cdb_cells_approved": 0,
+        "player_id_crosswalk_exported": False,
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", type=Path, required=True)
@@ -217,6 +313,7 @@ def main() -> None:
             source = list(csv.DictReader(text))
     frame = pd.read_parquet(args.canonical, columns=list(CDB_COLUMNS))
     report = compare(source, canonical_rows(frame))
+    report["name_format_diagnostics"] = name_format_diagnostics(source, canonical_rows(frame))
     report["verified_source_sha256"] = args.source_sha256
     report["verified_current_2024_cdb_sha256"] = args.canonical_sha256
     report["canonical_rows_in_year"] = len(frame)

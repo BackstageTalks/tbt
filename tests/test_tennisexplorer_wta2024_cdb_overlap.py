@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from audit_tennisexplorer_wta2024_cdb_overlap import (
-    canonical_rows, compare, result_side, source_players,
+    canonical_rows, compare, result_side, source_players, name_format_diagnostics,
 )
 
 
@@ -102,3 +102,38 @@ def test_doubles_and_missing_player_ids_excluded():
     assert x["counts"]["wrong_source_tour_or_category"] == 1
     y = compare([src(side1_players_json='["A","B"]')], [cdb()])
     assert y["counts"]["incomplete_source_player_identity"] == 1
+
+
+def test_unordered_full_tokens_reveal_reversed_source_name_order_without_links():
+    rows=[src(side1_players_json='["Swiatek Iga"]')]
+    diag=name_format_diagnostics(rows,[cdb()])
+    assert diag["counts"]["unordered_full_token_pair_day_candidate_rows"] == 1
+    assert diag["counts"]["unordered_full_token_pair_day_tournament_candidate_rows"] == 1
+    assert diag["canonical_link_approved"] is False
+
+
+def test_abbreviated_surname_initial_is_research_only():
+    rows=[src(side1_players_json='["Swiatek I."]',
+              side2_players_json='["Two P."]')]
+    diag=name_format_diagnostics(rows,[cdb()])
+    assert diag["counts"]["source_rows_containing_a_single_letter_token"] == 1
+    assert diag["counts"]["surname_initial_pair_day_candidate_rows_research_only"] == 1
+    assert diag["counts"]["surname_initial_pair_day_tournament_candidate_rows_research_only"] == 1
+    assert diag["player_id_crosswalk_exported"] is False
+    assert diag["new_cdb_cells_approved"] == 0
+
+
+def test_surname_initial_same_pair_wrong_tournament_not_verified():
+    rows=[src(tournament="Other tournament",
+              side1_players_json='["Swiatek I."]',
+              side2_players_json='["Two P."]')]
+    diag=name_format_diagnostics(rows,[cdb()])
+    assert diag["counts"]["surname_initial_pair_day_candidate_rows_research_only"] == 1
+    assert diag["counts"].get("surname_initial_pair_day_tournament_candidate_rows_research_only",0)==0
+
+
+def test_identical_surname_initial_collisions_rejected():
+    rows=[src(side1_players_json='["Smith J."]',
+              side2_players_json='["Smith J."]')]
+    diag=name_format_diagnostics(rows,[cdb()])
+    assert diag["counts"].get("surname_initial_pair_day_candidate_rows_research_only",0)==0
