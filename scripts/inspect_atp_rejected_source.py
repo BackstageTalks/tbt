@@ -37,7 +37,38 @@ def inspect_html(html):
     stripped = re.sub(r"\s+", " ", stripped).strip()
     features = {name: bool(re.search(pattern, html, flags=re.I | re.S))
                 for name, pattern in FEATURES.items()}
+    # Reproduce the original ATP collector's selector precedence without
+    # outputting any text content. This disambiguates empty <main> from
+    # browser-only pages and from nonempty stats outside <main>.
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+    main = soup.select_one("main")
+    stats_node = soup.select_one(".atp_match-stats")
+    body = soup.body
+    first = main or stats_node or body
+    def condensed(n):
+        return n.get_text(" ", strip=True) if n else ""
+    a, b, c, selected = [condensed(n) for n in (main, stats_node, body, first)]
+    nonempty_rows = sum(1 for tr in soup.select("table tr")
+                        if any(cell.get_text(" ", strip=True)
+                               for cell in tr.select("th,td")))
+    table_labels = bool(re.search(
+        r"\\b(?:aces?|double faults?|break points?|first serve|second serve)\\b",
+        " ".join(x.get_text(" ", strip=True) for x in soup.select("table")),
+        re.I))
     return {
+        "main_present": main is not None,
+        "main_visible_chars": len(a),
+        "stats_node_present": stats_node is not None,
+        "stats_node_visible_chars": len(b),
+        "body_visible_chars": len(c),
+        "original_selector_visible_chars": len(selected),
+        "table_count": len(soup.select("table")),
+        "nonempty_table_rows": nonempty_rows,
+        "table_contains_serve_labels": table_labels,
+        "body_serve_terms": bool(re.search(FEATURES["serve_stat_terms"], c, re.I)),
+        "original_selector_serve_terms":
+            bool(re.search(FEATURES["serve_stat_terms"], selected, re.I)),
         "html_bytes": len(html.encode("utf-8")),
         "visible_characters_rough": len(stripped),
         "digit_count_visible_rough": sum(ch.isdigit() for ch in stripped),
@@ -78,6 +109,23 @@ def inspect_checkpoint(path, digest):
             (r["visible_characters_rough"] for r in samples), default=0),
         "max_visible_digits_rough": max(
             (r["digit_count_visible_rough"] for r in samples), default=0),
+        "dom_selector_counts": {
+            "main_present": sum(x["main_present"] for x in samples),
+            "stats_node_present": sum(x["stats_node_present"] for x in samples),
+            "main_empty_but_body_nonempty": sum(
+                x["main_present"] and x["main_visible_chars"] == 0
+                and x["body_visible_chars"] > 100 for x in samples),
+            "selector_lost_body_stats_terms": sum(
+                x["body_serve_terms"] and not x["original_selector_serve_terms"]
+                for x in samples),
+            "table_count": sum(x["table_count"] for x in samples),
+            "nonempty_table_rows": sum(x["nonempty_table_rows"] for x in samples),
+            "serve_labeled_tables": sum(x["table_contains_serve_labels"]
+                                       for x in samples),
+        },
+        "largest_body_chars": max((x["body_visible_chars"] for x in samples),default=0),
+        "largest_selected_chars": max(
+            (x["original_selector_visible_chars"] for x in samples),default=0),
         "feature_counts": {name: sum(bool(s[name]) for s in samples) for name in fields},
         "provider_requests": 0,
         "production_cdb_modified": False,
