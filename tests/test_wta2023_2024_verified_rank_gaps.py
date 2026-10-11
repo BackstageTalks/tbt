@@ -24,6 +24,7 @@ def test_exact_source_id_prior_week_and_two_nulls(monkeypatch,year):
     monkeypatch.setattr(a,"YEAR",year)
     report,stage=a.audit_rows([match(year)],Source(year),SHA,{})
     assert report["year"]==year
+    assert report["status"]==f"READ_ONLY_WTA{year}_ID_RANK_CDB_GAPS"
     assert report["counts"]["candidate_rank_cells"]==2
     assert stage[0]["canonical_year"]==year
     assert stage[0]["add_only_null_fields"]=={"player1_rank":12,"player2_rank":34}
