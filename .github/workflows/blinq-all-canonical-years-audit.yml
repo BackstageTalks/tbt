@@ -1,0 +1,176 @@
+name: BlinQ all 78 canonical year partitions structural row audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-all-canonical-years-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-canonical-years-read-only-audit
+  cancel-in-progress: false
+
+jobs:
+  audit-all-years:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      CANONICAL_RELEASE: tbt-data-v1
+      PRIVATE_AUDIT_RELEASE: blinq-complete-git-byte-audit-20261011-38119153567
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download and pin full current canonical year snapshots
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          mkdir -p /tmp/blinq-canonical-audit/year /tmp/blinq-canonical-audit/report
+          gh api "repos/$PRIVATE_REPO/releases/tags/$CANONICAL_RELEASE" \
+            > /tmp/blinq-canonical-audit/release.json
+          gh release download "$CANONICAL_RELEASE" -R "$PRIVATE_REPO" \
+            -p 'history-*.parquet' -p 'history_manifest.json' \
+            -p '_tbt_bundle_manifest.json' -D /tmp/blinq-canonical-audit/year
+          python -m pip install "pandas>=2,<3" pyarrow
+      - name: Independently check every Parquet manifest, row identity and stat structure
+        timeout-minutes: 20
+        run: |
+          python - <<'PY'
+          import collections
+          import hashlib
+          import json
+          from pathlib import Path
+          import re
+          import pandas as pd
+
+          root=Path("/tmp/blinq-canonical-audit/year")
+          release=json.loads(Path("/tmp/blinq-canonical-audit/release.json").read_text())
+          release_assets={a["name"]:a for a in release["assets"]}
+          manifest=json.loads((root/"history_manifest.json").read_text())
+          years=manifest.get("years") or {}
+          paths=sorted(root.glob("history-*.parquet"))
+          counts=collections.Counter()
+          issues=[]
+          rows=[]
+          seen_global=set()
+          assert len(paths)>=78, f"Expected at least 78 current canonical partitions, got {len(paths)}"
+          assert len(years)>=78, "Missing canonical history manifest years"
+          for p in paths:
+              match=re.fullmatch(r"history-(\d{4})\.parquet",p.name)
+              if not match:
+                  issues.append({"file":p.name,"issue":"INVALID_YEAR_PARTITION_NAME"})
+                  continue
+              year=int(match.group(1))
+              digest=hashlib.sha256(p.read_bytes()).hexdigest()
+              a=release_assets.get(p.name) or {}
+              ym=years.get(str(year)) or {}
+              if a.get("digest")!="sha256:"+digest:
+                  issues.append({"year":year,"issue":"REMOTE_ASSET_SHA_DRIFT"})
+                  continue
+              if ym.get("sha256")!=digest:
+                  issues.append({"year":year,"issue":"MANIFEST_PARTITION_SHA_DRIFT"})
+                  continue
+              frame=pd.read_parquet(p,columns=[
+                  "match_id","scheduled_at","tour","player1_id",
+                  "player2_id","winner_id","stats_json"
+              ])
+              n=len(frame)
+              counts["rows_total"]+=n
+              counts["partitions_sha_manifest_verified"]+=1
+              counts["bytes_sha_verified"]+=p.stat().st_size
+              if ym.get("rows")!=n:
+                  issues.append({"year":year,"issue":"MANIFEST_ROW_COUNT_DRIFT"})
+              ids=frame["match_id"].astype(str)
+              dupl=ids.duplicated().sum()
+              counts["duplicate_ids_within_year"]+=int(dupl)
+              global_repeats=sum(mid in seen_global for mid in ids)
+              counts["duplicate_match_ids_cross_year"]+=global_repeats
+              seen_global.update(ids)
+              dates=pd.to_datetime(frame["scheduled_at"],utc=True,errors="coerce")
+              wrong=int(((dates.dt.year!=year)|dates.isna()).sum())
+              counts["scheduled_year_mismatches"]+=wrong
+              same=int((frame["player1_id"].astype(str)==frame["player2_id"].astype(str)).sum())
+              counts["same_player_id_both_sides"]+=same
+              missing_id=int(frame["match_id"].isna().sum()+frame["player1_id"].isna().sum()+frame["player2_id"].isna().sum())
+              counts["missing_required_identity_cells"]+=missing_id
+              eligible=0
+              invalid_stats=0
+              for raw in frame["stats_json"]:
+                  try:
+                      d=json.loads(raw) if isinstance(raw,str) and raw else {}
+                      if not isinstance(d,dict):
+                          raise ValueError("stats not object")
+                      if d:
+                          eligible+=1
+                  except (ValueError,TypeError):
+                      invalid_stats+=1
+              counts["matches_with_nonempty_stats_json"]+=eligible
+              counts["invalid_stats_json_rows"]+=invalid_stats
+              counts["wta_rows"]+=int((frame["tour"].astype(str).str.lower()=="wta").sum())
+              counts["atp_rows"]+=int((frame["tour"].astype(str).str.lower()=="atp").sum())
+              rows.append({"year":year,"rows":n,"sha256":digest,
+                           "with_stats":eligible,"invalid_stats":invalid_stats,
+                           "duplicate_match_ids":int(dupl),
+                           "wrong_scheduled_year":wrong})
+          expected_names={"history-"+str(y)+".parquet" for y in years}
+          downloaded={p.name for p in paths}
+          if downloaded!=expected_names:
+              issues.append({"issue":"MANIFEST_PARTITION_SET_NOT_EQUAL_ASSETS",
+                             "manifest_only":len(expected_names-downloaded),
+                             "download_only":len(downloaded-expected_names)})
+          report={
+              "schema":1,
+              "status":"EVERY_CANONICAL_YEAR_CONTENT_ROW_AND_MANIFEST_CHECKED"
+                       if not issues and counts["partitions_sha_manifest_verified"]==len(paths)
+                       else "CANONICAL_YEAR_AUDIT_HAS_EXCEPTIONS",
+              "source":"private tbt-data-v1 pinned GitHub Release snapshot",
+              "current_release_manifest_sha256":hashlib.sha256((root/"history_manifest.json").read_bytes()).hexdigest(),
+              "release_bundle_manifest_sha256":hashlib.sha256((root/"_tbt_bundle_manifest.json").read_bytes()).hexdigest(),
+              "counts":dict(counts),
+              "year_partitions":rows,
+              "issues":issues,
+              "canonical_cdb_writes":0,
+              "model_trained_or_promoted":False,
+              "provider_requests":0,
+              "scope_limit":"Parquet JSON/identity structure, not complete point-in-time or source-to-CDB field eligibility proof",
+          }
+          dest=Path("/tmp/blinq-canonical-audit/report/canonical-all-year-audit.json")
+          dest.write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
+          print("ALL_CANONICAL_YEARS_AUDITED",
+                report["status"], "PARTITIONS",len(paths),
+                "MATCHES",counts["rows_total"],"STRUCTURAL_ISSUES",len(issues),
+                "INVALID_STATS_JSON",counts["invalid_stats_json_rows"],
+                "DUPLICATE_IDS",counts["duplicate_match_ids_within_year"]+counts["duplicate_match_ids_cross_year"])
+          PY
+      - name: Preserve aggregate-only canonical year QA privately and independently reread
+        if: always()
+        run: |
+          set -euo pipefail
+          cd /tmp/blinq-canonical-audit/report
+          test -s canonical-all-year-audit.json
+          sha256sum canonical-all-year-audit.json > canonical-all-year-SHA256SUMS
+          sha256sum -c canonical-all-year-SHA256SUMS
+          gh release upload "$PRIVATE_AUDIT_RELEASE" \
+            canonical-all-year-audit.json canonical-all-year-SHA256SUMS -R "$PRIVATE_REPO"
+          mkdir -p readback
+          gh release download "$PRIVATE_AUDIT_RELEASE" -R "$PRIVATE_REPO" \
+            -p 'canonical-all-year-*' -D readback
+          (cd readback && sha256sum -c canonical-all-year-SHA256SUMS)
+          python - <<'PY'
+          import json
+          p='readback/canonical-all-year-audit.json'
+          r=json.load(open(p))
+          print('CANONICAL_ALL_YEARS_PRIVATE_REPORT_VERIFIED',r['status'],
+                'years',len(r['year_partitions']),
+                'rows',r['counts']['rows_total'],
+                'issues',len(r['issues']))
+          if r['status']!='EVERY_CANONICAL_YEAR_CONTENT_ROW_AND_MANIFEST_CHECKED':
+              raise SystemExit(2)
+          PY
