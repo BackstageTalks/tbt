@@ -86,3 +86,26 @@ jobs:
             'cdb_delta_verified':False,
           },sort_keys=True))
           PY
+
+      - name: Preserve SHA-checked full source QA report PRIVATE only, then independently read it back
+        run: |
+          set -euo pipefail
+          report=.cache/tbt-private-charting/report.json
+          expected=133d7fb52b454394f5fe8a27018506bc2ab348a7d22c353151a68e6ff6d59703
+          echo "$expected  $report" | sha256sum -c -
+          path=audit/import-preparation/charting-all1742-row-audit-20261011.json
+          remote="repos/$DATA_REPO/contents/$path"
+          mkdir -p .cache/tbt-private-charting/verified
+          if gh api "$remote?ref=main" > .cache/tbt-private-charting/verified/old_metadata.json 2>/dev/null; then
+            gh api "$remote?ref=main" --jq .content | base64 -d > .cache/tbt-private-charting/verified/existing.json
+            cmp "$report" .cache/tbt-private-charting/verified/existing.json ||
+              { echo "Fail closed: private report path collision"; exit 1; }
+          else
+            gh api --method PUT "$remote" \
+              -f message="audit(charting): persist full 1742 private gzip profile identity report" \
+              -f content="$(base64 -w0 "$report")" > .cache/tbt-private-charting/verified/upload.json
+          fi
+          gh api "$remote?ref=main" --jq .content | base64 -d > .cache/tbt-private-charting/verified/persisted.json
+          cmp "$report" .cache/tbt-private-charting/verified/persisted.json
+          echo "$expected  .cache/tbt-private-charting/verified/persisted.json" | sha256sum -c -
+          echo "PRIVATE_FULL_CHARTING_REPORT_VERIFIED_SHA256=$expected"
