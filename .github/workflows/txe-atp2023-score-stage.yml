@@ -38,7 +38,12 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install -r api/requirements.txt -r api/requirements-train.txt pytest
-          python -m pytest -q tests/test_txe_generic_score_semantics.py tests/test_txe_wta2024_scores_exact.py
+          python -m pytest -q tests/test_txe_generic_score_semantics.py
+          (
+            export BLINQ_SCORE_YEAR=2024 BLINQ_SCORE_TOUR=wta \
+              BLINQ_SCORE_SOURCE_SHA=27c779c73bcfaf089e362f3480c4201f032e15fefbc3a0fadaa39bfce9f5956b
+            python -m pytest -q tests/test_txe_wta2024_scores_exact.py
+          )
           python -m compileall -q scripts/stage_txe_wta2024_scores.py scripts/import_txe_wta2024_scores_exact.py
       - name: Retrieve SHA-pinned 2023 ATP original archive and canonical year
         run: |
