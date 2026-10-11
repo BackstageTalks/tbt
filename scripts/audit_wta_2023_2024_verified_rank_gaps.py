@@ -80,7 +80,7 @@ def audit_rows(matches, ranking, year_sha, source_hashes):
         months[month]["candidate_matches"] += 1
         months[month]["candidate_cells"] += len(additions)
     return {
-        "schema":1, "status":"READ_ONLY_WTA2025_ID_RANK_CDB_GAPS",
+        "schema":1, "status":f"READ_ONLY_WTA{YEAR}_ID_RANK_CDB_GAPS",
         "year":YEAR, "canonical_year_sha256":year_sha, "source_sha256":source_hashes,
         "counts":dict(counts), "quarantined":dict(quarantined),
         "months":{key:dict(value) for key,value in sorted(months.items())},
