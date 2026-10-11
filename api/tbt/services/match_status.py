@@ -15,6 +15,7 @@ are changed here.
 from __future__ import annotations
 
 from copy import deepcopy
+import math
 from datetime import datetime, timedelta, timezone
 import re
 import time
@@ -58,6 +59,8 @@ _PUBLIC_MATCH_WINNER_KEYS = (
     "value_picks",
     "doubles_picks",
 )
+_PUBLIC_PROJECTION_KEYS = ("ace_picks", "sg_picks")
+_PROJECTION_MARKETS = {"aces", "double_faults", "sets", "games"}
 LEGACY_PENDING_CARRY_HOURS = 48
 
 
@@ -146,7 +149,7 @@ def prediction_rows(
             if existing is None or quality > old_quality:
                 out[eid] = row
 
-    public_contract_present = any(key in feed for key in _PUBLIC_MATCH_WINNER_KEYS)
+    public_contract_present = any(key in feed for key in (_PUBLIC_MATCH_WINNER_KEYS + _PUBLIC_PROJECTION_KEYS))
     if public_contract_present:
         for key in _PUBLIC_MATCH_WINNER_KEYS:
             rows = feed.get(key)
@@ -160,6 +163,35 @@ def prediction_rows(
         # the public market-section contract. Production feeds carry the public
         # keys above, so generic model-board rows are never queued there.
         add_rows(feed.get("upcoming"))
+
+    # Stat-only published fixtures must enter the same bounded finished-event
+    # lookup. Prefer existing winner rows, and never treat an O/U selection ID
+    # (e.g. sets:over:2.5) as the predicted match winner.
+    if public_contract_present:
+        for key in _PUBLIC_PROJECTION_KEYS:
+            for row in feed.get(key, []) or []:
+                if not isinstance(row, dict) or not _scheduled_in_current_betting_day(row, now):
+                    continue
+                eid = _event_id(row)
+                if not eid or eid in out:
+                    continue
+                publications = row.get("market_publications") or []
+                if not any(
+                    isinstance(p, dict)
+                    and str(p.get("market") or "").lower() in _PROJECTION_MARKETS
+                    and p.get("issued_at")
+                    and str(p.get("publication_status") or "") == "published"
+                    for p in publications
+                ):
+                    continue
+                p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
+                anchor = str(row.get("winner_id") or "").strip()
+                if not p1 or not p2 or p1 == p2 or anchor not in {p1, p2}:
+                    continue
+                safe_row = dict(row)
+                safe_row["betting"] = {}
+                safe_row["selection_id"] = anchor
+                out[eid] = safe_row
 
     return out
 
@@ -175,6 +207,8 @@ _RUNTIME_RESULT_SOURCE_KEYS = (
     "top_daily_picks",
     "value_picks",
     "doubles_picks",
+    "ace_picks",
+    "sg_picks",
 )
 
 _RUNTIME_RESULT_SOURCE_SECTIONS = {
@@ -185,6 +219,19 @@ _RUNTIME_RESULT_SOURCE_SECTIONS = {
     "value_picks": "value",
     "doubles_picks": "doubles",
 }
+
+
+def _projection_contract_identity(publication: dict[str, Any]) -> str:
+    """Do not deduplicate distinct player O/U lines on the same fixture."""
+    explicit = str(publication.get("publication_key") or "").strip()
+    if explicit:
+        return "|" + explicit
+    return "|" + "|".join((
+        str(publication.get("price_contract") or ""),
+        str(publication.get("ou_side") or publication.get("projection_direction") or ""),
+        str(publication.get("market_line") if publication.get("market") in {"aces", "double_faults"}
+            else publication.get("reference_projection")),
+    ))
 
 
 def _runtime_result_identity(
@@ -203,7 +250,8 @@ def _runtime_result_identity(
         or ""
     ).strip()
     if event_id and section and market and selection:
-        return f"{event_id}|{section}|{market}|{scope}|{metric}|{selection}"
+        base = f"{event_id}|{section}|{market}|{scope}|{metric}|{selection}"
+        return base + _projection_contract_identity(publication) if market in _PROJECTION_MARKETS else base
     return f"{event_id}|{section}|{market}|{scope}|{metric}|{selection}|{index}"
 
 
@@ -290,9 +338,139 @@ def _runtime_publication_key(
         or ""
     ).strip()
     issued_at = str(publication.get("issued_at") or "").strip()
+    extra = _projection_contract_identity(publication) if market in _PROJECTION_MARKETS else ""
     if event_id and selection and issued_at:
-        return f"{event_id}|{section}|{market}|{selection}|{issued_at}"
-    return f"{event_id}|{section}|{market}|{selection}|{issued_at}|{index}"
+        return f"{event_id}|{section}|{market}|{selection}|{issued_at}{extra}"
+    return f"{event_id}|{section}|{market}|{selection}|{issued_at}{extra}|{index}"
+
+
+def _finite_count(raw: Any) -> float | None:
+    if isinstance(raw, bool) or raw is None:
+        return None
+    try:
+        n = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return n if math.isfinite(n) and n >= 0 else None
+
+
+def _grade_runtime_projection(
+    row: dict[str, Any], publication: dict[str, Any], status_row: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Apply the frozen offline market rules without importing ML dependencies.
+
+    Only verified full-match evidence from the same event can settle a market.
+    Partial provider counts and unpriced projections never invent betting ROI.
+    """
+    market = str(publication.get("market") or "").lower()
+    scheduled = _parse_time(row.get("scheduled_at"))
+    issued = _parse_time(publication.get("issued_at"))
+    if scheduled is None or issued is None or issued >= scheduled:
+        return None
+    state = str(status_row.get("status") or "").lower()
+    if state not in TERMINAL_STATUSES:
+        return None
+    players = {_player_id(row, "player1"), _player_id(row, "player2")}
+    provider_players = {str(status_row.get("provider_home_id") or ""), str(status_row.get("provider_away_id") or "")}
+    if "" in players or players != provider_players:
+        return None
+    base = {
+        "settled_at": status_row.get("checked_at") or scheduled.isoformat(),
+        "scheduled_at": scheduled.isoformat(),
+        "runtime_overlay": True,
+        "runtime_source": "match_status_snapshot",
+    }
+    if state in {"retired", "void"}:
+        result = {**base, "status": "void", "reason": state,
+                  "correct": None, "void": True,
+                  "staked_units": 0.0, "return_units": 0.0, "profit_units": 0.0}
+    else:
+        stats = status_row.get("projection_stats")
+        if not isinstance(stats, dict):
+            return None
+        actual = other = reference = None
+        selected = str(publication.get("selection_id") or "")
+        if market in {"aces", "double_faults"}:
+            p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
+            if not p1 or not p2 or p1 == p2 or selected not in {p1, p2}:
+                return None
+            if (str(status_row.get("projection_stats_p1_id") or "") != p1
+                    or str(status_row.get("projection_stats_p2_id") or "") != p2):
+                return None
+            own = "p1" if selected == p1 else "p2"
+            opponent = "p2" if own == "p1" else "p1"
+            actual = _finite_count(stats.get(f"{own}_{market}"))
+            other = _finite_count(stats.get(f"{opponent}_{market}"))
+            if actual is None:
+                return None
+            contract = str(publication.get("price_contract") or "").lower()
+            if contract == "player_total_ou":
+                direction = str(publication.get("ou_side") or "").lower()
+                reference = _finite_count(publication.get("market_line"))
+                if reference is None or direction not in {"over", "under"}:
+                    return None
+                correct = actual > reference if direction == "over" else actual < reference
+                equal = actual == reference
+            elif contract in {"", "player_superiority"}:
+                if other is None:
+                    return None
+                correct = actual > other
+                equal = actual == other
+            else:
+                return None
+        elif market in {"sets", "games"}:
+            actual = _finite_count(stats.get("total_sets" if market == "sets" else "total_games"))
+            if actual is None or actual <= 0:
+                return None
+            if market == "sets":
+                parts = selected.lower().split(":")
+                if len(parts) < 3 or parts[0] != "sets" or parts[1] not in {"over", "under"}:
+                    return None
+                direction = parts[1]
+                reference = _finite_count(parts[2])
+            else:
+                direction = str(publication.get("projection_direction") or "").lower()
+                if not direction and selected.lower().startswith("games:"):
+                    direction = selected.lower().split(":", 1)[1]
+                reference = _finite_count(publication.get("reference_projection"))
+                if direction not in {"high", "low"}:
+                    return None
+            if reference is None:
+                return None
+            correct = actual > reference if direction in {"over", "high"} else actual < reference
+            equal = actual == reference
+        else:
+            return None
+        status = "void" if equal else "hit" if correct else "miss"
+        result = {
+            **base, "status": status, "correct": None if equal else correct,
+            "void": equal, "actual_count": actual,
+            "projection": publication.get("projection"),
+            "projection_scope": publication.get("projection_scope") or (
+                "player" if market in {"aces", "double_faults"} else "match_total"
+            ),
+            "projection_metric": publication.get("projection_metric") or market,
+            "data_depth": publication.get("data_depth"),
+        }
+        if other is not None:
+            result["opponent_actual_count"] = other
+        if market in {"aces", "double_faults"}:
+            result["opponent_projection"] = publication.get("opponent_projection")
+        else:
+            result["reference_projection"] = reference
+        if equal:
+            result.update(staked_units=0.0, return_units=0.0, profit_units=0.0)
+        elif str(publication.get("price_status") or "").lower() == "priced_projection":
+            odds = _finite_count(publication.get("odds"))
+            if odds is not None and odds > 1:
+                result.update(
+                    staked_units=1.0,
+                    return_units=odds if correct else 0.0,
+                    profit_units=odds - 1.0 if correct else -1.0,
+                )
+    scored = deepcopy(publication)
+    scored["result"] = result
+    return scored
 
 
 def runtime_settled_results(
@@ -365,7 +543,8 @@ def runtime_settled_results(
                 market = str(publication.get("market") or "").strip().lower()
                 if not market and section in {"top200", "top_daily", "prime", "value", "doubles"}:
                     market = "match_winner"
-                if market != "match_winner":
+                projection = market in _PROJECTION_MARKETS
+                if market != "match_winner" and not projection:
                     continue
                 publication_status = str(
                     publication.get("publication_status") or "published"
@@ -378,7 +557,7 @@ def runtime_settled_results(
                     or publication.get("pick_id")
                     or ""
                 ).strip()
-                if expected_selection and selection and selection != expected_selection:
+                if not projection and expected_selection and selection and selection != expected_selection:
                     continue
 
                 key = _runtime_publication_key(row, publication, index)
@@ -389,6 +568,15 @@ def runtime_settled_results(
                     or identity in seen_identities
                     or identity in runtime_seen_identities
                 ):
+                    continue
+
+                if projection:
+                    scored = _grade_runtime_projection(row, publication, status_row)
+                    if scored is None:
+                        continue
+                    overlay_publications.append(scored)
+                    runtime_seen.add(key)
+                    runtime_seen_identities.add(identity)
                     continue
 
                 result = publication.get("result")
@@ -571,6 +759,8 @@ def classify_finished_event(
     provider_players = {str(home.get("id") or "").strip(), str(away.get("id") or "").strip()}
     if "" in feed_players or "" in provider_players or feed_players != provider_players:
         return None
+    base["provider_home_id"] = str(home.get("id") or "")
+    base["provider_away_id"] = str(away.get("id") or "")
     if retired:
         return {**base, "status": "retired"}
     if void:
@@ -615,9 +805,60 @@ def classify_finished_event(
         **base,
         "status": "win" if predicted == provider_winner else "loss",
         "winner_id": provider_winner,
+        "provider_home_id": str(home.get("id") or ""),
+        "provider_away_id": str(away.get("id") or ""),
+        "projection_stats": _verified_final_score_stats(row, event),
         **({"first_set_outcome": first_set_outcome, "first_set_score": first_set_score}
            if first_set_outcome else {}),
     }
+
+
+def _verified_final_score_stats(row: dict[str, Any], event: dict[str, Any]) -> dict[str, int]:
+    """Require a complete, identity-matched, terminal tennis score.
+
+    Incomplete period data and super-tiebreak ambiguity are left ungraded.
+    Match winner and publisher identities were checked by classify_finished_event.
+    """
+    home = event.get("homeScore") if isinstance(event.get("homeScore"), dict) else {}
+    away = event.get("awayScore") if isinstance(event.get("awayScore"), dict) else {}
+    winner_code = event.get("winnerCode")
+    try:
+        winner_code = int(winner_code)
+    except (TypeError, ValueError):
+        return {}
+    if winner_code not in (1, 2):
+        return {}
+    sets = []
+    seen_gap = False
+    for index in range(1, 6):
+        a, b = home.get(f"period{index}"), away.get(f"period{index}")
+        if a is None and b is None:
+            seen_gap = True
+            continue
+        if seen_gap or a is None or b is None:
+            return {}
+        try:
+            ga, gb = int(a), int(b)
+        except (TypeError, ValueError):
+            return {}
+        if ga < 0 or gb < 0 or ga == gb:
+            return {}
+        high, low = max(ga, gb), min(ga, gb)
+        if not ((high == 6 and low <= 4) or (high == 7 and low in (5, 6))):
+            return {}
+        sets.append((ga, gb))
+    if len(sets) not in (2, 3, 4, 5):
+        return {}
+    home_wins = sum(a > b for a, b in sets)
+    away_wins = len(sets) - home_wins
+    target = 3 if len(sets) >= 4 or str(row.get("best_of") or "") == "5" or max(home_wins, away_wins) == 3 else 2
+    if max(home_wins, away_wins) != target:
+        return {}
+    if (home_wins > away_wins) != (winner_code == 1):
+        return {}
+    if str(row.get("best_of") or "") == "3" and len(sets) > 3:
+        return {}
+    return {"total_sets": len(sets), "total_games": sum(a+b for a, b in sets)}
 
 
 def _second_set_outcome(row: dict[str, Any], event: dict[str, Any]) -> str:
@@ -671,7 +912,7 @@ def scan_match_statuses(
     deadline = (time.monotonic() + max(0.0, max_wall_seconds)
                 if max_wall_seconds is not None else None)
     time_budget_exhausted = False
-    public_contract_present = any(key in feed for key in _PUBLIC_MATCH_WINNER_KEYS)
+    public_contract_present = any(key in feed for key in (_PUBLIC_MATCH_WINNER_KEYS + _PUBLIC_PROJECTION_KEYS))
     rows = prediction_rows(feed, now=now)
     prior = previous_snapshot if isinstance(previous_snapshot, dict) else {}
     prior_pending = prior.get("pending")

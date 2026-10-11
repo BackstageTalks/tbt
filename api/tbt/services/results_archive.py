@@ -1,9 +1,9 @@
-"""Durable, issuer-safe Results overlay for settled Match Winner publications.
+"""Durable, issuer-safe Results overlay for settled public predictions.
 
 Azure Table is the append-only serving sidecar. The canonical predictions release
 and its original issued odds/ledger remain immutable during hourly status checks.
-Each row can only originate from a deployed Match Winner pick + a provider-
-confirmed terminal status. Per-day shards avoid the Azure 64-KiB string ceiling.
+Every row originates from a deployed pick and provider-confirmed terminal
+match/statistics evidence. Per-day shards avoid the Azure 64-KiB string ceiling.
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from .admin_storage import (
 from .match_status import runtime_settled_results, verified_terminal_statuses
 
 _PARTITION = "settled-results-archive-v1"
-_PUBLIC_SECTIONS = {"top_daily", "prime", "value", "doubles"}
+_PUBLIC_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
 _SHARDS = 4
 _MAX_ROW_UTF16 = 60_000
 _MAX_ARCHIVED_ROWS = 12_000
@@ -53,7 +53,17 @@ def _identity(row: dict, publication: dict) -> str:
     selection = str(publication.get("selection_id") or publication.get("winner_id") or "").strip()
     if not (event and section and market and selection):
         return ""
-    return "|".join((event, section, market, scope, metric, selection))
+    base = "|".join((event, section, market, scope, metric, selection))
+    if market in {"aces", "double_faults", "sets", "games"}:
+        # An immutable O/U market line is part of the bet identity. The
+        # selection alone cannot distinguish Over 4.5 from Under 5.5.
+        contract = str(publication.get("publication_key") or "").strip()
+        if contract:
+            return base + "|" + contract
+        direction = str(publication.get("ou_side") or publication.get("projection_direction") or "").lower()
+        threshold = publication.get("market_line") if market in {"aces", "double_faults"} else publication.get("reference_projection")
+        return base + "|" + str(publication.get("price_contract") or "") + "|" + direction + "|" + str(threshold)
+    return base
 
 
 def _archive_record(row: dict, publication: dict, generated_at: str) -> dict | None:
@@ -62,7 +72,12 @@ def _archive_record(row: dict, publication: dict, generated_at: str) -> dict | N
     identity = _identity(row, publication)
     if not identity or str(publication.get("section") or "").lower() not in _PUBLIC_SECTIONS:
         return None
-    if str(publication.get("market") or "match_winner").lower() != "match_winner":
+    market = str(publication.get("market") or "match_winner").lower()
+    section = str(publication.get("section") or "").lower()
+    if market != "match_winner" and not (
+        market in {"aces", "double_faults", "sets", "games"}
+        and section == {"aces":"ace", "double_faults":"double_faults", "sets":"sets", "games":"games"}[market]
+    ):
         return None
     result = publication.get("result")
     if not isinstance(result, dict) or result.get("runtime_source") != "match_status_snapshot":

@@ -13,6 +13,7 @@ import gzip
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import math
 import os
 import re
 import threading
@@ -723,6 +724,45 @@ def save_match_status_snapshot(payload: object) -> dict:
             "winner_id": str(value.get("winner_id") or "")[:64],
             "provider_status": str(value.get("provider_status") or "")[:120],
         }
+        # Verified provider identity and tightly bounded final statistics are
+        # settlement evidence, never a replacement for immutable issued odds.
+        home = str(value.get("provider_home_id") or "").strip()[:64]
+        away = str(value.get("provider_away_id") or "").strip()[:64]
+        if (home and away and home != away
+                and re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", home)
+                and re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", away)):
+            statuses[eid]["provider_home_id"] = home
+            statuses[eid]["provider_away_id"] = away
+            source_p1 = str(value.get("projection_stats_p1_id") or "").strip()[:64]
+            source_p2 = str(value.get("projection_stats_p2_id") or "").strip()[:64]
+            if source_p1 != source_p2 and {source_p1, source_p2} == {home, away}:
+                statuses[eid]["projection_stats_p1_id"] = source_p1
+                statuses[eid]["projection_stats_p2_id"] = source_p2
+            stats = value.get("projection_stats")
+            if isinstance(stats, dict):
+                clean = {}
+                for key in ("total_sets", "total_games", "p1_aces", "p2_aces",
+                            "p1_double_faults", "p2_double_faults"):
+                    raw = stats.get(key)
+                    if isinstance(raw, bool) or raw is None:
+                        continue
+                    try:
+                        count = float(raw)
+                    except (TypeError, ValueError, OverflowError):
+                        continue
+                    ceiling = 5 if key == "total_sets" else 1000
+                    if math.isfinite(count) and 0 <= count <= ceiling and count.is_integer():
+                        if key != "total_sets" or count >= 2:
+                            clean[key] = int(count)
+                if clean:
+                    statuses[eid]["projection_stats"] = clean
+            checked_at = str(value.get("projection_stats_checked_at") or "")[:64]
+            try:
+                when = datetime.fromisoformat(checked_at.replace("Z", "+00:00"))
+                if when.tzinfo is not None:
+                    statuses[eid]["projection_stats_checked_at"] = checked_at
+            except ValueError:
+                pass
         # Only provider-confirmed settlement context is persisted. These fields
         # are display metadata, NEVER a replacement for immutable issued odds.
         first_outcome = str(value.get("first_set_outcome") or "").strip().lower()
@@ -777,6 +817,9 @@ def save_match_status_snapshot(payload: object) -> dict:
         "checked": max(0, int(data.get("checked") or 0)),
         "skipped_live": max(0, int(data.get("skipped_live") or 0)),
         "provider_requests": max(0, int(data.get("provider_requests") or 0)),
+        "projection_statistics_checked": max(0, int(data.get("projection_statistics_checked") or 0)),
+        "projection_statistics_unavailable": max(0, int(data.get("projection_statistics_unavailable") or 0)),
+        "projection_statistics_budget_paused": bool(data.get("projection_statistics_budget_paused", False)),
         "budget_paused": bool(data.get("budget_paused", False)),
         "time_budget_exhausted": bool(data.get("time_budget_exhausted", False)),
         "newly_resolved": max(0, int(data.get("newly_resolved") or 0)),
