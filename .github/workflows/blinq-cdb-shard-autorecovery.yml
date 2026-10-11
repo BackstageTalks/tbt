@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - .github/workflows/blinq-cdb-shard-autorecovery.yml
+  pull_request:
+    paths:
+      - .github/workflows/blinq-cdb-shard-autorecovery.yml
   workflow_dispatch:
     inputs:
       task:
@@ -71,9 +74,9 @@ jobs:
           allowed=("txe-atp-single-2025","txe-atp-double-2025",
                    "txe-wta-single-2025","txe-wta-double-2025",
                    "atp-archive-2021","atp-doubles-ranking")
-          if os.environ["EVENT"]=="push":
-              # WTA 2025 is already running in the original cloud collection.
-              # Do not duplicate writers or requests for the same shard.
+          if os.environ["EVENT"] in ("push","pull_request"):
+              # Validate safely on PR/push without collecting anything.
+              # Collect job has a separate explicit dispatch-only guard.
               items=("txe-atp-single-2025","txe-atp-double-2025",
                      "atp-archive-2021","atp-doubles-ranking")
               iteration=1
@@ -93,6 +96,8 @@ jobs:
           PY
 
   collect:
+    # Edits to this workflow must never automatically restart providers.
+    if: github.event_name == 'workflow_dispatch'
     name: "Resume ${{ matrix.task }} / attempt ${{ needs.plan.outputs.iteration }}"
     needs: plan
     runs-on: ubuntu-latest
@@ -131,8 +136,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          DURATION=280m
+          # More frequent private checkpoints for long-running detail scans,
+          # without changing delay, concurrency, or retry intensity.
+          if [[ "$TASK" == txe-* ]]; then DURATION=60m; fi
           python -u scripts/recover_cdb_source_shard.py \
-            --task "$TASK" --duration 280m
+            --task "$TASK" --duration "$DURATION"
       - name: Assess persisted evidence and bounded continuation
         id: assess
         shell: bash
@@ -150,7 +159,10 @@ jobs:
           complete=d.get("raw_source_complete") is True
           delta=int(d.get("progress_delta",0))
           attempt=int(os.environ["ITERATION"])
-          nxt=not complete and delta>0 and attempt<12
+          # Only a clean bounded run or expected timeout may auto-resume.
+          # Provider refusals, invalid HTML and process errors stop here.
+          collector_rc=int(d.get("collector_exit_code",-1))
+          nxt=not complete and delta>0 and collector_rc in (0,124) and attempt<12
           if delta<0:
               raise SystemExit("Source rows regressed: STOP to protect historical data")
           with open(os.environ["GITHUB_OUTPUT"],"a") as f:
@@ -174,7 +186,8 @@ jobs:
           name: cdb-shard-recovery-${{ matrix.task }}-${{ needs.plan.outputs.iteration }}
           path: source/.cdb_recovery_status.json
           retention-days: 30
-          if-no-files-found: warn
+          include-hidden-files: true
+          if-no-files-found: error
       - name: Dispatch next attempt only if source progress is positive
         if: steps.assess.outputs.continue == 'true'
         env:
