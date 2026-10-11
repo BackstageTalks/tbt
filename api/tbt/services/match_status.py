@@ -149,7 +149,7 @@ def prediction_rows(
             if existing is None or quality > old_quality:
                 out[eid] = row
 
-    public_contract_present = any(key in feed for key in _PUBLIC_MATCH_WINNER_KEYS)
+    public_contract_present = any(key in feed for key in (_PUBLIC_MATCH_WINNER_KEYS + _PUBLIC_PROJECTION_KEYS))
     if public_contract_present:
         for key in _PUBLIC_MATCH_WINNER_KEYS:
             rows = feed.get(key)
@@ -354,6 +354,10 @@ def _grade_runtime_projection(
         return None
     state = str(status_row.get("status") or "").lower()
     if state not in TERMINAL_STATUSES:
+        return None
+    players = {_player_id(row, "player1"), _player_id(row, "player2")}
+    provider_players = {str(status_row.get("provider_home_id") or ""), str(status_row.get("provider_away_id") or "")}
+    if "" in players or players != provider_players:
         return None
     base = {
         "settled_at": status_row.get("checked_at") or scheduled.isoformat(),
@@ -782,6 +786,7 @@ def classify_finished_event(
         "status": "win" if predicted == provider_winner else "loss",
         "winner_id": provider_winner,
         "provider_home_id": str(home.get("id") or ""),
+        "provider_away_id": str(away.get("id") or ""),
         "projection_stats": _verified_final_score_stats(row, event),
         **({"first_set_outcome": first_set_outcome, "first_set_score": first_set_score}
            if first_set_outcome else {}),
@@ -826,12 +831,12 @@ def _verified_final_score_stats(row: dict[str, Any], event: dict[str, Any]) -> d
         return {}
     home_wins = sum(a > b for a, b in sets)
     away_wins = len(sets) - home_wins
-    target = 3 if len(sets) >= 4 or row.get("best_of") == 5 else 2
+    target = 3 if len(sets) >= 4 or str(row.get("best_of") or "") == "5" or max(home_wins, away_wins) == 3 else 2
     if max(home_wins, away_wins) != target:
         return {}
     if (home_wins > away_wins) != (winner_code == 1):
         return {}
-    if row.get("best_of") == 3 and len(sets) > 3:
+    if str(row.get("best_of") or "") == "3" and len(sets) > 3:
         return {}
     return {"total_sets": len(sets), "total_games": sum(a+b for a, b in sets)}
 
@@ -887,7 +892,7 @@ def scan_match_statuses(
     deadline = (time.monotonic() + max(0.0, max_wall_seconds)
                 if max_wall_seconds is not None else None)
     time_budget_exhausted = False
-    public_contract_present = any(key in feed for key in _PUBLIC_MATCH_WINNER_KEYS)
+    public_contract_present = any(key in feed for key in (_PUBLIC_MATCH_WINNER_KEYS + _PUBLIC_PROJECTION_KEYS))
     rows = prediction_rows(feed, now=now)
     prior = previous_snapshot if isinstance(previous_snapshot, dict) else {}
     prior_pending = prior.get("pending")
