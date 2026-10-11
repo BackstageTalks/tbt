@@ -1,0 +1,210 @@
+name: BlinQ guarded WTA 2026 exact-ID rank import
+
+on:
+  pull_request:
+    paths:
+      - scripts/import_wta2026_verified_rank_exact.py
+      - tests/test_import_wta2026_verified_rank_exact.py
+      - .github/workflows/wta2026-verified-rank-guarded-import.yml
+      - .github/wta2026-verified-rank-publish-request.json
+  push:
+    branches: [main]
+    paths:
+      - scripts/import_wta2026_verified_rank_exact.py
+      - tests/test_import_wta2026_verified_rank_exact.py
+      - .github/workflows/wta2026-verified-rank-guarded-import.yml
+      - .github/wta2026-verified-rank-publish-request.json
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: blinq-wta2026-pit-rank-${{ github.run_id }}
+  cancel-in-progress: false
+jobs:
+  guard-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Exact rank identity, temporal, collision and parser regression
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m pytest tests/test_import_wta2026_verified_rank_exact.py -q
+          python -m compileall -q scripts/import_wta2026_verified_rank_exact.py
+  guarded-import:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [guard-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      DATA_REPO: BackstageTalks/tbt-data
+      ROOT: .cache/tbt/wta2026-pit-rank-write
+      STAGE_TAG: blinq-wta2026-id-ranked-null-audit-38124637314
+      ORIGIN_TAG: blinq-atp-weekly-rank-prewrite-38124799583-1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate immutable source, exact write authorization and safety
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$DATA_REPO" --jq .private)" = true
+          r=.github/wta2026-verified-rank-publish-request.json
+          test "$(jq -r .schema "$r")" = 1
+          test "$(jq -r .mode "$r")" = write
+          test "$(jq -r .source_tag "$r")" = "$STAGE_TAG"
+          test "$(jq -r .source_stage_sha256 "$r")" = d8353bb92c8fbca596cf8d423ef926bbeb2d6ae51d3e4ddd686d23837d3976f4
+          test "$(jq -r .source_report_sha256 "$r")" = d70c7dce0ce8fc413a226ebff68ab2ae4628e2f8799ec26af6e2980a8f8cf086
+          test "$(jq -r .original_cdb_2026_sha256 "$r")" = b945528573a8488a5c03eec66b0987791939313cc1099b12d44a9d4a95893bc6
+          test "$(jq -r .original_backup_tag "$r")" = "$ORIGIN_TAG"
+          test "$(jq -r .expected_matches "$r")" = 9844
+          test "$(jq -r .expected_rank_values "$r")" = 19688
+          for prop in require_verified_id require_source_before_match require_wta_full_year_rebase global_writer_lock immutable_backup full_year_readback; do
+            test "$(jq -r --arg k "$prop" '.[$k]' "$r")" = true
+          done
+          for prop in allow_existing_overwrite model_training model_promotion; do
+            test "$(jq -r --arg k "$prop" '.[$k]' "$r")" = false
+          done
+          test "$(jq -r .provider_api_requests "$r")" = 0
+          python -m pip install --retries 6 -r api/requirements-train.txt pytest
+          python -m pytest tests/test_import_wta2026_verified_rank_exact.py -q
+      - name: Read back privately staged exact-ID WTA candidates and old ATP prewrite backup
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/stage" "$ROOT/original" "$ROOT/current" "$ROOT/local"
+          gh release download "$STAGE_TAG" -R "$DATA_REPO" -D "$ROOT/stage"
+          (cd "$ROOT/stage" && sha256sum -c SHA256SUMS)
+          gh release download "$ORIGIN_TAG" -R "$DATA_REPO" -D "$ROOT/original" -p history-2026.parquet -p history_manifest.json -p _tbt_bundle_manifest.json
+          gh api "repos/$DATA_REPO/releases/tags/$ORIGIN_TAG" > "$ROOT/original/release.json"
+          gh release download tbt-data-v1 -R "$DATA_REPO" -D "$ROOT/current" -p history-2026.parquet -p history_manifest.json -p _tbt_bundle_manifest.json
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > "$ROOT/current/release.json"
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          for scope in ("original","current"):
+              d=root/scope
+              release=json.loads((d/"release.json").read_text())
+              remote={x["name"]:x["digest"] for x in release["assets"]}
+              m=json.loads((d/"history_manifest.json").read_text())
+              b=json.loads((d/"_tbt_bundle_manifest.json").read_text())
+              for file in ("history-2026.parquet","history_manifest.json","_tbt_bundle_manifest.json"):
+                  sha=hashlib.sha256((d/file).read_bytes()).hexdigest()
+                  assert remote[file]=="sha256:"+sha,(scope,file)
+                  if file=="history-2026.parquet":assert m["years"]["2026"]["sha256"]==sha
+                  if file=="history_manifest.json":assert b["files"][file]["sha256"]==sha
+          assert hashlib.sha256((root/"original/history-2026.parquet").read_bytes()).hexdigest()=="b945528573a8488a5c03eec66b0987791939313cc1099b12d44a9d4a95893bc6"
+          print("ORIGINAL_AND_CURRENT_CDB_RELEASES_VERIFIED")
+          PY
+      - name: Rebase exact original WTA cohort onto latest ATP-enriched current CDB
+        run: |
+          set -euo pipefail
+          cmd="python scripts/import_wta2026_verified_rank_exact.py --source-original-dir $ROOT/original --current-dir $ROOT/current --after-dir $ROOT/local --stage-file $ROOT/stage/wta2026-rank-null-candidates.jsonl.gz --stage-report $ROOT/stage/report.json"
+          $cmd --mode dry-run --out "$ROOT/preflight.json"
+          test "$(jq -r .changed_matches "$ROOT/preflight.json")" = 9844
+          test "$(jq -r .new_rank_values "$ROOT/preflight.json")" = 19688
+          test "$(jq -r .wta_rows_original_vs_current_exact "$ROOT/preflight.json")" = 37751
+          $cmd --mode write --out "$ROOT/local-write.json"
+          $cmd --mode verify --out "$ROOT/local-verified.json"
+          test "$(jq -r .status "$ROOT/local-verified.json")" = full_year_verified
+          test "$(jq -r .previous_rank_overwrites "$ROOT/local-verified.json")" = 0
+          test "$(jq -r .new_rank_values "$ROOT/local-verified.json")" = 19688
+      - name: Acquire crossrepo CDB writer lock before positive publication
+        run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+      - name: CAS verify unaffected current 2026 year and manifests under lock
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          mkdir -p "$ROOT/lock-before"
+          gh release download tbt-data-v1 -R "$DATA_REPO" -D "$ROOT/lock-before" -p history-2026.parquet -p history_manifest.json -p _tbt_bundle_manifest.json
+          for file in history-2026.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cmp "$ROOT/current/$file" "$ROOT/lock-before/$file"
+          done
+      - name: Immutable private full 2026 prewrite backup and independent SHA reread
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/backup" "$ROOT/backup-readback"
+          cp "$ROOT/current/history-2026.parquet" "$ROOT/backup/"
+          cp "$ROOT/current/history_manifest.json" "$ROOT/backup/"
+          cp "$ROOT/current/_tbt_bundle_manifest.json" "$ROOT/backup/"
+          cp "$ROOT/stage/report.json" "$ROOT/backup/source-report.json"
+          cp "$ROOT/stage/wta2026-rank-null-candidates.jsonl.gz" "$ROOT/backup/source-stage.jsonl.gz"
+          cp "$ROOT/preflight.json" "$ROOT/backup/preflight.json"
+          (
+            cd "$ROOT/backup"
+            sha256sum *.parquet *.json *.gz > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          tag="blinq-wta2026-verified-rank-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" "$ROOT/backup/"* -R "$DATA_REPO" --title "Immutable prewrite 2026 WTA rank rollback" --notes "Full old year and manifests, stage and SHA; postmatch model unchanged."
+          gh release download "$tag" -R "$DATA_REPO" -D "$ROOT/backup-readback"
+          (cd "$ROOT/backup-readback" && sha256sum -c SHA256SUMS)
+      - name: Under lock publish current 2026 add-only year and manifest LAST
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python - <<'PY'
+          import os,json
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from cdb_global_writer_lock import verify
+          root=Path(os.environ["ROOT"]);repo=os.environ["DATA_REPO"]
+          before=json.loads((root/"current/_tbt_bundle_manifest.json").read_text())["files"]
+          def cas():
+              verify(repo,Path(".cdb-global-writer-lock.json"))
+              actual=ReleaseStore(repo,"tbt-data-v1",root/"cas")._remote_bundle_files()
+              if actual != before:
+                  raise RuntimeError("Another writer changed the canonical bundle, refusing stale WTA rank publication")
+          ReleaseStore(repo,"tbt-data-v1",root/"local").upload_bundle(
+              [root/"local/history-2026.parquet",root/"local/history_manifest.json"],
+              before_upload=cas)
+          PY
+      - name: Independent full 2026 production readback, zero overwrites
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/remote" "$ROOT/verified"
+          gh release download tbt-data-v1 -R "$DATA_REPO" -D "$ROOT/remote" -p history-2026.parquet -p history_manifest.json -p _tbt_bundle_manifest.json
+          python scripts/import_wta2026_verified_rank_exact.py --mode verify --source-original-dir "$ROOT/original" --current-dir "$ROOT/current" --after-dir "$ROOT/remote" --stage-file "$ROOT/stage/wta2026-rank-null-candidates.jsonl.gz" --stage-report "$ROOT/stage/report.json" --out "$ROOT/verified/production-readback.json"
+          test "$(jq -r .status "$ROOT/verified/production-readback.json")" = full_year_verified
+          test "$(jq -r .changed_matches "$ROOT/verified/production-readback.json")" = 9844
+          test "$(jq -r .new_rank_values "$ROOT/verified/production-readback.json")" = 19688
+          test "$(jq -r .previous_rank_overwrites "$ROOT/verified/production-readback.json")" = 0
+          cmp "$ROOT/local/history-2026.parquet" "$ROOT/remote/history-2026.parquet"
+          cmp "$ROOT/local/history_manifest.json" "$ROOT/remote/history_manifest.json"
+      - name: Persist independently verified full-year production proof privately
+        run: |
+          set -euo pipefail
+          jq -n --arg run "$GITHUB_RUN_ID" --arg sha "$GITHUB_SHA" --arg backup "blinq-wta2026-verified-rank-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --slurpfile readback "$ROOT/verified/production-readback.json" '{schema:1,status:"published_and_independently_verified",run_id:$run,app_sha:$sha,immutable_prewrite_backup:$backup,readback:$readback[0],new_rank_values:19688,affected_wta_matches:9844,overwritten_existing_ranks:0,model_trained:false,model_promoted:false,provider_api_requests:0}' > "$ROOT/verified/private-report.json"
+          path=audit/wta2026-verified-rank-import-latest.json
+          b64="$(base64 -w0 "$ROOT/verified/private-report.json")"
+          old="$(gh api "repos/$DATA_REPO/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$old" ]]; then
+            gh api --method PUT "repos/$DATA_REPO/contents/$path" -f message="Record verified WTA 2026 rank import $GITHUB_RUN_ID" -f content="$b64" -f sha="$old" >/dev/null
+          else
+            gh api --method PUT "repos/$DATA_REPO/contents/$path" -f message="Record verified WTA 2026 rank import $GITHUB_RUN_ID" -f content="$b64" >/dev/null
+          fi
+          gh api "repos/$DATA_REPO/contents/$path" --jq .content | tr -d '\n' | base64 -d > "$ROOT/verified/private-report-readback.json"
+          cmp "$ROOT/verified/private-report.json" "$ROOT/verified/private-report-readback.json"
+      - name: Keep aggregate-only CI proof, never private candidates
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-wta2026-rank-verified-counts-${{ github.run_id }}
+          path: |
+            .cache/tbt/wta2026-pit-rank-write/preflight.json
+            .cache/tbt/wta2026-pit-rank-write/verified/production-readback.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Release global crossrepo writer lock
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
