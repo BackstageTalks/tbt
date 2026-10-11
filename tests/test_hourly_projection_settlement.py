@@ -183,3 +183,46 @@ def test_no_projection_from_winner_status_alone():
     base = _base()
     feed = {"ace_picks":[{**base,"market_publications":[_pub("aces")]}], "results":[]}
     assert runtime_settled_results(feed, _status()) == []
+
+
+def test_snapshot_save_preserves_validated_stats_and_rejects_invalid_counts(monkeypatch):
+    from tbt.services import admin_storage
+    table = Table()
+    monkeypatch.setattr(admin_storage, "_table", lambda _: table)
+    statuses = _status(projection_stats={
+        "total_sets":3, "total_games":27, "p1_aces":7, "p2_aces":4,
+        "p1_double_faults": 2, "p2_double_faults": 5,
+        "bad_payload": 999999,  # must never persist
+    })
+    snapshot = admin_storage.save_match_status_snapshot({
+        "statuses": statuses, "tracked": 1, "due": 0,
+    })
+    saved = snapshot["statuses"]["100"]
+    assert saved["projection_stats"] == {
+        "total_sets":3, "total_games":27, "p1_aces":7, "p2_aces":4,
+        "p1_double_faults":2, "p2_double_faults":5,
+    }
+    assert saved["projection_stats_p1_id"] == "11"
+    assert saved["projection_stats_p2_id"] == "22"
+    assert admin_storage.load_match_status_snapshot()["statuses"]["100"] == saved
+
+    corrupt = _status(projection_stats={
+        "p1_aces": -1, "p2_aces": float("nan"), "total_sets": 9, "total_games": "n/a",
+    })
+    stripped = admin_storage.save_match_status_snapshot({"statuses": corrupt})
+    assert "projection_stats" not in stripped["statuses"]["100"]
+
+
+def test_statistic_orientation_mismatch_is_not_scored():
+    base = _base()
+    feed = {"ace_picks":[{**base,"market_publications":[_pub("aces")]}], "results":[]}
+    statuses = _status(projection_stats={"p1_aces":7,"p2_aces":4},
+                       projection_stats_p1_id="22", projection_stats_p2_id="11")
+    assert runtime_settled_results(feed, statuses) == []
+
+
+def test_results_ui_distinguishes_distinct_priced_ou_lines():
+    from pathlib import Path
+    app = (Path(__file__).resolve().parents[1] / "web" / "app.js").read_text(encoding="utf-8")
+    assert "const totalContract=" in app
+    assert "market_line??''" in app
