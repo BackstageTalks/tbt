@@ -252,7 +252,7 @@ def _statistics_candidates(matches, start, end, *, targeted=False):
         # Within a recent year, complete missing serve/return quality before
         # spending the same budget on ace/DF-only gaps in already-ready rows.
         # Existing complete, verified identity also saves an event-detail call.
-        identity = (match.provider_payload or {}).get("_tbt_event_identity")
+        identity = (getattr(match, "provider_payload", None) or {}).get("_tbt_event_identity") if targeted else None
         verified_identity = (
             isinstance(identity, dict)
             and identity.get("event_id") == event_id(match)
