@@ -3529,8 +3529,10 @@
       aceDfNormalizedKpis:aceDfCategory,
     };
   }
-  function resultLiveMaxOddsHtml(publication,publishedOdds){
+  function resultLiveMaxOddsHtml(publication,publishedOdds,outcome){
+    if(outcome?.kind!=='win')return '';
     const result=publication?.result&&typeof publication.result==='object'?publication.result:{};
+    if(String(result.first_set_outcome||'').trim().toLowerCase()!=='loss')return '';
     const peak=Number(result.max_live_odds);
     const base=Number(publishedOdds);
     if(!Number.isFinite(peak)||peak<=1||!Number.isFinite(base)||base<=1||peak<=base+0.005)return '';
@@ -3540,18 +3542,6 @@
       'Nejvyšší provider Match Winner kurz zachycený LIVE Radarem po prohře 1. setu. Pouze informativní; ROI používá publikovaný předzápasový kurz.'
     );
     return `<small class="result-live-max" title="${escapeHtml(title)}">MAX ${peak.toFixed(2)}</small>`;
-  }
-  function resultComebackIcon(publication,outcome){
-    if(outcome?.kind!=='win')return '';
-    const section=String(publication?.section||'').trim().toLowerCase();
-    if(section!=='prime')return '';
-    const result=publication?.result&&typeof publication.result==='object'?publication.result:{};
-    if(String(result.first_set_outcome||'').trim().toLowerCase()!=='loss')return '';
-    const score=String(result.first_set_score||'').trim();
-    const title=score
-      ?lcopy(`Comeback · lost set 1 ${score}`,`Otočka · prehral 1. set ${score}`,`Obrat · prohrál 1. set ${score}`)
-      :lcopy('Comeback · lost set 1','Otočka · prehral 1. set','Obrat · prohrál 1. set');
-    return `<span class="result-comeback-icon" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">↻</span>`;
   }
   function renderResults(){
     const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',entries=settledPublishedEntries(rows,category,filters);
@@ -3597,8 +3587,7 @@
       const p1Class=p1Selected?' is-pick':p2Selected?' is-opponent':'';
       const p2Class=p2Selected?' is-pick':p1Selected?' is-opponent':'';
       const tipBadge='<i class="results-pick-mark" aria-label="Predikovaný hráč">TIP</i>';
-      const comebackIcon=resultComebackIcon(publication,outcome);
-      const match=`<div class="results-match-player${p1Class}">${p1Selected?comebackIcon:''}${sideAvatarHtml(r,p1,'player1','hub-avatar')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${p1Selected?tipBadge:''}</div><div class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${p2Selected?comebackIcon:''}${sideAvatarHtml(r,p2,'player2','hub-avatar')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<strong>${escapeHtml(p2Name)}</strong>${p2Selected?tipBadge:''}</span></div>`;
+      const match=`<div class="results-match-player${p1Class}">${sideAvatarHtml(r,p1,'player1','hub-avatar')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${p1Selected?tipBadge:''}</div><div class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${sideAvatarHtml(r,p2,'player2','hub-avatar')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<strong>${escapeHtml(p2Name)}</strong>${p2Selected?tipBadge:''}</span></div>`;
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
         const displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
@@ -3638,7 +3627,7 @@
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
         return `<tr class="results-card-row result-${escapeHtml(outcome.kind)} is-projection"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(displayPick)}</strong></td><td class="result-confidence result-projection"><span class="result-projection-value">${escapeHtml(projectionText)}</span><small class="result-projection-label">${escapeHtml(lcopy('Projection','Projekcia','Projekce'))}</small></td><td class="result-odds"${projectionOddsTitle}>${escapeHtml(displayedProjectionOdds)}</td><td class="result-status"><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td class="result-units"><span class="results-units-depth"><b${!hasSettledUnits?projectionOddsTitle:''} class="${Number.isFinite(displayUnits)&&displayUnits>0?'correct':Number.isFinite(displayUnits)&&displayUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b></span></td></tr>`;
       }
-      return `<tr class="results-card-row result-${escapeHtml(outcome.kind)}"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(pickName)}</strong></td><td class="result-confidence">${Number.isFinite(probability)?pct(probability):'—'}</td><td class="result-odds">${Number.isFinite(odds)?odds.toFixed(2):'—'}${resultLiveMaxOddsHtml(publication,odds)}</td><td class="result-status">${resultHtml}</td><td class="result-units ${outcome.kind==='void'?'void':!Number.isFinite(units)?'unit-excluded':units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
+      return `<tr class="results-card-row result-${escapeHtml(outcome.kind)}"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(pickName)}</strong></td><td class="result-confidence">${Number.isFinite(probability)?pct(probability):'—'}</td><td class="result-odds">${Number.isFinite(odds)?odds.toFixed(2):'—'}${resultLiveMaxOddsHtml(publication,odds,outcome)}</td><td class="result-status">${resultHtml}</td><td class="result-units ${outcome.kind==='void'?'void':!Number.isFinite(units)?'unit-excluded':units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
     }).join('');
     const pager=`<div class="results-pagination"><div class="results-pagination-meta"><strong>${startIndex+1}–${endIndex}</strong><span>z ${entries.length}</span></div><label><span>Riadkov</span><select id="resultsPageSize">${allowedSizes.map(size=>`<option value="${size}"${size===pageSize?' selected':''}>${size}</option>`).join('')}</select></label><div class="results-pagination-nav"><button type="button" id="resultsPrevPage" ${state.resultsPage<=0?'disabled':''}>←</button><span>Strana <strong>${state.resultsPage+1}</strong> / ${pages}</span><button type="button" id="resultsNextPage" ${state.resultsPage>=pages-1?'disabled':''}>→</button></div></div>`;
     const head=`<tr><th>Dátum</th><th>Kategória</th><th>Turnaj</th><th>Zápas</th><th>Predikcia</th><th data-mobile-label="BlinQ %">Model / BlinQ %<small class="results-model-heading">${escapeHtml(lcopy('or projection','alebo projekcia','nebo projekce'))}</small></th><th>Kurz</th><th>Výsledok</th><th>Jednotky</th></tr>`;
