@@ -6,10 +6,16 @@ name: BlinQ private Drive CDB audit - bounded free public runner
     inputs:
       batch_files:
         type: choice
-        description: Maximum changed source files for read-only pilot
+        description: Maximum new or changed source files; verified cached files do not consume this budget
         required: true
-        default: '10'
-        options: ['10', '25', '50']
+        default: '200'
+        options: ['10', '25', '50', '200', '500', '1000', '2000']
+      download_mb:
+        type: choice
+        description: Maximum source download MiB for this batch (CDB snapshot excluded)
+        required: true
+        default: '2048'
+        options: ['256', '512', '1024', '2048', '4096', '8192']
   pull_request:
     paths:
       - .github/workflows/blinq-private-drive-cdb-audit-bridge.yml
@@ -41,7 +47,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: safety-tests
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PRIVATE_REPO: BackstageTalks/tbt-data
@@ -139,12 +145,14 @@ jobs:
         shell: bash
         env:
           BATCH_FILES: ${{ inputs.batch_files }}
+          DOWNLOAD_MB: ${{ inputs.download_mb }}
         run: |
           set -euo pipefail
-          case "$BATCH_FILES" in 10|25|50) ;; *) echo 'Invalid batch size'; exit 1;; esac
+          case "$BATCH_FILES" in 10|25|50|200|500|1000|2000) ;; *) echo 'Invalid batch size'; exit 1;; esac
+          case "$DOWNLOAD_MB" in 256|512|1024|2048|4096|8192) ;; *) echo 'Invalid download budget'; exit 1;; esac
           mkdir -p work/report work/cache
           set +e
-          python -u private/scripts/drive_cdb_audit.py --folder-id "$DRIVE_ROOT" --history-dir work/history --cache work/cache/audit.sqlite --out work/report --max-files "$BATCH_FILES" --max-download-mb 256 >work/private-audit.log 2>&1
+          python -u private/scripts/drive_cdb_audit.py --folder-id "$DRIVE_ROOT" --history-dir work/history --cache work/cache/audit.sqlite --out work/report --max-files "$BATCH_FILES" --max-download-mb "$DOWNLOAD_MB" >work/private-audit.log 2>&1
           code=$?
           set -e
           if [[ "$code" -ne 0 ]]; then
@@ -191,15 +199,36 @@ jobs:
           set -euo pipefail
           mkdir -p work/cache-export work/cache-verify
           cache_bytes="$(stat -c '%s' work/cache/audit.sqlite)"
-          if (( cache_bytes > 268435456 )); then
-            echo 'CHECKPOINT_OVER_256_MIB_SKIPPED_NO_EXTRA_STORAGE'
-            exit 0
+          if (( cache_bytes > 1073741824 )); then
+            echo 'BLOCKED: checkpoint exceeds 1 GiB; do not claim resumable success'
+            exit 1
           fi
           python scripts/drive_cdb_private_bridge.py write-checkpoint --cache-file work/cache/audit.sqlite --code-file private/scripts/drive_cdb_audit.py --folder-id "$DRIVE_ROOT" --output work/cache-export
+          # Retain an immutable per-run checkpoint before updating the rolling
+          # pointer. A partial pointer upload must not lose the completed batch.
+          checkpoint_tag="blinq-drive-cdb-checkpoint-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$checkpoint_tag" -R "$PRIVATE_REPO" --target main --title 'Private Drive audit batch checkpoint' --notes 'Immutable source-observation checkpoint. No canonical writes.' >/dev/null
+          gh release upload "$checkpoint_tag" work/cache-export/audit.sqlite work/cache-export/checkpoint.json -R "$PRIVATE_REPO" >/dev/null
+          gh release download "$checkpoint_tag" -R "$PRIVATE_REPO" -p audit.sqlite -p checkpoint.json -D work/cache-verify >/dev/null
+          python scripts/drive_cdb_private_bridge.py restore-checkpoint --folder-id "$DRIVE_ROOT" --code-file private/scripts/drive_cdb_audit.py --source work/cache-verify --dest work/cache/verified-persisted.sqlite
           if ! gh release view "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" >/dev/null 2>&1; then
             gh release create "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" --target main --title 'Private read-only Drive source checkpoint' --notes 'Cached observations only. Not an import.' >/dev/null
           fi
           gh release upload "$PRIVATE_CACHE_RELEASE" work/cache-export/audit.sqlite work/cache-export/checkpoint.json -R "$PRIVATE_REPO" --clobber >/dev/null
-          gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p audit.sqlite -p checkpoint.json -D work/cache-verify >/dev/null
+          gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p audit.sqlite -p checkpoint.json -D work/cache-verify --clobber >/dev/null
           python scripts/drive_cdb_private_bridge.py restore-checkpoint --folder-id "$DRIVE_ROOT" --code-file private/scripts/drive_cdb_audit.py --source work/cache-verify --dest work/cache/verified-persisted.sqlite
           echo PRIVATE_CHECKPOINT_INDEPENDENT_SHA256_READBACK_PASS
+
+      - name: Record execution status without exposing private source data
+        if: always()
+        env:
+          AUDIT_OUTCOME: ${{ steps.audit.outcome }}
+          REPORT_OUTCOME: ${{ steps.private_report.outcome }}
+        run: |
+          {
+            echo '## Drive batch: read-only candidate discovery'
+            echo "Audit step: $AUDIT_OUTCOME; private report: $REPORT_OUTCOME."
+            echo 'Canonical imports: none. Candidate values require identity, rights, time and governed-writer gates.'
+            echo 'Check the checkpoint step before claiming this batch can resume. Full evidence is in the private tbt-data releases.'
+            echo 'No schedule is installed. External cron can invoke workflow_dispatch on main with batch_files and download_mb.'
+          } >> "$GITHUB_STEP_SUMMARY"
