@@ -1,0 +1,107 @@
+name: BlinQ WTA 2024 actual score delta and local exact readback
+
+on:
+  pull_request:
+    paths:
+      - "scripts/stage_txe_wta2024_scores.py"
+      - "scripts/import_txe_wta2024_scores_exact.py"
+      - "tests/test_txe_wta2024_scores_exact.py"
+      - ".github/workflows/txe-wta2024-score-stage.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: blinq-wta2024-score-stage-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      ROOT: .cache/tbt/wta2024-scores
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Enforce full-name slug winner and 2024 score regression
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements.txt -r api/requirements-train.txt pytest
+          python -m pytest -q tests/test_txe_wta2024_scores_exact.py
+          python -m compileall -q scripts/stage_txe_wta2024_scores.py scripts/import_txe_wta2024_scores_exact.py
+
+      - name: Download pinned private source and CURRENT canonical 2024 CDB
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$DATA_REPO" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p "$ROOT/source" "$ROOT/history" "$ROOT/stage" "$ROOT/local"
+          gh release download blinq-tennisexplorer-cloud-20261009 -R "$DATA_REPO" \
+            -p txe-wta-single-2024.tar.gz -D "$ROOT/source"
+          echo "27c779c73bcfaf089e362f3480c4201f032e15fefbc3a0fadaa39bfce9f5956b  $ROOT/source/txe-wta-single-2024.tar.gz" | sha256sum -c -
+          gh release download tbt-data-v1 -R "$DATA_REPO" \
+            -p history-2024.parquet -p history_manifest.json \
+            -p _tbt_bundle_manifest.json -D "$ROOT/history"
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > "$ROOT/history/release.json"
+
+      - name: Stage only full score facts supported by witnessed slugs
+        run: |
+          set -euo pipefail
+          python scripts/stage_txe_wta2024_scores.py \
+            --source "$ROOT/source/txe-wta-single-2024.tar.gz" \
+            --history "$ROOT/history/history-2024.parquet" \
+            --manifest "$ROOT/history/history_manifest.json" \
+            --release "$ROOT/history/release.json" \
+            --out "$ROOT/stage"
+          jq '.counts' "$ROOT/stage/report.json"
+          test "$(jq -r .counts.source_rows "$ROOT/stage/report.json")" = 45143
+          test "$(jq -r .counts.details_rows "$ROOT/stage/report.json")" = 8524
+          test "$(jq -r .production_mutated "$ROOT/stage/report.json")" = false
+
+      - name: Full 113733-match 2024 local add-only patch and independent replay
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/dry" "$ROOT/local-write" "$ROOT/local-verify"
+          for f in history-2024.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cp "$ROOT/history/$f" "$ROOT/local/$f"
+          done
+          python scripts/import_txe_wta2024_scores_exact.py --mode dry-run \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/dry/report.json"
+          if [[ "$(jq -r '.added_values' "$ROOT/dry/report.json")" -gt 0 ]]; then
+            python scripts/import_txe_wta2024_scores_exact.py --mode write \
+              --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+              --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+              --out "$ROOT/local-write/report.json"
+            python scripts/import_txe_wta2024_scores_exact.py --mode verify \
+              --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+              --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+              --out "$ROOT/local-verify/report.json"
+            test "$(jq -r .existing_values_overwritten "$ROOT/local-verify/report.json")" = 0
+            test "$(jq -r .canonical_rows_checked "$ROOT/local-verify/report.json")" = 113733
+          else
+            echo "NO POSITIVE SCORE FIELDS: publishing skipped"
+          fi
+
+      - name: Retain source-CDB classification, quarantine and local replay
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-wta2024-scores-${{ github.run_id }}
+          path: |
+            .cache/tbt/wta2024-scores/stage/report.json
+            .cache/tbt/wta2024-scores/dry/report.json
+            .cache/tbt/wta2024-scores/local-write/report.json
+            .cache/tbt/wta2024-scores/local-verify/report.json
+          retention-days: 40
+          if-no-files-found: warn

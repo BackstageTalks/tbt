@@ -1,0 +1,256 @@
+name: BlinQ WTA 2024 score protected canonical import
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/txe-wta2024-score-import.yml"
+      - ".github/txe-wta2024-score-import-request.json"
+      - "scripts/stage_txe_wta2024_scores.py"
+      - "scripts/import_txe_wta2024_scores_exact.py"
+      - "tests/test_txe_wta2024_scores_exact.py"
+  push:
+    branches: [main]
+    paths: [".github/txe-wta2024-score-import-request.json"]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: blinq-wta2024-score-exact-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      ROOT: .cache/tbt/wta2024-score-publish
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Controlled request; pull requests never publish
+        id: control
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$PRIVATE_REPO" --json visibility -q .visibility)" = PRIVATE
+          req=".github/txe-wta2024-score-import-request.json"
+          test "$(jq -r .schema "$req")" = 1
+          test "$(jq -r .year "$req")" = 2024
+          test "$(jq -r .source_sha256 "$req")" = 27c779c73bcfaf089e362f3480c4201f032e15fefbc3a0fadaa39bfce9f5956b
+          test "$(jq -r .allow_existing_overwrite "$req")" = false
+          test "$(jq -r .global_writer_lock "$req")" = true
+          test "$(jq -r .immutable_backup "$req")" = true
+          test "$(jq -r .full_year_readback "$req")" = true
+          test "$(jq -r .model_training "$req")" = false
+          test "$(jq -r .model_promotion "$req")" = false
+          test "$(jq -r .provider_api_requests "$req")" = 0
+          mode=dry-run
+          if [[ "$GITHUB_EVENT_NAME" = push && "$GITHUB_REF" = refs/heads/main ]]; then
+            mode="$(jq -r .mode "$req")"
+          fi
+          [[ "$mode" == dry-run || "$mode" == write ]]
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+      - name: Validate real source score semantics and strict writer regression
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements.txt -r api/requirements-train.txt pytest
+          python -m pytest -q tests/test_txe_wta2024_scores_exact.py
+          python -m compileall -q scripts/stage_txe_wta2024_scores.py scripts/import_txe_wta2024_scores_exact.py
+
+      - name: Prepare exact original input and current source-scoped CDB OUTSIDE lock
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/source" "$ROOT/history" "$ROOT/stage" "$ROOT/local"
+          gh release download blinq-tennisexplorer-cloud-20261009 -R "$PRIVATE_REPO" \
+            -p txe-wta-single-2024.tar.gz -D "$ROOT/source"
+          echo "27c779c73bcfaf089e362f3480c4201f032e15fefbc3a0fadaa39bfce9f5956b  $ROOT/source/txe-wta-single-2024.tar.gz" | sha256sum -c -
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
+            -p history-2024.parquet -p history_manifest.json \
+            -p _tbt_bundle_manifest.json -D "$ROOT/history"
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > "$ROOT/history/release.json"
+          python scripts/stage_txe_wta2024_scores.py \
+            --source "$ROOT/source/txe-wta-single-2024.tar.gz" \
+            --history "$ROOT/history/history-2024.parquet" \
+            --manifest "$ROOT/history/history_manifest.json" \
+            --release "$ROOT/history/release.json" \
+            --out "$ROOT/stage"
+          test "$(jq -r .counts.source_rows "$ROOT/stage/report.json")" = 45143
+          test "$(jq -r .counts.details_rows "$ROOT/stage/report.json")" = 8524
+          test "$(jq -r .production_mutated "$ROOT/stage/report.json")" = false
+
+      - name: Produce null-only local verified 2024 year and package
+        id: prepared
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/dry" "$ROOT/local-write" "$ROOT/local-verify"
+          for f in history-2024.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cp "$ROOT/history/$f" "$ROOT/local/$f"
+          done
+          python scripts/import_txe_wta2024_scores_exact.py --mode dry-run \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/dry/report.json"
+          additions="$(jq -r .added_values "$ROOT/dry/report.json")"
+          echo "additions=$additions" >> "$GITHUB_OUTPUT"
+          if [[ "$additions" -eq 0 ]]; then
+            if [[ "${{ steps.control.outputs.mode }}" == write ]]; then echo "No new cells; refusing publish"; exit 1; fi
+            echo "No delta, unchanged canonical"
+            exit 0
+          fi
+          python scripts/import_txe_wta2024_scores_exact.py --mode write \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/local-write/report.json"
+          python scripts/import_txe_wta2024_scores_exact.py --mode verify \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/local" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/local-verify/report.json"
+          test "$(jq -r .existing_values_overwritten "$ROOT/local-verify/report.json")" = 0
+          test "$(jq -r .added_values "$ROOT/local-verify/report.json")" = "$additions"
+          test "$(jq -r .canonical_rows_checked "$ROOT/local-verify/report.json")" = 113733
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          paths=("source/txe-wta-single-2024.tar.gz","stage/stage.jsonl",
+                 "stage/report.json","history/history-2024.parquet",
+                 "history/history_manifest.json","history/_tbt_bundle_manifest.json",
+                 "local/history-2024.parquet")
+          report=json.loads((root/"local-verify/report.json").read_text())
+          package={"schema":1,"year":2024,"added_values":report["added_values"],
+                   "changed_matches":report["changed_matches"],"overwrites":0,
+                   "model_training":False,
+                   "file_sha256":{p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in paths}}
+          (root/"package.json").write_text(json.dumps(package,indent=2,sort_keys=True))
+          PY
+
+      - name: Acquire GLOBAL crossrepo canonical writer lock
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
+      - name: Verify latest remote CDB partition and both manifests UNDER lock
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          mkdir -p "$ROOT/remote-before"
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
+            -p history-2024.parquet -p history_manifest.json \
+            -p _tbt_bundle_manifest.json -D "$ROOT/remote-before"
+          for f in history-2024.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cmp "$ROOT/history/$f" "$ROOT/remote-before/$f"
+          done
+
+      - name: Create immutable prewrite backup and independently verify restored bytes
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/backup" "$ROOT/backup-readback"
+          cp "$ROOT/history/history-2024.parquet" "$ROOT/backup/"
+          cp "$ROOT/history/history_manifest.json" "$ROOT/backup/"
+          cp "$ROOT/history/_tbt_bundle_manifest.json" "$ROOT/backup/"
+          cp "$ROOT/stage/stage.jsonl" "$ROOT/backup/"
+          cp "$ROOT/stage/report.json" "$ROOT/backup/source-report.json"
+          cp "$ROOT/package.json" "$ROOT/backup/"
+          (cd "$ROOT/backup" && sha256sum history-2024.parquet history_manifest.json \
+            _tbt_bundle_manifest.json stage.jsonl source-report.json package.json > SHA256SUMS \
+            && sha256sum -c SHA256SUMS)
+          tag="blinq-wta2024-scores-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" "$ROOT/backup/"* -R "$PRIVATE_REPO" \
+            --title "Immutable WTA 2024 score source and canonical prewrite backup" \
+            --notes "Original 2024 partition, manifest, stage, checked source proof. Preserve for rollback."
+          gh release download "$tag" -R "$PRIVATE_REPO" -D "$ROOT/backup-readback"
+          (cd "$ROOT/backup-readback" && sha256sum -c SHA256SUMS)
+          cmp "$ROOT/backup-readback/package.json" "$ROOT/package.json"
+
+      - name: Atomic manifest-last release upload with last-moment CDB CAS
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from cdb_global_writer_lock import verify
+          from release_store import ReleaseStore
+          root=Path(os.environ["ROOT"]); repo=os.environ["PRIVATE_REPO"]
+          def freshness():
+              verify(repo,Path(".cdb-global-writer-lock.json"))
+              before=json.loads((root/"history/_tbt_bundle_manifest.json").read_text())["files"]
+              present=ReleaseStore(repo,"tbt-data-v1",root/"freshness")._remote_bundle_files()
+              if present!=before:
+                  raise ValueError("Canonical partition/bundle advanced during work; refuse stale publish")
+          ReleaseStore(repo,"tbt-data-v1",root/"local").upload_bundle([
+              root/"local/history-2024.parquet",root/"local/history_manifest.json"
+          ],before_upload=freshness)
+          PY
+
+      - name: Independently reread persisted 2024 year and all 9916+ exact changes
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/persisted" "$ROOT/remote-verify"
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
+            -p history-2024.parquet -p history_manifest.json -p _tbt_bundle_manifest.json \
+            -D "$ROOT/persisted"
+          python scripts/import_txe_wta2024_scores_exact.py --mode verify \
+            --before-dir "$ROOT/history" --after-dir "$ROOT/persisted" \
+            --stage-file "$ROOT/stage/stage.jsonl" --stage-report "$ROOT/stage/report.json" \
+            --out "$ROOT/remote-verify/report.json"
+          test "$(jq -r .status "$ROOT/remote-verify/report.json")" = verified
+          test "$(jq -r .existing_values_overwritten "$ROOT/remote-verify/report.json")" = 0
+          test "$(jq -r .added_values "$ROOT/remote-verify/report.json")" = "$(jq -r .added_values "$ROOT/package.json")"
+          test "$(jq -r .canonical_rows_checked "$ROOT/remote-verify/report.json")" = 113733
+
+      - name: Save independently VERIFIED write proof in private data main
+        if: steps.control.outputs.mode == 'write' && steps.prepared.outputs.additions != '0'
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg sha "$GITHUB_SHA" --arg backup "blinq-wta2024-scores-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            --slurpfile source "$ROOT/stage/report.json" \
+            --slurpfile persisted "$ROOT/remote-verify/report.json" \
+            '{schema:1,status:"published_and_independently_verified",run_id:$run,
+              attempt:$attempt,app_sha:$sha,backup_tag:$backup,
+              source_stage:$source[0],independent_full_year_readback:$persisted[0],
+              existing_values_overwritten:0,model_trained:false,model_promoted:false,
+              provider_api_requests:0}' > "$ROOT/final-audit.json"
+          path=audit/txe-wta2024-score-import-latest.json
+          encoded="$(base64 -w0 "$ROOT/final-audit.json")"
+          old="$(gh api "repos/$PRIVATE_REPO/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$old" ]]; then
+            gh api --method PUT "repos/$PRIVATE_REPO/contents/$path" \
+              -f message="Verify WTA 2024 score CDB import run $GITHUB_RUN_ID" \
+              -f content="$encoded" -f sha="$old" >/dev/null
+          else
+            gh api --method PUT "repos/$PRIVATE_REPO/contents/$path" \
+              -f message="Verify WTA 2024 score CDB import run $GITHUB_RUN_ID" \
+              -f content="$encoded" >/dev/null
+          fi
+
+      - name: Retain AGGREGATE reports only, no player-level source data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-wta2024-score-import-${{ github.run_id }}
+          path: |
+            .cache/tbt/wta2024-score-publish/stage/report.json
+            .cache/tbt/wta2024-score-publish/dry/report.json
+            .cache/tbt/wta2024-score-publish/local-verify/report.json
+            .cache/tbt/wta2024-score-publish/remote-verify/report.json
+            .cache/tbt/wta2024-score-publish/final-audit.json
+          retention-days: 45
+          if-no-files-found: warn
+
+      - name: Release global writer lock even after a failed publication
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
