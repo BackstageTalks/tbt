@@ -106,6 +106,33 @@ def test_targeted_queue_filters_cooldown_and_prioritizes_recent_gaps(match_facto
     assert plan['skipped'] == {'missing_or_conflicting_event_id':1, 'retry_not_due':1}
 
 
+
+def test_targeted_priority_values_quality_and_verified_identity(match_factory):
+    from datetime import date
+    from download_tennis_history import _statistics_candidates
+    ready = match_factory('ready', 'A', 'B', 'A')
+    incomplete = match_factory('incomplete', 'A', 'B', 'A')
+    verified = match_factory('verified', 'A', 'B', 'A')
+    unverified = match_factory('unverified', 'A', 'B', 'A')
+    for m in (ready, incomplete, verified, unverified):
+        m.scheduled_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        m.provider_payload = {'id': '123'}
+    ready.stats = {f'{p}_{f}': .5 for p in ('p1', 'p2')
+                   for f in ('service_points_won', 'return_points_won')}
+    incomplete.stats = {'p1_service_points_won': .5, 'p1_return_points_won': .5,
+                        'p2_aces': 2}
+    verified.stats = {'p1_service_points_won': .5, 'p1_return_points_won': .5}
+    unverified.stats = dict(verified.stats)
+    verified.provider_payload['_tbt_event_identity'] = {
+        'event_id': '123', 'status': 'finished', 'home': 'A', 'away': 'B'}
+    ordered, _ = _statistics_candidates(
+        [ready, incomplete, verified, unverified],
+        date(2026, 1, 1), date(2026, 12, 31), targeted=True)
+    names = [m.match_id for m in ordered]
+    assert names.index('ready') > names.index('incomplete')
+    assert names.index('verified') < names.index('unverified')
+
+
 def test_readback_requires_all_exact_added_values(match_factory):
     import pytest
     from verify_targeted_statistics import verify_added_fields
