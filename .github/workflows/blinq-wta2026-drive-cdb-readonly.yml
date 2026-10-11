@@ -1,0 +1,100 @@
+name: WTA 2026 private-source to CDB read-only diagnostic
+on:
+  pull_request:
+    paths:
+      - scripts/audit_wta2026_excel_readonly.py
+      - tests/test_audit_wta2026_excel_readonly.py
+      - .github/workflows/blinq-wta2026-drive-cdb-readonly.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/audit_wta2026_excel_readonly.py
+      - tests/test_audit_wta2026_excel_readonly.py
+      - .github/workflows/blinq-wta2026-drive-cdb-readonly.yml
+permissions:
+  contents: read
+concurrency:
+  group: blinq-wta2026-readonly-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          python -m unittest discover -s tests -p test_audit_wta2026_excel_readonly.py -v
+          python -m compileall -q scripts/audit_wta2026_excel_readonly.py
+  audit:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      SOURCE_GIT_BLOB: aa88294e7d7edcc980302c07a1e9394e6efa5ea9
+      SOURCE_SHA256: 9bb1d5b2ecc57fc1c0866e50f722b2a4ebc7616090e8848b41b08f438ce7c753
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Require private token and verified private source identity
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$DATA_REPO" --jq .private)" = true
+      - name: Download SHA-verified original from private Git object, never log source rows
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/wta2026/audit
+          gh api "repos/$DATA_REPO/git/blobs/$SOURCE_GIT_BLOB" --jq .content | base64 -d > .cache/wta2026/2026.xlsx
+          echo "$SOURCE_SHA256  .cache/wta2026/2026.xlsx" | sha256sum -c -
+          test "$(stat -c %s .cache/wta2026/2026.xlsx)" -eq 343699
+      - name: Download fresh canonical year from private release and validate manifest/release SHA
+        run: |
+          set -euo pipefail
+          python -m pip install -q pandas pyarrow
+          gh release download tbt-data-v1 -R "$DATA_REPO" \
+            -p history-2026.parquet -p history_manifest.json -p _tbt_bundle_manifest.json \
+            -D .cache/wta2026
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > .cache/wta2026/release.json
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          root=Path(".cache/wta2026")
+          release=json.loads((root/"release.json").read_text())
+          digests={item["name"]:item.get("digest") for item in release["assets"]}
+          b=json.loads((root/"_tbt_bundle_manifest.json").read_text())
+          m=json.loads((root/"history_manifest.json").read_text())
+          for n in ("history-2026.parquet","history_manifest.json","_tbt_bundle_manifest.json"):
+              digest=hashlib.sha256((root/n).read_bytes()).hexdigest()
+              assert digests.get(n)=="sha256:"+digest,(n,"release drift")
+              if n!="_tbt_bundle_manifest.json":
+                  assert b["files"][n]["sha256"]==digest,(n,"bundle drift")
+          year=hashlib.sha256((root/"history-2026.parquet").read_bytes()).hexdigest()
+          assert m["years"]["2026"]["sha256"]==year
+          (root/"cdb-year.sha").write_text(year)
+          print("FRESH_CDB_SHA_MANIFEST_RELEASE_VERIFIED")
+          PY
+      - name: Compare source against latest canonical year in strictly read-only mode
+        run: |
+          set -euo pipefail
+          python scripts/audit_wta2026_excel_readonly.py \
+            --xlsx .cache/wta2026/2026.xlsx \
+            --canonical .cache/wta2026/history-2026.parquet \
+            --expected-cdb-sha "$(cat .cache/wta2026/cdb-year.sha)" \
+            --report .cache/wta2026/audit/report.json
+          jq -e '.approved_added_values==0 and .canonical_written==false and .model_trained==false and .license_cleared==false and .stable_source_player_event_ids==false' .cache/wta2026/audit/report.json
+      - name: Publish only aggregate research diagnostics, not source or private rows
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wta2026-cdb-readonly-${{ github.run_id }}
+          path: .cache/wta2026/audit/report.json
+          retention-days: 30
+          if-no-files-found: warn
