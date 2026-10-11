@@ -126,7 +126,7 @@ def classify(raw, point_rows, frame, cdb_sha):
             raise ValueError("Duplicate source match id")
         seen_raw.add(sid)
         try:
-            if integer(entry["Year"]) != YEAR:
+            if str(entry["Year"]).strip() != str(YEAR):
                 raise ValueError("Wrong year")
             a, b = norm_text(entry["Player1Name"]), norm_text(entry["Player2Name"])
             if not a or not b or a == b:
