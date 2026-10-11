@@ -1,4 +1,4 @@
-"""Read-only older WTA ranking snapshots require attested IDs and 1-14 day PIT."""
+"""Read-only WTA ranking snapshots require attested IDs and 1-14 day PIT (2021-24)."""
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 import pytest
@@ -19,7 +19,7 @@ class Source:
     def _snapshot(self,name,day,*,player_id,max_age_days):
         return {"date":self.date,"rank":12 if player_id=="canon-A" else 34}
 
-@pytest.mark.parametrize("year",[2023,2024])
+@pytest.mark.parametrize("year",[2021,2022,2023,2024])
 def test_exact_source_id_prior_week_and_two_nulls(monkeypatch,year):
     monkeypatch.setattr(a,"YEAR",year)
     report,stage=a.audit_rows([match(year)],Source(year),SHA,{})
@@ -30,14 +30,14 @@ def test_exact_source_id_prior_week_and_two_nulls(monkeypatch,year):
     assert stage[0]["add_only_null_fields"]=={"player1_rank":12,"player2_rank":34}
     assert report["write_authorized"] is False
 
-@pytest.mark.parametrize("year",[2023,2024])
+@pytest.mark.parametrize("year",[2021,2022,2023,2024])
 def test_no_overwrite_conflicting_original_rank(monkeypatch,year):
     monkeypatch.setattr(a,"YEAR",year)
     report,stage=a.audit_rows([match(year,p1=99)],Source(year),SHA,{})
     assert stage==[]
     assert report["quarantined"]["existing_rank_disagreement"]==1
 
-@pytest.mark.parametrize("year",[2023,2024])
+@pytest.mark.parametrize("year",[2021,2022,2023,2024])
 @pytest.mark.parametrize("age",[0,-1,15])
 def test_future_same_day_and_stale_rejected(monkeypatch,year,age):
     monkeypatch.setattr(a,"YEAR",year)
@@ -45,7 +45,7 @@ def test_future_same_day_and_stale_rejected(monkeypatch,year,age):
     assert stage==[]
     assert report["quarantined"]["future_same_day_or_stale_rank"]==1
 
-@pytest.mark.parametrize("year",[2023,2024])
+@pytest.mark.parametrize("year",[2021,2022,2023,2024])
 def test_source_id_one_to_one(monkeypatch,year):
     monkeypatch.setattr(a,"YEAR",year)
     report,stage=a.audit_rows([match(year)],Source(year,{"canon-A":"s","canon-B":"s"}),SHA,{})
