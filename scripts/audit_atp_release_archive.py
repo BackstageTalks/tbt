@@ -119,6 +119,17 @@ def audit(archive_path, year, digest):
                                          if isinstance(x, dict)):
             nonempty_table_stats += 1
 
+    # Payload usability is separate from structural checkpoint completion.
+    # Report counts only: never print full private HTML or player text.
+    texts = [v.get("visible_text", "") for v in stats.values()
+             if isinstance(v, dict)]
+    text_counts = [len(t.strip()) if isinstance(t, str) else 0 for t in texts]
+    with_text = sum(n >= 100 for n in text_counts)
+    keywords = re.compile(r"\b(?:aces?|double faults?|break points?|"
+                          r"first serve|second serve|1st serve|2nd serve)\b",
+                          flags=re.I)
+    metric_text = sum(1 for t in texts if isinstance(t, str)
+                      and keywords.search(t) and len(re.findall(r"[0-9]", t)) >= 6)
     complete = bool(urls and not missing_tournaments
                     and not bad_tournament_rows and not missing_stats)
     return {
@@ -134,6 +145,10 @@ def audit(archive_path, year, digest):
         "linked_match_stats": len(required_stats),
         "missing_match_stats": missing_stats,
         "stats_with_nonempty_tables": nonempty_table_stats,
+        "stats_json_files": len(stats),
+        "stats_with_text_over_100_chars": with_text,
+        "stats_with_numeric_serve_text": metric_text,
+        "largest_stats_text_chars": max(text_counts, default=0),
         "source_archive_complete": complete,
         "production_cdb_modified": False,
         "training_db_modified": False,
