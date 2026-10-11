@@ -62,6 +62,10 @@ PLAYER_STATS_FOCUS = ("aces", "dblfaults", "breakpts", "breakpts_w",
                       "tiebreaks", "tiebreaks_w", "total_games", "sets_won")
 
 
+class OptionalStatsAccessUnavailable(Exception):
+    """Optional free-player-game endpoint unavailable; continue normal odds."""
+
+
 def select_player_game_targets(future, limit=PLAYER_GAMES_PROBE_MAX):
     """Distinct single-player names from already-fetched upcoming ATP/WTA slate."""
     seen = set()
@@ -116,12 +120,20 @@ def probe_player_games(future, day, runid):
     """Bounded, research-only historical stats audit; no canonical writes."""
     targets = select_player_game_targets(future)
     examined = 0
+    attempted = 0
     with_stats = 0
     for name in targets:
         if STATE["reason"] or STATE["calls"] >= MAX_CALLS:
             break
         path = "/sports/tennis/players/" + urllib.parse.quote(name, safe="") + "/games"
-        result = request(path, {"limit": PLAYER_GAMES_LIMIT}, allow_not_found=True)
+        attempted += 1
+        try:
+            result = request(path, {"limit": PLAYER_GAMES_LIMIT}, allow_not_found=True)
+        except OptionalStatsAccessUnavailable:
+            # Not entitled to this optional endpoint. Do not waste the nightly
+            # quota retrying other names; preserve the existing odds closeout.
+            print(json.dumps({"player_games_probe": "not_entitled_or_disabled"}), flush=True)
+            break
         if result is None:
             if STATE["reason"]:
                 break
@@ -133,7 +145,7 @@ def probe_player_games(future, day, runid):
                      "captured_at_utc": now().isoformat(), "summary": summary,
                      "payload": result, "research_only": True})
         flush_if_needed(day, runid)
-    print(json.dumps({"player_games_probe": {"attempted": min(len(targets), PLAYER_GAMES_PROBE_MAX),
+    print(json.dumps({"player_games_probe": {"attempted": attempted,
                       "responses": examined, "games_with_relevant_stats": with_stats,
                       "new_cdb_cells_verified": None}}), flush=True)
 
@@ -250,6 +262,8 @@ def request(path, params=None, *, allow_not_found=False):
             # Missing player logs are normal; do not poison unrelated night odds.
             if allow_not_found and exc.code == 404:
                 return None
+            if allow_not_found and exc.code == 403:
+                raise OptionalStatsAccessUnavailable() from None
             if exc.code == 429:
                 retry = exc.headers.get("Retry-After", "1")
                 try:
