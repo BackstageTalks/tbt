@@ -1,0 +1,48 @@
+name: BlinQ ATP Futures original source SHA audit
+on:
+  pull_request:
+    paths:
+      - scripts/audit_atp_futures_source_sha.py
+      - tests/test_atp_futures_source_sha.py
+      - .github/workflows/blinq-atp-futures-source-audit.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/audit_atp_futures_source_sha.py
+      - tests/test_atp_futures_source_sha.py
+      - .github/workflows/blinq-atp-futures-source-audit.yml
+permissions:
+  contents: read
+  actions: read
+jobs:
+  read-only-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test fail-closed original source SHA reconstruction
+        run: |
+          set -euo pipefail
+          python -m pip install -q pytest
+          python -m pytest -q tests/test_atp_futures_source_sha.py
+      - name: Reconstruct original source on private runner only
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = true
+          python scripts/audit_atp_futures_source_sha.py --out .cache/tbt/atp-futures-source-audit.json
+          jq -e '.status=="VERIFIED_PRIVATE_SOURCE_ONLY" and .source_rows==130689 and .approved_missing_cdb_cells==0 and .canonical_mutated==false' .cache/tbt/atp-futures-source-audit.json
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: atp-futures-source-report
+          path: .cache/tbt/atp-futures-source-audit.json
+          retention-days: 30
+          if-no-files-found: error
