@@ -58,7 +58,7 @@ def download_consistent_history(store):
             return store.download(require_bundle_manifest=True)
         except RuntimeError as exc:
             transient_partition = re.fullmatch(
-                r"Release bundle checksum mismatch for history-\\d{4}\\.parquet",
+                r"Release bundle checksum mismatch for history-\d{4}\.parquet",
                 str(exc),
             )
             if attempt == 2 or not transient_partition:
