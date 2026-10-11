@@ -1,0 +1,100 @@
+name: BlinQ full app Git byte audit (private report)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-full-app-git-byte-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-full-app-git-byte-audit
+  cancel-in-progress: false
+
+jobs:
+  audit-entire-app-tree:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      PRIVATE_RELEASE: blinq-complete-git-byte-audit-20261011-38119153567
+      SCANNER_SHA: 6e0ada97acb49771560b0e2ce2afe6ad893fb894
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          ref: ${{ env.SCANNER_SHA }}
+          path: auditor
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify read-only scanner and private destination
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          python -u auditor/scripts/test_audit_full_git_content.py
+          gh release view "$PRIVATE_RELEASE" -R "$PRIVATE_REPO" >/dev/null
+      - name: Read and checksum every tracked app Git file
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/app-full-audit
+          printf '[]\n' >/tmp/app-full-audit/no-external-releases.json
+          python -u auditor/scripts/audit_full_git_content.py \
+            --repo app --releases-json /tmp/app-full-audit/no-external-releases.json \
+            --report /tmp/app-full-audit/app-whole-repo-summary.json \
+            --private-index /tmp/app-full-audit/app-whole-repo-file-index.jsonl.gz \
+            > /tmp/app-full-audit/scan-private.txt
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          p=Path('/tmp/app-full-audit/app-whole-repo-summary.json')
+          d=json.loads(p.read_text())
+          d['repo']='BackstageTalks/tbt'
+          d['scope']='Complete app tracked Git bytes; app software tests/assets. Release bytes are separately audited in private repository.'
+          d['releases']={'scope':'app release assets not enumerated in this app Git tree audit'}
+          d['registered_source_coverage']={'scope':'not a data-source register'}
+          assert d['tracked_git']['files']>=1117
+          assert d['tracked_git']['all_git_bytes_sha256_read']
+          assert not d['tracked_git']['partial_content_checks']
+          assert not d['tracked_git']['failed_file_checks']
+          assert d['cdb_modified_by_this_audit'] is False
+          expected=subprocess.check_output(['git','-C','app','rev-parse','HEAD'],text=True).strip()
+          assert d['pinned_git_commit']==expected
+          p.write_text(json.dumps(d,indent=2,sort_keys=True)+'\n')
+          print('APP_WHOLE_REPO_BYTES_VALIDATED',d['pinned_git_commit'],
+                'TRACKED_FILES',d['tracked_git']['files'],
+                'HASHED_BYTES',d['tracked_git']['bytes_read_at_least_once'],
+                'STRUCTURED_CHECKED',d['tracked_git']['checked_structures'],
+                'PARSE_ERRORS',d['tracked_git']['failed_file_checks'])
+          PY
+      - name: Persist app file-by-file hashes privately, independent checksum re-read
+        run: |
+          set -euo pipefail
+          cd /tmp/app-full-audit
+          sha256sum app-whole-repo-summary.json app-whole-repo-file-index.jsonl.gz > app-SHA256SUMS
+          sha256sum -c app-SHA256SUMS
+          gh release upload "$PRIVATE_RELEASE" \
+            app-whole-repo-summary.json app-whole-repo-file-index.jsonl.gz app-SHA256SUMS \
+            -R "$PRIVATE_REPO"
+          mkdir -p readback
+          gh release download "$PRIVATE_RELEASE" \
+            -R "$PRIVATE_REPO" \
+            -p 'app-whole-repo-*' -p 'app-SHA256SUMS' \
+            -D readback
+          (cd readback && sha256sum -c app-SHA256SUMS)
+          python - <<'PY'
+          import json
+          d=json.load(open('readback/app-whole-repo-summary.json'))
+          print('APP_WHOLE_GIT_AUDIT_PERSISTED',d['tracked_git']['files'],
+                'PARSE_ERRORS',d['tracked_git']['failed_file_checks'])
+          PY
