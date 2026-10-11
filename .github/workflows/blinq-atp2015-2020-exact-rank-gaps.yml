@@ -1,0 +1,176 @@
+name: BlinQ ATP 2015-2020 pinned weekly rank current CDB gap
+on:
+  pull_request:
+    paths:
+      - .github/workflows/blinq-atp2015-2020-exact-rank-gaps.yml
+      - scripts/audit_atp_weekly_rank_history.py
+      - scripts/import_atp_weekly_rank_fill.py
+      - tests/test_atp_rank_history_contract.py
+  push:
+    branches: [main]
+    paths: [.github/workflows/blinq-atp2015-2020-exact-rank-gaps.yml]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: blinq-atp2015-2020-readonly-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  guard-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate PIT source matching, stateless null-only rank contract
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pytest
+          python -m pytest -q tests/test_atp_rank_history_contract.py
+          python -m compileall -q scripts/audit_atp_weekly_rank_history.py scripts/import_atp_weekly_rank_fill.py
+  read-only-stage:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [guard-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 95
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {start: 2015, end: 2017, years: "2015 2016 2017"}
+          - {start: 2018, end: 2020, years: "2018 2019 2020"}
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      YEARS: ${{ matrix.years }}
+      YEAR_START: ${{ matrix.start }}
+      YEAR_END: ${{ matrix.end }}
+      ROOT: .cache/tbt/atp-weekly-2015-2020-${{ matrix.start }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Source pin, canonical private access and focused tests
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$DATA_REPO" --jq .private)" = true
+          python -m pip install --retries 6 -r api/requirements.txt -r api/requirements-train.txt pytest
+          python -m pytest -q tests/test_atp_rank_history_contract.py
+      - name: Download exact old ranking source and ONLY current CDB interval
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/source" "$ROOT/history" "$ROOT/stage" "$ROOT/dry"
+          curl --fail --location --retry 3 --retry-delay 2 --max-time 300 \
+            'https://raw.githubusercontent.com/Jupiterian/ATP-Rankings-API/247f2f5e86b9e142a7ead7b0e8b3dfb5ee6abb28/rankings.db' \
+            --output "$ROOT/source/rankings.db"
+          echo "c20ec5cf9b87db59a300e0cae6bba2649cdec25248d0f0b0ad3a4d6026aa0fff  $ROOT/source/rankings.db" | sha256sum -c -
+          for year in $YEARS; do
+            gh release download tbt-data-v1 -R "$DATA_REPO" -p "history-$year.parquet" -D "$ROOT/history"
+          done
+          gh release download tbt-data-v1 -R "$DATA_REPO" -p history_manifest.json -p _tbt_bundle_manifest.json -D "$ROOT/history"
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > "$ROOT/history/release.json"
+      - name: Independently checksum all full-year inputs and project 3-year manifest
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"]);dir=root/"history"
+          source=json.loads((dir/"history_manifest.json").read_text())
+          bundle=json.loads((dir/"_tbt_bundle_manifest.json").read_text())
+          rel=json.loads((dir/"release.json").read_text())
+          remote={a["name"]:a["digest"] for a in rel["assets"]}
+          years=os.environ["YEARS"].split()
+          pins={}
+          for year in years:
+              filename=f"history-{year}.parquet"
+              h=hashlib.sha256((dir/filename).read_bytes()).hexdigest()
+              assert source["years"][year]["sha256"]==h
+              assert bundle["files"][filename]["sha256"]==h
+              assert remote[filename]=="sha256:"+h
+              pins[year]=h
+          for filename in ("history_manifest.json","_tbt_bundle_manifest.json"):
+              h=hashlib.sha256((dir/filename).read_bytes()).hexdigest()
+              assert remote[filename]=="sha256:"+h
+          projected=dict(source)
+          projected["years"]={year:source["years"][year] for year in years}
+          (dir/"history_manifest.json").write_text(json.dumps(projected,indent=2))
+          (root/"source/source-pin.json").write_text(json.dumps({
+              "schema":1,"years":pins,
+              "upstream_git_commit":"247f2f5e86b9e142a7ead7b0e8b3dfb5ee6abb28",
+              "upstream_source_sha256":"c20ec5cf9b87db59a300e0cae6bba2649cdec25248d0f0b0ad3a4d6026aa0fff",
+              "provider_api_requests":0,"production_mutated":False
+          },sort_keys=True,indent=2))
+          print("ATP_OLD_RANK_CURRENT_SHA_PINS",pins)
+          PY
+      - name: Strict year-specific live canonical ATP source and rank gap
+        run: |
+          set -euo pipefail
+          python scripts/audit_atp_weekly_rank_history.py --history-dir "$ROOT/history" \
+            --sqlite-db "$ROOT/source/rankings.db" --out-dir "$ROOT/stage"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          report=json.loads((root/"stage/report.json").read_text())
+          assert report["schema"]==1 and report["source_mode"]=="sqlite"
+          assert report["rapidapi_requests"]==report["api_requests"]==0
+          assert report["production_mutated"] is False
+          assert report["counts"].get("atp_matches_in_source_span",0)>0
+          rows=(root/"stage/rank-fill-candidates.jsonl").read_text().splitlines()
+          assert len(rows)==report["counts"].get("strict_fill_candidate",0)
+          print("ATP_OLD_RANK_STRICT_STAGE_COUNTS",json.dumps(report["counts"],sort_keys=True))
+          PY
+      - name: Recheck exact existing-field preconditions using null-only dry importer
+        run: |
+          set -euo pipefail
+          python scripts/import_atp_weekly_rank_fill.py --history-dir "$ROOT/history" \
+            --stage "$ROOT/stage/rank-fill-candidates.jsonl" --out-dir "$ROOT/dry"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ["ROOT"])
+          report=json.loads((root/"dry/report.json").read_text())
+          assert report["schema"]==1 and report["rapidapi_requests"]==0
+          assert report["production_mutated"] is False and report["local_partitions_written"] is False
+          assert report["changed_years"]==sorted(report["changed_years"])
+          print("ATP_OLD_RANK_NULL_ONLY_DELTA",json.dumps(report,sort_keys=True))
+          PY
+      - name: Private SHA256 stage, immutable snapshot and independent readback
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT/private" "$ROOT/independent"
+          cp "$ROOT/source/source-pin.json" "$ROOT/private/"
+          cp "$ROOT/stage/report.json" "$ROOT/private/source-stage-report.json"
+          cp "$ROOT/stage/rank-fill-candidates.jsonl" "$ROOT/private/rank-fill-candidates.jsonl"
+          cp "$ROOT/stage/rank-points-sidecar.jsonl" "$ROOT/private/rank-points-sidecar.jsonl"
+          cp "$ROOT/dry/report.json" "$ROOT/private/rank-dry-report.json"
+          (
+            cd "$ROOT/private"
+            sha256sum *.json *.jsonl > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          tag="blinq-atp-rank-gap-$YEAR_START-$YEAR_END-$GITHUB_RUN_ID"
+          gh release create "$tag" "$ROOT/private/"* -R "$DATA_REPO" \
+            --title "Read-only ATP $YEAR_START-$YEAR_END rank source to CURRENT CDB gap" \
+            --notes "Immutable SHA-verified source observation stage; no CDB/model writes or API calls."
+          gh release download "$tag" -R "$DATA_REPO" -D "$ROOT/independent"
+          (cd "$ROOT/independent" && sha256sum -c SHA256SUMS)
+          cmp "$ROOT/private/rank-dry-report.json" "$ROOT/independent/rank-dry-report.json"
+      - name: Public artifacts contain only aggregate reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-atp-rank-old-counts-${{ matrix.start }}-${{ github.run_id }}
+          path: |
+            .cache/tbt/atp-weekly-2015-2020-${{ matrix.start }}/stage/report.json
+            .cache/tbt/atp-weekly-2015-2020-${{ matrix.start }}/dry/report.json
+          if-no-files-found: warn
+          retention-days: 30
