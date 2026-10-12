@@ -139,3 +139,53 @@ jobs:
         shell: bash
         run: |
           echo "Private manual serve/return CDB candidate audit: Python unit tests and read-only contract passed on public app runner. No source rows or artifacts published; CDB untouched." >> "$GITHUB_STEP_SUMMARY"
+
+  private-derived-rates-null-gate-contract:
+    # Ephemeral read-only fixture check on authorized public app runner because
+    # private tbt-data runners cannot start. Commit is SHA-pinned; no CDB bytes.
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Verify trusted private checkout
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view BackstageTalks/tbt-data --json visibility -q .visibility)" = PRIVATE
+      - name: Read SHA-pinned private gate code only
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 7076a5574e47df81d87bd958a20c5ab847d19efe
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run isolated private NULL and source-rate regressions
+        working-directory: private
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_drive_cdb_current_null_gate.py -v
+          python -m unittest discover -s tests -p test_drive_cdb_audit.py -v
+          python -m unittest discover -s tests -p test_sackmann_boxscore_rates.py -v
+          python -m compileall -q scripts/drive_cdb_current_null_gate.py scripts/drive_cdb_audit.py scripts/sackmann_boxscore_rates.py
+          python - <<'PY'
+          from pathlib import Path
+          content=Path("scripts/drive_cdb_current_null_gate.py").read_text()
+          assert '"ready_for_production_write": 0' in content
+          assert '"write_authorized": False' in content
+          for forbidden in ("upload_bundle(", "write_snapshot(", "gh release", "requests.post("):
+              assert forbidden not in content
+          print("BLINQ_PRIVATE_REVIEW_GATE_NO_WRITER_VERIFIED")
+          PY
+      - name: Private test outcome only
+        if: success()
+        run: echo "Synthetic source and CURRENT NULL safety checks passed without private artifacts or canonical writes." >> "$GITHUB_STEP_SUMMARY"
