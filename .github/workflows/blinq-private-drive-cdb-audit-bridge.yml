@@ -253,7 +253,7 @@ jobs:
           for name in drive-inventory.json files.json candidate-fields.jsonl report.json; do
             if test -f "work/report/$name"; then cp "work/report/$name" work/private-output/; fi
           done
-          printf '%s\n' "source_ref=$SOURCE_REF" "drive_root=$DRIVE_ROOT" "run=$GITHUB_RUN_ID" "attempt=$GITHUB_RUN_ATTEMPT" "audit_outcome=${{ steps.audit.outcome }}" >work/private-output/run-evidence.txt
+          printf '%s\n' "source_ref=$SOURCE_REF" "source_sampling=historical_stats_priority" "drive_root=$DRIVE_ROOT" "run=$GITHUB_RUN_ID" "attempt=$GITHUB_RUN_ATTEMPT" "audit_outcome=${{ steps.audit.outcome }}" >work/private-output/run-evidence.txt
           if test -f work/private-current-null-review/report.json; then
             cp work/private-current-null-review/report.json work/private-output/current-null-review-report.json
             cp work/private-current-null-review/review-candidates.jsonl work/private-output/current-null-review-candidates.jsonl
