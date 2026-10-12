@@ -36,6 +36,29 @@ def norm(value):
         c for c in t if not unicodedata.combining(c))))
 
 
+# Only semantically identical, provider-independent draw round labels.
+ROUND_ALIASES = {
+    "f": "f", "final": "f", "finals": "f",
+    "sf": "sf", "semifinal": "sf", "semifinals": "sf",
+    "semi final": "sf", "semi finals": "sf",
+    "qf": "qf", "quarterfinal": "qf", "quarterfinals": "qf",
+    "quarter final": "qf", "quarter finals": "qf",
+    "r128": "r128", "round of 128": "r128",
+    "r64": "r64", "round of 64": "r64",
+    "r32": "r32", "round of 32": "r32",
+    "r16": "r16", "round of 16": "r16",
+    "rr": "rr", "round robin": "rr",
+    "q1": "q1", "1st round qualifying": "q1", "first round qualifying": "q1",
+    "q2": "q2", "2nd round qualifying": "q2", "second round qualifying": "q2",
+    "q3": "q3", "3rd round qualifying": "q3", "third round qualifying": "q3",
+}
+
+
+def canonical_round(value):
+    label = norm(value)
+    return ROUND_ALIASES.get(label, label)
+
+
 def sha_file(path: Path, expected: str):
     if not SHA.fullmatch(str(expected)):
         raise ValueError("A full expected SHA-256 is mandatory")
@@ -248,8 +271,9 @@ def score_event_candidates(observations, current_matches, links):
              lambda c: str(c.get("winner_id") or "") == wid),
             ("exact_tournament_name",
              lambda c: norm(c.get("tournament")) == norm(raw.get("tourney_name"))),
-            ("exact_round_name",
-             lambda c: norm(c.get("round_name")) == norm(source.get("source_round"))),
+            ("equivalent_round_name",
+             lambda c: canonical_round(c.get("round_name")) ==
+             canonical_round(source.get("source_round"))),
             ("exact_surface",
              lambda c: norm(c.get("surface")) == norm(raw.get("surface"))),
             ("best_of",
@@ -257,6 +281,8 @@ def score_event_candidates(observations, current_matches, links):
              or str(c.get("best_of")) in (
                  str(raw.get("best_of")), str(raw.get("best_of")) + ".0")),
         )
+        if not candidates:
+            count["context_rejected_no_canonical_pair"] += 1
         for stage, predicate in steps:
             if not candidates:
                 break
