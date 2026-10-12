@@ -101,6 +101,34 @@ class OfficialEventWitnessTest(unittest.TestCase):
         obj["sides"][0]["scores"][0]="7"
         self.assertFalse(mod.official_compatible(self.source,obj))
 
+    def test_listing_only_never_becomes_official_native_match_id(self):
+        from copy import deepcopy
+        listing=deepcopy(self.official)
+        listing["source_match_id"]="atptour:2025:580:listing-foo"
+        self.assertFalse(mod.official_compatible(self.source,listing))
+        self.assertTrue(mod.official_compatible(self.source,listing,listing_review_only=True))
+        listing["sides"][0]["scores"][0]="7"
+        self.assertFalse(mod.official_compatible(self.source,listing,listing_review_only=True))
+
+    def test_canonical_metadata_review_is_not_canonical_set_tape(self):
+        from copy import deepcopy
+        match=deepcopy(self.match)
+        self.assertTrue(mod.canonical_metadata_review(self.source,match,self.ids))
+        match.stats={}
+        self.assertTrue(mod.canonical_metadata_review(self.source,match,self.ids))
+        self.assertFalse(mod.canonical_compatible(self.source,match,self.ids))
+        match.tournament="Different ATP Tournament"
+        self.assertFalse(mod.canonical_metadata_review(self.source,match,self.ids))
+
+    def test_metadata_review_never_accepts_wrong_winner_or_pair(self):
+        from copy import deepcopy
+        match=deepcopy(self.match)
+        match.winner_id="222"
+        self.assertFalse(mod.canonical_metadata_review(self.source,match,self.ids))
+        match=deepcopy(self.match)
+        match.player1_id="333"
+        self.assertFalse(mod.canonical_metadata_review(self.source,match,self.ids))
+
     def test_official_native_match_and_complete_set_tape(self):
         self.assertTrue(mod.official_compatible(self.source,self.official))
         self.assertTrue(mod.canonical_compatible(self.source,self.match,self.ids))

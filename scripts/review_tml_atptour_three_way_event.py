@@ -72,14 +72,14 @@ def official_score_cells(sides, expected_sets):
     return cells
 
 
-def official_compatible(source: dict, official: dict) -> bool:
+def official_compatible(source: dict, official: dict, *, listing_review_only: bool = False) -> bool:
     """Exactly equal native ATP tournament, ATP player codes and finished sets."""
     event=EVENT.fullmatch(str(source.get("tourney_id") or ""))
     match=MATCH.fullmatch(str(official.get("source_match_id") or ""))
     if not event or not match or event.group(1)!=match.group(1) or event.group(2)!=match.group(2):
         return False
-    if match.group(3).startswith("listing-"):
-        return False  # Require ATP's actual match-stats native link, not a listing hash.
+    if match.group(3).startswith("listing-") and not listing_review_only:
+        return False  # Writer: native ATP match ID mandatory; research may review score only.
     if official.get("source")!="atptour" or str(official.get("source_tournament_id"))!="atptour:tournament:"+match.group(2):
         return False
     url=str(official.get("source_url") or "")
@@ -141,7 +141,13 @@ def official_compatible(source: dict, official: dict) -> bool:
     return True
 
 
-def canonical_compatible(source:dict, match, ids:dict) -> bool:
+def canonical_metadata_review(source:dict, match, ids:dict) -> bool:
+    """Review-only metadata concordance; NEVER proves canonical event identity.
+
+    Intentionally DOES NOT require complete canonical set-tape. An apparent
+    match on this predicate must never be passed to the protected importer
+    without independent official event+score and a fresh current NULL audit.
+    """
     win=ids.get(str(source.get("winner_id") or "").upper())
     lose=ids.get(str(source.get("loser_id") or "").upper())
     if not win or not lose or win==lose:
@@ -164,8 +170,13 @@ def canonical_compatible(source:dict, match, ids:dict) -> bool:
         lag=(match.scheduled_at.date()-first).days
     except (TypeError,ValueError,AttributeError):
         return False
-    if not -1<=lag<=16:
+    return -1<=lag<=16
+
+
+def canonical_compatible(source:dict, match, ids:dict) -> bool:
+    if not canonical_metadata_review(source,match,ids):
         return False
+    win=ids.get(str(source.get("winner_id") or "").upper())
     tape=source_score(source.get("score"))
     if not tape:
         return False
@@ -326,6 +337,16 @@ def compare(source_dir:Path, archive_dir:Path, history_dir:Path,
                 m for m in index.get((frozenset((win,lose)),year),[])
                 if canonical_compatible(row,m,links)
             ]
+            metadata_candidates=[
+                m for m in index.get((frozenset((win,lose)),year),[])
+                if canonical_metadata_review(row,m,links)
+            ]
+            if len(metadata_candidates)==1:
+                report["source_unique_metadata_review_no_set_tape_required"]+=1
+            elif len(metadata_candidates)>1:
+                report["source_ambiguous_metadata_review"]+=1
+            else:
+                report["source_no_metadata_review"]+=1
             if len(canonical_score_candidates)==1:
                 report["source_exact_unique_canonical_set_tape"]+=1
             elif len(canonical_score_candidates)>1:
@@ -354,6 +375,21 @@ def compare(source_dir:Path, archive_dir:Path, history_dir:Path,
                     candidate_recovery=native_event_recovery_record(row,candidate,year)
                     if candidate_recovery is not None:
                         candidate_recovery["independent_current_canonical_full_set_witness_count"]=len(canonical_score_candidates)
+                        candidate_recovery["current_canonical_metadata_review_count"]=len(metadata_candidates)
+                        # No canonical IDs in the source-only stale-safe queue.
+                        # The listing hash is not an official match identifier.
+                        research_score=official_compatible(row,candidate,listing_review_only=True)
+                        candidate_recovery["official_complete_score_for_research_only"]=research_score
+                        if research_score:
+                            report["recovery_independent_official_full_score_research"]+=1
+                        if len(metadata_candidates)==1:
+                            report["recovery_unique_canonical_metadata_review"]+=1
+                            if research_score:
+                                report["recovery_official_score_and_canonical_metadata_research"]+=1
+                        elif len(metadata_candidates)>1:
+                            report["recovery_ambiguous_canonical_metadata_review"]+=1
+                        else:
+                            report["recovery_no_canonical_metadata_review"]+=1
                         # DO NOT include or approve the canonical ID; a research
                         # funnel count is not an authorized event crosswalk.
                         if len(canonical_score_candidates)==1:
