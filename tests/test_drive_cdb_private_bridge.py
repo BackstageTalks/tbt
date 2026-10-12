@@ -221,6 +221,7 @@ class PrivateBridgeTest(unittest.TestCase):
         self.assertIn('LEGACY_SOURCE_REF: cf96b6085f93696eb7c319e9109a2040a04cfc4e', workflow)
         self.assertIn('ref: main\n          # Full history keeps the immutable', workflow)
         self.assertIn('fetch-depth: 0\n          path: private', workflow)
+        self.assertIn('test "$(git -C private rev-parse --is-shallow-repository)" = false', workflow)
         self.assertIn('git -C private checkout --detach "$SOURCE_REF"', workflow)
         self.assertIn('test "$(git -C private rev-parse HEAD)" = "$SOURCE_REF"', workflow)
         self.assertIn('verify-priority-reader --legacy-code work/legacy-drive-cdb-audit.py', workflow)
