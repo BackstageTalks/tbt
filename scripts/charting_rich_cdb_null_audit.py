@@ -33,7 +33,7 @@ def rate(row,num,den):
 
 def run(project,out):
     project=pathlib.Path(project);out=pathlib.Path(out);out.mkdir(parents=True,exist_ok=True)
-    src=project/'private-data/tennis/charting';h=project/'history';review=project/'basic-gate'
+    src=pathlib.Path('private-data/tennis/charting');h=project/'history';review=project/'basic-gate'
     basic=json.loads((review/'report.json').read_text())
     assert basic['status']=='READ_ONLY_NO_PRODUCTION_WRITES'
     valid=[json.loads(s) for s in (review/'already_present_verified.jsonl').read_text().splitlines() if s.strip()]
@@ -57,7 +57,7 @@ def run(project,out):
     for x in valid:wanted[x['source_match_id']].add(x['canonical_match_id'])
     # Reconstruct pinned 335-column raw-source views, not synthetic profile aggregates.
     selected=collections.defaultdict(list)
-    root=project/'private-data/research/offline-sources/blinq-import-2026-10-07/chunks'
+    root=pathlib.Path('private-data/research/offline-sources/blinq-import-2026-10-07/chunks')
     for tour,(expected,nrows) in SOURCE.items():
         paths=sorted(root.glob('blinq_charting_'+tour+'_core_features.csv.gz.b64.part*.txt'))
         assert paths
