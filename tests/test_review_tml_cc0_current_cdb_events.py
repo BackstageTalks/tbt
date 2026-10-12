@@ -7,7 +7,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from review_tml_cc0_current_cdb_events import (
-    valid_candidate_edges, score_event_candidates, compare_core_service_cells, compare_derived_rates, sha_file,
+    valid_candidate_edges, score_event_candidates, compare_core_service_cells, compare_derived_rates, corroborate_complete_set_score, sha_file,
 )
 
 
@@ -263,6 +263,91 @@ class GuardTests(unittest.TestCase):
                  "existing_core_stat_cells_equal": 4}
         with self.assertRaisesRegex(ValueError, "not canonical participant"):
             compare_derived_rates(score, match(), "NOT_PLAYER", "CAN2", proof)
+
+    def test_complete_original_score_requires_all_canonical_sets(self):
+        raw = {"score": "6-4 7-6(5)"}
+        stats = {"p1_set1_games": 6, "p2_set1_games": 4,
+                 "p1_set2_games": 7, "p2_set2_games": 6,
+                 "p1_sets_won": 2, "p2_sets_won": 0,
+                 "total_sets": 2, "total_games": 23}
+        self.assertEqual(corroborate_complete_set_score(
+            raw, match(stats_json=json.dumps(stats)), "CAN1", "CAN2"),
+            "exact_full_set_score_review_only")
+        del stats["p2_set2_games"]
+        self.assertEqual(corroborate_complete_set_score(
+            raw, match(stats_json=json.dumps(stats)), "CAN1", "CAN2"),
+            "canonical_set_tape_incomplete")
+
+    def test_original_score_wrong_set_or_total_quarantined(self):
+        raw = {"score": "6-4 6-3"}
+        stats = {"p1_set1_games": 6, "p2_set1_games": 4,
+                 "p1_set2_games": 6, "p2_set2_games": 2}
+        self.assertEqual(corroborate_complete_set_score(
+            raw, match(stats_json=json.dumps(stats)), "CAN1", "CAN2"),
+            "canonical_score_conflict")
+        stats["p2_set2_games"] = 3
+        stats["total_games"] = 20
+        self.assertEqual(corroborate_complete_set_score(
+            raw, match(stats_json=json.dumps(stats)), "CAN1", "CAN2"),
+            "canonical_score_conflict")
+
+    def test_swapped_winner_score_orientation_keeps_source_and_cdb_distinct(self):
+        raw = {"score": "6-3 6-4"}
+        stats = {"p1_set1_games": 3, "p2_set1_games": 6,
+                 "p1_set2_games": 4, "p2_set2_games": 6,
+                 "p1_sets_won": 0, "p2_sets_won": 2, "total_games": 19}
+        current = match(winner_id="CAN2", stats_json=json.dumps(stats))
+        self.assertEqual(corroborate_complete_set_score(
+            raw, current, "CAN2", "CAN1"), "exact_full_set_score_review_only")
+        self.assertEqual(corroborate_complete_set_score(
+            raw, current, "CAN1", "CAN2"), "source_canonical_orientation_conflict")
+
+    def test_retirement_and_unfinished_score_never_corroborated(self):
+        stats = {"p1_set1_games": 6, "p2_set1_games": 4,
+                 "p1_set2_games": 6, "p2_set2_games": 4}
+        current = match(stats_json=json.dumps(stats))
+        for score in ("6-4 RET", "6-4 4-6", "6-4 6-4 1-0",
+                      "6-4 7-5 RET", "10-8 6-4 6-4"):
+            with self.subTest(score=score):
+                self.assertEqual(corroborate_complete_set_score(
+                    {"score": score}, current, "CAN1", "CAN2"),
+                    "invalid_original_score")
+        self.assertEqual(corroborate_complete_set_score(
+            {"score": "6-4 6-4"}, match(status="retired"),
+            "CAN1", "CAN2"), "canonical_not_completed")
+
+    def test_full_score_corroboration_records_provenance_but_cannot_authorize_write(self):
+        links, _ = self.bridges()
+        sha_a, sha_b = "a" * 64, "b" * 64
+        origin = source(
+            source_file="atp_matches_2024.csv",
+            source_sha256=sha_a, raw_row_sha256=sha_b, source_row=42,
+            raw_columns={**source()["raw_columns"], "score": "6-4 6-3"})
+        stats = {"p1_set1_games": 6, "p2_set1_games": 4,
+                 "p1_set2_games": 6, "p2_set2_games": 3}
+        candidates, counts = score_event_candidates(
+            [origin], [match(stats_json=json.dumps(stats))], links)
+        self.assertEqual(len(candidates), 1)
+        row = candidates[0]
+        self.assertTrue(row["score_attested"])
+        self.assertEqual(row["score_review_status"],
+                         "exact_full_set_score_review_only")
+        self.assertEqual(row["original_source_sha256"], sha_a)
+        self.assertEqual(row["original_source_row_sha256"], sha_b)
+        self.assertEqual(row["original_source_row_number"], 42)
+        self.assertFalse(row["independent_event_id_attested"])
+        self.assertFalse(row["write_authorized"])
+        self.assertFalse(row["import_ready"])
+        self.assertIsNone(row["candidate_new_null_fields"])
+        self.assertEqual(counts["score_review_exact_full_set_score_review_only"], 1)
+
+    def test_partial_or_missing_score_no_false_attestation(self):
+        links, _ = self.bridges()
+        candidates, counts = score_event_candidates(
+            [source()], self.canon, links)
+        self.assertFalse(candidates[0]["score_attested"])
+        self.assertEqual(counts["score_review_invalid_original_score"], 1)
+        self.assertFalse(candidates[0]["import_ready"])
 
     def test_source_sha_corruption_rejected(self):
         with tempfile.TemporaryDirectory() as t:
