@@ -174,11 +174,12 @@ class PrivateBridgeTest(unittest.TestCase):
                       if line.strip().startswith('SOURCE_REF: '))
         self.assertEqual(len(pinned), 40)
         self.assertTrue(all(ch in '0123456789abcdef' for ch in pinned))
-        self.assertIn('ref: main\n          fetch-depth: 64\n          path: private', workflow)
-        self.assertIn('git -C private checkout --detach "$SOURCE_REF"', workflow)
-        self.assertIn('test "$(git -C private rev-parse HEAD)" = "$SOURCE_REF"', workflow)
+        self.assertIn('ref: ${{ env.SOURCE_REF }}\\n          fetch-depth: 1\\n          path: private', workflow)
+        self.assertIn('git -C private rev-parse --verify HEAD', workflow)
+        self.assertIn('test "$actual" = "$SOURCE_REF"', workflow)
         self.assertIn('PINNED_PRIVATE_SOURCE_SHA_VERIFIED', workflow)
-        self.assertNotIn('ref: ${{ env.SOURCE_REF }}', workflow)
+        self.assertNotIn('ref: main\\n          fetch-depth: 64', workflow)
+        self.assertNotIn('git -C private checkout --detach "$SOURCE_REF"', workflow)
         # PR137 priority stays opt-in pending separately verified cache migration.
         self.assertNotIn('--prioritize-historical-stats', workflow)
 
