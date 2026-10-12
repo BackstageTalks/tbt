@@ -7,6 +7,8 @@ name: BlinQ private source evidence lake (bounded once)
     paths:
       - 'scripts/build_source_evidence_lake.py'
       - 'tests/test_build_source_evidence_lake.py'
+      - 'scripts/audit_source_identity_gaps.py'
+      - 'tests/test_audit_source_identity_gaps.py'
       - '.github/workflows/blinq-source-evidence-lake-once.yml'
   push:
     branches: [main]
@@ -36,7 +38,8 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest discover -s tests -p test_build_source_evidence_lake.py -v
-          python -m compileall -q scripts/build_source_evidence_lake.py
+          python -m unittest discover -s tests -p test_audit_source_identity_gaps.py -v
+          python -m compileall -q scripts/build_source_evidence_lake.py scripts/audit_source_identity_gaps.py
           python - <<'PY'
           from pathlib import Path
           s=Path('scripts/build_source_evidence_lake.py').read_text()
@@ -135,6 +138,20 @@ jobs:
           print('SOURCE_ORIGINAL_ROWS_PRIVATELY_RETAINED_NO_CANONICAL_WRITES:',n)
           PY
           (cd work/private-source-evidence && sha256sum -c SHA256SUMS)
+      - name: Rank next exact ATP player identity bridge gaps (private only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/private-identity
+          gh release download tbt-canonical-identity-links-v1 -R "$PRIVATE_REPO" \
+            -p player-identity-crosswalk.jsonl -D work/private-identity >/dev/null
+          test "$(sha256sum work/private-identity/player-identity-crosswalk.jsonl | cut -d' ' -f1)" = "ae61e871a59c9960f00c20cb061bd6d1a90e222dc58b126438d27a14aeedd192"
+          python scripts/audit_source_identity_gaps.py \
+            --observations work/private-source-evidence/source-observations.jsonl.gz \
+            --private-links work/private-identity/player-identity-crosswalk.jsonl \
+            --links-sha256 ae61e871a59c9960f00c20cb061bd6d1a90e222dc58b126438d27a14aeedd192 \
+            --out work/private-source-evidence
+          (cd work/private-source-evidence && sha256sum identity-gap-report.json identity-crosswalk-priority-private.jsonl >> SHA256SUMS && sha256sum -c SHA256SUMS)
       - name: Publish immutable private Release and independently read back
         shell: bash
         run: |
@@ -142,6 +159,7 @@ jobs:
           tag="blinq-source-evidence-tml-2022-2025-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           root=work/private-source-evidence
           gh release create "$tag" "$root/report.json" "$root/SHA256SUMS" "$root/source-observations.jsonl.gz" \
+            "$root/identity-gap-report.json" "$root/identity-crosswalk-priority-private.jsonl" \
             -R "$PRIVATE_REPO" --title "BlinQ TML source-native observation lake" \
             --notes "Immutable private source observations; research-only, no canonical matching/write or model inputs. Source original bytes pinned to upstream commit SHA."
           mkdir -p work/private-readback
@@ -159,6 +177,10 @@ jobs:
                   assert row['write_authorized'] is False and row['canonical_match_id'] is None
                   count+=1
           assert count==11933
+          gaps=json.loads(Path('work/private-readback/identity-gap-report.json').read_text())
+          assert gaps['rows_checked']==count
+          assert gaps['ready_for_canonical_write']==0
+          assert gaps['source_observations_sha256']==json.loads(Path('work/private-readback/report.json').read_text())['observations_sha256']
           print('PRIVATE_SOURCE_EVIDENCE_INDEPENDENT_REMOTE_READBACK_PASS:',count)
           PY
           echo "Private source evidence Release tag: $tag" >> "$GITHUB_STEP_SUMMARY"
