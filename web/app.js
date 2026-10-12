@@ -3549,6 +3549,7 @@
     return `<small class="result-live-max" title="${escapeHtml(title)}">MAX ${peak.toFixed(2)}</small>`;
   }
   function renderResults(){
+    if(state.feed?.results_exclusions_unavailable)return '<div class="state-card" role="alert">Vyhodnotené výsledky sú dočasne nedostupné – prebieha ochranné overenie administrátorských vylúčení. Predikcie zostávajú dostupné.</div>';
     const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',entries=settledPublishedEntries(rows,category,filters);
     if(!entries.length){state.resultsPage=0;return '<div class="state-card">Zatiaľ nie sú dostupné vyhodnotené publikované predikcie/projekcie pre tento filter.</div>';}
     const allowedSizes=[50,100],pageSize=allowedSizes.includes(Number(state.resultsPageSize))?Number(state.resultsPageSize):50;
