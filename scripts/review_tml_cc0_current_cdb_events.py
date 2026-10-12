@@ -236,24 +236,36 @@ def score_event_candidates(observations, current_matches, links):
         except ValueError:
             count["blocked_source_date"] += 1
             continue
-        candidates = []
-        for c in by_pair.get(frozenset((wid, lid)), []):
-            delta = (datetime.fromisoformat(c["scheduled_day"]).date()
-                     - tournament_start).days
-            if not 0 <= delta <= 16:
-                continue
-            if str(c.get("winner_id") or "") != wid:
-                continue
-            if norm(c.get("tournament")) != norm(raw.get("tourney_name")):
-                continue
-            if norm(c.get("round_name")) != norm(source.get("source_round")):
-                continue
-            if norm(c.get("surface")) != norm(raw.get("surface")):
-                continue
-            bo = str(raw.get("best_of") or "")
-            if bo and str(c.get("best_of")) not in (bo, f"{bo}.0"):
-                continue
-            candidates.append(c)
+        # Ordered rejection counters reveal the first unresolved context
+        # without printing any player, provider ID, event, or raw source row.
+        candidates = list(by_pair.get(frozenset((wid, lid)), []))
+        steps = (
+            ("source_tournament_week",
+             lambda c: 0 <= (
+                 datetime.fromisoformat(c["scheduled_day"]).date() -
+                 tournament_start).days <= 16),
+            ("canonical_winner_id",
+             lambda c: str(c.get("winner_id") or "") == wid),
+            ("exact_tournament_name",
+             lambda c: norm(c.get("tournament")) == norm(raw.get("tourney_name"))),
+            ("exact_round_name",
+             lambda c: norm(c.get("round_name")) == norm(source.get("source_round"))),
+            ("exact_surface",
+             lambda c: norm(c.get("surface")) == norm(raw.get("surface"))),
+            ("best_of",
+             lambda c: not str(raw.get("best_of") or "")
+             or str(c.get("best_of")) in (
+                 str(raw.get("best_of")), str(raw.get("best_of")) + ".0")),
+        )
+        for stage, predicate in steps:
+            if not candidates:
+                break
+            candidates = [c for c in candidates if predicate(c)]
+            if not candidates:
+                count["context_rejected_" + stage] += 1
+                break
+        if not candidates:
+            count["context_rejected_no_full_match"] += 1
         if len(candidates) == 1:
             c = candidates[0]
             count["unique_full_metadata_candidates_review_only"] += 1
