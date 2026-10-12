@@ -2,12 +2,14 @@
   "schema": 1,
   "mode": "statistics",
   "promote": false,
-  "source": "operator_authorized_current_CDB_gapfill",
-  "purpose": "Bounded 500-request proof-of-yield on CURRENT CDB 2022-2025 service/return NULL gaps with exact provider event identity, shared 15000/day budget, global CDB writer and no model training; report real value before any larger spend",
+  "source": "operator_authorized_1000_request_followup_to_verified_500_request_pilot",
+  "purpose": "One guarded 1000-request CDB quality-gap follow-up after 500-call pilot persisted 1960 exact new stats with SHA readback. Shared budget, global writer, existing source event IDs only; no TML crosswalk inference or model promotion.",
   "requested_on": "2026-10-12",
-  "max_requests": 500,
+  "max_requests": 1000,
   "start": "2022-01-01",
   "end": "2025-12-31",
   "targeted_statistics": true,
-  "historical_match_winner_odds_as_model_feature": false
+  "historical_match_winner_odds_as_model_feature": false,
+  "model_training": false,
+  "pre_reset_provider_header_override": false
 }
