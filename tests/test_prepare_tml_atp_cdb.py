@@ -172,4 +172,42 @@ class TmlTests(unittest.TestCase):
         self.assertNotIn("SequenceMatcher",text)
         self.assertIn("row[\"winner_id\"] not in links",text)
 
+
+    def test_opt_in_2007_is_sha_pinned_source_only_and_never_cdb_ready(self):
+        self.row.update(tourney_id="2007-123",tourney_date="20070101")
+        p,sha=self.save([self.row])
+        p.rename(self.d/"2007.csv")
+        with patch.dict(tml.OPTIONAL_YEAR_BLOBS,{2007:sha}):
+            report=tml.audit_all_pinned_sources(self.d,self.d/"out",years=[2007])
+        self.assertEqual(report["status"],"PINNED_SOURCE_ONLY_NO_CDB_ACCESS")
+        self.assertEqual(report["per_year"]["2007"]["source_native_valid"],1)
+        self.assertIsNone(report["per_year"]["2007"]["new_verified_cdb_null_cells"])
+        self.assertFalse(report["canonical_mutated"])
+        self.assertEqual(report["cdb_imported"],0)
+
+    def test_2026_upload_filename_alias_must_match_original_git_blob(self):
+        self.row.update(tourney_id="2026-123",tourney_date="20260101")
+        p,sha=self.save([self.row])
+        p.rename(self.d/"2026(1).csv")
+        with patch.dict(tml.OPTIONAL_YEAR_BLOBS,{2026:sha}):
+            report=tml.audit_all_pinned_sources(self.d,self.d/"out",years=[2026])
+        self.assertEqual(report["per_year"]["2026"]["file"],"2026(1).csv")
+        self.assertEqual(report["per_year"]["2026"]["source_native_valid"],1)
+        self.assertEqual(report["independent_cdb_readback"],"NOT_RUN")
+
+    def test_unsupported_year_cannot_bypass_original_sha_pin(self):
+        with self.assertRaisesRegex(ValueError,"Unpinned"):
+            tml.audit_all_pinned_sources(self.d,self.d/"out",years=[2006])
+
+    def test_opt_in_raw_sha_mismatch_fails_closed(self):
+        self.row.update(tourney_id="2007-123",tourney_date="20070101")
+        p,sha=self.save([self.row])
+        p.rename(self.d/"2007.csv")
+        with self.assertRaisesRegex(ValueError,"SHA mismatch"):
+            tml.audit_all_pinned_sources(self.d,self.d/"out",years=[2007])
+
+    def test_protected_writer_year_scope_unchanged(self):
+        self.assertEqual(sorted(tml.YEAR_BLOBS),[2022,2023,2024,2025])
+        self.assertEqual(len(tml.OPTIONAL_YEAR_BLOBS),16)
+
 if __name__=="__main__":unittest.main()
