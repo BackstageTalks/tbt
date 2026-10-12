@@ -23,6 +23,18 @@ YEAR_BLOBS = {
 # SHA-pinned, opt-in original source-only QA for historical years outside the guarded 2022–25
 # writer contract. Defaults and writer-supported YEAR_BLOBS stay unchanged.
 OPTIONAL_YEAR_BLOBS = {
+    1975: "b68544151b80635c5075dda43c051dfbf4c37704",
+    1976: "b4b6bac80aff030552b2922a774d01979904597c",
+    1977: "5ca27554ca8c1eef74208cf5ed9bde4e0ace5f30",
+    1978: "0cfedf2e263255f62d3414030d994159ff36ec6e",
+    1979: "0feaf02cc014727411ca1ff12b9803b22e1eb84d",
+    1980: "e39c4e949147c051892231a4c81e134552dec5a6",
+    1981: "006d19cc679ea92ecf880fcc3e72ffeab28c503f",
+    1982: "9c2b5010cb10502c138076f07190cde08bfca945",
+    1983: "7240c95d4a85debc9635665bf1508fab384142bf",
+    1984: "baced5374d5c3329327d2a5f8e794a5b15f28ebb",
+    1985: "4bc92343af47d80511f7beb93564b58fcfc587ce",
+    1986: "9d58437c45bd4793885f73b1ad1e94235823c3f6",
     1987: "a899da932402e5a44071ad44bb0f6d74897bd571",
     1988: "b5cc74c973d70eff55a2d07fa909bdbf02cb8177",
     1989: "92d27f0702d015d3dac6d59f8497ee743c1945b9",
@@ -322,7 +334,7 @@ def main():
     p.add_argument("--crosswalk-sha256")
     p.add_argument("--out",required=True,type=Path)
     p.add_argument("--source-only-audit",action="store_true",
-                   help="Read only all SHA-pinned 1987–2026 originals; no CDB or ID linking")
+                   help="Read only all SHA-pinned 1975–2026 originals; no CDB or ID linking")
     a=p.parse_args()
     if a.source_only_audit:
         r=audit_all_pinned_sources(a.source_dir,a.out)
