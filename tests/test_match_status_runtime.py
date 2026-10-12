@@ -1349,3 +1349,56 @@ def test_read_side_does_not_publish_premature_terminal_result():
     assert result["status"] == "miss"
     assert result["correct"] is False
     assert result["runtime_source"] == "match_status_snapshot"
+
+
+def test_daily_identity_verified_nonterminal_skips_redundant_near_and_stays_pending():
+    """Provider explicitly says not started or interrupted, even past ETA."""
+    now = datetime(2026, 10, 12, 22, 0, tzinfo=timezone.utc)
+    scheduled = (now - timedelta(hours=5)).isoformat()
+    rows = [_row("101", "11", scheduled), _row("102", "22", scheduled)]
+    interrupted = _event("101", winner_code=None, status_type="interrupted", description="Interrupted")
+    not_started = _event("102", winner_code=None, status_type="notstarted", description="Not started")
+    provider = _DailyStatusProvider([interrupted, not_started])
+    first = scan_match_statuses(
+        {"upcoming": rows}, provider, {"preferred_route": "near"},
+        now=now, max_checks=10, max_near_checks=10,
+    )
+    assert first["statuses"] == {}
+    assert first["newly_resolved"] == 0
+    assert first["pending_count"] == 2
+    assert set(first["pending"]) == {"101", "102"}
+    assert provider.near_calls == []
+    assert provider.previous_calls == []
+    assert first["provider_requests"] == 2  # One live and one date request.
+    assert first["matched_events"] == 2
+    assert first["unmatched"] == 0
+
+    # A new authoritative final result is picked up by the next 30-min
+    # worker run. The other (still postponed) match stays pending.
+    provider.daily_events = [_event("101", winner_code=1), not_started]
+    second = scan_match_statuses(
+        {"upcoming": rows}, provider, first,
+        now=now + timedelta(minutes=30), max_checks=10,
+    )
+    assert second["statuses"]["101"]["status"] == "win"
+    assert second["newly_resolved"] == 1
+    assert "101" not in second["pending"]
+    assert "102" in second["pending"]
+    assert provider.near_calls == []
+
+
+def test_nonterminal_calendar_event_with_mismatched_players_still_tries_near():
+    """A recycled event ID must never suppress the safe identity fallback."""
+    now = datetime(2026, 10, 12, 22, 0, tzinfo=timezone.utc)
+    row = _row("101", "11", (now - timedelta(hours=2)).isoformat())
+    bad = _event("101", winner_code=None, status_type="notstarted", description="Not started")
+    bad["awayTeam"] = {"id": "999", "name": "Different Player"}
+    provider = _DailyStatusProvider([bad])
+    provider.events["11"] = _event("101", winner_code=1)
+    snapshot = scan_match_statuses(
+        {"upcoming": [row]}, provider,
+        {"preferred_route": "near"}, now=now,
+    )
+    assert provider.near_calls == ["11"]
+    assert snapshot["statuses"]["101"]["status"] == "win"
+    assert snapshot["newly_resolved"] == 1
