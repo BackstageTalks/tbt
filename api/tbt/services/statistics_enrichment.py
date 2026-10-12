@@ -149,10 +149,21 @@ class StatisticsEnricher:
                 "unsupported_keys": sorted(conflicts)[:40],
             }}
             return "conflict"
+        if not stats:
+            # Some legitimate HTTP-200 responses have no ALL-match statistics
+            # at all. Explicitly label the coverage miss: previously these
+            # became "unavailable_unspecified", obscuring hundreds of costly
+            # provider lookups and frustrating targeted gap triage.
+            match.provider_payload = {**raw, "_tbt_statistics": {
+                "schema": STATISTICS_SCHEMA_VERSION, "event_id": str(event_id),
+                "source": "tennisapi1", "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "status": "unavailable", "reason": "empty_whole_match_statistics",
+            }}
+            return "unavailable"
         match.stats = {**(match.stats or {}), **stats}
         match.provider_payload = {**raw, "_tbt_statistics": {
             "schema": STATISTICS_SCHEMA_VERSION, "event_id": str(event_id), "source": "tennisapi1",
             "fetched_at": datetime.now(timezone.utc).isoformat(),
-            "status": "available" if stats else "unavailable",
+            "status": "available",
         }}
-        return "enriched" if stats else "unavailable"
+        return "enriched"
