@@ -267,6 +267,7 @@ class TmlTests(unittest.TestCase):
             report=tml.audit_all_pinned_sources(self.d,self.d/"out",years=[1977])
         self.assertEqual(report["per_year"]["1977"]["source_score_only_valid_unique"],1)
         self.assertEqual(report["cdb_imported"],0)
+        self.assertFalse(report["canonical_mutated"])
 
     def test_season_rollover_must_have_native_tourney_id_and_january_february(self):
         self.assertTrue(tml.valid_tourney_season_start({"tourney_id":"1977-605","tourney_date":"19780104"},1977))
