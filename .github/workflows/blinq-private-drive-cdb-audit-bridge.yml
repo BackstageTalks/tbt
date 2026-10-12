@@ -26,6 +26,8 @@ name: BlinQ private Drive CDB audit - bounded free public runner
       - .github/workflows/blinq-private-drive-cdb-audit-bridge.yml
       - scripts/drive_cdb_private_bridge.py
       - tests/test_drive_cdb_private_bridge.py
+      - scripts/drive_sort_prefolders.py
+      - tests/test_drive_sort_prefolders.py
 
 permissions:
   contents: read
@@ -99,7 +101,11 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test private report and checkpoint guards (no secrets)
-        run: python -m unittest discover -s tests -p test_drive_cdb_private_bridge.py -v
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_drive_cdb_private_bridge.py -v
+          python -m unittest discover -s tests -p test_drive_sort_prefolders.py -v
+          python -m compileall -q scripts/drive_sort_prefolders.py
 
   private-drive-audit:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.scan_budget.outputs.proceed == 'true'
@@ -403,4 +409,90 @@ jobs:
             echo 'Canonical imports: none. Candidate values require identity, rights, time and governed-writer gates.'
             echo 'Check the checkpoint step before claiming this batch can resume. Full evidence is in the private tbt-data releases.'
             echo 'No schedule is installed. External cron can invoke workflow_dispatch on main with batch_files and download_mb.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  drive-folder-selection:
+    # Only after successful private audit; originals are never moved.
+    needs: [private-drive-audit]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.private-drive-audit.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test classifier and install metadata-only Drive dependencies
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_drive_sort_prefolders.py -v
+          python -m pip install --disable-pip-version-check -q google-auth requests
+      - name: Select sources into verified predefined folders
+        shell: bash
+        env:
+          DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+          DRIVE_ORGANIZER_JSON: ${{ secrets.BLINQ_DRIVE_ORGANIZER_JSON }}
+        run: |
+          set -euo pipefail
+          mkdir -p work/drive-folder-selection
+          # A separate Drive editor is required to create shortcuts.
+          # Existing reader credentials are always PLAN ONLY.
+          if [[ -n "$DRIVE_ORGANIZER_JSON" ]]; then
+            mode=apply
+            export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_ORGANIZER_JSON"
+          else
+            mode=plan
+            export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_READER_JSON"
+          fi
+          test -n "$BLINQ_DRIVE_SORT_CREDENTIALS"
+          python scripts/drive_sort_prefolders.py --mode "$mode" \
+            --max-files 10000 --max-folders 2000 --max-new 300 \
+            --out work/drive-folder-selection/private-report.json \
+            >work/drive-folder-selection/public-counts.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path('work/drive-folder-selection/private-report.json').read_text())
+          assert data['source_originals_moved']==0 and data['cdb_writes']==0
+          assert data['source_file_count']==sum(data['category_counts'].values())
+          assert len(data['details'])==data['source_file_count']
+          assert data['new_shortcuts_verified']+data['already_linked']+data['pending_unlinked']==data['source_file_count']
+          print('DRIVE_FOLDER_SELECTION_CONSISTENCY_PASS')
+          PY
+      - name: Publish full manifest ONLY in verified private Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/$PRIVATE_REPO --jq .private)" = true
+          tag="blinq-drive-cdb-audit-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release view "$tag" -R "$PRIVATE_REPO" >/dev/null
+          (cd work/drive-folder-selection && sha256sum private-report.json > SHA256SUMS)
+          tar -czf work/drive-folder-selection.tar.gz -C work/drive-folder-selection private-report.json SHA256SUMS
+          gh release upload "$tag" work/drive-folder-selection.tar.gz -R "$PRIVATE_REPO"
+          mkdir -p work/drive-folder-readback
+          gh release download "$tag" -R "$PRIVATE_REPO" -p drive-folder-selection.tar.gz -D work/drive-folder-readback
+          cmp work/drive-folder-selection.tar.gz work/drive-folder-readback/drive-folder-selection.tar.gz
+          (cd work/drive-folder-readback && tar -xzf drive-folder-selection.tar.gz && sha256sum -c SHA256SUMS)
+          echo DRIVE_FOLDER_SELECTION_PRIVATE_SHA_READBACK_PASS
+      - name: Publish counts-only classification status
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Drive folder selection'
+            if [[ -s work/drive-folder-selection/public-counts.json ]]; then
+              echo 'Original source files remain untouched; category entries are shortcuts.'
+              cat work/drive-folder-selection/public-counts.json
+            else
+              echo 'Folder classification not verified. No success claim.'
+            fi
+            echo 'Full manifest stays in the paired PRIVATE tbt-data release.'
           } >> "$GITHUB_STEP_SUMMARY"
