@@ -1,0 +1,161 @@
+name: BlinQ ATP WTA 2022-2025 current CDB read-only gate
+'on':
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  source-to-current-null:
+    if: ${{ github.repository == 'BackstageTalks/tbt' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      DATA_REPO: BackstageTalks/tbt-data
+    steps:
+      - name: Authenticate and confirm PRIVATE access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "BackstageTalks/tbt"
+          test -n "$GH_TOKEN"
+          test -n "$BLINQ_DRIVE_READER_JSON"
+          test "$(gh repo view "$DATA_REPO" --json visibility -q .visibility)" = PRIVATE
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Source-CDB strict regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet "pandas>=2,<3" pyarrow google-auth requests
+          python -m unittest discover -s tests -p test_blinq_season_cdb_gate.py -v
+          python -m py_compile scripts/blinq_season_cdb_gate.py
+          python - <<'PY'
+          from pathlib import Path
+          script=Path("scripts/blinq_season_cdb_gate.py").read_text()
+          assert "'write_authorized':False" in script
+          assert "'canonical_changed':False" in script
+          assert "gh release" not in script
+          print("READ_ONLY_CDB_SEASON_AUDIT_CONTRACT_PASS")
+          PY
+      - name: Download original Drive CSVs and SHA-verified current 2021-2025 CDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/history work/source work/report work/readback
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > work/release-before.json
+          gh release download tbt-data-v1 -R "$DATA_REPO" -D work/history \
+            -p history-2021.parquet -p history-2022.parquet \
+            -p history-2023.parquet -p history-2024.parquet \
+            -p history-2025.parquet -p history_manifest.json
+          python - <<'PY'
+          import hashlib,json,os,sys
+          from pathlib import Path
+          from google.oauth2.service_account import Credentials
+          from google.auth.transport.requests import AuthorizedSession
+          sys.path.insert(0,"scripts")
+          from blinq_season_cdb_gate import SOURCE_SHA
+          releases=json.loads(Path("work/release-before.json").read_text())
+          assets={x["name"]:x for x in releases["assets"]}
+          manifest=json.loads(Path("work/history/history_manifest.json").read_text())
+          years={}
+          for y in range(2021,2026):
+              name=f"history-{y}.parquet"
+              digest=hashlib.sha256((Path("work/history")/name).read_bytes()).hexdigest()
+              assert assets[name]["digest"]=="sha256:"+digest
+              assert manifest["years"][str(y)]["sha256"]==digest
+              years[name]=digest
+          Path("work/years.json").write_text(json.dumps(years,sort_keys=True))
+          ids={
+              "2022-atp-season.csv":"1Rr63NmbO5InfAVi7AVBR96L7YyUX0j4P",
+              "2022-wta-season.csv":"1lj4rRqPRGv63uWriuvVsfCdSFLGKbbhm",
+              "2023-atp-season.csv":"1aS_7AL1wfnjNZ3bXtU6EUpG3l5rBM8gF",
+              "2023-wta-season.csv":"1P9c_2DHfStYBKRn71T3HICDTWvuNvNQ5",
+              "2024-atp-season.csv":"1Q_Mo1kJezi5ViOudFgns9Pa_pLq9VOyK",
+              "2024-wta-season.csv":"11yOL2LBaohSSw-GYFg1TGrttU1IkWaUm",
+              "2025-atp-season.csv":"1vPORpaKwQQ-ieXfUlKDxy1tdw7tVVh2T",
+              "2025-wta-season.csv":"1i9CXB16lHFu9pP6vVWORoelaJyqbqQsR",
+          }
+          assert set(ids)==set(SOURCE_SHA)
+          creds=Credentials.from_service_account_info(json.loads(os.environ["BLINQ_DRIVE_READER_JSON"]),
+              scopes=["https://www.googleapis.com/auth/drive.readonly"])
+          session=AuthorizedSession(creds)
+          for name,id in ids.items():
+              path=Path("work/source")/name
+              url="https://www.googleapis.com/drive/v3/files/"+id
+              with session.get(url,params={"alt":"media","supportsAllDrives":"true"},stream=True,timeout=120) as r:
+                  r.raise_for_status()
+                  with path.open("wb") as out:
+                      for buf in r.iter_content(1024*1024):
+                          if buf:out.write(buf)
+              assert hashlib.sha256(path.read_bytes()).hexdigest()==SOURCE_SHA[name]
+          print("EIGHT_ORIGINAL_SOURCES_AND_FIVE_CDB_YEARS_SHA_VERIFIED")
+          PY
+      - name: Check exact event ID, both players, clock, outcome, and NULL-only stats
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/blinq_season_cdb_gate.py --source-dir work/source \
+            --history-dir work/history --year-shas work/years.json \
+            --out work/report > work/counts.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("work/report/report.json").read_text())
+          assert r["counts"]["source_rows"]==76990
+          assert r["source_reuse_rights"]=="UNVERIFIED"
+          assert r["writer_executed"] is False and r["write_authorized"] is False
+          assert r["canonical_changed"] is False
+          print("EXACT_CURRENT_CDB_SEASON_READONLY_PASS")
+          print(json.dumps(r["counts"],sort_keys=True))
+          PY
+      - name: Reverify live CDB snapshot did not change
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > work/release-after.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          def assets(path):
+              d=json.loads(Path(path).read_text())
+              names={f"history-{y}.parquet" for y in range(2021,2026)}|{"history_manifest.json"}
+              return {x["name"]:x["digest"] for x in d["assets"] if x["name"] in names}
+          assert assets("work/release-before.json")==assets("work/release-after.json")
+          print("CDB_SHA_PIN_STABLE_BEFORE_AND_AFTER")
+          PY
+      - name: Write PRIVATE audit-only release and verify byte-for-byte readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="blinq-season-cdb-readonly-$GITHUB_RUN_ID"
+          if gh release view "$tag" -R "$DATA_REPO" >/dev/null 2>&1; then
+              gh release upload "$tag" work/report/report.json -R "$DATA_REPO" --clobber >/dev/null
+          else
+              gh release create "$tag" -R "$DATA_REPO" --target main \
+                --title "2022-25 source to current CDB private audit" \
+                --notes "Research-only; rights unverified; no canonical mutation." \
+                work/report/report.json >/dev/null
+          fi
+          gh release download "$tag" -R "$DATA_REPO" -D work/readback -p report.json --clobber
+          cmp work/report/report.json work/readback/report.json
+          if [[ -s work/report/candidate-matches-private.jsonl ]]; then
+              gh release upload "$tag" work/report/candidate-matches-private.jsonl -R "$DATA_REPO" --clobber >/dev/null
+              gh release download "$tag" -R "$DATA_REPO" -D work/readback \
+                -p candidate-matches-private.jsonl --clobber
+              cmp work/report/candidate-matches-private.jsonl work/readback/candidate-matches-private.jsonl
+          else
+              echo "ZERO_NEW_CELLS_EMPTY_ASSET_NOT_PUBLISHED"
+          fi
+          echo "PRIVATE_AUDIT_REMOTE_SHA_READBACK_PASS"
+          echo "Private read-only Release: $tag" >> "$GITHUB_STEP_SUMMARY"
+      - name: Purge private CDB and raw CSV copies
+        if: always()
+        shell: bash
+        run: rm -rf work
