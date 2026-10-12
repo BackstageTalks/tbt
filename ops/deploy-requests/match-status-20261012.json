@@ -1,0 +1,8 @@
+{
+  "schema": "BLINQ_DEPLOY_REQUEST_V1",
+  "reason": "Deploy merged Match Status recovery for verified priced projection-only published picks",
+  "fix_commit": "1b508a1040d749ec4080258b89c027de1f7752b4",
+  "fix_pr": 663,
+  "scope": "Existing tbt production CI/deploy; no CDB or model writes",
+  "requested_on": "2026-10-12"
+}
