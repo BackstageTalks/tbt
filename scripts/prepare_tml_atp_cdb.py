@@ -19,6 +19,60 @@ YEAR_BLOBS = {
   2024: "cf513429259b4a15e84e2021206895d9bd4ff772",
   2025: "1aff9b077cf4de7806b665ec0c6d8b4032a040f3",
 }
+
+# SHA-pinned, opt-in original source-only QA for historical years outside the guarded 2022–25
+# writer contract. Defaults and writer-supported YEAR_BLOBS stay unchanged.
+OPTIONAL_YEAR_BLOBS = {
+    1975: "b68544151b80635c5075dda43c051dfbf4c37704",
+    1976: "b4b6bac80aff030552b2922a774d01979904597c",
+    1977: "5ca27554ca8c1eef74208cf5ed9bde4e0ace5f30",
+    1978: "0cfedf2e263255f62d3414030d994159ff36ec6e",
+    1979: "0feaf02cc014727411ca1ff12b9803b22e1eb84d",
+    1980: "e39c4e949147c051892231a4c81e134552dec5a6",
+    1981: "006d19cc679ea92ecf880fcc3e72ffeab28c503f",
+    1982: "9c2b5010cb10502c138076f07190cde08bfca945",
+    1983: "7240c95d4a85debc9635665bf1508fab384142bf",
+    1984: "baced5374d5c3329327d2a5f8e794a5b15f28ebb",
+    1985: "4bc92343af47d80511f7beb93564b58fcfc587ce",
+    1986: "9d58437c45bd4793885f73b1ad1e94235823c3f6",
+    1987: "a899da932402e5a44071ad44bb0f6d74897bd571",
+    1988: "b5cc74c973d70eff55a2d07fa909bdbf02cb8177",
+    1989: "92d27f0702d015d3dac6d59f8497ee743c1945b9",
+    1990: "b6d5b188d2c2c668b97dfbdcae6d441a715b2ab7",
+    1991: "fc121a545659831718cda02ca7a5d805fb12c9f3",
+    1992: "5a8c4e03457f8b0e428d99f4854fd8fe4a9c06ad",
+    1993: "c663e31d38296df704d2b8b0ac6819e7705829e1",
+    1994: "dabd32e2f8d694809d104070ec818fc2e6c2ae51",
+    1995: "78daf479225257c071d07ab83f2cb2e36f478c34",
+    1996: "1fa08e8eeceac6a5b07278ab796467e96f145ba9",
+    1997: "c70bf6b7b0f904f48d568f88dcf0fff4dc013e58",
+    1998: "8dbc8b130ea717679182519f5aab36d07e170dc0",
+    1999: "ca8ee0f930823a0245b0979c051f9e8035165b8a",
+    2000: "bbe66a82015430166e6a7d45aaf09b1ba5fccd98",
+    2001: "6bbae8af7b894aa0eb2684185e9373a83d25a3a4",
+    2002: "240adc2a4b3eef73aca79a584f30b77d9823cffe",
+    2003: "e1f8985c9e38ffa4e44e0627963499afac874ce0",
+    2004: "01ba136cd875e4e4341453ddcfd8bb6d39389ba8",
+    2005: "4ca2674aacb7e22663d3b4ce23782021dc28a0ca",
+    2006: "23d500db297d9ca0414f70222ab432497af45474",
+    2007: "22f26df7dbf9b0e217a0cff5b541e95d7ce36161",
+    2008: "90db8f4ca43b60a97e0d4806d10f0edcfa8e665c",
+    2009: "623abf68f9b5c2f37d27c6589e6a5b5fff7a97d7",
+    2010: "869e16018241c2bf8e6b68a316157d0eb4ef39d1",
+    2011: "d877cbda486c752fd2ffd241430b056fd00ea351",
+    2012: "49a4c4d93c4ccb1255bf1065a4f6409eec672bb9",
+    2013: "a025418f2edaff54d273c209985352134e28ff61",
+    2014: "ea3226ebe6b78aad0cc8c698b445d2cc11181b0b",
+    2015: "97b09b910a207855ea71fc475e6d4d4b901fd814",
+    2016: "e911c48f099081a3682099cb627c1b420a5b6842",
+    2017: "951e68d3ec4a3f5f4fdb276b3824f746a8c1633f",
+    2018: "01b9806660796d3169a8335f238077c94d4ce58f",
+    2019: "b6d793cb413efe0fc060a3d85a1c75fa4e9162c6",
+    2020: "50fa843751a4394d314e2959d62aeac92588182b",
+    2021: "2bd4eaf4eb28a09b42ab4ecd5830a8f3ad068faa",
+    2026: "8b2c58c563002e7baef091654ec8bf2abb6b81e6",
+}
+
 STATS = tuple(f"{p}_{k}" for p in ("w","l") for k in
  ("ace","df","svpt","1stIn","1stWon","2ndWon","SvGms","bpSaved","bpFaced"))
 ID = re.compile(r"[A-Za-z0-9]+\Z")
@@ -60,9 +114,31 @@ def complete_winner_score(score: object, best_of: object) -> bool:
     return wins == needed and losses < needed
 
 
+
+def valid_tourney_season_start(row: dict, year: int) -> bool:
+    """Accept only attested historic season labels spilling into January/February.
+
+    Old 1977–1985 year-labelled tournaments have recorded calendar start
+    in year+1; preserve them solely when the original native tourney_id
+    embeds the season year. The protected writer 2022–2025 is unchanged.
+    """
+    date = str(row.get("tourney_date") or "")
+    if not re.fullmatch(r"\d{8}", date):
+        return False
+    try:
+        start = datetime.strptime(date, "%Y%m%d")
+    except ValueError:
+        return False
+    rollover = (1977 <= year <= 1985 and start.year == year + 1
+                and start.month <= 2
+                and str(row.get("tourney_id") or "").startswith(f"{year}-"))
+    return start.year in (year, year - 1) or rollover
+
+
 def select_source(path: Path, year: int):
     data = path.read_bytes()
-    if blob_sha1(data) != YEAR_BLOBS[year]:
+    expected_blob = YEAR_BLOBS.get(year) or OPTIONAL_YEAR_BLOBS.get(year)
+    if expected_blob is None or blob_sha1(data) != expected_blob:
         raise ValueError(f"TML original Git blob SHA mismatch: {year}")
     stream = io.StringIO(data.decode("utf-8-sig"), newline="")
     reader = csv.DictReader(stream)
@@ -82,8 +158,7 @@ def select_source(path: Path, year: int):
             continue
         date = row["tourney_date"]
         ids = (row["winner_id"], row["loser_id"])
-        if (not re.fullmatch(r"\d{8}", date)
-                or int(date[:4]) not in (year, year-1)
+        if (not valid_tourney_season_start(row, year)
                 or not row["tourney_id"] or not row["match_num"].isdecimal()
                 or any(not ID.fullmatch(v or "") for v in ids) or ids[0] == ids[1]):
             counts["quarantine_missing_original_identity"] += 1
@@ -199,13 +274,93 @@ def prepare(folder: Path, crosswalk_file: Path, crosswalk_sha: str, out: Path):
     (out/"report.json").write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
     return report
 
+
+
+def score_only_source_counts(path: Path, year: int, p0_rows: list[dict]) -> dict:
+    """Keep fully completed scores when service counts are absent/invalid.
+
+    This is source QA, not a canonical P1 writer. It cannot infer an event
+    time, missing statistics, canonical match ID, or valid prematch rank.
+    """
+    raw = path.read_bytes()
+    reader = csv.DictReader(io.StringIO(raw.decode("utf-8-sig"), newline=""))
+    entries = list(reader)
+    native = defaultdict(list)
+    for row in entries:
+        if None in row or any(v is None for v in row.values()):
+            continue
+        day = str(row.get("tourney_date") or "")
+        ids = (row.get("winner_id") or "", row.get("loser_id") or "")
+        if (not valid_tourney_season_start(row, year)
+                or not row.get("tourney_id") or not str(row.get("match_num") or "").isdecimal()
+                or any(not ID.fullmatch(pid) for pid in ids) or ids[0] == ids[1]):
+            continue
+        try:
+            datetime.strptime(day, "%Y%m%d")
+        except ValueError:
+            continue
+        native[(row["tourney_id"], row["match_num"])].append(row)
+    p0_keys = {(r["tourney_id"], r["match_num"]) for r in p0_rows}
+    score_only = 0
+    for key, copies in native.items():
+        if len(copies) != 1 or key in p0_keys:
+            continue
+        if complete_winner_score(copies[0].get("score"), copies[0].get("best_of")):
+            score_only += 1
+    return {"source_score_only_valid_unique": score_only,
+            "source_strict_boxscore_valid_unique": len(p0_keys),
+            "raw_rows_not_in_p0_or_p1": len(entries) - len(p0_keys) - score_only,
+            "candidate_cdb_event_links": None,
+            "safe_new_cdb_cells": None}
+
+
+def audit_all_pinned_sources(folder: Path, out: Path, years=None):
+    """Source-only inspection. Never produces an import-ready CDB stage."""
+    allowed = {**OPTIONAL_YEAR_BLOBS, **YEAR_BLOBS}
+    selected = sorted(allowed if years is None else years)
+    if not set(selected).issubset(allowed):
+        raise ValueError("Unpinned TML year not permitted")
+    report = {"schema": 1, "status": "PINNED_SOURCE_ONLY_NO_CDB_ACCESS",
+              "source_repo": ORIGIN, "source_git_commit": SOURCE_COMMIT,
+              "source_families": 1, "per_year": {}, "cdb_imported": 0,
+              "current_cdb_null_delta": None, "independent_cdb_readback": "NOT_RUN",
+              "canonical_mutated": False, "model_trained": False,
+              "provider_api_requests": 0}
+    for year in selected:
+        path = folder / f"{year}.csv"
+        if year == 2026 and not path.exists():
+            # User uploads may rename an exact original without altering bytes.
+            path = folder / "2026(1).csv"
+        usable, header, counts, sha = select_source(path, year)
+        score_quality = score_only_source_counts(path, year, usable)
+        report["per_year"][str(year)] = {
+            "file": path.name, "raw_sha256": sha,
+            "git_blob_sha1": allowed[year], "raw_rows": counts.get("source_rows", 0),
+            "source_native_valid": len(usable),
+            **score_quality,
+            "reasons": {k: v for k, v in sorted(counts.items())
+                        if k.startswith("quarantine_")},
+            "canonical_match_links": None, "new_verified_cdb_null_cells": None}
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "pinned-source-only-audit.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return report
+
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--source-dir",required=True,type=Path)
-    p.add_argument("--verified-crosswalk",required=True,type=Path)
-    p.add_argument("--crosswalk-sha256",required=True)
+    p.add_argument("--verified-crosswalk",type=Path)
+    p.add_argument("--crosswalk-sha256")
     p.add_argument("--out",required=True,type=Path)
+    p.add_argument("--source-only-audit",action="store_true",
+                   help="Read only all SHA-pinned 1975–2026 originals; no CDB or ID linking")
     a=p.parse_args()
+    if a.source_only_audit:
+        r=audit_all_pinned_sources(a.source_dir,a.out)
+        print(json.dumps({"status":r["status"],"per_year":r["per_year"]},sort_keys=True))
+        return
+    if a.verified_crosswalk is None or a.crosswalk_sha256 is None:
+        p.error("Protected default mode requires both --verified-crosswalk and --crosswalk-sha256")
     r=prepare(a.source_dir,a.verified_crosswalk,a.crosswalk_sha256,a.out)
     print(json.dumps({"status":r["status"],"per_year":r["per_year"],"crosswalk_quality":r["crosswalk_quality"]},sort_keys=True))
 if __name__=="__main__":main()

@@ -172,4 +172,107 @@ class TmlTests(unittest.TestCase):
         self.assertNotIn("SequenceMatcher",text)
         self.assertIn("row[\"winner_id\"] not in links",text)
 
+
+    def test_opt_in_2007_is_sha_pinned_source_only_and_never_cdb_ready(self):
+        self.row.update(tourney_id="2007-123",tourney_date="20070101")
+        p,sha=self.save([self.row])
+        p.rename(self.d/"2007.csv")
+        with patch.dict(tml.OPTIONAL_YEAR_BLOBS,{2007:sha}):
+            report=tml.audit_all_pinned_sources(self.d,self.d/"out",years=[2007])
+        self.assertEqual(report["status"],"PINNED_SOURCE_ONLY_NO_CDB_ACCESS")
+        self.assertEqual(report["per_year"]["2007"]["source_native_valid"],1)
+        self.assertIsNone(report["per_year"]["2007"]["new_verified_cdb_null_cells"])
+        self.assertFalse(report["canonical_mutated"])
+        self.assertEqual(report["cdb_imported"],0)
+
+    def test_2026_upload_filename_alias_must_match_original_git_blob(self):
+        self.row.update(tourney_id="2026-123",tourney_date="20260101")
+        p,sha=self.save([self.row])
+        p.rename(self.d/"2026(1).csv")
+        with patch.dict(tml.OPTIONAL_YEAR_BLOBS,{2026:sha}):
+            report=tml.audit_all_pinned_sources(self.d,self.d/"out",years=[2026])
+        self.assertEqual(report["per_year"]["2026"]["file"],"2026(1).csv")
+        self.assertEqual(report["per_year"]["2026"]["source_native_valid"],1)
+        self.assertEqual(report["independent_cdb_readback"],"NOT_RUN")
+
+    def test_unsupported_year_cannot_bypass_original_sha_pin(self):
+        with self.assertRaisesRegex(ValueError,"Unpinned"):
+            tml.audit_all_pinned_sources(self.d,self.d/"out",years=[1974])
+
+    def test_opt_in_raw_sha_mismatch_fails_closed(self):
+        self.row.update(tourney_id="2007-123",tourney_date="20070101")
+        p,sha=self.save([self.row])
+        p.rename(self.d/"2007.csv")
+        with self.assertRaisesRegex(ValueError,"SHA mismatch"):
+            tml.audit_all_pinned_sources(self.d,self.d/"out",years=[2007])
+
+    def test_protected_writer_year_scope_unchanged(self):
+        self.assertEqual(sorted(tml.YEAR_BLOBS),[2022,2023,2024,2025])
+        self.assertEqual(len(tml.OPTIONAL_YEAR_BLOBS),48)
+
+
+    def test_complete_1987_score_only_remains_research_and_no_invented_stats(self):
+        row=dict(self.row)
+        row.update(tourney_id="1987-123",tourney_date="19870101",
+                   match_num="1",score="6-4 6-4")
+        for col in tml.STATS:
+            row[col]=""
+        p,sha=self.save([row])
+        p.rename(self.d/"1987.csv")
+        with patch.dict(tml.OPTIONAL_YEAR_BLOBS,{1987:sha}):
+            result=tml.audit_all_pinned_sources(self.d,self.d/"audit",years=[1987])
+        one=result["per_year"]["1987"]
+        self.assertEqual(one["source_native_valid"],0)
+        self.assertEqual(one["source_score_only_valid_unique"],1)
+        self.assertIsNone(one["safe_new_cdb_cells"])
+        self.assertEqual(result["cdb_imported"],0)
+
+    def test_score_only_synthetic_event_key_collision_is_not_usable(self):
+        row=dict(self.row)
+        row.update(tourney_id="1987-123",tourney_date="19870101",score="6-4 6-4")
+        for col in tml.STATS:
+            row[col]=""
+        p,sha=self.save([row,row])
+        p.rename(self.d/"1987.csv")
+        with patch.dict(tml.OPTIONAL_YEAR_BLOBS,{1987:sha}):
+            result=tml.audit_all_pinned_sources(self.d,self.d/"audit",years=[1987])
+        self.assertEqual(result["per_year"]["1987"]["source_score_only_valid_unique"],0)
+        self.assertEqual(result["per_year"]["1987"]["raw_rows_not_in_p0_or_p1"],2)
+
+
+    def test_1975_source_only_preserves_historic_completed_scores(self):
+        row=dict(self.row)
+        row.update(tourney_id="1975-D015",tourney_date="19741004",
+                   match_num="1",score="6-0 6-2 6-4",best_of="5")
+        for col in tml.STATS:
+            row[col]=""
+        p,sha=self.save([row])
+        p.rename(self.d/"1975.csv")
+        with patch.dict(tml.OPTIONAL_YEAR_BLOBS,{1975:sha}):
+            result=tml.audit_all_pinned_sources(self.d,self.d/"audit",years=[1975])
+        one=result["per_year"]["1975"]
+        self.assertEqual(one["source_native_valid"],0)
+        self.assertEqual(one["source_score_only_valid_unique"],1)
+        self.assertEqual(result["cdb_imported"],0)
+
+
+    def test_native_1977_event_1978_january_start_is_legitimate_season_rollover(self):
+        row=dict(self.row)
+        row.update(tourney_id="1977-605",tourney_date="19780104",
+                   match_num="1",score="6-3 6-4",best_of="3")
+        for col in tml.STATS:
+            row[col]=""
+        p,sha=self.save([row]);p.rename(self.d/"1977.csv")
+        with patch.dict(tml.OPTIONAL_YEAR_BLOBS,{1977:sha}):
+            report=tml.audit_all_pinned_sources(self.d,self.d/"out",years=[1977])
+        self.assertEqual(report["per_year"]["1977"]["source_score_only_valid_unique"],1)
+        self.assertEqual(report["cdb_imported"],0)
+        self.assertFalse(report["canonical_mutated"])
+
+    def test_season_rollover_must_have_native_tourney_id_and_january_february(self):
+        self.assertTrue(tml.valid_tourney_season_start({"tourney_id":"1977-605","tourney_date":"19780104"},1977))
+        self.assertFalse(tml.valid_tourney_season_start({"tourney_id":"1979-605","tourney_date":"19780104"},1977))
+        self.assertFalse(tml.valid_tourney_season_start({"tourney_id":"1977-605","tourney_date":"19780604"},1977))
+        self.assertFalse(tml.valid_tourney_season_start({"tourney_id":"2024-605","tourney_date":"20250104"},2024))
+
 if __name__=="__main__":unittest.main()
