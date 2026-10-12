@@ -20,9 +20,29 @@ YEAR_BLOBS = {
   2025: "1aff9b077cf4de7806b665ec0c6d8b4032a040f3",
 }
 
-# SHA-pinned, opt-in original source-only QA for years outside the guarded 2022–25
+# SHA-pinned, opt-in original source-only QA for historical years outside the guarded 2022–25
 # writer contract. Defaults and writer-supported YEAR_BLOBS stay unchanged.
 OPTIONAL_YEAR_BLOBS = {
+    1987: "a899da932402e5a44071ad44bb0f6d74897bd571",
+    1988: "b5cc74c973d70eff55a2d07fa909bdbf02cb8177",
+    1989: "92d27f0702d015d3dac6d59f8497ee743c1945b9",
+    1990: "b6d5b188d2c2c668b97dfbdcae6d441a715b2ab7",
+    1991: "fc121a545659831718cda02ca7a5d805fb12c9f3",
+    1992: "5a8c4e03457f8b0e428d99f4854fd8fe4a9c06ad",
+    1993: "c663e31d38296df704d2b8b0ac6819e7705829e1",
+    1994: "dabd32e2f8d694809d104070ec818fc2e6c2ae51",
+    1995: "78daf479225257c071d07ab83f2cb2e36f478c34",
+    1996: "1fa08e8eeceac6a5b07278ab796467e96f145ba9",
+    1997: "c70bf6b7b0f904f48d568f88dcf0fff4dc013e58",
+    1998: "8dbc8b130ea717679182519f5aab36d07e170dc0",
+    1999: "ca8ee0f930823a0245b0979c051f9e8035165b8a",
+    2000: "bbe66a82015430166e6a7d45aaf09b1ba5fccd98",
+    2001: "6bbae8af7b894aa0eb2684185e9373a83d25a3a4",
+    2002: "240adc2a4b3eef73aca79a584f30b77d9823cffe",
+    2003: "e1f8985c9e38ffa4e44e0627963499afac874ce0",
+    2004: "01ba136cd875e4e4341453ddcfd8bb6d39389ba8",
+    2005: "4ca2674aacb7e22663d3b4ce23782021dc28a0ca",
+    2006: "23d500db297d9ca0414f70222ab432497af45474",
     2007: "22f26df7dbf9b0e217a0cff5b541e95d7ce36161",
     2008: "90db8f4ca43b60a97e0d4806d10f0edcfa8e665c",
     2009: "623abf68f9b5c2f37d27c6589e6a5b5fff7a97d7",
@@ -260,7 +280,7 @@ def main():
     p.add_argument("--crosswalk-sha256")
     p.add_argument("--out",required=True,type=Path)
     p.add_argument("--source-only-audit",action="store_true",
-                   help="Read only all SHA-pinned 2007–2026 originals; no CDB or ID linking")
+                   help="Read only all SHA-pinned 1987–2026 originals; no CDB or ID linking")
     a=p.parse_args()
     if a.source_only_audit:
         r=audit_all_pinned_sources(a.source_dir,a.out)
