@@ -197,7 +197,7 @@ class TmlTests(unittest.TestCase):
 
     def test_unsupported_year_cannot_bypass_original_sha_pin(self):
         with self.assertRaisesRegex(ValueError,"Unpinned"):
-            tml.audit_all_pinned_sources(self.d,self.d/"out",years=[1986])
+            tml.audit_all_pinned_sources(self.d,self.d/"out",years=[1974])
 
     def test_opt_in_raw_sha_mismatch_fails_closed(self):
         self.row.update(tourney_id="2007-123",tourney_date="20070101")
@@ -208,7 +208,7 @@ class TmlTests(unittest.TestCase):
 
     def test_protected_writer_year_scope_unchanged(self):
         self.assertEqual(sorted(tml.YEAR_BLOBS),[2022,2023,2024,2025])
-        self.assertEqual(len(tml.OPTIONAL_YEAR_BLOBS),36)
+        self.assertEqual(len(tml.OPTIONAL_YEAR_BLOBS),48)
 
 
     def test_complete_1987_score_only_remains_research_and_no_invented_stats(self):
@@ -238,5 +238,21 @@ class TmlTests(unittest.TestCase):
             result=tml.audit_all_pinned_sources(self.d,self.d/"audit",years=[1987])
         self.assertEqual(result["per_year"]["1987"]["source_score_only_valid_unique"],0)
         self.assertEqual(result["per_year"]["1987"]["raw_rows_not_in_p0_or_p1"],2)
+
+
+    def test_1975_source_only_preserves_historic_completed_scores(self):
+        row=dict(self.row)
+        row.update(tourney_id="1975-D015",tourney_date="19741004",
+                   match_num="1",score="6-0 6-2 6-4",best_of="5")
+        for col in tml.STATS:
+            row[col]=""
+        p,sha=self.save([row])
+        p.rename(self.d/"1975.csv")
+        with patch.dict(tml.OPTIONAL_YEAR_BLOBS,{1975:sha}):
+            result=tml.audit_all_pinned_sources(self.d,self.d/"audit",years=[1975])
+        one=result["per_year"]["1975"]
+        self.assertEqual(one["source_native_valid"],0)
+        self.assertEqual(one["source_score_only_valid_unique"],1)
+        self.assertEqual(result["cdb_imported"],0)
 
 if __name__=="__main__":unittest.main()
