@@ -255,4 +255,23 @@ class TmlTests(unittest.TestCase):
         self.assertEqual(one["source_score_only_valid_unique"],1)
         self.assertEqual(result["cdb_imported"],0)
 
+
+    def test_native_1977_event_1978_january_start_is_legitimate_season_rollover(self):
+        row=dict(self.row)
+        row.update(tourney_id="1977-605",tourney_date="19780104",
+                   match_num="1",score="6-3 6-4",best_of="3")
+        for col in tml.STATS:
+            row[col]=""
+        p,sha=self.save([row]);p.rename(self.d/"1977.csv")
+        with patch.dict(tml.OPTIONAL_YEAR_BLOBS,{1977:sha}):
+            report=tml.audit_all_pinned_sources(self.d,self.d/"out",years=[1977])
+        self.assertEqual(report["per_year"]["1977"]["source_score_only_valid_unique"],1)
+        self.assertEqual(report["cdb_imported"],0)
+
+    def test_season_rollover_must_have_native_tourney_id_and_january_february(self):
+        self.assertTrue(tml.valid_tourney_season_start({"tourney_id":"1977-605","tourney_date":"19780104"},1977))
+        self.assertFalse(tml.valid_tourney_season_start({"tourney_id":"1979-605","tourney_date":"19780104"},1977))
+        self.assertFalse(tml.valid_tourney_season_start({"tourney_id":"1977-605","tourney_date":"19780604"},1977))
+        self.assertFalse(tml.valid_tourney_season_start({"tourney_id":"2024-605","tourney_date":"20250104"},2024))
+
 if __name__=="__main__":unittest.main()
