@@ -7,7 +7,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from review_tml_cc0_current_cdb_events import (
-    valid_candidate_edges, score_event_candidates, sha_file,
+    valid_candidate_edges, score_event_candidates, compare_core_service_cells, sha_file,
 )
 
 
@@ -41,7 +41,7 @@ def match(**updates):
             "player1_name": "A Player", "player2_name": "B Player",
             "winner_id": "CAN1", "tournament": "Test Open",
             "round_name": "QF", "surface": "Hard",
-            "best_of": 3, "status": "finished"}
+            "best_of": 3, "status": "finished", "stats_json": "{}"}
     data.update(updates)
     return data
 
@@ -159,6 +159,40 @@ class GuardTests(unittest.TestCase):
             [source(source_loser_id="UNKNOWN")], self.canon, links)
         self.assertEqual(possibles, [])
         self.assertEqual(counts["blocked_unverified_current_player_pair"], 1)
+
+    def test_null_equal_and_conflicting_source_service_values_stay_review_only(self):
+        fields = {"w_ace": "5", "w_df": "2", "l_ace": "1", "l_df": "0"}
+        current = match(stats_json=json.dumps({
+            "p1_aces": 5, "p1_double_faults": 999,
+            "p2_aces": None, "p2_double_faults": 0}))
+        stats = compare_core_service_cells(fields, current, "CAN1", "CAN2")
+        self.assertEqual(stats["observed_source_core_stat_cells"], 4)
+        self.assertEqual(stats["existing_core_stat_cells_equal"], 2)
+        self.assertEqual(stats["conflicting_core_stat_cells"], 1)
+        self.assertEqual(stats["current_null_core_cells_review_only"], 1)
+        links, _ = self.bridges()
+        observed, counts = score_event_candidates(
+            [source(raw_columns={**source()["raw_columns"], **fields})], [current], links)
+        self.assertEqual(len(observed), 1)
+        self.assertFalse(observed[0]["import_ready"])
+        self.assertFalse(observed[0]["write_authorized"])
+        self.assertIsNone(observed[0]["candidate_new_null_fields"])
+        self.assertEqual(counts["current_null_core_cells_review_only"], 1)
+
+    def test_swapped_original_winner_orientation_maps_to_p2_fields(self):
+        stats = compare_core_service_cells(
+            {"w_ace": "3", "w_df": "1", "l_ace": "8", "l_df": "4"},
+            match(stats_json=json.dumps({"p1_aces": 8, "p2_aces": 3})),
+            "CAN2", "CAN1")
+        self.assertEqual(stats["existing_core_stat_cells_equal"], 2)
+        self.assertEqual(stats["current_null_core_cells_review_only"], 2)
+
+    def test_unknown_or_non_numeric_source_stats_never_count_as_null(self):
+        result = compare_core_service_cells(
+            {"w_ace": "", "w_df": "-1", "l_ace": "NaN", "l_df": "2"},
+            match(), "CAN1", "CAN2")
+        self.assertEqual(result["unusable_source_core_stat_cells"], 3)
+        self.assertEqual(result["current_null_core_cells_review_only"], 1)
 
     def test_source_sha_corruption_rejected(self):
         with tempfile.TemporaryDirectory() as t:
