@@ -1309,12 +1309,18 @@ def feed(req):
             source_feed["results_archive_unavailable"] = True
         # Test exclusions are centrally enforced before both entitlements
         # and KPI evaluation. Never trust a browser-side-only filter.
+        exclusions_available = True
         try:
             excluded_result_ids = load_result_exclusions()
         except AdminStorageUnavailable:
-            logging.exception("Result exclusion policy unavailable")
-            return response({"error": "result_exclusion_storage_unavailable"}, 503)
+            # Keep predictions/accounts working, but fail CLOSED on public
+            # Results when the authoritative exclusion policy is unavailable.
+            logging.exception("Result exclusion policy unavailable; Results suppressed")
+            excluded_result_ids = set()
+            exclusions_available = False
         source_feed = apply_result_exclusions(source_feed, excluded_result_ids)
+        if not exclusions_available:
+            source_feed = {**source_feed, "results": [], "results_exclusions_unavailable": True}
         runtime_ui = None
         try:
             runtime_ui, _, _ = load_effective_ui_config()
@@ -1354,6 +1360,8 @@ def feed(req):
                 kpi_source = dict(source_feed)
                 kpi_source["results"] = runtime_settled_results(source_feed, raw_statuses)
                 kpi_source = apply_result_exclusions(kpi_source, excluded_result_ids)
+                if not exclusions_available:
+                    kpi_source["results"] = []
                 data["dashboard_kpi_cards"] = selected_dashboard_cards(kpi_source, runtime_ui)
             data["match_statuses"] = {
                 str(event_id): value
@@ -1367,6 +1375,9 @@ def feed(req):
             if bool(entitlements.get("results")):
                 data["results"] = runtime_settled_results(data, data["match_statuses"])
                 data = apply_result_exclusions(data, excluded_result_ids)
+                if not exclusions_available:
+                    data["results"] = []
+                    data["results_exclusions_unavailable"] = True
             data["match_status_updated_at"] = status_snapshot.get("updated_at")
         except AdminStorageUnavailable:
             data["match_statuses"] = {}
