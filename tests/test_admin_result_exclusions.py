@@ -43,7 +43,7 @@ def test_exclusion_round_trip_restores_and_keeps_immutable_source(monkeypatch):
 
 def test_bulk_100_per_call_and_strict_no_unknown_or_partial_id(monkeypatch):
     table=Table()
-    monkeypatch.setattr(result_exclusions,"_table",lambda:table)
+    monkeypatch.setattr(result_exclusions,"_table",lambda _name:table)
     ids=[result_exclusions.result_bet_id(published(str(i)),published(str(i))["market_publications"][0]) for i in range(120)]
     assert len(set(ids))==120
     with pytest.raises(ValueError):
