@@ -1,12 +1,11 @@
 {
   "schema": 1,
-  "mode": "production-preflight",
+  "mode": "statistics",
   "promote": false,
-  "purpose": "Read-only current CDB pre-training readiness: canonical history, player/tournament identities, leakage, training feature coverage. No training, model promotion, provider requests, CDB write, comparator publish or web deployment.",
-  "requested_on": "2026-10-11",
-  "max_requests": 1,
-  "start": "",
-  "end": "",
-  "training_scope": "read_only_pretraining_audit",
+  "purpose": "Operator-authorized bounded 50-request TennisAPI pilot: fill missing match serve/return data from 2022-2025. Shared quota and canonical writer gates required. No model training/promotion or public app deployment.",
+  "requested_on": "2026-10-12",
+  "max_requests": 50,
+  "start": "2022-01-01",
+  "end": "2025-12-31",
   "historical_match_winner_odds_as_model_feature": false
 }
