@@ -23,6 +23,21 @@ class TestNormalizer(unittest.TestCase):
         self.assertEqual(stats, {'aces':7.0,'double_faults':0.0,'first_serve_win':54/66})
         self.assertFalse(bad)
 
+    def test_zero_over_zero_skips_only_unavailable_rate(self):
+        stats, bad = stats_for_side({
+            'match_Aces_p1': '9',
+            'match_Double_Faults_p1': '2',
+            'match_Break_Points_Saved_p1': '0%(0/0)',
+            'match_Break_Points_Converted_p1': '0%(0/0)',
+            'match_1st_Serve_Points_Won_p1': '60%(30/50)',
+        }, 'p1')
+        self.assertEqual(stats, {
+            'aces': 9.0, 'double_faults': 2.0, 'first_serve_win': .6,
+        })
+        self.assertFalse(bad)
+        _, bad = stats_for_side({'match_Break_Points_Saved_p1': '50%(0/0)'}, 'p1')
+        self.assertEqual(bad, ['Break_Points_Saved'])
+
     def test_archive_dedup_and_fail_closed(self):
         row = dict(player1='Novak Djokovic',player2='Stefanos Tsitsipas',winner='Novak Djokovic',round='Finals -',stats_url='https://www.atptour.com/en/scores/match-stats/archive/2023/580/ms001',match_Aces_p1='7',match_Aces_p2='15',match_Double_Faults_p1='3',match_Double_Faults_p2='3',match_Service_Points_Won_p1='75%(75/100)',match_Return_Points_Won_p2='25%(25/100)',match_Service_Points_Won_p2='65%(69/106)',match_Return_Points_Won_p1='35%(37/106)', ytd_Aces_p1='100')
         header=list(row)
