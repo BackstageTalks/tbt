@@ -380,7 +380,8 @@ def corroborate_complete_set_score(source_raw, canonical, winner_cid, loser_cid)
         a, b = int(m.group(1)), int(m.group(2))
         hi, lo = max(a, b), min(a, b)
         if not ((hi == 6 and lo <= 4) or (hi == 7 and lo in (5, 6))
-                or (hi >= 8 and hi - lo == 2)):
+                or (hi >= 8 and hi - lo == 2 and best_of == 5
+                    and i == len(tokens) - 1)):
             return "invalid_original_score"
         if a > b:
             winner_sets += 1
