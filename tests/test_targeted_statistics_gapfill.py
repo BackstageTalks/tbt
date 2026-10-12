@@ -207,3 +207,82 @@ def test_targeted_outcome_unknown_coverage_reason_and_zero_request_denominator(m
     assert data['api_requests_including_retries'] == 0
     assert data['api_new_statistic_values_per_1000_requests'] is None
     assert data['api_new_quality_ready_rows_per_1000_requests'] is None
+
+
+def test_hourly_priority_moves_high_yield_2025_atp_quality_gaps_before_2026(match_factory):
+    from datetime import date
+    from download_tennis_history import _statistics_candidates
+    atp2025 = match_factory('atp-2025', 'A', 'B', 'A')
+    atp2025.tour = 'ATP'
+    atp2025.scheduled_at = datetime(2025, 8, 17, tzinfo=timezone.utc)
+    atp2025.stats = {'p1_service_points_won': 0.6}
+    atp2025.provider_payload = {'id': '500'}
+
+    wta2026 = match_factory('wta-2026', 'A', 'B', 'A')
+    wta2026.tour = 'WTA'
+    wta2026.scheduled_at = datetime(2026, 7, 17, tzinfo=timezone.utc)
+    wta2026.stats = {}
+    wta2026.provider_payload = {'id': '600'}
+
+    atp2025_ace_only = match_factory('atp-2025-ace', 'A', 'B', 'A')
+    atp2025_ace_only.tour = 'ATP'
+    atp2025_ace_only.scheduled_at = datetime(2025, 9, 17, tzinfo=timezone.utc)
+    atp2025_ace_only.stats = {
+        f'{p}_{k}': 0.6 for p in ('p1', 'p2')
+        for k in ('service_points_won', 'return_points_won')
+    }
+    atp2025_ace_only.provider_payload = {'id': '501'}
+    all_rows = [atp2025, wta2026, atp2025_ace_only]
+    default, _ = _statistics_candidates(all_rows, date(2025, 1, 1),
+                                         date(2026, 12, 31), targeted=True)
+    preferred, report = _statistics_candidates(
+        all_rows, date(2025, 1, 1), date(2026, 12, 31),
+        targeted=True, historical_high_yield=True,
+    )
+    assert default[0].match_id == 'wta-2026'
+    assert preferred[0].match_id == 'atp-2025'
+    assert preferred[-1].match_id == 'atp-2025-ace'
+    assert report['preferred_verified_cohort'] == 'atp:2025:serve_return_incomplete'
+    assert report['historical_high_yield'] is True
+    import pytest
+    with pytest.raises(ValueError, match='requires identity-checked'):
+        _statistics_candidates(all_rows, date(2025, 1, 1), date(2026, 12, 31),
+                               historical_high_yield=True)
+
+
+def test_hourly_high_yield_flag_is_not_enabled_for_manual_operator_request():
+    from pathlib import Path
+    wf=(Path(__file__).resolve().parents[1] / '.github/workflows/data.yml').read_text()
+    assert "BLINQ_AUTOFILL_HIGH_YIELD: ${{ inputs.hourly_autofill && 'true' || 'false' }}" in wf
+    script=(Path(__file__).resolve().parents[1] / 'scripts/download_tennis_history.py').read_text()
+    assert 'historical_high_yield=high_yield_setting == "true"' in script
+    assert 'targeted_statistics' in script
+
+
+def test_empty_provider_statistics_has_reason_and_cooldown(match_factory, tmp_path):
+    class Provider:
+        def __init__(self):
+            self.calls = 0
+
+        def _get(self, path, **kwargs):
+            self.calls += 1
+            assert path == '/api/tennis/event/123/statistics'
+            return {'statistics': []}
+
+    match = match_factory('empty-snapshot', 'A', 'B', 'A')
+    match.stats = {}
+    match.provider_payload = {'id': '123', '_tbt_event_identity': {
+        'event_id': '123', 'status': 'finished', 'home': 'A', 'away': 'B',
+    }}
+    provider = Provider()
+    enricher = StatisticsEnricher(provider, tmp_path / 'statistics.sqlite', targeted=True)
+    try:
+        assert enricher.enrich(match) == 'unavailable'
+        marker = match.provider_payload['_tbt_statistics']
+        assert marker['status'] == 'unavailable'
+        assert marker['reason'] == 'empty_whole_match_statistics'
+        assert enricher.enrich(match) == 'cached'
+        assert provider.calls == 1
+        assert match.stats == {}
+    finally:
+        enricher.close()
