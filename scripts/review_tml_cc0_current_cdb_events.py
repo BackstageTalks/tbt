@@ -339,6 +339,120 @@ def compare_derived_rates(source_raw, canonical, winner_cid, loser_cid,
     return dict(counts)
 
 
+_COMPLETE_SET = re.compile(r"^(\d{1,2})-(\d{1,2})(?:\(\d{1,2}\))?$")
+
+
+def corroborate_complete_set_score(source_raw, canonical, winner_cid, loser_cid):
+    """Independent CDB set-tape comparison; never proof of provider event-ID equality.
+
+    The original TML score is winner/loser oriented, whereas the canonical
+    statistics are player1/player2 oriented. Only a FULL set-by-set match
+    earns a score corroboration marker. Aggregate games or two partial sets
+    can never stand in for a complete five-set tape.
+    """
+    if str(canonical.get("status") or "").casefold() not in (
+            "finished", "completed", "ended"):
+        return "canonical_not_completed"
+    winner = str(canonical.get("winner_id") or "")
+    p1, p2 = (str(canonical.get("player1_id") or ""),
+              str(canonical.get("player2_id") or ""))
+    if winner != winner_cid or {winner_cid, loser_cid} != {p1, p2}:
+        return "source_canonical_orientation_conflict"
+    try:
+        best_of = int(canonical.get("best_of"))
+    except (TypeError, ValueError):
+        return "invalid_original_score"
+    if best_of not in (3, 5):
+        return "invalid_original_score"
+    raw_score = source_raw.get("score")
+    if not isinstance(raw_score, str) or not raw_score.strip():
+        return "invalid_original_score"
+    tokens = raw_score.strip().split()
+    if len(tokens) < best_of // 2 + 1 or len(tokens) > best_of:
+        return "invalid_original_score"
+    score = []
+    winner_sets = loser_sets = 0
+    target_wins = best_of // 2 + 1
+    for i, token in enumerate(tokens):
+        m = _COMPLETE_SET.fullmatch(token)
+        if not m:
+            return "invalid_original_score"
+        a, b = int(m.group(1)), int(m.group(2))
+        hi, lo = max(a, b), min(a, b)
+        if not ((hi == 6 and lo <= 4) or (hi == 7 and lo in (5, 6))
+                or (hi >= 8 and hi - lo == 2 and best_of == 5
+                    and i == len(tokens) - 1)):
+            return "invalid_original_score"
+        if a > b:
+            winner_sets += 1
+        else:
+            loser_sets += 1
+        if loser_sets >= target_wins or (winner_sets >= target_wins
+                                        and i != len(tokens) - 1):
+            return "invalid_original_score"
+        score.append((a, b))
+    if winner_sets != target_wins:
+        return "invalid_original_score"
+    stats = canonical.get("stats_json")
+    if isinstance(stats, str):
+        try:
+            stats = json.loads(stats, parse_constant=lambda _: (
+                _ for _ in ()).throw(ValueError("Nonfinite score")))
+        except (TypeError, ValueError):
+            return "invalid_canonical_score"
+    if not isinstance(stats, dict):
+        return "invalid_canonical_score"
+    # Ensure every original set exists on BOTH canonical sides, including
+    # third/fourth/fifth sets. Missing is not a disagreement and never proof.
+    expected_p1 = []
+    expected_p2 = []
+    for n, (w, l) in enumerate(score, 1):
+        w_on_p1 = winner_cid == p1
+        values = (w, l) if w_on_p1 else (l, w)
+        for idx, value in enumerate(values, 1):
+            key = f"p{idx}_set{n}_games"
+            old = stats.get(key)
+            if old is None or old == "":
+                return "canonical_set_tape_incomplete"
+            if isinstance(old, bool):
+                return "canonical_score_conflict"
+            try:
+                actual = float(old)
+            except (TypeError, ValueError):
+                return "canonical_score_conflict"
+            if not actual.is_integer() or int(actual) != value:
+                return "canonical_score_conflict"
+        expected_p1.append(values[0])
+        expected_p2.append(values[1])
+    # Never accept a partial tape if the CDB also explicitly names more sets.
+    for n in range(len(score) + 1, 6):
+        for side in (1, 2):
+            extra = stats.get(f"p{side}_set{n}_games")
+            if extra is not None and extra != "":
+                return "canonical_score_conflict"
+    totals = {
+        "total_sets": len(score),
+        "total_games": sum(expected_p1) + sum(expected_p2),
+        "p1_games_won": sum(expected_p1),
+        "p2_games_won": sum(expected_p2),
+        "p1_sets_won": winner_sets if winner_cid == p1 else loser_sets,
+        "p2_sets_won": loser_sets if winner_cid == p1 else winner_sets,
+    }
+    for key, expected in totals.items():
+        old = stats.get(key)
+        if old is None or old == "":
+            continue
+        if isinstance(old, bool):
+            return "canonical_score_conflict"
+        try:
+            val = float(old)
+        except (TypeError, ValueError):
+            return "canonical_score_conflict"
+        if not val.is_integer() or int(val) != expected:
+            return "canonical_score_conflict"
+    return "exact_full_set_score_review_only"
+
+
 def score_event_candidates(observations, current_matches, links):
     """Examine possible events, but NEVER claim a canonical event identity."""
     by_pair = defaultdict(list)
@@ -425,16 +539,22 @@ def score_event_candidates(observations, current_matches, links):
             count["unique_full_metadata_candidates_review_only"] += 1
             core_stat_review = compare_core_service_cells(raw, c, wid, lid)
             rates_review = compare_derived_rates(raw, c, wid, lid, core_stat_review)
+            score_review = corroborate_complete_set_score(raw, c, wid, lid)
             possible.append({
                 "source_namespace": source["source_namespace"],
                 "source_native_event_key": native,
+                "original_source_file": source.get("source_file"),
+                "original_source_sha256": source.get("source_sha256"),
+                "original_source_row_sha256": source.get("raw_row_sha256"),
+                "original_source_row_number": source.get("source_row"),
                 "candidate_canonical_match_id": c["match_id"],
                 "source_winner_id": sid_w,
                 "source_loser_id": sid_l,
                 "current_canonical_winner_id": wid,
                 "context": "both_ids_winner_tournament_round_surface_week_best_of",
                 "independent_event_id_attested": False,
-                "score_attested": False,
+                "score_attested": score_review == "exact_full_set_score_review_only",
+                "score_review_status": score_review,
                 "candidate_new_null_fields": None,
                 "core_serve_cells_review_only": core_stat_review,
                 "derived_rate_cells_review_only": rates_review,
@@ -455,6 +575,11 @@ def score_event_candidates(observations, current_matches, links):
     for candidate in possible:
         count.update(candidate["core_serve_cells_review_only"])
         count.update(candidate["derived_rate_cells_review_only"])
+        count["score_review_" + candidate["score_review_status"]] += 1
+        if candidate["score_attested"] and not (
+                candidate["original_source_sha256"]
+                and candidate["original_source_row_sha256"]):
+            count["score_review_missing_original_row_sha_provenance"] += 1
     return possible, dict(count)
 
 
@@ -485,11 +610,12 @@ def run(gaps: Path, gaps_sha: str, legacy: Path, legacy_sha: str,
         "candidate_event_rows": len(candidates),
         "private_event_review_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
         "native_event_identity_verified": False,
-        "score_corroborated": False,
+        "score_corroborated": bool(source_count.get(
+            "score_review_exact_full_set_score_review_only", 0)),
         "ready_for_cdb_write": 0,
         "canonical_mutated": False,
         "provider_api_requests": 0, "model_trained": False,
-        "policy": "Metadata-only candidate; no source event ID, score, or NULL proof",
+        "policy": "Even full-set-score corroboration is review-only; no independent provider event-ID link, no NULL/CAS write proof",
     }
     (out / "report.json").write_text(
         json.dumps(report, sort_keys=True, indent=2, allow_nan=False) + "\n")
