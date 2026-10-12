@@ -201,8 +201,14 @@ jobs:
           echo "MAX_REQUESTS=$max_requests" >> "$GITHUB_ENV"
           echo "START_DATE=$start_date" >> "$GITHUB_ENV"
           echo "END_DATE=$end_date" >> "$GITHUB_ENV"
+          targeted="$(jq -r '.targeted_statistics // false' "$request")"
+          [[ "$targeted" == "true" || "$targeted" == "false" ]] || { echo "Invalid targeted_statistics flag"; exit 1; }
+          if [[ "$targeted" == "true" && "$mode" != "statistics" ]]; then
+            echo "Targeted statistics requires statistics mode"; exit 1
+          fi
+          echo "BLINQ_TARGETED_STATISTICS=$targeted" >> "$GITHUB_ENV"
           echo "BLINQ_SHARED_API_BUDGET_PURPOSE=history" >> "$GITHUB_ENV"
-          echo "Resolved controlled data request: mode=$mode max_requests=$max_requests start=$start_date end=$end_date promote=$promote"
+          echo "Resolved controlled data request: mode=$mode targeted=$targeted max_requests=$max_requests start=$start_date end=$end_date promote=$promote"
 
       - uses: actions/setup-python@v5
         with:
@@ -262,7 +268,7 @@ jobs:
             python scripts/run_mega_data.py "${args[@]}"
           elif [[ "$MODE" == history || "$MODE" == statistics ]]; then
             args=(--publish --data-repository "$TBT_DATA_REPOSITORY" --mode "$MODE" --lookback-days "$LOOKBACK_DAYS" --max-requests "$MAX_REQUESTS")
-            if [[ "${{ inputs.hourly_autofill || 'false' }}" == "true" ]]; then args+=(--targeted-statistics); fi
+            if [[ "${{ inputs.hourly_autofill || 'false' }}" == "true" || "${BLINQ_TARGETED_STATISTICS:-false}" == "true" ]]; then args+=(--targeted-statistics); fi
             if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
             if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
             python scripts/download_tennis_history.py "${args[@]}"
