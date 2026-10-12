@@ -254,6 +254,110 @@ jobs:
           assert x["enriched_matches"]==w["counts"]["updated"]
           print("TML_INDEPENDENT_POSTWRITE_CDB_READBACK_PASS:",{k:x[k] for k in ("enriched_matches","added_values","existing_values_overwritten")})
           PY
+      - name: Read-only 52-year SHA-pinned TML versus CURRENT canonical CDB
+        if: steps.mode.outputs.mode == 'dry-run'
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/tml-cdb
+          mkdir -p "$root/historical-inputs" "$root/historical-linked"
+          # Original 1975-2026 CSVs are SHA/Git-blob pinned. Build only
+          # independently verified ATP two-player P0 subsets, never new IDs.
+          python - <<'PY'
+          import csv,hashlib,json,re
+          from pathlib import Path
+          from collections import Counter
+          from prepare_tml_atp_cdb import (
+              YEAR_BLOBS,OPTIONAL_YEAR_BLOBS,select_source,verified_links,
+              valid_tourney_season_start,complete_winner_score,ID,
+          )
+          src=Path('tml-source'); dest=Path('.cache/tbt/tml-cdb/historical-inputs')
+          cross=Path('.cache/tbt/tml-cdb/identity/player-identity-crosswalk.jsonl')
+          expected='ae61e871a59c9960f00c20cb061bd6d1a90e222dc58b126438d27a14aeedd192'
+          links,qual=verified_links(cross,expected)
+          assert links and sorted(YEAR_BLOBS)==[2022,2023,2024,2025]
+          years=sorted(set(OPTIONAL_YEAR_BLOBS)|set(YEAR_BLOBS))
+          assert years==list(range(1975,2027))
+          # A separate native key is not proof of a different match; suppress
+          # all same winner+loser+round+score+week collisions across source years.
+          semantic=Counter()
+          for year in years:
+              path=src/f'{year}.csv'
+              # select_source enforces original immutable Git-blob SHA.
+              select_source(path,year)
+              with path.open(newline='',encoding='utf-8-sig') as f:
+                  for row in csv.DictReader(f):
+                      if (not valid_tourney_season_start(row,year)
+                              or not row.get('tourney_id')
+                              or not str(row.get('match_num') or '').isdecimal()
+                              or not ID.fullmatch(row.get('winner_id') or '')
+                              or not ID.fullmatch(row.get('loser_id') or '')
+                              or row.get('winner_id')==row.get('loser_id')
+                              or not complete_winner_score(row.get('score'),row.get('best_of'))):
+                          continue
+                      key=tuple(row.get(k) for k in
+                              ('tourney_date','winner_id','loser_id','score','round'))
+                      semantic[key]+=1
+          count=Counter()
+          for year in years:
+              valid,header,qa,rawsha=select_source(src/f'{year}.csv',year)
+              count['p0_source_valid']+=len(valid)
+              out=[]
+              for row in valid:
+                  if (row['winner_id'] not in links or row['loser_id'] not in links
+                      or links[row['winner_id']]==links[row['loser_id']]):
+                      count['blocked_unverified_two_player_ids']+=1
+                      continue
+                  key=tuple(row.get(k) for k in
+                            ('tourney_date','winner_id','loser_id','score','round'))
+                  if semantic[key]!=1:
+                      count['blocked_ambiguous_native_semantic_event']+=1
+                      continue
+                  out.append(row)
+              with (dest/f'atp_matches_{year}.csv').open('w',newline='',encoding='utf8') as f:
+                  w=csv.DictWriter(f,fieldnames=header)
+                  w.writeheader();w.writerows(out)
+              count['two_independent_ids_eligible_for_CDB_review']+=len(out)
+          assert count['p0_source_valid']>=90000
+          assert count['two_independent_ids_eligible_for_CDB_review']<=count['p0_source_valid']
+          assert sum(count[k] for k in ('two_independent_ids_eligible_for_CDB_review',
+                   'blocked_unverified_two_player_ids','blocked_ambiguous_native_semantic_event'))==count['p0_source_valid']
+          payload={'source_years_checked':len(years),'counts':dict(count),
+            'source_player_ID_links':len(links),'origin_SHA_pinned':True,
+            'native_event_ID_equivalence_proven':False,
+            'cdb_mutated':False,'automatically_authorized_fields':0}
+          (dest/'source-review.json').write_text(json.dumps(payload,sort_keys=True,indent=2)+'\n')
+          print('TML_52_YEAR_SHA_PINNED_TWO_ID_SOURCE_QA:',json.dumps(payload,sort_keys=True))
+          PY
+          args=()
+          for year in $(seq 1975 2026); do
+            args+=(--source-csv "$root/historical-inputs/atp_matches_$year.csv")
+          done
+          sha="$(jq -r .generated_crosswalk_sha256 "$root/prepared/report.json")"
+          python scripts/link_offline_serve_return.py \
+            --history-dir "$root/history" "${args[@]}" \
+            --matching-strategy verified_ids --require-verified-identities \
+            --verified-player-crosswalk "$root/prepared/tml-verified-crosswalk.json" \
+            --verified-player-crosswalk-sha256 "$sha" \
+            --out-dir "$root/historical-linked" >"$root/historical-private-linker.log"
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('.cache/tbt/tml-cdb')
+          report=json.loads((root/'historical-linked/report.json').read_text())
+          source=json.loads((root/'historical-inputs/source-review.json').read_text())
+          assert report['require_verified_identities'] is True
+          assert report['matching_strategy']=='verified_ids'
+          assert source['source_years_checked']==52
+          assert source['native_event_ID_equivalence_proven'] is False
+          result={'source_P0':source['counts']['p0_source_valid'],
+                  'both_independently_verified_player_IDs':source['counts']['two_independent_ids_eligible_for_CDB_review'],
+                  'linker_count_diagnostics':report.get('counts') or {},
+                  'source_event_ID_attested':0,
+                  'production_import_approved':0,'cdb_writes':0,
+                  'note':'Metadata linkage is NOT independent TML/native provider event-ID attestation'}
+          print('TML_52_YEAR_CURRENT_CDB_REVIEW_ONLY:',json.dumps(result,sort_keys=True))
+          PY
       - name: Record aggregate-only result without leaking private player data
         if: always()
         run: |
