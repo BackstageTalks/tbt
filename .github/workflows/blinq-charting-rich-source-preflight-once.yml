@@ -39,10 +39,10 @@ jobs:
               counts+=1
               for key in ('match_id','date','Date','source_match_id','tour','round','surface','p1_aces','p2_aces','p1_return_in_play_rate','p2_return_in_play_rate'):
                 if row.get(key):nonempty[key]=nonempty.get(key,0)+1
-              if len(samples)<2:
-                samples.append({k:str(v)[:100] for k,v in row.items() if k in ('match_id','date','Date','source_match_id','tour','round','surface','p1_aces','p2_aces')})
+              if len(samples)<1:
+                samples.append({k:str(v)[:100] for k,v in row.items() if k in ('match_id','date','player','opponent','ace_rate','first_win_pct','return_win_pct','servebasics_total_pts','returnoutcomes_total_returnable','shottypes_total_pt_ending')})
             assert counts==nrows,(tour,counts,nrows)
             head=r.fieldnames
             assert len(head)>=300,(tour,len(head))
-            print('VERIFIED_RICH_CHARTING',json.dumps({'tour':tour,'rows':counts,'sha256':actual,'columns':len(head),'keys':head[:85],'nonempty':nonempty,'samples':samples},sort_keys=True),flush=True)
+            print('VERIFIED_RICH_CHARTING',json.dumps({'tour':tour,'rows':counts,'sha256':actual,'columns':len(head),'rich_keys':[k for k in head if k.startswith(('servebasics_','returnoutcomes_','returndepth_','shottypes_','netpoints_','overview_'))],'nonempty':nonempty,'samples':samples},sort_keys=True),flush=True)
           PY
