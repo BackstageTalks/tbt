@@ -532,8 +532,7 @@ def main() -> None:
         json.dumps(payload, ensure_ascii=False, allow_nan=False),
         encoding="utf-8",
     )
-    print(
-        "Serving snapshot ready:",
+    # Validate the actual packaged snapshot after optional presentation enrichment.\n    # Prevent a deploy that would later exceed the API reader cap.\n    read_feed(target)\n    print("Packaged serving feed bytes:", target.stat().st_size)\n    print(\n        "Serving snapshot ready:",
         payload.get("ready", False),
         "player assets:",
         payload.get("player_assets", {}).get("photos_deployed", 0),
