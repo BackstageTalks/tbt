@@ -60,7 +60,7 @@ def evaluate(root,out):
     players=collections.defaultdict(list)
     for row in json.loads((src/"players.json").read_text()):
         players[(row["tour"],row["name"])].append(row["path"])
-    result=collections.Counter();review=[]
+    result=collections.Counter();review=[];complete=[]
     for candidate in candidates:
         sid=candidate["source_match_id"];mid=candidate["canonical_match_id_candidate"]
         sr=source.get(sid);m=hits.get(mid);reason=None;observed={}
@@ -93,7 +93,9 @@ def evaluate(root,out):
             result["consistent_stat_matches"]+=1
             delta={k:v for k,v in stats.items() if old.get(k) is None}
             result["null_cells_in_consistent_matches"]+=len(delta)
-            if not delta:reason="already_complete"
+            if not delta:
+                reason="already_complete"
+                complete.append({"canonical_match_id":mid,"source_match_id":sid,"source_player_side_map":candidate["source_side_to_canonical_side"],"canonical_player_ids":[str(m["player1_id"]),str(m["player2_id"])],"corroborating_fields":sorted(overlap),"source_sha256":rep["source_sha256"],"canonical_raw_stats_sha256":hashlib.sha256(m["stats_json"].encode()).hexdigest(),"import_approved":False})
             elif len(overlap)<4 or {k[:2] for k in overlap}!={"p1","p2"} or {k[:2] for k in overlap if k.endswith(("aces","double_faults"))}!={"p1","p2"}:
                 reason="insufficient_two_sided_canonical_stats"
         if reason is None:
@@ -106,7 +108,9 @@ def evaluate(root,out):
     assert sum(v for k,v in result.items() if k not in noncategories)==len(candidates)
     with (out/"review.jsonl").open("w") as f:
         for r in review:f.write(json.dumps(r,sort_keys=True)+"\n")
-    report={"status":"READ_ONLY_NO_PRODUCTION_WRITES","candidate_links":len(candidates),"cdb_rows":rep["counts"]["cdb_rows"],"counts":dict(result),"possible_review_matches":len(review),"possible_review_cells":sum(len(x["missing_values"]) for x in review),"approved_production_cells":0,"written_production_cells":0,"next_gate":"Verify independent event and both-player identity, stats whole-match completeness, immutable backup, single writer lock, NULL-only CAS and full persisted readback"}
+    with (out/"already_present_verified.jsonl").open("w") as f:
+        for r in complete:f.write(json.dumps(r,sort_keys=True)+"\n")
+    report={"status":"READ_ONLY_NO_PRODUCTION_WRITES","candidate_links":len(candidates),"consistent_already_present_rows":len(complete),"cdb_rows":rep["counts"]["cdb_rows"],"counts":dict(result),"possible_review_matches":len(review),"possible_review_cells":sum(len(x["missing_values"]) for x in review),"approved_production_cells":0,"written_production_cells":0,"next_gate":"Verify independent event and both-player identity, stats whole-match completeness, immutable backup, single writer lock, NULL-only CAS and full persisted readback"}
     (out/"report.json").write_text(json.dumps(report,indent=2)+"\n")
     print("CHARTING_FIELD_GATE",json.dumps(report,sort_keys=True))
 if __name__=="__main__":
