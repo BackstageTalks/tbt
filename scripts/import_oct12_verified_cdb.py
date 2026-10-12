@@ -22,7 +22,7 @@ from _bootstrap import ROOT  # noqa: F401
 from cdb_global_writer_lock import acquire, release
 from propline_nightly_cdb import fetch_current
 from release_store import ReleaseStore
-from tbt.data.history_snapshot import load_snapshot, write_year_partition
+from tbt.data.history_snapshot import load_snapshot, write_year_partition, minimize_provider_payload
 from tbt.data.offline_odds import norm_text
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.config import settings
@@ -185,7 +185,7 @@ def stage_rows(before, stage, source_rows, provider_rows):
         if source_surface and source_surface != str(item.surface).lower():
             reject("provider_surface_conflict"); continue
 
-        stage_stats = dict(item.stats or {})
+        # Canonical persistence intentionally stores minimized, reproducible provider context.\n        item.provider_payload = minimize_provider_payload(item.provider_payload)\n        stage_stats = dict(item.stats or {})
         # Every proposed historical score uses strictly the completed event;
         # no odds, current ranking or model projection enters the CDB.
         if str(item.match_id) in {str(v.match_id) for v in prepared}:
