@@ -7,7 +7,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from review_tml_cc0_current_cdb_events import (
-    valid_candidate_edges, score_event_candidates, compare_core_service_cells, sha_file,
+    valid_candidate_edges, score_event_candidates, compare_core_service_cells, compare_derived_rates, sha_file,
 )
 
 
@@ -203,6 +203,66 @@ class GuardTests(unittest.TestCase):
             match(), "CAN1", "CAN2")
         self.assertEqual(result["unusable_source_core_stat_cells"], 3)
         self.assertEqual(result["current_null_core_cells_review_only"], 1)
+
+    def test_derived_rates_only_after_four_existing_exact_core_stat_witnesses(self):
+        score = {"w_ace": "5", "w_df": "2", "l_ace": "1", "l_df": "0",
+                 "w_svpt": "80", "w_1stIn": "50", "w_1stWon": "35", "w_2ndWon": "18",
+                 "l_svpt": "90", "l_1stIn": "60", "l_1stWon": "40", "l_2ndWon": "20"}
+        current = match(stats_json=json.dumps(
+            {"p1_aces": 5, "p1_double_faults": 2,
+             "p2_aces": 1, "p2_double_faults": 0,
+             "p1_first_serve_win": 0.7}))
+        proof = compare_core_service_cells(score, current, "CAN1", "CAN2")
+        self.assertEqual(proof["existing_core_stat_cells_equal"], 4)
+        rates = compare_derived_rates(score, current, "CAN1", "CAN2", proof)
+        self.assertEqual(rates["observed_derived_rate_cells_review_only"], 8)
+        self.assertEqual(rates["existing_derived_rate_cells_equal_rounded"], 1)
+        self.assertEqual(rates["potential_current_null_rate_cells_review_only"], 7)
+        self.assertEqual(rates.get("conflicting_derived_rate_cells", 0), 0)
+        links, _ = self.bridges()
+        items, counts = score_event_candidates(
+            [source(raw_columns={**source()["raw_columns"], **score})], [current], links)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(counts["potential_current_null_rate_cells_review_only"], 7)
+        self.assertFalse(items[0]["import_ready"])
+        self.assertFalse(items[0]["write_authorized"])
+        self.assertIsNone(items[0]["candidate_new_null_fields"])
+
+    def test_missing_or_conflicting_aces_df_block_all_rate_proposals(self):
+        score = {"w_svpt": "80", "w_1stIn": "50",
+                 "w_1stWon": "35", "w_2ndWon": "18",
+                 "l_svpt": "90", "l_1stIn": "60",
+                 "l_1stWon": "40", "l_2ndWon": "20"}
+        current = match()
+        for bad in ({"existing_core_stat_cells_equal": 3},
+                    {"existing_core_stat_cells_equal": 4,
+                     "observed_source_core_stat_cells": 4,
+                     "conflicting_core_stat_cells": 1}):
+            with self.subTest(proof=bad):
+                rates = compare_derived_rates(score, current, "CAN1", "CAN2", bad)
+                self.assertEqual(rates["rate_review_blocked_missing_four_core_equal_witnesses"], 1)
+                self.assertEqual(rates.get("potential_current_null_rate_cells_review_only", 0), 0)
+
+    def test_impossible_postmatch_boxscore_blocks_derived_nulls(self):
+        score = {"w_svpt": "80", "w_1stIn": "50",
+                 "w_1stWon": "80", "w_2ndWon": "18",
+                 "l_svpt": "90", "l_1stIn": "60",
+                 "l_1stWon": "40", "l_2ndWon": "20"}
+        proof = {"observed_source_core_stat_cells": 4,
+                 "existing_core_stat_cells_equal": 4}
+        rates = compare_derived_rates(score, match(), "CAN1", "CAN2", proof)
+        self.assertEqual(rates["rate_review_impossible_source_boxscore"], 1)
+        self.assertEqual(rates.get("potential_current_null_rate_cells_review_only", 0), 0)
+
+    def test_wrong_derived_orientation_hard_block(self):
+        score = {"w_svpt": "80", "w_1stIn": "50",
+                 "w_1stWon": "35", "w_2ndWon": "18",
+                 "l_svpt": "90", "l_1stIn": "60",
+                 "l_1stWon": "40", "l_2ndWon": "20"}
+        proof = {"observed_source_core_stat_cells": 4,
+                 "existing_core_stat_cells_equal": 4}
+        with self.assertRaisesRegex(ValueError, "not canonical participant"):
+            compare_derived_rates(score, match(), "NOT_PLAYER", "CAN2", proof)
 
     def test_source_sha_corruption_rejected(self):
         with tempfile.TemporaryDirectory() as t:
