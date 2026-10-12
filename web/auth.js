@@ -538,6 +538,14 @@
   async function adminLiveRadar(force = false, publish = false) {
     return apiWithSession(`/api/v1/admin/live-radar${force?'?force=1':''}`, {method: publish ? 'POST' : 'GET'});
   }
+  async function adminResultTestExclusions() {
+    return apiWithSession('/api/v1/admin/results-test-exclusions');
+  }
+  async function adminSetResultTestExclusions(ids, excluded) {
+    return apiWithSession('/api/v1/admin/results-test-exclusions', {
+      method:'POST', body:JSON.stringify({ids,excluded}),
+    });
+  }
   async function adminLiveResults() {
     return apiWithSession('/api/v1/admin/live-radar/results');
   }
@@ -700,6 +708,7 @@
     projectGroups, joinProjectGroup, leaveProjectGroup, insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, markInsightRead,
     adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
     adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult,
+    adminResultTestExclusions, adminSetResultTestExclusions,
     adminDiagnostics, adminModelCalibration, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews, comparatorPlayers, comparatorCompare,
     bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
