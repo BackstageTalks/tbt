@@ -1,0 +1,148 @@
+name: BlinQ TML ↔ ATP official ↔ CDB witness (read-only)
+
+'on':
+  pull_request:
+    paths:
+      - scripts/review_tml_atptour_three_way_event.py
+      - tests/test_review_tml_atptour_three_way_event.py
+      - .github/workflows/tml-official-three-way-witness.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/tml-official-three-way-request.json
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-tml-official-threeway-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  source-contract-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test official native event and complete-score witness fail-closed
+        run: |
+          set -euo pipefail
+          python -m pip install -q -r api/requirements-train.txt
+          python -m unittest discover -s tests -p 'test_review_tml_atptour_three_way_event.py' -v
+          python -m compileall -q scripts/review_tml_atptour_three_way_event.py
+  original-provider-triple-witness:
+    needs: source-contract-tests
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      PYTHONPATH: api:scripts
+      SOURCE_PIN: c5537eed87d8a76f3adb598cdf506d885872923b
+      CROSSWALK_SHA: ae61e871a59c9960f00c20cb061bd6d1a90e222dc58b126438d27a14aeedd192
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Tennismylife/TML-Database
+          ref: c5537eed87d8a76f3adb598cdf506d885872923b
+          fetch-depth: 1
+          path: tml-source
+          persist-credentials: false
+      - name: Check pinned originals and private destination
+        run: |
+          set -euo pipefail
+          test "$(git -C tml-source rev-parse HEAD)" = "$SOURCE_PIN"
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$DATA_REPO" --json visibility -q .visibility)" = PRIVATE
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install canonical CDB reader
+        run: python -m pip install -q -r api/requirements-train.txt pyarrow pandas
+      - name: Download coherent immutable current canonical CDB
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/tml-threeway/history .cache/tbt/tml-threeway/identity
+          python scripts/download_stable_cdb.py \
+            --repository "$DATA_REPO" \
+            --out .cache/tbt/tml-threeway/history \
+            --report .cache/tbt/tml-threeway/cdb-snapshot.json
+          gh release download tbt-canonical-identity-links-v1 -R "$DATA_REPO" \
+            -p player-identity-crosswalk.jsonl -D .cache/tbt/tml-threeway/identity
+          echo "$CROSSWALK_SHA  .cache/tbt/tml-threeway/identity/player-identity-crosswalk.jsonl" | sha256sum -c -
+      - name: Restore original SHA-attested official ATP archive checkpoints
+        run: |
+          set -euo pipefail
+          dir=.cache/tbt/tml-threeway
+          mkdir -p "$dir/official"
+          for year in 2022 2023 2024 2025; do
+            name="blinq-atp-archive-${year}-37988671325-1.tar.gz"
+            gh release download blinq-cloud-atptour-20261009 -R "$DATA_REPO" -p "$name" -D "$dir/official"
+            mv "$dir/official/$name" "$dir/official/official-$year.tar.gz"
+          done
+      - name: Independently reconcile THREE source-native event records
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/tml-threeway
+          mkdir -p "$root/private-report"
+          python scripts/review_tml_atptour_three_way_event.py \
+            --source-dir tml-source --archive-dir "$root/official" \
+            --history-dir "$root/history" \
+            --verified-crosswalk "$root/identity/player-identity-crosswalk.jsonl" \
+            --crosswalk-sha256 "$CROSSWALK_SHA" \
+            --out "$root/private-report" >"$root/aggregate-review.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('.cache/tbt/tml-threeway')
+          r=json.loads((root/'private-report/report.json').read_text())
+          assert r['status']=='THREE_WAY_OFFICIAL_ATP_READ_ONLY'
+          assert r['cdb_writes']==0 and r['ready_for_cdb_write']==0
+          assert r['model_trained'] is False and r['api_requests']==0
+          assert r['counts'].get('source_p0_rows',0)>9000
+          assert r['counts'].get('three_way_official_review_candidates',0)<=r['counts'].get('official_match_witnessed',0)
+          print('OFFICIAL_THREE_WAY_READ_ONLY_COUNTS:',json.dumps(r['counts'],sort_keys=True))
+          PY
+      - name: Reject stale canonical snapshot, retain private reviewed witness archive
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,os
+          from release_store import ReleaseStore
+          root=Path('.cache/tbt/tml-threeway')
+          original=(root/'history/_tbt_bundle_manifest.json').read_bytes()
+          current=root/'fresh-current-manifest'
+          current.mkdir()
+          ReleaseStore(os.environ['DATA_REPO'],'tbt-data-v1',current)._download_asset('_tbt_bundle_manifest.json')
+          assert hashlib.sha256(original).digest()==hashlib.sha256((current/'_tbt_bundle_manifest.json').read_bytes()).digest(), 'CDB raced during event proof; retry on coherent snapshot'
+          print('OFFICIAL_THREE_WAY_CURRENT_CDB_MANIFEST_CAS_PASS')
+          PY
+          root=.cache/tbt/tml-threeway
+          mkdir -p "$root/private-output" "$root/readback"
+          cp "$root/private-report/"* "$root/private-output/"
+          (cd "$root/private-output"; sha256sum -- * > SHA256SUMS)
+          tag="blinq-tml-official-event-witness-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" -R "$DATA_REPO" --target main \
+            --title "BlinQ TML official ATP three-way evidence" \
+            --notes "Private only, read-only. No original match ID equality assumed, no CDB write." >/dev/null
+          tar -czf "$root/private-threeway.tar.gz" -C "$root/private-output" .
+          gh release upload "$tag" "$root/private-threeway.tar.gz" -R "$DATA_REPO" >/dev/null
+          gh release download "$tag" -R "$DATA_REPO" -p private-threeway.tar.gz -D "$root/readback" >/dev/null
+          cmp "$root/private-threeway.tar.gz" "$root/readback/private-threeway.tar.gz"
+          mkdir -p "$root/readback/data"
+          tar -xzf "$root/readback/private-threeway.tar.gz" -C "$root/readback/data"
+          (cd "$root/readback/data"; sha256sum -c SHA256SUMS >/dev/null)
+          echo OFFICIAL_THREE_WAY_PRIVATE_SHA256_PERSISTED_READBACK_PASS
