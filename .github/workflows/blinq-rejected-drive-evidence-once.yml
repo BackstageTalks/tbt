@@ -1,0 +1,146 @@
+name: BlinQ rejected Drive ATP WTA raw evidence (manual one-shot)
+
+'on':
+  pull_request:
+    paths:
+      - 'scripts/archive_rejected_drive_tennis.py'
+      - 'tests/test_archive_rejected_drive_tennis.py'
+      - '.github/workflows/blinq-rejected-drive-evidence-once.yml'
+  push:
+    branches: [main]
+    paths: ['.github/rejected-drive-evidence-request.json']
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Source-only archive and rejected-source regression tests
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_archive_rejected_drive_tennis.py -v
+          python -m compileall -q scripts/archive_rejected_drive_tennis.py
+
+  archive:
+    needs: contract
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'BackstageTalks/tbt' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Require exact one-shot source scope and PRIVATE sink
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$DRIVE_READER_JSON"
+          test "$(gh repo view "$PRIVATE_REPO" --json visibility -q .visibility)" = PRIVATE
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            test "$(jq -er .mode .github/rejected-drive-evidence-request.json)" = private-research-only
+            test "$(jq -er .scope .github/rejected-drive-evidence-request.json)" = two-20261012-na-kontrolu-sources
+          fi
+          python -m pip install --disable-pip-version-check -q google-auth requests
+      - name: Download exact Drive originals with existing read-only service identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/source
+          python - <<'PY'
+          import json,os,hashlib
+          from pathlib import Path
+          from google.oauth2.service_account import Credentials
+          from google.auth.transport.requests import AuthorizedSession
+          from scripts.archive_rejected_drive_tennis import SOURCES
+          creds=Credentials.from_service_account_info(json.loads(os.environ["DRIVE_READER_JSON"]),
+            scopes=["https://www.googleapis.com/auth/drive.readonly"])
+          session=AuthorizedSession(creds)
+          expected={"atp":9151459,"wta":1707799}
+          for tour,(name,file_id,_) in SOURCES.items():
+              endpoint="https://www.googleapis.com/drive/v3/files/"+file_id
+              m=session.get(endpoint,params={"fields":"id,name,size,mimeType,md5Checksum","supportsAllDrives":"true"},timeout=90)
+              m.raise_for_status()
+              meta=m.json()
+              if meta.get("name")!=name or int(meta.get("size",0))!=expected[tour]:
+                  raise SystemExit("Drive original drift / bad file ID; no source can be published")
+              path=Path("work/source")/name
+              with session.get(endpoint,params={"alt":"media","supportsAllDrives":"true"},timeout=240,stream=True) as download:
+                  download.raise_for_status()
+                  with path.open("wb") as fd:
+                      for block in download.iter_content(1024*1024):
+                          if block:
+                              fd.write(block)
+                              if fd.tell()>20_000_000: raise SystemExit("Exceeded source size cap")
+              if path.stat().st_size!=expected[tour]:
+                  raise SystemExit("Incomplete Drive raw download")
+              raw_md5=hashlib.md5(path.read_bytes()).hexdigest()
+              if meta.get("md5Checksum") and raw_md5!=meta["md5Checksum"]:
+                  raise SystemExit("Original Drive MD5 differs from raw payload")
+              print("Verified original file:",name,path.stat().st_size)
+          PY
+      - name: Preserve every original row and quarantine ambiguous legacy fields
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=work/private
+          mkdir -p "$root"
+          python scripts/archive_rejected_drive_tennis.py --source-root work/source --out "$root"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path("work/private/report.json").read_text())
+          assert report["source_rows"]==114143
+          assert report["by_tour"]["atp"]["rows"]==68760
+          assert report["by_tour"]["wta"]["rows"]==45383
+          assert report["canonical_matches_proven"]==0
+          assert report["canonical_cells_written"]==0
+          assert report["accepted_source_matches_eligible_for_cdb"]==0
+          assert report["sports_api_requests"]==0
+          print("PRIVATE_RAW_REJECTED_SOURCE_EVIDENCE_COUNTS:",report["by_tour"])
+          PY
+          cp 'work/source/atp_tennis2.txt' "$root/"
+          cp 'work/source/WTA Tennis 2007 - 2026 Daily update.xlsx' "$root/"
+          (cd "$root" && sha256sum 'atp_tennis2.txt' 'WTA Tennis 2007 - 2026 Daily update.xlsx' >> SHA256SUMS && sha256sum -c SHA256SUMS)
+      - name: Publish immutable PRIVATE source evidence and independent SHA readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=work/private
+          tag="blinq-rejected-drive-evidence-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$root/"* -R "$PRIVATE_REPO" \
+            --title "BlinQ rejected ATP/WTA Drive source evidence" \
+            --notes "Read-only original ATP TXT and WTA XLSX, research-only normalized rows and quarantine; no CDB write, model or sports API requests."
+          mkdir -p work/remote-verification
+          gh release download "$tag" -R "$PRIVATE_REPO" -D work/remote-verification
+          (cd work/remote-verification && sha256sum -c SHA256SUMS)
+          python - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+          before=Path("work/private/report.json")
+          after=Path("work/remote-verification/report.json")
+          assert sha(before)==sha(after)
+          data=json.loads(after.read_text())
+          assert data["source_rows"]==114143 and data["canonical_cells_written"]==0
+          assert data["observations_sha256"]==sha("work/remote-verification/rejected-source-observations.jsonl.gz")
+          print("REJECTED_SOURCE_IMMUTABLE_PRIVATE_READBACK_PASS:",data["source_rows"],flush=True)
+          PY
+          echo "Private rejected original-data Release: $tag" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Zero tennis API calls, CDB writes, model training and scheduled tasks.' >> "$GITHUB_STEP_SUMMARY"
