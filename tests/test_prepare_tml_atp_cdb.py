@@ -197,7 +197,7 @@ class TmlTests(unittest.TestCase):
 
     def test_unsupported_year_cannot_bypass_original_sha_pin(self):
         with self.assertRaisesRegex(ValueError,"Unpinned"):
-            tml.audit_all_pinned_sources(self.d,self.d/"out",years=[2006])
+            tml.audit_all_pinned_sources(self.d,self.d/"out",years=[1986])
 
     def test_opt_in_raw_sha_mismatch_fails_closed(self):
         self.row.update(tourney_id="2007-123",tourney_date="20070101")
