@@ -5240,6 +5240,8 @@
     decorateAdminMediaUploads(host);
     decorateBannerNumberControls(host);
     host.onclick=async event=>{
+      const adminTestButton=event.target.closest('[data-admin-test-action]');
+      if(adminTestButton){await adminTestAction(adminTestButton.dataset.adminTestAction);return;}
       const step=event.target.closest('[data-banner-step]');
       if(step){
         const input=step.parentElement?.querySelector('input[type="number"][data-simple-banner-field]');
@@ -5438,6 +5440,9 @@
     };
     host.onchange=event=>{
       const t=event.target;
+      if(t.dataset.adminTestCheck){const chosen=new Set(state.adminTestSelected||[]);if(t.checked)chosen.add(t.dataset.adminTestCheck);else chosen.delete(t.dataset.adminTestCheck);state.adminTestSelected=[...chosen];rerenderAdmin();return;}
+      if(t.dataset.adminTestFilter){adminTestFilter()[t.dataset.adminTestFilter]=String(t.value||'');state.adminTestPage=0;rerenderAdmin();return;}
+      if(t.hasAttribute('data-admin-test-size')){state.adminTestSize=[50,100].includes(Number(t.value))?Number(t.value):50;state.adminTestPage=0;rerenderAdmin();return;}
       if(t.dataset.tgField){const cfg=state.ui.telegram_groups=state.ui.telegram_groups||{schema:1,enabled:true,groups:[]};cfg[t.dataset.tgField]=t.type==='checkbox'?t.checked:t.value;renderTelegramGroupsPanel();return;}
       if(t.dataset.tgGroupField){const card=t.closest('[data-tg-index]'),index=Number(card?.dataset.tgIndex),cfg=state.ui.telegram_groups=state.ui.telegram_groups||{schema:1,enabled:true,groups:[]},group=Array.isArray(cfg.groups)?cfg.groups[index]:null;if(group){group[t.dataset.tgGroupField]=t.type==='checkbox'?t.checked:t.value;renderTelegramGroupsPanel();}return;}
       const uf=adminUserFilterState();
@@ -5486,6 +5491,7 @@
       if(t.dataset.adminAccess){const item=elements()?.[state.selectedElement];if(item){item.access=item.access||{};item.access[t.dataset.adminAccess]=t.value;if(t.dataset.adminAccess==='rookie')item.access.trial=t.value;rerenderAdmin();}return;}
     };
     // Live copy feedback without replacing the selected editor or interrupting typing.
+    host.onkeydown=event=>{if(event.target?.id==='adminTestGoPage'&&event.key==='Enter'){event.preventDefault();adminTestAction('go');}};
     host.oninput=event=>{
       const t=event.target,field=t?.dataset?.simpleBannerField;
       const liveFields=['eyebrow','headline','text','button_text','desktop_image_x','desktop_image_y','mobile_image_x','mobile_image_y','desktop_text_x','desktop_text_y','desktop_text_width','mobile_text_x','mobile_text_y','mobile_text_width','desktop_headline_size','mobile_headline_size','desktop_text_size','mobile_text_size','desktop_eyebrow_size','mobile_eyebrow_size','desktop_social_x','desktop_social_y','mobile_social_x','mobile_social_y','desktop_social_size','mobile_social_size','desktop_shadow_strength','mobile_shadow_strength'];
