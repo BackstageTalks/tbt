@@ -99,6 +99,10 @@ from tbt.services.push_notifications import (
 from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed
 from tbt.services.dashboard_kpis import selected_dashboard_cards
+from tbt.services.result_exclusions import (
+    result_candidates, load_result_exclusions, set_result_exclusions,
+    apply_result_exclusions,
+)
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.providers.shared_budget import (
     reserve as reserve_shared_api_budget,
@@ -1303,6 +1307,14 @@ def feed(req):
             # immutable issued feed remains available, but health is explicit.
             logging.exception("Durable Results archive read unavailable")
             source_feed["results_archive_unavailable"] = True
+        # Test exclusions are centrally enforced before both entitlements
+        # and KPI evaluation. Never trust a browser-side-only filter.
+        try:
+            excluded_result_ids = load_result_exclusions()
+        except AdminStorageUnavailable:
+            logging.exception("Result exclusion policy unavailable")
+            return response({"error": "result_exclusion_storage_unavailable"}, 503)
+        source_feed = apply_result_exclusions(source_feed, excluded_result_ids)
         runtime_ui = None
         try:
             runtime_ui, _, _ = load_effective_ui_config()
@@ -1341,6 +1353,7 @@ def feed(req):
             if runtime_ui is not None:
                 kpi_source = dict(source_feed)
                 kpi_source["results"] = runtime_settled_results(source_feed, raw_statuses)
+                kpi_source = apply_result_exclusions(kpi_source, excluded_result_ids)
                 data["dashboard_kpi_cards"] = selected_dashboard_cards(kpi_source, runtime_ui)
             data["match_statuses"] = {
                 str(event_id): value
@@ -1353,6 +1366,7 @@ def feed(req):
             # never inferred from the match-winner status.
             if bool(entitlements.get("results")):
                 data["results"] = runtime_settled_results(data, data["match_statuses"])
+                data = apply_result_exclusions(data, excluded_result_ids)
             data["match_status_updated_at"] = status_snapshot.get("updated_at")
         except AdminStorageUnavailable:
             data["match_statuses"] = {}
@@ -2108,6 +2122,51 @@ def admin_live_radar(req):
     except AdminStorageUnavailable:return response({"error":"live_radar_storage_unavailable"},503)
     except Exception as exc:
         logging.exception("Admin LIVE Radar scan failed");return response({"error":"live_radar_unavailable","detail":exc.__class__.__name__},503)
+
+
+@app.route(route="v1/admin/results-test-exclusions", methods=["GET", "POST"])
+def admin_result_test_exclusions(req):
+    admin, denied = _admin_user(req)
+    if denied:
+        return denied
+    try:
+        source = visible_feed(read_feed(FEED))
+        source = merge_settled_results(source, load_settled_results_archive())
+        try:
+            statuses = load_match_status_snapshot() or {}
+            source["results"] = runtime_settled_results(
+                source, verified_terminal_statuses(statuses.get("statuses"))
+            )
+        except AdminStorageUnavailable:
+            # Durable settled archive remains the minimum authoritative source.
+            pass
+        available = result_candidates(source)
+        excluded = load_result_exclusions()
+        if req.method == "GET":
+            return response({
+                "items": [{**row, "excluded": row["id"] in excluded} for row in available],
+                "excluded_total": len(excluded),
+                "total": len(available),
+            })
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        if not isinstance(payload, dict):
+            return response({"error": "invalid_json"}, 400)
+        ids = payload.get("ids")
+        excluded_action = payload.get("excluded")
+        if not isinstance(ids, list) or not isinstance(excluded_action, bool):
+            return response({"error": "invalid_result_exclusion_request"}, 400)
+        permitted = {row["id"] for row in available}
+        if any(not isinstance(k, str) or k not in permitted for k in ids):
+            return response({"error": "unknown_or_stale_result_id"}, 409)
+        return response(set_result_exclusions(ids, excluded_action, str(admin.get("id") or "")))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        logging.exception("Admin result exclusion storage unavailable")
+        return response({"error": "result_exclusion_storage_unavailable"}, 503)
 
 
 @app.route(route="v1/admin/live-radar/results", methods=["GET"])
