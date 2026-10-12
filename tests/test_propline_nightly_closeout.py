@@ -2,6 +2,7 @@ import importlib.util
 import io
 import json
 import unittest
+import tempfile
 from datetime import datetime, timezone
 from unittest import mock
 from urllib.error import HTTPError
@@ -201,6 +202,62 @@ class CloseoutContractTests(unittest.TestCase):
             mod.probe_player_games(targets, "2026-10-11", "123")
         self.assertEqual(len(attempts), 1)
         self.assertEqual(mod.STATE["reason"], "")
+
+
+    def test_night_target_index_uses_canonical_players_not_next_slate(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "gaps.json"
+            path.write_text(json.dumps({
+                "schema": 1, "source": "canonical_cdb_2026",
+                "partition_sha256": "a" * 64,
+                "targets": [{"player_name": "Carlos Alcaraz", "score": 6},
+                            {"player_name": "Novak Djokovic", "score": 2}],
+            }), encoding="utf-8")
+            with mock.patch.dict(mod.os.environ, {"CLOSEOUT_GAP_TARGETS": str(path)}):
+                self.assertEqual(mod._targeted_player_names(),
+                                 ["Carlos Alcaraz", "Novak Djokovic"])
+
+    def test_night_target_reserves_fifty_remaining_calls_for_odds(self):
+        utc = datetime(2026, 10, 12, 21, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "gaps.json"
+            path.write_text(json.dumps({
+                "schema": 1, "source": "canonical_cdb_2026",
+                "partition_sha256": "b" * 64,
+                "targets": [{"player_name": f"Player{j} Person", "score": 1}
+                            for j in range(90)],
+            }), encoding="utf-8")
+            mod.STATE["remaining"] = 70
+            def respond(*args, **kwargs):
+                mod.STATE["calls"] += 1
+                mod.STATE["remaining"] -= 1
+                return {"games": [{"status": "final", "stats": {"aces": 3}}]}
+            with mock.patch.dict(mod.os.environ, {"CLOSEOUT_GAP_TARGETS": str(path)}), \
+                 mock.patch.object(mod, "request", side_effect=respond), \
+                 mock.patch.object(mod, "now", return_value=utc), \
+                 mock.patch.object(mod, "flush_if_needed"):
+                mod.probe_player_games([], "2026-10-12", "test")
+            self.assertEqual(mod.STATE["calls"], 20)
+            self.assertEqual(mod.STATE["remaining"], 50)
+
+    def test_night_player_probe_stops_after_thirty_empty_lookups(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "gaps.json"
+            path.write_text(json.dumps({
+                "schema": 1, "source": "canonical_cdb_2026",
+                "partition_sha256": "b" * 64,
+                "targets": [{"player_name": f"Missing{j} Person", "score": 1}
+                            for j in range(90)],
+            }), encoding="utf-8")
+            def respond(*args, **kwargs):
+                mod.STATE["calls"] += 1
+                return {"games": []}
+            with mock.patch.dict(mod.os.environ, {"CLOSEOUT_GAP_TARGETS": str(path)}), \
+                 mock.patch.object(mod, "request", side_effect=respond), \
+                 mock.patch.object(mod, "flush_if_needed"):
+                mod.probe_player_games([], "2026-10-12", "test")
+            self.assertEqual(mod.STATE["calls"], 30)
+            self.assertEqual(mod.STATE["reason"], "")
 
     def test_save_batch_preserves_on_readback_failure(self):
         mod.DATA.append({"event_id": "123", "odds": {"bookmakers": []}})
