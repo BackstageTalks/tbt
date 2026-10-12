@@ -26,7 +26,7 @@ ID = re.compile(r"[A-Za-z0-9]+\Z")
 def blob_sha1(raw: bytes):
     return hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
 
-_SET_SCORE = re.compile(r"^(\\d{1,2})-(\\d{1,2})(?:\\(\\d{1,2}\\))?$")
+_SET_SCORE = re.compile(r"^(\d{1,2})-(\d{1,2})(?:\(\d{1,2}\))?$")
 
 
 def complete_winner_score(score: object, best_of: object) -> bool:
