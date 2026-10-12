@@ -138,6 +138,38 @@ jobs:
                               for k in ('status','strategy','method','quality','evidence'):
                                   if k in obj and isinstance(obj[k],(str,int,bool)):
                                       link_status[k+':'+str(obj[k])[:35]]+=1
+          exact_proof=Counter(); score_types=Counter(); orient_values=Counter(); evidence_types=Counter()
+          def compact_text(x):
+              return ' '.join(str(x or '').lower().split())
+          with gzip.open(p,'rt',encoding='utf8') as f:
+              for line in f:
+                  if not line.strip():continue
+                  item=json.loads(line)
+                  if not isinstance(item,dict):continue
+                  srcrow=sources.get(str(item.get('event_id') or ''))
+                  if not srcrow or str(item.get('tour') or '').upper()!=srcrow['source_tour'] or clock(item.get('start_utc'))!=clock(srcrow['scheduled_at_utc']):
+                      continue
+                  exact_proof['same_tour_utc']+=1
+                  if not item.get('canonical_match_id'):continue
+                  exact_proof['with_canonical_id']+=1
+                  link=item.get('link') or {}
+                  if isinstance(link,dict):
+                      score_types[type(link.get('score')).__name__]+=1
+                      orient_values[str(link.get('orientation'))[:25]]+=1
+                      evidence_types[type(link.get('tournament_evidence')).__name__]+=1
+                      if link.get('accepted') is True:exact_proof['link_accepted_true']+=1
+                  src_ids={str(srcrow['source_winner_id']),str(srcrow['source_loser_id'])}
+                  index_sides={str(item.get('player1_source')),str(item.get('player2_source'))}
+                  if index_sides==src_ids:exact_proof['index_source_sides_are_native_ids']+=1
+                  src_names={compact_text(srcrow['source_winner_name']),compact_text(srcrow['source_loser_name'])}
+                  index_names={compact_text(item.get('player1_source')),compact_text(item.get('player2_source'))}
+                  if src_names==index_names:exact_proof['index_source_sides_equal_names']+=1
+          print('FLASH_NATIVE_EXACT75_PROOF',json.dumps({
+             'counts':dict(exact_proof),
+             'link_score_types':dict(score_types),
+             'link_orientation_categories':dict(orient_values),
+             'tournament_evidence_types':dict(evidence_types)
+          },sort_keys=True))
           print('FLASH_NATIVE_BRIDGE_LINK_SCHEMA',json.dumps({
              'strict':dict(strict),
              'link_value_types':dict(link_types),
