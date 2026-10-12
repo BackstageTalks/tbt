@@ -113,6 +113,16 @@ class GuardTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "preapproved"):
             self.bridges()
 
+    def test_unambiguous_round_alias_unblocks_review_not_import(self):
+        links, _ = self.bridges()
+        for canonical_round in ("Quarterfinal", "Quarter Finals", "QF"):
+            with self.subTest(round=canonical_round):
+                items, counts = score_event_candidates(
+                    [source()], [match(round_name=canonical_round)], links)
+                self.assertEqual(counts["unique_full_metadata_candidates_review_only"], 1)
+                self.assertFalse(items[0]["write_authorized"])
+                self.assertFalse(items[0]["import_ready"])
+
     def test_winner_mismatch_fails_event_gate(self):
         links, _ = self.bridges()
         matches = [match(winner_id="CAN2")]
