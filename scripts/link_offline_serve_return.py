@@ -1206,7 +1206,11 @@ def main() -> None:
     ap.add_argument("--verified-player-crosswalk", default="")
     ap.add_argument("--verified-player-crosswalk-sha256", default="")
     ap.add_argument("--matching-strategy", choices=("name_only", "verified_ids"), default="verified_ids")
+    ap.add_argument("--require-verified-identities", action="store_true",
+                    help="Fail closed: no name-only fallback for external TML data")
     args = ap.parse_args()
+    if args.require_verified_identities and args.matching_strategy != "verified_ids":
+        ap.error("--require-verified-identities needs verified_ids matching")
     links = _read_verified_player_crosswalk(
         args.verified_player_crosswalk, args.verified_player_crosswalk_sha256
     ) if args.matching_strategy == "verified_ids" else {}
@@ -1246,6 +1250,9 @@ def main() -> None:
         counts["source_rows"] += 1
         per_source[source.source] += 1
         verified_ids, identity_error = _verified_ids(source, links)
+        if args.require_verified_identities and not verified_ids:
+            counts["blocked_no_two_verified_source_player_ids"] += 1
+            continue
         if identity_error:
             counts["identity_crosswalk_quarantined"] += 1
             weak_review.append({
@@ -1409,6 +1416,7 @@ def main() -> None:
         "production_mutated": False,
         "api_requests": 0,
         "matching_strategy": args.matching_strategy,
+        "require_verified_identities": bool(args.require_verified_identities),
         "verified_crosswalk_sha256": args.verified_player_crosswalk_sha256 or None,
         "verified_crosswalk_entries": len(links),
         "note": "Read-only linker. No canonical history write and no provider call occurred.",
