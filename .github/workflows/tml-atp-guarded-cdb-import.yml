@@ -326,7 +326,7 @@ jobs:
             'source_player_ID_links':len(links),'origin_SHA_pinned':True,
             'native_event_ID_equivalence_proven':False,
             'cdb_mutated':False,'automatically_authorized_fields':0}
-          (dest/'source-review.json').write_text(json.dumps(payload,sort_keys=True,indent=2)+'\\n')
+          (dest/'source-review.json').write_text(json.dumps(payload,sort_keys=True,indent=2)+'\n')
           print('TML_52_YEAR_SHA_PINNED_TWO_ID_SOURCE_QA:',json.dumps(payload,sort_keys=True))
           PY
           args=()
@@ -334,11 +334,11 @@ jobs:
             args+=(--source-csv "$root/historical-inputs/atp_matches_$year.csv")
           done
           sha="$(jq -r .generated_crosswalk_sha256 "$root/prepared/report.json")"
-          python scripts/link_offline_serve_return.py \\
-            --history-dir "$root/history" "${args[@]}" \\
-            --matching-strategy verified_ids --require-verified-identities \\
-            --verified-player-crosswalk "$root/prepared/tml-verified-crosswalk.json" \\
-            --verified-player-crosswalk-sha256 "$sha" \\
+          python scripts/link_offline_serve_return.py \
+            --history-dir "$root/history" "${args[@]}" \
+            --matching-strategy verified_ids --require-verified-identities \
+            --verified-player-crosswalk "$root/prepared/tml-verified-crosswalk.json" \
+            --verified-player-crosswalk-sha256 "$sha" \
             --out-dir "$root/historical-linked" >"$root/historical-private-linker.log"
           python - <<'PY'
           from pathlib import Path
