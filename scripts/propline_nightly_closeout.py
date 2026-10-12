@@ -8,9 +8,11 @@ Collection contract:
      Retain the existing double-fault/ace/regular markets as fallback.
   4) Preserve unmodified provider payload + UTC capture time + provider event ID.
   5) Flush immutable batches every 25 attempted requests; read back blob SHA/size.
-  6) At most 16 nightly FREE player-game log calls; archive Aces/DF/break
-     points as research, never assert new CDB coverage without exact linking.
-  7) Never promote, train, import to CDB, or modify publication.
+  6) Prioritize canonical 2026 missing Aces/DF via up to 600 historical
+     player-log calls; preserve ≥50 attempted calls for existing niche odds.
+  7) Separate exact-linking, single-writer, full-year independent readback
+     authorizes additive CDB imports in the SAME nighttime workflow.
+  8) Never train, promote or touch daytime CLV workflows.
 """
 import base64
 import gzip
@@ -56,7 +58,9 @@ def odds_priority(market_keys):
 # PropLine advertises up to 100 finished player games in a single FREE call,
 # but tennis serve-detail coverage is explicitly thin. Research first; only
 # an independent exact CDB gap comparison may authorize later import.
-PLAYER_GAMES_PROBE_MAX = 16
+PLAYER_GAMES_PROBE_MAX = 16  # Offline compatibility; active night reads exact CDB gaps
+NIGHTLY_GAP_PLAYER_MAX = 600
+NIGHTLY_ODDS_RESERVE = 50
 PLAYER_GAMES_LIMIT = 100
 PLAYER_STATS_FOCUS = ("aces", "dblfaults", "breakpts", "breakpts_w",
                       "tiebreaks", "tiebreaks_w", "total_games", "sets_won")
@@ -122,14 +126,46 @@ def summarize_player_games(payload):
             "focus_fields": {k: n for k, n in field_counts.items() if n}}
 
 
+def _targeted_player_names():
+    """Fail closed if the prepared canonical gap target index is unavailable."""
+    path = os.getenv("CLOSEOUT_GAP_TARGETS", "").strip()
+    if not path:
+        return None
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    if (raw.get("schema") != 1 or raw.get("source") != "canonical_cdb_2026"
+            or not isinstance(raw.get("targets"), list)
+            or not isinstance(raw.get("partition_sha256"), str)
+            or len(raw["partition_sha256"]) != 64):
+        raise RuntimeError("Invalid canonical CDB gap index")
+    names, seen = [], set()
+    for item in raw["targets"][:NIGHTLY_GAP_PLAYER_MAX]:
+        name = str(item.get("player_name") or "").strip() if isinstance(item, dict) else ""
+        norm = " ".join(name.casefold().split())
+        if (len(name) < 5 or len(name) > 100 or len(name.split()) < 2
+                or any(c in name for c in ("/", ",", " & ", " + "))
+                or norm in seen):
+            raise RuntimeError("Ambiguous or duplicate canonical target")
+        seen.add(norm)
+        names.append(name)
+    return names
+
+
 def probe_player_games(future, day, runid):
-    """Bounded, research-only historical stats audit; no canonical writes."""
-    targets = select_player_game_targets(future)
+    """Night-only CDB-gap-targeted raw historical boxscore acquisition."""
+    exact_targets = _targeted_player_names()
+    targets = exact_targets if exact_targets is not None else select_player_game_targets(future)
     examined = 0
     attempted = 0
     with_stats = 0
+    dry_streak = 0
     for name in targets:
         if STATE["reason"] or STATE["calls"] >= MAX_CALLS:
+            break
+        # Preserve useful nightly odds bandwidth within the same 750 calls.
+        if exact_targets is not None and (
+            STATE["calls"] >= MAX_CALLS - NIGHTLY_ODDS_RESERVE
+            or (STATE["remaining"] is not None and STATE["remaining"] <= NIGHTLY_ODDS_RESERVE)
+        ):
             break
         path = "/sports/tennis/players/" + urllib.parse.quote(name, safe="") + "/games"
         attempted += 1
@@ -146,11 +182,17 @@ def probe_player_games(future, day, runid):
             continue
         summary = summarize_player_games(result)
         examined += 1
+        detailed = sum(summary["focus_fields"].get(key, 0)
+                       for key in ("aces", "dblfaults"))
+        dry_streak = 0 if detailed else dry_streak + 1
         with_stats += summary["completed_with_focus"]
         DATA.append({"stage": "player_game_stats_probe", "player_name": name,
                      "captured_at_utc": now().isoformat(), "summary": summary,
                      "payload": result, "research_only": True})
         flush_if_needed(day, runid)
+        if exact_targets is not None and dry_streak >= 30:
+            print(json.dumps({"player_games_gap_stop": "30_consecutive_no_aces_df"}), flush=True)
+            break
     print(json.dumps({"player_games_probe": {"attempted": attempted,
                       "responses": examined, "games_with_relevant_stats": with_stats,
                       "new_cdb_cells_verified": None}}), flush=True)
@@ -339,7 +381,10 @@ def collect():
         # They target raw completed-match stats, not offered betting lines.
         probe_player_games(future, day, runid)
         discovered = []
-        discovery_call_cap = max(0, (MAX_CALLS - STATE["calls"]) // 2)
+        available_calls = max(0, MAX_CALLS - STATE["calls"])
+        if STATE["remaining"] is not None:
+            available_calls = min(available_calls, max(0, STATE["remaining"]))
+        discovery_call_cap = available_calls // 2
         for kickoff, event in future:
             if STATE["reason"] or len(discovered) >= discovery_call_cap:
                 break
