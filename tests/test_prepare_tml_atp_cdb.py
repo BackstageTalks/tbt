@@ -208,6 +208,35 @@ class TmlTests(unittest.TestCase):
 
     def test_protected_writer_year_scope_unchanged(self):
         self.assertEqual(sorted(tml.YEAR_BLOBS),[2022,2023,2024,2025])
-        self.assertEqual(len(tml.OPTIONAL_YEAR_BLOBS),16)
+        self.assertEqual(len(tml.OPTIONAL_YEAR_BLOBS),36)
+
+
+    def test_complete_1987_score_only_remains_research_and_no_invented_stats(self):
+        row=dict(self.row)
+        row.update(tourney_id="1987-123",tourney_date="19870101",
+                   match_num="1",score="6-4 6-4")
+        for col in tml.STATS:
+            row[col]=""
+        p,sha=self.save([row])
+        p.rename(self.d/"1987.csv")
+        with patch.dict(tml.OPTIONAL_YEAR_BLOBS,{1987:sha}):
+            result=tml.audit_all_pinned_sources(self.d,self.d/"audit",years=[1987])
+        one=result["per_year"]["1987"]
+        self.assertEqual(one["source_native_valid"],0)
+        self.assertEqual(one["source_score_only_valid_unique"],1)
+        self.assertIsNone(one["safe_new_cdb_cells"])
+        self.assertEqual(result["cdb_imported"],0)
+
+    def test_score_only_synthetic_event_key_collision_is_not_usable(self):
+        row=dict(self.row)
+        row.update(tourney_id="1987-123",tourney_date="19870101",score="6-4 6-4")
+        for col in tml.STATS:
+            row[col]=""
+        p,sha=self.save([row,row])
+        p.rename(self.d/"1987.csv")
+        with patch.dict(tml.OPTIONAL_YEAR_BLOBS,{1987:sha}):
+            result=tml.audit_all_pinned_sources(self.d,self.d/"audit",years=[1987])
+        self.assertEqual(result["per_year"]["1987"]["source_score_only_valid_unique"],0)
+        self.assertEqual(result["per_year"]["1987"]["raw_rows_not_in_p0_or_p1"],2)
 
 if __name__=="__main__":unittest.main()
