@@ -114,6 +114,27 @@ def complete_winner_score(score: object, best_of: object) -> bool:
     return wins == needed and losses < needed
 
 
+
+def valid_tourney_season_start(row: dict, year: int) -> bool:
+    """Accept only attested historic season labels spilling into January/February.
+
+    Old 1977–1985 year-labelled tournaments have recorded calendar start
+    in year+1; preserve them solely when the original native tourney_id
+    embeds the season year. The protected writer 2022–2025 is unchanged.
+    """
+    date = str(row.get("tourney_date") or "")
+    if not re.fullmatch(r"\d{8}", date):
+        return False
+    try:
+        start = datetime.strptime(date, "%Y%m%d")
+    except ValueError:
+        return False
+    rollover = (1977 <= year <= 1985 and start.year == year + 1
+                and start.month <= 2
+                and str(row.get("tourney_id") or "").startswith(f"{year}-"))
+    return start.year in (year, year - 1) or rollover
+
+
 def select_source(path: Path, year: int):
     data = path.read_bytes()
     expected_blob = YEAR_BLOBS.get(year) or OPTIONAL_YEAR_BLOBS.get(year)
@@ -137,8 +158,7 @@ def select_source(path: Path, year: int):
             continue
         date = row["tourney_date"]
         ids = (row["winner_id"], row["loser_id"])
-        if (not re.fullmatch(r"\d{8}", date)
-                or int(date[:4]) not in (year, year-1)
+        if (not valid_tourney_season_start(row, year)
                 or not row["tourney_id"] or not row["match_num"].isdecimal()
                 or any(not ID.fullmatch(v or "") for v in ids) or ids[0] == ids[1]):
             counts["quarantine_missing_original_identity"] += 1
@@ -271,8 +291,7 @@ def score_only_source_counts(path: Path, year: int, p0_rows: list[dict]) -> dict
             continue
         day = str(row.get("tourney_date") or "")
         ids = (row.get("winner_id") or "", row.get("loser_id") or "")
-        if (not re.fullmatch(r"\d{8}", day)
-                or int(day[:4]) not in (year, year-1)
+        if (not valid_tourney_season_start(row, year)
                 or not row.get("tourney_id") or not str(row.get("match_num") or "").isdecimal()
                 or any(not ID.fullmatch(pid) for pid in ids) or ids[0] == ids[1]):
             continue
