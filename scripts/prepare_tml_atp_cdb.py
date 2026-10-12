@@ -243,6 +243,46 @@ def prepare(folder: Path, crosswalk_file: Path, crosswalk_sha: str, out: Path):
     return report
 
 
+
+def score_only_source_counts(path: Path, year: int, p0_rows: list[dict]) -> dict:
+    """Keep fully completed scores when service counts are absent/invalid.
+
+    This is source QA, not a canonical P1 writer. It cannot infer an event
+    time, missing statistics, canonical match ID, or valid prematch rank.
+    """
+    raw = path.read_bytes()
+    reader = csv.DictReader(io.StringIO(raw.decode("utf-8-sig"), newline=""))
+    entries = list(reader)
+    native = defaultdict(list)
+    for row in entries:
+        if None in row or any(v is None for v in row.values()):
+            continue
+        day = str(row.get("tourney_date") or "")
+        ids = (row.get("winner_id") or "", row.get("loser_id") or "")
+        if (not re.fullmatch(r"\\d{8}", day)
+                or int(day[:4]) not in (year, year-1)
+                or not row.get("tourney_id") or not str(row.get("match_num") or "").isdecimal()
+                or any(not ID.fullmatch(pid) for pid in ids) or ids[0] == ids[1]):
+            continue
+        try:
+            datetime.strptime(day, "%Y%m%d")
+        except ValueError:
+            continue
+        native[(row["tourney_id"], row["match_num"])].append(row)
+    p0_keys = {(r["tourney_id"], r["match_num"]) for r in p0_rows}
+    score_only = 0
+    for key, copies in native.items():
+        if len(copies) != 1 or key in p0_keys:
+            continue
+        if complete_winner_score(copies[0].get("score"), copies[0].get("best_of")):
+            score_only += 1
+    return {"source_score_only_valid_unique": score_only,
+            "source_strict_boxscore_valid_unique": len(p0_keys),
+            "raw_rows_not_in_p0_or_p1": len(entries) - len(p0_keys) - score_only,
+            "candidate_cdb_event_links": None,
+            "safe_new_cdb_cells": None}
+
+
 def audit_all_pinned_sources(folder: Path, out: Path, years=None):
     """Source-only inspection. Never produces an import-ready CDB stage."""
     allowed = {**OPTIONAL_YEAR_BLOBS, **YEAR_BLOBS}
@@ -261,10 +301,12 @@ def audit_all_pinned_sources(folder: Path, out: Path, years=None):
             # User uploads may rename an exact original without altering bytes.
             path = folder / "2026(1).csv"
         usable, header, counts, sha = select_source(path, year)
+        score_quality = score_only_source_counts(path, year, usable)
         report["per_year"][str(year)] = {
             "file": path.name, "raw_sha256": sha,
             "git_blob_sha1": allowed[year], "raw_rows": counts.get("source_rows", 0),
             "source_native_valid": len(usable),
+            **score_quality,
             "reasons": {k: v for k, v in sorted(counts.items())
                         if k.startswith("quarantine_")},
             "canonical_match_links": None, "new_verified_cdb_null_cells": None}
