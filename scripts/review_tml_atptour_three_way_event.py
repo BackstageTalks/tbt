@@ -165,6 +165,72 @@ def canonical_compatible(source:dict, match, ids:dict) -> bool:
     return True
 
 
+
+
+def native_event_recovery_record(source: dict, official: dict, year: int):
+    """Private source-only candidate, NEVER an identity witness or write permission."""
+    event=EVENT.fullmatch(str(source.get("tourney_id") or ""))
+    match=MATCH.fullmatch(str(official.get("source_match_id") or ""))
+    if not event or not match or str(year)!=event.group(1) or str(year)!=match.group(1):
+        return None
+    if event.group(2)!=match.group(2):
+        return None
+    if (official.get("source")!="atptour" or
+        official.get("source_tournament_id")!="atptour:tournament:"+event.group(2) or
+        urlparse(str(official.get("source_url") or "")).hostname not in
+        {"atptour.com","www.atptour.com"}):
+        return None
+    if not round_key(source.get("round")) or round_key(source.get("round"))!=round_key(official.get("round")):
+        return None
+    sides=official.get("sides")
+    if not isinstance(sides,list) or len(sides)!=2:
+        return None
+    codes=[]
+    for side in sides:
+        persons=side.get("players") if isinstance(side,dict) else None
+        if not isinstance(persons,list) or len(persons)!=1 or not isinstance(persons[0],dict):
+            return None
+        code=str(persons[0].get("atp_player_id") or "").upper()
+        if not re.fullmatch(r"[A-Z0-9]{2,32}",code):
+            return None
+        codes.append(code)
+    original_pair={str(source.get("winner_id") or "").upper(),
+                   str(source.get("loser_id") or "").upper()}
+    if len(set(codes))!=2 or set(codes)!=original_pair:
+        return None
+    tape=source_score(source.get("score"))
+    if tape is None:
+        return None
+    if match.group(3).startswith("listing-"):
+        reason="SYNTHETIC_LISTING_ID_REQUIRES_OFFICIAL_NATIVE_MATCH"
+    elif any(not isinstance(side.get("scores"),list) or len(side["scores"])!=len(tape)
+             for side in sides):
+        reason="NATIVE_MATCH_ID_OFFICIAL_SET_COUNT_MISMATCH"
+    else:
+        reason="NATIVE_MATCH_ID_REQUIRES_FULL_INDEPENDENT_SCORE_REVIEW"
+    return {
+        "schema":1,
+        "source_namespace":"tml-atp",
+        "source_year":year,
+        "source_tourney_id":source["tourney_id"],
+        "source_match_num":source["match_num"],
+        "source_winner_atp_id":source["winner_id"],
+        "source_loser_atp_id":source["loser_id"],
+        "source_finished_score":source["score"],
+        "source_round":source["round"],
+        "official_candidate_match_id":official["source_match_id"],
+        "official_tournament_id":official["source_tournament_id"],
+        "official_source_url":official["source_url"],
+        "official_archive_sha256":EXPECTED_ARCHIVES[year],
+        "reason":reason,
+        "canonical_match_id":None,
+        "official_identity_verified":False,
+        "import_ready":False,
+        "write_authorized":False,
+        "model_feature_allowed":False,
+    }
+
+
 def original_archive(path:Path, year:int):
     h=hashlib.sha256(path.read_bytes()).hexdigest()
     if h!=EXPECTED_ARCHIVES[year]:
@@ -210,6 +276,7 @@ def compare(source_dir:Path, archive_dir:Path, history_dir:Path,
     for m in matches:
         if str(m.tour).lower()=="atp":
             index[(frozenset((str(m.player1_id),str(m.player2_id))),m.scheduled_at.year)].append(m)
+    recovery_queue=[]
     seen_src=defaultdict(list)
     seen_atp=defaultdict(list)
     seen_cdb=defaultdict(list)
@@ -249,6 +316,9 @@ def compare(source_dir:Path, archive_dir:Path, history_dir:Path,
                         report["same_official_pair_missing_winner_icon"]+=1
                     if round_key(candidate.get("round"))!=round_key(row.get("round")):
                         continue
+                    candidate_recovery=native_event_recovery_record(row,candidate,year)
+                    if candidate_recovery is not None:
+                        recovery_queue.append(candidate_recovery)
                     if str(candidate.get("source_match_id") or "").split(":")[-1].startswith("listing-"):
                         report["same_official_pair_round_synthetic_id"]+=1
                         continue
@@ -307,7 +377,25 @@ def compare(source_dir:Path, archive_dir:Path, history_dir:Path,
             else:
                 report["blocked_nonunique_three_way_link"]+=1
     report["three_way_official_review_candidates"]=len(accepted)
+    proven={(r["source_tourney_id"],r["source_match_num"],r["official_atp_match_id"])
+            for r in accepted}
+    pending={}
+    for item in recovery_queue:
+        key=(item["source_tourney_id"],item["source_match_num"],item["official_candidate_match_id"])
+        if key not in proven:
+            pending[key]=item
+    ordered_recovery=[pending[key] for key in sorted(pending)]
+    report["private_native_id_recovery_candidates"]=len(ordered_recovery)
+    report["recovery_synthetic_listing_ids"]=sum(
+        x["reason"]=="SYNTHETIC_LISTING_ID_REQUIRES_OFFICIAL_NATIVE_MATCH"
+        for x in ordered_recovery)
+    report["recovery_native_set_count_mismatches"]=sum(
+        x["reason"]=="NATIVE_MATCH_ID_OFFICIAL_SET_COUNT_MISMATCH"
+        for x in ordered_recovery)
     out.mkdir(parents=True,exist_ok=True)
+    recovery_file=out/"private-native-id-recovery-queue.jsonl"
+    recovery_file.write_text("".join(json.dumps(x,sort_keys=True)+"\n"
+                                    for x in ordered_recovery))
     dest=out/"private-three-way-candidates.jsonl"
     dest.write_text("".join(json.dumps(x,sort_keys=True)+"\n" for x in accepted))
     summary={"status":"THREE_WAY_OFFICIAL_ATP_READ_ONLY",
@@ -315,6 +403,7 @@ def compare(source_dir:Path, archive_dir:Path, history_dir:Path,
        "official_archive_sha256":EXPECTED_ARCHIVES,
        "verified_crosswalk_sha256":crosswalk_sha,
        "private_review_sha256":hashlib.sha256(dest.read_bytes()).hexdigest(),
+       "native_id_recovery_queue_sha256":hashlib.sha256(recovery_file.read_bytes()).hexdigest(),
        "source_to_provider_native_id_direct_equality_proven":False,
        "ready_for_cdb_write":0,"cdb_writes":0,"api_requests":0,"model_trained":False}
     (out/"report.json").write_text(json.dumps(summary,indent=2,sort_keys=True)+"\n")
