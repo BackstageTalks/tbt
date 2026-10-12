@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "scope": "TML ATP original 2022-2025, only independently verified both ATP IDs, current CDB NULL stats",
+  "source_git_commit": "c5537eed87d8a76f3adb598cdf506d885872923b",
+  "new_scheduled_job": false,
+  "training_allowed": false,
+  "canonical_nonnull_overwrite_allowed": false,
+  "requested_by": "explicit-user-CDB-integration-2026-10-12"
+}
