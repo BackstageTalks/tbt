@@ -21,9 +21,21 @@ concurrency:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    outputs:
+      pending_match_status_deploy: ${{ steps.match_status_deploy_request.outputs.pending }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Check pending Match Status deployment request
+        id: match_status_deploy_request
+        shell: bash
+        run: |
+          if [[ -f ops/deploy-requests/match-status-20261012.json ]]; then
+            echo 'pending=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'pending=false' >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Sanitize generated artifacts
         run: python scripts/clean_generated_artifacts.py
@@ -250,7 +262,8 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' &&
        (vars.TBT_DEPLOY_ENABLED == 'true' ||
-        contains(github.event.head_commit.message, '[deploy-current]')))
+        contains(github.event.head_commit.message, '[deploy-current]') ||
+        needs.checks.outputs.pending_match_status_deploy == 'true'))
     # Web/API deployment only reads committed prediction/player-asset releases.
     # It must not queue behind long-running history/environment writers.
     # Keep production deployments serialized only against other deployments.
