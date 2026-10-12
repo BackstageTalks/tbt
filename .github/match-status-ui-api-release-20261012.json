@@ -1,0 +1,12 @@
+{
+  "purpose": "one-time guarded production web+api deployment of merged PR #663 match-status fix",
+  "fix_merge": "1b508a1040d749ec4080258b89c027de1f7752b4",
+  "validated_ci_run": 38306149112,
+  "validation_note": "all check steps succeeded; workflow canceled due concurrent nonruntime main pushes before deployment",
+  "target": "most recent main SHA at commit creation",
+  "after_release": [
+    "verify production deployment.json git_sha",
+    "verify new real match-status-worker snapshots",
+    "preserve CDB and shared API quota"
+  ]
+}
