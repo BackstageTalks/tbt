@@ -93,6 +93,13 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.run_build()["counts"]["name_disagreement_requires_manual_review"], 1)
         self.assertEqual(self.proposals(), [])
 
+    def test_name_owner_collision_is_not_promoted(self):
+        self.write([gap("AB12")],
+                   [link(), link(code="EF34", qid="Q444",
+                                 cid="canonical-two", name="Player One")])
+        self.assertEqual(self.run_build()["counts"]["ambiguous_canonical_name_owners"], 1)
+        self.assertEqual(self.proposals(), [])
+
     def test_missing_official_id_produces_zero(self):
         self.write([gap("AB12")], [link(code="EF34")])
         self.assertEqual(self.run_build()["counts"]["no_existing_cc0_canonical_reference"], 1)
@@ -125,8 +132,8 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.proposals(), [])
 
     def test_rank_by_unlocked_partner_rows(self):
-        self.write([gap("EF34"), gap("AB12")],
-                   [link(code="EF34", qid="Q444", cid="canonical-two", name="Player One"),
+        self.write([gap("EF34", "Player Two"), gap("AB12")],
+                   [link(code="EF34", qid="Q444", cid="canonical-two", name="Player Two"),
                     link()])
         self.run_build()
         self.assertEqual(len(self.proposals()), 2)
