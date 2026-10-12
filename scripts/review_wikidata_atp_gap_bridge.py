@@ -74,6 +74,7 @@ def build(priority: Path, priority_sha: str, canonical_links: Path,
     by_qid: dict[str, set[tuple[str, str]]] = defaultdict(set)
     by_canonical: dict[str, set[tuple[str, str]]] = defaultdict(set)
     label_by_edge: dict[tuple[str, str, str], set[str]] = defaultdict(set)
+    by_name: dict[str, set[str]] = defaultdict(set)
     for link in rows(canonical_links):
         if (link.get("tour") != "atp" or link.get("source") != "Wikidata"
                 or link.get("license") != "CC0-1.0"
@@ -92,7 +93,10 @@ def build(priority: Path, priority_sha: str, canonical_links: Path,
             owners[code].add((qid, cid))
             by_qid[qid].add((code, cid))
             by_canonical[cid].add((code, qid))
-            label_by_edge[(code, qid, cid)].add(normalize(link.get("canonical_name")))
+            name = normalize(link.get("canonical_name"))
+            label_by_edge[(code, qid, cid)].add(name)
+            if name:
+                by_name[name].add(cid)
 
     seen = set()
     counts = Counter()
@@ -107,7 +111,9 @@ def build(priority: Path, priority_sha: str, canonical_links: Path,
         seen.add(code)
         if (gap.get("review_only") is not True
                 or gap.get("canonical_player_id") is not None
-                or gap.get("evidence_required") != "independent_official_ATP_ID_to_canonical_player"):
+                or gap.get("evidence_required") != "independent_official_ATP_ID_to_canonical_player"
+                or gap.get("write_authorized") not in (None, False)
+                or gap.get("import_ready") not in (None, False)):
             raise ValueError("Source gap already authorized or untrusted")
         edges = owners.get(code, set())
         if not edges:
@@ -127,6 +133,9 @@ def build(priority: Path, priority_sha: str, canonical_links: Path,
         same = {normalize(v) for v in aliases} & canonical_names
         if not same:
             counts["name_disagreement_requires_manual_review"] += 1
+            continue
+        if any(by_name[n] != {cid} for n in same):
+            counts["ambiguous_canonical_name_owners"] += 1
             continue
         proposals.append({
             "source_atp_player_id": sid,
