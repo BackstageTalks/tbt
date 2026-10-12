@@ -185,8 +185,19 @@ jobs:
           counts=Counter(v['provider_event_id'] for v in candidates)
           if any(n!=1 for n in counts.values()):
               raise SystemExit('Duplicate provider event in verified candidates')
+          # The production status worker proves 26 tracked fixtures for this
+          # day. A different private release is NOT a verified deployed cohort.
+          # Retain factual sidecar rows for audit, but quarantine canonical
+          # import eligibility until the exact production feed SHA is available.
+          production_cohort_count=26
+          feed_cohort_matches_production=len(rows)==production_cohort_count
           stage={
              'schema':1,'source_date':'2026-10-12',
+             'status':'SOURCE_AUDIT_ONLY' if feed_cohort_matches_production else 'SOURCE_COHORT_DRIFT_QUARANTINED',
+             'source_release_fixtures':len(rows),
+             'production_worker_tracked_fixtures':production_cohort_count,
+             'source_cohort_matches_production':feed_cohort_matches_production,
+             'canonical_import_candidate_count':0,
              'feed_sha256':hashlib.sha256(feed_path.read_bytes()).hexdigest(),
              'source_event_count':len(source.get('events',[])),
              'published_fixtures':len(rows),
