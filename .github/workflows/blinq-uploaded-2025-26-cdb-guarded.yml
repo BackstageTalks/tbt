@@ -140,6 +140,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p work/link
           python scripts/link_uploaded_flashscore_verified.py \
             --source-stage work/source/cdb_oriented_source_candidates.jsonl.gz \
             --flashscore-index work/before/blinq-flashscore-event-index-2026.jsonl.gz \
