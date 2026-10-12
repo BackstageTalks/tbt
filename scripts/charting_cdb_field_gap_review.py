@@ -146,7 +146,7 @@ def run(source,players_path,candidates_path,profiles_root,cdb_paths,out,expected
     candidate_items=list(rows(candidates_path))
     candidate_ids=set();canonical_ids=set();stage=[]
     for item in candidate_items:
-        if item.get('status')!='CANDIDATE_COMPOUND_ONLY':continue
+        if item.get('status') not in {'CANDIDATE_COMPOUND_ONLY','RESEARCH_TOURNAMENT_ALIAS_ONLY','RESEARCH_ONE_DAY_UTC_SHIFT_ONLY'}:continue
         sid=item.get('source_match_id');mid=item.get('canonical_match_id_candidate')
         if not sid or not mid or sid in candidate_ids or mid in canonical_ids:
             raise ValueError('Duplicate or missing candidate identity')
@@ -161,11 +161,13 @@ def run(source,players_path,candidates_path,profiles_root,cdb_paths,out,expected
             all_ids.add(mid)
             if mid in canonical_ids:current[mid]=r
     counts=Counter(cdb_rows_scanned=rows_checked,source_match_rows=len(sources),
-                   compound_candidate_rows=len(stage))
+                   compound_candidate_rows=sum(x['status']=='CANDIDATE_COMPOUND_ONLY' for x in stage),
+                   context_review_candidate_rows=sum(x['status']!='CANDIDATE_COMPOUND_ONLY' for x in stage))
     outcomes=[]
     for x in stage:
         source_id=x['source_match_id'];canonical_id=x['canonical_match_id_candidate']
-        row={'source_match_id':source_id,'canonical_match_id_candidate':canonical_id,
+        row={'source_match_id':source_id,'source_match_status':x['status'],
+             'canonical_match_id_candidate':canonical_id,
              'status':'','missing_cells':{},'matching_existing_cells':[],
              'conflicting_existing_cells':[],'write_authorized':False,
              'identity_evidence':'compound_metadata_only_not_independently_attested'}
