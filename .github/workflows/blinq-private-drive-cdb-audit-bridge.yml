@@ -98,7 +98,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$SOURCE_REF" != ""
-          test "$(git -C private rev-parse --is-shallow-repository)" = true
+          test "$(git -C private rev-parse --is-shallow-repository)" = false
           git -C private cat-file -e "${SOURCE_REF}^{commit}" || {
             echo 'BLOCKED: pinned private source is outside checkout history'
             exit 1
