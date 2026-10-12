@@ -166,7 +166,7 @@ jobs:
               "source_rows":c.get("source_rows",0),
               "staged_matches":n,"new_null_cells":c.get("staged_new_canonical_null_cells",0),
               "four_count_score_verified":c.get("verified_four_counts_and_two_sets",0),
-              "rejected_source_rows":c.get("index_absent_or_ambiguous",0)}))
+              "rejected_source_rows":c.get("index_absent_or_ambiguous",0),"reason_counts":c}))
           PY
 
       - name: Acquire global CDB writer ONLY for independently attested positive delta
