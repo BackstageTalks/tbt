@@ -9,5 +9,7 @@
   "model_training": false,
   "provider_sports_API_requests": 0,
   "new_cron": false,
-  "reason": "one-shot save and independently re-download two Drive rejected original datasets for later validated source-to-CDB exact NULL linkage"
+  "reason": "one-shot save and independently re-download two Drive rejected original datasets for later validated source-to-CDB exact NULL linkage",
+  "retry_original_sha_readback_run": 38249357014,
+  "retry_reason": "GH Releases filename-space-to-dot normalization; re-download and verify original complete 114143-row archive with unchanged strict SHA256SUMS; no CDB writes"
 }
