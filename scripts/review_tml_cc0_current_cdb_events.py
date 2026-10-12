@@ -27,7 +27,7 @@ MAX_BYTES = 70 * 1024 * 1024
 MAX_ROWS = 100000
 FIELDS = ["match_id", "tour", "scheduled_at", "player1_id", "player2_id",
           "player1_name", "player2_name", "winner_id", "tournament",
-          "round_name", "surface", "best_of", "status"]
+          "round_name", "surface", "best_of", "status", "stats_json"]
 
 
 def norm(value):
@@ -211,6 +211,52 @@ def valid_candidate_edges(proposals, legacy, cc0_links, matches):
     return accepted, dict(counts)
 
 
+def compare_core_service_cells(source_raw, canonical, winner_cid, loser_cid):
+    """Count potential NULLs without treating metadata-only links as importable."""
+    payload = canonical.get("stats_json")
+    if isinstance(payload, str):
+        payload = json.loads(payload, parse_constant=lambda x: (
+            _ for _ in ()).throw(ValueError("Invalid numeric CDB stats")))
+    if not isinstance(payload, dict):
+        raise ValueError("Canonical stats JSON must contain a dictionary")
+    res = Counter()
+    for source_side, target_id in (("w", winner_cid), ("l", loser_cid)):
+        if target_id == str(canonical.get("player1_id")):
+            prefix = "p1"
+        elif target_id == str(canonical.get("player2_id")):
+            prefix = "p2"
+        else:
+            raise ValueError("Source player identity does not match canonical sides")
+        for field, target_suffix in (("ace", "aces"), ("df", "double_faults")):
+            raw = source_raw.get(f"{source_side}_{field}")
+            if not isinstance(raw, str) or not raw.isascii() or not raw.isdecimal():
+                res["unusable_source_core_stat_cells"] += 1
+                continue
+            value = int(raw)
+            if value < 0 or value > 1000:
+                res["unusable_source_core_stat_cells"] += 1
+                continue
+            key = f"{prefix}_{target_suffix}"
+            old = payload.get(key)
+            res["observed_source_core_stat_cells"] += 1
+            if old is None or old == "":
+                res["current_null_core_cells_review_only"] += 1
+                continue
+            if isinstance(old, bool):
+                res["conflicting_core_stat_cells"] += 1
+                continue
+            try:
+                parsed = float(old)
+            except (TypeError, ValueError):
+                res["conflicting_core_stat_cells"] += 1
+                continue
+            if not (parsed >= 0 and parsed.is_integer() and int(parsed) == value):
+                res["conflicting_core_stat_cells"] += 1
+            else:
+                res["existing_core_stat_cells_equal"] += 1
+    return dict(res)
+
+
 def score_event_candidates(observations, current_matches, links):
     """Examine possible events, but NEVER claim a canonical event identity."""
     by_pair = defaultdict(list)
@@ -295,6 +341,7 @@ def score_event_candidates(observations, current_matches, links):
         if len(candidates) == 1:
             c = candidates[0]
             count["unique_full_metadata_candidates_review_only"] += 1
+            core_stat_review = compare_core_service_cells(raw, c, wid, lid)
             possible.append({
                 "source_namespace": source["source_namespace"],
                 "source_native_event_key": native,
@@ -306,6 +353,7 @@ def score_event_candidates(observations, current_matches, links):
                 "independent_event_id_attested": False,
                 "score_attested": False,
                 "candidate_new_null_fields": None,
+                "core_serve_cells_review_only": core_stat_review,
                 "import_ready": False, "write_authorized": False,
             })
         elif len(candidates) > 1:
@@ -319,6 +367,9 @@ def score_event_candidates(observations, current_matches, links):
             n for n in owner_count.values() if n > 1)
         possible = [row for row in possible if
                     owner_count[row["candidate_canonical_match_id"]] == 1]
+    # Aggregate after duplicate canonical-target quarantine, never before.
+    for candidate in possible:
+        count.update(candidate["core_serve_cells_review_only"])
     return possible, dict(count)
 
 
