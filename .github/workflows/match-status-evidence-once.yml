@@ -1,0 +1,92 @@
+name: BlinQ six unresolved status evidence (read-only once)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/match-status-evidence-once.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: blinq-match-status-evidence-six
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_SHARED_API_BUDGET_PURPOSE: match
+      PYTHONPATH: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r api/requirements.txt
+      - name: Probe exact six event state with shared budget and no writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$RAPIDAPI_KEY"
+          test -n "$BLINQ_SHARED_API_BUDGET_TOKEN"
+          python - <<'PY'
+          import json
+          from datetime import date, datetime, timezone
+          from tbt.providers.rapidapi import RapidTennisClient
+          from tbt.services.match_status import classify_finished_event, _provider_rows, _provider_event_id, _status_text, _explicitly_nonterminal_status
+          from tbt.config import settings
+          expected = {
+              "17306129": ("145008","157302","157302"),
+              "17305888": ("326246","79223","326246"),
+              "17305722": ("223513","79467","223513"),
+              "17304964": ("302567","232059","302567"),
+              "17301355": ("163438","201681","163438"),
+              "17302006": ("417196","342909","342909"),
+          }
+          client = RapidTennisClient(settings)
+          client.request_limit = 10
+          client.retry_attempts = 1
+          client.client.timeout = 6
+          try:
+              payload = client.events_for_status_day(date(2026,10,12), target_event_ids=set(expected), max_category_requests=8)
+              all_rows = _provider_rows(payload)
+              report = []
+              for eid,(p1,p2,selection) in expected.items():
+                  candidates=[r for r in all_rows if _provider_event_id(r)==eid]
+                  observations=[]
+                  for event in candidates[:3]:
+                      home=event.get("homeTeam") if isinstance(event.get("homeTeam"),dict) else {}
+                      away=event.get("awayTeam") if isinstance(event.get("awayTeam"),dict) else {}
+                      actual={str(home.get("id") or ""),str(away.get("id") or "")}
+                      status=_status_text(event)
+                      raw_wc=event.get("winnerCode")
+                      raw_wid=event.get("winnerId") or event.get("winner_id") or event.get("winnerTeamId")
+                      hs=event.get("homeScore") if isinstance(event.get("homeScore"),dict) else {}
+                      as_=event.get("awayScore") if isinstance(event.get("awayScore"),dict) else {}
+                      row={"event_id":eid,"player1":{"id":p1},"player2":{"id":p2},"betting":{"selection_id":selection}}
+                      outcome=classify_finished_event(row,event,checked_at=datetime.now(timezone.utc))
+                      observations.append({
+                         "provider_id":_provider_event_id(event), "status":status[:85],
+                         "nonterminal":_explicitly_nonterminal_status(status),
+                         "identity_exact":actual=={p1,p2},"provider_players":sorted(actual),
+                         "winner_code":str(raw_wc)[:18], "winner_id":str(raw_wid)[:20],
+                         "score_home":[hs.get("period"+str(i)) for i in range(1,6)],
+                         "score_away":[as_.get("period"+str(i)) for i in range(1,6)],
+                         "has_status_object":isinstance(event.get("status"),dict),
+                         "classified":(outcome or {}).get("status"),
+                         "field_names":sorted(k for k in event.keys() if k in {"status","winnerCode","winnerId","winner_id","winnerTeamId","homeScore","awayScore","homeTeam","awayTeam","id","eventId"}),
+                      })
+                  report.append({"event_id":eid,"seen":len(candidates),"observations":observations})
+              print("STATUS_EVIDENCE_ONLY "+json.dumps({
+                "schema":1,"date":"2026-10-12","requested":len(expected),
+                "events_in_bounded_daily_list":len(all_rows),
+                "provider_requests":client.request_count,
+                "no_cdb_writes":True,"no_prediction_writes":True,
+                "events":report,
+              },sort_keys=True))
+          finally:
+              client.close()
+          PY
