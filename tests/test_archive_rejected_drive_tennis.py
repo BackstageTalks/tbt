@@ -130,4 +130,15 @@ class RejectedSourcesTests(unittest.TestCase):
             a.build(self.root,self.out)
         self.assertFalse(self.out.exists())
 
+    def test_github_release_sanitized_wta_filename_is_strictly_restored(self):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    ".github/workflows/blinq-rejected-drive-evidence-once.yml").read_text()
+        self.assertIn("gh_name='WTA.Tennis.2007.-.2026.Daily.update.xlsx'", workflow)
+        self.assertIn("original='WTA Tennis 2007 - 2026 Daily update.xlsx'", workflow)
+        self.assertIn('mv -- "$gh_name" "$original"', workflow)
+        self.assertIn('test -f "$original"', workflow)
+        self.assertIn("sha256sum -c SHA256SUMS", workflow)
+        self.assertIn("duplicate original and GitHub-normalized WTA assets", workflow)
+        self.assertNotIn("schedule:", workflow)
+
 if __name__=="__main__":unittest.main()
