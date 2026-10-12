@@ -129,6 +129,23 @@ class OfficialEventWitnessTest(unittest.TestCase):
         match.player1_id="333"
         self.assertFalse(mod.canonical_metadata_review(self.source,match,self.ids))
 
+    def test_canonical_metadata_exact_first_rejection_proof(self):
+        from copy import deepcopy
+        self.assertEqual(mod.canonical_metadata_rejection_stage(self.source,self.match,self.ids),
+                         "research_metadata_match_only")
+        cases=[("tournament","Different Event","tournament_name"),
+               ("round_name","Semifinal","round"),
+               ("winner_id","222","winner"),
+               ("best_of",3,"best_of"),
+               ("surface","Clay","surface")]
+        for field,value,reason in cases:
+            obj=deepcopy(self.match)
+            setattr(obj,field,value)
+            self.assertEqual(mod.canonical_metadata_rejection_stage(self.source,obj,self.ids),reason)
+            self.assertFalse(mod.canonical_metadata_review(self.source,obj,self.ids))
+        self.assertEqual(mod.canonical_metadata_rejection_stage(self.source,self.match,{}),
+                         "unverified_independent_players")
+
     def test_official_native_match_and_complete_set_tape(self):
         self.assertTrue(mod.official_compatible(self.source,self.official))
         self.assertTrue(mod.canonical_compatible(self.source,self.match,self.ids))

@@ -141,36 +141,43 @@ def official_compatible(source: dict, official: dict, *, listing_review_only: bo
     return True
 
 
-def canonical_metadata_review(source:dict, match, ids:dict) -> bool:
-    """Review-only metadata concordance; NEVER proves canonical event identity.
+def canonical_metadata_rejection_stage(source:dict, match, ids:dict) -> str:
+    """Return the *first* metadata mismatch, not a verified event identity.
 
-    Intentionally DOES NOT require complete canonical set-tape. An apparent
-    match on this predicate must never be passed to the protected importer
-    without independent official event+score and a fresh current NULL audit.
+    Explicit fields show whether missing player-pair history, winner,
+    tournament name, round, surface, format or broad event date is the real
+    blocker. All outputs are diagnostic and cannot grant write permission.
     """
     win=ids.get(str(source.get("winner_id") or "").upper())
     lose=ids.get(str(source.get("loser_id") or "").upper())
     if not win or not lose or win==lose:
-        return False
-    if str(match.tour).lower()!="atp" or {str(match.player1_id),str(match.player2_id)}!={win,lose}:
-        return False
+        return "unverified_independent_players"
+    if str(match.tour).lower()!="atp":
+        return "tour"
+    if {str(match.player1_id),str(match.player2_id)}!={win,lose}:
+        return "canonical_players"
     if str(match.winner_id)!=win:
-        return False
+        return "winner"
     if _norm_text(source.get("tourney_name"))!=_norm_text(match.tournament):
-        return False
+        return "tournament_name"
     if round_key(source.get("round"))!=round_key(match.round_name):
-        return False
+        return "round"
     if _norm_surface(source.get("surface"))!=_norm_surface(match.surface):
-        return False
+        return "surface"
     if str(source.get("best_of"))!=str(match.best_of):
-        return False
+        return "best_of"
     try:
         from datetime import datetime
-        first=datetime.strptime(source["tourney_date"],"%Y%m%d").date()
-        lag=(match.scheduled_at.date()-first).days
+        start=datetime.strptime(source["tourney_date"],"%Y%m%d").date()
+        lag=(match.scheduled_at.date()-start).days
     except (TypeError,ValueError,AttributeError):
-        return False
-    return -1<=lag<=16
+        return "invalid_event_date"
+    return "research_metadata_match_only" if -1<=lag<=16 else "event_date_outside_tournament"
+
+
+def canonical_metadata_review(source:dict, match, ids:dict) -> bool:
+    """REVIEW ONLY. Metadata cannot substitute for a canonical event witness."""
+    return canonical_metadata_rejection_stage(source,match,ids)=="research_metadata_match_only"
 
 
 def canonical_compatible(source:dict, match, ids:dict) -> bool:
@@ -331,6 +338,19 @@ def compare(source_dir:Path, archive_dir:Path, history_dir:Path,
                 report["source_with_official_tournament_archive"]+=1
             original_pair={str(row.get("winner_id") or "").upper(),
                            str(row.get("loser_id") or "").upper()}
+            # Include the first rejection category of EVERY canonical
+            # pair+year candidate in aggregates. Do not choose "closest" names
+            # or remap a provider ID. This is read-only root-cause triage.
+            mapped_pair_year=index.get((frozenset((win,lose)),year),[])
+            if not mapped_pair_year:
+                report["source_no_exact_mapped_canonical_player_pair_year"]+=1
+            else:
+                report["source_with_exact_mapped_canonical_player_pair_year"]+=1
+                if len(mapped_pair_year)>1:
+                    report["source_multiple_canonical_pair_year_candidates"]+=1
+                for m in mapped_pair_year:
+                    stage=canonical_metadata_rejection_stage(row,m,links)
+                    report["canonical_candidate_first_block_"+stage]+=1
             # Independent canonical full-set witness diagnostic, NEVER an
             # import authorization. No fuzzy names or tolerances.
             canonical_score_candidates=[
