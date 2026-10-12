@@ -141,6 +141,15 @@ def perform(directory: Path, backup: Path, readback: Path, *, write: bool) -> di
        str(backup / "original-release-assets.json"), str(sha_file), "-R", DATA_REPO,
        "--title", "BlinQ Charting CDB prewrite manifest and history digests",
        "--notes", "Immutable prewrite checkpoint for source-native add-only publication.")
+    # Independently read back immutable prewrite backup before any CDB publication.
+    backup_readback = backup / "immutable-readback"
+    backup_readback.mkdir(exist_ok=True)
+    gh("release", "download", audit_tag, "-R", DATA_REPO, "-D", str(backup_readback))
+    for line in sha_file.read_text(encoding="utf-8").splitlines():
+        expected_hash, name = line.split("  ", 1)
+        restored = backup_readback / name
+        if not restored.is_file() or sha(restored) != expected_hash:
+            raise ValueError("Prewrite backup SHA-256 readback mismatch: " + name)
     # Fail closed if any asset has changed, including a non-history sidecar.
     def cas():
         verify(DATA_REPO, Path(".cdb-global-writer-lock.json"))
