@@ -5,7 +5,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
-from normalize_hf_atp import prepare, fraction, normalize_url, stats_for_side
+from scripts.normalize_hf_atp import prepare, fraction, normalize_url, stats_for_side
 
 class TestNormalizer(unittest.TestCase):
     def test_fraction(self):
