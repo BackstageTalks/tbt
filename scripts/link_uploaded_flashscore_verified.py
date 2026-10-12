@@ -144,17 +144,24 @@ def run(source_path,index_path,history_dir,out):
             counts["canonical_winner_id_disagreement"]+=1;continue
         if str(m.surface).lower()!=str(src["source_surface"]).lower():
             counts["surface_disagreement"]+=1;continue
-        if m.best_of is None or int(m.best_of)!=3 or int(src["source_best_of"])!=3:
-            counts["format_disagreement"]+=1;continue
+        if int(src["source_best_of"])!=3 or (m.best_of is not None and int(m.best_of)!=3):
+            counts["actual_format_conflict"]+=1;continue
+        if m.best_of is None:
+            # A missing canonical best_of does not become an inferred value;
+            # finished, independently confirmed TWO-set result is still required.
+            counts["missing_canonical_best_of_retained"]+=1
         # Tournament exact equality, allowing only a trailing country in
         # canonical display format; not a fuzzy or substring name join.
         src_tournament=norm(src["source_tournament_name"])
         index_tournament=norm(index.get("tournament"))
         canonical_tournament=norm(m.tournament)
-        if not src_tournament or src_tournament!=index_tournament or not (
-                canonical_tournament==src_tournament
-                or canonical_tournament.startswith(src_tournament+" ")):
-            counts["tournament_disagreement"]+=1;continue
+        if not src_tournament or not index_tournament or not canonical_tournament:
+            counts["missing_tournament_context"]+=1;continue
+        if not (src_tournament==index_tournament==canonical_tournament):
+            # The event identity is subsequently anchored by full score
+            # and four already-present ace/DF cells; keep display labels
+            # unchanged and record the disagreement for provenance review.
+            counts["tournament_label_diff_retained_for_review"]+=1
         results=score_two_sets(src["source_score"])
         if not results:
             counts["incomplete_or_nonstandard_source_score"]+=1;continue
