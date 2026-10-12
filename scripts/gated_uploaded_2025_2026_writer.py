@@ -44,10 +44,25 @@ def records(stage_path: Path) -> dict[str, dict]:
         row = json.loads(line, parse_constant=lambda x: (_ for _ in ()).throw(ValueError(x)))
         mid = str(row.get("match_id") or "")
         src = row.get("source") or {}
+        proof_method = src.get("verification")
+        accepted_methods = {
+            "exact_provider_event_native_player_ids_utc_winner_verified_score",
+            "flashscore_exact_event_clock_four_counts_full_two_set_score",
+        }
+        if proof_method not in accepted_methods:
+            raise ValueError("Unattested source-to-canonical match proof")
+        if proof_method == "flashscore_exact_event_clock_four_counts_full_two_set_score":
+            expected_flags = {"three_way_exact_utc", "native_event_exact",
+                              "full_two_set_score", "four_existing_stat_counts",
+                              "canonical_winner_id", "two_player_sides"}
+            evidence = src.get("proof")
+            if (src.get("flashscore_index_sha256") !=
+                  "328f9c36c0f4021c745ca7119ea904a4ae7cadb66cee17cc63f2ca6f5774a952"
+                    or not isinstance(evidence, dict)
+                    or any(evidence.get(flag) is not True for flag in expected_flags)):
+                raise ValueError("Missing pinned independent Flashscore source proof")
         if (not mid or mid in rows or row.get("schema") != 1
                 or row.get("import_ready") is not True
-                or src.get("verification") !=
-                "exact_provider_event_native_player_ids_utc_winner_verified_score"
                 or not isinstance(row.get("canonical"), dict)
                 or row.get("delayed_observation") is not None):
             raise ValueError("Invalid, duplicate, or nonattested staged identity")
