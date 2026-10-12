@@ -185,15 +185,3 @@ class PrivateBridgeTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-)
-        self.assertIn('ref: main\n          fetch-depth: 64\n          path: private', workflow)
-        self.assertIn('git -C private checkout --detach "$SOURCE_REF"', workflow)
-        self.assertIn('test "$(git -C private rev-parse HEAD)" = "$SOURCE_REF"', workflow)
-        self.assertIn('PINNED_PRIVATE_SOURCE_SHA_VERIFIED', workflow)
-        self.assertNotIn('ref: ${{ env.SOURCE_REF }}', workflow)
-        # PR137 priority stays opt-in pending separately verified cache migration.
-        self.assertNotIn('--prioritize-historical-stats', workflow)
-
-
-if __name__ == '__main__':
-    unittest.main()
