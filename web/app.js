@@ -874,6 +874,14 @@
     const match=text.match(/^(v?\d+(?:[._-]\d+){0,3})/i);
     return (match?.[1]||text.split(/[+\s]/)[0]||text).slice(0,18);
   }
+  function publicModelName(value){
+    const raw=String(value||'').trim();
+    if(!raw)return '—';
+    const match=raw.match(/^v(\d+)(?:-(\d{4})(\d{2})(\d{2})T\d{6,}Z)?$/i);
+    if(!match)return shortModelVersion(raw);
+    const [,number,year,month,day]=match;
+    return 'BlinQ Core v'+number+(year?' · '+day+'.'+month+'.'+year:'');
+  }
   function contentActive(content){
     if(content?.enabled===false)return false;
     const now=Date.now();
@@ -6013,7 +6021,7 @@
         ${signals?`<div class="comparator-section-head"><h4>${escapeHtml(lcopy('Supporting signals','Podporné signály','Podpůrné signály'))}</h4><small>${escapeHtml(lcopy('Direction of evidence, not causal model attribution','Smer signálov, nie vyčíslený vplyv na model','Směr signálů, ne vyčíslený vliv na model'))}</small></div><div class="comparator-factors">${signals}</div>`:''}
         <p class="comparator-analytics-note">${escapeHtml(lcopy('Model probabilities are estimates, not guaranteed results. Missing or limited samples are marked —. Only completed historical data before the UTC-day cutoff are used; no live odds.','Pravdepodobnosti sú odhady modelu, nie garancia. Chýbajúce alebo malé vzorky sú označené —. Používa sa len história pred dennou UTC uzávierkou, bez LIVE kurzov.','Pravděpodobnosti jsou odhady modelu, ne záruka. Chybějící nebo malé vzorky jsou označené —. Použita je jen historie před denní UTC uzávěrkou, bez LIVE kurzů.'))}</p>
       </div>
-      <footer><span>${escapeHtml(lcopy('Model','Model','Model'))}: ${escapeHtml(shortModelVersion(result.model_version)||'—')}</span><span>${escapeHtml(lcopy('Snapshot','Snapshot','Snapshot'))}: ${escapeHtml(String(fresh.generated_at||'—').replace('T',' ').slice(0,16))} UTC</span></footer>
+      <footer><span>${escapeHtml(lcopy('Model','Model','Model'))}: ${escapeHtml(publicModelName(result.model_version))}</span><span>${escapeHtml(lcopy('Snapshot','Snapshot','Snapshot'))}: ${escapeHtml(String(fresh.generated_at||'—').replace('T',' ').slice(0,16))} UTC</span></footer>
     </section>`;
   }
   function renderComparatorRoute(){
@@ -6146,7 +6154,7 @@
     else if(route==='tournaments'){const names=[...new Set((feed.upcoming||[]).map(x=>x.tournament).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):escapeHtml(publicText('No upcoming tournament coverage is currently published.'))}</div>`;}
     else if(route==='players'){const names=[...new Set((feed.upcoming||[]).flatMap(x=>[x.player1?.name,x.player2?.name]).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):escapeHtml(publicText('No upcoming players are currently published.'))}</div>`;}
     else if(route==='stats') body=metricCards([[publicText('Vyhodnotené predikcie'),String(p.n??0),publicText('Published and scored')],[publicText('Accuracy'),p.accuracy!=null?pct(p.accuracy):'—',publicText('Observed results')],['Log loss',number(p.log_loss),publicText('Lower is better')],[publicText('Brier score'),number(p.brier_score),publicText('Probability quality')]])+`<div class="route-sub"><h3>${escapeHtml(publicText('Results'))}</h3>${renderResults()}</div>`;
-    else if(route==='model'||route==='backtests'){const h=report.holdout||{},delta=report.delta_vs_elo||{};body=metricCards([[publicText('Model'),String(feed.model?.version||'—'),publicText('Production artifact')],['Holdout n',String(h.n??'—'),publicText('Chronological holdout')],['Holdout úspešnosť',h.accuracy!=null?pct(h.accuracy):'—',publicText('Evaluation report')],['Δ log loss vs Elo',delta.log_loss!=null?number(delta.log_loss):'—',publicText('Negative is better')]])+`<div class="route-sub static-copy"><h3>${escapeHtml(publicText('Data window'))}</h3><p>${escapeHtml(history.start?fmtDate(history.start):'—')} → ${escapeHtml(history.end?fmtDate(history.end):'—')} · ${escapeHtml(lcopy(`${history.matches??'—'} historical matches in the current serving metadata.`,`${history.matches??'—'} historických zápasov v aktuálnych metadátach.`,`${history.matches??'—'} historických zápasů v aktuálních metadatech.`))}</p><p>${escapeHtml(lcopy('No result here is presented as a guarantee. Holdout metrics describe a specific historical evaluation period.','Žiadny výsledok tu nie je prezentovaný ako záruka. Holdout metriky opisujú konkrétne historické obdobie vyhodnotenia.','Žádný výsledek zde není prezentován jako záruka. Holdout metriky popisují konkrétní historické období vyhodnocení.'))}</p></div>`;}
+    else if(route==='model'||route==='backtests'){const h=report.holdout||{},delta=report.delta_vs_elo||{};body=metricCards([[publicText('Model'),publicModelName(feed.model?.version),publicText('Production artifact')],['Holdout n',String(h.n??'—'),publicText('Chronological holdout')],['Holdout úspešnosť',h.accuracy!=null?pct(h.accuracy):'—',publicText('Evaluation report')],['Δ log loss vs Elo',delta.log_loss!=null?number(delta.log_loss):'—',publicText('Negative is better')]])+`<div class="route-sub static-copy"><h3>${escapeHtml(publicText('Data window'))}</h3><p>${escapeHtml(history.start?fmtDate(history.start):'—')} → ${escapeHtml(history.end?fmtDate(history.end):'—')} · ${escapeHtml(lcopy(`${history.matches??'—'} historical matches in the current serving metadata.`,`${history.matches??'—'} historických zápasov v aktuálnych metadátach.`,`${history.matches??'—'} historických zápasů v aktuálních metadatech.`))}</p><p>${escapeHtml(lcopy('No result here is presented as a guarantee. Holdout metrics describe a specific historical evaluation period.','Žiadny výsledok tu nie je prezentovaný ako záruka. Holdout metriky opisujú konkrétne historické obdobie vyhodnotenia.','Žádný výsledek zde není prezentován jako záruka. Holdout metriky popisují konkrétní historické období vyhodnocení.'))}</p></div>`;}
     else if(route==='account') body=renderAccountPage();
     else if(['how_blinq_works','methodology','model_data','faq','responsible_use','terms','privacy','cookies'].includes(route)) body=renderSiteContentPage(route);
     else body=`<div class="static-copy"><p>${escapeHtml(lcopy('This section is available in the BlinQ workspace.','Táto sekcia je dostupná v BlinQ.','Tato sekce je dostupná v BlinQ.'))}</p></div>`;
