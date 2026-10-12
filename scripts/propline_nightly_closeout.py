@@ -157,6 +157,7 @@ def probe_player_games(future, day, runid):
     examined = 0
     attempted = 0
     with_stats = 0
+    detailed_stat_rows = 0
     dry_streak = 0
     for name in targets:
         if STATE["reason"] or STATE["calls"] >= MAX_CALLS:
@@ -179,12 +180,17 @@ def probe_player_games(future, day, runid):
         if result is None:
             if STATE["reason"]:
                 break
+            dry_streak += 1
+            if exact_targets is not None and dry_streak >= 30:
+                print(json.dumps({"player_games_gap_stop": "30_consecutive_missing_or_empty"}), flush=True)
+                break
             continue
         summary = summarize_player_games(result)
         examined += 1
         detailed = sum(summary["focus_fields"].get(key, 0)
                        for key in ("aces", "dblfaults"))
         dry_streak = 0 if detailed else dry_streak + 1
+        detailed_stat_rows += summary["focus_fields"].get("aces", 0)
         with_stats += summary["completed_with_focus"]
         DATA.append({"stage": "player_game_stats_probe", "player_name": name,
                      "captured_at_utc": now().isoformat(), "summary": summary,
@@ -195,6 +201,7 @@ def probe_player_games(future, day, runid):
             break
     print(json.dumps({"player_games_probe": {"attempted": attempted,
                       "responses": examined, "games_with_relevant_stats": with_stats,
+                      "detailed_ace_df_rows": detailed_stat_rows,
                       "new_cdb_cells_verified": None}}), flush=True)
 
 
