@@ -86,7 +86,7 @@ def triage(context: Path, context_sha: str, witnesses: Path, witnesses_sha: str,
         if not matched:
             counts["without_independent_event_witness"] += 1
             continue
-        if len(matched) != 1 or len(canonical_owners[canonical]) != 1:
+        if len(matched) != 1 or len(canonical_owners[matched[0]["canonical_match_id"]]) != 1:
             counts["ambiguous_event_witness"] += 1
             continue
         witness = matched[0]
