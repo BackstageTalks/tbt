@@ -166,5 +166,18 @@ class PrivateBridgeTest(unittest.TestCase):
             self.assertFalse((p / 'output.sqlite').exists())
 
 
+    def test_private_drive_checkout_ref_remains_immutable(self):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    '.github/workflows/blinq-private-drive-cdb-audit-bridge.yml').read_text()
+        self.assertIn('SOURCE_REF: cf96b6085f93696eb7c319e9109a2040a04cfc4', workflow)
+        self.assertIn('ref: main\n          fetch-depth: 64\n          path: private', workflow)
+        self.assertIn('git -C private checkout --detach "$SOURCE_REF"', workflow)
+        self.assertIn('test "$(git -C private rev-parse HEAD)" = "$SOURCE_REF"', workflow)
+        self.assertIn('PINNED_PRIVATE_SOURCE_SHA_VERIFIED', workflow)
+        self.assertNotIn('ref: ${{ env.SOURCE_REF }}', workflow)
+        # PR137 priority stays opt-in pending separately verified cache migration.
+        self.assertNotIn('--prioritize-historical-stats', workflow)
+
+
 if __name__ == '__main__':
     unittest.main()
