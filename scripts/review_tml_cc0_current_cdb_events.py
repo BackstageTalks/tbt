@@ -257,6 +257,83 @@ def compare_core_service_cells(source_raw, canonical, winner_cid, loser_cid):
     return dict(res)
 
 
+def compare_derived_rates(source_raw, canonical, winner_cid, loser_cid,
+                          core_proof):
+    """Read-only derived serve/return potential, only if all 4 core cells agree.
+
+    These are POSTMATCH research rates, never same-match prestart model inputs.
+    Partial/conflicting aces or DF are not corroboration and block speculation.
+    """
+    counts = Counter()
+    if (core_proof.get("observed_source_core_stat_cells") != 4
+            or core_proof.get("existing_core_stat_cells_equal") != 4
+            or core_proof.get("conflicting_core_stat_cells")
+            or core_proof.get("unusable_source_core_stat_cells")):
+        counts["rate_review_blocked_missing_four_core_equal_witnesses"] += 1
+        return dict(counts)
+    fields = {}
+    for side in ("w", "l"):
+        try:
+            values = {key: int(source_raw[f"{side}_{key}"])
+                      for key in ("svpt", "1stIn", "1stWon", "2ndWon")}
+        except (TypeError, ValueError, KeyError):
+            counts["rate_review_incomplete_source_boxscore"] += 1
+            return dict(counts)
+        if (any(v < 0 for v in values.values())
+                or not (0 < values["svpt"] < 2000)
+                or not (0 < values["1stIn"] <= values["svpt"])
+                or values["1stWon"] > values["1stIn"]
+                or values["2ndWon"] > values["svpt"] - values["1stIn"]):
+            counts["rate_review_impossible_source_boxscore"] += 1
+            return dict(counts)
+        fields[side] = values
+    raw_json = canonical.get("stats_json")
+    stats = json.loads(raw_json) if isinstance(raw_json, str) else raw_json
+    if not isinstance(stats, dict):
+        raise ValueError("Canonical stats JSON must be a dictionary")
+    rates = {}
+    for side, cid, other in (("w", winner_cid, "l"),
+                             ("l", loser_cid, "w")):
+        v = fields[side]
+        opp = fields[other]
+        prefix = "p1" if cid == str(canonical.get("player1_id")) else "p2"
+        second = v["svpt"] - v["1stIn"]
+        if second <= 0:
+            counts["rate_review_missing_second_serve_denominator"] += 1
+            return dict(counts)
+        current = {
+            "first_serve_win": v["1stWon"] / v["1stIn"],
+            "second_serve_win": v["2ndWon"] / second,
+            "service_points_won": (v["1stWon"] + v["2ndWon"]) / v["svpt"],
+            "return_points_won": (opp["svpt"] -
+                                  opp["1stWon"] - opp["2ndWon"]) / opp["svpt"],
+        }
+        for field, value in current.items():
+            if not 0 <= value <= 1:
+                raise ValueError("Impossible derived postmatch rate")
+            rates[prefix + "_" + field] = value
+    for key, value in rates.items():
+        old = stats.get(key)
+        counts["observed_derived_rate_cells_review_only"] += 1
+        if old is None or old == "":
+            counts["potential_current_null_rate_cells_review_only"] += 1
+        else:
+            if isinstance(old, bool):
+                counts["conflicting_derived_rate_cells"] += 1
+                continue
+            try:
+                old_number = float(old)
+            except (ValueError, TypeError):
+                counts["conflicting_derived_rate_cells"] += 1
+                continue
+            if (old_number >= 0 and old_number <= 1 and
+                    abs(old_number - value) <= 0.001):
+                counts["existing_derived_rate_cells_equal_rounded"] += 1
+            else:
+                counts["conflicting_derived_rate_cells"] += 1
+    return dict(counts)
+
+
 def score_event_candidates(observations, current_matches, links):
     """Examine possible events, but NEVER claim a canonical event identity."""
     by_pair = defaultdict(list)
@@ -342,6 +419,7 @@ def score_event_candidates(observations, current_matches, links):
             c = candidates[0]
             count["unique_full_metadata_candidates_review_only"] += 1
             core_stat_review = compare_core_service_cells(raw, c, wid, lid)
+            rates_review = compare_derived_rates(raw, c, wid, lid, core_stat_review)
             possible.append({
                 "source_namespace": source["source_namespace"],
                 "source_native_event_key": native,
@@ -354,6 +432,7 @@ def score_event_candidates(observations, current_matches, links):
                 "score_attested": False,
                 "candidate_new_null_fields": None,
                 "core_serve_cells_review_only": core_stat_review,
+                "derived_rate_cells_review_only": rates_review,
                 "import_ready": False, "write_authorized": False,
             })
         elif len(candidates) > 1:
@@ -370,6 +449,7 @@ def score_event_candidates(observations, current_matches, links):
     # Aggregate after duplicate canonical-target quarantine, never before.
     for candidate in possible:
         count.update(candidate["core_serve_cells_review_only"])
+        count.update(candidate["derived_rate_cells_review_only"])
     return possible, dict(count)
 
 
