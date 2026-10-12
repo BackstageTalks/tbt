@@ -1,0 +1,55 @@
+name: BlinQ verify rejected Drive private release bytes once
+
+'on':
+  pull_request:
+    paths:
+      - 'scripts/verify_rejected_drive_private_release.py'
+      - '.github/workflows/blinq-rejected-drive-private-verify-once.yml'
+  push:
+    branches: [main]
+    paths: ['.github/rejected-drive-evidence-verification-request.json']
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  readback:
+    if: ${{ github.repository == 'BackstageTalks/tbt' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      TAG: blinq-rejected-drive-evidence-38249357014-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile strict local/private SHA readback verifier
+        run: |
+          python -m py_compile scripts/verify_rejected_drive_private_release.py
+          test -f scripts/archive_rejected_drive_tennis.py
+      - name: Attest request and private release scope
+        if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$PRIVATE_REPO" --json visibility -q .visibility)" = PRIVATE
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            test "$(jq -r .mode .github/rejected-drive-evidence-verification-request.json)" = private-sha-readback-existing-only
+            test "$(jq -r .release .github/rejected-drive-evidence-verification-request.json)" = "$TAG"
+          fi
+      - name: Download existing original private Release only once (no new import)
+        if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/private
+          gh release download "$TAG" -R "$PRIVATE_REPO" -D work/private
+          python scripts/verify_rejected_drive_private_release.py --release-download-dir work/private
+          echo 'Verified private raw source bytes and 114143 research-only records. Zero provider sports APIs, CDB writes or model changes.' >> "$GITHUB_STEP_SUMMARY"
