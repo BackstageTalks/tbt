@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "action": "private_official_three_way_event_identity_review",
+  "requested_on": "2026-10-12",
+  "original_source_commit": "c5537eed87d8a76f3adb598cdf506d885872923b",
+  "source_years": [
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "third_party_source": "official_ATP_Tour_result_and_match_stats_archives",
+  "canonical_source": "current_checksum_verified_tbt-data-v1",
+  "source_to_cdb_native_id_equal_without_evidence": false,
+  "cdb_write": false,
+  "auto_approve_import": false,
+  "model_train": false,
+  "provider_api_requests": 0,
+  "purpose": "Prove only uniquely corroborated source-to-official-and-canonical event identities using original ATP player codes, official native match IDs, all set games and precise source tournament ID, then persist private SHA-bound review; never write stats without fresh NULL+CAS proof"
+}
