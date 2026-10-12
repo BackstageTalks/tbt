@@ -34,7 +34,7 @@ def overview(row):
 
 def evaluate(root,out):
     root=pathlib.Path(root);out=pathlib.Path(out);out.mkdir(parents=True,exist_ok=True)
-    src=root/"private-data/tennis/charting"; croot=root/"crosswalk";history=root/"history"
+    src=pathlib.Path("private-data/tennis/charting"); croot=root/"crosswalk";history=root/"history"
     rep=json.loads((croot/"crosswalk_report.json").read_text())
     assert digest(src/"matches.json.gz")==rep["source_sha256"]
     with gzip.open(src/"matches.json.gz","rt") as f:source=json.load(f)
