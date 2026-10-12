@@ -1,0 +1,269 @@
+name: BlinQ TML ATP 2022-2025 verified CDB import
+
+# One-shot request by explicitly versioned Git commit; no cron.
+'on':
+  pull_request:
+    paths:
+      - scripts/prepare_tml_atp_cdb.py
+      - scripts/link_offline_serve_return.py
+      - tests/test_prepare_tml_atp_cdb.py
+      - .github/workflows/tml-atp-guarded-cdb-import.yml
+  push:
+    branches: [main]
+    paths: [.github/tml-atp-cdb-request.json]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-crossrepo-writer-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  source-contract-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test pinned TML source and independent both-player identity gate
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_prepare_tml_atp_cdb.py -v
+          python -m compileall -q scripts/prepare_tml_atp_cdb.py scripts/link_offline_serve_return.py
+
+  stage-and-protected-write:
+    needs: source-contract-tests
+    if: github.event_name != 'pull_request' && github.repository == 'BackstageTalks/tbt' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      PYTHONPATH: api:scripts
+      SOURCE_PIN: c5537eed87d8a76f3adb598cdf506d885872923b
+      CROSSWALK_SHA: ae61e871a59c9960f00c20cb061bd6d1a90e222dc58b126438d27a14aeedd192
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Tennismylife/TML-Database
+          ref: c5537eed87d8a76f3adb598cdf506d885872923b
+          fetch-depth: 1
+          path: tml-source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Resolve gated request and attest source trust
+        id: mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$DATA_REPO" --json visibility -q .visibility)" = PRIVATE
+          test "$(git -C tml-source rev-parse HEAD)" = "$SOURCE_PIN"
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            mode="$(jq -er '.mode' .github/tml-atp-cdb-request.json)"
+          else
+            mode=dry-run
+          fi
+          [[ "$mode" == dry-run || "$mode" == write ]]
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "TML_ATP_SOURCE_PIN_VERIFIED_MODE_$mode"
+      - name: Install canonical Parquet and app dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -q -r api/requirements-train.txt pyarrow pandas pytest
+          python -m pytest -q tests/test_prepare_tml_atp_cdb.py tests/test_cdb_global_writer_lock.py
+      - name: Acquire global CDB writer lock only for write mode
+        if: steps.mode.outputs.mode == 'write'
+        run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+      - name: Download coherent exact current canonical CDB and verified ATP IDs
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/tml-cdb/identity
+          python scripts/download_stable_cdb.py --repository "$DATA_REPO" --out .cache/tbt/tml-cdb/history --report .cache/tbt/tml-cdb/source-snapshot.json
+          gh release download tbt-canonical-identity-links-v1 -R "$DATA_REPO" -p player-identity-crosswalk.jsonl -D .cache/tbt/tml-cdb/identity >/dev/null
+          test "$(sha256sum .cache/tbt/tml-cdb/identity/player-identity-crosswalk.jsonl | cut -d' ' -f1)" = "$CROSSWALK_SHA"
+          echo TML_CANONICAL_SNAPSHOT_AND_VERIFIED_ATP_ID_CROSSWALK_PASS
+      - name: Quarantine invalid TML original rows and construct strong-only player crosswalk
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/tml-cdb
+          python scripts/prepare_tml_atp_cdb.py --source-dir tml-source \
+            --verified-crosswalk "$root/identity/player-identity-crosswalk.jsonl" \
+            --crosswalk-sha256 "$CROSSWALK_SHA" --out "$root/prepared" >"$root/prep-counts.log"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('.cache/tbt/tml-cdb/prepared/report.json').read_text())
+          assert report["status"]=="SOURCE_FILTERED_AND_ID_WITNESSES_ONLY_NOT_CANONICAL"
+          assert report["source_git_commit"]=="c5537eed87d8a76f3adb598cdf506d885872923b"
+          assert report["canonical_mutated"] is False
+          assert sum(y["verified_two_player_rows"] for y in report["per_year"].values()) <= 10831
+          print("TML_SOURCE_ID_PAIRS_VERIFIED:",{y:r["verified_two_player_rows"] for y,r in report["per_year"].items()})
+          PY
+      - name: Link strong ATP IDs to current CDB and stage only original NULL stats
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/tml-cdb
+          sha="$(jq -r .generated_crosswalk_sha256 "$root/prepared/report.json")"
+          python scripts/link_offline_serve_return.py \
+            --history-dir "$root/history" \
+            --source-csv "$root/prepared/atp_matches_2022.csv" \
+            --source-csv "$root/prepared/atp_matches_2023.csv" \
+            --source-csv "$root/prepared/atp_matches_2024.csv" \
+            --source-csv "$root/prepared/atp_matches_2025.csv" \
+            --matching-strategy verified_ids --require-verified-identities \
+            --verified-player-crosswalk "$root/prepared/tml-verified-crosswalk.json" \
+            --verified-player-crosswalk-sha256 "$sha" \
+            --out-dir "$root/linked" >"$root/linker-private.log"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path('.cache/tbt/tml-cdb')
+          result=json.loads((root/'linked/report.json').read_text())
+          assert result["canonical_rows"]>900000
+          assert result["require_verified_identities"] is True
+          assert result["matching_strategy"]=="verified_ids"
+          assert result["counts"].get("name_linked",0)==0
+          rows=[json.loads(x) for x in (root/'linked/auto_linked.jsonl').read_text().splitlines() if x.strip()]
+          assert len(rows)==result["counts"].get("staged_matches",0)
+          assert len({r["match_id"] for r in rows})==len(rows)
+          assert all(r.get("import_ready") is True and r.get("incoming_stats") and
+            all("verified_player_id_pair" in s.get("evidence",[]) and
+                s.get("source","").startswith("sackmann:atp_matches_") for s in r.get("sources",[]))
+            for r in rows)
+          assert all(r["canonical"]["tour"]=="atp" for r in rows)
+          assert sum(len(r["incoming_stats"]) for r in rows)<=100000
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f:
+            f.write("changes="+("true" if rows else "false")+"\n")
+          print("TML_EXACT_CURRENT_CDB_STAGE_COUNTS:",result["counts"],flush=True)
+          PY
+      - name: Rehearse import without canonical mutation
+        if: steps.gate.outputs.changes == 'true'
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/tml-cdb
+          python scripts/import_offline_linked_serve_return.py \
+            --stage "$root/linked/auto_linked.jsonl" --history-dir "$root/history" \
+            --out-dir "$root/rehearsal" >"$root/rehearsal-private.log"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('.cache/tbt/tml-cdb')
+          a=json.loads((root/'rehearsal/report.json').read_text())
+          b=json.loads((root/'linked/report.json').read_text())
+          assert a["counts"].get("updated",0)>0
+          assert a["counts"].get("updated",0)<=b["counts"].get("staged_matches",0)
+          assert a["counts"].get("stat_fields_added",0)>0
+          assert a["production_mutated"] is False
+          print("TML_READ_ONLY_CDB_REHEARSAL_PASS:",a["counts"])
+          PY
+      - name: Create immutable backup and independent private SHA readback
+        if: steps.mode.outputs.mode == 'write' && steps.gate.outputs.changes == 'true'
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/tml-cdb
+          mkdir -p "$root/prewrite" "$root/prewrite-readback"
+          cp -a "$root/history" "$root/before"
+          python - <<'PY'
+          import json,shutil
+          from pathlib import Path
+          root=Path('.cache/tbt/tml-cdb')
+          years=json.loads((root/'rehearsal/report.json').read_text())["changed_years"]
+          assert years and all(2022<=int(y)<=2025 for y in years)
+          names=['history_manifest.json','_tbt_bundle_manifest.json']+[f'history-{y:04d}.parquet' for y in years]
+          for name in names:
+            shutil.copyfile(root/'before'/name,root/'prewrite'/name)
+          PY
+          (cd "$root/prewrite" && sha256sum * > SHA256SUMS && sha256sum -c SHA256SUMS)
+          tag="blinq-tml-atp-prewrite-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$root/prewrite/"* -R "$DATA_REPO" \
+            --title "Immutable TML ATP prewrite canonical backup" \
+            --notes "Original affected partitions and manifests; do not overwrite"
+          gh release download "$tag" -R "$DATA_REPO" -D "$root/prewrite-readback"
+          (cd "$root/prewrite-readback" && sha256sum -c SHA256SUMS)
+          echo TML_PREWRITE_SHA_INDEPENDENT_PASS
+      - name: Apply exact NULL-only year Parquet cells on local snapshot
+        if: steps.mode.outputs.mode == 'write' && steps.gate.outputs.changes == 'true'
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/tml-cdb
+          python scripts/import_offline_linked_serve_return.py \
+            --stage "$root/linked/auto_linked.jsonl" --history-dir "$root/history" \
+            --write-partitions --write-history-dir "$root/history" --exact-stats-only \
+            --out-dir "$root/write" > "$root/write-private.log"
+          python scripts/offline_exact_cdb_write.py \
+            --before-dir "$root/before" --after-dir "$root/history" \
+            --stage "$root/linked/auto_linked.jsonl" \
+            --changed-years "$(jq -c '.changed_years' "$root/write/report.json")" \
+            --output "$root/local-readback.json"
+      - name: Publish canonical changes only after unchanged-manifest CAS
+        if: steps.mode.outputs.mode == 'write' && steps.gate.outputs.changes == 'true'
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python - <<'PY'
+          import json,hashlib,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          root=Path(".cache/tbt/tml-cdb")
+          prior=(root/"before/_tbt_bundle_manifest.json").read_bytes()
+          remote=root/"remote-manifest";remote.mkdir()
+          store=ReleaseStore(os.environ["DATA_REPO"],"tbt-data-v1",remote)
+          store._download_asset("_tbt_bundle_manifest.json")
+          assert hashlib.sha256(prior).digest()==hashlib.sha256((remote/"_tbt_bundle_manifest.json").read_bytes()),"CDB manifest raced with another writer"
+          report=json.loads((root/"write/report.json").read_text())
+          years=report["changed_years"]
+          assert years and all(2022<=int(y)<=2025 for y in years)
+          history=root/"history"
+          changed=[history/f"history-{year:04d}.parquet" for year in years]
+          ReleaseStore(os.environ["DATA_REPO"],"tbt-data-v1",history).upload_bundle(changed+[history/"history_manifest.json"])
+          print("TML_ATP_CDB_PUBLISHED_YEARS:",years)
+          PY
+      - name: Independently re-download and verify whole changed CDB partitions
+        if: steps.mode.outputs.mode == 'write' && steps.gate.outputs.changes == 'true'
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/tml-cdb
+          python scripts/download_stable_cdb.py --repository "$DATA_REPO" --out "$root/persisted" --report "$root/persisted-download.json"
+          python scripts/offline_exact_cdb_write.py \
+            --before-dir "$root/before" --after-dir "$root/persisted" \
+            --stage "$root/linked/auto_linked.jsonl" \
+            --changed-years "$(jq -c '.changed_years' "$root/write/report.json")" \
+            --output "$root/persisted-readback.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('.cache/tbt/tml-cdb')
+          x=json.loads((root/'persisted-readback.json').read_text())
+          w=json.loads((root/'write/report.json').read_text())
+          assert x["status"]=="verified" and x["existing_values_overwritten"]==0
+          assert x["added_values"]==w["counts"]["stat_fields_added"]
+          assert x["enriched_matches"]==w["counts"]["updated"]
+          print("TML_INDEPENDENT_POSTWRITE_CDB_READBACK_PASS:",{k:x[k] for k in ("enriched_matches","added_values","existing_values_overwritten")})
+          PY
+      - name: Record aggregate-only result without leaking private player data
+        if: always()
+        run: |
+          {
+            echo '### TML ATP 2022-2025 CDB bounded integration'
+            echo "Mode: ${{ steps.mode.outputs.mode || 'unresolved' }}"
+            echo "Stage outcome: ${{ steps.gate.outcome }}"
+            echo 'Only independently ID-verified ATP players, current NULLs, and unchanged canonical release are eligible.'
+            echo 'No provider request; no source player names/artifacts published.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Release global CDB writer lease
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
