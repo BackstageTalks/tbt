@@ -146,7 +146,7 @@ def deployed_priced_projection(row: dict[str, Any], feed: dict[str, Any]) -> dic
         return None
 
     raw_market = str(row.get("market") or row.get("projection_metric") or "").lower()
-    market = {"ace": "aces", "double_fouls": "double_faults"}.get(raw_market, raw_market)
+    market = {"ace": "aces", "double-faults": "double_faults"}.get(raw_market, raw_market)
     sections = {"aces": "ace", "double_faults": "double_faults",
                 "sets": "sets", "games": "games"}
     if market not in sections:
@@ -946,10 +946,23 @@ def _verified_final_score_stats(row: dict[str, Any], event: dict[str, Any]) -> d
     """
     home = event.get("homeScore") if isinstance(event.get("homeScore"), dict) else {}
     away = event.get("awayScore") if isinstance(event.get("awayScore"), dict) else {}
-    winner_code = event.get("winnerCode")
+    home_team = event.get("homeTeam") if isinstance(event.get("homeTeam"), dict) else {}
+    away_team = event.get("awayTeam") if isinstance(event.get("awayTeam"), dict) else {}
+    home_id, away_id = str(home_team.get("id") or ""), str(away_team.get("id") or "")
+    if not home_id or not away_id or home_id == away_id:
+        return {}
+    if {home_id, away_id} != {_player_id(row, "player1"), _player_id(row, "player2")}:
+        return {}
+    direct_winner = str(
+        event.get("winnerId") or event.get("winner_id") or event.get("winnerTeamId") or ""
+    ).strip()
     try:
-        winner_code = int(winner_code)
+        winner_code = int(event.get("winnerCode"))
     except (TypeError, ValueError):
+        winner_code = 0
+    if winner_code not in (1, 2):
+        winner_code = 1 if direct_winner == home_id else 2 if direct_winner == away_id else 0
+    elif direct_winner and (home_id if winner_code == 1 else away_id) != direct_winner:
         return {}
     if winner_code not in (1, 2):
         return {}
