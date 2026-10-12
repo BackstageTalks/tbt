@@ -229,6 +229,7 @@ class PrivateBridgeTest(unittest.TestCase):
         self.assertIn('VERIFIED_LEGACY_CHECKPOINT_MIGRATED_TO_PRIORITY_READER', workflow)
         self.assertIn('VERIFIED_PRIVATE_SQLITE_CACHE_INTEGRITY', workflow)
         self.assertIn('--prioritize-historical-stats --folder-id "$DRIVE_ROOT"', workflow)
+        self.assertIn('source_sampling=historical_stats_priority', workflow)
         self.assertIn("if: github.event_name == 'workflow_dispatch'", workflow)
         self.assertNotIn('schedule:', workflow)
 
