@@ -5,8 +5,8 @@ Status: READ-ONLY SOURCE QUARANTINE — **not a CDB import authorization**.
 Usage:
 
 ```sh
-python normalize_hf_atp.py --source HugF.zip --output staging
-python -m unittest -v test_normalize_hf_atp.py
+python scripts/normalize_hf_atp.py --source HugF.zip --output staging
+python -m unittest discover -s tests -p 'test_normalize_hf_atp.py' -v
 ```
 
 The output `staging/quarantined-observations.jsonl` contains normalized, source-linked post-match candidate observations, explicitly `import_ready=false`. `staging/report.json` carries measured counts and SHA-256 of source bytes. No canonical CDB writes, provider API requests, model training, or GitHub Actions jobs.
