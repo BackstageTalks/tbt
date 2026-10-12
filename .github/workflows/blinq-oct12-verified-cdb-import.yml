@@ -1,0 +1,67 @@
+name: BlinQ Oct12 fully verified canonical CDB append once
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/blinq-oct12-verified-cdb-import.yml'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: blinq-oct12-cdb-import-exact-once
+  cancel-in-progress: false
+jobs:
+  guarded-canonical-writer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: BackstageTalks/tbt-data
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_SHARED_API_BUDGET_PURPOSE: match
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install canonical reader dependencies
+        run: |
+          python -m pip install -r api/requirements.txt -r api/requirements-train.txt
+          python -m compileall -q scripts/import_oct12_verified_cdb.py
+      - name: Restore frozen signed source evidence (read-only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/oct12-stage /tmp/oct12-feed
+          gh run download 38311389071 --repo BackstageTalks/tbt --name match-status-20261012-cdb-evidence --dir /tmp/oct12-stage
+          test -s /tmp/oct12-stage/match-status-20261012-cdb-evidence.json
+      - name: Retrieve exact immutable source feed from private release
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          gh release download tbt-predictions-v1 --repo BackstageTalks/tbt-data --pattern feed.json --dir /tmp/oct12-feed --clobber
+          test -s /tmp/oct12-feed/feed.json
+      - name: Guarded additive CDB import with global lock and independent readback
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$RAPIDAPI_KEY" && test -n "$BLINQ_SHARED_API_BUDGET_TOKEN"
+          python -u scripts/import_oct12_verified_cdb.py \
+            --stage /tmp/oct12-stage/match-status-20261012-cdb-evidence.json \
+            --feed /tmp/oct12-feed/feed.json \
+            --report /tmp/blinq-oct12-cdb-final-report.json
+      - name: Preserve verified evidence or explicit fail-closed blocker
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-oct12-cdb-guarded-final
+          path: /tmp/blinq-oct12-cdb-final-report.json
+          retention-days: 30
+          if-no-files-found: warn
