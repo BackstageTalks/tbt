@@ -247,6 +247,38 @@ def compare(source_dir:Path, archive_dir:Path, history_dir:Path,
                         report["same_official_pair_and_round"]+=1
                     if not any(x.get("winner_marker") is True for x in sides):
                         report["same_official_pair_missing_winner_icon"]+=1
+                    if round_key(candidate.get("round"))!=round_key(row.get("round")):
+                        continue
+                    if str(candidate.get("source_match_id") or "").split(":")[-1].startswith("listing-"):
+                        report["same_official_pair_round_synthetic_id"]+=1
+                        continue
+                    report["same_official_pair_round_native_id"]+=1
+                    tape=source_score(row.get("score"))
+                    if tape is None:
+                        report["same_official_pair_round_bad_source_score"]+=1
+                        continue
+                    if any(not isinstance(x.get("scores"),list) or len(x["scores"])!=len(tape) for x in sides):
+                        report["same_official_pair_round_set_count_mismatch"]+=1
+                        continue
+                    report["same_official_pair_round_matching_set_count"]+=1
+                    parsed=[[SCORE.fullmatch(str(cell)) for cell in side["scores"]] for side in sides]
+                    if any(m is None for side in parsed for m in side):
+                        report["same_official_pair_round_unparsed_official_score_cells"]+=1
+                        continue
+                    report["same_official_pair_round_numeric_score_cells"]+=1
+                    src_side=0 if candidate_ids[0]==str(row.get("winner_id") or "").upper() else 1
+                    full_equal=all(
+                      int(parsed[src_side][n].group(1))==w and
+                      int(parsed[1-src_side][n].group(1))==l
+                      for n,(w,l,tb) in enumerate(tape))
+                    if not full_equal:
+                        report["same_official_pair_round_set_game_disagreement"]+=1
+                    else:
+                        report["same_official_pair_round_full_games_equal"]+=1
+                        if official_compatible(row,candidate):
+                            report["same_official_pair_round_strict_atp_witness"]+=1
+                        else:
+                            report["same_official_pair_round_remaining_tiebreak_or_metadata_disagreement"]+=1
             official=[o for o in atptour_rows if official_compatible(row,o)]
             if len(official)!=1:
                 report["blocked_official_missing_or_ambiguous"]+=1
