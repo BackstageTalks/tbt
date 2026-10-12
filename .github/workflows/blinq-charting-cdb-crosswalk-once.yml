@@ -1,0 +1,150 @@
+name: BlinQ Charting to current CDB exact crosswalk once
+
+# New workflow file triggers one isolated read-only audit. No schedule.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/blinq-charting-cdb-crosswalk-once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-charting-to-cdb-crosswalk-readonly
+  cancel-in-progress: false
+
+jobs:
+  crosswalk:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: main
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: private-data
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify private access and test existing fail-closed matcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          python -m pip install --disable-pip-version-check --quiet pyarrow 'pandas>=2,<3'
+          (cd private-data && PYTHONPATH=scripts python -m unittest discover -s tests -p test_charting_cdb_safe_bridge.py -v)
+      - name: Verify exact charting archive and quarantine evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          p=Path('private-data/tennis/charting/matches.json.gz')
+          a=json.loads(Path('private-data/audit/cross-source/CHARTING-SOURCE-PREFLIGHT-20261012.json').read_text())
+          assert hashlib.sha256(p.read_bytes()).hexdigest()==a['source_sha256']
+          assert a['counts']['input_rows']==11822 and a['counts']['valid_rows']==11810
+          assert a['cdb_writes']==0
+          print('CHARTING_SOURCE_SHA_VERIFIED')
+          PY
+      - name: Download stable checksum-verified CURRENT canonical CDB
+        shell: bash
+        working-directory: app
+        env:
+          PYTHONPATH: api:scripts
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/.cache/blinq-charting-crosswalk"
+          python scripts/download_stable_cdb.py \
+            --repository "$PRIVATE_REPO" --tag tbt-data-v1 \
+            --out "$GITHUB_WORKSPACE/.cache/blinq-charting-crosswalk/history" \
+            --report "$GITHUB_WORKSPACE/.cache/blinq-charting-crosswalk/snapshot-report.json"
+      - name: Verify canonical partition checksums and perform read-only crosswalk
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=.cache/blinq-charting-crosswalk
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('.cache/blinq-charting-crosswalk')
+          h=root/'history'
+          mf=json.loads((h/'history_manifest.json').read_text())
+          bundle=json.loads((h/'_tbt_bundle_manifest.json').read_text())
+          pins={}
+          for y,part in mf['years'].items():
+              name=f"history-{int(y):04d}.parquet"
+              assert part['asset']==name and (h/name).is_file()
+              assert bundle['files'][name]['sha256']==part['sha256']
+              pins[name]=part['sha256']
+          assert pins and set(pins)=={p.name for p in h.glob('history-*.parquet')}
+          (root/'expected-year-shas.json').write_text(json.dumps(pins,indent=2))
+          print('CANONICAL_YEARS_SHA_PINNED',len(pins))
+          PY
+          python private-data/scripts/charting_cdb_safe_bridge.py \
+            --charting private-data/tennis/charting/matches.json.gz \
+            --cdb "$root"/history/history-*.parquet \
+            --expected-shas "$root/expected-year-shas.json" \
+            --output "$root/crosswalk"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('.cache/blinq-charting-crosswalk/crosswalk/crosswalk_report.json').read_text())
+          assert r['rows_processed']==11822
+          assert r['canonical_cdb_writes']==0 and r['verified_provider_identity_links']==0
+          assert r['confirmed_new_cdb_cells']==0
+          print('READONLY_CROSSWALK_COUNTS',json.dumps(r['counts'],sort_keys=True))
+          PY
+      - name: Preserve candidate IDs in immutable PRIVATE release with byte readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=.cache/blinq-charting-crosswalk
+          tag="blinq-charting-cdb-crosswalk-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "$root/audit" "$root/readback"
+          cp "$root/crosswalk/crosswalk_report.json" "$root/audit/"
+          cp "$root/crosswalk/crosswalk_candidates.jsonl.gz" "$root/audit/"
+          cp "$root/snapshot-report.json" "$root/audit/"
+          cp "$root/expected-year-shas.json" "$root/audit/"
+          (cd "$root/audit" && sha256sum * > SHA256SUMS && sha256sum -c SHA256SUMS)
+          python - "$root/audit/crosswalk_report.json" "$root/audit/summary.md" <<'PY'
+          import json,sys
+          from pathlib import Path
+          r=json.loads(Path(sys.argv[1]).read_text())
+          Path(sys.argv[2]).write_text(
+             'Read-only private Charting versus CDB crosswalk. No CDB mutation.\n'
+             'Candidate links require independent provider event and both-player identity evidence '
+             'before any NULL-only production write.\n\n'
+             'Candidate_links='+str(r['candidate_links'])+'\n'
+             'Canonical_CDB_writes=0\n'
+             'Status_counts='+json.dumps(r['counts'],sort_keys=True)+'\n')
+          PY
+          gh release create "$tag" \
+            "$root/audit/crosswalk_report.json" \
+            "$root/audit/crosswalk_candidates.jsonl.gz" \
+            "$root/audit/snapshot-report.json" \
+            "$root/audit/expected-year-shas.json" \
+            "$root/audit/SHA256SUMS" \
+            --repo "$PRIVATE_REPO" \
+            --title 'BlinQ read-only charting versus CDB crosswalk' \
+            --notes-file "$root/audit/summary.md"
+          gh release download "$tag" --repo "$PRIVATE_REPO" --dir "$root/readback" \
+            -p 'crosswalk_report.json' -p 'crosswalk_candidates.jsonl.gz' \
+            -p 'snapshot-report.json' -p 'expected-year-shas.json' -p 'SHA256SUMS'
+          (cd "$root/readback" && sha256sum --check SHA256SUMS)
+          cmp "$root/audit/crosswalk_report.json" "$root/readback/crosswalk_report.json"
+          echo "PRIVATE_REPORT_READBACK_VERIFIED: $tag; CDB_WRITES=0"
