@@ -169,7 +169,11 @@ class PrivateBridgeTest(unittest.TestCase):
     def test_private_drive_checkout_ref_remains_immutable(self):
         workflow = (Path(__file__).resolve().parents[1] /
                     '.github/workflows/blinq-private-drive-cdb-audit-bridge.yml').read_text()
-        self.assertIn('SOURCE_REF: cf96b6085f93696eb7c319e9109a2040a04cfc4', workflow)
+        self.assertIn('SOURCE_REF: cf96b6085f93696eb7c319e9109a2040a04cfc4e', workflow)
+        pinned = next(line.split(': ', 1)[1].strip() for line in workflow.splitlines()
+                      if line.strip().startswith('SOURCE_REF: '))
+        self.assertEqual(len(pinned), 40)
+        self.assertTrue(all(ch in '0123456789abcdef' for ch in pinned))
         self.assertIn('ref: main\n          fetch-depth: 64\n          path: private', workflow)
         self.assertIn('git -C private checkout --detach "$SOURCE_REF"', workflow)
         self.assertIn('test "$(git -C private rev-parse HEAD)" = "$SOURCE_REF"', workflow)
