@@ -66,7 +66,7 @@ class TmlTests(unittest.TestCase):
         self.assertEqual(counts["quarantine_duplicate_tournament_match_key"],1)
     def test_partial_csv_row_quarantined(self):
         p,sha=self.save([self.row])
-        with p.open("a",encoding="utf-8") as f:f.write("bad,partial\\n")
+        with p.open("a",encoding="utf-8") as f:f.write("bad,partial\n")
         sha=tml.blob_sha1(p.read_bytes())
         with patch.dict(tml.YEAR_BLOBS,{2024:sha}):
             clean,_,counts,_=tml.select_source(p,2024)
@@ -74,7 +74,7 @@ class TmlTests(unittest.TestCase):
         self.assertEqual(counts["quarantine_csv_shape"],1)
     def crosswalk(self,rows):
         p=self.d/"verified.jsonl"
-        p.write_text("".join(json.dumps(x)+"\\n" for x in rows))
+        p.write_text("".join(json.dumps(x)+"\n" for x in rows))
         return p,hashlib.sha256(p.read_bytes()).hexdigest()
     def witness(self,atp="AB12",cid="canonical-1"):
         return {"tour":"atp","source":"BlinQ verified CDB plus Wikidata CC0",
