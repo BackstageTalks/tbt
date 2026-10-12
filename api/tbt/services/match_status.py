@@ -1347,6 +1347,22 @@ def scan_match_statuses(
                     "checked_at": now.isoformat(),
                 }
                 continue
+            # The exact daily schedule is authoritative for a nonterminal
+            # fixture ONLY after the provider player IDs match the issued
+            # prediction. Do not spend two further /near calls every 30 min
+            # for a postponed/interrupted match already seen on the calendar.
+            # Keep it pending: the next worker run will recheck its state.
+            home = event.get("homeTeam") if isinstance(event.get("homeTeam"), dict) else {}
+            away = event.get("awayTeam") if isinstance(event.get("awayTeam"), dict) else {}
+            feed_ids = {_player_id(row, "player1"), _player_id(row, "player2")}
+            provider_ids = {str(home.get("id") or "").strip(),
+                            str(away.get("id") or "").strip()}
+            if (
+                "" not in feed_ids and "" not in provider_ids
+                and feed_ids == provider_ids
+                and _explicitly_nonterminal_status(_status_text(event))
+            ):
+                continue
 
         try:
             if prefer_near:
