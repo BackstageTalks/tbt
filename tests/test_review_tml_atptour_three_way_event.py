@@ -31,6 +31,20 @@ class OfficialEventWitnessTest(unittest.TestCase):
     def test_official_native_match_and_complete_set_tape(self):
         self.assertTrue(mod.official_compatible(self.source,self.official))
         self.assertTrue(mod.canonical_compatible(self.source,self.match,self.ids))
+    def test_official_full_score_proves_winner_when_html_icon_is_absent(self):
+        from copy import deepcopy
+        obj=deepcopy(self.official)
+        for side in obj["sides"]:
+            side["winner_marker"]=False
+        self.assertTrue(mod.official_compatible(self.source,obj))
+
+    def test_official_wrong_winner_marker_still_rejected(self):
+        from copy import deepcopy
+        obj=deepcopy(self.official)
+        obj["sides"][0]["winner_marker"]=False
+        obj["sides"][1]["winner_marker"]=True
+        self.assertFalse(mod.official_compatible(self.source,obj))
+
     def test_no_hash_replacement_for_native_official_match(self):
         from copy import deepcopy
         obj=deepcopy(self.official)

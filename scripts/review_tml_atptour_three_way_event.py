@@ -80,7 +80,10 @@ def official_compatible(source: dict, official: dict) -> bool:
     if len(set(codes))!=2 or set(codes)!={winner,loser}:
         return False
     marked=[i for i,s in enumerate(sides) if s.get("winner_marker") is True]
-    if len(marked)!=1 or codes[marked[0]]!=winner:
+    # A source page may omit the decorative winner icon. Reject contradictory
+    # icons; otherwise derive the winner independently from the full ATP
+    # set-by-set scoreboard, never from the TML winner label alone.
+    if len(marked)>1 or (len(marked)==1 and codes[marked[0]]!=winner):
         return False
     tape=source_score(source.get("score"))
     if tape is None:
@@ -94,15 +97,23 @@ def official_compatible(source: dict, official: dict) -> bool:
         if any(m is None for m in decoded):
             return False
         games.append([(int(m.group(1)),int(m.group(2)) if m.group(2) is not None else None) for m in decoded])
+    independent_winner_idx=codes.index(winner)
+    official_win_sets=0
+    official_loss_sets=0
     for i,(sw,sl,tb) in enumerate(tape):
         a,b=(games[0][i],games[1][i]) if codes[0]==winner else (games[1][i],games[0][i])
         if (a[0],b[0])!=(sw,sl):
             return False
+        official_win_sets+=int(a[0]>b[0])
+        official_loss_sets+=int(a[0]<b[0])
         # ATP official score widgets put the TB loser points on the losing side.
         if tb is not None:
             loser_tb=a[1] if sw<sl else b[1]
             if loser_tb!=tb:
                 return False
+    needed={"3":2,"5":3}.get(str(source.get("best_of")))
+    if needed is None or official_win_sets!=needed or official_loss_sets>=needed:
+        return False
     return True
 
 
@@ -212,7 +223,31 @@ def compare(source_dir:Path, archive_dir:Path, history_dir:Path,
             if not event or not win or not lose or win==lose:
                 report["blocked_tourney_or_two_player_ID"]+=1
                 continue
-            official=[o for o in archive.get((year,event.group(2)),[]) if official_compatible(row,o)]
+            atptour_rows=archive.get((year,event.group(2)),[])
+            if not atptour_rows:
+                report["no_official_tournament_archive_records"]+=1
+            else:
+                report["source_with_official_tournament_archive"]+=1
+            original_pair={str(row.get("winner_id") or "").upper(),
+                           str(row.get("loser_id") or "").upper()}
+            for candidate in atptour_rows:
+                if not str(candidate.get("source_match_id") or "").split(":")[-1].startswith("listing-"):
+                    report["native_official_match_id_in_same_tournament"]+=1
+                sides=candidate.get("sides")
+                if not isinstance(sides,list) or len(sides)!=2:
+                    continue
+                candidate_ids=[]
+                for side in sides:
+                    persons=side.get("players") if isinstance(side,dict) else None
+                    candidate_ids.append(str(persons[0].get("atp_player_id") or "").upper()
+                                         if isinstance(persons,list) and len(persons)==1 else "")
+                if set(candidate_ids)==original_pair and len(original_pair)==2:
+                    report["same_official_atp_player_pair"]+=1
+                    if round_key(candidate.get("round"))==round_key(row.get("round")):
+                        report["same_official_pair_and_round"]+=1
+                    if not any(x.get("winner_marker") is True for x in sides):
+                        report["same_official_pair_missing_winner_icon"]+=1
+            official=[o for o in atptour_rows if official_compatible(row,o)]
             if len(official)!=1:
                 report["blocked_official_missing_or_ambiguous"]+=1
                 continue
