@@ -175,12 +175,53 @@ def restore_checkpoint(source: Path, code_file: Path, folder_id: str, dest: Path
         return False
 
 
+def verify_priority_reader_migration(legacy_code: Path, priority_code: Path) -> None:
+    """Prove that the new reader retains identical cached observation semantics.
+
+    Only a pure source-order helper, an opt-in CLI argument and the item-order
+    selection may differ. Compare every other byte of the two full scripts.
+    This is intentionally strict: unrelated parser edits require a new review.
+    """
+    old = legacy_code.read_text(encoding='utf-8')
+    current = priority_code.read_text(encoding='utf-8')
+    start = 'def audit_source_priority(item):\n'
+    end = 'def records(stream, suffix):\n'
+    if current.count(start) != 1 or current.count(end) != 1:
+        raise ValueError('Expected exactly one historical-source priority helper')
+    a = current.index(start)
+    b = current.index(end, a)
+    if not a < b:
+        raise ValueError('Invalid source-priority helper bounds')
+    current = current[:a] + current[b:]
+    flag = (
+        "    ap.add_argument('--prioritize-historical-stats', action='store_true',\n"
+        "                    help='Opt in to historical match-stat sample ordering; default preserves existing checkpoint order')\n"
+    )
+    if current.count(flag) != 1:
+        raise ValueError('Historical-priority opt-in CLI contract changed')
+    current = current.replace(flag, '', 1)
+    ordering = (
+        '    # Keep default scanner behavior identical for pinned production checkpoints.\n'
+        '    # A new priority policy needs an explicitly reviewed cache/code migration.\n'
+        '    ordered = sorted(inventory, key=audit_source_priority) if args.prioritize_historical_stats else inventory\n'
+        '    for item in ordered:'
+    )
+    if current.count(ordering) != 1:
+        raise ValueError('Historical-priority loop contract changed')
+    current = current.replace(ordering, '    for item in inventory:', 1)
+    if not old or old != current:
+        raise ValueError('Cached source parser semantics changed: cannot migrate checkpoint')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='mode', required=True)
     check = sub.add_parser('validate')
     check.add_argument('--report-dir', type=Path, required=True)
     check.add_argument('--folder-id', required=True)
+    migrate = sub.add_parser('verify-priority-reader')
+    migrate.add_argument('--legacy-code', type=Path, required=True)
+    migrate.add_argument('--priority-code', type=Path, required=True)
     for mode in ('write-checkpoint', 'restore-checkpoint'):
         p = sub.add_parser(mode)
         p.add_argument('--folder-id', required=True)
@@ -192,7 +233,10 @@ def main() -> None:
             p.add_argument('--source', type=Path, required=True)
             p.add_argument('--dest', type=Path, required=True)
     args = parser.parse_args()
-    if args.mode == 'validate':
+    if args.mode == 'verify-priority-reader':
+        verify_priority_reader_migration(args.legacy_code, args.priority_code)
+        print('PRIVATE_PRIORITY_READER_CHECKPOINT_SCHEMA_COMPATIBLE')
+    elif args.mode == 'validate':
         validate(args.report_dir, args.folder_id)
         print('PRIVATE_AUDIT_SAFETY_GATES_PASS')
     elif args.mode == 'write-checkpoint':
