@@ -18,6 +18,11 @@ class CloseoutContractTests(unittest.TestCase):
     def setUp(self):
         mod.STATE.update(calls=0, remaining=None, reason="", batches=0)
         mod.DATA.clear()
+        # The production workflow exports the CDB gap path before running tests.
+        # Isolate fixture tests from that path; targeted tests set their own index.
+        patcher = mock.patch.dict(mod.os.environ, {"CLOSEOUT_GAP_TARGETS": ""})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_utc_cutoff_excludes_new_quota(self):
         self.assertTrue(mod.allowed(datetime(2026, 10, 10, 21, 0, tzinfo=timezone.utc)))
