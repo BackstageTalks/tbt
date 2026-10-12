@@ -416,8 +416,10 @@ jobs:
             python scripts/pipeline.py "${args[@]}"
           fi
 
-      - name: Independently verify hourly CDB statistics publication
-        if: ${{ success() && inputs.hourly_autofill && env.MODE == 'statistics' }}
+      - name: Independently verify every targeted CDB statistics publication
+        # Push-triggered operator batches and hourly runs both publish canonical
+        # data; neither may claim success without exact remote partition readback.
+        if: ${{ success() && env.MODE == 'statistics' && (inputs.hourly_autofill || env.BLINQ_TARGETED_STATISTICS == 'true') }}
         run: python scripts/verify_targeted_statistics.py --data-repository "$TBT_DATA_REPOSITORY"
 
       - name: Persist training decision audit
