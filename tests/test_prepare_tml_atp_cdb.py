@@ -11,12 +11,12 @@ class TmlTests(unittest.TestCase):
         self.d=Path(self.tmp.name)
         self.h=["tourney_id","tourney_name","tourney_date","match_num",
             "winner_id","loser_id","winner_name","loser_name","surface",
-            "round","best_of",*tml.STATS]
+            "round","best_of","score",*tml.STATS]
         self.row=dict.fromkeys(self.h,"")
         self.row.update(tourney_id="2024-123",tourney_name="Open",
             tourney_date="20240101",match_num="1",
             winner_id="AB12",loser_id="CD34",winner_name="Player A",
-            loser_name="Player B",surface="Hard",round="F",best_of="3")
+            loser_name="Player B",surface="Hard",round="F",best_of="3",score="6-4 6-4")
         for side in ("w","l"):
             for k,n in {"ace":5,"df":2,"svpt":80,"1stIn":50,"1stWon":34,
                         "2ndWon":17,"SvGms":12,"bpSaved":2,"bpFaced":3}.items():
@@ -100,6 +100,36 @@ class TmlTests(unittest.TestCase):
             clean,_,counts,_=tml.select_source(p,2024)
         self.assertFalse(clean)
         self.assertEqual(counts["quarantine_missing_original_identity"],1)
+
+    def test_postmatch_completion_guard_blocks_retired_and_partial(self):
+        for score in ("6-4 2-3 RET", "6-4 W/O", "6-4 6-4 DEF",
+                      "6-4 3-2", "6-4 4-6", "", "6-4 6-4 0-6",
+                      "6-4 4-6 4-6", "6-4 2-6 [10-7]"):
+            altered=dict(self.row,score=score)
+            p,sha=self.save([altered])
+            with patch.dict(tml.YEAR_BLOBS,{2024:sha}):
+                clean,_,counts,_=tml.select_source(p,2024)
+            self.assertEqual(clean,[],score)
+            self.assertEqual(counts["quarantine_incomplete_or_invalid_final_score"],1,score)
+
+    def test_valid_tiebreak_and_three_winning_sets_remain_usable(self):
+        for score,best_of in (("7-6(4) 6-2","3"),
+                              ("6-4 4-6 6-2","3"),
+                              ("6-4 4-6 6-3 5-7 7-6(3)","5")):
+            altered=dict(self.row,score=score,best_of=best_of)
+            p,sha=self.save([altered])
+            with patch.dict(tml.YEAR_BLOBS,{2024:sha}):
+                clean,_,counts,_=tml.select_source(p,2024)
+            self.assertEqual(len(clean),1,score)
+            self.assertEqual(counts["source_native_valid"],1,score)
+
+    def test_inconsistent_best_of_blocks_whole_match_rates(self):
+        altered=dict(self.row,score="6-4 6-4",best_of="5")
+        p,sha=self.save([altered])
+        with patch.dict(tml.YEAR_BLOBS,{2024:sha}):
+            clean,_,counts,_=tml.select_source(p,2024)
+        self.assertEqual(clean,[])
+        self.assertEqual(counts["quarantine_incomplete_or_invalid_final_score"],1)
 
     def test_partial_csv_row_quarantined(self):
         p,sha=self.save([self.row])
