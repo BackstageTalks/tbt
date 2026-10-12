@@ -146,6 +146,13 @@ class NightCanonicalGapsTests(TestCase):
                   pair=("Ben Shelton", f"Different Opponent {i}"))
             for i in range(1, 5)
         ]
+        for i, row in enumerate(generic):
+            # A valid API PRO event ID with no prior attempt is tier 3;
+            # truly missing event IDs must correctly remain tier 1.
+            row.provider_payload = {"_tbt_event_identity": {
+                "event_id": str(901 + i), "home": "11", "away": "22",
+                "status": "finished",
+            }}
         candidates = plan_targets(generic + [unavailable], now)
         self.assertEqual(candidates[0]["player_name"], "Carlos Alcaraz")
         self.assertEqual(candidates[0]["api_pro_priority"], 0)
