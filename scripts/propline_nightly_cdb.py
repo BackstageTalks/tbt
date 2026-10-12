@@ -239,6 +239,12 @@ def stage_additions(matches, reports: Path, now):
                 counters["unmatched" if not candidates else "ambiguous"] += 1
                 continue
             match = candidates[0]
+            # API PRO flagged this match as conflicting with authoritative
+            # canonical statistics. Never backfill it implicitly from a
+            # different player's aggregated PropLine log.
+            if api_pro_gap_reason(match) is None:
+                counters["api_pro_conflict_quarantined"] += 1
+                continue
             mid = str(match.match_id)
             gid = str(game.get("event_id") or "")
             if not gid.isdigit():
