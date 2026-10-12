@@ -83,18 +83,24 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/review"
-          sha256sum report.json native-history-fingerprint-private.jsonl > SHA256SUMS
+          # GitHub release API refuses a zero-byte asset. Preserve the
+          # genuinely empty JSONL without inventing a fake match row.
+          tar -czf native-key-evidence.tar.gz report.json native-history-fingerprint-private.jsonl
+          sha256sum native-key-evidence.tar.gz > SHA256SUMS
           tag="blinq-native-key-probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           gh release create "$tag" -R "$PRIVATE_REPO" --target main \
             --title 'Private historical native ID fingerprint probe' \
             --notes 'Private research: deterministic CDB lineage only; never writer evidence' >/dev/null
-          gh release upload "$tag" report.json native-history-fingerprint-private.jsonl SHA256SUMS \
+          gh release upload "$tag" native-key-evidence.tar.gz SHA256SUMS \
             -R "$PRIVATE_REPO" >/dev/null
-          mkdir -p "$RUNNER_TEMP/readback"
+          mkdir -p "$RUNNER_TEMP/readback" "$RUNNER_TEMP/readback-unpack"
           gh release download "$tag" -R "$PRIVATE_REPO" \
-            -p report.json -p native-history-fingerprint-private.jsonl -p SHA256SUMS \
+            -p native-key-evidence.tar.gz -p SHA256SUMS \
             -D "$RUNNER_TEMP/readback" >/dev/null
           (cd "$RUNNER_TEMP/readback" && sha256sum -c SHA256SUMS >/dev/null)
-          cmp report.json "$RUNNER_TEMP/readback/report.json"
-          cmp native-history-fingerprint-private.jsonl "$RUNNER_TEMP/readback/native-history-fingerprint-private.jsonl"
+          tar -xzf "$RUNNER_TEMP/readback/native-key-evidence.tar.gz" \
+            -C "$RUNNER_TEMP/readback-unpack"
+          cmp report.json "$RUNNER_TEMP/readback-unpack/report.json"
+          cmp native-history-fingerprint-private.jsonl \
+            "$RUNNER_TEMP/readback-unpack/native-history-fingerprint-private.jsonl"
           echo 'PRIVATE_NATIVE_HISTORY_ID_RELEASE_READBACK_PASS'
