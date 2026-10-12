@@ -132,6 +132,10 @@ def test_direct_winner_id_is_valid_only_with_matching_identity_and_terminal_stat
     event.pop("winnerCode")
     event["winnerId"] = "11"
     assert classify_finished_event(row, event)["status"] == "win"
+    from tbt.services.match_status import _verified_final_score_stats
+    assert _verified_final_score_stats(row, event) == {
+        "total_sets": 2, "total_games": 18,
+    }
     wrong = deepcopy(event)
     wrong["winnerId"] = "999"
     assert classify_finished_event(row, wrong) is None
