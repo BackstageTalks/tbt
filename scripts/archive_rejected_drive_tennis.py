@@ -122,7 +122,7 @@ def _wta_records(path):
         if len(cells)==1:
             raw=cells[0]
             parsed=next(csv.reader([raw]),[])
-        elif len(cells)==2 and re.fullmatch(r"\d+",cells[0]) and "," in cells[1]:
+        elif len(cells)==2 and (not cells[0].strip() or re.fullmatch(r"\d+",cells[0])) and "," in cells[1]:
             parsed=next(csv.reader([cells[1]]),[])
         else:
             parsed=cells
