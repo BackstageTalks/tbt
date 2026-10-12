@@ -55,7 +55,9 @@ jobs:
       PRIVATE_REPO: BackstageTalks/tbt-data
       DRIVE_ROOT: 17UChTTWLpC-7tZIbvTXKA4_2eqooV44A
       PRIVATE_CACHE_RELEASE: blinq-drive-cdb-audit-cache-v1
-      SOURCE_REF: cf96b6085f93696eb7c319e9109a2040a04cfc4e
+      # Immutable modern reader, explicitly validated against legacy checkpoint parser.
+      SOURCE_REF: 10806400e536195890600c4256303697912ab95f
+      LEGACY_SOURCE_REF: cf96b6085f93696eb7c319e9109a2040a04cfc4e
       PYTHONPATH: api:scripts:private/scripts
     steps:
       - name: Preflight trust and private-only credentials
@@ -86,7 +88,8 @@ jobs:
           # Fetch from an advertised branch first. actions/checkout cannot
           # reliably resolve an arbitrary private commit SHA with depth=1.
           ref: main
-          fetch-depth: 64
+          # Full history keeps the immutable source commit reachable even after >64 commits.
+          fetch-depth: 0
           path: private
           persist-credentials: false
 
@@ -131,25 +134,43 @@ jobs:
             exit 1
           fi
 
-      - name: Restore SHA-256-checked checkpoint from private Release
+      - name: Restore verified private checkpoint with historical-reader migration
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p work/cache work/cache-input
           if gh release view "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" >/dev/null 2>&1; then
-            # Prefer SHA-checked compressed v2; legacy raw v1 is still readable.
-            if gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p checkpoint.json -D work/cache-input >/dev/null 2>&1; then
-              if ! gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p audit.sqlite.gz -D work/cache-input >/dev/null 2>&1; then
-                gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p audit.sqlite -D work/cache-input >/dev/null 2>&1 || true
-              fi
-              if python scripts/drive_cdb_private_bridge.py restore-checkpoint --folder-id "$DRIVE_ROOT" --code-file private/scripts/drive_cdb_audit.py --source work/cache-input --dest work/cache/audit.sqlite; then
-                echo VERIFIED_PRIVATE_CHECKPOINT_RESTORED
-              else
-                echo INVALID_OR_STALE_PRIVATE_CHECKPOINT_IGNORED
-              fi
-            else
-              echo INVALID_OR_STALE_PRIVATE_CHECKPOINT_IGNORED
+            # An existing checkpoint must never be silently ignored.
+            gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p checkpoint.json -D work/cache-input >/dev/null
+            if ! gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p audit.sqlite.gz -D work/cache-input >/dev/null 2>&1; then
+              gh release download "$PRIVATE_CACHE_RELEASE" -R "$PRIVATE_REPO" -p audit.sqlite -D work/cache-input >/dev/null
             fi
+            if python scripts/drive_cdb_private_bridge.py restore-checkpoint --folder-id "$DRIVE_ROOT" --code-file private/scripts/drive_cdb_audit.py --source work/cache-input --dest work/cache/audit.sqlite; then
+              echo VERIFIED_PRIVATE_CHECKPOINT_RESTORED
+            else
+              # The previous rolling checkpoint was created with the original
+              # parser. Fetch that exact historical source solely to verify its
+              # manifest binding, then prove the new parser differs ONLY in
+              # how the next input files are ordered.
+              gh api "repos/$PRIVATE_REPO/contents/scripts/drive_cdb_audit.py?ref=$LEGACY_SOURCE_REF" --jq .content | base64 --decode >work/legacy-drive-cdb-audit.py
+              test -s work/legacy-drive-cdb-audit.py
+              python scripts/drive_cdb_private_bridge.py verify-priority-reader --legacy-code work/legacy-drive-cdb-audit.py --priority-code private/scripts/drive_cdb_audit.py
+              python scripts/drive_cdb_private_bridge.py restore-checkpoint --folder-id "$DRIVE_ROOT" --code-file work/legacy-drive-cdb-audit.py --source work/cache-input --dest work/cache/audit.sqlite
+              echo VERIFIED_LEGACY_CHECKPOINT_MIGRATED_TO_PRIORITY_READER
+            fi
+            # Check SQLite itself; a valid gzip digest does not prove that
+            # the historical database is readable or has expected tables.
+            python - <<'PY'
+          import sqlite3
+          from pathlib import Path
+          p = Path('work/cache/audit.sqlite')
+          with sqlite3.connect(f'file:{p}?mode=ro', uri=True) as db:
+              tables = {x[0] for x in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              assert {'files', 'profiles', 'failures', 'observations'} <= tables
+              assert db.execute('PRAGMA quick_check').fetchone()[0] == 'ok'
+              assert db.execute('SELECT COUNT(*) FROM files').fetchone()[0] > 0
+          print('VERIFIED_PRIVATE_SQLITE_CACHE_INTEGRITY')
+          PY
           else
             echo NO_PREVIOUS_PRIVATE_CHECKPOINT
           fi
@@ -178,7 +199,7 @@ jobs:
           case "$DOWNLOAD_MB" in 256|512|1024|2048|4096|8192) ;; *) echo 'Invalid download budget'; exit 1;; esac
           mkdir -p work/report work/cache
           set +e
-          python -u private/scripts/drive_cdb_audit.py --folder-id "$DRIVE_ROOT" --history-dir work/history --cache work/cache/audit.sqlite --out work/report --max-files "$BATCH_FILES" --max-download-mb "$DOWNLOAD_MB" >work/private-audit.log 2>&1
+          python -u private/scripts/drive_cdb_audit.py --prioritize-historical-stats --folder-id "$DRIVE_ROOT" --history-dir work/history --cache work/cache/audit.sqlite --out work/report --max-files "$BATCH_FILES" --max-download-mb "$DOWNLOAD_MB" >work/private-audit.log 2>&1
           code=$?
           set -e
           if [[ "$code" -ne 0 ]]; then
