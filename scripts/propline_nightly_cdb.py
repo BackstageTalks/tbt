@@ -15,7 +15,6 @@ import json
 import os
 from pathlib import Path
 import shutil
-import subprocess
 
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_snapshot
@@ -38,12 +37,11 @@ PLAYER_LOG_LIMIT = 600
 def fetch_current(directory: Path):
     """Fetch ONLY the canonical 2026 partition and both signed inventory files."""
     directory.mkdir(parents=True, exist_ok=True)
+    # Reuse the existing audited release download helper: it retries GitHub
+    # transient errors and recovers stale release asset IDs after CDB updates.
+    store = ReleaseStore(REPOSITORY, RELEASE, directory)
     for name in (ASSET, MANIFEST, BUNDLE):
-        subprocess.run(
-            ["gh", "release", "download", RELEASE, "--repo", REPOSITORY,
-             "--dir", str(directory), "--pattern", name, "--clobber"],
-            check=True, capture_output=True, text=True,
-        )
+        store._download_asset(name)
     bundle = json.loads((directory / BUNDLE).read_text(encoding="utf-8"))
     manifest = json.loads((directory / MANIFEST).read_text(encoding="utf-8"))
     files = bundle.get("files") or {}
