@@ -28,6 +28,42 @@ class OfficialEventWitnessTest(unittest.TestCase):
           tournament="Australian Open",surface="hard",round_name="Final",best_of=5,
           scheduled_at=datetime(2025,1,26,tzinfo=timezone.utc),
           stats={f"p{i}_set{n}_games":v for n,ss in enumerate([(6,3),(7,6),(6,3)],1) for i,v in enumerate(ss,1)})
+    def test_private_recovery_queue_preserves_source_namespace_and_write_block(self):
+        from copy import deepcopy
+        row=mod.native_event_recovery_record(self.source,self.official,2025)
+        self.assertEqual(row["reason"],"NATIVE_MATCH_ID_REQUIRES_FULL_INDEPENDENT_SCORE_REVIEW")
+        self.assertEqual(row["official_candidate_match_id"],"atptour:2025:580:ms001")
+        self.assertIsNone(row["canonical_match_id"])
+        self.assertFalse(row["official_identity_verified"])
+        self.assertFalse(row["import_ready"])
+        self.assertFalse(row["write_authorized"])
+        self.assertFalse(row["model_feature_allowed"])
+        synthetic=deepcopy(self.official)
+        synthetic["source_match_id"]="atptour:2025:580:listing-abcd"
+        resolved=mod.native_event_recovery_record(self.source,synthetic,2025)
+        self.assertEqual(resolved["reason"],"SYNTHETIC_LISTING_ID_REQUIRES_OFFICIAL_NATIVE_MATCH")
+        self.assertFalse(resolved["write_authorized"])
+
+    def test_private_recovery_rejects_fake_origin_and_unmatched_player_ids(self):
+        from copy import deepcopy
+        bad=deepcopy(self.official)
+        bad["source_url"]="https://example.org/imposter"
+        self.assertIsNone(mod.native_event_recovery_record(self.source,bad,2025))
+        bad=deepcopy(self.official)
+        bad["sides"][0]["players"][0]["atp_player_id"]="WRONG"
+        self.assertIsNone(mod.native_event_recovery_record(self.source,bad,2025))
+        bad=deepcopy(self.official)
+        bad["source_match_id"]="atptour:2025:999:ms001"
+        self.assertIsNone(mod.native_event_recovery_record(self.source,bad,2025))
+        bad=deepcopy(self.official)
+        bad["round"]="Semifinal"
+        self.assertIsNone(mod.native_event_recovery_record(self.source,bad,2025))
+        bad=deepcopy(self.official)
+        bad["sides"][0]["scores"]=["6"]
+        row=mod.native_event_recovery_record(self.source,bad,2025)
+        self.assertEqual(row["reason"],"NATIVE_MATCH_ID_OFFICIAL_SET_COUNT_MISMATCH")
+        self.assertIsNone(row["canonical_match_id"])
+
     def test_official_native_match_and_complete_set_tape(self):
         self.assertTrue(mod.official_compatible(self.source,self.official))
         self.assertTrue(mod.canonical_compatible(self.source,self.match,self.ids))
