@@ -1,0 +1,59 @@
+name: Trusted private CDB research tests
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/blinq-private-sackmann-ci-20261012.yml
+
+permissions:
+  contents: read
+
+jobs:
+  private-source-synthetic:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'BackstageTalks'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PRIVATE_SHA: f5fbad9a99672bac3b530186811bef69737dab7d
+      PYTHONPATH: private/scripts:api
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          ref: main
+          fetch-depth: 64
+          path: private
+          persist-credentials: false
+      - name: Verify exact private commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C private cat-file -e "${PRIVATE_SHA}^{commit}"
+          git -C private checkout --detach "$PRIVATE_SHA" >/dev/null
+          test "$(git -C private rev-parse HEAD)" = "$PRIVATE_SHA"
+          echo PRIVATE_PIN_VERIFIED
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run private synthetic tests without revealing sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet --disable-pip-version-check pandas pyarrow google-auth requests
+          if python -m unittest discover -s private/tests -p test_sackmann_boxscore_rates.py > /tmp/sackmann-tests.log 2>&1 &&
+             python -m unittest discover -s private/tests -p test_drive_cdb_audit.py > /tmp/drive-tests.log 2>&1 &&
+             python -m unittest discover -s private/tests -p test_wta_xlsx_research.py > /tmp/xlsx-tests.log 2>&1 &&
+             python -m py_compile private/scripts/sackmann_boxscore_rates.py private/scripts/drive_cdb_audit.py; then
+            echo PRIVATE_RESEARCH_ONLY_BOX_SCORE_TESTS_PASS
+            echo PRIVATE_DRIVE_AUDIT_SAFETY_TESTS_PASS
+          else
+            echo 'PRIVATE_TESTS_FAILED (details retained only in runner workspace)'
+            exit 1
+          fi
+          grep -q "'import_ready': False" private/scripts/drive_cdb_audit.py
+          grep -q "'cdb_writes': 0" private/scripts/drive_cdb_audit.py
+          echo PRIVATE_NO_CANONICAL_WRITE_GUARD_PASS
