@@ -2,10 +2,12 @@
   "schema": 1,
   "mode": "statistics",
   "promote": false,
-  "purpose": "Operator-authorized bounded 50-request TennisAPI pilot: fill missing match serve/return data from 2022-2025. Shared quota and canonical writer gates required. No model training/promotion or public app deployment.",
+  "source": "operator_authorized_cdb_gapfill",
+  "purpose": "Up to 7950 additional requests after the separately limited 50-request pilot, total <=8000. Prefer current CDB 2022-25 missing serve+return, exact event+both-player identity, provider shared budget and canonical global CAS. No model training or web deploy.",
   "requested_on": "2026-10-12",
-  "max_requests": 50,
+  "max_requests": 7950,
   "start": "2022-01-01",
   "end": "2025-12-31",
+  "targeted_statistics": true,
   "historical_match_winner_odds_as_model_feature": false
 }
