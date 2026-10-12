@@ -68,6 +68,12 @@ def stats_for_side(row: dict, side: str) -> tuple[dict[str, float], list[str]]:
         raw = str(row.get(f"match_{source}_{side}") or "").strip()
         if not raw:
             continue
+        # ATP reports 0%(0/0) where no break-point chance occurred.
+        # This is missing data, not a failed rate or a reason to drop
+        # the match's otherwise valid ace/serve/return observations.
+        match = FRACTION.fullmatch(raw)
+        if match and tuple(map(int, match.groups())) == (0, 0, 0):
+            continue
         rate = fraction(raw)
         if rate is None:
             rejected.append(source)
