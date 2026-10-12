@@ -62,8 +62,45 @@ class TmlTests(unittest.TestCase):
         p,sha=self.save([self.row,self.row])
         with patch.dict(tml.YEAR_BLOBS,{2024:sha}):
             clean,_,counts,_=tml.select_source(p,2024)
-        self.assertEqual(len(clean),1)
-        self.assertEqual(counts["quarantine_duplicate_tournament_match_key"],1)
+        self.assertEqual(len(clean),0)
+        self.assertEqual(counts["quarantine_duplicate_tournament_match_key"],2)
+    def test_conflicting_duplicate_keys_quarantine_all_members(self):
+        altered=dict(self.row)
+        altered["winner_id"]="EF56"
+        altered["w_ace"]="10"
+        p,sha=self.save([self.row,altered])
+        with patch.dict(tml.YEAR_BLOBS,{2024:sha}):
+            clean,_,counts,_=tml.select_source(p,2024)
+        self.assertEqual(clean,[])
+        self.assertEqual(counts["quarantine_duplicate_tournament_match_key"],2)
+        self.assertEqual(counts.get("source_native_valid",0),0)
+
+    def test_different_match_numbers_stay_distinct(self):
+        second=dict(self.row, match_num="2")
+        p,sha=self.save([self.row,second])
+        with patch.dict(tml.YEAR_BLOBS,{2024:sha}):
+            clean,_,counts,_=tml.select_source(p,2024)
+        self.assertEqual(len(clean),2)
+        self.assertEqual(counts.get("quarantine_duplicate_tournament_match_key",0),0)
+
+    def test_impossible_aces_and_second_serve_double_faults_quarantined(self):
+        for field,value in (("w_ace","70"),("w_df","40")):
+            altered=dict(self.row)
+            altered[field]=value
+            p,sha=self.save([altered])
+            with patch.dict(tml.YEAR_BLOBS,{2024:sha}):
+                clean,_,counts,_=tml.select_source(p,2024)
+            self.assertFalse(clean,field)
+            self.assertEqual(counts["quarantine_impossible_service_counts"],1)
+
+    def test_invalid_calendar_day_cannot_enter_source_stage(self):
+        self.row["tourney_date"]="20240230"
+        p,sha=self.save([self.row])
+        with patch.dict(tml.YEAR_BLOBS,{2024:sha}):
+            clean,_,counts,_=tml.select_source(p,2024)
+        self.assertFalse(clean)
+        self.assertEqual(counts["quarantine_missing_original_identity"],1)
+
     def test_partial_csv_row_quarantined(self):
         p,sha=self.save([self.row])
         with p.open("a",encoding="utf-8") as f:f.write("bad,partial\n")
