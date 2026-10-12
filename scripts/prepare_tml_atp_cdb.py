@@ -26,6 +26,40 @@ ID = re.compile(r"[A-Za-z0-9]+\Z")
 def blob_sha1(raw: bytes):
     return hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
 
+_SET_SCORE = re.compile(r"^(\d{1,2})-(\d{1,2})(?:\(\d{1,2}\))?$")
+
+
+def complete_winner_score(score: object, best_of: object) -> bool:
+    """Only whole completed winner-oriented singles scores qualify for boxscore staging.
+
+    Reject retirements, walkovers, truncated sets, match tie-break shorthand,
+    trailing sets after the winner clinched and scores won by the loser.
+    """
+    needed = {"3": 2, "5": 3}.get(str(best_of))
+    if needed is None or not isinstance(score, str) or not score.strip():
+        return False
+    tokens = score.strip().split()
+    if len(tokens) < needed:
+        return False
+    wins = losses = 0
+    for index, token in enumerate(tokens):
+        match = _SET_SCORE.fullmatch(token)
+        if match is None:
+            return False
+        a, b = int(match.group(1)), int(match.group(2))
+        hi, lo = max(a, b), min(a, b)
+        if not ((hi == 6 and lo <= 4) or (hi == 7 and lo in (5, 6))
+                or (hi >= 8 and hi - lo == 2)):
+            return False
+        if a > b:
+            wins += 1
+        else:
+            losses += 1
+        if losses >= needed or (wins == needed and index != len(tokens) - 1):
+            return False
+    return wins == needed and losses < needed
+
+
 def select_source(path: Path, year: int):
     data = path.read_bytes()
     if blob_sha1(data) != YEAR_BLOBS[year]:
@@ -35,7 +69,7 @@ def select_source(path: Path, year: int):
     header = reader.fieldnames or []
     required = set(STATS) | {"tourney_id", "tourney_name", "tourney_date",
           "match_num","winner_id","loser_id","winner_name","loser_name",
-          "surface","round","best_of"}
+          "surface","round","best_of","score"}
     if len(header) != len(set(header)) or not required.issubset(header):
         raise ValueError("Incomplete or duplicate TML CSV headers")
     good = []
@@ -87,6 +121,9 @@ def select_source(path: Path, year: int):
                 unsafe = True
         if unsafe:
             counts["quarantine_impossible_service_counts"] += 1
+            continue
+        if not complete_winner_score(row["score"], row["best_of"]):
+            counts["quarantine_incomplete_or_invalid_final_score"] += 1
             continue
         counts["source_native_valid"] += 1
         good.append(row)
