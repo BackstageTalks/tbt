@@ -104,6 +104,47 @@ jobs:
                               if len(potential)<10:potential.append(path)
                   if item.get('canonical_match_id') or item.get('canonical_provider_event_id'):
                       stats['index_rows_with_explicit_canonical_bridge']+=1
+          strict=Counter(); link_types=Counter(); link_fields=Counter(); player_fields=Counter(); link_status=Counter()
+          sources={str(x['source_match_id']):x for x in original}
+          from datetime import datetime,timezone
+          def clock(value):
+              try:
+                  d=datetime.fromisoformat(str(value).replace('Z','+00:00'))
+                  return d.astimezone(timezone.utc) if d.tzinfo else None
+              except (TypeError,ValueError):return None
+          with gzip.open(p,'rt',encoding='utf8') as f:
+              for line in f:
+                  if not line.strip():continue
+                  item=json.loads(line)
+                  if not isinstance(item,dict):continue
+                  eid=str(item.get('event_id') or '')
+                  if eid not in sources:continue
+                  srcrow=sources[eid]
+                  strict['source_index_id_match']+=1
+                  if item.get('canonical_match_id'):strict['with_canonical_match_id']+=1
+                  if str(item.get('tour') or '').upper()==srcrow['source_tour']:
+                      strict['same_tour']+=1
+                      if clock(item.get('start_utc'))==clock(srcrow['scheduled_at_utc']):
+                          strict['same_tour_and_exact_utc']+=1
+                          if item.get('canonical_match_id'):
+                              strict['same_tour_utc_with_canonical_match_id']+=1
+                  for field in ('link','player1_source','player2_source'):
+                      obj=item.get(field)
+                      link_types[field+':'+type(obj).__name__]+=1
+                      if isinstance(obj,dict):
+                          for key in obj:
+                              (link_fields if field=='link' else player_fields)[field+'.'+key]+=1
+                          if field=='link':
+                              for k in ('status','strategy','method','quality','evidence'):
+                                  if k in obj and isinstance(obj[k],(str,int,bool)):
+                                      link_status[k+':'+str(obj[k])[:35]]+=1
+          print('FLASH_NATIVE_BRIDGE_LINK_SCHEMA',json.dumps({
+             'strict':dict(strict),
+             'link_value_types':dict(link_types),
+             'link_keys':dict(link_fields.most_common(55)),
+             'player_source_keys':dict(player_fields.most_common(50)),
+             'link_categorical':dict(link_status.most_common(25))
+          },sort_keys=True))
           print('FLASH_NATIVE_BRIDGE_REPORT',json.dumps({
               'source_rows':len(original),'source_distinct_events':len(keys),
               'index_rows':stats['index_rows'],
