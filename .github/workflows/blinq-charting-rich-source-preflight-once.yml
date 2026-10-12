@@ -1,0 +1,48 @@
+name: BlinQ charting rich 335-column source preflight once
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/blinq-charting-rich-source-preflight-once.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+      - name: Reconstruct preexisting Charting core CSV and independently verify source hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64,csv,gzip,hashlib,io,json
+          from pathlib import Path
+          root=Path('research/offline-sources/blinq-import-2026-10-07/chunks')
+          expected={'atp':('92d6975a09ebc0f5bf42d68a34e57087152e9219d8430d7794faa68b0c5630f8',15129),
+                    'wta':('cf1ec57c55cda20cd43a2848e30369b4c829486f618605c9a369a22fa3fdd315',8506)}
+          for tour,(sha,nrows) in expected.items():
+            parts=sorted(root.glob('blinq_charting_'+tour+'_core_features.csv.gz.b64.part*.txt'))
+            if not parts:raise RuntimeError('Missing expected source chunks '+tour)
+            encoded=b''.join(p.read_bytes().strip() for p in parts)
+            data=gzip.decompress(base64.b64decode(encoded,validate=True))
+            actual=hashlib.sha256(data).hexdigest()
+            assert actual==sha,(tour,actual)
+            r=csv.DictReader(io.StringIO(data.decode('utf-8-sig')))
+            samples=[];counts=0; nonempty={}
+            for row in r:
+              counts+=1
+              for key in ('match_id','date','Date','source_match_id','tour','round','surface','p1_aces','p2_aces','p1_return_in_play_rate','p2_return_in_play_rate'):
+                if row.get(key):nonempty[key]=nonempty.get(key,0)+1
+              if len(samples)<2:
+                samples.append({k:str(v)[:100] for k,v in row.items() if k in ('match_id','date','Date','source_match_id','tour','round','surface','p1_aces','p2_aces')})
+            assert counts==nrows,(tour,counts,nrows)
+            head=r.fieldnames
+            assert len(head)>=300,(tour,len(head))
+            print('VERIFIED_RICH_CHARTING',json.dumps({'tour':tour,'rows':counts,'sha256':actual,'columns':len(head),'keys':head[:85],'nonempty':nonempty,'samples':samples},sort_keys=True),flush=True)
+          PY
