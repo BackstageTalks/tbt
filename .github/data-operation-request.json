@@ -1,18 +1,17 @@
 {
   "schema": 1,
-  "mode": "statistics",
+  "mode": "history",
   "promote": false,
-  "source": "explicit_user_continue_safe_CDB_maximum_20261012",
-  "purpose": "New bounded 3000-request follow-up to verified provider-native event stats. Shared 15k daily API budget and 450 reserve, global lock and CAS, immutable backup, NULL-only, independent persisted SHA+cell readback; never fuzzy or TML context-only match mapping; no model promotion.",
+  "source": "autonomous verified October12 finalized matches CDB safe history enrichment",
+  "purpose": "Complete/verified ATP WTA singles results 2026-10-12, fail closed on incomplete/nonterminal; canonical history safety and unique player/event identity guards, private GH release backup and bundle verification, cross-repo single-writer lock; no prediction/model training.",
   "requested_on": "2026-10-12",
-  "max_requests": 3000,
-  "start": "2022-01-01",
-  "end": "2025-12-31",
-  "targeted_statistics": true,
+  "max_requests": 350,
+  "start": "2026-10-12",
+  "end": "2026-10-12",
+  "targeted_statistics": false,
   "historical_match_winner_odds_as_model_feature": false,
   "model_training": false,
   "pre_reset_provider_header_override": false,
-  "verified_prior_successful_run": 38307045073,
-  "verified_prior_new_CDB_values": 25499,
-  "source_only_tml_write_authorized": false
+  "skip_nonterminal": true,
+  "only_exact_verified_results": true
 }
