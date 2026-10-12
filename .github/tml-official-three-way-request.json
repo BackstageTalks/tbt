@@ -16,5 +16,8 @@
   "auto_approve_import": false,
   "model_train": false,
   "provider_api_requests": 0,
-  "purpose": "Prove only uniquely corroborated source-to-official-and-canonical event identities using original ATP player codes, official native match IDs, all set games and precise source tournament ID, then persist private SHA-bound review; never write stats without fresh NULL+CAS proof"
+  "purpose": "Prove only uniquely corroborated source-to-official-and-canonical event identities using original ATP player codes, official native match IDs, all set games and precise source tournament ID, then persist private SHA-bound review; never write stats without fresh NULL+CAS proof",
+  "attempt": 2,
+  "sha_pin_fix_pr": 669,
+  "last_failure": "2024 official archive pin mismatch caught prior to canonical mutation"
 }
