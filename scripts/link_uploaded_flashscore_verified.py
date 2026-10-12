@@ -37,7 +37,7 @@ def short_matches(canonical,short):
     a=norm(canonical).split();b=norm(short).split()
     if not a or not b:return False
     if a==b:return True
-    if len(b)<2 or len(a)<2 or len(b[-1])!=1:return False
+    if len(b)<2 or len(a)<2 or len(a)!=len(b) or len(b[-1])!=1:return False
     # Source "Carreno-Busta P." -> canonical "Pablo Carreno Busta".
     return a[0][0]==b[-1] and a[-len(b)+1:]==b[:-1]
 
