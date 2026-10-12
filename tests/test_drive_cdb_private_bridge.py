@@ -7,7 +7,8 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from drive_cdb_private_bridge import validate, write_checkpoint, restore_checkpoint
+from drive_cdb_private_bridge import (validate, write_checkpoint, restore_checkpoint,
+                                      verify_priority_reader_migration)
 
 FOLDER = '17UChTTWLpC-7tZIbvTXKA4_2eqooV44A'
 
@@ -166,10 +167,74 @@ class PrivateBridgeTest(unittest.TestCase):
             self.assertFalse((p / 'output.sqlite').exists())
 
 
+    def test_priority_reader_migration_exact_code_contract(self):
+        # Use minimal synthetic scripts matching the only three allowed edits.
+        with TemporaryDirectory() as d:
+            p = Path(d)
+            legacy = p / 'original.py'
+            current = p / 'priority.py'
+            original = (
+                'import re\n'
+                'from pathlib import Path\n'
+                'def records(stream, suffix):\n'
+                '    return stream\n'
+                'def main():\n'
+                '    ap = argparse.ArgumentParser()\n'
+                '    args = ap.parse_args()\n'
+                '    for item in inventory:\n'
+                '        print(item)\n'
+            )
+            legacy.write_text(original, encoding='utf-8')
+            priority = original.replace(
+                'def records(stream, suffix):\n',
+                'def audit_source_priority(item):\n'
+                '    return (0, item)\n\n'
+                'def records(stream, suffix):\n', 1
+            )
+            priority = priority.replace(
+                '    args = ap.parse_args()\n',
+                "    ap.add_argument('--prioritize-historical-stats', action='store_true',\n"
+                "                    help='Opt in to historical match-stat sample ordering; default preserves existing checkpoint order')\n"
+                '    args = ap.parse_args()\n', 1
+            )
+            priority = priority.replace(
+                '    for item in inventory:',
+                '    # Keep default scanner behavior identical for pinned production checkpoints.\n'
+                '    # A new priority policy needs an explicitly reviewed cache/code migration.\n'
+                '    ordered = sorted(inventory, key=audit_source_priority) if args.prioritize_historical_stats else inventory\n'
+                '    for item in ordered:', 1
+            )
+            current.write_text(priority, encoding='utf-8')
+            verify_priority_reader_migration(legacy, current)
+            current.write_text(priority.replace('return stream', 'return None'), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'semantics changed'):
+                verify_priority_reader_migration(legacy, current)
+            current.write_text(priority.replace(
+                '    for item in ordered:', '    for item in unknown_source:'), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'loop contract'):
+                verify_priority_reader_migration(legacy, current)
+
+    def test_actual_workflow_uses_pinned_new_reader_and_legacy_checkpoint(self):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    '.github/workflows/blinq-private-drive-cdb-audit-bridge.yml').read_text()
+        self.assertIn('SOURCE_REF: 10806400e536195890600c4256303697912ab95f', workflow)
+        self.assertIn('LEGACY_SOURCE_REF: cf96b6085f93696eb7c319e9109a2040a04cfc4e', workflow)
+        self.assertIn('ref: ${{ env.SOURCE_REF }}\n          fetch-depth: 1\n          path: private', workflow)
+        self.assertIn('git -C private rev-parse --verify HEAD', workflow)
+        self.assertIn('test "$actual" = "$SOURCE_REF"', workflow)
+        self.assertIn('verify-priority-reader --legacy-code work/legacy-drive-cdb-audit.py', workflow)
+        self.assertIn('--code-file work/legacy-drive-cdb-audit.py --source work/cache-input', workflow)
+        self.assertIn('VERIFIED_LEGACY_CHECKPOINT_MIGRATED_TO_PRIORITY_READER', workflow)
+        self.assertIn('VERIFIED_PRIVATE_SQLITE_CACHE_INTEGRITY', workflow)
+        self.assertIn('--prioritize-historical-stats --folder-id "$DRIVE_ROOT"', workflow)
+        self.assertIn('source_sampling=historical_stats_priority', workflow)
+        self.assertIn("if: github.event_name == 'workflow_dispatch'", workflow)
+        self.assertNotIn('schedule:', workflow)
+
     def test_private_drive_checkout_ref_remains_immutable(self):
         workflow = (Path(__file__).resolve().parents[1] /
                     '.github/workflows/blinq-private-drive-cdb-audit-bridge.yml').read_text()
-        self.assertIn('SOURCE_REF: cf96b6085f93696eb7c319e9109a2040a04cfc4e', workflow)
+        self.assertIn('SOURCE_REF: 10806400e536195890600c4256303697912ab95f', workflow)
         pinned = next(line.split(': ', 1)[1].strip() for line in workflow.splitlines()
                       if line.strip().startswith('SOURCE_REF: '))
         self.assertEqual(len(pinned), 40)
@@ -180,8 +245,7 @@ class PrivateBridgeTest(unittest.TestCase):
         self.assertIn('PINNED_PRIVATE_SOURCE_SHA_VERIFIED', workflow)
         self.assertNotIn('ref: main\n          fetch-depth: 64', workflow)
         self.assertNotIn('git -C private checkout --detach "$SOURCE_REF"', workflow)
-        # PR137 priority stays opt-in pending separately verified cache migration.
-        self.assertNotIn('--prioritize-historical-stats', workflow)
+        self.assertIn('--prioritize-historical-stats', workflow)
 
 
 if __name__ == '__main__':
