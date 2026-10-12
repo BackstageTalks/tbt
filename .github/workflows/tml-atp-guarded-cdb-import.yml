@@ -207,8 +207,8 @@ jobs:
           python scripts/offline_exact_cdb_write.py \
             --before-dir "$root/before" --after-dir "$root/history" \
             --stage "$root/linked/auto_linked.jsonl" \
-            --changed-years "$(jq -r '.changed_years|join(",")' "$root/write/report.json")" \
-            --out "$root/local-readback.json"
+            --changed-years "$(jq -c '.changed_years' "$root/write/report.json")" \
+            --output "$root/local-readback.json"
       - name: Publish canonical changes only after unchanged-manifest CAS
         if: steps.mode.outputs.mode == 'write' && steps.gate.outputs.changes == 'true'
         run: |
@@ -241,8 +241,8 @@ jobs:
           python scripts/offline_exact_cdb_write.py \
             --before-dir "$root/before" --after-dir "$root/persisted" \
             --stage "$root/linked/auto_linked.jsonl" \
-            --changed-years "$(jq -r '.changed_years|join(",")' "$root/write/report.json")" \
-            --out "$root/persisted-readback.json"
+            --changed-years "$(jq -c '.changed_years' "$root/write/report.json")" \
+            --output "$root/persisted-readback.json"
           python - <<'PY'
           import json
           from pathlib import Path
