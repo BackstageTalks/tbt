@@ -116,6 +116,116 @@ def _player_id(row: dict[str, Any], key: str) -> str:
     return str(player.get("id") or "").strip()
 
 
+def deployed_priced_projection(row: dict[str, Any], feed: dict[str, Any]) -> dict[str, Any] | None:
+    """Recover an immutable, already-served priced projection without a nested ledger.
+
+    Daily serving rows can carry the complete frozen bookmaker contract while
+    the private publication ledger is stored separately. A public row is enough
+    evidence ONLY if both its quote capture and the serving feed generation
+    strictly precede the match. Never turn arbitrary model-board projections
+    or post-start captures into published Results.
+    """
+    if (
+        not isinstance(row, dict) or not isinstance(feed, dict)
+        or row.get("excluded_reason") or row.get("market_publications")
+        or str(row.get("publication_status") or "published").lower() != "published"
+        or str(row.get("price_status") or "").lower() != "priced_projection"
+    ):
+        return None
+    scheduled = _parse_time(row.get("scheduled_at") or row.get("date"))
+    issued = _parse_time(row.get("issued_at") or feed.get("generated_at"))
+    captured = _parse_time(row.get("captured_at"))
+    if not scheduled or not issued or not captured or not (captured <= issued < scheduled):
+        return None
+    try:
+        odds = float(row.get("odds"))
+        provider_id = int(row.get("provider_id"))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(odds) or odds < 1.5 or provider_id <= 0:
+        return None
+
+    raw_market = str(row.get("market") or row.get("projection_metric") or "").lower()
+    market = {"ace": "aces", "double-faults": "double_faults"}.get(raw_market, raw_market)
+    sections = {"aces": "ace", "double_faults": "double_faults",
+                "sets": "sets", "games": "games"}
+    if market not in sections:
+        return None
+    p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
+    if not p1 or not p2 or p1 == p2:
+        return None
+
+    selection_text = str(row.get("selection") or row.get("pick") or "").strip()
+    match = re.search(r"\b(over|under)\s+(\d+(?:[.,]\d+)?)\b", selection_text, re.I)
+    published_side = match.group(1).lower() if match else ""
+    published_line = float(match.group(2).replace(",", ".")) if match else None
+    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+    raw_side = str(
+        row.get("side") or row.get("prediction_side") or row.get("selection_side")
+        or row.get("projection_direction") or betting.get("side") or ""
+    ).strip().lower()
+    sides = {"o": "over", "high": "over", "above": "over", "higher": "over",
+             "u": "under", "low": "under", "below": "under", "lower": "under"}
+    side = sides.get(raw_side, raw_side) if raw_side else published_side
+    if side not in {"over", "under"} or (published_side and side != published_side):
+        return None
+
+    line = None
+    for raw in (
+        row.get("line"), row.get("market_line"), row.get("betting_line"),
+        row.get("bookmaker_line"), row.get("over_under_line"), row.get("total_line"),
+        row.get("threshold"), betting.get("line"), betting.get("market_line"),
+        published_line,
+    ):
+        if raw is None or raw == "":
+            continue
+        try:
+            candidate = float(str(raw).replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(candidate) and candidate > 0:
+            line = candidate
+            break
+    if line is None or (published_line is not None and abs(line - published_line) > 0.0001):
+        return None
+
+    source_selection = str(
+        betting.get("selection_id") or row.get("projection_subject_id")
+        or row.get("selection_id") or ""
+    ).strip()
+    if market in {"aces", "double_faults"}:
+        if source_selection not in {p1, p2}:
+            return None
+        selection_id = source_selection
+    elif market == "sets":
+        selection_id = f"sets:{side}:{line:g}"
+    else:
+        selection_id = f"games:{'high' if side == 'over' else 'low'}"
+
+    pub = {
+        "section": sections[market], "market": market, "selection_id": selection_id,
+        "selection": selection_text, "issued_at": issued.isoformat(),
+        "publication_status": "published",
+        "runtime_publication_evidence": "deployed_daily_offer_row",
+        "price_status": "priced_projection", "odds": odds,
+        "provider_id": provider_id, "captured_at": captured.isoformat(),
+        "projection_scope": row.get("projection_scope") or (
+            "player" if market in {"aces", "double_faults"} else "match_total"
+        ),
+        "projection_metric": market,
+    }
+    for name in ("projection", "data_depth", "model_probability", "betting_day",
+                 "opponent_projection", "publication_key"):
+        if row.get(name) is not None:
+            pub[name] = deepcopy(row[name])
+    if market in {"aces", "double_faults"}:
+        pub.update(price_contract="player_total_ou", ou_side=side, market_line=line)
+    elif market == "games":
+        pub.update(projection_direction="high" if side == "over" else "low",
+                   reference_projection=line)
+    return pub
+
+
 def prediction_rows(
     feed: dict[str, Any], *, now: datetime | None = None
 ) -> dict[str, dict[str, Any]]:
@@ -176,13 +286,14 @@ def prediction_rows(
                 if not eid or eid in out:
                     continue
                 publications = row.get("market_publications") or []
-                if not any(
+                issued_projection = any(
                     isinstance(p, dict)
                     and str(p.get("market") or "").lower() in _PROJECTION_MARKETS
                     and p.get("issued_at")
                     and str(p.get("publication_status") or "") == "published"
                     for p in publications
-                ):
+                )
+                if not issued_projection and deployed_priced_projection(row, feed) is None:
                     continue
                 p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
                 anchor = str(row.get("winner_id") or "").strip()
@@ -525,7 +636,11 @@ def runtime_settled_results(
                 if isinstance(publication, dict)
             ]
             if not source_publications:
-                deployed = _deployed_match_winner_publication(row, source_key)
+                deployed = (
+                    deployed_priced_projection(row, feed)
+                    if source_key in _PUBLIC_PROJECTION_KEYS
+                    else _deployed_match_winner_publication(row, source_key)
+                )
                 if deployed is not None:
                     source_publications = [deployed]
 
@@ -771,6 +886,16 @@ def classify_finished_event(
         provider_winner = str(home.get("id") or "").strip()
     elif winner_code == 2:
         provider_winner = str(away.get("id") or "").strip()
+    # A verified direct winner identifier is valid evidence when winnerCode is
+    # absent. If both signals exist but disagree, quarantine instead of scoring.
+    direct_winner = str(
+        event.get("winnerId") or event.get("winner_id") or event.get("winnerTeamId") or ""
+    ).strip()
+    if direct_winner and direct_winner not in provider_players:
+        return None
+    if direct_winner and provider_winner and direct_winner != provider_winner:
+        return None
+    provider_winner = provider_winner or direct_winner
     if not provider_winner:
         return None
 
@@ -821,10 +946,23 @@ def _verified_final_score_stats(row: dict[str, Any], event: dict[str, Any]) -> d
     """
     home = event.get("homeScore") if isinstance(event.get("homeScore"), dict) else {}
     away = event.get("awayScore") if isinstance(event.get("awayScore"), dict) else {}
-    winner_code = event.get("winnerCode")
+    home_team = event.get("homeTeam") if isinstance(event.get("homeTeam"), dict) else {}
+    away_team = event.get("awayTeam") if isinstance(event.get("awayTeam"), dict) else {}
+    home_id, away_id = str(home_team.get("id") or ""), str(away_team.get("id") or "")
+    if not home_id or not away_id or home_id == away_id:
+        return {}
+    if {home_id, away_id} != {_player_id(row, "player1"), _player_id(row, "player2")}:
+        return {}
+    direct_winner = str(
+        event.get("winnerId") or event.get("winner_id") or event.get("winnerTeamId") or ""
+    ).strip()
     try:
-        winner_code = int(winner_code)
+        winner_code = int(event.get("winnerCode"))
     except (TypeError, ValueError):
+        winner_code = 0
+    if winner_code not in (1, 2):
+        winner_code = 1 if direct_winner == home_id else 2 if direct_winner == away_id else 0
+    elif direct_winner and (home_id if winner_code == 1 else away_id) != direct_winner:
         return {}
     if winner_code not in (1, 2):
         return {}
