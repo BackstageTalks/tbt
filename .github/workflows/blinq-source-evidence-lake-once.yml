@@ -1,0 +1,187 @@
+name: BlinQ private source evidence lake (bounded once)
+
+# Never scheduled. The push trigger only runs when an explicit one-shot
+# request file is created/modified; PR branch executes unit tests only.
+'on':
+  pull_request:
+    paths:
+      - 'scripts/build_source_evidence_lake.py'
+      - 'tests/test_build_source_evidence_lake.py'
+      - 'scripts/audit_source_identity_gaps.py'
+      - 'tests/test_audit_source_identity_gaps.py'
+      - '.github/workflows/blinq-source-evidence-lake-once.yml'
+  push:
+    branches: [main]
+    paths: ['.github/source-evidence-lake-request.json']
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-source-evidence-lake-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify source-only and zero-write contracts without dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_build_source_evidence_lake.py -v
+          python -m unittest discover -s tests -p test_audit_source_identity_gaps.py -v
+          python -m compileall -q scripts/build_source_evidence_lake.py scripts/audit_source_identity_gaps.py
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('scripts/build_source_evidence_lake.py').read_text()
+          assert '"write_authorized": False' in s
+          assert '"canonical_cells_written": 0' in s
+          assert '"sport_api_requests": 0' in s
+          assert 'upload_bundle(' not in s
+          print('PRIVATE_SOURCE_EVIDENCE_ZERO_WRITE_CONTRACT_PASS')
+          PY
+
+  save-private-source-evidence:
+    needs: tests
+    if: ${{ github.event_name != 'pull_request' && github.repository == 'BackstageTalks/tbt' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      SOURCE_PIN: c5537eed87d8a76f3adb598cdf506d885872923b
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Tennismylife/TML-Database
+          ref: c5537eed87d8a76f3adb598cdf506d885872923b
+          fetch-depth: 1
+          path: tml-source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Confirm explicit source evidence request and private storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$PRIVATE_REPO" --json visibility -q .visibility)" = PRIVATE
+          test "$(git -C tml-source rev-parse HEAD)" = "$SOURCE_PIN"
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            test "$(jq -er .scope .github/source-evidence-lake-request.json)" = tml-atp-2022-2025
+            test "$(jq -er .mode .github/source-evidence-lake-request.json)" = preserve-private-only
+          fi
+          echo PINNED_SOURCE_AND_PRIVATE_TARGET_VERIFIED
+      - name: Verify pinned source Git blobs and write SHA256 manifest locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/private-source-evidence
+          python - <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          sys.path.insert(0,'scripts')
+          from prepare_tml_atp_cdb import SOURCE_COMMIT,YEAR_BLOBS,blob_sha1
+          assert SOURCE_COMMIT=='c5537eed87d8a76f3adb598cdf506d885872923b'
+          sources=[]
+          for year,blob in sorted(YEAR_BLOBS.items()):
+              filename=f'{year}.csv'
+              raw=(Path('tml-source')/filename).read_bytes()
+              assert blob_sha1(raw)==blob
+              sources.append({
+                'filename':filename,'namespace':f'tml-atp-{year}',
+                'profile':'atp-wta-sackmann',
+                'tour':'atp','sha256':hashlib.sha256(raw).hexdigest(),
+                'source_ref':f'https://github.com/Tennismylife/TML-Database/blob/{SOURCE_COMMIT}/{filename}',
+                'source_rights_status':'review_needed',
+              })
+          Path('work/manifest.json').write_text(json.dumps({'schema':1,'sources':sources},sort_keys=True))
+          print('PINNED_TML_ORIGINAL_BLOBS_VERIFIED:',len(sources))
+          PY
+      - name: Retain every original source row privately, including quarantine
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_source_evidence_lake.py --manifest work/manifest.json \
+            --source-root tml-source --out work/private-source-evidence
+          python - <<'PY'
+          import gzip,json
+          from pathlib import Path
+          root=Path('work/private-source-evidence')
+          report=json.loads((root/'report.json').read_text())
+          assert report['source_count']==4
+          assert report['source_rows_retained']==11933
+          assert report['canonical_cells_written']==0
+          assert report['sport_api_requests']==0
+          n=0
+          with gzip.open(root/'source-observations.jsonl.gz','rt',encoding='utf-8') as src:
+              for line in src:
+                  row=json.loads(line)
+                  assert row['canonical_match_id'] is None
+                  assert row['write_authorized'] is False
+                  assert row['import_ready'] is False
+                  n+=1
+          assert n==report['source_rows_retained']
+          print('SOURCE_ORIGINAL_ROWS_PRIVATELY_RETAINED_NO_CANONICAL_WRITES:',n)
+          PY
+          (cd work/private-source-evidence && sha256sum -c SHA256SUMS)
+      - name: Rank next exact ATP player identity bridge gaps (private only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/private-identity
+          gh release download tbt-canonical-identity-links-v1 -R "$PRIVATE_REPO" \
+            -p player-identity-crosswalk.jsonl -D work/private-identity >/dev/null
+          test "$(sha256sum work/private-identity/player-identity-crosswalk.jsonl | cut -d' ' -f1)" = "ae61e871a59c9960f00c20cb061bd6d1a90e222dc58b126438d27a14aeedd192"
+          python scripts/audit_source_identity_gaps.py \
+            --observations work/private-source-evidence/source-observations.jsonl.gz \
+            --private-links work/private-identity/player-identity-crosswalk.jsonl \
+            --links-sha256 ae61e871a59c9960f00c20cb061bd6d1a90e222dc58b126438d27a14aeedd192 \
+            --out work/private-source-evidence
+          (cd work/private-source-evidence && sha256sum identity-gap-report.json identity-crosswalk-priority-private.jsonl >> SHA256SUMS && sha256sum -c SHA256SUMS)
+      - name: Publish immutable private Release and independently read back
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="blinq-source-evidence-tml-2022-2025-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          root=work/private-source-evidence
+          gh release create "$tag" "$root/report.json" "$root/SHA256SUMS" "$root/source-observations.jsonl.gz" \
+            "$root/identity-gap-report.json" "$root/identity-crosswalk-priority-private.jsonl" \
+            -R "$PRIVATE_REPO" --title "BlinQ TML source-native observation lake" \
+            --notes "Immutable private source observations; research-only, no canonical matching/write or model inputs. Source original bytes pinned to upstream commit SHA."
+          mkdir -p work/private-readback
+          gh release download "$tag" -R "$PRIVATE_REPO" -D work/private-readback >/dev/null
+          (cd work/private-readback && sha256sum -c SHA256SUMS)
+          cmp "$root/report.json" work/private-readback/report.json
+          python - <<'PY'
+          import gzip,json
+          from pathlib import Path
+          path=Path('work/private-readback/source-observations.jsonl.gz')
+          count=0
+          with gzip.open(path,'rt',encoding='utf-8') as src:
+              for line in src:
+                  row=json.loads(line)
+                  assert row['write_authorized'] is False and row['canonical_match_id'] is None
+                  count+=1
+          assert count==11933
+          gaps=json.loads(Path('work/private-readback/identity-gap-report.json').read_text())
+          assert gaps['rows_checked']==count
+          assert gaps['ready_for_canonical_write']==0
+          assert gaps['source_observations_sha256']==json.loads(Path('work/private-readback/report.json').read_text())['observations_sha256']
+          print('PRIVATE_SOURCE_EVIDENCE_INDEPENDENT_REMOTE_READBACK_PASS:',count)
+          PY
+          echo "Private source evidence Release tag: $tag" >> "$GITHUB_STEP_SUMMARY"
+          echo 'All observations private; no tennis API requests, no canonical write, no model use.' >> "$GITHUB_STEP_SUMMARY"
