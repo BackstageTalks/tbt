@@ -48,6 +48,30 @@ def round_key(value):
     return _norm_round(str(value or "").split(" - ",1)[0].strip())
 
 
+def official_score_cells(sides, expected_sets):
+    """Discard *only* one verifiably empty trailing score widget on BOTH sides.
+
+    ATP archived HTML may render a spare empty scoreboard column. Any nonblank
+    trailing value, unequal side length, or additional columns fails closed.
+    Native match link and all played-set games/tiebreaks remain mandatory.
+    """
+    if (not isinstance(sides, list) or len(sides) != 2
+            or not isinstance(expected_sets, int) or expected_sets < 2
+            or expected_sets > 5):
+        return None
+    cells = [side.get("scores") if isinstance(side, dict) else None for side in sides]
+    if any(not isinstance(row, list) for row in cells):
+        return None
+    if all(len(row) == expected_sets + 1 for row in cells):
+        if all(isinstance(row[-1], str) and not row[-1].strip() for row in cells):
+            cells = [row[:-1] for row in cells]
+        else:
+            return None
+    if not all(len(row) == expected_sets for row in cells):
+        return None
+    return cells
+
+
 def official_compatible(source: dict, official: dict) -> bool:
     """Exactly equal native ATP tournament, ATP player codes and finished sets."""
     event=EVENT.fullmatch(str(source.get("tourney_id") or ""))
@@ -88,11 +112,11 @@ def official_compatible(source: dict, official: dict) -> bool:
     tape=source_score(source.get("score"))
     if tape is None:
         return False
+    score_cells=official_score_cells(sides,len(tape))
+    if score_cells is None:
+        return False
     games=[]
-    for side in sides:
-        cells=side.get("scores")
-        if not isinstance(cells,list) or len(cells)!=len(tape):
-            return False
+    for cells in score_cells:
         decoded=[SCORE.fullmatch(str(cell)) for cell in cells]
         if any(m is None for m in decoded):
             return False
@@ -203,8 +227,7 @@ def native_event_recovery_record(source: dict, official: dict, year: int):
         return None
     if match.group(3).startswith("listing-"):
         reason="SYNTHETIC_LISTING_ID_REQUIRES_OFFICIAL_NATIVE_MATCH"
-    elif any(not isinstance(side.get("scores"),list) or len(side["scores"])!=len(tape)
-             for side in sides):
+    elif official_score_cells(sides,len(tape)) is None:
         reason="NATIVE_MATCH_ID_OFFICIAL_SET_COUNT_MISMATCH"
     else:
         reason="NATIVE_MATCH_ID_REQUIRES_FULL_INDEPENDENT_SCORE_REVIEW"
@@ -297,6 +320,18 @@ def compare(source_dir:Path, archive_dir:Path, history_dir:Path,
                 report["source_with_official_tournament_archive"]+=1
             original_pair={str(row.get("winner_id") or "").upper(),
                            str(row.get("loser_id") or "").upper()}
+            # Independent canonical full-set witness diagnostic, NEVER an
+            # import authorization. No fuzzy names or tolerances.
+            canonical_score_candidates=[
+                m for m in index.get((frozenset((win,lose)),year),[])
+                if canonical_compatible(row,m,links)
+            ]
+            if len(canonical_score_candidates)==1:
+                report["source_exact_unique_canonical_set_tape"]+=1
+            elif len(canonical_score_candidates)>1:
+                report["source_ambiguous_canonical_set_tape"]+=1
+            else:
+                report["source_missing_exact_canonical_set_tape"]+=1
             for candidate in atptour_rows:
                 if not str(candidate.get("source_match_id") or "").split(":")[-1].startswith("listing-"):
                     report["native_official_match_id_in_same_tournament"]+=1
@@ -318,6 +353,15 @@ def compare(source_dir:Path, archive_dir:Path, history_dir:Path,
                         continue
                     candidate_recovery=native_event_recovery_record(row,candidate,year)
                     if candidate_recovery is not None:
+                        candidate_recovery["independent_current_canonical_full_set_witness_count"]=len(canonical_score_candidates)
+                        # DO NOT include or approve the canonical ID; a research
+                        # funnel count is not an authorized event crosswalk.
+                        if len(canonical_score_candidates)==1:
+                            report["recovery_unique_canonical_full_set_tape"]+=1
+                        elif len(canonical_score_candidates)>1:
+                            report["recovery_ambiguous_canonical_full_set_tape"]+=1
+                        else:
+                            report["recovery_no_canonical_full_set_tape"]+=1
                         recovery_queue.append(candidate_recovery)
                     if str(candidate.get("source_match_id") or "").split(":")[-1].startswith("listing-"):
                         report["same_official_pair_round_synthetic_id"]+=1
@@ -329,14 +373,17 @@ def compare(source_dir:Path, archive_dir:Path, history_dir:Path,
                         continue
                     p1set=sides[0].get("scores") if isinstance(sides[0].get("scores"),list) else []
                     p2set=sides[1].get("scores") if isinstance(sides[1].get("scores"),list) else []
-                    if len(p1set)!=len(tape) or len(p2set)!=len(tape):
+                    score_cells=official_score_cells(sides,len(tape))
+                    if score_cells is None:
                         report["same_official_pair_round_set_count_mismatch"]+=1
                         report[f"official_score_shape_src{len(tape)}_atp{len(p1set)}_{len(p2set)}"]+=1
                         if candidate.get("match_stats_urls"):
                             report["score_mismatch_native_has_match_stats_link"]+=1
                         continue
                     report["same_official_pair_round_matching_set_count"]+=1
-                    parsed=[[SCORE.fullmatch(str(cell)) for cell in side["scores"]] for side in sides]
+                    if len(p1set)==len(tape)+1:
+                        report["official_score_empty_trailing_both_sides_discarded"]+=1
+                    parsed=[[SCORE.fullmatch(str(cell)) for cell in score_cells[i]] for i in range(2)]
                     if any(m is None for side in parsed for m in side):
                         report["same_official_pair_round_unparsed_official_score_cells"]+=1
                         continue

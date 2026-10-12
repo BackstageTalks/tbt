@@ -64,6 +64,43 @@ class OfficialEventWitnessTest(unittest.TestCase):
         self.assertEqual(row["reason"],"NATIVE_MATCH_ID_OFFICIAL_SET_COUNT_MISMATCH")
         self.assertIsNone(row["canonical_match_id"])
 
+    def test_official_empty_trailing_html_score_column_only(self):
+        from copy import deepcopy
+        obj=deepcopy(self.official)
+        for side in obj["sides"]:
+            side["scores"].append("")
+        self.assertTrue(mod.official_compatible(self.source,obj))
+        self.assertEqual(mod.native_event_recovery_record(self.source,obj,2025)["reason"],
+                         "NATIVE_MATCH_ID_REQUIRES_FULL_INDEPENDENT_SCORE_REVIEW")
+        self.assertEqual(mod.official_score_cells(obj["sides"],3),
+                         [["6","7","6"],["3","6 4","3"]])
+
+    def test_official_nonempty_extra_set_or_unbalanced_tail_rejected(self):
+        from copy import deepcopy
+        for added in (("6","4"),("0","0"),("","5")):
+            obj=deepcopy(self.official)
+            for side,v in zip(obj["sides"],added):
+                side["scores"].append(v)
+            self.assertIsNone(mod.official_score_cells(obj["sides"],3))
+            self.assertFalse(mod.official_compatible(self.source,obj))
+        obj=deepcopy(self.official)
+        obj["sides"][0]["scores"].append("")
+        self.assertFalse(mod.official_compatible(self.source,obj))
+        obj=deepcopy(self.official)
+        for side in obj["sides"]: side["scores"].extend(["",""])
+        self.assertFalse(mod.official_compatible(self.source,obj))
+
+    def test_official_empty_tail_never_overrides_wrong_winner_or_set(self):
+        from copy import deepcopy
+        obj=deepcopy(self.official)
+        for side in obj["sides"]: side["scores"].append("")
+        obj["sides"][1]["winner_marker"]=True
+        self.assertFalse(mod.official_compatible(self.source,obj))
+        obj=deepcopy(self.official)
+        for side in obj["sides"]: side["scores"].append("")
+        obj["sides"][0]["scores"][0]="7"
+        self.assertFalse(mod.official_compatible(self.source,obj))
+
     def test_official_native_match_and_complete_set_tape(self):
         self.assertTrue(mod.official_compatible(self.source,self.official))
         self.assertTrue(mod.canonical_compatible(self.source,self.match,self.ids))
