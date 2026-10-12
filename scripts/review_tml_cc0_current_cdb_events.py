@@ -296,7 +296,12 @@ def compare_derived_rates(source_raw, canonical, winner_cid, loser_cid,
                              ("l", loser_cid, "w")):
         v = fields[side]
         opp = fields[other]
-        prefix = "p1" if cid == str(canonical.get("player1_id")) else "p2"
+        if cid == str(canonical.get("player1_id")):
+            prefix = "p1"
+        elif cid == str(canonical.get("player2_id")):
+            prefix = "p2"
+        else:
+            raise ValueError("Derived rate source side is not canonical participant")
         second = v["svpt"] - v["1stIn"]
         if second <= 0:
             counts["rate_review_missing_second_serve_denominator"] += 1
