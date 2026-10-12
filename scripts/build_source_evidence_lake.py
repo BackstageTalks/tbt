@@ -87,9 +87,13 @@ def _records(path, mapping, spec):
         if (not header or len(header) != len(set(header))
                 or any(not isinstance(f, str) or not f for f in header)):
             raise ValueError("Invalid CSV header")
-        for col in mapping.values():
-            if col and col not in header:
-                raise ValueError("Identity column not in source: " + col)
+        # Some legitimate exports omit event_id or match_num. Retain them
+        # explicitly as source-only observations rather than rejecting the file.
+        # Explicit user-provided column names must exist to prevent typos.
+        explicit = spec.get("columns", {})
+        for logical, col in mapping.items():
+            if col and col not in header and logical in explicit:
+                raise ValueError("Specified identity column not in source: " + col)
         for i, raw in enumerate(reader, start=2):
             if i > MAX_ROWS_PER_SOURCE + 1:
                 raise ValueError("Unbounded source row count")
