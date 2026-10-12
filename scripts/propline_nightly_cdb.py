@@ -19,6 +19,8 @@ import shutil
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_snapshot
 from tbt.data.offline_odds import norm_text
+from tbt.services.statistics_gapfill import event_id as api_pro_event_id
+from tbt.services.statistics_enrichment import STATISTICS_SCHEMA_VERSION
 from import_offline_linked_serve_return import _signature
 from offline_exact_cdb_write import write_exact_stats_partition, verify_persisted
 from release_store import ReleaseStore
@@ -79,10 +81,61 @@ def _is_target(match, now):
     )
 
 
+def api_pro_gap_reason(match):
+    """Read standard API PRO collector's *persisted* outcome, without requests.
+
+    An unavailable marker is strong evidence that a real statistics attempt
+    returned no supported match data. A missing event identity means the
+    regular collector had no reliable API event to request. Partial coverage
+    remains useful, but a source conflict is never an automatic import target.
+    """
+    raw = match.provider_payload or {}
+    marker = raw.get("_tbt_statistics")
+    provider_id = api_pro_event_id(match)
+    if isinstance(marker, dict):
+        status = str(marker.get("status") or "")
+        schema = marker.get("schema")
+        marker_id = str(marker.get("event_id") or "")
+        # Only classify positive evidence against a consistent provider event.
+        if schema == STATISTICS_SCHEMA_VERSION and provider_id and marker_id == provider_id:
+            if status == "conflict":
+                return None
+            if status == "unavailable":
+                reason = str(marker.get("reason") or "no_supported_stats")
+                if reason not in {"no_supported_fields", "missing_unambiguous_all_period"}:
+                    reason = "other_unavailable"
+                return "api_pro_unavailable_" + reason
+            if status == "available":
+                return "api_pro_partial_statistics"
+    if provider_id is None:
+        return "api_pro_skipped_no_event_id"
+    return "api_pro_not_yet_attempted"
+
+
+def _priority(reason):
+    if reason is None:
+        return None
+    if reason.startswith("api_pro_unavailable_"):
+        return 0
+    return {
+        "api_pro_skipped_no_event_id": 1,
+        "api_pro_partial_statistics": 2,
+        "api_pro_not_yet_attempted": 3,
+    }[reason]
+
+
 def plan_targets(matches, now, *, max_names=PLAYER_LOG_LIMIT):
-    """High-yield unique full player names; prioritize actual *missing* CDB cells."""
+    """Prioritize API PRO skipped/unavailable CDB cells, then other missing fields.
+
+    Exact ATP/WTA singles and uniquely identified date/pair are still required.
+    All target reasons originate from the regular collector's canonical
+    _tbt_statistics marker; no inferential coverage claim is made.
+    """
     scores = defaultdict(float)
     labels = {}
+    best = {}
+    reasons = defaultdict(Counter)
+    gaps = Counter()
     by_day_pair = defaultdict(set)
     for m in matches:
         if str(m.tour or "").lower() not in {"atp", "wta"} or not m.is_completed:
@@ -97,6 +150,12 @@ def plan_targets(matches, now, *, max_names=PLAYER_LOG_LIMIT):
                tuple(sorted((norm_text(m.player1_name), norm_text(m.player2_name)))))
         if len(by_day_pair[key]) != 1:
             continue
+        reason = api_pro_gap_reason(m)
+        tier = _priority(reason)
+        if tier is None:
+            gaps["api_pro_conflict_quarantined"] += 1
+            continue
+        gaps[reason] += 1
         age = max(0, (now.date() - m.scheduled_at.date()).days)
         recent = 3.0 if age <= 60 else 2.0 if age <= 120 else 1.0
         for side, name in (("p1", m.player1_name), ("p2", m.player2_name)):
@@ -106,9 +165,18 @@ def plan_targets(matches, now, *, max_names=PLAYER_LOG_LIMIT):
             norm = norm_text(name)
             scores[norm] += missing * recent
             labels.setdefault(norm, name)
-    order = sorted(scores, key=lambda name: (-scores[name], name))[:max_names]
-    return [{"player_name": labels[key], "score": round(scores[key], 2)}
-            for key in order]
+            if norm not in best or tier < best[norm]:
+                best[norm] = tier
+            reasons[norm][reason] += missing
+    order = sorted(scores, key=lambda name: (best[name], -scores[name], name))[:max_names]
+    return [
+        {"player_name": labels[key], "score": round(scores[key], 2),
+         "api_pro_priority": best[key],
+         "api_pro_skipped_fields": sum(value for reason, value in reasons[key].items()
+                                       if reason != "api_pro_not_yet_attempted"),
+         "api_pro_gap_reasons": dict(sorted(reasons[key].items()))}
+        for key in order
+    ]
 
 
 def _number(value):
@@ -171,6 +239,12 @@ def stage_additions(matches, reports: Path, now):
                 counters["unmatched" if not candidates else "ambiguous"] += 1
                 continue
             match = candidates[0]
+            # API PRO flagged this match as conflicting with authoritative
+            # canonical statistics. Never backfill it implicitly from a
+            # different player's aggregated PropLine log.
+            if api_pro_gap_reason(match) is None:
+                counters["api_pro_conflict_quarantined"] += 1
+                continue
             mid = str(match.match_id)
             gid = str(game.get("event_id") or "")
             if not gid.isdigit():
@@ -257,7 +331,15 @@ def main():
         _write_report(args.targets, {
             "schema": 1, "source": "canonical_cdb_2026", "partition_sha256": digest,
             "generated_at_utc": now.isoformat(), "targets": targets,
-            "candidate_players": len(targets), "research_only": True,
+            "candidate_players": len(targets),
+            "explicit_api_pro_skipped_players": sum(
+                any(reason.startswith("api_pro_unavailable_")
+                    or reason == "api_pro_skipped_no_event_id"
+                    for reason in row["api_pro_gap_reasons"])
+                for row in targets),
+            "api_pro_target_priority_counts": dict(Counter(
+                str(row["api_pro_priority"]) for row in targets)),
+            "research_only": True,
         })
         return
 

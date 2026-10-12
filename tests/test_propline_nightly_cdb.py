@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import TestCase
 
 from tbt.schemas import MatchRecord
-from propline_nightly_cdb import plan_targets, stage_additions
+from propline_nightly_cdb import plan_targets, stage_additions, api_pro_gap_reason
 
 
 def match(mid="cdb-1", day=10, both=False, pair=("Carlos Alcaraz", "Novak Djokovic"),
@@ -123,3 +123,116 @@ class NightCanonicalGapsTests(TestCase):
             stage, _ = stage_additions([match()], root, today)
         self.assertEqual(set(stage[0]["incoming_stats"]),
                          {"p1_aces", "p1_double_faults", "p2_aces"})
+
+    def test_standard_api_pro_explicit_unavailable_precedes_generic_cdb_gaps(self):
+        now = datetime(2026, 10, 12, tzinfo=timezone.utc)
+        unavailable = match(
+            "failed", pair=("Jannik Sinner", "Carlos Alcaraz"),
+            stats={"p1_aces": None},
+        )
+        unavailable.provider_payload = {
+            "_tbt_event_identity": {
+                "event_id": "778", "home": "11", "away": "22", "status": "finished",
+            },
+            "_tbt_statistics": {
+                "schema": 3, "event_id": "778", "status": "unavailable",
+                "reason": "no_supported_fields",
+                "fetched_at": "2026-10-11T17:00:00Z",
+            },
+        }
+        # Many missing fields, but API PRO did not previously fail for them.
+        generic = [
+            match(f"generic-{i}", day=9-i,
+                  pair=("Ben Shelton", f"Different Opponent {i}"))
+            for i in range(1, 5)
+        ]
+        for i, row in enumerate(generic):
+            # A valid API PRO event ID with no prior attempt is tier 3;
+            # truly missing event IDs must correctly remain tier 1.
+            row.provider_payload = {"_tbt_event_identity": {
+                "event_id": str(901 + i), "home": "11", "away": "22",
+                "status": "finished",
+            }}
+        candidates = plan_targets(generic + [unavailable], now)
+        self.assertEqual(candidates[0]["player_name"], "Carlos Alcaraz")
+        self.assertEqual(candidates[0]["api_pro_priority"], 0)
+        self.assertIn("api_pro_unavailable_no_supported_fields",
+                      candidates[0]["api_pro_gap_reasons"])
+        self.assertTrue(any(row["api_pro_priority"] == 3 for row in candidates))
+
+    def test_no_api_pro_event_id_is_an_explicit_standard_collector_skip(self):
+        now = datetime(2026, 10, 12, tzinfo=timezone.utc)
+        row = match("no-event-id")
+        self.assertEqual(api_pro_gap_reason(row), "api_pro_skipped_no_event_id")
+        targeted = plan_targets([row], now)
+        self.assertTrue(targeted)
+        self.assertEqual(targeted[0]["api_pro_priority"], 1)
+        self.assertGreater(targeted[0]["api_pro_skipped_fields"], 0)
+
+    def test_partial_api_pro_marks_remaining_fields_and_conflict_quarantines(self):
+        now = datetime(2026, 10, 12, tzinfo=timezone.utc)
+        partial = match("partial", day=10)
+        partial.provider_payload = {
+            "_tbt_event_identity": {"event_id": "822", "home": "11",
+                                    "away": "22", "status": "finished"},
+            "_tbt_statistics": {"schema": 3, "event_id": "822",
+                                "status": "available",
+                                "fetched_at": "2026-10-11T18:00:00Z"},
+        }
+        conflict = match("conflict", day=9, pair=("Learner Tien", "Casper Ruud"))
+        conflict.provider_payload = {
+            "_tbt_event_identity": {"event_id": "912", "home": "11",
+                                    "away": "22", "status": "finished"},
+            "_tbt_statistics": {"schema": 3, "event_id": "912",
+                                "status": "conflict",
+                                "reason": "existing_canonical_stat_conflict"},
+        }
+        self.assertEqual(api_pro_gap_reason(partial), "api_pro_partial_statistics")
+        self.assertIsNone(api_pro_gap_reason(conflict))
+        planned = plan_targets([partial, conflict], now)
+        self.assertEqual(planned[0]["api_pro_priority"], 2)
+        self.assertNotIn("Learner Tien", [row["player_name"] for row in planned])
+        self.assertNotIn("Casper Ruud", [row["player_name"] for row in planned])
+
+    def test_stale_or_unlinked_api_pro_markers_are_not_false_unavailable_evidence(self):
+        row = match()
+        row.provider_payload = {
+            "_tbt_event_identity": {"event_id": "190", "home": "11",
+                                    "away": "22", "status": "finished"},
+            "_tbt_statistics": {"schema": 3, "event_id": "different",
+                                "status": "unavailable",
+                                "reason": "no_supported_fields"},
+        }
+        self.assertEqual(api_pro_gap_reason(row), "api_pro_not_yet_attempted")
+        row.provider_payload["_tbt_statistics"]["event_id"] = "190"
+        row.provider_payload["_tbt_statistics"]["schema"] = 2
+        self.assertEqual(api_pro_gap_reason(row), "api_pro_not_yet_attempted")
+
+    def test_unambiguous_all_period_failure_is_selected_by_actual_api_pro_reason(self):
+        row = match()
+        row.provider_payload = {
+            "_tbt_event_identity": {"event_id": "190", "home": "11",
+                                    "away": "22", "status": "finished"},
+            "_tbt_statistics": {"schema": 3, "event_id": "190",
+                                "status": "unavailable",
+                                "reason": "missing_unambiguous_all_period"},
+        }
+        self.assertEqual(api_pro_gap_reason(row),
+                         "api_pro_unavailable_missing_unambiguous_all_period")
+
+    def test_source_found_via_other_player_still_does_not_import_api_pro_conflict(self):
+        row = match()
+        row.provider_payload = {
+            "_tbt_event_identity": {"event_id": "190", "home": "11",
+                                    "away": "22", "status": "finished"},
+            "_tbt_statistics": {"schema": 3, "event_id": "190",
+                                "status": "conflict",
+                                "reason": "existing_canonical_stat_conflict"},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            save(root, [source()])
+            staged, counts = stage_additions(
+                [row], root, datetime(2026, 10, 12, tzinfo=timezone.utc))
+        self.assertFalse(staged)
+        self.assertEqual(counts["api_pro_conflict_quarantined"], 1)
