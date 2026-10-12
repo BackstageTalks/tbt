@@ -35,6 +35,8 @@ jobs:
           set -euo pipefail
           python -m pip install --quiet "pandas>=2,<3" pyarrow google-auth requests
           python -m unittest discover -s tests -p test_blinq_season_cdb_gate.py -v
+          python -m unittest discover -s tests -p test_diagnose_season_source_crosswalk.py -v
+          python -m py_compile scripts/diagnose_season_source_crosswalk.py
           python -m py_compile scripts/blinq_season_cdb_gate.py
           python - <<'PY'
           from pathlib import Path
@@ -115,6 +117,23 @@ jobs:
           print("EXACT_CURRENT_CDB_SEASON_READONLY_PASS")
           print(json.dumps(r["counts"],sort_keys=True))
           PY
+      - name: Independently diagnose cross-provider participant identity namespaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/diagnose_season_source_crosswalk.py --source-dir work/source \
+            --history-dir work/history --year-shas work/years.json \
+            --out work/report/participant-crosswalk-diagnostic.json > work/diagnostic-counts.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("work/report/participant-crosswalk-diagnostic.json").read_text())
+          assert d["rights_verified"] is False and d["write_authorized"] is False
+          assert d["cdb_modified"] is False
+          assert d["source_rows_eligible"]==73830
+          print("PROVIDER_CROSSWALK_AGGREGATE_ONLY_DIAGNOSTIC_PASS")
+          print(json.dumps(d["counts"],sort_keys=True))
+          PY
       - name: Reverify live CDB snapshot did not change
         shell: bash
         run: |
@@ -153,6 +172,10 @@ jobs:
           else
               echo "ZERO_NEW_CELLS_EMPTY_ASSET_NOT_PUBLISHED"
           fi
+          gh release upload "$tag" work/report/participant-crosswalk-diagnostic.json -R "$DATA_REPO" --clobber >/dev/null
+          gh release download "$tag" -R "$DATA_REPO" -D work/readback \
+            -p participant-crosswalk-diagnostic.json --clobber
+          cmp work/report/participant-crosswalk-diagnostic.json work/readback/participant-crosswalk-diagnostic.json
           echo "PRIVATE_AUDIT_REMOTE_SHA_READBACK_PASS"
           echo "Private read-only Release: $tag" >> "$GITHUB_STEP_SUMMARY"
       - name: Purge private CDB and raw CSV copies
