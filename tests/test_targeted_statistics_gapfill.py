@@ -250,6 +250,85 @@ def test_hourly_priority_moves_high_yield_2025_atp_quality_gaps_before_2026(matc
                                historical_high_yield=True)
 
 
+
+def test_hourly_97_percent_queue_gives_undercovered_atp_wta_years_a_budget_share(match_factory):
+    from datetime import date
+    from collections import Counter
+    from download_tennis_history import _statistics_candidates
+
+    rows = []
+    cohorts = (("atp", 2025, 30), ("wta", 2024, 15),
+               ("atp", 2022, 15), ("wta", 2026, 15))
+    for tour, year, count in cohorts:
+        for index in range(count):
+            m = match_factory(f"{tour}-{year}-{index}", "A", "B", "A")
+            m.tour = tour.upper()
+            m.scheduled_at = datetime(year, 6, 1, tzinfo=timezone.utc) + timedelta(days=index)
+            m.stats = {"p1_service_points_won": 0.6}
+            m.provider_payload = {"id": str(1000 + len(rows))}
+            rows.append(m)
+
+    selected, report = _statistics_candidates(
+        rows, date(2022, 1, 1), date(2026, 12, 31),
+        targeted=True, historical_high_yield=True,
+    )
+    assert len(selected) == len(rows)
+    assert len({m.match_id for m in selected}) == len(rows)
+    first_ten = Counter((m.tour.lower(), m.scheduled_at.year) for m in selected[:10])
+    assert first_ten == {
+        ("atp", 2025): 6,
+        ("wta", 2024): 2,
+        ("atp", 2022): 1,
+        ("wta", 2026): 1,
+    }
+    assert report["priority_policy"] == (
+        "6_high_yield_2_undercovered_wta_1_undercovered_atp_1_other"
+    )
+    assert sum(report["first_1000_by_tour_year"].values()) == len(rows)
+
+
+def test_high_yield_queue_prioritizes_independently_verified_player_pair(match_factory):
+    from datetime import date
+    from download_tennis_history import _statistics_candidates
+
+    unverified = match_factory("unverified", "A", "B", "A")
+    verified = match_factory("verified", "A", "B", "A")
+    for m in (unverified, verified):
+        m.tour = "ATP"
+        m.scheduled_at = datetime(2025, 6, 1, tzinfo=timezone.utc)
+        m.stats = {"p1_service_points_won": 0.6}
+        m.provider_payload = {"id": "123"}
+    verified.provider_payload["_tbt_event_identity"] = {
+        "event_id": "123", "home": "A", "away": "B", "status": "finished"
+    }
+    selected, _ = _statistics_candidates(
+        [unverified, verified], date(2025, 1, 1), date(2025, 12, 31),
+        targeted=True, historical_high_yield=True,
+    )
+    assert [m.match_id for m in selected] == ["verified", "unverified"]
+
+
+def test_wta_older_underserved_years_rotate_instead_of_starving(match_factory):
+    from datetime import date
+    from download_tennis_history import _statistics_candidates
+
+    matches = []
+    for year in (2023, 2024, 2025):
+        for n in range(5):
+            m = match_factory(f"wta-{year}-{n}", "A", "B", "A")
+            m.tour = "WTA"
+            m.scheduled_at = datetime(year, 8, 1, tzinfo=timezone.utc) + timedelta(days=n)
+            m.provider_payload = {"id": str(year * 10 + n)}
+            m.stats = {}
+            matches.append(m)
+    ordered, _ = _statistics_candidates(
+        matches, date(2022, 1, 1), date(2025, 12, 31),
+        targeted=True, historical_high_yield=True,
+    )
+    assert [m.scheduled_at.year for m in ordered[:6]] == [2025, 2024, 2023, 2025, 2024, 2023]
+
+
+
 def test_hourly_high_yield_flag_is_not_enabled_for_manual_operator_request():
     from pathlib import Path
     wf=(Path(__file__).resolve().parents[1] / '.github/workflows/data.yml').read_text()

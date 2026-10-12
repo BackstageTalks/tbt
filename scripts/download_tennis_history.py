@@ -255,6 +255,72 @@ def _statistics_segment_yield(segments):
     return result
 
 
+def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
+    """Mix proven high-yield work with underserved ATP/WTA years (no extra API calls).
+
+    Every candidate has already passed canonical event-ID and retry checks.
+    The 6:2:1:1 schedule avoids starving low-coverage cohorts when ATP 2025
+    has hundreds of thousands of gaps. Within each tour/year, a previously
+    verified *two-player* provider identity is attempted first.
+    """
+    from collections import defaultdict, deque
+
+    families = ("high_yield", "wta_gap", "atp_gap", "other")
+    grouped = {name: defaultdict(list) for name in families}
+    for candidate in candidates:
+        match = candidate[-1]
+        tour = str(match.tour or "unknown").lower()
+        year = int(match.scheduled_at.year)
+        bucket = (tour, year)
+        incomplete_rates = not (
+            _quality_ready(match.stats or {}, "p1")
+            and _quality_ready(match.stats or {}, "p2")
+        )
+        coverage = bucket_ready[bucket] / max(1, bucket_total[bucket])
+        if candidate[0] == 0:
+            family = "high_yield"  # ATP 2025, missing serve/return
+        elif (incomplete_rates and 2022 <= year <= 2025 and coverage < 0.55
+              and tour == "wta"):
+            family = "wta_gap"
+        elif (incomplete_rates and 2022 <= year <= 2024 and coverage < 0.55
+              and tour == "atp"):
+            family = "atp_gap"
+        else:
+            family = "other"
+        grouped[family][year].append(candidate)
+
+    pending = {}
+    years = {}
+    for family in families:
+        # Stable within-year ordering: exact verified pair identity; incomplete
+        # whole-match service/return; partial reusable statistics; newer dates.
+        pending[family] = {
+            year: deque(sorted(rows, key=lambda r: (
+                r[4], r[2], r[3], r[5], r[6], r[7]
+            )))
+            for year, rows in grouped[family].items()
+        }
+        # Rotate years so WTA 2022/2023/2024/2025 all receive opportunities.
+        years[family] = deque(sorted(pending[family], reverse=True))
+
+    schedule = ("high_yield",) * 6 + ("wta_gap",) * 2 + ("atp_gap", "other")
+    result = []
+    while len(result) < len(candidates):
+        advanced = False
+        for family in schedule:
+            if not years[family]:
+                continue
+            year = years[family].popleft()
+            queue = pending[family][year]
+            result.append(queue.popleft())
+            advanced = True
+            if queue:
+                years[family].append(year)
+        if not advanced:
+            raise RuntimeError("Targeted gap queue stopped before consuming candidates")
+    return result
+
+
 def _statistics_candidates(matches, start, end, *, targeted=False, historical_high_yield=False):
     """Prioritize verified gaps; optional high-yield historical cohort first."""
     if historical_high_yield and not targeted:
@@ -323,6 +389,13 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
             match,
         ))
     candidates.sort(key=lambda row: row[:-1])
+    if historical_high_yield:
+        candidates = _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready)
+    first_1000 = candidates[:1000]
+    priority_preview = dict(Counter(
+        f"{str(entry[-1].tour or 'unknown').lower()}:{entry[-1].scheduled_at.year}"
+        for entry in first_1000
+    )) if historical_high_yield else {}
     return [row[-1] for row in candidates], {
         "window_completed": len(in_window),
         "already_quality_ready": sum(bucket_ready.values()),
@@ -330,6 +403,8 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
         "targeted": targeted,
         "historical_high_yield": historical_high_yield,
         "preferred_verified_cohort": "atp:2025:serve_return_incomplete" if historical_high_yield else None,
+        "priority_policy": "6_high_yield_2_undercovered_wta_1_undercovered_atp_1_other" if historical_high_yield else None,
+        "first_1000_by_tour_year": priority_preview,
         "skipped": dict(skipped),
         "bucket_coverage": {
             f"{tour}:{year}": {

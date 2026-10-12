@@ -31,9 +31,10 @@ def test_97_percent_shared_budget_and_provider_headroom():
     assert '16: 10500, 17: 12000, 18: 13500}' in HOURLY
 
 
-def test_final_1855_new_day_1911_and_provider_reset_are_bounded():
+def test_delayed_closeout_window_and_new_day_reset_are_bounded():
     assert "18:45" in HOURLY
-    assert "55 <= local.minute <= 57" in HOURLY
+    assert "18 * 60 + 50 <= minute_of_day <= 19 * 60 + 3" in HOURLY
+    assert "local.hour == 19 and not (final_topup or new_day_start)" in HOURLY
     assert "local.hour == 19 and local.minute == 11" in HOURLY
     assert "limit = 3000 if new_day_start else (14550 if final_topup else caps[local.hour])" in HOURLY
     assert "expected_reset_date = local.date() + timedelta(days=1) if new_day_start else local.date()" in HOURLY
@@ -56,3 +57,24 @@ def test_writer_and_two_independent_quota_guards():
     assert '"hourly_autofill": "true"' in HOURLY
     assert 'BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER' in DATA
     assert 'inputs.mode == \'refresh\'' in DATA  # no automatic model promotion
+
+
+def test_closeout_window_at_actual_runner_start_including_delay():
+    from types import SimpleNamespace
+
+    # Execute just the two pure time-policy assignments from the workflow;
+    # no credentials, network, or GitHub dispatch occurs in this test.
+    lines = HOURLY.splitlines()
+    minute_assignment = next(line.strip() for line in lines
+                             if line.strip().startswith("minute_of_day = "))
+    closeout_assignment = next(line.strip() for line in lines
+                               if line.strip().startswith("final_topup = "))
+    for hour, minute, expected in [
+        (18, 45, False), (18, 49, False), (18, 50, True),
+        (18, 55, True), (18, 57, True), (18, 59, True),
+        (19, 0, True), (19, 3, True), (19, 4, False),
+        (19, 8, False), (19, 10, False), (19, 11, False),
+    ]:
+        scope = {"local": SimpleNamespace(hour=hour, minute=minute)}
+        exec(minute_assignment + "\n" + closeout_assignment, {}, scope)
+        assert scope["final_topup"] is expected, (hour, minute)
