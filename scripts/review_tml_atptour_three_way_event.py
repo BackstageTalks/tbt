@@ -24,7 +24,7 @@ from tbt.data.history_safety import sanitize_history_identities
 EXPECTED_ARCHIVES = {
   2022:"b7dbc286b2c6766436e8acacb7f584c850694c857e2458ec9e08a1afc40cee20",
   2023:"bbdb313ea06dd4cef8e4637d3a23c93e17bcb7106adb895e6e9556ed48d50c62",
-  2024:"5bbe9756e3e3d25ae78ff82a6bff7d8ac48edb0944e5c4e7346e97e7a1dcaafab",
+  2024:"5bbe9756b263dc1cfd8ea7b095b24629fa9ace5ec4e7346e97e7a1dcaafab730",
   2025:"28c9c5924e62c6d07566c4f0815f9ceeac2a2454db6d7c7eb09c711323ab0755",
 }
 SET = re.compile(r"^(\d{1,2})-(\d{1,2})(?:\((\d{1,2})\))?$")
