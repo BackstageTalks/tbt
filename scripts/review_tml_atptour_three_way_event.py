@@ -227,8 +227,7 @@ def native_event_recovery_record(source: dict, official: dict, year: int):
         return None
     if match.group(3).startswith("listing-"):
         reason="SYNTHETIC_LISTING_ID_REQUIRES_OFFICIAL_NATIVE_MATCH"
-    elif any(not isinstance(side.get("scores"),list) or len(side["scores"])!=len(tape)
-             for side in sides):
+    elif official_score_cells(sides,len(tape)) is None:
         reason="NATIVE_MATCH_ID_OFFICIAL_SET_COUNT_MISMATCH"
     else:
         reason="NATIVE_MATCH_ID_REQUIRES_FULL_INDEPENDENT_SCORE_REVIEW"
