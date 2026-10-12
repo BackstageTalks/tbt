@@ -1,0 +1,100 @@
+name: BlinQ private TML native fingerprint probe (temporary)
+'on':
+  pull_request:
+    paths: ['.github/workflows/blinq-native-tml-private-probe-temporary.yml']
+permissions:
+  contents: read
+jobs:
+  private-source-lineage-probe:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'BackstageTalks'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      INPUT_SHA: 3cdf94b55a19d065cf01141839585245d85d59597c1fe6a7a5ffff96e121a89a
+      TAR_SHA: 7df7b7bd3fedefdd940d5592caca87e2e209d95715cc8c1e806af7f667aecde1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read only original PRIVATE SHA-pinned source and context
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          mkdir -p "$RUNNER_TEMP/input" "$RUNNER_TEMP/review" "$RUNNER_TEMP/unpack"
+          gh release download blinq-source-evidence-tml-2022-2025-38241050051-1 \
+            -R "$PRIVATE_REPO" -p source-observations.jsonl.gz -D "$RUNNER_TEMP/input" >/dev/null
+          gh release download blinq-cc0-current-event-review-38248515157-1 \
+            -R "$PRIVATE_REPO" -p event-review-evidence.tar.gz -D "$RUNNER_TEMP/input" >/dev/null
+          python - <<'PY'
+          import hashlib,os,tarfile
+          from pathlib import Path
+          inp=Path(os.environ['RUNNER_TEMP'])/'input'
+          obs=inp/'source-observations.jsonl.gz'
+          arc=inp/'event-review-evidence.tar.gz'
+          for path,name in ((obs,'INPUT_SHA'),(arc,'TAR_SHA')):
+              h=hashlib.sha256(path.read_bytes()).hexdigest()
+              assert h==os.environ[name], 'PRIVATE_INPUT_SHA_MISMATCH'
+          out=Path(os.environ['RUNNER_TEMP'])/'unpack'
+          with tarfile.open(arc, 'r:gz') as t:
+              members=t.getmembers()
+              assert len(members)<20, 'PRIVATE_ARCHIVE_UNEXPECTED_LENGTH'
+              for m in members:
+                  assert m.isfile() or m.isdir(), 'PRIVATE_ARCHIVE_UNSAFE_TYPE'
+                  assert (out/m.name).resolve().is_relative_to(out.resolve()),'PRIVATE_ARCHIVE_UNSAFE_PATH'
+                  assert m.size < 8*1024*1024,'PRIVATE_ARCHIVE_UNEXPECTED_ASSET_SIZE'
+              t.extractall(out, filter='data')
+          matches=list(out.rglob('current-cdb-event-review-private.jsonl'))
+          reports=list(out.rglob('report.json'))
+          assert len(matches)==1 and len(reports)==1, 'PRIVATE_REVIEW_MISSING_OR_DUPLICATE'
+          import json
+          report=json.loads(reports[0].read_text())
+          witness=hashlib.sha256(matches[0].read_bytes()).hexdigest()
+          assert witness==report['private_event_review_sha256'], 'PRIVATE_REVIEW_SHA_MISMATCH'
+          with open(os.environ['GITHUB_ENV'],'a') as e:
+              e.write('PRIVATE_CONTEXT_PATH='+str(matches[0])+'\n')
+              e.write('PRIVATE_CONTEXT_SHA='+witness+'\n')
+          print('PRIVATE_ORIGINAL_AND_CONTEXT_SHA_VERIFIED')
+          PY
+      - name: Compare historical native key against PRIVATE context, no CDB reads or writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/audit_tml_native_history_id.py \
+            --source "$RUNNER_TEMP/input/source-observations.jsonl.gz" \
+            --source-sha256 "$INPUT_SHA" --context "$PRIVATE_CONTEXT_PATH" \
+            --context-sha256 "$PRIVATE_CONTEXT_SHA" --out "$RUNNER_TEMP/review"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ['RUNNER_TEMP'])/'review'/'report.json').read_text())
+          assert r['ready_for_cdb_write']==0 and r['cdb_writes']==0
+          assert r['provider_api_requests']==0 and r['model_trained'] is False
+          print('PRIVATE_NATIVE_HISTORY_ID_READONLY_PASS')
+          PY
+      - name: Save private review only and read back exact digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/review"
+          sha256sum report.json native-history-fingerprint-private.jsonl > SHA256SUMS
+          tag="blinq-native-key-probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" -R "$PRIVATE_REPO" --target main \
+            --title 'Private historical native ID fingerprint probe' \
+            --notes 'Private research: deterministic CDB lineage only; never writer evidence' >/dev/null
+          gh release upload "$tag" report.json native-history-fingerprint-private.jsonl SHA256SUMS \
+            -R "$PRIVATE_REPO" >/dev/null
+          mkdir -p "$RUNNER_TEMP/readback"
+          gh release download "$tag" -R "$PRIVATE_REPO" \
+            -p report.json -p native-history-fingerprint-private.jsonl -p SHA256SUMS \
+            -D "$RUNNER_TEMP/readback" >/dev/null
+          (cd "$RUNNER_TEMP/readback" && sha256sum -c SHA256SUMS >/dev/null)
+          cmp report.json "$RUNNER_TEMP/readback/report.json"
+          cmp native-history-fingerprint-private.jsonl "$RUNNER_TEMP/readback/native-history-fingerprint-private.jsonl"
+          echo 'PRIVATE_NATIVE_HISTORY_ID_RELEASE_READBACK_PASS'
