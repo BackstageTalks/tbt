@@ -1,10 +1,5 @@
 name: BlinQ ATP WTA 2022-2025 current CDB read-only gate
 'on':
-  pull_request:
-    paths:
-      - 'scripts/blinq_season_cdb_gate.py'
-      - 'tests/test_blinq_season_cdb_gate.py'
-      - '.github/workflows/blinq-season-2022-2025-cdb-audit.yml'
   workflow_dispatch: {}
 
 permissions:
@@ -12,7 +7,7 @@ permissions:
 
 jobs:
   source-to-current-null:
-    if: ${{ github.repository == 'BackstageTalks/tbt' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    if: ${{ github.repository == 'BackstageTalks/tbt' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
