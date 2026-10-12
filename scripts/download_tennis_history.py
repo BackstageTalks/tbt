@@ -255,8 +255,10 @@ def _statistics_segment_yield(segments):
     return result
 
 
-def _statistics_candidates(matches, start, end, *, targeted=False):
-    """Prioritize real serve/return gaps and skip rows already quality-ready."""
+def _statistics_candidates(matches, start, end, *, targeted=False, historical_high_yield=False):
+    """Prioritize verified gaps; optional high-yield historical cohort first."""
+    if historical_high_yield and not targeted:
+        raise ValueError("High-yield priority requires identity-checked targeted statistics")
     in_window = [
         match for match in matches
         if match.is_completed and start <= match.scheduled_at.date() <= end
@@ -304,7 +306,13 @@ def _statistics_candidates(matches, start, end, *, targeted=False):
                 == {match.player1_id, match.player2_id}
             and identity.get("home") != identity.get("away")
         ) if targeted else False
+        # Opt-in hourly only: ATP 2025 yielded 13,829 new fields per 1,000
+        # calls in run 38229127240 versus ~6,750 for 2026 in 38259786928.
+        # Prefer only missing serve/return quality, not ace-only ready rows.
+        high_yield = bool(historical_high_yield and key == ("atp", 2025)
+                          and not (p1_ready and p2_ready))
         candidates.append((
+            0 if high_yield else 1,
             -match.scheduled_at.year if targeted else coverage,
             int(p1_ready and p2_ready) if targeted else 0,
             partial_priority,
@@ -320,6 +328,8 @@ def _statistics_candidates(matches, start, end, *, targeted=False):
         "already_quality_ready": sum(bucket_ready.values()),
         "candidate_rows": len(candidates),
         "targeted": targeted,
+        "historical_high_yield": historical_high_yield,
+        "preferred_verified_cohort": "atp:2025:serve_return_incomplete" if historical_high_yield else None,
         "skipped": dict(skipped),
         "bucket_coverage": {
             f"{tour}:{year}": {
@@ -348,6 +358,11 @@ def main():
     parser.add_argument("--release-tag", default="tbt-data-v1")
     parser.add_argument("--publish", action="store_true", help="Download/publish via gh; use the supplied serialized workflow")
     args = parser.parse_args()
+    high_yield_setting = os.environ.get("BLINQ_AUTOFILL_HIGH_YIELD", "false").lower()
+    if high_yield_setting not in ("true", "false"):
+        parser.error("BLINQ_AUTOFILL_HIGH_YIELD must be true or false")
+    if high_yield_setting == "true" and (args.mode != "statistics" or not args.targeted_statistics):
+        parser.error("High-yield priority requires targeted statistics mode")
     try:
         start, end = history_window(args.start, args.end, args.lookback_days)
     except ValueError as exc:
@@ -492,7 +507,8 @@ def main():
                                          targeted=args.targeted_statistics)
             changed = set()
             statistics_candidates, statistics_plan = _statistics_candidates(
-                matches, start, end, targeted=args.targeted_statistics)
+                matches, start, end, targeted=args.targeted_statistics,
+                historical_high_yield=high_yield_setting == "true")
             write_json(directory / "statistics_gap_plan.json", statistics_plan)
             report["statistics_candidate_rows"] = int(statistics_plan["candidate_rows"])
             report["statistics_already_quality_ready"] = int(statistics_plan["already_quality_ready"])
