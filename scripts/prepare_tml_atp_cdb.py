@@ -7,6 +7,7 @@ Verified Wikidata/ATP sidecar must supply *both* exact ATP Tour player IDs.
 """
 from __future__ import annotations
 import argparse, csv, hashlib, io, json, re
+from datetime import datetime
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -39,7 +40,7 @@ def select_source(path: Path, year: int):
         raise ValueError("Incomplete or duplicate TML CSV headers")
     good = []
     counts = Counter()
-    native_keys = set()
+    native_keys = defaultdict(list)
     for row in reader:
         counts["source_rows"] += 1
         if None in row or any(v is None for v in row.values()):
@@ -47,16 +48,26 @@ def select_source(path: Path, year: int):
             continue
         date = row["tourney_date"]
         ids = (row["winner_id"], row["loser_id"])
-        if (not date[:4].isdigit() or int(date[:4]) not in (year, year-1)
+        if (not re.fullmatch(r"\d{8}", date)
+                or int(date[:4]) not in (year, year-1)
                 or not row["tourney_id"] or not row["match_num"].isdecimal()
                 or any(not ID.fullmatch(v or "") for v in ids) or ids[0] == ids[1]):
             counts["quarantine_missing_original_identity"] += 1
             continue
-        key = (row["tourney_id"],row["match_num"])
-        if key in native_keys:
-            counts["quarantine_duplicate_tournament_match_key"] += 1
+        try:
+            datetime.strptime(date, "%Y%m%d")
+        except ValueError:
+            counts["quarantine_missing_original_identity"] += 1
             continue
-        native_keys.add(key)
+        key = (row["tourney_id"],row["match_num"])
+        native_keys[key].append(row)
+    # A duplicated native event key cannot elect its first row as truth.
+    # Quarantine *every* occurrence, even when one copy has invalid stats.
+    for group in native_keys.values():
+        if len(group) != 1:
+            counts["quarantine_duplicate_tournament_match_key"] += len(group)
+            continue
+        row = group[0]
         try:
             values = {k:int(row[k]) for k in STATS if row[k].isascii() and row[k].isdecimal()}
         except (ValueError, TypeError):
@@ -70,7 +81,8 @@ def select_source(path: Path, year: int):
             if (n("svpt") <= 0 or n("1stIn") > n("svpt")
                     or n("1stWon") > n("1stIn")
                     or n("2ndWon") > n("svpt")-n("1stIn")
-                    or n("ace") > n("svpt") or n("df") > n("svpt")
+                    or n("ace") > n("1stWon") + n("2ndWon")
+                    or n("df") > n("svpt") - n("1stIn")
                     or n("bpSaved") > n("bpFaced")):
                 unsafe = True
         if unsafe:
