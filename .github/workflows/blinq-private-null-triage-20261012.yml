@@ -69,3 +69,35 @@ jobs:
           print('SAFE_NULL_GATE_LOG_PRESENT='+str(bool(log)))
           print('TRUSTED_PRIVATE_REPORT_SHA_READBACK_PASS')
           PY
+
+  trusted-private-null-regression:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'BackstageTalks'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      PRIVATE_SHA: e9f2491964698bba75b9239485ec2b9060c0462b
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          ref: fix/current-null-multisource-provenance-20261012
+          fetch-depth: 1
+          path: private
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify SHA and run private NULL gate regressions without source disclosure
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C private rev-parse HEAD)" = "$PRIVATE_SHA"
+          if python -m unittest discover -s private/tests -p test_drive_cdb_current_null_gate.py > /tmp/blinq-null-gate-tests.log 2>&1 &&
+             python -m py_compile private/scripts/drive_cdb_current_null_gate.py; then
+            echo PRIVATE_MULTI_SOURCE_NULL_GATE_REGRESSIONS_PASS
+            echo NO_CANONICAL_CDB_WRITES
+          else
+            echo PRIVATE_MULTI_SOURCE_NULL_GATE_TESTS_FAILED
+            exit 1
+          fi
