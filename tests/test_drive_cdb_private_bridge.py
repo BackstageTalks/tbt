@@ -231,6 +231,25 @@ class PrivateBridgeTest(unittest.TestCase):
         self.assertIn("if: github.event_name == 'workflow_dispatch'", workflow)
         self.assertNotIn('schedule:', workflow)
 
+    def test_rapid_external_dispatch_is_budget_bounded_and_null_errors_redacted(self):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    '.github/workflows/blinq-private-drive-cdb-audit-bridge.yml').read_text()
+        self.assertIn('  scan_budget:', workflow)
+        self.assertIn('age < 5400', workflow)
+        self.assertIn('DRIVE_AUDIT_COOLDOWN_SKIP_90_MINUTES', workflow)
+        self.assertIn("needs.scan_budget.outputs.proceed == 'true'", workflow)
+        self.assertIn('needs: [safety-tests, scan_budget]', workflow)
+        self.assertIn('force_scan:', workflow)
+        self.assertIn('DRIVE_AUDIT_EXPLICIT_OVERRIDE', workflow)
+        self.assertIn('DRIVE_AUDIT_BUDGET_BLOCKED_UNVERIFIED_CHECKPOINT', workflow)
+        self.assertIn('PRIVATE_CURRENT_NULL_RECHECK_BLOCKED_', workflow)
+        self.assertIn('UNKNOWN_PRIVATE', workflow)
+        self.assertNotIn('print(text)', workflow)
+        self.assertNotIn('schedule:', workflow)
+        # The scanner retains its fail-closed provenance and zero-write path.
+        self.assertIn('PRIVATE_CURRENT_NULL_RECHECK_PASS_NO_WRITES', workflow)
+        self.assertIn('--prioritize-historical-stats', workflow)
+
     def test_private_drive_checkout_ref_remains_immutable(self):
         workflow = (Path(__file__).resolve().parents[1] /
                     '.github/workflows/blinq-private-drive-cdb-audit-bridge.yml').read_text()
