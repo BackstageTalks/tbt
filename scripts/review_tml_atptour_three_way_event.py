@@ -257,8 +257,13 @@ def compare(source_dir:Path, archive_dir:Path, history_dir:Path,
                     if tape is None:
                         report["same_official_pair_round_bad_source_score"]+=1
                         continue
-                    if any(not isinstance(x.get("scores"),list) or len(x["scores"])!=len(tape) for x in sides):
+                    p1set=sides[0].get("scores") if isinstance(sides[0].get("scores"),list) else []
+                    p2set=sides[1].get("scores") if isinstance(sides[1].get("scores"),list) else []
+                    if len(p1set)!=len(tape) or len(p2set)!=len(tape):
                         report["same_official_pair_round_set_count_mismatch"]+=1
+                        report[f"official_score_shape_src{len(tape)}_atp{len(p1set)}_{len(p2set)}"]+=1
+                        if candidate.get("match_stats_urls"):
+                            report["score_mismatch_native_has_match_stats_link"]+=1
                         continue
                     report["same_official_pair_round_matching_set_count"]+=1
                     parsed=[[SCORE.fullmatch(str(cell)) for cell in side["scores"]] for side in sides]
