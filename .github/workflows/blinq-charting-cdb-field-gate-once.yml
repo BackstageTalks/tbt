@@ -1,0 +1,85 @@
+name: BlinQ charting per-match CDB NULL and identity gate
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/blinq-charting-cdb-field-gate-once.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: blinq-charting-cdb-field-gate-readonly
+  cancel-in-progress: false
+jobs:
+  source-field-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: main
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: private-data
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify repo and install read-only parquet dependency
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/$PRIVATE_REPO --jq .private)" = true
+          python -m pip install -q pyarrow
+          python -m py_compile app/scripts/charting_cdb_field_readiness.py
+      - name: Download proven source links and checksum-verified CURRENT CDB
+        run: |
+          set -euo pipefail
+          root=.cache/blinq-charting-field-gate
+          mkdir -p "$root/crosswalk"
+          gh release download blinq-charting-cdb-crosswalk-38302479837-1 \
+            -R "$PRIVATE_REPO" -D "$root/crosswalk" \
+            -p crosswalk_report.json -p crosswalk_candidates.jsonl.gz -p SHA256SUMS
+          (cd "$root/crosswalk" && sha256sum -c SHA256SUMS --ignore-missing)
+          (cd app && PYTHONPATH=api:scripts python scripts/download_stable_cdb.py \
+            --repository "$PRIVATE_REPO" --tag tbt-data-v1 \
+            --out ../.cache/blinq-charting-field-gate/history \
+            --report ../.cache/blinq-charting-field-gate/snapshot.json)
+      - name: Stage exact field gaps ONLY for independent review, never write CDB
+        run: |
+          set -euo pipefail
+          python app/scripts/charting_cdb_field_readiness.py \
+            --root .cache/blinq-charting-field-gate \
+            --out .cache/blinq-charting-field-gate/audit
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('.cache/blinq-charting-field-gate/audit/report.json')
+          r=json.loads(p.read_text())
+          assert r['candidate_links']==1153 and r['written_production_cells']==0
+          assert r['approved_production_cells']==0
+          print('STAGE_READONLY_COUNTS',r['counts'],flush=True)
+          PY
+      - name: Retain immutable PRIVATE audit and independently verify readback
+        run: |
+          set -euo pipefail
+          root=.cache/blinq-charting-field-gate
+          tag="blinq-charting-field-gate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          (cd "$root/audit" && sha256sum report.json review.jsonl > SHA256SUMS && sha256sum -c SHA256SUMS)
+          gh release create "$tag" "$root/audit/report.json" \
+            "$root/audit/review.jsonl" "$root/audit/SHA256SUMS" \
+            -R "$PRIVATE_REPO" --title 'BlinQ charting per-match NULL-only field readiness' \
+            --notes 'No canonical mutations; independent event and player witness still required.'
+          mkdir -p "$root/readback"
+          gh release download "$tag" -R "$PRIVATE_REPO" -D "$root/readback" \
+            -p report.json -p review.jsonl -p SHA256SUMS
+          (cd "$root/readback" && sha256sum -c SHA256SUMS)
+          cmp "$root/audit/report.json" "$root/readback/report.json"
+          echo "PRIVATE_READBACK_OK $tag WRITES=0"
