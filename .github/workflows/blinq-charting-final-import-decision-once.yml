@@ -1,6 +1,8 @@
 name: BlinQ final Charting CDB safe-import disposition
 
 # One-time, read-only finalization: intentionally no canonical release writer.
+# Revalidate against latest CDB after 2025 partition changed under a separate
+# legitimate canonical writer. Both pre/post asset digests must stay identical.
 on:
   push:
     branches: [main]
