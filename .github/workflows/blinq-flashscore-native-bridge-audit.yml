@@ -1,0 +1,118 @@
+name: BlinQ Flashscore native event bridge (read-only one-shot)
+'on':
+  pull_request:
+    paths:
+      - .github/workflows/blinq-flashscore-native-bridge-audit.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-flashscore-native-bridge-audit.yml
+permissions:
+  contents: read
+concurrency:
+  group: blinq-flashscore-id-bridge-${{ github.run_id }}
+  cancel-in-progress: false
+jobs:
+  source-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      CDB_REPO: BackstageTalks/tbt-data
+      SOURCE_DRIVE_ID: 1MQJhldmHcVgiDXyK234oqagnXGjdO9ah
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Read-only PR compilation and scope check
+        run: |
+          python - <<'PY'
+          import re
+          assert re.fullmatch(r'[A-Za-z0-9_-]{12,128}', '1MQJhldmHcVgiDXyK234oqagnXGjdO9ah')
+          print('FLASH_NATIVE_BRIDGE_PR_CONTRACT_PASS')
+          PY
+      - name: Private identity-only crosswalk audit
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test -n "$DRIVE_READER_JSON"
+          test "$(gh repo view "$CDB_REPO" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p work
+          gh release download tbt-data-v1 -R "$CDB_REPO" \
+            -p blinq-flashscore-event-index-2026.jsonl.gz -D work
+          python -m pip install --quiet google-auth requests
+          python - <<'PY'
+          import gzip,hashlib,io,json,os,re,zipfile
+          from collections import Counter
+          from pathlib import Path
+          from google.oauth2.service_account import Credentials
+          from google.auth.transport.requests import AuthorizedSession
+          p=Path('work/blinq-flashscore-event-index-2026.jsonl.gz')
+          if hashlib.sha256(p.read_bytes()).hexdigest()!='328f9c36c0f4021c745ca7119ea904a4ae7cadb66cee17cc63f2ca6f5774a952':
+              raise SystemExit('Private Flashscore index digest mismatch')
+          cred=Credentials.from_service_account_info(json.loads(os.environ["DRIVE_READER_JSON"]),
+               scopes=["https://www.googleapis.com/auth/drive.readonly"])
+          r=AuthorizedSession(cred).get("https://www.googleapis.com/drive/v3/files/"+
+                 os.environ['SOURCE_DRIVE_ID'],params={'alt':'media'},timeout=90)
+          r.raise_for_status()
+          payload=r.content
+          if hashlib.sha256(payload).hexdigest()!='ae52fb03322a0265a181c07fdb948f9fe2cab8fb3b15de462380c4bba0517612':
+              raise SystemExit('Source Drive ZIP changed')
+          with zipfile.ZipFile(io.BytesIO(payload)) as z:
+              src=z.read('cdb_oriented_source_candidates.jsonl.gz')
+          if hashlib.sha256(src).hexdigest()!='e66e6de58d70801fe2dca7b049f75f442237516a7e5042947b892d63daa1dae8':
+              raise SystemExit('Source candidate stage digest changed')
+          original=[json.loads(l) for l in gzip.decompress(src).splitlines() if l.strip()]
+          keys={(x['source_tour'],str(x['source_match_id'])) for x in original}
+          by_id={str(x['source_match_id']) for x in original}
+          stats=Counter(); names=Counter(); example_keys=Counter(); direct=set(); many=set()
+          potential=[]
+          def candidates(row):
+              vals=[]
+              def walk(obj, path=''):
+                  if isinstance(obj,dict):
+                      for k,v in obj.items():
+                          if len(path.split('.'))>=4:continue
+                          clean=k.lower().replace('_','')
+                          next_path=(path+'.'+k).strip('.')
+                          if isinstance(v,str) and re.fullmatch(r'[A-Za-z0-9]{8}',v) and (
+                              clean in ('id','matchid','eventid','flashscoreid','sourceeventid','flashscorematchid')
+                              or ('match' in clean and 'id' in clean)):
+                              vals.append((next_path,v))
+                          elif isinstance(v,(dict,list)):walk(v,next_path)
+                  elif isinstance(obj,list):
+                      for x in obj[:5]:walk(x,path)
+              walk(row)
+              return vals
+          with gzip.open(p,'rt',encoding='utf-8') as f:
+              for line in f:
+                  if not line.strip():continue
+                  item=json.loads(line);stats['index_rows']+=1
+                  if not isinstance(item,dict):continue
+                  for k in item:example_keys[k]+=1
+                  for path,val in candidates(item):
+                      names[path]+=1
+                      if val in by_id:
+                          stats['matched_id_occurrences']+=1
+                          many.add(val)
+                          if path.split('.')[-1].lower().replace('_','') in ('matchid','eventid','flashscorematchid','sourceeventid'):
+                              direct.add(val)
+                              if len(potential)<10:potential.append(path)
+                  if item.get('canonical_match_id') or item.get('canonical_provider_event_id'):
+                      stats['index_rows_with_explicit_canonical_bridge']+=1
+          print('FLASH_NATIVE_BRIDGE_REPORT',json.dumps({
+              'source_rows':len(original),'source_distinct_events':len(keys),
+              'index_rows':stats['index_rows'],
+              'index_field_names':sorted(example_keys)[:50],
+              'observed_8char_id_field_paths':dict(names.most_common(20)),
+              'any_matching_event_identifiers':len(many),
+              'matching_explicit_match_event_identifiers':len(direct),
+              'bridge_explicit_canonical_fields':stats['index_rows_with_explicit_canonical_bridge'],
+              'sample_matching_field_paths':sorted(set(potential)),
+              'production_mutated':False,'model_changed':False
+          },sort_keys=True))
+          PY
