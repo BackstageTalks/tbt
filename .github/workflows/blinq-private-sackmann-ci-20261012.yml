@@ -24,8 +24,8 @@ jobs:
         with:
           repository: BackstageTalks/tbt-data
           token: ${{ secrets.TBT_DATA_GH_TOKEN }}
-          ref: main
-          fetch-depth: 64
+          ref: fix/sackmann-postmatch-research-safe-20261012
+          fetch-depth: 1
           path: private
           persist-credentials: false
       - name: Verify exact private commit
