@@ -80,7 +80,17 @@ def canonical_rows(history_dir: Path):
         entry = files.get(name)
         expected = entry.get("sha256") if isinstance(entry, dict) else None
         path = history_dir / name
-        sha_file(path, expected)
+        # Private current CDB Parquet can exceed the small research input cap.
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 512*1024*1024:
+            raise ValueError("Missing or oversized canonical history partition")
+        if not SHA.fullmatch(str(expected)):
+            raise ValueError("Missing signed canonical year partition SHA")
+        h = hashlib.sha256()
+        with path.open("rb") as file:
+            for chunk in iter(lambda: file.read(1024 * 1024), b""):
+                h.update(chunk)
+        if h.hexdigest() != expected:
+            raise ValueError("Canonical bundle partition SHA mismatch")
         frame = pd.read_parquet(path, columns=FIELDS)
         digests[name] = expected
         for record in frame.to_dict("records"):
@@ -130,7 +140,8 @@ def valid_candidate_edges(proposals, legacy, cc0_links, matches):
                     "official_atp_identifier_unique_registry_full_name_and_nonconflicting_cdb"):
             sid, cid = str(row.get("atp_tour_id") or ""), str(
                 row.get("canonical_player_id") or "")
-            if ATP.fullmatch(sid) and cid:
+            cname = norm(row.get("canonical_name"))
+            if ATP.fullmatch(sid) and cid and cname and observed.get(cid) == {cname}:
                 original[sid.upper()].add(cid)
     counts = Counter()
     accepted = {}
@@ -149,7 +160,7 @@ def valid_candidate_edges(proposals, legacy, cc0_links, matches):
         qid = str(p.get("wikidata_qid") or "")
         cid = str(p.get("candidate_canonical_player_id") or "")
         matches_cc0 = cc0.get(code, set())
-        if matches_cc0 != {(qid, cid, next(iter({e[2] for e in matches_cc0}), ""))}:
+        if len(matches_cc0) != 1 or next(iter(matches_cc0))[:2] != (qid, cid):
             counts["blocked_ambiguous_cc0"] += 1
             continue
         cname = next(iter(matches_cc0))[2]
@@ -300,7 +311,7 @@ def run(gaps: Path, gaps_sha: str, legacy: Path, legacy_sha: str,
         "candidate_event_rows": len(candidates),
         "private_event_review_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
         "native_event_identity_verified": False,
-        "score_corrobated": False,
+        "score_corroborated": False,
         "ready_for_cdb_write": 0,
         "canonical_mutated": False,
         "provider_api_requests": 0, "model_trained": False,
