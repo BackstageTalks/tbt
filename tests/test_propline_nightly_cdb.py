@@ -212,3 +212,20 @@ class NightCanonicalGapsTests(TestCase):
         }
         self.assertEqual(api_pro_gap_reason(row),
                          "api_pro_unavailable_missing_unambiguous_all_period")
+
+    def test_source_found_via_other_player_still_does_not_import_api_pro_conflict(self):
+        row = match()
+        row.provider_payload = {
+            "_tbt_event_identity": {"event_id": "190", "home": "11",
+                                    "away": "22", "status": "finished"},
+            "_tbt_statistics": {"schema": 3, "event_id": "190",
+                                "status": "conflict",
+                                "reason": "existing_canonical_stat_conflict"},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            save(root, [source()])
+            staged, counts = stage_additions(
+                [row], root, datetime(2026, 10, 12, tzinfo=timezone.utc))
+        self.assertFalse(staged)
+        self.assertEqual(counts["api_pro_conflict_quarantined"], 1)
