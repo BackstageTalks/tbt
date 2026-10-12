@@ -88,6 +88,22 @@ class RejectedSourcesTests(unittest.TestCase):
         self.assertEqual(rows[-1]["status"],"QUARANTINE_CSV_COLUMN_SHAPE")
         self.assertEqual(rows[-1]["source_values_raw"],["Wrong","Number","Of","Fields"])
 
+    def test_two_column_indexed_xlsx_with_blank_index_header(self):
+        from xml.sax.saxutils import escape
+        wb='<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets></workbook>'
+        rel='<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'
+        rows=[]
+        for idx,val in enumerate(self.xlsx_lines,start=1):
+            index="" if idx==1 else str(idx-2)
+            rows.append(f'<row r="{idx}"><c r="A{idx}" t="inlineStr"><is><t>{index}</t></is></c><c r="B{idx}" t="inlineStr"><is><t>{escape(val)}</t></is></c></row>')
+        sheet='<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'+''.join(rows)+'</sheetData></worksheet>'
+        with ZipFile(self.wta,"w") as z:
+            z.writestr("xl/workbook.xml",wb)
+            z.writestr("xl/_rels/workbook.xml.rels",rel)
+            z.writestr("xl/worksheets/sheet1.xml",sheet)
+        r=a.build(self.root,self.out)
+        self.assertEqual(r["by_tour"]["wta"]["rows"],3)
+
     def test_shared_strings_xlsx_supported(self):
         self.xlsx_fixture(self.xlsx_lines,style="shared")
         r=a.build(self.root,self.out)
