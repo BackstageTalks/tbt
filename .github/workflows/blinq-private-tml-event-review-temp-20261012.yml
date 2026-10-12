@@ -102,16 +102,23 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/output"
+          # GitHub Releases reject zero-byte asset uploads. Keep empty event
+          # candidate lists intact inside a non-empty immutable archive.
           sha256sum report.json current-cdb-event-review-private.jsonl > SHA256SUMS
+          tar -czf event-review-evidence.tar.gz report.json current-cdb-event-review-private.jsonl SHA256SUMS
+          sha256sum event-review-evidence.tar.gz > ARCHIVE_SHA256SUMS
           tag="blinq-cc0-current-event-review-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           gh release create "$tag" -R "$DATA_REPO" --target main \
             --title 'BlinQ private current CDB event candidate audit' \
             --notes 'Read-only metadata review, not event ID proof or canonical import.' >/dev/null
-          gh release upload "$tag" report.json current-cdb-event-review-private.jsonl SHA256SUMS -R "$DATA_REPO" >/dev/null
-          mkdir -p "$RUNNER_TEMP/readback"
-          gh release download "$tag" -R "$DATA_REPO" -p report.json \
-            -p current-cdb-event-review-private.jsonl -p SHA256SUMS -D "$RUNNER_TEMP/readback" >/dev/null
-          (cd "$RUNNER_TEMP/readback" && sha256sum -c SHA256SUMS >/dev/null)
-          cmp report.json "$RUNNER_TEMP/readback/report.json"
-          cmp current-cdb-event-review-private.jsonl "$RUNNER_TEMP/readback/current-cdb-event-review-private.jsonl"
+          gh release upload "$tag" event-review-evidence.tar.gz ARCHIVE_SHA256SUMS -R "$DATA_REPO" >/dev/null
+          mkdir -p "$RUNNER_TEMP/readback/extracted"
+          gh release download "$tag" -R "$DATA_REPO" \
+            -p event-review-evidence.tar.gz -p ARCHIVE_SHA256SUMS -D "$RUNNER_TEMP/readback" >/dev/null
+          (cd "$RUNNER_TEMP/readback" && sha256sum -c ARCHIVE_SHA256SUMS >/dev/null)
+          tar -xzf "$RUNNER_TEMP/readback/event-review-evidence.tar.gz" \
+            -C "$RUNNER_TEMP/readback/extracted" --no-same-owner
+          (cd "$RUNNER_TEMP/readback/extracted" && sha256sum -c SHA256SUMS >/dev/null)
+          cmp report.json "$RUNNER_TEMP/readback/extracted/report.json"
+          cmp current-cdb-event-review-private.jsonl "$RUNNER_TEMP/readback/extracted/current-cdb-event-review-private.jsonl"
           echo PRIVATE_CURRENT_CDB_EVENT_REVIEW_SHA_READBACK_PASS
