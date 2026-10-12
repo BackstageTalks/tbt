@@ -250,6 +250,22 @@ class PrivateBridgeTest(unittest.TestCase):
         self.assertIn('PRIVATE_CURRENT_NULL_RECHECK_PASS_NO_WRITES', workflow)
         self.assertIn('--prioritize-historical-stats', workflow)
 
+    def test_current_null_gate_can_be_upgraded_without_rewriting_scanner_cache(self):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    '.github/workflows/blinq-private-drive-cdb-audit-bridge.yml').read_text()
+        self.assertIn('SOURCE_REF: 10806400e536195890600c4256303697912ab95f', workflow)
+        self.assertIn('NULL_GATE_REF: ef6b83d4b11157f41621e109a774fdc40a4095fe', workflow)
+        self.assertIn('NULL_GATE_BLOB: f85f56d365c40f219ae56f87345faab60b33654a', workflow)
+        self.assertIn('git hash-object work/sha-pinned-reviewer/drive_cdb_current_null_gate.py', workflow)
+        self.assertIn('PINNED_CURRENT_NULL_REVIEWER_VERIFIED', workflow)
+        self.assertIn('if python work/sha-pinned-reviewer/drive_cdb_current_null_gate.py', workflow)
+        self.assertNotIn('if python private/scripts/drive_cdb_current_null_gate.py', workflow)
+        # Preserve snapshot pins, cache migration, and no-write accounting.
+        self.assertIn('VERIFIED_PRIVATE_SQLITE_CACHE_INTEGRITY', workflow)
+        self.assertIn('--prioritize-historical-stats --folder-id', workflow)
+        self.assertIn('PRIVATE_CURRENT_NULL_RECHECK_PASS_NO_WRITES', workflow)
+        self.assertNotIn('schedule:', workflow)
+
     def test_private_drive_checkout_ref_remains_immutable(self):
         workflow = (Path(__file__).resolve().parents[1] /
                     '.github/workflows/blinq-private-drive-cdb-audit-bridge.yml').read_text()

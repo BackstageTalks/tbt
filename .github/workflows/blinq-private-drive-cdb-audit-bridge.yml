@@ -114,6 +114,9 @@ jobs:
       # Immutable modern reader, explicitly validated against legacy checkpoint parser.
       SOURCE_REF: 10806400e536195890600c4256303697912ab95f
       LEGACY_SOURCE_REF: cf96b6085f93696eb7c319e9109a2040a04cfc4e
+      # Independent immutable gate revision, not the checkpoint-bound scanner.
+      NULL_GATE_REF: ef6b83d4b11157f41621e109a774fdc40a4095fe
+      NULL_GATE_BLOB: f85f56d365c40f219ae56f87345faab60b33654a
       PYTHONPATH: api:scripts:private/scripts
     steps:
       - name: Preflight trust and private-only credentials
@@ -263,6 +266,21 @@ jobs:
           python scripts/drive_cdb_private_bridge.py validate --report-dir work/report --folder-id "$DRIVE_ROOT"
           echo READ_ONLY_AUDIT_VALIDATED_NO_CANONICAL_WRITES
 
+      - name: Verify independently pinned read-only NULL reviewer
+        if: steps.audit.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/sha-pinned-reviewer
+          gh api "repos/$PRIVATE_REPO/contents/scripts/drive_cdb_current_null_gate.py?ref=$NULL_GATE_REF" --jq .content | base64 --decode > work/sha-pinned-reviewer/drive_cdb_current_null_gate.py
+          test -s work/sha-pinned-reviewer/drive_cdb_current_null_gate.py
+          actual="$(git hash-object work/sha-pinned-reviewer/drive_cdb_current_null_gate.py)"
+          test "$actual" = "$NULL_GATE_BLOB" || {
+            echo 'PRIVATE_NULL_REVIEWER_SHA_MISMATCH'
+            exit 1
+          }
+          echo 'PINNED_CURRENT_NULL_REVIEWER_VERIFIED'
+
       - name: Recheck exact current CDB NULLs and source provenance privately
         id: current_null_review
         if: steps.audit.outcome == 'success'
@@ -272,7 +290,7 @@ jobs:
           mkdir -p work/private-current-null-review
           # Never pass unverified license/identity files. Research-only
           # source links remain blocked. Source and CDB are SHA-bound.
-          if python private/scripts/drive_cdb_current_null_gate.py \
+          if python work/sha-pinned-reviewer/drive_cdb_current_null_gate.py \
             --source-audit work/report \
             --history-dir work/history \
             --out work/private-current-null-review >work/private-current-null.log 2>&1; then
