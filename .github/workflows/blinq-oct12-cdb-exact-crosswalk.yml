@@ -103,7 +103,37 @@ jobs:
                   state=('UNMATCHED_CANONICAL_MATCH' if not pair and not provider else 'AMBIGUOUS_OR_MISSING_PROVIDER_ID')
                   summary[state]+=1
                   rows.append({'event_id':eid,'state':state,'canonical_pair_candidates':len(pair),'canonical_provider_candidates':len(provider)})
-          output={'schema':1,'status':'CDB_EXACT_CROSSWALK_AUDIT','canonical_partition_sha256':digest,'canonical_2026_day_matches':day_count,'source_feed_sha256':stage['feed_sha256'],'source_feed_fixtures':len(current),'production_tracked_reference':26,'original_stage_candidates':len(stage['candidates']),'summary':dict(summary),'rows':rows,'canonical_mutated':False}
+          player_name_to_ids=defaultdict(set)
+          provider_id_to_canonical_name=defaultdict(set)
+          for m in before:
+              for canonical_player_id,player_name in ((m.player1_id,m.player1_name),(m.player2_id,m.player2_name)):
+                  key=(str(m.tour).lower(),norm_text(player_name))
+                  if key[1]: player_name_to_ids[key].add(str(canonical_player_id))
+                  if str(canonical_player_id).isdigit():
+                      provider_id_to_canonical_name[(str(m.tour).lower(),str(canonical_player_id))].add(norm_text(player_name))
+          new_match_identity=[]
+          for evidence in stage['candidates']:
+              eid=evidence['provider_event_id'];row=current.get(eid)
+              if not row:continue
+              names=[str((row.get(k) or {}).get('name') or '') for k in ('player1','player2')]
+              ids=[str((row.get(k) or {}).get('id') or '') for k in ('player1','player2')]
+              sides=[]
+              for name,pid in zip(names,ids):
+                  mapped=sorted(player_name_to_ids.get((evidence['tour'],norm_text(name)),set()))
+                  direct_identity=(pid in mapped)
+                  sides.append({'provider_id':pid,'source_name':name,'canonical_ids_by_exact_name':mapped[:5],
+                                'canonical_identity_unique':len(mapped)==1,'provider_id_direct_match':direct_identity})
+              new_match_identity.append({'event_id':eid,'sides':sides,'tour':evidence['tour'],
+                                         'tournament':str(row.get('tournament') or '')[:110],
+                                         'source_scheduled':str(row.get('scheduled_at') or '')[:60],
+                                         'source_surface':str(row.get('surface') or '')[:50]})
+          day_examples=[{'match_id':str(m.match_id),'tour':m.tour,
+                         'name_pair':[m.player1_name,m.player2_name],
+                         'player_ids':[str(m.player1_id),str(m.player2_id)],
+                         'winner_id':str(m.winner_id or ''),'status':m.status,
+                         'source_event':str((m.provider_payload or {}).get('_tbt_provider_event_id') or '')}
+                        for m in before if m.scheduled_at.date().isoformat()==day][:9]
+          output={'schema':1,'status':'CDB_EXACT_CROSSWALK_AUDIT','canonical_partition_sha256':digest,'canonical_2026_day_matches':day_count,'source_feed_sha256':stage['feed_sha256'],'source_feed_fixtures':len(current),'production_tracked_reference':26,'original_stage_candidates':len(stage['candidates']),'summary':dict(summary),'rows':rows,'canonical_mutated':False,'new_match_identity':new_match_identity,'canonical_day_examples':day_examples}
           Path('blinq-oct12-canonical-crosswalk.json').write_text(json.dumps(output,ensure_ascii=False,indent=2)+'\n')
           print('OCT12_CANONICAL_CROSSWALK '+json.dumps(output,sort_keys=True))
           PY
