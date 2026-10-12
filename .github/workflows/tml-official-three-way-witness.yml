@@ -128,6 +128,7 @@ jobs:
           current.mkdir(exist_ok=True)
           ReleaseStore(os.environ['DATA_REPO'],'tbt-data-v1',current)._download_asset('_tbt_bundle_manifest.json')
           PY
+          root=.cache/tbt/tml-threeway
           python scripts/quarantine_tml_recovery_on_cdb_race.py \
             --original-manifest "$root/history/_tbt_bundle_manifest.json" \
             --fresh-manifest "$root/fresh-current-manifest/_tbt_bundle_manifest.json" \
