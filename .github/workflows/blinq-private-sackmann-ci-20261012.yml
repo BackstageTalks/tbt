@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      PRIVATE_SHA: f5fbad9a99672bac3b530186811bef69737dab7d
+      PRIVATE_SHA: 5d0277d7b73049d2bb50a5b27a3a3a26f7eecf8d
       PYTHONPATH: private/scripts:api
     steps:
       - uses: actions/checkout@v4
