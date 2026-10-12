@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "kind": "dry-run",
-  "requested_utc": "2026-10-08T17:49:00Z",
-  "purpose": "Deploy verified budget GET endpoint and run no-API-budget-cost smoke test",
+  "requested_utc": "2026-10-12T19:45:00Z",
+  "purpose": "Verify LIVE shared RapidAPI budget and active CDB writers using existing zero-billable-call dry-run guard",
   "safe_mode": true,
-  "deploy_reason": "Hourly API quota guard endpoint not deployed; previous smoke HTTP 404"
+  "deploy_reason": "User requested fresh access and quota verification; do not dispatch provider API or canonical writer"
 }
