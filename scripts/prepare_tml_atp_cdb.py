@@ -19,6 +19,28 @@ YEAR_BLOBS = {
   2024: "cf513429259b4a15e84e2021206895d9bd4ff772",
   2025: "1aff9b077cf4de7806b665ec0c6d8b4032a040f3",
 }
+
+# SHA-pinned, opt-in original source-only QA for years outside the guarded 2022–25
+# writer contract. Defaults and writer-supported YEAR_BLOBS stay unchanged.
+OPTIONAL_YEAR_BLOBS = {
+    2007: "22f26df7dbf9b0e217a0cff5b541e95d7ce36161",
+    2008: "90db8f4ca43b60a97e0d4806d10f0edcfa8e665c",
+    2009: "623abf68f9b5c2f37d27c6589e6a5b5fff7a97d7",
+    2010: "869e16018241c2bf8e6b68a316157d0eb4ef39d1",
+    2011: "d877cbda486c752fd2ffd241430b056fd00ea351",
+    2012: "49a4c4d93c4ccb1255bf1065a4f6409eec672bb9",
+    2013: "a025418f2edaff54d273c209985352134e28ff61",
+    2014: "ea3226ebe6b78aad0cc8c698b445d2cc11181b0b",
+    2015: "97b09b910a207855ea71fc475e6d4d4b901fd814",
+    2016: "e911c48f099081a3682099cb627c1b420a5b6842",
+    2017: "951e68d3ec4a3f5f4fdb276b3824f746a8c1633f",
+    2018: "01b9806660796d3169a8335f238077c94d4ce58f",
+    2019: "b6d793cb413efe0fc060a3d85a1c75fa4e9162c6",
+    2020: "50fa843751a4394d314e2959d62aeac92588182b",
+    2021: "2bd4eaf4eb28a09b42ab4ecd5830a8f3ad068faa",
+    2026: "8b2c58c563002e7baef091654ec8bf2abb6b81e6",
+}
+
 STATS = tuple(f"{p}_{k}" for p in ("w","l") for k in
  ("ace","df","svpt","1stIn","1stWon","2ndWon","SvGms","bpSaved","bpFaced"))
 ID = re.compile(r"[A-Za-z0-9]+\Z")
@@ -62,7 +84,8 @@ def complete_winner_score(score: object, best_of: object) -> bool:
 
 def select_source(path: Path, year: int):
     data = path.read_bytes()
-    if blob_sha1(data) != YEAR_BLOBS[year]:
+    expected_blob = YEAR_BLOBS.get(year) or OPTIONAL_YEAR_BLOBS.get(year)
+    if expected_blob is None or blob_sha1(data) != expected_blob:
         raise ValueError(f"TML original Git blob SHA mismatch: {year}")
     stream = io.StringIO(data.decode("utf-8-sig"), newline="")
     reader = csv.DictReader(stream)
@@ -199,13 +222,52 @@ def prepare(folder: Path, crosswalk_file: Path, crosswalk_sha: str, out: Path):
     (out/"report.json").write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
     return report
 
+
+def audit_all_pinned_sources(folder: Path, out: Path, years=None):
+    """Source-only inspection. Never produces an import-ready CDB stage."""
+    allowed = {**OPTIONAL_YEAR_BLOBS, **YEAR_BLOBS}
+    selected = sorted(allowed if years is None else years)
+    if not set(selected).issubset(allowed):
+        raise ValueError("Unpinned TML year not permitted")
+    report = {"schema": 1, "status": "PINNED_SOURCE_ONLY_NO_CDB_ACCESS",
+              "source_repo": ORIGIN, "source_git_commit": SOURCE_COMMIT,
+              "source_families": 1, "per_year": {}, "cdb_imported": 0,
+              "current_cdb_null_delta": None, "independent_cdb_readback": "NOT_RUN",
+              "canonical_mutated": False, "model_trained": False,
+              "provider_api_requests": 0}
+    for year in selected:
+        path = folder / f"{year}.csv"
+        if year == 2026 and not path.exists():
+            # User uploads may rename an exact original without altering bytes.
+            path = folder / "2026(1).csv"
+        usable, header, counts, sha = select_source(path, year)
+        report["per_year"][str(year)] = {
+            "file": path.name, "raw_sha256": sha,
+            "git_blob_sha1": allowed[year], "raw_rows": counts.get("source_rows", 0),
+            "source_native_valid": len(usable),
+            "reasons": {k: v for k, v in sorted(counts.items())
+                        if k.startswith("quarantine_")},
+            "canonical_match_links": None, "new_verified_cdb_null_cells": None}
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "pinned-source-only-audit.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return report
+
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--source-dir",required=True,type=Path)
-    p.add_argument("--verified-crosswalk",required=True,type=Path)
-    p.add_argument("--crosswalk-sha256",required=True)
+    p.add_argument("--verified-crosswalk",type=Path)
+    p.add_argument("--crosswalk-sha256")
     p.add_argument("--out",required=True,type=Path)
+    p.add_argument("--source-only-audit",action="store_true",
+                   help="Read only all SHA-pinned 2007–2026 originals; no CDB or ID linking")
     a=p.parse_args()
+    if a.source_only_audit:
+        r=audit_all_pinned_sources(a.source_dir,a.out)
+        print(json.dumps({"status":r["status"],"per_year":r["per_year"]},sort_keys=True))
+        return
+    if a.verified_crosswalk is None or a.crosswalk_sha256 is None:
+        p.error("Protected default mode requires both --verified-crosswalk and --crosswalk-sha256")
     r=prepare(a.source_dir,a.verified_crosswalk,a.crosswalk_sha256,a.out)
     print(json.dumps({"status":r["status"],"per_year":r["per_year"],"crosswalk_quality":r["crosswalk_quality"]},sort_keys=True))
 if __name__=="__main__":main()
