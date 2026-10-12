@@ -45,6 +45,10 @@ jobs:
           gh release download tbt-data-v1 -R "$CDB_REPO" \
             -p blinq-flashscore-event-index-2026.jsonl.gz -D work
           python -m pip install --quiet google-auth requests
+          gh release download tbt-data-v1 -R "$CDB_REPO" \
+            -p history-2024.parquet -p history-2025.parquet -p history-2026.parquet \
+            -p history_manifest.json -p _tbt_bundle_manifest.json -D work
+          python -m pip install --quiet pandas pyarrow
           python - <<'PY'
           import gzip,hashlib,io,json,os,re,zipfile
           from collections import Counter
@@ -164,6 +168,102 @@ jobs:
                   src_names={compact_text(srcrow['source_winner_name']),compact_text(srcrow['source_loser_name'])}
                   index_names={compact_text(item.get('player1_source')),compact_text(item.get('player2_source'))}
                   if src_names==index_names:exact_proof['index_source_sides_equal_names']+=1
+          # Physical current canonical NULL check: SHA-pinned all three years,
+          # no fuzzy joins, no write. A linked Flashscore event is not by itself
+          # a proof that source/canonical players or result are identical.
+          import pandas as pd
+          bundle=json.loads(Path('work/_tbt_bundle_manifest.json').read_text())['files']
+          hm=json.loads(Path('work/history_manifest.json').read_text())['years']
+          canids={}
+          for yr in (2024,2025,2026):
+              name=f'history-{yr}.parquet'; file=Path('work')/name
+              digest=hashlib.sha256(file.read_bytes()).hexdigest()
+              if digest!=bundle[name]['sha256'] or digest!=hm[str(yr)]['sha256']:
+                  raise SystemExit('Canonical physical digest mismatch')
+              cols=['match_id','tour','scheduled_at','player1_id','player1_name','player2_id','player2_name',
+                    'winner_id','status','surface','tournament','best_of','stats_json','provider_context_json']
+              df=pd.read_parquet(file,columns=cols)
+              for values in df.itertuples(index=False,name=None):
+                  row=dict(zip(cols,values))
+                  if str(row['match_id']) in canids:
+                      raise SystemExit('Duplicate canonical ID across partitions')
+                  canids[str(row['match_id'])]=row
+          audit=Counter(); gap=Counter()
+          with gzip.open(p,'rt',encoding='utf-8') as stream:
+              for line in stream:
+                  if not line.strip():continue
+                  item=json.loads(line)
+                  if not isinstance(item,dict):continue
+                  srcrow=sources.get(str(item.get('event_id') or ''))
+                  if not srcrow or not item.get('canonical_match_id'):continue
+                  if str(item.get('tour') or '').upper()!=srcrow['source_tour']:continue
+                  if clock(item.get('start_utc'))!=clock(srcrow['scheduled_at_utc']):continue
+                  audit['native_event_exact_clock_canonical_id']+=1
+                  link=item.get('link') or {}
+                  if not isinstance(link,dict) or link.get('accepted') is not True or link.get('orientation') not in ('direct','swapped'):
+                      audit['link_unverified']+=1;continue
+                  m=canids.get(str(item['canonical_match_id']))
+                  if m is None:audit['canonical_id_missing']+=1;continue
+                  if str(m['tour']).upper()!=srcrow['source_tour'] or clock(m['scheduled_at'])!=clock(srcrow['scheduled_at_utc']):
+                      audit['canonical_tour_or_exact_utc_mismatch']+=1;continue
+                  audit['three_way_source_index_cdb_clock']+=1
+                  if str(m['status']).lower() not in ('finished','completed','ended'):
+                      audit['canonical_nonfinished']+=1;continue
+                  left,right=compact_text(item.get('player1_source')),compact_text(item.get('player2_source'))
+                  sw,sl=compact_text(srcrow['source_winner_name']),compact_text(srcrow['source_loser_name'])
+                  if left==sw and right==sl: winner_source_first=True
+                  elif left==sl and right==sw:winner_source_first=False
+                  else:audit['source_pair_names_not_same']+=1;continue
+                  # Index link orientation is only a proposal; independent
+                  # match stats below must corroborate both player sides.
+                  winner_p1=winner_source_first if link['orientation']=='direct' else not winner_source_first
+                  expected_winner=str(m['player1_id'] if winner_p1 else m['player2_id'])
+                  if str(m['winner_id'])!=expected_winner:
+                      audit['canonical_winner_conflict']+=1;continue
+                  audit['full_proposed_winner_orientation']+=1
+                  try:
+                      existing=json.loads(m['stats_json'] or '{}')
+                      if not isinstance(existing,dict):raise ValueError()
+                  except (TypeError,ValueError):
+                      audit['malformed_canonical_stats']+=1;continue
+                  observed={}
+                  for label,fields in (('winner',srcrow['winner_stats']),('loser',srcrow['loser_stats'])):
+                      pref='p1' if (label=='winner')==winner_p1 else 'p2'
+                      observed.update({pref+'_'+k:v for k,v in fields.items()})
+                  four=('p1_aces','p2_aces','p1_double_faults','p2_double_faults')
+                  if not all(key in observed and isinstance(existing.get(key),(int,float))
+                             and not isinstance(existing.get(key),bool)
+                             and float(existing[key])==float(observed[key]) for key in four):
+                      audit['missing_or_disagreeing_four_independent_counts']+=1;continue
+                  audit['four_original_count_cells_corroborated']+=1
+                  vals=[]
+                  for text_score in str(srcrow.get('source_score') or '').split():
+                      match=re.fullmatch(r'(\d+)-(\d+)',text_score)
+                      if match:vals.append((int(match[1]),int(match[2])))
+                  has_score=False
+                  if len(vals)>=2:
+                      has_score=all(
+                          all(isinstance(existing.get('p'+str(side)+'_set'+str(n)+'_games'),(int,float))
+                              and float(existing['p'+str(side)+'_set'+str(n)+'_games'])==float(games)
+                              for side,games in ((1,(a if winner_p1 else b)),(2,(b if winner_p1 else a))))
+                          for n,(a,b) in enumerate(vals[:2],1))
+                  if has_score:audit['independent_first_two_sets_score_verified']+=1
+                  mismatches=[k for k,v in observed.items() if existing.get(k) is not None and
+                              (not isinstance(existing[k],(int,float)) or abs(float(existing[k])-float(v))>0.000001)]
+                  if mismatches:
+                      audit['other_existing_stats_conflicts']+=1;continue
+                  missing=[k for k in observed if existing.get(k) is None]
+                  if missing:
+                      audit['four_count_context_positive_null_delta']+=1
+                      gap.update(missing)
+                      if has_score:audit['four_count_and_score_positive_null_delta_matches']+=1
+                  else:audit['already_complete_source_stats']+=1
+          print('FLASH_NATIVE_CDB_STRICT_GAP',json.dumps({
+             'counts':dict(audit),
+             'missing_cell_counts_context_candidates_only':dict(gap),
+             'write_authorized':False,'canonical_written':False,
+             'requires_independent_player_identity':True
+          },sort_keys=True))
           print('FLASH_NATIVE_EXACT75_PROOF',json.dumps({
              'counts':dict(exact_proof),
              'link_score_types':dict(score_types),
