@@ -17,7 +17,7 @@
   "model_train": false,
   "provider_api_requests": 0,
   "purpose": "Prove only uniquely corroborated source-to-official-and-canonical event identities using original ATP player codes, official native match IDs, all set games and precise source tournament ID, then persist private SHA-bound review; never write stats without fresh NULL+CAS proof",
-  "attempt": 4,
+  "attempt": 5,
   "sha_pin_fix_pr": 669,
   "last_failure": "2024 official archive pin mismatch caught prior to canonical mutation",
   "latest_reviewer_fix_pr": 670,
@@ -25,5 +25,7 @@
   "source_rejection_diagnostic_pr": 672,
   "source_rejection_diagnostics": "native ATP match ID, player pair, round, set count, official set score cells, complete games and tiebreak",
   "write_allowed": false,
-  "production_cdb_write": false
+  "production_cdb_write": false,
+  "native_atp_score_shape_pr": 675,
+  "why": "Identify whether 16 native ATP match-ID source disagreements are incomplete official scoreboard extraction; metadata is read-only and public counts aggregated only."
 }
