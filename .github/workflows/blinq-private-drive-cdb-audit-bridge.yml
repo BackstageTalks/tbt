@@ -83,26 +83,25 @@ jobs:
         with:
           repository: BackstageTalks/tbt-data
           token: ${{ secrets.TBT_DATA_GH_TOKEN }}
-          # Fetch from an advertised branch first. actions/checkout cannot
-          # reliably resolve an arbitrary private commit SHA with depth=1.
-          ref: main
-          fetch-depth: 64
+          # Pin the exact audited private commit, not an arbitrary depth-64
+          # window of a fast-moving main branch. An old pin may leave that
+          # window within hours and falsely block every authorized audit.
+          ref: ${{ env.SOURCE_REF }}
+          fetch-depth: 1
           path: private
           persist-credentials: false
 
-      - name: Verify and select immutable private source commit
+      - name: Verify immutable private source commit
         shell: bash
         run: |
           set -euo pipefail
-          test "$SOURCE_REF" != ""
-          test "$(git -C private rev-parse --is-shallow-repository)" = true
-          git -C private cat-file -e "${SOURCE_REF}^{commit}" || {
-            echo 'BLOCKED: pinned private source is outside checkout history'
+          test -n "$SOURCE_REF"
+          actual="$(git -C private rev-parse --verify HEAD)"
+          test "$actual" = "$SOURCE_REF" || {
+            echo 'BLOCKED: private source revision mismatch'
             exit 1
           }
-          git -C private checkout --detach "$SOURCE_REF" >/dev/null
-          test "$(git -C private rev-parse HEAD)" = "$SOURCE_REF"
-          echo 'PINNED_PRIVATE_SOURCE_SHA_VERIFIED'
+          echo PINNED_PRIVATE_SOURCE_SHA_VERIFIED
 
       - uses: actions/setup-python@v5
         with:
