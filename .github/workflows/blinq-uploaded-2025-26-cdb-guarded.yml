@@ -13,7 +13,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: blinq-uploaded-2025-26-\${{ github.run_id }}
+  group: blinq-uploaded-2025-26-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -34,8 +34,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 85
     env:
-      GH_TOKEN: \${{ secrets.TBT_DATA_GH_TOKEN }}
-      DRIVE_READER_JSON: \${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
       PYTHONPATH: api:scripts:work/source
       CDB_REPO: BackstageTalks/tbt-data
       CDB_TAG: tbt-data-v1
@@ -120,7 +120,7 @@ jobs:
               value=hashlib.sha256(p.read_bytes()).hexdigest()
               if assets[name].get("digest") != "sha256:"+value:
                   raise SystemExit("Canonical remote release digest mismatch")
-              if name!=" _tbt_bundle_manifest.json" and name!="_tbt_bundle_manifest.json":
+              if name!="_tbt_bundle_manifest.json":
                   if bundle.get(name,{}).get("sha256") != value:
                       raise SystemExit("Canonical bundle manifest mismatch")
               if name.endswith(".parquet"):
@@ -188,9 +188,9 @@ jobs:
              work/before/history_manifest.json work/before/_tbt_bundle_manifest.json work/backup/
           cp work/backup/* work/after/
           (cd work/backup && sha256sum history* _tbt_bundle_manifest.json > SHA256SUMS && sha256sum -c SHA256SUMS)
-          tag="blinq-uploaded-2025-26-prewrite-\${{ github.run_id }}-\${{ github.run_attempt }}"
+          tag="blinq-uploaded-2025-26-prewrite-${{ github.run_id }}-${{ github.run_attempt }}"
           gh release create "$tag" work/backup/* -R "$CDB_REPO" \
-            --title "Pinned prewrite uploaded-source backup \${{ github.run_id }}" \
+            --title "Pinned prewrite uploaded-source backup ${{ github.run_id }}" \
             --notes "Original canonical partitions and both manifests; preserve for recovery."
           gh release download "$tag" -R "$CDB_REPO" -D work/backup-readback
           (cd work/backup-readback && sha256sum -c SHA256SUMS)
