@@ -83,6 +83,15 @@ class Tests(unittest.TestCase):
         self.store([context()], [witness(), witness(provider_event_id="event-99")])
         self.assertEqual(self.run_gate()["counts"]["ambiguous_event_witness"], 1)
 
+    def test_same_provider_event_reused_across_canonical_matches_is_ambiguous(self):
+        first = witness()
+        second = witness(
+            source_native_event_key=["tournament-match", "2024-7", "15"],
+            canonical_match_id="m2")
+        self.store([context()], [first, second])
+        self.assertEqual(self.run_gate()["counts"]["ambiguous_provider_event_reuse"], 1)
+        self.assertEqual(self.output(), [])
+
     def test_without_score_corroboration_blocks(self):
         self.store([context(score_attested=False)], [witness()])
         self.assertEqual(self.run_gate()["counts"]["no_independent_full_score_corroboration"], 1)
