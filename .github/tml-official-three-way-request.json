@@ -17,7 +17,7 @@
   "model_train": false,
   "provider_api_requests": 0,
   "purpose": "Prove only uniquely corroborated source-to-official-and-canonical event identities using original ATP player codes, official native match IDs, all set games and precise source tournament ID, then persist private SHA-bound review; never write stats without fresh NULL+CAS proof",
-  "attempt": 9,
+  "attempt": 10,
   "sha_pin_fix_pr": 669,
   "last_failure": "2024 official archive pin mismatch caught prior to canonical mutation",
   "latest_reviewer_fix_pr": 670,
@@ -37,5 +37,6 @@
   "official_score_tail_evidence_pr": 689,
   "exact_canonical_score_funnel_read_only": true,
   "current_canonical_metadata_vs_set_tape_readonly_pr": 690,
-  "research_only_identification": true
+  "research_only_identification": true,
+  "first_exact_rejection_funnel_pr": 691
 }
