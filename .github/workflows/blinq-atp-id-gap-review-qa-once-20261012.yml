@@ -62,3 +62,22 @@ jobs:
           assert r['event_identity_attested'] is False
           print('PINNED_606_ATP_GAP_CC0_REVIEW_NO_WRITE_PASS')
           PY
+          # Keep all player-level material PRIVATE and independently verify the
+          # immutable Release before declaring a saved review checkpoint.
+          cd "$RUNNER_TEMP/output"
+          test -s atp-gap-cc0-review-private.jsonl
+          sha256sum report.json atp-gap-cc0-review-private.jsonl > SHA256SUMS
+          tag="blinq-atp-gap-cc0-review-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" -R BackstageTalks/tbt-data \
+            --target main --title 'Private ATP CC0 player ID review' \
+            --notes '186-style identity proposals only, not canonical match proof; no CDB writes.' >/dev/null
+          gh release upload "$tag" report.json atp-gap-cc0-review-private.jsonl SHA256SUMS \
+            -R BackstageTalks/tbt-data >/dev/null
+          mkdir -p "$RUNNER_TEMP/readback"
+          gh release download "$tag" -R BackstageTalks/tbt-data \
+            -p report.json -p atp-gap-cc0-review-private.jsonl -p SHA256SUMS \
+            -D "$RUNNER_TEMP/readback" >/dev/null
+          (cd "$RUNNER_TEMP/readback" && sha256sum -c SHA256SUMS >/dev/null)
+          cmp report.json "$RUNNER_TEMP/readback/report.json"
+          cmp atp-gap-cc0-review-private.jsonl "$RUNNER_TEMP/readback/atp-gap-cc0-review-private.jsonl"
+          echo 'PRIVATE_ATP_CC0_CANDIDATE_RELEASE_INDEPENDENT_SHA_READBACK_PASS'
