@@ -129,7 +129,23 @@ jobs:
             --notes "Read-only original ATP TXT and WTA XLSX, research-only normalized rows and quarantine; no CDB write, model or sports API requests."
           mkdir -p work/remote-verification
           gh release download "$tag" -R "$PRIVATE_REPO" -D work/remote-verification
-          (cd work/remote-verification && sha256sum -c SHA256SUMS)
+          # GitHub Release asset names replace spaces with dots. The original
+          # source hash manifest deliberately preserves the REAL Drive name.
+          # Normalize exactly this observed one-to-one filename on the fresh,
+          # private readback copy; never loosen SHA-256 or accept two variants.
+          (
+            cd work/remote-verification
+            original='WTA Tennis 2007 - 2026 Daily update.xlsx'
+            gh_name='WTA.Tennis.2007.-.2026.Daily.update.xlsx'
+            if [[ -f "$gh_name" && ! -e "$original" ]]; then
+              mv -- "$gh_name" "$original"
+            elif [[ -e "$gh_name" && -e "$original" ]]; then
+              echo 'BLOCKED: duplicate original and GitHub-normalized WTA assets' >&2
+              exit 1
+            fi
+            test -f "$original"
+            sha256sum -c SHA256SUMS
+          )
           python - <<'PY'
           import json,hashlib
           from pathlib import Path
