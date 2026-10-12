@@ -3,6 +3,7 @@ name: BlinQ uploaded 2025-26 canonical exact import (one-shot fail-closed)
   pull_request:
     paths:
       - scripts/gated_uploaded_2025_2026_writer.py
+      - scripts/link_uploaded_flashscore_verified.py
       - .github/workflows/blinq-uploaded-2025-26-cdb-guarded.yml
   push:
     branches: [main]
@@ -26,7 +27,9 @@ jobs:
         with:
           python-version: '3.11'
       - name: Compile isolated additive writer (safe on PR, no CDB access)
-        run: python -m compileall -q scripts/gated_uploaded_2025_2026_writer.py
+        run: |
+          python -m compileall -q scripts/gated_uploaded_2025_2026_writer.py scripts/link_uploaded_flashscore_verified.py
+          python -m unittest discover -s tests -p test_link_uploaded_flashscore_verified.py -v
 
   exact-link-and-protected-write:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -95,7 +98,7 @@ jobs:
         run: |
           set -euo pipefail
           (cd work/source && python -m unittest -q test_auto_exact_cdb_link.py)
-          python -m compileall -q work/source/auto_exact_cdb_link.py scripts/gated_uploaded_2025_2026_writer.py
+          python -m compileall -q work/source/auto_exact_cdb_link.py scripts/gated_uploaded_2025_2026_writer.py scripts/link_uploaded_flashscore_verified.py
 
       - name: Fetch current 2024-26 canonical Parquet and complete bundle manifests
         run: |
@@ -104,6 +107,8 @@ jobs:
           gh release download "$CDB_TAG" -R "$CDB_REPO" \
             -p history-2024.parquet -p history-2025.parquet -p history-2026.parquet \
             -p history_manifest.json -p _tbt_bundle_manifest.json -D work/before --clobber
+          gh release download "$CDB_TAG" -R "$CDB_REPO" \
+            -p blinq-flashscore-event-index-2026.jsonl.gz -D work/before --clobber
           gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" > work/before/release-metadata.json
           python - <<'PY'
           from pathlib import Path
@@ -132,31 +137,36 @@ jobs:
           print("CANONICAL_CURRENT_SHA_VERIFIED",len(names),"years")
           PY
 
-      - name: Strict exact event/UTC/player/winner/score/NULL-only linker
+      - name: Verify Flashscore event/clock, canonical players, four existing stats and full score
         id: exact
         shell: bash
         run: |
           set -euo pipefail
-          python work/source/auto_exact_cdb_link.py \
+          mkdir -p work/link
+          python scripts/link_uploaded_flashscore_verified.py \
             --source-stage work/source/cdb_oriented_source_candidates.jsonl.gz \
-            --canonical work/before/history-2024.parquet work/before/history-2025.parquet work/before/history-2026.parquet \
-            --canonical-sha-manifest work/before/expected-sha.json \
+            --flashscore-index work/before/blinq-flashscore-event-index-2026.jsonl.gz \
+            --history-dir work/before \
             --out work/link > work/link/stdout-private.log
           python - <<'PY'
           import json,os
           r=json.load(open("work/link/direct_link_report.json"))
-          n=r["stage_rows"]
-          c=r["counts"]
+          n=int(r["stage_rows"]);c=r["counts"]
           if r["writer_executed"] is not False or r["canonical_writes"] != 0:
-              raise SystemExit("Linker was not read-only")
-          if n != c.get("verified_event_matches",0):
-              raise SystemExit("Linker staged count inconsistency")
+              raise SystemExit("Linker performed an unauthorized production write")
+          if n > c.get("verified_four_counts_and_two_sets",0):
+              raise SystemExit("Unattested staged match exceeds independently proven matches")
+          if sum(len(x.get("incoming_stats",{})) for x in
+                 (json.loads(line) for line in open("work/link/cdb_import_stage_EXACT_DIRECT_ONLY.jsonl")
+                  if line.strip())) != c.get("staged_new_canonical_null_cells",0):
+              raise SystemExit("Source stage count and NULL delta disagree")
           with open(os.environ["GITHUB_OUTPUT"],"a") as f:
               f.write("additions="+("true" if n else "false")+"\n")
-          print("CURRENT_CDB_EXACT_LINK",json.dumps({"source_rows":c.get("source_rows",0),
-              "staged_matches":n,"new_null_cells":c.get("new_null_cells",0),
-              "unmatched_event_ids":c.get("no_direct_event",0),
-              "missing_independent_score":c.get("no_independent_winner_score",0)}))
+          print("CURRENT_CDB_FLASH_EXACT_LINK",json.dumps({
+              "source_rows":c.get("source_rows",0),
+              "staged_matches":n,"new_null_cells":c.get("staged_new_canonical_null_cells",0),
+              "four_count_score_verified":c.get("verified_four_counts_and_two_sets",0),
+              "rejected_source_rows":c.get("index_absent_or_ambiguous",0)}))
           PY
 
       - name: Acquire global CDB writer ONLY for independently attested positive delta
