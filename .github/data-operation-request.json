@@ -2,8 +2,8 @@
   "schema": 1,
   "mode": "statistics",
   "promote": false,
-  "source": "explicit_user_maximum_verified_CDB_enrichment_2026_10_12",
-  "purpose": "Continue strictly verified positive-yield canonical gapfill after remote SHA readback of 3736 fields from the preceding 1000-call run; use no fuzzy TML mapping; global single-writer and shared API reserve; model stays unchanged.",
+  "source": "explicit_user_continue_safe_CDB_maximum_20261012",
+  "purpose": "New bounded 3000-request follow-up to verified provider-native event stats. Shared 15k daily API budget and 450 reserve, global lock and CAS, immutable backup, NULL-only, independent persisted SHA+cell readback; never fuzzy or TML context-only match mapping; no model promotion.",
   "requested_on": "2026-10-12",
   "max_requests": 3000,
   "start": "2022-01-01",
@@ -12,7 +12,7 @@
   "historical_match_winner_odds_as_model_feature": false,
   "model_training": false,
   "pre_reset_provider_header_override": false,
-  "verified_prior_successful_run": 38305018968,
-  "verified_prior_new_CDB_values": 3736,
+  "verified_prior_successful_run": 38307045073,
+  "verified_prior_new_CDB_values": 25499,
   "source_only_tml_write_authorized": false
 }
