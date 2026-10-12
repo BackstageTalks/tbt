@@ -9,6 +9,7 @@ name: BlinQ uploaded 2025-26 canonical exact import (one-shot fail-closed)
     branches: [main]
     paths:
       - .github/workflows/blinq-uploaded-2025-26-cdb-guarded.yml
+      - scripts/link_uploaded_flashscore_verified.py
 
 permissions:
   contents: read
