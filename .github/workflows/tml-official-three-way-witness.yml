@@ -37,6 +37,7 @@ jobs:
           set -euo pipefail
           python -m pip install -q -r api/requirements-train.txt
           python -m unittest discover -s tests -p 'test_review_tml_atptour_three_way_event.py' -v
+          python -m unittest discover -s tests -p 'test_quarantine_tml_recovery_on_cdb_race.py' -v
           python -m compileall -q scripts/review_tml_atptour_three_way_event.py
   original-provider-triple-witness:
     needs: source-contract-tests
@@ -120,16 +121,18 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-          import hashlib,os
+          import os
           from release_store import ReleaseStore
           root=Path('.cache/tbt/tml-threeway')
-          original=(root/'history/_tbt_bundle_manifest.json').read_bytes()
           current=root/'fresh-current-manifest'
-          current.mkdir()
+          current.mkdir(exist_ok=True)
           ReleaseStore(os.environ['DATA_REPO'],'tbt-data-v1',current)._download_asset('_tbt_bundle_manifest.json')
-          assert hashlib.sha256(original).digest()==hashlib.sha256((current/'_tbt_bundle_manifest.json').read_bytes()).digest(), 'CDB raced during event proof; retry on coherent snapshot'
-          print('OFFICIAL_THREE_WAY_CURRENT_CDB_MANIFEST_CAS_PASS')
           PY
+          root=.cache/tbt/tml-threeway
+          python scripts/quarantine_tml_recovery_on_cdb_race.py \
+            --original-manifest "$root/history/_tbt_bundle_manifest.json" \
+            --fresh-manifest "$root/fresh-current-manifest/_tbt_bundle_manifest.json" \
+            --report-dir "$root/private-report"
           root=.cache/tbt/tml-threeway
           mkdir -p "$root/private-output" "$root/readback"
           cp "$root/private-report/"* "$root/private-output/"
