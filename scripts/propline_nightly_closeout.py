@@ -353,6 +353,13 @@ def collect():
     day = started.date().isoformat()
     runid = os.getenv("GITHUB_RUN_ID", str(int(started.timestamp())))
     try:
+        canonical_gap_mode = bool(os.getenv("CLOSEOUT_GAP_TARGETS", "").strip())
+        # Missing canonical Aces/DF take first priority, even if the future
+        # market board is empty or unavailable. This is only the 23:00 job.
+        if canonical_gap_mode:
+            probe_player_games([], day, runid)
+        if STATE["reason"] or STATE["calls"] >= MAX_CALLS:
+            return
         board = request("/sports/tennis/events")
         if board is None:
             return
@@ -379,7 +386,8 @@ def collect():
         print(json.dumps({"eligible_events": len(future), "budget": MAX_CALLS, "scope_days": 7}), flush=True)
         # The extra calls are drawn ONLY from the existing nightly 750 cap.
         # They target raw completed-match stats, not offered betting lines.
-        probe_player_games(future, day, runid)
+        if not canonical_gap_mode:
+            probe_player_games(future, day, runid)
         discovered = []
         available_calls = max(0, MAX_CALLS - STATE["calls"])
         if STATE["remaining"] is not None:
