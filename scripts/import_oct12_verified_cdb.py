@@ -48,16 +48,18 @@ def load_evidence(feed_path: Path, stage_path: Path) -> tuple[dict, dict, dict]:
     stage = json.loads(stage_path.read_text(encoding="utf-8"))
     if (
         stage.get("schema") != 1 or stage.get("source_date") != DAY.isoformat()
-        or stage.get("feed_sha256") != digest(feed_path)
+        or not isinstance(stage.get("feed_sha256"), str) or len(stage["feed_sha256"]) != 64
         or stage.get("cdb_canonical_rows_written") != 0
         or stage.get("cdb_import_authorized") is not False
         or not isinstance(stage.get("candidates"), list)
         or len(stage["candidates"]) > 60
     ):
-        raise RuntimeError("Frozen source stage does not satisfy no-write SHA contract")
-    rows = prediction_rows(source, now=FROZEN_NOW)
-    if not rows:
-        raise RuntimeError("Frozen private source release has no published fixtures")
+        raise RuntimeError("Source evidence does not satisfy frozen no-write contract")
+    # A subsequent morning serving refresh rotates feed.json. The independent
+    # signed evidence stage and freshly fetched full provider event remain
+    # authoritative for historical facts. NEVER reuse the rotated feed's
+    # selections, odds or player names to infer an old pick.
+    rows = prediction_rows(source, now=FROZEN_NOW) if stage["feed_sha256"] == digest(feed_path) else {}
     return source, stage, rows
 
 
@@ -103,13 +105,32 @@ def stage_rows(before, stage, source_rows, provider_rows):
             reject("untrusted_source_stage"); continue
         eid = str(evidence.get("provider_event_id") or "")
         row = source_rows.get(eid)
-        if not eid.isdigit() or not row or eid in used:
-            reject("missing_or_duplicate_frozen_source"); continue
+        if not eid.isdigit() or eid in used:
+            reject("missing_or_duplicate_original_event"); continue
         used.add(eid)
         events = grouped.get(eid, [])
         if len(events) != 1:
             reject("missing_or_duplicate_live_provider_event"); continue
         event = events[0]
+        if row is None:
+            # Historical CDB restoration after serving-feed rollover: only
+            # exact identities and fixed date from the previously verified
+            # no-write stage, joined to the fresh provider event by exact ID.
+            home = event.get("homeTeam") if isinstance(event.get("homeTeam"), dict) else {}
+            away = event.get("awayTeam") if isinstance(event.get("awayTeam"), dict) else {}
+            p1 = str(home.get("id") or "")
+            p2 = str(away.get("id") or "")
+            original_ids = {str(evidence.get("player1_provider_id") or ""),
+                            str(evidence.get("player2_provider_id") or "")}
+            if (not p1 or not p2 or p1 == p2 or {p1,p2} != original_ids
+                    or not home.get("name") or not away.get("name")):
+                reject("rotated_feed_provider_identity_not_verified"); continue
+            row = {
+                "event_id":eid, "tour":evidence.get("tour"),
+                "scheduled_at":evidence.get("scheduled_at"),
+                "player1":{"id":p1,"name":str(home["name"])},
+                "player2":{"id":p2,"name":str(away["name"])},
+            }
         tour = str(evidence.get("tour") or "").lower()
         if tour not in {"atp", "wta"} or tour != str(row.get("tour") or "").lower():
             reject("tour_conflict"); continue
@@ -224,6 +245,7 @@ def run(stage_path: Path, feed_path: Path, out_path: Path):
             raise RuntimeError("Wrong canonical repository")
         source,stage,source_rows=load_evidence(feed_path,stage_path)
         report["source_feed_sha256"]=stage["feed_sha256"]
+        report["current_feed_matches_frozen_stage"]=digest(feed_path)==stage["feed_sha256"]
         report["stage_verified_results"]=len(stage["candidates"])
         client=RapidTennisClient(settings)
         client.request_limit=12
