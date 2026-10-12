@@ -1,0 +1,71 @@
+name: BlinQ private NULL failure one-shot triage
+'on':
+  pull_request:
+    paths:
+      - '.github/workflows/blinq-private-null-triage-20261012.yml'
+permissions:
+  contents: read
+jobs:
+  trusted-private-failure-triage:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'BackstageTalks'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      RUN_TAG: blinq-drive-cdb-audit-38228695647-1
+    steps:
+      - name: Read and verify existing private report with aggregate-only output
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/$DATA_REPO --jq .private)" = true
+          mkdir -p "$RUNNER_TEMP/report" "$RUNNER_TEMP/unpacked"
+          gh release download "$RUN_TAG" -R "$DATA_REPO" -p drive-cdb-audit-bundle.tar.gz -D "$RUNNER_TEMP/report" >/dev/null
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,subprocess,tarfile
+          p=Path(os.environ['RUNNER_TEMP'])/'report'/'drive-cdb-audit-bundle.tar.gz'
+          sha=hashlib.sha256(p.read_bytes()).hexdigest()
+          if sha!='e04e04cd20c57459d017522b1ccbdc106d0b694d0cea012a66ae22bd244ef543':
+              raise ValueError('PRIVATE_AUDIT_BUNDLE_SHA_MISMATCH')
+          out=Path(os.environ['RUNNER_TEMP'])/'unpacked'
+          with tarfile.open(p,'r:gz') as archive:
+              for member in archive.getmembers():
+                  target=(out/member.name).resolve()
+                  if not target.is_relative_to(out.resolve()):
+                      raise ValueError('UNSAFE_ARCHIVE_PATH')
+                  if member.issym() or member.islnk():
+                      raise ValueError('UNSAFE_ARCHIVE_LINK')
+              archive.extractall(out,filter='data')
+          subprocess.run(['sha256sum','-c','SHA256SUMS'],cwd=out,check=True,capture_output=True)
+          audit=json.loads((out/'report.json').read_text())
+          log=(out/'private-current-null.log').read_text(errors='replace') if (out/'private-current-null.log').is_file() else ''
+          counts=audit.get('comparison') or {}
+          for key in ('candidate_missing_fields','research_name_matched_rows','explicit_identity_matched_rows','research_identity_unmatched_or_ambiguous','already_present_observations','rows_with_existing_value_conflict'):
+              value=counts.get(key)
+              if isinstance(value,int) and not isinstance(value,bool):
+                  print('SAFE_AUDIT_'+key.upper()+'='+str(value))
+          codes=(
+              ('CANONICAL_SHA',('Stale/invalid canonical year SHA','Different canonical year partition set')),
+              ('CANDIDATE_COUNT',('Candidate count and source report disagree',)),
+              ('DUPLICATE_CELL',('Duplicate/invalid canonical cell key',)),
+              ('UNSUPPORTED_FIELD',('Unsafe candidate authorization or field',)),
+              ('SOURCE_PROVENANCE',('Unpinned/ambiguous source provenance',)),
+              ('INVALID_VALUE',('Invalid candidate data type/value',)),
+              ('SOURCE_INVENTORY',('Incomplete original Drive file inventory',)),
+              ('READ_ONLY_REPORT',('Unsafe/incomplete source report',)),
+              ('CANONICAL_ROW_COUNT',('Canonical row count changed since original audit',)),
+              ('SOURCE_REPORT',('Missing validated read-only Drive report',)),
+              ('MISSING_FILE',('FileNotFoundError:',)),
+              ('SQLITE_SCHEMA',('sqlite3.OperationalError:',)),
+              ('MEMORY',('MemoryError:',)),
+              ('TYPE_ERROR',('TypeError:',)),
+              ('KEY_ERROR',('KeyError:',)),
+          )
+          reason=next((tag for tag, needles in codes if any(s in log for s in needles)),'OTHER_PRIVATE')
+          print('SAFE_NULL_GATE_FAILURE_CATEGORY='+reason)
+          print('SAFE_NULL_GATE_LOG_PRESENT='+str(bool(log)))
+          print('TRUSTED_PRIVATE_REPORT_SHA_READBACK_PASS')
+          PY
