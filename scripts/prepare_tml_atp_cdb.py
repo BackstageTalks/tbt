@@ -259,7 +259,7 @@ def score_only_source_counts(path: Path, year: int, p0_rows: list[dict]) -> dict
             continue
         day = str(row.get("tourney_date") or "")
         ids = (row.get("winner_id") or "", row.get("loser_id") or "")
-        if (not re.fullmatch(r"\\d{8}", day)
+        if (not re.fullmatch(r"\d{8}", day)
                 or int(day[:4]) not in (year, year-1)
                 or not row.get("tourney_id") or not str(row.get("match_num") or "").isdecimal()
                 or any(not ID.fullmatch(pid) for pid in ids) or ids[0] == ids[1]):
