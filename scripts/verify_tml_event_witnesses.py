@@ -48,6 +48,7 @@ def triage(context: Path, context_sha: str, witnesses: Path, witnesses_sha: str,
     verify(witnesses, witnesses_sha)
     canonical_owners = defaultdict(list)
     source_owners = defaultdict(list)
+    provider_owners = defaultdict(set)
     for row in read(witnesses):
         if (row.get("schema") != 1 or row.get("kind") != "independent_original_event_witness"
                 or row.get("from_tml_source") is not False
@@ -64,6 +65,7 @@ def triage(context: Path, context_sha: str, witnesses: Path, witnesses_sha: str,
             raise ValueError("Unsupported or preauthorized event witness")
         key = (row["source_namespace"], tuple(row["source_native_event_key"]))
         canonical_owners[row["canonical_match_id"]].append(row)
+        provider_owners[(row["provider_namespace"], row["provider_event_id"])].add(row["canonical_match_id"])
         source_owners[key].append(row)
     counts = Counter()
     accepted = []
@@ -88,6 +90,9 @@ def triage(context: Path, context_sha: str, witnesses: Path, witnesses_sha: str,
             counts["ambiguous_event_witness"] += 1
             continue
         witness = matched[0]
+        if len(provider_owners[(witness["provider_namespace"], witness["provider_event_id"])]) != 1:
+            counts["ambiguous_provider_event_reuse"] += 1
+            continue
         if witness["canonical_match_id"] != canonical:
             counts["canonical_target_conflict"] += 1
             continue
