@@ -16,6 +16,11 @@ name: BlinQ private Drive CDB audit - bounded free public runner
         required: true
         default: '2048'
         options: ['256', '512', '1024', '2048', '4096', '8192']
+      force_scan:
+        type: boolean
+        description: Override the 90-minute GitHub Actions budget cooldown for an explicitly authorized one-off scan
+        required: false
+        default: false
   pull_request:
     paths:
       - .github/workflows/blinq-private-drive-cdb-audit-bridge.yml
@@ -32,6 +37,57 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  scan_budget:
+    # External dispatch may arrive every 15 minutes. Only the lightweight
+    # release-metadata check runs; do not download ~1 GB CDB for every tick.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      proceed: ${{ steps.check.outputs.proceed }}
+    steps:
+      - name: Bound expensive Drive audit executions
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          FORCE_SCAN: ${{ inputs.force_scan }}
+        run: |
+          set -euo pipefail
+          if [[ "$FORCE_SCAN" == "true" ]]; then
+            echo 'proceed=true' >> "$GITHUB_OUTPUT"
+            echo 'DRIVE_AUDIT_EXPLICIT_OVERRIDE'
+            exit 0
+          fi
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo 'proceed=false' >> "$GITHUB_OUTPUT"
+            echo 'DRIVE_AUDIT_BUDGET_BLOCKED_MISSING_PRIVATE_TOKEN'
+            exit 0
+          fi
+          if ! release="$(gh api repos/BackstageTalks/tbt-data/releases/tags/blinq-drive-cdb-audit-cache-v1 2>/dev/null)"; then
+            # Fail closed on permission/rate-limit/network errors; never
+            # interpret an unknown checkpoint as permission to spend.
+            echo 'proceed=false' >> "$GITHUB_OUTPUT"
+            echo 'DRIVE_AUDIT_BUDGET_BLOCKED_UNVERIFIED_CHECKPOINT'
+            exit 0
+          fi
+          checkpoint="$(printf '%s' "$release" | jq -r '[.assets[]? | select(.name == "checkpoint.json") | .updated_at] | first // empty')"
+          if [[ -z "$checkpoint" ]]; then
+            echo 'proceed=false' >> "$GITHUB_OUTPUT"
+            echo 'DRIVE_AUDIT_BUDGET_BLOCKED_MISSING_CHECKPOINT_TIMESTAMP'
+            exit 0
+          fi
+          last="$(date -u -d "$checkpoint" +%s)" || exit 1
+          now="$(date -u +%s)"
+          age=$((now - last))
+          if (( age < 5400 )); then
+            echo 'proceed=false' >> "$GITHUB_OUTPUT"
+            echo 'DRIVE_AUDIT_COOLDOWN_SKIP_90_MINUTES'
+          else
+            echo 'proceed=true' >> "$GITHUB_OUTPUT"
+            echo 'DRIVE_AUDIT_COOLDOWN_READY'
+          fi
+
   safety-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -46,8 +102,8 @@ jobs:
         run: python -m unittest discover -s tests -p test_drive_cdb_private_bridge.py -v
 
   private-drive-audit:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    needs: safety-tests
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.scan_budget.outputs.proceed == 'true'
+    needs: [safety-tests, scan_budget]
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
@@ -234,7 +290,28 @@ jobs:
           PY
             echo PRIVATE_CURRENT_NULL_RECHECK_PASS_NO_WRITES
           else
-            echo PRIVATE_CURRENT_NULL_RECHECK_BLOCKED_DETAILS_PRIVATE
+            # Show only one stable, reviewed error category; never disclose
+            # private match IDs, player names, source rows, or raw tracebacks.
+            python - <<'PY'
+          from pathlib import Path
+          log = Path('work/private-current-null.log')
+          text = log.read_text(errors='replace') if log.is_file() else ''
+          reasons = (
+              ('CANONICAL_SHA', ('Stale/invalid canonical year SHA', 'Different canonical year partition set')),
+              ('CANDIDATE_COUNT', ('Candidate count and source report disagree',)),
+              ('DUPLICATE_CELL', ('Duplicate/invalid canonical cell key',)),
+              ('UNSUPPORTED_FIELD', ('Unsafe candidate authorization or field',)),
+              ('SOURCE_PROVENANCE', ('Unpinned/ambiguous source provenance',)),
+              ('INVALID_VALUE', ('Invalid candidate data type/value',)),
+              ('SOURCE_INVENTORY', ('Incomplete original Drive file inventory',)),
+              ('READ_ONLY_REPORT', ('Unsafe/incomplete source report',)),
+              ('CANONICAL_ROW_COUNT', ('Canonical row count changed since original audit',)),
+              ('SOURCE_REPORT', ('Missing validated read-only Drive report',)),
+          )
+          category = next((tag for tag, needles in reasons
+                           if any(needle in text for needle in needles)), 'UNKNOWN_PRIVATE')
+          print('PRIVATE_CURRENT_NULL_RECHECK_BLOCKED_' + category)
+          PY
             exit 1
           fi
 
