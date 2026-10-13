@@ -50,3 +50,13 @@ def test_results_live_max_odds_only_for_confirmed_comeback_below_price():
     assert "display:block!important" in css_block
     assert "margin:3px 0 0!important" in css_block
     assert "color:#ff8a2a!important" in css_block
+
+
+def test_results_calendar_and_betting_day_helper_copy_without_final_period():
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    for text in ("Vyber začiatok obdobia", "Vyber koniec obdobia", "Obdobie je pripravené"):
+        assert f"'{text}'" in app
+        assert f"'{text}.'" not in app
+    tooltip = "Vybrané dátumy sa počítajú od 06:00 do 06:00 Europe/Bratislava"
+    assert f"'{tooltip}'" in app
+    assert f"'{tooltip}.'" not in app
