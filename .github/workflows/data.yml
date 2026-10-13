@@ -207,6 +207,15 @@ jobs:
           if [[ "$targeted" == "true" && "$mode" != "statistics" ]]; then
             echo "Targeted statistics requires statistics mode"; exit 1
           fi
+          target_tour="$(jq -r '.target_tour // empty' "$request")"
+          case "$target_tour" in
+            ""|atp|wta) ;;
+            *) echo "Invalid target_tour (must be atp or wta)"; exit 1 ;;
+          esac
+          if [[ -n "$target_tour" && ( "$mode" != "statistics" || "$targeted" != "true" ) ]]; then
+            echo "target_tour requires targeted statistics mode"; exit 1
+          fi
+          echo "BLINQ_TARGET_STATS_TOUR=$target_tour" >> "$GITHUB_ENV"
           echo "BLINQ_TARGETED_STATISTICS=$targeted" >> "$GITHUB_ENV"
           echo "BLINQ_SHARED_API_BUDGET_PURPOSE=history" >> "$GITHUB_ENV"
           echo "Resolved controlled data request: mode=$mode targeted=$targeted max_requests=$max_requests start=$start_date end=$end_date promote=$promote"
@@ -272,6 +281,7 @@ jobs:
             if [[ "${{ inputs.hourly_autofill || 'false' }}" == "true" || "${BLINQ_TARGETED_STATISTICS:-false}" == "true" ]]; then args+=(--targeted-statistics); fi
             if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
             if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
+            if [[ -n "${BLINQ_TARGET_STATS_TOUR:-}" ]]; then args+=(--target-tour "$BLINQ_TARGET_STATS_TOUR"); fi
             python scripts/download_tennis_history.py "${args[@]}"
           elif [[ "$MODE" == doubles-data ]]; then
             args=(

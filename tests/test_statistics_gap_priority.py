@@ -67,3 +67,27 @@ def test_statistics_candidates_respect_requested_window():
     )
     assert [row.match_id for row in candidates] == ["in-gap"]
     assert report["window_completed"] == 1
+
+
+def test_targeted_stats_can_be_scoped_to_atp_without_touching_wta():
+    rows = [
+        _match("atp-gap", "ATP", "2025-05-10T12:00:00", {}),
+        _match("wta-gap", "WTA", "2025-05-10T12:00:00", {}),
+    ]
+    only_atp, report = _statistics_candidates(
+        rows, date(2025, 1, 1), date(2025, 12, 31), target_tour="atp"
+    )
+    assert [row.match_id for row in only_atp] == ["atp-gap"]
+    assert report["window_completed"] == 1
+    assert "wta:2025" not in report["bucket_coverage"]
+    both, report_both = _statistics_candidates(
+        rows, date(2025, 1, 1), date(2025, 12, 31)
+    )
+    assert {row.match_id for row in both} == {"atp-gap", "wta-gap"}
+    assert report_both["window_completed"] == 2
+
+
+def test_targeted_stats_tour_rejects_unknown_filter():
+    import pytest
+    with pytest.raises(ValueError, match="Unsupported statistics target tour"):
+        _statistics_candidates([], date(2025, 1, 1), date(2025, 12, 31), target_tour="ATP;WTA")

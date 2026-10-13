@@ -321,13 +321,16 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
     return result
 
 
-def _statistics_candidates(matches, start, end, *, targeted=False, historical_high_yield=False):
+def _statistics_candidates(matches, start, end, *, targeted=False, historical_high_yield=False, target_tour=None):
     """Prioritize verified gaps; optional high-yield historical cohort first."""
     if historical_high_yield and not targeted:
         raise ValueError("High-yield priority requires identity-checked targeted statistics")
+    if target_tour not in (None, "atp", "wta"):
+        raise ValueError("Unsupported statistics target tour")
     in_window = [
         match for match in matches
-        if match.is_completed and start <= match.scheduled_at.date() <= end
+        if (match.is_completed and start <= match.scheduled_at.date() <= end
+            and (target_tour is None or str(match.tour or "").lower() == target_tour))
     ]
     bucket_total = Counter()
     bucket_ready = Counter()
@@ -427,12 +430,16 @@ def main():
     parser.add_argument("--mode", choices=["history", "statistics"], default="history")
     parser.add_argument("--targeted-statistics", action="store_true",
                         help="Queue only identifiable missing fields whose retry is due, recent years first")
+    parser.add_argument("--target-tour", choices=("atp", "wta"), default=None,
+                        help="Limit statistics candidates to the selected tour; never affects history mode")
     parser.add_argument("--max-requests", type=int, default=4000)
     parser.add_argument("--history-dir", default=str(ROOT / ".cache/tbt/history"))
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", ""))
     parser.add_argument("--release-tag", default="tbt-data-v1")
     parser.add_argument("--publish", action="store_true", help="Download/publish via gh; use the supplied serialized workflow")
     args = parser.parse_args()
+    if args.target_tour and (args.mode != "statistics" or not args.targeted_statistics):
+        parser.error("--target-tour requires targeted statistics mode")
     high_yield_setting = os.environ.get("BLINQ_AUTOFILL_HIGH_YIELD", "false").lower()
     if high_yield_setting not in ("true", "false"):
         parser.error("BLINQ_AUTOFILL_HIGH_YIELD must be true or false")
@@ -583,7 +590,8 @@ def main():
             changed = set()
             statistics_candidates, statistics_plan = _statistics_candidates(
                 matches, start, end, targeted=args.targeted_statistics,
-                historical_high_yield=high_yield_setting == "true")
+                historical_high_yield=high_yield_setting == "true",
+                target_tour=args.target_tour)
             write_json(directory / "statistics_gap_plan.json", statistics_plan)
             report["statistics_candidate_rows"] = int(statistics_plan["candidate_rows"])
             report["statistics_already_quality_ready"] = int(statistics_plan["already_quality_ready"])
