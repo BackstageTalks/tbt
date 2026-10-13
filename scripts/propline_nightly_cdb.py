@@ -179,6 +179,46 @@ def plan_targets(matches, now, *, max_names=PLAYER_LOG_LIMIT):
     ]
 
 
+
+def gap_inventory(matches, now):
+    """Read-only, identity-safe API PRO gap counts on the current 2026 CDB."""
+    by_day_pair = Counter()
+    for m in matches:
+        if m.is_completed and str(m.tour or "").lower() in {"atp", "wta"}:
+            pair = tuple(sorted((norm_text(m.player1_name), norm_text(m.player2_name))))
+            by_day_pair[(m.scheduled_at.date().isoformat(), pair)] += 1
+
+    counts = Counter()
+    by_reason = Counter()
+    cells_by_reason = Counter()
+    for m in matches:
+        if not _is_target(m, now):
+            continue
+        pair = tuple(sorted((norm_text(m.player1_name), norm_text(m.player2_name))))
+        if by_day_pair[(m.scheduled_at.date().isoformat(), pair)] != 1:
+            counts["ambiguous_identity_matches"] += 1
+            continue
+        missing = [f"{side}_{field}" for side in ("p1", "p2")
+                   for field in STAT_FIELDS
+                   if (m.stats or {}).get(f"{side}_{field}") is None]
+        reason = api_pro_gap_reason(m)
+        if reason is None:
+            counts["api_pro_conflict_quarantined_matches"] += 1
+            continue
+        counts["eligible_matches"] += 1
+        counts["missing_cells"] += len(missing)
+        counts["missing_ace_cells"] += sum(field.endswith("_aces") for field in missing)
+        counts["missing_df_cells"] += sum(field.endswith("_double_faults") for field in missing)
+        by_reason[reason] += 1
+        cells_by_reason[reason] += len(missing)
+    return {
+        **dict(counts),
+        "matches_by_api_pro_reason": dict(sorted(by_reason.items())),
+        "missing_cells_by_api_pro_reason": dict(sorted(cells_by_reason.items())),
+        "excludes": "ambiguous identity and provider conflicts; never imputes data",
+    }
+
+
 def _number(value):
     if (isinstance(value, bool) or not isinstance(value, (int, float))
             or not float(value).is_integer() or not 0 <= value <= 200):
@@ -328,8 +368,10 @@ def main():
     if args.action == "plan":
         matches, digest = fetch_current(args.history_dir)
         targets = plan_targets(matches, now)
+        inventory = gap_inventory(matches, now)
         _write_report(args.targets, {
             "schema": 1, "source": "canonical_cdb_2026", "partition_sha256": digest,
+            "api_pro_gap_inventory": inventory,
             "generated_at_utc": now.isoformat(), "targets": targets,
             "candidate_players": len(targets),
             "explicit_api_pro_skipped_players": sum(
