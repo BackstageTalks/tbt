@@ -1,0 +1,111 @@
+name: BlinQ Oct13 read-only published-match audit
+on:
+  push:
+    branches:
+      - audit/blinq-daily-results-20261013
+    paths:
+      - .github/workflows/blinq-oct13-read-only-audit.yml
+permissions:
+  actions: read
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r api/requirements.txt
+      - name: Fetch currently committed published serving feed (no mutations)
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN"
+          mkdir -p /tmp/blinq-audit-feed
+          gh release download tbt-predictions-v1 -R BackstageTalks/tbt-data --pattern feed.json --dir /tmp/blinq-audit-feed --clobber
+          test -s /tmp/blinq-audit-feed/feed.json
+      - name: Read verified hourly state and reconcile published match rows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: api:scripts
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          from collections import Counter, defaultdict
+          from datetime import datetime, timezone
+          from zoneinfo import ZoneInfo
+          from tbt.services.match_status import prediction_rows, runtime_settled_results, _selection_id, _scheduled_in_current_betting_day
+          raw=Path('/tmp/blinq-audit-feed/feed.json').read_bytes()
+          feed=json.loads(raw)
+          target='38431091568'
+          log=subprocess.run(['gh','run','view',target,'--repo','BackstageTalks/tbt','--log'],capture_output=True,text=True,check=True).stdout
+          decoder=json.JSONDecoder()
+          state=None
+          for line in log.splitlines():
+              token='{"schema": 1, "updated_at"'
+              offset=line.find(token)
+              if offset<0:continue
+              try:
+                  candidate,_=decoder.raw_decode(line[offset:])
+                  if candidate.get('updated_at') and candidate.get('statuses'):
+                      state=candidate
+              except (json.JSONDecodeError,TypeError):continue
+          if state is None:raise SystemExit('Latest match-status snapshot not found; audit fails closed')
+          now=datetime.fromisoformat(state['updated_at'].replace('Z','+00:00'))
+          current=prediction_rows(feed,now=now)
+          count=Counter();row_summaries=[]
+          for eid,row in sorted(current.items()):
+              status=state.get('statuses',{}).get(eid,{})
+              outcome=status.get('status') or ('PENDING' if eid in state.get('pending',{}) else 'NOT_IN_WORKER')
+              count[outcome]+=1
+              p1=row.get('player1') or {};p2=row.get('player2') or {}
+              selected=str(_selection_id(row))
+              predicted=next((p.get('name') for p in (p1,p2) if str(p.get('id'))==selected),'')
+              checked=status.get('checked_at')
+              row_summaries.append({'id':eid,'players':[p1.get('name'),p2.get('name')],
+                    'tour':row.get('tour'),'start':row.get('scheduled_at') or row.get('date'),
+                    'predicted':predicted,'outcome':outcome,'winner_id':status.get('winner_id'),
+                    'checked_at':checked,'provider_status':status.get('provider_status')})
+          result_rows=runtime_settled_results(feed,state.get('statuses'))
+          markets=defaultdict(Counter)
+          sample_market=[]
+          seen_pub=set()
+          for row in result_rows:
+              if not isinstance(row,dict) or not _scheduled_in_current_betting_day(row,now):continue
+              eid=str(row.get('event_id') or row.get('id') or '')
+              for p in row.get('market_publications') or []:
+                  if not isinstance(p,dict):continue
+                  outcome=(p.get('result') or {}).get('status')
+                  section=str(p.get('section') or p.get('market') or 'unknown').lower()
+                  market=str(p.get('market') or '').lower()
+                  if outcome not in ('hit','miss','void','retired'):continue
+                  distinct=(eid,section,market,str(p.get('publication_key') or p.get('selection_id') or ''),str(p.get('issued_at') or ''))
+                  if distinct in seen_pub:continue
+                  seen_pub.add(distinct)
+                  markets[section][outcome]+=1
+                  sample_market.append({'event_id':eid,'section':section,'market':market,'outcome':outcome})
+          pending_ids=sorted(state.get('pending',{}))
+          mismatches={
+             'tracked_delta_current_feed_minus_status':len(current)-int(state.get('tracked') or 0),
+             'terminal_in_current_feed':sum(1 for r in row_summaries if r['outcome'] in ('win','loss','retired','void')),
+             'pending_in_current_feed':sum(1 for r in row_summaries if r['outcome']=='PENDING'),
+             'statuses_outside_current_feed':len(set(state.get('statuses',{}))-set(current)),
+          }
+          out={
+            'day':'2026-10-13','checked_worker':target,'checked_at':state['updated_at'],
+            'feed_generated_at':feed.get('generated_at'),'feed_count_current_day':len(current),
+            'worker_tracked':state.get('tracked'),'worker_terminal':state.get('terminal'),
+            'worker_pending_count':state.get('pending_count'),'worker_status_counts':dict(Counter(v.get('status') for v in state.get('statuses',{}).values())),
+            'worker_provider_errors':state.get('provider_errors'),'worker_archive':state.get('results_archive'),
+            'observed_outcomes_current_feed':dict(count),'crosswalk':mismatches,
+            'published_result_markets_readback':{k:dict(v) for k,v in sorted(markets.items())},
+            'published_result_market_count':len(seen_pub),
+            'pending_matches':[r for r in row_summaries if r['id'] in pending_ids],
+            'current_match_rows':row_summaries,
+            'read_only':True,
+          }
+          print('TODAY_BlinQ_MATCH_AUDIT '+json.dumps(out,ensure_ascii=False,sort_keys=True))
+          PY
