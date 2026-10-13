@@ -131,6 +131,36 @@ class SourceEvidenceLakeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"Unpinned/unsupported"):
             build(self.manifest,self.src,self.out)
 
+    def test_52_unique_historic_sources_all_retained_and_never_imported(self):
+        first = self.save([self.example])
+        manifest = [first]
+        for year in (year for year in range(1975, 2027) if year != 2025):
+            item = dict(first)
+            item["filename"] = f"{year}.csv"
+            item["namespace"] = f"tml-atp-{year}"
+            (self.src/item["filename"]).write_bytes((self.src/"2025.csv").read_bytes())
+            item["sha256"] = sha256_file(self.src/item["filename"])
+            manifest.append(item)
+        self.assertEqual(len(manifest), 52)
+        self.manifest.write_text(json.dumps({"schema": 1, "sources": manifest}))
+        report = build(self.manifest, self.src, self.out)
+        self.assertEqual(report["source_count"], 52)
+        self.assertEqual(report["source_rows_retained"], 52)
+        self.assertEqual(report["canonical_cells_written"], 0)
+        self.assertFalse(report["canonical_write_authorized"])
+        self.assertTrue(all(row["canonical_match_id"] is None and
+                            row["write_authorized"] is False
+                            for row in self.read_output()))
+
+    def test_61_source_manifest_still_rejected(self):
+        first = self.save([self.example])
+        manifest = [dict(first, filename=f"{n}.csv",
+                         namespace=f"tml-atp-{n}")
+                    for n in range(61)]
+        self.manifest.write_text(json.dumps({"schema": 1, "sources": manifest}))
+        with self.assertRaisesRegex(ValueError, "Invalid source manifest"):
+            build(self.manifest, self.src, self.out)
+
     def test_repeated_namespace_blocked(self):
         spec=self.save([self.example])
         m={"schema":1,"sources":[spec,dict(spec)]}

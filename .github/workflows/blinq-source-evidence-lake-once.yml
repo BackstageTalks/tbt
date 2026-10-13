@@ -54,7 +54,7 @@ jobs:
     needs: tests
     if: ${{ github.event_name != 'pull_request' && github.repository == 'BackstageTalks/tbt' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 40
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PRIVATE_REPO: BackstageTalks/tbt-data
@@ -81,7 +81,7 @@ jobs:
           test "$(gh repo view "$PRIVATE_REPO" --json visibility -q .visibility)" = PRIVATE
           test "$(git -C tml-source rev-parse HEAD)" = "$SOURCE_PIN"
           if [[ "$GITHUB_EVENT_NAME" == push ]]; then
-            test "$(jq -er .scope .github/source-evidence-lake-request.json)" = tml-atp-2022-2025
+            test "$(jq -er .scope .github/source-evidence-lake-request.json)" = tml-atp-1975-2026
             test "$(jq -er .mode .github/source-evidence-lake-request.json)" = preserve-private-only
           fi
           echo PINNED_SOURCE_AND_PRIVATE_TARGET_VERIFIED
@@ -94,10 +94,12 @@ jobs:
           import hashlib,json,sys
           from pathlib import Path
           sys.path.insert(0,'scripts')
-          from prepare_tml_atp_cdb import SOURCE_COMMIT,YEAR_BLOBS,blob_sha1
+          from prepare_tml_atp_cdb import SOURCE_COMMIT,YEAR_BLOBS,OPTIONAL_YEAR_BLOBS,blob_sha1
           assert SOURCE_COMMIT=='c5537eed87d8a76f3adb598cdf506d885872923b'
+          blobs={**OPTIONAL_YEAR_BLOBS,**YEAR_BLOBS}
+          assert sorted(blobs)==list(range(1975,2027)) and len(blobs)==52
           sources=[]
-          for year,blob in sorted(YEAR_BLOBS.items()):
+          for year,blob in sorted(blobs.items()):
               filename=f'{year}.csv'
               raw=(Path('tml-source')/filename).read_bytes()
               assert blob_sha1(raw)==blob
@@ -109,6 +111,7 @@ jobs:
                 'source_rights_status':'review_needed',
               })
           Path('work/manifest.json').write_text(json.dumps({'schema':1,'sources':sources},sort_keys=True))
+          assert len(sources)==52
           print('PINNED_TML_ORIGINAL_BLOBS_VERIFIED:',len(sources))
           PY
       - name: Retain every original source row privately, including quarantine
@@ -122,10 +125,11 @@ jobs:
           from pathlib import Path
           root=Path('work/private-source-evidence')
           report=json.loads((root/'report.json').read_text())
-          assert report['source_count']==4
-          assert report['source_rows_retained']==11933
+          assert report['source_count']==52
+          assert report['source_rows_retained']==171415
           assert report['canonical_cells_written']==0
           assert report['sport_api_requests']==0
+          assert report['canonical_write_authorized'] is False
           n=0
           with gzip.open(root/'source-observations.jsonl.gz','rt',encoding='utf-8') as src:
               for line in src:
@@ -156,7 +160,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="blinq-source-evidence-tml-2022-2025-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          tag="blinq-source-evidence-tml-1975-2026-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           root=work/private-source-evidence
           gh release create "$tag" "$root/report.json" "$root/SHA256SUMS" "$root/source-observations.jsonl.gz" \
             "$root/identity-gap-report.json" "$root/identity-crosswalk-priority-private.jsonl" \
@@ -176,7 +180,7 @@ jobs:
                   row=json.loads(line)
                   assert row['write_authorized'] is False and row['canonical_match_id'] is None
                   count+=1
-          assert count==11933
+          assert count==171415
           gaps=json.loads(Path('work/private-readback/identity-gap-report.json').read_text())
           assert gaps['rows_checked']==count
           assert gaps['ready_for_canonical_write']==0
