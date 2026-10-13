@@ -145,7 +145,7 @@ def build(manifest_path: Path, source_root: Path, output: Path):
                           parse_constant=lambda x: (_ for _ in ()).throw(ValueError(x)))
     if (not isinstance(manifest, dict) or manifest.get("schema") != 1
             or not isinstance(manifest.get("sources"), list)
-            or not 1 <= len(manifest["sources"]) <= 50):
+            or not 1 <= len(manifest["sources"]) <= 60):
         raise ValueError("Invalid source manifest")
     specs = manifest["sources"]
     namespaces, filenames = set(), set()
