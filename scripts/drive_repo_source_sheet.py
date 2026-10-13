@@ -202,6 +202,8 @@ def generate(drive: list[dict], repositories: dict[str, list[dict]], commits: di
         ("audit-zdrojov.csv", rows),
         ("nove-a-zmenene-zdroje.csv", [x for x in rows if x["stav"] in
                                       ("NOVY", "ZMENENY", "UZ_NEDOSTUPNY")]),
+        ("potencialne-datove-zdroje.csv", [x for x in rows if x["stav"] != "UZ_NEDOSTUPNY"
+                                         and x["vhodnost"].startswith(("POTENCIALNY_", "ARCHIV_"))]),
     ):
         with (out / name).open("w", newline="", encoding="utf-8-sig") as stream:
             writer = csv.DictWriter(stream, fieldnames=FIELDS)
@@ -220,6 +222,8 @@ def generate(drive: list[dict], repositories: dict[str, list[dict]], commits: di
         "baseline_previously_available": previous is not None,
         "source_counts": dict(sorted(counts.items())),
         "drive_originals": len(drive), "github_release_assets": len(releases or []),
+        "candidate_files_metadata_only": sum(x["vhodnost"].startswith(("POTENCIALNY_", "ARCHIV_"))
+                                             and x["stav"] != "UZ_NEDOSTUPNY" for x in rows),
         "git_files": {repo: len(repositories[repo]) for repo in REPOS},
         "canonical_rows": comparison.get("canonical_rows"),
         "cdb_candidate_missing_fields_all_drive": (
