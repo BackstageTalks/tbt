@@ -56,6 +56,9 @@ class AuditSheetTests(unittest.TestCase):
         reports = [{"id": "d1", "status": "CACHED"},
                    {"id": "s1", "status": "NEEDS_FORMAT_ADAPTER"}]
         self.assertEqual(len(drive_inventory(inventory, reports)), 1)
+        before = drive_inventory(inventory, reports)[0]["fingerprint"]
+        renamed = [dict(inventory[0], name="new_name.csv"), inventory[1]]
+        self.assertNotEqual(drive_inventory(renamed, reports)[0]["fingerprint"], before)
         with self.assertRaisesRegex(ValueError, "inconsistent"):
             drive_inventory(inventory, reports[:1])
 
