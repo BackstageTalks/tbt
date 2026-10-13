@@ -264,9 +264,47 @@ class CloseoutContractTests(unittest.TestCase):
             self.assertEqual(mod.STATE["calls"], 30)
             self.assertEqual(mod.STATE["reason"], "")
 
+    def test_gap_probes_rotate_between_nights_within_priority_tiers(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "gaps.json"
+            targets = [
+                {"player_name": f"Tierzero{j} Player", "api_pro_priority": 0}
+                for j in range(90)
+            ] + [
+                {"player_name": f"Tierone{j} Player", "api_pro_priority": 1}
+                for j in range(30)
+            ]
+            path.write_text(json.dumps({
+                "schema": 1, "source": "canonical_cdb_2026",
+                "partition_sha256": "c" * 64, "targets": targets,
+            }), encoding="utf-8")
+            with mock.patch.dict(mod.os.environ, {"CLOSEOUT_GAP_TARGETS": str(path)}):
+                first = mod._targeted_player_names("2026-10-12")
+                second = mod._targeted_player_names("2026-10-13")
+            self.assertEqual(len(first), 120)
+            self.assertEqual(len(second), 120)
+            self.assertEqual(set(first), set(second))
+            self.assertFalse(set(first[:30]) & set(second[:30]))
+            self.assertTrue(all(name.startswith("Tierzero") for name in first[:90]))
+            self.assertTrue(all(name.startswith("Tierzero") for name in second[:90]))
+
+    def test_persistence_retries_transient_github_503(self):
+        transient = HTTPError("https://api.github.com/x", 503, "unavailable", {}, None)
+        response = mock.MagicMock()
+        response.__enter__.return_value = io.BytesIO(b'{"sha": "a"}')
+        with mock.patch.object(mod.urllib.request, "urlopen",
+                               side_effect=[transient, response]) as urlopen, \
+             mock.patch.object(mod.time, "sleep") as nap:
+            result = mod.github("research/test.json.gz")
+        self.assertEqual(result, {"sha": "a"})
+        self.assertEqual(urlopen.call_count, 2)
+        nap.assert_called_once()
+
     def test_save_batch_preserves_on_readback_failure(self):
         mod.DATA.append({"event_id": "123", "odds": {"bookmakers": []}})
-        with mock.patch.object(mod, "github", return_value=None), mock.patch("pathlib.Path.write_bytes", return_value=1):
+        with mock.patch.object(mod, "github", return_value=None), \
+             mock.patch.object(mod.time, "sleep"), \
+             mock.patch("pathlib.Path.write_bytes", return_value=1):
             with self.assertRaisesRegex(RuntimeError, "read-back FAILED"):
                 mod.save("2026-10-10", "123")
         self.assertEqual(len(mod.DATA), 1)
