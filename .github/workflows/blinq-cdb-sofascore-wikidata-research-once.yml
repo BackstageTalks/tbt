@@ -20,6 +20,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 75628adea78e0696fc556b5bc89305534ffc292e
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+          path: work/private-repo
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -36,7 +43,8 @@ jobs:
           mkdir -p work/cdb work/private work/result
           gh release download tbt-data-v1 -R "$PRIVATE_REPO" --pattern history-2025.parquet -D work/cdb >/dev/null
           echo "$CDB2025_SHA  work/cdb/history-2025.parquet" | sha256sum -c
-          gh api -H 'Accept: application/vnd.github.raw+json' 'repos/BackstageTalks/tbt-data/contents/research/player_identity/wikidata-tennis-identity.jsonl.gz?ref=75628adea78e0696fc556b5bc89305534ffc292e' > work/private/wikidata-tennis-identity.jsonl.gz
+          test "$(git -C work/private-repo rev-parse HEAD)" = 75628adea78e0696fc556b5bc89305534ffc292e
+          cp work/private-repo/research/player_identity/wikidata-tennis-identity.jsonl.gz work/private/wikidata-tennis-identity.jsonl.gz
           echo "$WIKIDATA_SHA  work/private/wikidata-tennis-identity.jsonl.gz" | sha256sum -c
       - name: Validate 9 fail-closed regression tests
         shell: bash
