@@ -50,7 +50,7 @@ def _release_json(repository: str, tag: str, asset: str, folder: Path) -> dict:
     return report
 
 
-def build_snapshot(shadow: dict, readiness: dict, promotion: dict, *, timestamp: str) -> dict:
+def build_snapshot(shadow: dict, readiness: dict, promotion: dict, *, timestamp: str, offline_candidate: dict | None = None) -> dict:
     champion = str(shadow.get("production_model_version") or "").strip()
     candidate = str(shadow.get("challenger_model_version") or "").strip()
     if not champion:
@@ -63,6 +63,7 @@ def build_snapshot(shadow: dict, readiness: dict, promotion: dict, *, timestamp:
         "production_version": champion,
         "candidate_version": candidate,
         "shadow": shadow,
+        "offline_candidate": offline_candidate,
         "readiness": readiness,
         "last_decision": {
             "status": str(promotion.get("status") or ""),
@@ -106,6 +107,10 @@ def publish(payload: dict, base_url: str, worker_token: str) -> dict:
         raise RuntimeError("Persisted production version differs from source")
     if result.get("candidate_version") != (payload["candidate_version"] or None):
         raise RuntimeError("Persisted candidate version differs from source")
+    expected_offline = ((payload.get("offline_candidate") or {})
+                        .get("candidate_version"))
+    if result.get("offline_candidate_version") != expected_offline:
+        raise RuntimeError("Admin backend did not independently confirm offline candidate")
     return result
 
 
@@ -139,9 +144,16 @@ def main() -> int:
         args.data_repository, "audit/model-shadow-promotion-latest.json",
         required=False,
     )
+    # Independently evaluated offline candidate does not replace the active
+    # shadow challenger; it occupies a separate admin comparison section.
+    offline_candidate = _json_content(
+        args.data_repository, "audit/model-frozen-candidate-latest.json",
+        required=False,
+    )
     snapshot = build_snapshot(
         shadow, readiness, decision,
-        timestamp=datetime.now(timezone.utc).isoformat()
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        offline_candidate=offline_candidate or None,
     )
     # Reuse the *same* strict, private API schema before a network write.
     from tbt.services.model_calibration_status import normalize_model_calibration_snapshot

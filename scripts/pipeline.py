@@ -716,18 +716,21 @@ def _publish_predictions(
     return feed
 
 
-def _require_training_backup_gate() -> None:
-    """Fail closed until a per-run durable input+champion backup/restore gate exists.
+def _require_training_backup_gate() -> dict:
+    """Only one run-bound, independently read-back immutable full-input backup permits fit.
 
-    Deliberately has no environment-variable escape hatch. Legacy unit tests
-    may monkeypatch this internal seam while mocking every release operation,
-    but no production entrypoint can bypass the missing evidence.
+    No flag-only escape hatch: validate SHA-256 of the exact local frozen inputs,
+    previously downloaded complete private release, and champion restore parity.
     """
-    raise RuntimeError(
-        "Candidate training blocked: missing per-run immutable full-input "
-        "backup, independent hash readback and isolated champion restore. "
-        "See AGENTS.md; prior champion-only rehearsal is insufficient."
-    )
+    try:
+        from guarded_candidate_backup import validate_certificate
+        return validate_certificate()
+    except Exception as exc:
+        raise RuntimeError(
+            "Candidate training blocked: missing per-run immutable full-input "
+            "backup, independent hash readback and isolated champion restore. "
+            + str(exc)[:400]
+        ) from exc
 
 
 def main():
@@ -772,9 +775,10 @@ def main():
         )
     # Without an independently restored immutable complete input backup, every
     # real candidate fit must fail before any model/CDB/network access.
+    training_certificate = None
     if args.mode == "train":
         try:
-            _require_training_backup_gate()
+            training_certificate = _require_training_backup_gate()
         except RuntimeError as exc:
             parser.error(str(exc))
     if not 1 <= args.max_requests <= 3000:
@@ -902,7 +906,11 @@ def main():
         print(json.dumps(report.get("overall", report.get("metrics", {})), indent=2))
         return
     if args.mode == "train":
-        candidate = ReleaseStore(args.data_repository, "tbt-model-candidate-v1", model_dir)
+        if not isinstance(training_certificate, dict) or not training_certificate.get("candidate_tag"):
+            parser.error("No run-bound independently backed-up candidate release target")
+        # Keep Model Lab's current candidate untouched. Store each new candidate
+        # under an immutable per-run tag until separately reviewed.
+        candidate = ReleaseStore(args.data_repository, training_certificate["candidate_tag"], model_dir)
         candidate_assets = candidate._asset_names()
         candidate.download(
             extra_names=("promotion_history.json",),
@@ -926,6 +934,10 @@ def main():
                              if "promotion_history.json" in production_assets else []):
                 if decision not in promotion_history:
                     promotion_history.append(decision)
+        # Remote source lookups and prior loading may race concurrent metadata
+        # changes; compare every locally consumed raw input to the immutable
+        # remotely verified backup immediately before any model fitting.
+        _require_training_backup_gate()
         result = train_from_matches(
             matches,
             production_model=champion,
@@ -1014,6 +1026,15 @@ def main():
         # Keep the current attempt visible even when it is deferred and thus is
         # intentionally absent from promotion_history.
         report["promotion_decision"] = decision
+        report["immutable_training_backup"] = {
+            "tag": training_certificate["backup_tag"],
+            "champion_sha256": training_certificate["champion_sha256"],
+            "application_sha": training_certificate["application_sha"],
+            "asset_count": training_certificate["all_assets_remotely_verified"],
+            "candidate_tag": training_certificate["candidate_tag"],
+        }
+        # The canonical/prior inputs must not drift during the fit.
+        _require_training_backup_gate()
         save_model(model_to_save, str(model_dir / "model.joblib"))
         write_json(model_dir / "training_report.json", report)
         write_json(promotion_history_path, promotion_history)

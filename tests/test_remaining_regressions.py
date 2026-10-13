@@ -427,7 +427,15 @@ def test_only_requested_holdout_decisions_persist_before_promotion(monkeypatch, 
     monkeypatch.setattr(pipeline, 'ROOT', tmp_path)
     # Unit-test only: all release/model operations are mocked. The real
     # candidate-training backup gate remains fail-closed in production.
-    monkeypatch.setattr(pipeline, '_require_training_backup_gate', lambda: None)
+    monkeypatch.setattr(
+        pipeline, '_require_training_backup_gate', lambda: {
+            'backup_tag': 'blinq-full-training-backup-unit-test',
+            'champion_sha256': 'a' * 64,
+            'application_sha': 'b' * 40,
+            'all_assets_remotely_verified': 100,
+            'candidate_tag': 'blinq-candidate-frozen-unit-test',
+        },
+    )
     monkeypatch.setattr(pipeline, 'ReleaseStore', Store)
     monkeypatch.setattr(pipeline, 'load_partitions', lambda path: [])
     monkeypatch.setattr(
@@ -465,7 +473,7 @@ def test_only_requested_holdout_decisions_persist_before_promotion(monkeypatch, 
             pipeline.main()
     else:
         pipeline.main()
-    assert published[0][0] == 'tbt-model-candidate-v1'
+    assert published[0][0] == 'blinq-candidate-frozen-unit-test'
     if promote:
         decision = published[0][1][0]
         assert decision['eligible'] is passing

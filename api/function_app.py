@@ -2598,6 +2598,7 @@ def internal_model_calibration_snapshot(req):
             "stored": True,
             "production_version": saved["production_version"],
             "candidate_version": saved["candidate_version"],
+            "offline_candidate_version": (saved.get("offline_candidate") or {}).get("candidate_version"),
             "updated_at": saved["updated_at"],
         })
     except (ValueError, TypeError) as exc:
