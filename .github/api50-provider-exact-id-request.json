@@ -1,0 +1,14 @@
+{
+  "schema": "BLINQ_FIRST_PARTY_API50_EXACT_EVENT_RECHECK_ONCE_V1",
+  "date": "2026-10-13",
+  "scope": "50 unique canonical 2025 finished singles matches, 25 ATP and 25 WTA",
+  "provider": "REcodeX TennisApi1 existing subscribed API",
+  "source": "current SHA-pinned tbt-data-v1 history-2025.parquet",
+  "max_billable_requests": 50,
+  "shared_api_budget": "mandatory reservation per request and 450-request headroom",
+  "no_automated_sofascore_requests": true,
+  "proves_external_sofascore_id_equality": false,
+  "write_to_cdb": false,
+  "train_model": false,
+  "cron": false
+}
