@@ -23,7 +23,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 API = "https://api.prop-line.com/v1"
@@ -126,8 +126,8 @@ def summarize_player_games(payload):
             "focus_fields": {k: n for k, n in field_counts.items() if n}}
 
 
-def _targeted_player_names():
-    """Fail closed if the prepared canonical gap target index is unavailable."""
+def _targeted_player_names(day=None):
+    """Fail closed on bad gap indexes; rotate verified players between nights."""
     path = os.getenv("CLOSEOUT_GAP_TARGETS", "").strip()
     if not path:
         return None
@@ -138,6 +138,7 @@ def _targeted_player_names():
             or len(raw["partition_sha256"]) != 64):
         raise RuntimeError("Invalid canonical CDB gap index")
     names, seen = [], set()
+    buckets = {tier: [] for tier in range(4)}
     for item in raw["targets"][:NIGHTLY_GAP_PLAYER_MAX]:
         name = str(item.get("player_name") or "").strip() if isinstance(item, dict) else ""
         norm = " ".join(name.casefold().split())
@@ -146,13 +147,28 @@ def _targeted_player_names():
                 or norm in seen):
             raise RuntimeError("Ambiguous or duplicate canonical target")
         seen.add(norm)
+        tier = item.get("api_pro_priority", 3) if isinstance(item, dict) else 3
+        if not isinstance(tier, int) or isinstance(tier, bool) or tier not in buckets:
+            raise RuntimeError("Invalid canonical API PRO priority")
         names.append(name)
-    return names
+        buckets[tier].append(name)
+    if day is None:
+        return names
+    # If thirty probes have no detailed stats, try a different block tomorrow.
+    # Rotation stays within API PRO priority tiers and never alters the index.
+    ordinal = date.fromisoformat(day).toordinal()
+    rotated = []
+    for tier in sorted(buckets):
+        group = buckets[tier]
+        if group:
+            shift = (ordinal * 30) % len(group)
+            rotated.extend(group[shift:] + group[:shift])
+    return rotated
 
 
 def probe_player_games(future, day, runid):
     """Night-only CDB-gap-targeted raw historical boxscore acquisition."""
-    exact_targets = _targeted_player_names()
+    exact_targets = _targeted_player_names(day)
     targets = exact_targets if exact_targets is not None else select_player_game_targets(future)
     examined = 0
     attempted = 0
@@ -231,13 +247,22 @@ def github(path, method="GET", content=None, optional=False):
           "Accept": "application/vnd.github+json",
           "X-GitHub-Api-Version": "2022-11-28",
           "Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.load(resp)
-    except urllib.error.HTTPError as exc:
-        if optional and exc.code == 404:
-            return None
-        raise RuntimeError("GitHub persistence HTTP " + str(exc.code)) from None
+    # Retry bounded transient GitHub failures. PUT has a fixed create-only
+    # path; on an uncertain result, save() verifies the exact blob digest.
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.load(resp)
+        except urllib.error.HTTPError as exc:
+            if optional and exc.code == 404:
+                return None
+            if exc.code not in (429, 500, 502, 503, 504) or attempt == 3:
+                raise RuntimeError("GitHub persistence HTTP " + str(exc.code)) from None
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 3:
+                raise RuntimeError("GitHub persistence transient network failure") from None
+        time.sleep(min(4, 2 ** attempt))
+    raise RuntimeError("GitHub persistence retry exhausted")
 
 
 def save(day, runid):
@@ -262,8 +287,17 @@ def save(day, runid):
             github(path, method="PUT", content=body)
         except RuntimeError:
             pass  # Read-back decides whether an uncertain write succeeded.
-    result = github(path, optional=True)
-    if not result or result.get("sha") != expected or result.get("size") != len(raw):
+    # A newly-created GitHub blob can briefly be invisible through Contents
+    # API even after PUT succeeded; poll read-back but never accept mismatch.
+    for attempt in range(5):
+        result = github(path, optional=True)
+        if result is not None:
+            if result.get("sha") != expected or result.get("size") != len(raw):
+                raise RuntimeError("Batch integrity/read-back FAILED: " + path)
+            break
+        if attempt < 4:
+            time.sleep(min(4, attempt + 1))
+    else:
         raise RuntimeError("Batch integrity/read-back FAILED: " + path)
     STATE["batches"] += 1
     print(json.dumps({"saved": path, "items": len(DATA),
