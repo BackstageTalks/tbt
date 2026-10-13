@@ -12,5 +12,6 @@
   "historical_match_winner_odds_as_model_feature": false,
   "model_training": false,
   "pre_reset_provider_header_override": false,
-  "source_only_tml_write_authorized": false
+  "source_only_tml_write_authorized": false,
+  "target_tour": "atp"
 }
