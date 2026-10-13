@@ -32,8 +32,8 @@ def test_97_percent_shared_budget_and_provider_headroom():
 
 
 def test_delayed_closeout_window_and_new_day_reset_are_bounded():
-    assert "18:45" in HOURLY
-    assert "18 * 60 + 50 <= minute_of_day <= 19 * 60 + 3" in HOURLY
+    assert "18:35" in HOURLY
+    assert "18 * 60 + 35 <= minute_of_day <= 19 * 60 + 3" in HOURLY
     assert "local.hour == 19 and not (final_topup or new_day_start)" in HOURLY
     assert "local.hour == 19 and local.minute == 11" in HOURLY
     assert "limit = 3000 if new_day_start else (14550 if final_topup else caps[local.hour])" in HOURLY
@@ -70,7 +70,8 @@ def test_closeout_window_at_actual_runner_start_including_delay():
     closeout_assignment = next(line.strip() for line in lines
                                if line.strip().startswith("final_topup = "))
     for hour, minute, expected in [
-        (18, 45, False), (18, 49, False), (18, 50, True),
+        (18, 30, False), (18, 34, False), (18, 35, True),
+        (18, 45, True), (18, 49, True), (18, 50, True),
         (18, 55, True), (18, 57, True), (18, 59, True),
         (19, 0, True), (19, 3, True), (19, 4, False),
         (19, 8, False), (19, 10, False), (19, 11, False),
