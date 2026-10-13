@@ -1,4 +1,4 @@
-name: BlinQ PbP exact source vs current CDB NULL gap audit
+name: BlinQ PbP compound candidate vs current CDB NULL gap audit
 on:
   push:
     branches: [main]
@@ -42,10 +42,11 @@ jobs:
           gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
             -p 'history-*.parquet' -p history_manifest.json -D /tmp/blinq-pbp-gap/cdb
           python -m pip install --quiet "pandas>=2,<3" pyarrow
-      - name: Byte-verify all 262 source files and all 78 CDB parts; count exact safe NULL gaps
+      - name: Test candidate safety and compare verified source bytes with 78 CDB parts
         timeout-minutes: 40
         run: |
           set -euo pipefail
+          python -m unittest discover -s app/tests -p test_pbp_candidate_audit.py -v
           python app/scripts/audit_pbp_source_vs_current_cdb.py \
             --source source --cdb /tmp/blinq-pbp-gap/cdb \
             --release /tmp/blinq-pbp-gap/release.json \
@@ -59,6 +60,9 @@ jobs:
           import json
           j=json.load(open('pbp-current-cdb-gap.json'))
           assert j['canonical_writes']==0 and j['training'] is False
+          assert j['schema']==2 and j['approved_cdb_cells']==0
+          assert j['independent_identity_verified'] is False
+          assert 'verified_safe_additive_null_cells' not in j['counts']
           assert j['counts']['source_files_byte_identical_to_zip']==262
           assert j['counts']['cdb_rows']>=995143
           PY

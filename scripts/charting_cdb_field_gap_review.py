@@ -73,9 +73,8 @@ def stats_observation(obs):
     d.update(bk_pts=bp,bp_saved=saved)
     return d,''
 
-def whole_match(a,b):
-    # A charted subset could omit unobserved points. Refuse pretending it covers
-    # a full match unless both players' totals agree arithmetically.
+def point_totals_consistent(a,b):
+    # Symmetric subsets also balance. This checks arithmetic, NOT completeness.
     if a['serve_pts']!=b['return_pts'] or b['serve_pts']!=a['return_pts']:
         return False
     if a['return_pts_won']!=b['serve_pts']-b['first_won']-b['second_won']:
@@ -171,6 +170,10 @@ def run(source,players_path,candidates_path,profiles_root,cdb_paths,out,expected
              'status':'','missing_cells':{},'matching_existing_cells':[],
              'conflicting_existing_cells':[],'write_authorized':False,
              'identity_evidence':'compound_metadata_only_not_independently_attested'}
+        row['whole_match_coverage_verified']=False
+        row['source_rights_verified']=False
+        row['remaining_evidence']=['independent_event_and_both_player_ids',
+                                   'independent_whole_match_coverage','source_reuse_rights']
         try:
             info=sources[source_id];c=current[canonical_id]
             assert isinstance(info,dict)
@@ -191,7 +194,7 @@ def run(source,players_path,candidates_path,profiles_root,cdb_paths,out,expected
                 d,error=stats_observation(obs)
                 if error:raise ValueError(error)
                 raw.append(d);proof.append(p)
-            if not whole_match(raw[0],raw[1]):raise ValueError('Point totals differ across opponents')
+            if not point_totals_consistent(raw[0],raw[1]):raise ValueError('Point totals differ across opponents')
             projected={}
             for i,d in enumerate(raw):
                 prefix='p1_' if sides[i]==1 else 'p2_'
@@ -242,8 +245,9 @@ def run(source,players_path,candidates_path,profiles_root,cdb_paths,out,expected
               'counts':dict(sorted(counts.items())),
               'field_gap_output_sha256':sha(output),
               'independent_event_and_both_player_id_proof':False,
+              'whole_match_coverage_verified':False,'source_rights_verified':False,
               'approved_cdb_cells':0,'canonical_cdb_writes':0,'production_mutated':False,
-              'next_gate':'independent event+participant reference; exact current NULL-only CAS; global writer lock; immutable prewrite backup; remote readback'}
+              'next_gate':'independent event+participant reference; independent whole-match coverage; source reuse rights; exact current NULL-only CAS; global writer lock; immutable prewrite backup; remote readback'}
     (out/'field_gap_report.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2,sort_keys=True)+'\n')
     return manifest
 

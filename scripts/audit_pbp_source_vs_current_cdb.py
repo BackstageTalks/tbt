@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Read-only match-level Sackmann CSV vs current canonical BlinQ CDB comparison."""
-import argparse,collections,csv,datetime as dt,difflib,hashlib,json,re,unicodedata
+import argparse,collections,csv,datetime as dt,difflib,hashlib,json,re,unicodedata,math,gzip
 from pathlib import Path
 import pandas as pd
 
@@ -20,6 +20,7 @@ def similar(a,b):
     a,b=norm(a),norm(b)
     if not a or not b:return False
     ta=set(a.split())-GENERIC;tb=set(b.split())-GENERIC
+    if not ta or not tb:return False
     if ta and tb and (ta==tb or (len(ta)>=2 and ta<=tb) or (len(tb)>=2 and tb<=ta)):return True
     return difflib.SequenceMatcher(None,' '.join(sorted(ta)),' '.join(sorted(tb))).ratio()>=.86
 def missing(v):
@@ -59,7 +60,29 @@ def sha(path):
         for b in iter(lambda:f.read(1024*1024),b''):h.update(b)
     return h.hexdigest()
 
-def main(src,cdb,release_path,out):
+def compare_cells(existing, values):
+    """Only absent keys/JSON null are gaps; corrupt values are conflicts."""
+    nulls, errors = [], []
+    for key, value in values.items():
+        if value is None:continue
+        previous = existing.get(key)
+        if previous is None:
+            nulls.append(key)
+        elif (isinstance(previous,bool) or not isinstance(previous,(int,float))
+              or not math.isfinite(previous)
+              or abs(previous-value) > (0 if key.endswith(('_aces','_faults')) else .01)):
+            errors.append(key)
+    return nulls, errors
+
+def native_key(tour,row):
+    """An integer alone is never a player or event key across tours."""
+    fields=('tourney_id','tourney_date','match_num','round','winner_id','loser_id')
+    values=tuple(str(row.get(k) or '').strip() for k in fields)
+    if tour not in ('atp','wta') or not all(values) or values[-1]==values[-2]:
+        raise ValueError('Incomplete or colliding source-native identity')
+    return (tour,)+values
+
+def main(src,cdb,release_path,out,candidates=None):
     release=json.loads(release_path.read_text())
     assets={a['name']:a for a in release['assets']}
     manifest=json.loads((cdb/'history_manifest.json').read_text())['years']
@@ -69,6 +92,7 @@ def main(src,cdb,release_path,out):
     index=collections.defaultdict(list)
     cols=['match_id','tour','scheduled_at','player1_id','player2_id','player1_name','player2_name',
           'tournament','round_name','surface','winner_id','stats_json']
+    canonical_ids=set()
     for p in parts:
         year=int(re.search(r'history-(\d{4})',p.name)[1]);h=sha(p)
         if assets[p.name]['digest']!='sha256:'+h or manifest[str(year)]['sha256']!=h:
@@ -77,8 +101,10 @@ def main(src,cdb,release_path,out):
         counts['cdb_rows']+=len(df)
         for x in df.itertuples(index=False,name=None):
             mid,t,when,id1,id2,n1,n2,event,round_name,surface,winner,stats=x
+            if missing(mid) or str(mid) in canonical_ids:raise ValueError('Missing/duplicate canonical match ID')
+            canonical_ids.add(str(mid))
             pair=tuple(sorted((norm(n1),norm(n2))))
-            if not all(pair) or missing(when):continue
+            if not all(pair) or pair[0]==pair[1] or missing(id1) or missing(id2) or str(id1)==str(id2) or missing(when):continue
             day=pd.Timestamp(when).date()
             index[(norm(t),pair)].append((day,norm(event),rnd(round_name),norm(surface),str(winner or ''),
                                           str(id1),str(id2),str(mid),norm(n1),norm(n2),stats))
@@ -91,25 +117,27 @@ def main(src,cdb,release_path,out):
             fprint=((fprint^c)*16777619)&0xffffffff
     if fprint!=0x082c375c:raise RuntimeError('Source Git SHA inventory differs from operator PbP.zip: '+hex(fprint))
     counts['source_files_byte_identical_to_zip']=262
-    seen={};matches={};quarantined=set()
+    seen={};matches={};quarantined=set();source_hashes={};locations={}
     for path in paths:
         relative=path.relative_to(src).as_posix()
+        source_hashes[relative]=sha(path)
         fam='wta' if relative.startswith('wta/') else 'atp'
         with path.open(encoding='utf-8-sig',newline='') as fh:
-            for row in csv.DictReader(fh):
+            for record_number,row in enumerate(csv.DictReader(fh),1):
                 counts['source_rows_scanned']+=1
                 s=valid(row)
                 if s is None:continue
                 counts['complete_boxscore_rows']+=1
                 pair=tuple(sorted((norm(row.get('winner_name')),norm(row.get('loser_name')))))
-                if not all(pair):reasons['missing_name']+=1;continue
-                sid=(relative.split('/')[0],row.get('tourney_id'),row.get('tourney_date'),
-                     row.get('match_num'),row.get('round'),row.get('winner_id'),row.get('loser_id'))
+                if not all(pair) or pair[0]==pair[1]:reasons['missing_or_colliding_name']+=1;continue
+                try:sid=native_key(fam,row)
+                except ValueError:reasons['invalid_source_native_identity']+=1;continue
                 if sid in seen:
                     if seen[sid]!=(s,pair):quarantined.add(sid)
                     counts['duplicate_complete_source_rows']+=1
                     continue
                 seen[sid]=(s,pair)
+                locations[sid]=(relative,record_number)
                 counts['distinct_complete_boxscore_source_matches']+=1
                 try:start=dt.datetime.strptime(row['tourney_date'],'%Y%m%d').date()
                 except (ValueError,KeyError):reasons['invalid_event_start']+=1;continue
@@ -127,7 +155,7 @@ def main(src,cdb,release_path,out):
                     reasons['winner_unattested']+=1;continue
                 winner_id=z[5] if norm(row['winner_name'])==z[8] else z[6]
                 if z[4]!=winner_id:reasons['winner_conflict']+=1;continue
-                counts['one_to_one_event_winner_attested']+=1
+                counts['unique_compound_candidates_winner_consistent']+=1
                 mid=z[7]
                 if mid in matches and matches[mid][0]!=sid:
                     quarantined.add(sid);quarantined.add(matches[mid][0])
@@ -135,9 +163,14 @@ def main(src,cdb,release_path,out):
                 matches[mid]=(sid,z,row,s)
     matched=additive=already=blocked=0;null_cells=0
     missing_fields=collections.Counter();conflict_fields=collections.Counter()
+    candidate_rows=[]
     for mid,(sid,z,row,stats) in matches.items():
         if sid in quarantined:blocked+=1;continue
-        try:existing=json.loads(z[10]) if isinstance(z[10],str) and z[10] else {}
+        try:
+            if z[10] is None:existing={}
+            elif isinstance(z[10],dict):existing=z[10]
+            elif isinstance(z[10],str):existing=json.loads(z[10])
+            else:raise ValueError('Invalid canonical stats')
         except (ValueError,TypeError):reasons['canonical_invalid_json']+=1;continue
         if not isinstance(existing,dict):reasons['canonical_invalid_json']+=1;continue
         values={}
@@ -158,33 +191,47 @@ def main(src,cdb,release_path,out):
                 side+'_second_return_win':(ose-stats[opp+'_2ndWon'])/ose if ose else None,
                 side+'_break_points_won':(obp-stats[opp+'_bpSaved'])/obp if obp else None,
             })
-        nulls=[];errors=[]
-        for k,v in values.items():
-            if v is None:continue
-            if missing(existing.get(k)):nulls.append(k)
-            else:
-                try:diff=abs(float(existing[k])-v)
-                except (TypeError,ValueError):errors.append(k);continue
-                if diff>(0 if k.endswith(('_aces','_faults')) else .01):errors.append(k)
+        nulls,errors=compare_cells(existing,values)
         if errors:
             conflict_fields.update(errors);blocked+=1;reasons['existing_nonnull_stat_conflicts']+=1
             continue
         matched+=1
+        if candidates is not None:
+            relative,record_number=locations[sid]
+            candidate_rows.append({'source_namespace':'sackmann','tour':sid[0],
+                'source_native_key':list(sid),'source_file':relative,'source_record_number':record_number,
+                'source_sha256':source_hashes[relative],
+                'source_player_ids':[row['winner_id'],row['loser_id']],
+                'canonical_match_id_candidate':mid,'canonical_player_ids_candidate':[z[5],z[6]],
+                'canonical_side_source_player_ids':[row['winner_id'] if norm(row['winner_name'])==n else row['loser_id'] for n in (z[8],z[9])],
+                'missing_candidate_cells':{k:values[k] for k in nulls},
+                'identity_evidence':'compound_metadata_only',
+                'independent_identity_verified':False,'source_rights_verified':False,
+                'write_authorized':False})
         if nulls:
             additive+=1;null_cells+=len(nulls);missing_fields.update(nulls)
         else:already+=1
-    counts.update({'fully_validated_matched_cdb':matched,'matched_with_new_null_stat_cells':additive,
+    counts.update({'compound_candidates_without_stat_conflict':matched,'matched_with_new_null_stat_cells':additive,
                    'matched_without_new_null_stat_cells':already,'blocked_matched_records':blocked,
-                   'verified_safe_additive_null_cells':null_cells,'source_conflict_groups':len(quarantined)})
-    report={'schema':1,'status':'READ_ONLY_EXACT_SOURCE_CDB_IDENTITY_AND_NULL_GAP_COMPARE',
+                   'candidate_null_cells_not_approved':null_cells,'source_conflict_groups':len(quarantined)})
+    report={'schema':2,'status':'READ_ONLY_COMPOUND_CANDIDATES_NOT_IDENTITY_PROOF',
             'source_mirror_sha':'83733587353df8a41f2fd4f516147d5aa83f5a8d',
             'source_zip_file_inventory_fingerprint':'0x082c375c',
             'canonical_release_id':release['id'],'canonical_release_updated_at':release['updated_at'],
+            'canonical_manifest_sha256':sha(cdb/'history_manifest.json'),
+            'canonical_partition_sha256':{p.name:manifest[re.search(r'history-(\d{4})',p.name)[1]]['sha256'] for p in parts},
             'counts':dict(counts),'blocked_reasons':dict(reasons),
-            'safe_missing_stat_field_counts':dict(missing_fields),
+            'candidate_missing_stat_field_counts':dict(missing_fields),
             'conflicting_existing_stat_field_counts':dict(conflict_fields),
-            'canonical_writes':0,'training':False,'disclosure':'Aggregate totals only; no match identity rows published',
-            'safety':'Only exact full player names, unique tournament/round/window/surface, confirmed winner, and empty nonconflicting destination stats'}
+            'approved_cdb_cells':0,'independent_identity_verified':False,'source_rights_verified':False,
+            'canonical_writes':0,'training':False,
+            'source_file_sha256':source_hashes,
+            'safety':'Research candidates only. Require independent event and both-player identity evidence, source rights, current NULL recheck and governed writer before import.'}
+    if candidates is not None:
+        with gzip.open(candidates,'wt',encoding='utf-8') as f:
+            for record in candidate_rows:f.write(json.dumps(record,sort_keys=True,allow_nan=False)+'\n')
+        report['candidate_ledger_sha256']=sha(candidates)
+        report['candidate_ledger_rows']=len(candidate_rows)
     out.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
     print('PBP_TO_CURRENT_CDB_COUNTS',json.dumps(report,sort_keys=True))
 if __name__=='__main__':
@@ -193,4 +240,5 @@ if __name__=='__main__':
     a.add_argument('--cdb',type=Path,required=True)
     a.add_argument('--release',type=Path,required=True)
     a.add_argument('--out',type=Path,required=True)
-    x=a.parse_args();main(x.source,x.cdb,x.release,x.out)
+    a.add_argument('--candidates',type=Path,help='Optional PRIVATE research-only JSONL.gz ledger; never a writer input')
+    x=a.parse_args();main(x.source,x.cdb,x.release,x.out,x.candidates)
