@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import TestCase
 
 from tbt.schemas import MatchRecord
-from propline_nightly_cdb import plan_targets, stage_additions, api_pro_gap_reason
+from propline_nightly_cdb import plan_targets, stage_additions, api_pro_gap_reason, gap_inventory
 
 
 def match(mid="cdb-1", day=10, both=False, pair=("Carlos Alcaraz", "Novak Djokovic"),
@@ -50,6 +50,32 @@ class NightCanonicalGapsTests(TestCase):
         self.assertEqual(targets[0]["player_name"], "Carlos Alcaraz")
         self.assertNotIn("Daniil Medvedev", [row["player_name"] for row in targets])
         self.assertEqual(len(targets), len(set(x["player_name"] for x in targets)))
+
+    def test_gap_inventory_counts_only_missing_cells_and_quarantines_conflicts(self):
+        now = datetime(2026, 10, 13, tzinfo=timezone.utc)
+        row = match("partial", stats={"p1_aces": 5, "p1_double_faults": None})
+        row.provider_payload = {
+            "_tbt_event_identity": {"event_id": "777", "home": "11",
+                                    "away": "22", "status": "finished"},
+            "_tbt_statistics": {"schema": 3, "event_id": "777",
+                                 "status": "unavailable",
+                                 "reason": "no_supported_fields"},
+        }
+        conflict = match("conflict", day=9, pair=("Learner Tien", "Casper Ruud"))
+        conflict.provider_payload = {
+            "_tbt_event_identity": {"event_id": "888", "home": "11",
+                                    "away": "22", "status": "finished"},
+            "_tbt_statistics": {"schema": 3, "event_id": "888",
+                                 "status": "conflict"},
+        }
+        counts = gap_inventory([row, conflict], now)
+        self.assertEqual(counts["eligible_matches"], 1)
+        self.assertEqual(counts["missing_cells"], 3)
+        self.assertEqual(counts["missing_ace_cells"], 1)
+        self.assertEqual(counts["missing_df_cells"], 2)
+        self.assertEqual(counts["api_pro_conflict_quarantined_matches"], 1)
+        self.assertEqual(counts["missing_cells_by_api_pro_reason"]
+                         ["api_pro_unavailable_no_supported_fields"], 3)
 
     def test_strict_stage_adds_only_exact_ace_df_count_cells(self):
         today = datetime(2026, 10, 12, tzinfo=timezone.utc)
