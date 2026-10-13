@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from drive_repo_source_sheet import drive_inventory, generate, repo_inventory, safe_cell
+from drive_repo_source_sheet import drive_inventory, generate, repo_inventory, release_inventory, safe_cell
 
 class AuditSheetTests(unittest.TestCase):
     def test_git_is_pinned_to_current_commit_and_rejects_truncated_tree(self):
@@ -28,6 +28,25 @@ class AuditSheetTests(unittest.TestCase):
             repo_inventory("BackstageTalks/tbt", fetch=lambda p:
                 {"commit": {"sha": sha}} if "/branches/" in p else {"truncated": True, "tree": []})
 
+    def test_release_metadata_is_bounded_and_incomplete_scope_is_explicit(self):
+        call_list = []
+        def fetch(url):
+            call_list.append(url)
+            return [{"tag_name": "blinq-drive-source-inventory-latest-v1",
+                     "assets": [{"id": 8, "name": "ignore.json"}]}] + [
+                {"tag_name": "dataset", "assets": [{"id": 9 + i,
+                  "name": "serve.csv", "digest": "sha256:ab", "size": 42}]}
+                for i in range(99)]
+        rows, complete = release_inventory("BackstageTalks/tbt-data", fetch=fetch, max_pages=1)
+        self.assertFalse(complete)
+        self.assertEqual(len(rows), 99)
+        self.assertEqual(rows[0]["status"], "RELEASE_METADATA_ONLY_NOT_BYTES_VERIFIED")
+        self.assertEqual(len(call_list), 1)
+        with self.assertRaises(ValueError):
+            release_inventory("BackstageTalks/tbt", fetch=fetch)
+        rows, complete = release_inventory("BackstageTalks/tbt-data", fetch=lambda p: [], max_pages=1)
+        self.assertTrue(complete)
+        self.assertEqual(rows, [])
     def test_drive_shortcuts_ignored_and_matching_inventory_required(self):
         inventory = [
             {"id": "d1", "name": "serve_stats.csv", "mimeType": "text/csv",
