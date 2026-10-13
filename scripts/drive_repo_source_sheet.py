@@ -96,7 +96,7 @@ def release_inventory(repo: str, fetch=git_json, max_pages: int = 25) -> tuple[l
                 if not name:
                     raise ValueError("Unnamed Release asset")
                 value = "|".join(str(asset.get(k) or "") for k in
-                                 ("digest", "size", "updated_at"))
+                                 ("name", "digest", "size", "updated_at")) + "|" + tag
                 output.append({
                     "id": f"release:{repo}:{aid}", "source": repo + " Releases",
                     "name": tag + "/" + name, "size": asset.get("size"),
@@ -128,7 +128,7 @@ def drive_inventory(data: list, files: list) -> list[dict]:
             "source": "Google Drive",
             "name": row["name"],
             "size": row.get("size"),
-            "fingerprint": hashlib.sha256(version.encode("utf-8")).hexdigest(),
+            "fingerprint": hashlib.sha256((row["name"] + "|" + row.get("mimeType", "") + "|" + version).encode("utf-8")).hexdigest(),
             "link": "https://drive.google.com/open?id=" + quote(row["id"], safe=""),
             "mime": row.get("mimeType", ""),
             "status": statuses[row["id"]],
