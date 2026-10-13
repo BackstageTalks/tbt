@@ -1,0 +1,126 @@
+name: BlinQ one-time fresh CDB export to PRIVATE release
+on:
+  push:
+    branches: [blinq-cdb-private-export-20261013]
+    paths:
+      - .github/workflows/blinq-one-time-private-export-20261013.yml
+permissions:
+  contents: read
+concurrency:
+  group: blinq-onetime-cdb-export-20261013
+  cancel-in-progress: false
+
+jobs:
+  readonly-export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      PYTHONPATH: scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Confirm PRIVATE destination and current snapshot availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          mkdir -p /tmp/blinq-cdb-export/history /tmp/blinq-cdb-export/package /tmp/blinq-cdb-export/readback
+      - name: Download fully stable canonical bundle - SHA verified, zero writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/download_stable_cdb.py \
+            --repository "$PRIVATE_REPO" --tag tbt-data-v1 \
+            --out /tmp/blinq-cdb-export/history \
+            --report /tmp/blinq-cdb-export/snapshot-fetch.json
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > /tmp/blinq-cdb-export/release.json
+      - name: Check every partition against both manifests and pack private ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,re,zipfile
+          from pathlib import Path
+          from datetime import datetime,timezone
+          b=Path('/tmp/blinq-cdb-export')
+          h=b/'history'
+          m=json.loads((h/'history_manifest.json').read_text())
+          bundle=json.loads((h/'_tbt_bundle_manifest.json').read_text())
+          release=json.loads((b/'release.json').read_text())
+          fetch=json.loads((b/'snapshot-fetch.json').read_text())
+          assert fetch['status']=='verified'
+          assert release['tag_name']=='tbt-data-v1'
+          assert len(m['years'])==78
+          paths=sorted(h.glob('history-*.parquet'))
+          assert len(paths)==78
+          assets={a['name']:a for a in release['assets']}
+          years={}
+          for year,info in m['years'].items():
+              n=f"history-{int(year):04d}.parquet"
+              assert re.fullmatch(r'history-\d{4}\.parquet',n)
+              assert info['asset']==n and (h/n).is_file()
+              digest=hashlib.sha256((h/n).read_bytes()).hexdigest()
+              assert digest==info['sha256']==bundle['files'][n]['sha256']
+              assert assets[n]['digest']=='sha256:'+digest
+              assert assets[n]['size']==(h/n).stat().st_size
+              years[year]={'sha256':digest,'rows':info.get('rows'),'bytes':assets[n]['size']}
+          assert {p.name for p in paths}=={f"history-{int(y):04d}.parquet" for y in years}
+          for name in ('history_manifest.json','_tbt_bundle_manifest.json'):
+              f=h/name
+              assert f.is_file()
+              sha=hashlib.sha256(f.read_bytes()).hexdigest()
+              assert assets[name]['digest']=='sha256:'+sha
+              if name in bundle['files']:
+                  assert bundle['files'][name]['sha256']==sha
+          assert hashlib.sha256((h/'_tbt_bundle_manifest.json').read_bytes()).hexdigest()==fetch['manifest_sha256']
+          proof={'schema':'BLINQ_CDB_PRIVATE_READONLY_EXPORT_V1','status':'VERIFIED','exported_utc':datetime.now(timezone.utc).isoformat(),'source_repository':'BackstageTalks/tbt-data','source_release':'tbt-data-v1','source_release_id':release['id'],'source_release_updated_at':release['updated_at'],'partition_count':len(paths),'years':years,'history_manifest_sha256':hashlib.sha256((h/'history_manifest.json').read_bytes()).hexdigest(),'bundle_manifest_sha256':fetch['manifest_sha256'],'canonical_writes':0,'model_changes':0,'provider_api_requests':0}
+          (h/'snapshot-proof.json').write_text(json.dumps(proof,sort_keys=True,indent=2)+'\n')
+          out=b/'package'/'CDB_78_partitions_fresh_20261013.zip'
+          with zipfile.ZipFile(out,'w',compression=zipfile.ZIP_STORED,allowZip64=True) as z:
+              for p in paths+[h/'history_manifest.json',h/'_tbt_bundle_manifest.json',h/'snapshot-proof.json']:
+                  z.write(p,p.name)
+          with zipfile.ZipFile(out) as z:
+              assert z.testzip() is None
+              assert len(z.namelist())==81
+          digest=hashlib.sha256(out.read_bytes()).hexdigest()
+          (b/'package'/'SHA256SUMS').write_text(f'{digest}  {out.name}\n')
+          print('VERIFIED_PRIVATE_EXPORT',len(paths),'PARTITIONS',sum(p.stat().st_size for p in paths),'SOURCE_BYTES','ZIP_SHA256',digest)
+          PY
+          (cd /tmp/blinq-cdb-export/package && sha256sum --check SHA256SUMS)
+      - name: Publish ONLY to private tbt-data GitHub release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/blinq-cdb-export/package
+          tag="blinq-cdb-private-export-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          gh release create "$tag" \
+            CDB_78_partitions_fresh_20261013.zip SHA256SUMS \
+            -R "$PRIVATE_REPO" \
+            --title "PRIVATE fresh CDB 78 partitions - $GITHUB_RUN_ID" \
+            --notes 'PRIVATE read-only snapshot of tbt-data-v1. 78 verified Parquet partitions, both original manifests and snapshot proof; never import without a separate exact identity/NULL-only gate. No public artifact.'
+          echo "PRIVATE_RELEASE=https://github.com/$PRIVATE_REPO/releases/tag/$tag"
+      - name: Independently download entire PRIVATE export and verify bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="blinq-cdb-private-export-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release download "$tag" -R "$PRIVATE_REPO" -D /tmp/blinq-cdb-export/readback \
+            -p 'CDB_78_partitions_fresh_20261013.zip' -p SHA256SUMS
+          (cd /tmp/blinq-cdb-export/readback && sha256sum --check SHA256SUMS)
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          p=Path('/tmp/blinq-cdb-export/readback/CDB_78_partitions_fresh_20261013.zip')
+          with zipfile.ZipFile(p) as z:
+              assert z.testzip() is None
+              assert len(z.namelist())==81
+          print('INDEPENDENT_PRIVATE_READBACK_VERIFIED: 78 canonical Parquet files; 0 CDB writes')
+          PY
