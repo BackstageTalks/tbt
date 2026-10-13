@@ -1,0 +1,77 @@
+name: BlinQ private ATP1000 CC0 identity review - one shot
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/atp1000-identity-review-request.json'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  private-atp1000-wikidata-review:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      PINNED_PRIVATE_SHA: 75628adea78e0696fc556b5bc89305534ffc292e
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require private repo access, never expose data
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/$PRIVATE_REPO --jq .private)" = true
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 75628adea78e0696fc556b5bc89305534ffc292e
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+          path: work/private
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate pinned private input and all 14 safety tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C work/private rev-parse HEAD)" = "$PINNED_PRIVATE_SHA"
+          python -m unittest discover -s work/private/scripts/research -p test_verify_atp1000_wikidata_cc0.py -v
+          mkdir -p work/input
+          base64 --decode work/private/research/identity-gaps/atp1000-private-candidates-20261013.jsonl.gz.base64 | gzip -dc > work/input/candidates.jsonl
+          echo '7f4c7796c0f6836cf3967593b6338dcdee60abab116cb485058ac69856896507  work/input/candidates.jsonl' | sha256sum -c
+          echo 'f843cb67d852050580268f42ca207651ff335009a1ecffd50124d578574259a0  work/private/research/player_identity/wikidata-tennis-identity.jsonl.gz' | sha256sum -c
+      - name: Independent Wikidata CC0 review of 1000 native IDs (no CDB)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python work/private/scripts/research/verify_atp1000_wikidata_cc0.py \
+            --candidates work/input/candidates.jsonl \
+            --wikidata work/private/research/player_identity/wikidata-tennis-identity.jsonl.gz \
+            --out work/private-review
+          python - <<'PY'
+          import json
+          r=json.load(open('work/private-review/report.json'))
+          assert r['scope']==1000 and r['preserved_repeated_source_candidates']==195 and r['new_name_only_source_candidates']==805
+          assert r['canonical_player_ids_proven']==0 and r['canonical_event_ids_proven']==0 and r['cdb_fields_written']==0
+          assert r['rights_cleared'] is False and r['model_updated'] is False and r['provider_requests']==0
+          PY
+      - name: Persist private-only report and independent SHA readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="blinq-atp1000-cc0-review-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          (cd work/private-review && sha256sum report.json atp1000-private-review.jsonl > SHA256SUMS)
+          gh release create "$tag" -R "$PRIVATE_REPO" --target "$PINNED_PRIVATE_SHA" --title 'Private read-only ATP1000 native-ID/Wikidata review' --notes 'CC0 P536 and name-only research; original numeric-source player IDs, canonical matches and data rights UNPROVEN. No CDB writes, model changes or provider API.' >/dev/null
+          gh release upload "$tag" work/private-review/report.json work/private-review/atp1000-private-review.jsonl work/private-review/SHA256SUMS -R "$PRIVATE_REPO" >/dev/null
+          mkdir -p work/verified-readback
+          gh release download "$tag" -R "$PRIVATE_REPO" -D work/verified-readback >/dev/null
+          (cd work/verified-readback && sha256sum -c SHA256SUMS)
+          cmp work/private-review/report.json work/verified-readback/report.json
+          cmp work/private-review/atp1000-private-review.jsonl work/verified-readback/atp1000-private-review.jsonl
+          echo "VERIFIED_READ_ONLY_ATP1000_PRIVATE_RELEASE=$tag"
