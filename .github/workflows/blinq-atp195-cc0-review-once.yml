@@ -1,0 +1,66 @@
+name: BlinQ private 195 ATP identity proof review - one shot
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/atp195-identity-review-request.json'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  private-p536-review:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      PINNED_SOURCE_SHA: 2dafc1f1b7f50d10d1a5e8fd0635487544b7838b
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Private repo access guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/$PRIVATE_REPO --jq .private)" = true
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 2dafc1f1b7f50d10d1a5e8fd0635487544b7838b
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+          path: work/private-data
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run safety tests
+        run: python -m unittest discover -s work/private-data/scripts/research -p test_verify_atp_wikidata_p536.py -v
+      - name: Compare exact ATP P536 against existing CC0 registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C work/private-data rev-parse HEAD)" = "$PINNED_SOURCE_SHA"
+          test "$(git -C work/private-data rev-parse HEAD:research/player_identity/wikidata-tennis-identity.jsonl.gz | wc -c)" -eq 41
+          python work/private-data/scripts/research/verify_atp_wikidata_p536.py \
+            --candidates work/private-data/research/identity-gaps/season-atp-195-review-candidates-20261013.jsonl \
+            --wikidata work/private-data/research/player_identity/wikidata-tennis-identity.jsonl.gz \
+            --out work/result
+          test "$(python -c 'import json; r=json.load(open("work/result/report.json")); print(r["production_cdb_links"])')" = 0
+          test "$(python -c 'import json; r=json.load(open("work/result/report.json")); print(r["new_cdb_fields"])')" = 0
+      - name: Persist result privately with readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="blinq-atp195-p536-review-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          (cd work/result && sha256sum report.json atp_p536_private_review.jsonl > SHA256SUMS)
+          gh release create "$tag" -R "$PRIVATE_REPO" --target "$PINNED_SOURCE_SHA" --title 'Private BlinQ ATP195 P536 identity review' --notes 'Wikidata CC0 P536 corroboration only. No original numeric ID attestation, canonical event, source rights, model changes or CDB write.' >/dev/null
+          gh release upload "$tag" work/result/report.json work/result/atp_p536_private_review.jsonl work/result/SHA256SUMS -R "$PRIVATE_REPO" >/dev/null
+          mkdir -p work/readback
+          gh release download "$tag" -R "$PRIVATE_REPO" -D work/readback >/dev/null
+          (cd work/readback && sha256sum -c SHA256SUMS)
+          cmp work/result/report.json work/readback/report.json
+          cmp work/result/atp_p536_private_review.jsonl work/readback/atp_p536_private_review.jsonl
+          echo "VERIFIED_READ_ONLY_P536_PRIVATE_RELEASE=$tag"
