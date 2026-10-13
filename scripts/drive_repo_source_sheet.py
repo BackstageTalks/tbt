@@ -68,6 +68,48 @@ def repo_inventory(repo: str, fetch=git_json) -> tuple[list[dict], str]:
     return output, commit
 
 
+def release_inventory(repo: str, fetch=git_json, max_pages: int = 25) -> tuple[list[dict], bool]:
+    """Inventory GitHub Release assets as METADATA ONLY, never download raw data."""
+    if repo != "BackstageTalks/tbt-data":
+        raise ValueError("Unexpected release repository")
+    output = []
+    seen = set()
+    complete = False
+    for page_no in range(1, max_pages + 1):
+        page = fetch(f"repos/{repo}/releases?per_page=100&page={page_no}")
+        if not isinstance(page, list):
+            raise ValueError("Invalid release inventory response")
+        for release in page:
+            tag = release.get("tag_name", "")
+            # Exclude our own changing reports/checkpoints to avoid recursive deltas.
+            if tag.startswith(("blinq-drive-cdb-audit-", "blinq-drive-cdb-checkpoint-",
+                               "blinq-drive-source-inventory-")) or tag == "blinq-drive-cdb-audit-cache-v1":
+                continue
+            for asset in release.get("assets", []):
+                aid = asset.get("id")
+                if not isinstance(aid, int) or aid <= 0 or aid in seen:
+                    raise ValueError("Invalid or duplicate Release asset ID")
+                seen.add(aid)
+                if len(seen) > 25000:
+                    raise ValueError("Release asset inventory safety limit reached")
+                name = str(asset.get("name") or "")
+                if not name:
+                    raise ValueError("Unnamed Release asset")
+                value = "|".join(str(asset.get(k) or "") for k in
+                                 ("digest", "size", "updated_at"))
+                output.append({
+                    "id": f"release:{repo}:{aid}", "source": repo + " Releases",
+                    "name": tag + "/" + name, "size": asset.get("size"),
+                    "fingerprint": hashlib.sha256(value.encode("utf-8")).hexdigest(),
+                    "link": "https://github.com/" + repo + "/releases/tag/" + quote(tag, safe=""),
+                    "mime": Path(name).suffix.lower(),
+                    "status": "RELEASE_METADATA_ONLY_NOT_BYTES_VERIFIED",
+                })
+        if len(page) < 100:
+            complete = True
+            break
+    return output, complete
+
 def drive_inventory(data: list, files: list) -> list[dict]:
     if not isinstance(data, list) or not isinstance(files, list):
         raise ValueError("Invalid Drive report")
@@ -114,7 +156,8 @@ def safe_cell(value) -> str:
 
 
 def generate(drive: list[dict], repositories: dict[str, list[dict]], commits: dict[str, str],
-             comparison: dict, previous: dict | None, out: Path) -> dict:
+             comparison: dict, previous: dict | None, out: Path,
+             releases: list[dict] | None = None, releases_complete: bool = True) -> dict:
     if not isinstance(comparison, dict) or comparison.get("cdb_writes") != 0:
         raise ValueError("Unverified read-only CDB report")
     before = {}
@@ -122,7 +165,7 @@ def generate(drive: list[dict], repositories: dict[str, list[dict]], commits: di
         if previous.get("schema") != 1 or not isinstance(previous.get("entries"), dict):
             raise ValueError("Invalid previous source baseline")
         before = previous["entries"]
-    sources = drive + [item for repo in REPOS for item in repositories[repo]]
+    sources = drive + [item for repo in REPOS for item in repositories[repo]] + (releases or [])
     ids = [record["id"] for record in sources]
     if len(set(ids)) != len(ids):
         raise ValueError("Duplicate source identities")
@@ -171,10 +214,11 @@ def generate(drive: list[dict], repositories: dict[str, list[dict]], commits: di
         "schema": 1, "status": "READ_ONLY_INVENTORY",
         "scope": {"drive_root": "configured private Drive audit folder",
                   "repositories": list(REPOS), "git_branches": "main",
-                  "github_release_assets_in_scope": False},
+                  "github_release_assets_in_scope": bool(releases is not None),
+                  "github_release_inventory_complete": releases_complete},
         "baseline_previously_available": previous is not None,
         "source_counts": dict(sorted(counts.items())),
-        "drive_originals": len(drive),
+        "drive_originals": len(drive), "github_release_assets": len(releases or []),
         "git_files": {repo: len(repositories[repo]) for repo in REPOS},
         "canonical_rows": comparison.get("canonical_rows"),
         "cdb_candidate_missing_fields_all_drive": (
@@ -205,14 +249,15 @@ def main() -> None:
     repositories, commits = {}, {}
     for repo in REPOS:
         repositories[repo], commits[repo] = repo_inventory(repo)
+    releases, releases_complete = release_inventory("BackstageTalks/tbt-data")
     summary = generate(
         drive_inventory(json.loads(args.drive_inventory.read_text()),
                         json.loads(args.drive_files.read_text())),
         repositories, commits, json.loads(args.cdb_report.read_text()),
-        previous, args.out)
+        previous, args.out, releases=releases, releases_complete=releases_complete)
     print(json.dumps({k: summary[k] for k in (
         "status", "baseline_previously_available", "source_counts",
-        "drive_originals", "git_files", "cdb_writes")}, sort_keys=True))
+        "drive_originals", "git_files", "github_release_assets", "cdb_writes")}, sort_keys=True))
 
 
 if __name__ == "__main__":
