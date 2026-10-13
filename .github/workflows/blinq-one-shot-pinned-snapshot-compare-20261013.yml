@@ -1,0 +1,195 @@
+name: BlinQ ONE SHOT pinned CDB ZIP vs PbP and Charting
+on:
+  push:
+    branches: [blinq-cdb-private-export-20261013]
+    paths:
+      - .github/workflows/blinq-one-shot-pinned-snapshot-compare-20261013.yml
+permissions:
+  contents: read
+concurrency:
+  group: blinq-one-shot-pinned-snapshot-compare-20261013
+  cancel-in-progress: false
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      EXPORT_TAG: blinq-cdb-private-export-38455907134-1
+      EXPORT_SHA: 0f3807a1c7dcd8cdaac8e4824cdae60c8172d21a82c7ab6b6a747ac0616aa006
+      CHARTING_SOURCE_SHA: edb00bd1ba98ed937ed2aac575676e4f4656c5e8fd7ae4530cb802edad3e1478
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          ref: main
+          path: private-data
+          persist-credentials: false
+          sparse-checkout: |
+            tennis/charting
+            scripts/charting_cdb_safe_bridge.py
+            audit/cross-source/CHARTING-SOURCE-PREFLIGHT-20261012.json
+      - uses: actions/checkout@v4
+        with:
+          repository: Aneeshers/tennis-sackmann-archive
+          ref: 83733587353df8a41f2fd4f516147d5aa83f5a8d
+          path: sackmann-source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Acquire only PRIVATE exact pinned CDB ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          mkdir -p /tmp/blinq-pinned-compare/zip /tmp/blinq-pinned-compare/history /tmp/blinq-pinned-compare/report /tmp/blinq-pinned-compare/readback
+          gh release download "$EXPORT_TAG" -R "$PRIVATE_REPO" \
+            -p 'CDB_78_partitions_fresh_20261013.zip' -p SHA256SUMS \
+            -D /tmp/blinq-pinned-compare/zip
+          (cd /tmp/blinq-pinned-compare/zip && sha256sum --check SHA256SUMS)
+          echo "$EXPORT_SHA  /tmp/blinq-pinned-compare/zip/CDB_78_partitions_fresh_20261013.zip" | sha256sum --check
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile,hashlib,json
+          root=Path('/tmp/blinq-pinned-compare')
+          p=root/'zip/CDB_78_partitions_fresh_20261013.zip'
+          with zipfile.ZipFile(p) as z:
+              assert z.testzip() is None
+              names=z.namelist()
+              assert len(names)==81
+              assert all('/' not in n and n not in ('.','..') and not n.startswith('.') for n in names)
+              z.extractall(root/'history')
+          h=root/'history'
+          proof=json.loads((h/'snapshot-proof.json').read_text())
+          assert proof['status']=='VERIFIED' and proof['partition_count']==78
+          assert proof['canonical_writes']==0 and proof['provider_api_requests']==0
+          assert len(proof['years'])==78
+          bundle=json.loads((h/'_tbt_bundle_manifest.json').read_text())
+          manifest=json.loads((h/'history_manifest.json').read_text())
+          expected={}
+          for y,v in proof['years'].items():
+              name=f"history-{int(y):04d}.parquet"
+              q=h/name
+              assert q.is_file() and len(proof['years'])==78
+              digest=hashlib.sha256(q.read_bytes()).hexdigest()
+              assert digest==v['sha256']==manifest['years'][y]['sha256']==bundle['files'][name]['sha256']
+              assert q.stat().st_size==v['bytes']
+              expected[name]=digest
+          assert {x.name for x in h.glob('history-*.parquet')}==set(expected)
+          assert hashlib.sha256((h/'history_manifest.json').read_bytes()).hexdigest()==proof['history_manifest_sha256']
+          assert hashlib.sha256((h/'_tbt_bundle_manifest.json').read_bytes()).hexdigest()==proof['bundle_manifest_sha256']
+          (root/'report/expected-year-shas.json').write_text(json.dumps(expected,sort_keys=True))
+          fake_release={'id':proof['source_release_id'],'updated_at':proof['source_release_updated_at'],
+             'assets':[{'name':name,'digest':'sha256:'+digest} for name,digest in expected.items()]}
+          (root/'report/pinned-release.json').write_text(json.dumps(fake_release))
+          print('PINNED_CDB_EXTRACTED_AND_VERIFIED',len(expected))
+          PY
+          python -m pip install --quiet 'pandas>=2,<3' pyarrow
+      - name: Compare Match Charting against EXACT same pinned CDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=/tmp/blinq-pinned-compare
+          echo "$CHARTING_SOURCE_SHA  private-data/tennis/charting/matches.json.gz" | sha256sum --check
+          PYTHONPATH=private-data/scripts python private-data/scripts/charting_cdb_safe_bridge.py \
+            --charting private-data/tennis/charting/matches.json.gz \
+            --cdb "$root"/history/history-*.parquet \
+            --expected-shas "$root"/report/expected-year-shas.json \
+            --output "$root"/report/charting-links > /tmp/blinq-charting-links-stdout.json
+          python app/scripts/charting_cdb_field_gap_review.py \
+            --charting private-data/tennis/charting/matches.json.gz \
+            --players private-data/tennis/charting/players.json \
+            --profiles-root private-data/tennis/charting \
+            --crosswalk "$root"/report/charting-links/crosswalk_candidates.jsonl.gz \
+            --cdb "$root"/history/history-*.parquet \
+            --expected-shas "$root"/report/expected-year-shas.json \
+            --output "$root"/report/charting-gaps > /tmp/blinq-charting-gaps-stdout.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=Path('/tmp/blinq-pinned-compare/report')
+          a=json.loads((r/'charting-links/crosswalk_report.json').read_text())
+          b=json.loads((r/'charting-gaps/field_gap_report.json').read_text())
+          assert a['rows_processed']==11822 and a['canonical_cdb_writes']==0
+          assert b['canonical_cdb_writes']==0 and b['approved_cdb_cells']==0
+          assert b['counts']['cdb_rows_scanned']==a['counts']['cdb_rows']
+          print('CHARTING_CROSSWALK',json.dumps(a['counts'],sort_keys=True))
+          print('CHARTING_FIELD_GAPS',json.dumps(b['counts'],sort_keys=True))
+          PY
+      - name: Compare Sackmann original ZIP-identical source to SAME pinned CDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=/tmp/blinq-pinned-compare
+          python app/scripts/audit_pbp_source_vs_current_cdb.py \
+            --source sackmann-source \
+            --cdb "$root"/history \
+            --release "$root"/report/pinned-release.json \
+            --out "$root"/report/pbp-current-cdb-gap.json > /tmp/blinq-pbp-gap-stdout.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('/tmp/blinq-pinned-compare/report/pbp-current-cdb-gap.json').read_text())
+          assert d['canonical_writes']==0 and d['training'] is False
+          assert d['counts']['source_files_byte_identical_to_zip']==262
+          print('PBP_EXACT_ZIP_INVENTORY_MATCH_AND_CDB_GAPS',json.dumps(d['counts'],sort_keys=True))
+          PY
+      - name: Write aggregate ONLY combined report and independently verify private release readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=/tmp/blinq-pinned-compare
+          python - <<'PY'
+          import json,hashlib,os
+          from pathlib import Path
+          root=Path('/tmp/blinq-pinned-compare')
+          read=lambda p:json.loads(p.read_text())
+          chart=read(root/'report/charting-links/crosswalk_report.json')
+          fields=read(root/'report/charting-gaps/field_gap_report.json')
+          pbp=read(root/'report/pbp-current-cdb-gap.json')
+          proof=read(root/'history/snapshot-proof.json')
+          assert pbp['counts']['cdb_rows']==chart['counts']['cdb_rows']==fields['counts']['cdb_rows_scanned']
+          report={
+             'schema':'BLINQ_PINNED_CDB_CHARTING_PBP_AGGREGATE_COMPARISON_V1',
+             'status':'READ_ONLY_COMPARISON_COMPLETE',
+             'fresh_snapshot':{'export_release':os.environ['EXPORT_TAG'],'export_zip_sha256':os.environ['EXPORT_SHA'],'release_updated_at':proof['source_release_updated_at'],'canonical_rows':chart['counts']['cdb_rows'],'partitions':proof['partition_count']},
+             'charting':{'source_sha256':chart['source_sha256'],'source_rows':chart['rows_processed'],'counts':chart['counts'],'field_gap_counts':fields['counts'],'candidate_links_not_provider_attested':chart['candidate_links'],'approved_cdb_cells':0},
+             'pbp':{'source_mirror_sha':pbp['source_mirror_sha'],'source_zip_file_inventory_fingerprint':pbp['source_zip_file_inventory_fingerprint'],'counts':pbp['counts'],'blocked_reasons':pbp['blocked_reasons'],'safe_missing_stat_field_counts':pbp['safe_missing_stat_field_counts'],'conflicting_existing_stat_field_counts':pbp['conflicting_existing_stat_field_counts']},
+             'canonical_writes':0,'model_training':False,
+             'warning':'Charting compound-only match candidates lack independent provider ID attestation. PbP matching is conservative cross-source evidence, not blanket permission to import. No values published to canonical release.'
+          }
+          dest=root/'report/combined-pinned-comparison.json'
+          dest.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print('AGGREGATE_COMPARISON_COUNTS',json.dumps({'charting':report['charting']['counts'],'charting_gaps':report['charting']['field_gap_counts'],'pbp':report['pbp']['counts']},sort_keys=True))
+          PY
+          cd "$root/report"
+          sha256sum combined-pinned-comparison.json charting-links/crosswalk_report.json charting-gaps/field_gap_report.json pbp-current-cdb-gap.json > COMPARISON_SHA256SUMS
+          sha256sum --check COMPARISON_SHA256SUMS
+          tag="blinq-pinned-cdb-comparison-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" \
+            combined-pinned-comparison.json COMPARISON_SHA256SUMS \
+            -R "$PRIVATE_REPO" \
+            --title "PRIVATE pinned fresh CDB vs Charting/PbP aggregate compare $GITHUB_RUN_ID" \
+            --notes 'Only aggregate counts, not source identities; SHA-pinned CDB from exact prior private export; no CDB writes; no training.'
+          gh release download "$tag" -R "$PRIVATE_REPO" \
+            -p combined-pinned-comparison.json \
+            -D "$root/readback"
+          cmp combined-pinned-comparison.json "$root/readback/combined-pinned-comparison.json"
+          sha256sum combined-pinned-comparison.json > "$root/readback/report-SHA256SUMS"
+          (cd "$root/readback" && sha256sum --check report-SHA256SUMS)
+          # Audit JSON is aggregate-only and stored in the PRIVATE repository for authenticated textual read.
+          fname="audit/import-preparation/CDB_PINNED_MCP_PBP_COMPARISON_20261013.json"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          base64 -w0 combined-pinned-comparison.json > "$root/report/report.b64"
+          gh api --method PUT "repos/$PRIVATE_REPO/contents/$fname" \
+            -f message="audit: read-only pinned CDB, MCP, PbP comparison $GITHUB_RUN_ID" \
+            -f content="$(cat "$root/report/report.b64")" >/dev/null
+          echo "COMPARISON_PRIVATE_READBACK_VERIFIED $tag"
