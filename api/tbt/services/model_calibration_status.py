@@ -57,6 +57,62 @@ def _timestamp(value: object) -> str:
     return parsed.astimezone(timezone.utc).isoformat()
 
 
+def _offline_candidate(raw: object, production_version: str) -> dict | None:
+    """Validate separate untouched-holdout evidence; never label it as shadow."""
+    if not isinstance(raw, dict):
+        return None
+    if (raw.get("schema") != 1 or raw.get("status") != "EVALUATED_NOT_DEPLOYED"
+            or raw.get("evaluation_type") != "untouched_offline_holdout"
+            or raw.get("promotion_requested") is not False
+            or raw.get("model_promoted") is not False
+            or raw.get("backup_readback_verified") is not True
+            or raw.get("champion_restore_verified") is not True
+            or raw.get("candidate_remote_readback_verified") is not True):
+        raise ValueError("Unverified new offline model candidate evidence")
+    champion = _bounded_text(raw.get("champion_version"))
+    candidate = _bounded_text(raw.get("candidate_version"))
+    if champion != production_version:
+        # Keep the historic comparison separate; do not show it as current.
+        return None
+    if not candidate or candidate == champion:
+        raise ValueError("Offline candidate is not different from serving champion")
+    tag = _bounded_text(raw.get("candidate_release_tag"))
+    if not tag.startswith("blinq-candidate-frozen-"):
+        raise ValueError("Candidate release must be separately frozen")
+    if not isinstance(raw.get("candidate_sha256"), str) or len(raw["candidate_sha256"]) != 64:
+        raise ValueError("Candidate binary SHA missing")
+    comparison = raw.get("comparison")
+    if not isinstance(comparison, dict):
+        raise ValueError("Offline comparison missing")
+    n = _nonnegative(comparison.get("sample_size"), "offline_sample_size")
+    if n < 200:
+        raise ValueError("Offline model holdout too small")
+    def metrics(name):
+        block = comparison.get(name)
+        if not isinstance(block, dict) or type(block.get("n")) is not int or block["n"] != n:
+            raise ValueError("Offline champion/candidate holdout sample mismatch")
+        row = _metric_row(block)
+        if any(key not in row for key in ("accuracy", "log_loss", "brier_score", "ece_10")):
+            raise ValueError("Incomplete offline holdout metrics")
+        return row
+    return {
+        "status": "evaluated_not_deployed",
+        "evaluation_type": "untouched_offline_holdout",
+        "candidate_version": candidate,
+        "production_version": champion,
+        "candidate_release_tag": tag,
+        "candidate_sha256": raw["candidate_sha256"],
+        "backup_tag": _bounded_text(raw.get("backup_tag")),
+        "run_id": _bounded_text(raw.get("run_id"), 30),
+        "generated_at_utc": _timestamp(raw.get("generated_at_utc")),
+        "n": n,
+        "champion": metrics("champion"),
+        "candidate": metrics("candidate"),
+        "promotion_requested": False,
+        "model_promoted": False,
+    }
+
+
 def normalize_model_calibration_snapshot(raw: object) -> dict:
     if not isinstance(raw, dict) or raw.get("schema") != 1:
         raise ValueError("Invalid model calibration snapshot schema")
@@ -166,6 +222,7 @@ def normalize_model_calibration_snapshot(raw: object) -> dict:
             ],
         },
         "automatic_promotion": False,
+        "offline_candidate": _offline_candidate(raw.get("offline_candidate"), production),
         "source": "private_github_releases_and_readiness_audit",
     }
 

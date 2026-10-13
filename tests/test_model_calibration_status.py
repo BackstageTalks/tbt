@@ -107,6 +107,60 @@ class TestModelCalibrationStatus(unittest.TestCase):
         self.assertEqual(result["last_decision"]["status"], "rejected")
         self.assertFalse(result["shadow"]["gate"]["ready_for_promotion_review"])
 
+    def test_frozen_candidate_is_separate_from_old_shadow(self):
+        source = fixture()
+        source["offline_candidate"] = {
+            "schema": 1,
+            "status": "EVALUATED_NOT_DEPLOYED",
+            "evaluation_type": "untouched_offline_holdout",
+            "promotion_requested": False,
+            "model_promoted": False,
+            "backup_readback_verified": True,
+            "champion_restore_verified": True,
+            "candidate_remote_readback_verified": True,
+            "champion_version": "champion-v1",
+            "candidate_version": "new-frozen-v3",
+            "candidate_release_tag": "blinq-candidate-frozen-123-1",
+            "candidate_sha256": "f" * 64,
+            "backup_tag": "blinq-full-training-backup-123-1",
+            "run_id": "123",
+            "generated_at_utc": "2026-10-13T23:30:00Z",
+            "comparison": {
+                "sample_size": 500,
+                "champion": {"n": 500, "accuracy": .70, "log_loss": .58,
+                             "brier_score": .20, "ece_10": .04},
+                "candidate": {"n": 500, "accuracy": .72, "log_loss": .56,
+                              "brier_score": .19, "ece_10": .04},
+            },
+        }
+        result = normalize_model_calibration_snapshot(source)
+        self.assertEqual(result["shadow"]["settled"], 105)
+        self.assertEqual(result["candidate_version"], "challenger-v2")
+        self.assertEqual(result["offline_candidate"]["candidate_version"], "new-frozen-v3")
+        self.assertEqual(result["offline_candidate"]["n"], 500)
+        self.assertFalse(result["offline_candidate"]["model_promoted"])
+
+    def test_frozen_candidate_fails_closed_on_unequal_samples(self):
+        source = fixture()
+        self.test_frozen_candidate_is_separate_from_old_shadow()
+        source["offline_candidate"] = {
+            "schema": 1, "status": "EVALUATED_NOT_DEPLOYED",
+            "evaluation_type": "untouched_offline_holdout",
+            "promotion_requested": False, "model_promoted": False,
+            "backup_readback_verified": True, "champion_restore_verified": True,
+            "candidate_remote_readback_verified": True,
+            "champion_version": "champion-v1", "candidate_version": "new-v2",
+            "candidate_release_tag": "blinq-candidate-frozen-123-1",
+            "candidate_sha256": "f"*64, "generated_at_utc": "2026-10-13T23:30:00Z",
+            "comparison": {"sample_size": 500,
+                           "champion": {"n": 499, "accuracy": .70, "log_loss": .58,
+                                        "brier_score": .20, "ece_10": .04},
+                           "candidate": {"n": 500, "accuracy": .72, "log_loss": .56,
+                                        "brier_score": .19, "ece_10": .04}},
+        }
+        with self.assertRaises(ValueError):
+            normalize_model_calibration_snapshot(source)
+
     def test_snapshot_staleness_is_reported_without_changing_metrics(self):
         normalized = normalize_model_calibration_snapshot(fixture())
         normalized["updated_at"] = "2026-10-09T06:00:00+00:00"

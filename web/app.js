@@ -4943,6 +4943,28 @@
       gate.ready_for_promotion_review&&active?'Pripravený na odborné posúdenie':
       active?'V shadow testovaní': 'Čakáme na nový kandidátsky model';
     const incomplete=!active||!Number(shadow.settled);
+    // Separate untouched holdout is *not* an issued pre-match Shadow cohort.
+    // Never replace the historical shadow candidate or its published metrics.
+    const offline=d.offline_candidate;
+    const offlineRows=offline&&offline.evaluation_type==='untouched_offline_holdout'
+      ?metrics.map(([label,key])=>{
+          const old=offline.champion?.[key],next=offline.candidate?.[key];
+          const delta=typeof next==='number'&&typeof old==='number'?next-old:null;
+          const better=delta!==null?(key==='accuracy'||key==='roc_auc'?delta>0:delta<0):false;
+          const t=delta===null?'—':(delta>0?'+':'')+(key==='accuracy'||key==='roc_auc'||key==='ece_10'?(delta*100).toFixed(2)+' pp':delta.toFixed(4));
+          return `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(score(old,key))}</td><td>${escapeHtml(score(next,key))}</td><td class="${delta===0?'':better?'is-better':'is-worse'}">${escapeHtml(t)}</td></tr>`;
+        }).join(''):'';
+    const offlinePanel=offline&&offlineRows?`<article class="admin-calibration-panel" aria-label="Nový kandidát na CDB – oddelený offline holdout">
+      <h3>Nový kandidát na aktuálnej CDB · offline holdout</h3>
+      <p>Vyhodnotenie rovnakých ${numberOrDash(offline.n)} historických zápasov, ktoré neboli použité v rozhodovacom holdoute. Nie je to Shadow ani živá predikcia. Produkčný model zostáva nezmenený.</p>
+      <div class="admin-calibration-grid">
+        ${card('Champion',String(offline.production_version||'—'),'Aktuálny produkčný model')}
+        ${card('Kandidát po pretrénovaní',String(offline.candidate_version||'—'),'Iba offline · nenasadený')}
+        ${card('Vyhodnotené zápasy',numberOrDash(offline.n),'Rovnaká testovacia vzorka')}
+      </div>
+      <div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Metrika</th><th>Champion</th><th>Nový kandidát</th><th>Rozdiel</th></tr></thead><tbody>${offlineRows}</tbody></table></div>
+      <p class="admin-calibration-foot">Záloha: ${escapeHtml(offline.backup_tag||'—')} · Run: ${escapeHtml(offline.run_id||'—')} · ${escapeHtml(fmtStamp(offline.generated_at_utc))}. Žiadne automatické povýšenie.</p>
+    </article>`:`<article class="admin-calibration-panel"><h3>Nový kandidát na aktuálnej CDB</h3><p>Čakáme na úspešný zálohovaný tréning a nezávisle overený offline holdout. Starý Shadow test zostáva dostupný vyššie.</p></article>`;
     return `<section class="admin-ux-section admin-calibration">${head}
       <div class="admin-calibration-status${d.stale?' is-stale':''}" role="status"><strong>${escapeHtml(status)}</strong><span>${d.stale?'Údaje synchronizácie sú staršie než 8 hodín.':''} Synchronizácia: ${escapeHtml(fmtStamp(d.updated_at))} · Shadow report: ${escapeHtml(fmtStamp(d.shadow_generated_at))}</span></div>
       <div class="admin-calibration-grid">
@@ -4973,6 +4995,7 @@
           ].map(([label,pass])=>`<div><span>${escapeHtml(label)}</span><strong class="${pass?'is-good':'is-pending'}">${pass?'✓':'—'}</strong></div>`).join('')}
         </div><p class="admin-calibration-foot">Audit nových zápasov: ${escapeHtml(fmtStamp(unseen.readiness_generated_at))}. ${unseen.available?'Cohort nezávislý od už spotrebovaných rozhodnutí.':'Pozor: audit nových zápasov zatiaľ nepatrí aktuálnemu championovi.'}</p></article>
       </div>
+      ${offlinePanel}
       <div class="admin-calibration-bottom"><div><strong>Posledné rozhodnutie</strong><span>${escapeHtml(decision.status||'neznáme')} · ${escapeHtml(decision.candidate_version||'—')} · ${escapeHtml(fmtStamp(decision.decided_at))}${pairDecision?' · rovnaký modelový pár':' · historický kandidát'}</span></div><div class="admin-calibration-links">${link} · <a href="https://github.com/BackstageTalks/tbt-data/blob/main/audit/model-promotion-readiness-latest.json" target="_blank" rel="noopener noreferrer">Readiness audit ↗</a> · <a href="https://github.com/BackstageTalks/tbt-data/releases/tag/tbt-model-shadow-v1" target="_blank" rel="noopener noreferrer">Shadow report ↗</a></div></div>
       <p class="admin-calibration-foot">Kandidát sa automaticky identifikuje podľa presnej verzie nového artefaktu. Po schválenom nasadení sa ďalšie hodnotenie začne s novým párom champion/kandidát. História zostáva uložená na GitHube; tlačidlo Obnoviť iba načíta posledný privátny snapshot.</p>
     </section>`;

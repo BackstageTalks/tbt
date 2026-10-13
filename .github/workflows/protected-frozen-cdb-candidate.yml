@@ -1,0 +1,126 @@
+name: BlinQ protected frozen-CDB candidate training
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/protected-frozen-cdb-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serializes with champion rollback verification in this app repository.
+  # A separate private global tag lock covers canonical writes across repos.
+  group: blinq-model-backup-single-writer
+  cancel-in-progress: false
+
+jobs:
+  frozen-candidate:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      PYTHONPATH: api:scripts
+      PYTHONDONTWRITEBYTECODE: '1'
+      BLINQ_RAPIDAPI_MAX_RPS: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install existing training dependencies
+        run: python -m pip install -r api/requirements-train.txt pytest
+      - name: Verify backup and training fail-closed contracts
+        run: |
+          set -euo pipefail
+          python -m pytest -q \
+            tests/test_immutable_training_backup.py \
+            tests/test_candidate_training_requires_backup.py \
+            tests/test_champion_rollback_rehearsal.py
+      - name: Acquire global private canonical writer lock
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$TBT_DATA_REPOSITORY" = "BackstageTalks/tbt-data"
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+      - name: Freeze ALL current source inputs and independently restore champion
+        run: |
+          set -euo pipefail
+          python scripts/guarded_candidate_backup.py prepare
+          python scripts/guarded_candidate_backup.py verify
+      - name: Fit separate candidate only if immutable backup gate passed
+        run: |
+          set -euo pipefail
+          # No --promote. No current candidate tag rewrite. No app deployment.
+          python scripts/pipeline.py train --max-requests 1
+          python scripts/guarded_candidate_backup.py verify
+      - name: Independently persist champion-versus-candidate offline holdout
+        if: success()
+        run: |
+          set -euo pipefail
+          python scripts/publish_frozen_candidate_evidence.py
+          test -s .cache/tbt/training-backup/frozen-candidate-evaluation.json
+      - name: Update signed Admin model comparison without activation
+        if: success()
+        env:
+          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          python scripts/publish_model_calibration_status.py \
+            --output .cache/tbt/training-backup/admin-snapshot.json
+          test -s .cache/tbt/training-backup/admin-snapshot.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('.cache/tbt/training-backup/admin-snapshot.json').read_text())
+          assert d.get('offline_candidate'), 'Signed Admin comparison not present'
+          assert d['offline_candidate']['model_promoted'] is False
+          print('New frozen candidate included in signed Admin snapshot')
+          PY
+      - name: Write private aggregate candidate result to job summary
+        if: success()
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          cert=json.loads(Path('.cache/tbt/training-backup/verified-certificate.json').read_text())
+          report=json.loads(Path('.cache/tbt/model/training_report.json').read_text())
+          rows=[
+            '### BlinQ protected candidate — no deployment',
+            f"Backup: {cert['backup_tag']}",
+            f"Frozen canonical matches: {cert['canonical_matches']}",
+            f"Backup files + manifest remotely verified: {cert['all_assets_remotely_verified']}",
+            f"Candidate release: {cert['candidate_tag']}",
+            f"Champion isolated restore: {cert['champion_restore']['status']}",
+            f"Candidate holdout: {report.get('holdout',{})}",
+            f"Production holdout: {report.get('production_holdout',{})}",
+            f"Promotion request: {report.get('promotion_decision',{}).get('promotion_requested')}",
+            'No provider requests, CDB mutation, existing candidate overwrite or production promotion.',
+          ]
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('\n'.join(rows)+'\n')
+          PY
+      - name: Persist non-sensitive run proof as GitHub artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-protected-candidate-${{ github.run_id }}
+          path: |
+            .cache/tbt/training-backup/verified-certificate.json
+            .cache/tbt/model/training_report.json
+            .cache/tbt/production/leakage_audit_report.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Release CDB global writer lock
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
