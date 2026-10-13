@@ -152,7 +152,8 @@ def suitability(item: dict, category: str) -> str:
 def safe_cell(value) -> str:
     value = "" if value is None else str(value)
     # Quote untrusted Drive filenames so Excel/Sheets cannot execute CSV formulas.
-    return "'" + value if value.startswith(("=", "+", "-", "@", "\t", "\r", "\n")) else value
+    trimmed = value.lstrip(" \t\r\n\ufeff")
+    return "'" + value if trimmed.startswith(("=", "+", "-", "@")) else value
 
 
 def generate(drive: list[dict], repositories: dict[str, list[dict]], commits: dict[str, str],
