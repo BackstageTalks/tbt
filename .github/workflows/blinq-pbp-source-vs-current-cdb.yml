@@ -52,7 +52,7 @@ jobs:
             --release /tmp/blinq-pbp-gap/release.json \
             --out /tmp/blinq-pbp-gap/report/pbp-current-cdb-gap.json \
             --candidates /tmp/blinq-pbp-gap/report/pbp-candidates-private.jsonl.gz
-      - name: Publish aggregate-only comparison privately with independent SHA readback
+      - name: Publish private candidate ledger and aggregate report with SHA readback
         if: success()
         run: |
           set -euo pipefail
@@ -89,7 +89,7 @@ jobs:
           TAG="blinq-pbp-cdb-gap-${{ github.run_id }}-${{ github.run_attempt }}"
           gh release create "$TAG" -R "$PRIVATE_REPO" \
             --title "BlinQ read-only PbP source/current CDB gap ${{ github.run_id }}" \
-            --notes "Private aggregate-only comparison; no canonical data writes."
+            --notes "Private research-only per-candidate ledger and aggregate report. Zero canonical writes; no provider identity attested."
           gh release upload "$TAG" pbp-current-cdb-gap.json pbp-candidates-private.jsonl.gz SHA256SUMS -R "$PRIVATE_REPO"
           mkdir readback
           gh release download "$TAG" -R "$PRIVATE_REPO" \
