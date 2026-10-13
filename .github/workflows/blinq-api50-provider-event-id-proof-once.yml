@@ -1,0 +1,74 @@
+name: BlinQ first-party TennisApi 50-match exact ID proof (read only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/api50-provider-exact-id-request.json'
+permissions:
+  contents: read
+jobs:
+  limited-native-event-id-recheck:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      EXPECTED_2025_SHA: 3a929b356803af6b0f704d4d3066a053ecf995124ec8f4228487c54c0f534c58
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Require contract and preserved 2025 CDB version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$RAPIDAPI_KEY" && test -n "$BLINQ_SHARED_API_BUDGET_TOKEN"
+          test "$(gh api repos/$PRIVATE_REPO --jq .private)" = true
+          test "$(gh api repos/$PRIVATE_REPO/releases/tags/tbt-data-v1 --jq '.assets[] | select(.name == "history-2025.parquet") | .digest')" = "sha256:$EXPECTED_2025_SHA"
+          mkdir -p work/cdb work/output
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p history-2025.parquet -D work/cdb >/dev/null
+          echo "$EXPECTED_2025_SHA  work/cdb/history-2025.parquet" | sha256sum -c
+      - name: Validate 11 guard regressions and read-only Parquet tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet 'pyarrow>=17,<25'
+          PYTHONPATH=scripts/research python -m unittest discover -s scripts/research -p test_audit_api50_match_ids.py -v
+      - name: Test exactly 50 provider event IDs at most, budget-reserved separately per call
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/research/audit_api50_match_ids.py --cdb work/cdb/history-2025.parquet \
+            --sha "$EXPECTED_2025_SHA" --out work/output
+          python - <<'PY'
+          import json
+          j=json.load(open('work/output/report.json'))
+          assert j['selected_events']==50 and j['max_events']==50
+          assert 0<=j['requests_attempted']<=j['requests_reserved']<=50
+          assert j['verified_sofascore_event_id_equivalences']==0
+          assert j['verified_third_party_source_to_cdb_crosswalk']==0
+          assert j['CDB_writes']==0 and j['model_modified'] is False
+          PY
+      - name: Persist privately with SHA256 byte readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="blinq-licensed-api50-native-id-review-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          (cd work/output && sha256sum report.json api50-match-id-private.jsonl > SHA256SUMS)
+          gh release create "$tag" -R "$PRIVATE_REPO" --target main \
+            --title 'BlinQ private 50-event first-party TennisApi consistency review' \
+            --notes 'At most 50 reserved API calls, no SofaScore endpoint, no source rights inference, no canonical writes, no model feature changes. First-party ID recheck only.' >/dev/null
+          gh release upload "$tag" work/output/report.json work/output/api50-match-id-private.jsonl work/output/SHA256SUMS -R "$PRIVATE_REPO" >/dev/null
+          mkdir -p work/readback
+          gh release download "$tag" -R "$PRIVATE_REPO" -D work/readback >/dev/null
+          (cd work/readback && sha256sum -c SHA256SUMS)
+          cmp work/output/report.json work/readback/report.json
+          cmp work/output/api50-match-id-private.jsonl work/readback/api50-match-id-private.jsonl
+          echo "BLINQ_API50_PRIVATE_VERIFIED_READBACK=$tag"
