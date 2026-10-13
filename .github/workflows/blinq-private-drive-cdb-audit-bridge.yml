@@ -528,6 +528,8 @@ jobs:
           assert data['new_shortcuts_verified']+data['already_linked']+data['pending_unlinked']==data['source_file_count']
           print('DRIVE_FOLDER_SELECTION_CONSISTENCY_PASS')
           PY
+          echo DRIVE_FOLDER_SELECTION_COUNTS_ONLY
+          cat work/drive-folder-selection/public-counts.json
       - name: Publish full manifest ONLY in verified private Release
         shell: bash
         run: |
