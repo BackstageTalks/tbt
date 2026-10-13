@@ -307,6 +307,7 @@ jobs:
             >work/source-sheet-counts.json
           test -s work/source-sheet/audit-zdrojov.csv
           test -s work/source-sheet/nove-a-zmenene-zdroje.csv
+          test -s work/source-sheet/potencialne-datove-zdroje.csv
           (cd work/source-sheet && sha256sum --status -c source-baseline.sha256)
           echo PRIVATE_SOURCE_SHEETS_READ_ONLY_VALIDATED
 
@@ -391,7 +392,7 @@ jobs:
             if test -f "work/report/$name"; then cp "work/report/$name" work/private-output/; fi
           done
           if test -d work/source-sheet; then
-            for name in audit-zdrojov.csv nove-a-zmenene-zdroje.csv audit-zhrnutie.json source-baseline.json source-baseline.sha256; do
+            for name in audit-zdrojov.csv nove-a-zmenene-zdroje.csv potencialne-datove-zdroje.csv audit-zhrnutie.json source-baseline.json source-baseline.sha256; do
               test -s "work/source-sheet/$name" || exit 1
               cp "work/source-sheet/$name" work/private-output/
             done
@@ -469,7 +470,7 @@ jobs:
             echo "Audit step: $AUDIT_OUTCOME; private report: $REPORT_OUTCOME. Current NULL review must pass independently."
             echo 'Canonical imports: none. Candidate values require identity, rights, time and governed-writer gates.'
             echo 'Check the checkpoint step before claiming this batch can resume. Full evidence is in the private tbt-data releases.'
-            echo 'Private CSV audit sheets: audit-zdrojov.csv and nove-a-zmenene-zdroje.csv in the paired private tbt-data Release.'
+            echo 'Private CSV audit sheets: audit-zdrojov.csv, nove-a-zmenene-zdroje.csv, potencialne-datove-zdroje.csv in the paired private tbt-data Release.'
             echo 'No schedule is installed. External cron can invoke workflow_dispatch on main with batch_files and download_mb.'
           } >> "$GITHUB_STEP_SUMMARY"
 
