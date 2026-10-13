@@ -41,7 +41,10 @@ def test_results_live_max_odds_only_for_confirmed_comeback_below_price():
     assert "toLowerCase()!=='loss'" in block
     assert "result.max_live_odds" in block
     assert "peak<=base+0.005" in block
-    assert "ROI uses the published pre-match price" in block
+    # MAX value is preserved, only the former explanatory hover text is removed.
+    assert "ROI uses the published pre-match price" not in block
+    assert 'class="result-live-max">MAX ${peak.toFixed(2)}</small>' in block
+    assert "title=" not in block
     assert "resultLiveMaxOddsHtml(publication,odds,outcome)" in app
     css_block = css.split("body#blinqPremium .result-live-max{", 1)[1].split("}", 1)[0]
     assert "display:block!important" in css_block
