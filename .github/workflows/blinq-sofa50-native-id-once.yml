@@ -1,0 +1,63 @@
+name: BlinQ read-only 50 CDB-native versus public Sofascore ID probe
+on:
+  push:
+    branches: [main]
+    paths: ['.github/sofa50-request.json']
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      EXPECTED_SHA: 3a929b356803af6b0f704d4d3066a053ecf995124ec8f4228487c54c0f534c58
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify pinned immutable CDB source and private repo
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/$PRIVATE_REPO --jq .private)" = true
+          actual=$(gh api repos/$PRIVATE_REPO/releases/tags/tbt-data-v1 --jq '.assets[] | select(.name == "history-2025.parquet") | .digest')
+          test "$actual" = "sha256:$EXPECTED_SHA"
+          mkdir -p work/cdb
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p history-2025.parquet -D work/cdb >/dev/null
+          echo "$EXPECTED_SHA  work/cdb/history-2025.parquet" | sha256sum -c
+      - name: Test strict event, player and timestamp equality
+        run: |
+          set -euo pipefail
+          PYTHONPATH=scripts/research/sofa50 python -m unittest -v scripts/research/sofa50/test_probe.py
+          python -m pip install --quiet 'pyarrow>=16,<23'
+      - name: Check 25 ATP and 25 WTA event IDs against direct public API
+        run: |
+          set -euo pipefail
+          python scripts/research/sofa50/probe.py --cdb work/cdb/history-2025.parquet --sha "$EXPECTED_SHA" --out work/results
+          python - <<'PY'
+          import json
+          v=json.load(open('work/results/report.json'))
+          assert v['requested']==50 and v['actually_queried']<=50
+          assert v['cdb_writes']==0 and v['provider_rapidapi_requests']==0
+          assert v['canonical_source_stats_import_authorized'] is False
+          PY
+      - name: Persist research privately with verified remote readback
+        run: |
+          set -euo pipefail
+          tag="blinq-sofa50-native-id-"$GITHUB_RUN_ID"-"$GITHUB_RUN_ATTEMPT
+          (cd work/results && sha256sum report.json private-sample.jsonl > SHA256SUMS)
+          gh release create "$tag" -R "$PRIVATE_REPO" --target main --title "BlinQ public Sofa 50 native IDs read only" --notes "Research only. Source license and event crosswalk unproven. Do not import, no CDB writes." >/dev/null
+          gh release upload "$tag" work/results/report.json work/results/private-sample.jsonl work/results/SHA256SUMS -R "$PRIVATE_REPO" >/dev/null
+          mkdir -p work/readback
+          gh release download "$tag" -R "$PRIVATE_REPO" -D work/readback >/dev/null
+          (cd work/readback && sha256sum -c SHA256SUMS)
+          cmp work/results/report.json work/readback/report.json
+          cmp work/results/private-sample.jsonl work/readback/private-sample.jsonl
+          echo "SOFA50_PRIVATE_READBACK_OK=$tag"
