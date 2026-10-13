@@ -4,9 +4,10 @@
   "workflow": "cdb-service-complement-audit.yml",
   "reason": "Stage exact observed post-match service/return complements on verified current CDB; zero canonical/model changes",
   "approved_by_operator": true,
-  "evidence_run_id": 38259786928,
-  "expected_cdb_manifest_sha256": "ce6b8ec4b95d65ca4f21ebf8b8adde57a3ac53c2b21c831790ca7f296b3c1241",
-  "purpose": "Read only: detect any NEW exact complementary serve/return values after 2026-10-12 verified API import; do not repeat prior 2026-10-10 1448-cell import",
+  "purpose": "2026-10-14 fresh checksum-verified canonical CDB scan: find only new NULL-only exact opponent service/return complements; no canonical writes and no provider API",
   "api_requests": 0,
-  "cdb_write": false
+  "cdb_write": false,
+  "request_id": "safe-cdb-complements-20261014-readonly-001",
+  "prior_evidence_run_id": 38259786928,
+  "prior_expected_cdb_manifest_sha256": "ce6b8ec4b95d65ca4f21ebf8b8adde57a3ac53c2b21c831790ca7f296b3c1241"
 }
