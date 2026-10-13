@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 70
     env:
-      GH_TOKEN: \${{ secrets.TBT_DATA_GH_TOKEN }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PRIVATE_REPO: BackstageTalks/tbt-data
     steps:
       - uses: actions/checkout@v4
@@ -64,9 +64,9 @@ jobs:
           PY
           sha256sum pbp-current-cdb-gap.json > SHA256SUMS
           sha256sum -c SHA256SUMS
-          TAG="blinq-pbp-cdb-gap-\${{ github.run_id }}-\${{ github.run_attempt }}"
+          TAG="blinq-pbp-cdb-gap-${{ github.run_id }}-${{ github.run_attempt }}"
           gh release create "$TAG" -R "$PRIVATE_REPO" \
-            --title "BlinQ read-only PbP source/current CDB gap \${{ github.run_id }}" \
+            --title "BlinQ read-only PbP source/current CDB gap ${{ github.run_id }}" \
             --notes "Private aggregate-only comparison; no canonical data writes."
           gh release upload "$TAG" pbp-current-cdb-gap.json SHA256SUMS -R "$PRIVATE_REPO"
           mkdir readback
