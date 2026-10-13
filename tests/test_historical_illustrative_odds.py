@@ -74,9 +74,10 @@ def test_ui_never_renders_filler_as_a_real_quote():
     assert "aceDfLegacyResultDisplayOdds" not in live
     assert "historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'" in APP
     assert "illustrativeOnly?placeholderOdds.toFixed(2)" in APP
-    assert "not an archived bookmaker price or model estimate" in APP
-    assert "Nie je historický kurz" not in APP  # check actual wording instead
-    assert "nie historický kurz ani odhad modelu" in APP
+    # The source provenance and KPI guards remain; the user removed the four visible odds tooltips.
+    assert "not an archived bookmaker price or model estimate" not in APP
+    assert "nie historický kurz ani odhad modelu" not in APP
+    assert "projectionOddsTitle" not in APP
 
 
 def test_ace_df_results_kpis_use_displayed_normalized_or_real_api_odds_without_rewriting_ledger():
