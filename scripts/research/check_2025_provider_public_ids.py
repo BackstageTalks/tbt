@@ -24,21 +24,35 @@ def norm(s):
     s=unicodedata.normalize('NFKD',str(s or '').lower())
     return ' '.join(re.findall('[a-z]+',''.join(x for x in s if not unicodedata.combining(x))))
 
+def name_matches_public_case(name, case):
+    # Research-only namespace challenge: surname plus given-name initial,
+    # never a player or match promotion. Accept full/abbreviated and both
+    # ordered spellings only if the same uniquely stable original ID follows.
+    tokens=norm(name).split()
+    if len(tokens)<2:return False
+    surname=case['tokens'][-1]
+    first_initial={'carlos_alcaraz':'c','aleksandr_shevchenko':'a',
+       'jannik_sinner':'j','novak_djokovic':'n','iga_swiatek':'i',
+       'aryna_sabalenka':'a'}[case['slug']]
+    if tokens[-1]==surname and tokens[0].startswith(first_initial):return True
+    if tokens[0]==surname and tokens[-1].startswith(first_initial):return True
+    return False
+
 def assess(rows):
+    counts={c['slug']:defaultdict(int) for c in PUBLIC_TARGETS}
+    for row in rows:
+        tour=str(row.get('tour') or '').lower()
+        for side in ('1','2'):
+            name=row.get('player'+side+'_name')
+            pid=str(row.get('player'+side+'_id') or '')
+            if not pid:continue
+            for case in PUBLIC_TARGETS:
+                if case['tour']==tour and name_matches_public_case(name,case):
+                    counts[case['slug']][pid]+=1
     out={}
     for case in PUBLIC_TARGETS:
-        matches=defaultdict(int)
-        for row in rows:
-            if str(row.get('tour') or '').lower()!=case['tour']:continue
-            for side in ('1','2'):
-                name=norm(row.get('player'+side+'_name'))
-                tokens=name.split()
-                if not all(x in tokens for x in case['tokens']):continue
-                if case['slug']=='aleksandr_shevchenko' and not any(x in tokens for x in ('aleksandr','alexander','alex')):continue
-                pid=str(row.get('player'+side+'_id') or '')
-                if pid:matches[pid]+=1
-        total=sum(matches.values())
-        ids=set(matches)
+        matches=counts[case['slug']]
+        total=sum(matches.values());ids=set(matches)
         out[case['slug']]={
           'occurrences':total,'distinct_cdb_player_ids':len(ids),
           'public_sofascore_id':case['sofascore'],
@@ -53,7 +67,8 @@ def assess(rows):
         'cross_provider_player_link_authorized':False,
         'source_match_bridge_authorized':False,
         'new_CDB_stat_cells_authorized':0,'new_CDB_cells_written':0,
-        'note':'Two public player URL IDs are identity namespace probes only, never an event or license proof.'}
+        'note':'Two or more occurrences with surname+given initial and one numeric CDB ID. Public primary ID comparison only, never an event or license proof.'}
+
 
 def sha(path):
     h=hashlib.sha256()
