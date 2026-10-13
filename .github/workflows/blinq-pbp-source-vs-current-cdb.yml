@@ -1,0 +1,76 @@
+name: BlinQ PbP exact source vs current CDB NULL gap audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-pbp-source-vs-current-cdb.yml
+      - scripts/audit_pbp_source_vs_current_cdb.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: blinq-pbp-vs-cdb-read-only
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    env:
+      GH_TOKEN: \${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Aneeshers/tennis-sackmann-archive
+          ref: 83733587353df8a41f2fd4f516147d5aa83f5a8d
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download current canonical production snapshot privately
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          mkdir -p /tmp/blinq-pbp-gap/cdb /tmp/blinq-pbp-gap/report
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > /tmp/blinq-pbp-gap/release.json
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
+            -p 'history-*.parquet' -p history_manifest.json -D /tmp/blinq-pbp-gap/cdb
+          python -m pip install --quiet "pandas>=2,<3" pyarrow
+      - name: Byte-verify all 262 source files and all 78 CDB parts; count exact safe NULL gaps
+        timeout-minutes: 40
+        run: |
+          set -euo pipefail
+          python app/scripts/audit_pbp_source_vs_current_cdb.py \
+            --source source --cdb /tmp/blinq-pbp-gap/cdb \
+            --release /tmp/blinq-pbp-gap/release.json \
+            --out /tmp/blinq-pbp-gap/report/pbp-current-cdb-gap.json
+      - name: Publish aggregate-only comparison privately with independent SHA readback
+        if: success()
+        run: |
+          set -euo pipefail
+          cd /tmp/blinq-pbp-gap/report
+          python - <<'PY'
+          import json
+          j=json.load(open('pbp-current-cdb-gap.json'))
+          assert j['canonical_writes']==0 and j['training'] is False
+          assert j['counts']['source_files_byte_identical_to_zip']==262
+          assert j['counts']['cdb_rows']>=995143
+          PY
+          sha256sum pbp-current-cdb-gap.json > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          TAG="blinq-pbp-cdb-gap-\${{ github.run_id }}-\${{ github.run_attempt }}"
+          gh release create "$TAG" -R "$PRIVATE_REPO" \
+            --title "BlinQ read-only PbP source/current CDB gap \${{ github.run_id }}" \
+            --notes "Private aggregate-only comparison; no canonical data writes."
+          gh release upload "$TAG" pbp-current-cdb-gap.json SHA256SUMS -R "$PRIVATE_REPO"
+          mkdir readback
+          gh release download "$TAG" -R "$PRIVATE_REPO" \
+            -p 'pbp-current-cdb-gap.json' -p SHA256SUMS -D readback
+          (cd readback && sha256sum -c SHA256SUMS)
+          echo "PRIVATE_AGGREGATE_READBACK_SHA256_VERIFIED"
