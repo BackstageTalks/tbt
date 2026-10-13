@@ -20,6 +20,18 @@ class Tests(unittest.TestCase):
   def test_shevchenko_accents(self):
     rows=[self.make(id='264344',name='Aleksandr Shevchenko'),self.make(id='264344',name='Alexander Shevchenko')]
     self.assertTrue(assess(rows)['result']['aleksandr_shevchenko']['sofascore_id_equal_to_cdb'])
+  def test_djokovic(self):
+    rows=[self.make(id='14882',name='Novak Djokovic'),self.make(id='14882',name='Novak Djokovic')]
+    self.assertTrue(assess(rows)['result']['novak_djokovic']['sofascore_id_equal_to_cdb'])
+  def test_sinner(self):
+    rows=[self.make(id='206570',name='Jannik Sinner'),self.make(id='206570',name='Jannik Sinner')]
+    self.assertTrue(assess(rows)['result']['jannik_sinner']['sofascore_id_equal_to_cdb'])
+  def test_wta_swiatek(self):
+    rows=[self.make(id='228272',name='Iga Świątek',tour='wta'),self.make(id='228272',name='Iga Swiatek',tour='wta')]
+    self.assertTrue(assess(rows)['result']['iga_swiatek']['sofascore_id_equal_to_cdb'])
+  def test_wta_sabalenka(self):
+    rows=[self.make(id='157754',name='Aryna Sabalenka',tour='wta'),self.make(id='157754',name='Aryna Sabalenka',tour='wta')]
+    self.assertTrue(assess(rows)['result']['aryna_sabalenka']['sofascore_id_equal_to_cdb'])
   def test_false_is_never_import(self):
     r=assess([self.make(),self.make()]);self.assertFalse(r['cross_provider_player_link_authorized']);self.assertEqual(r['new_CDB_cells_written'],0)
 if __name__=='__main__':unittest.main()

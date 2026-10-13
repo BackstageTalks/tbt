@@ -12,8 +12,12 @@ from pathlib import Path
 
 # Public official player URL ID vs unlicensed TennisData native ID (research only).
 PUBLIC_TARGETS=(
-    {'slug':'carlos_alcaraz','tour':'atp','tokens':('carlos','alcaraz'),'sofascore':'275923','season_native':'115728'},
-    {'slug':'aleksandr_shevchenko','tour':'atp','tokens':('shevchenko',),'sofascore':'264344','season_native':'345517'},
+    {'slug':'carlos_alcaraz','tour':'atp','tokens':('carlos','alcaraz'),'sofascore':'275923','season_native':'115728','url':'https://www.sofascore.com/tennis/player/alcaraz-carlos/275923'},
+    {'slug':'aleksandr_shevchenko','tour':'atp','tokens':('shevchenko',),'sofascore':'264344','season_native':'345517','url':'https://www.sofascore.com/tennis/player/shevchenko-alexander/264344'},
+    {'slug':'jannik_sinner','tour':'atp','tokens':('jannik','sinner'),'sofascore':'206570','url':'https://www.sofascore.com/tennis/player/sinner-jannik/206570'},
+    {'slug':'novak_djokovic','tour':'atp','tokens':('novak','djokovic'),'sofascore':'14882','url':'https://www.sofascore.com/tennis/player/djokovic-novak/14882'},
+    {'slug':'iga_swiatek','tour':'wta','tokens':('iga','swiatek'),'sofascore':'228272','url':'https://www.sofascore.com/tennis/player/swiatek-iga/228272'},
+    {'slug':'aryna_sabalenka','tour':'wta','tokens':('aryna','sabalenka'),'sofascore':'157754','url':'https://www.sofascore.com/tennis/player/sabalenka-aryna/157754'},
 )
 
 def norm(s):
@@ -38,11 +42,9 @@ def assess(rows):
         out[case['slug']]={
           'occurrences':total,'distinct_cdb_player_ids':len(ids),
           'public_sofascore_id':case['sofascore'],
-          'official_sofascore_player_url':('https://www.sofascore.com/tennis/player/alcaraz-carlos/275923'
-                                             if case['slug']=='carlos_alcaraz'
-                                             else 'https://www.sofascore.com/tennis/player/shevchenko-alexander/264344'),
+          'official_sofascore_player_url':case['url'],
           'sofascore_id_equal_to_cdb':len(ids)==1 and case['sofascore'] in ids and total>=2,
-          'season_native_number_equal_to_cdb':len(ids)==1 and case['season_native'] in ids and total>=2,
+          'season_native_number_equal_to_cdb':len(ids)==1 and bool(case.get('season_native')) and case.get('season_native') in ids and total>=2,
           'canonical_id_consistent_across_matches':len(ids)==1 and total>=2,
           'canonical_IDs_undisclosed_in_public_log':True,
         }
