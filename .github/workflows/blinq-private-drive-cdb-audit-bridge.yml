@@ -24,6 +24,8 @@ name: BlinQ private Drive CDB audit - bounded free public runner
   pull_request:
     paths:
       - .github/workflows/blinq-private-drive-cdb-audit-bridge.yml
+      - scripts/drive_repo_source_sheet.py
+      - tests/test_drive_repo_source_sheet.py
       - scripts/drive_cdb_private_bridge.py
       - tests/test_drive_cdb_private_bridge.py
       - scripts/drive_sort_prefolders.py
@@ -105,7 +107,8 @@ jobs:
           set -euo pipefail
           python -m unittest discover -s tests -p test_drive_cdb_private_bridge.py -v
           python -m unittest discover -s tests -p test_drive_sort_prefolders.py -v
-          python -m compileall -q scripts/drive_sort_prefolders.py
+          python -m unittest discover -s tests -p test_drive_repo_source_sheet.py -v
+          python -m compileall -q scripts/drive_sort_prefolders.py scripts/drive_repo_source_sheet.py
 
   private-drive-audit:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.scan_budget.outputs.proceed == 'true'
@@ -272,6 +275,42 @@ jobs:
           python scripts/drive_cdb_private_bridge.py validate --report-dir work/report --folder-id "$DRIVE_ROOT"
           echo READ_ONLY_AUDIT_VALIDATED_NO_CANONICAL_WRITES
 
+      - name: Restore verified previous source inventory
+        if: steps.audit.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/source-previous
+          if gh release view blinq-drive-source-inventory-latest-v1 -R "$PRIVATE_REPO" >/dev/null 2>&1; then
+            gh release download blinq-drive-source-inventory-latest-v1 -R "$PRIVATE_REPO" -p source-baseline.json -p source-baseline.sha256 -D work/source-previous >/dev/null
+            (cd work/source-previous && sha256sum --status -c source-baseline.sha256)
+            echo PREVIOUS_SOURCE_INVENTORY_SHA_VERIFIED
+          else
+            echo SOURCE_INVENTORY_BASELINE_NOT_YET_CREATED
+          fi
+
+      - name: Audit Drive and GitHub sources into private CSV sheets
+        id: source_sheet
+        if: steps.audit.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          options=()
+          if test -s work/source-previous/source-baseline.json; then
+            options+=(--previous work/source-previous/source-baseline.json)
+          fi
+          python scripts/drive_repo_source_sheet.py \
+            --drive-inventory work/report/drive-inventory.json \
+            --drive-files work/report/files.json \
+            --cdb-report work/report/report.json \
+            --out work/source-sheet "${options[@]}" \
+            >work/source-sheet-counts.json
+          test -s work/source-sheet/audit-zdrojov.csv
+          test -s work/source-sheet/nove-a-zmenene-zdroje.csv
+          test -s work/source-sheet/potencialne-datove-zdroje.csv
+          (cd work/source-sheet && sha256sum --status -c source-baseline.sha256)
+          echo PRIVATE_SOURCE_SHEETS_READ_ONLY_VALIDATED
+
       - name: Verify independently pinned read-only NULL reviewer
         if: steps.audit.outcome == 'success'
         shell: bash
@@ -352,6 +391,12 @@ jobs:
           for name in drive-inventory.json files.json candidate-fields.jsonl report.json; do
             if test -f "work/report/$name"; then cp "work/report/$name" work/private-output/; fi
           done
+          if test -d work/source-sheet; then
+            for name in audit-zdrojov.csv nove-a-zmenene-zdroje.csv potencialne-datove-zdroje.csv audit-zhrnutie.json source-baseline.json source-baseline.sha256; do
+              test -s "work/source-sheet/$name" || exit 1
+              cp "work/source-sheet/$name" work/private-output/
+            done
+          fi
           printf '%s\n' "source_ref=$SOURCE_REF" "source_sampling=historical_stats_priority" "drive_root=$DRIVE_ROOT" "run=$GITHUB_RUN_ID" "attempt=$GITHUB_RUN_ATTEMPT" "audit_outcome=${{ steps.audit.outcome }}" >work/private-output/run-evidence.txt
           if test -f work/private-current-null-review/report.json; then
             cp work/private-current-null-review/report.json work/private-output/current-null-review-report.json
@@ -372,6 +417,23 @@ jobs:
           tar -xzf work/report-readback/drive-cdb-audit-bundle.tar.gz -C work/report-readback/contents
           (cd work/report-readback/contents; sha256sum -c SHA256SUMS >/dev/null)
           echo PRIVATE_AUDIT_REPORT_INDEPENDENT_SHA256_READBACK_PASS
+
+      - name: Store private source inventory baseline with SHA256 readback
+        if: steps.audit.outcome == 'success' && steps.source_sheet.outcome == 'success' && steps.private_report.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=blinq-drive-source-inventory-latest-v1
+          if ! gh release view "$tag" -R "$PRIVATE_REPO" >/dev/null 2>&1; then
+            gh release create "$tag" -R "$PRIVATE_REPO" --target main --title "Private Drive and Git source inventory baseline" --notes "Read-only observations; not a CDB import." >/dev/null
+          fi
+          gh release upload "$tag" work/source-sheet/source-baseline.json work/source-sheet/source-baseline.sha256 -R "$PRIVATE_REPO" --clobber >/dev/null
+          mkdir -p work/source-baseline-readback
+          gh release download "$tag" -R "$PRIVATE_REPO" -p source-baseline.json -p source-baseline.sha256 -D work/source-baseline-readback >/dev/null
+          cmp work/source-sheet/source-baseline.json work/source-baseline-readback/source-baseline.json
+          cmp work/source-sheet/source-baseline.sha256 work/source-baseline-readback/source-baseline.sha256
+          (cd work/source-baseline-readback && sha256sum --status -c source-baseline.sha256)
+          echo PRIVATE_SOURCE_BASELINE_SHA256_READBACK_PASS
 
       - name: Store verified private checkpoint only after success
         if: always() && steps.audit.outcome == 'success' && steps.private_report.outcome == 'success'
@@ -408,6 +470,7 @@ jobs:
             echo "Audit step: $AUDIT_OUTCOME; private report: $REPORT_OUTCOME. Current NULL review must pass independently."
             echo 'Canonical imports: none. Candidate values require identity, rights, time and governed-writer gates.'
             echo 'Check the checkpoint step before claiming this batch can resume. Full evidence is in the private tbt-data releases.'
+            echo 'Private CSV audit sheets: audit-zdrojov.csv, nove-a-zmenene-zdroje.csv, potencialne-datove-zdroje.csv in the paired private tbt-data Release.'
             echo 'No schedule is installed. External cron can invoke workflow_dispatch on main with batch_files and download_mb.'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -466,6 +529,8 @@ jobs:
           assert data['new_shortcuts_verified']+data['already_linked']+data['pending_unlinked']==data['source_file_count']
           print('DRIVE_FOLDER_SELECTION_CONSISTENCY_PASS')
           PY
+          echo DRIVE_FOLDER_SELECTION_COUNTS_ONLY
+          cat work/drive-folder-selection/public-counts.json
       - name: Publish full manifest ONLY in verified private Release
         shell: bash
         run: |
