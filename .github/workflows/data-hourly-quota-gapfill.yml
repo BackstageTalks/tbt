@@ -2,7 +2,7 @@ name: BlinQ targeted CDB API gapfill (90% staged, 97% closeout)
 
 # GitHub cron is intentionally forbidden by the repository contract.
 # Manual workflow_dispatch is intended for an external hourly schedule with
-# a 90% 18:45 launch, 97% 18:50–19:03 closeout (including queued-run delay),
+# a 90% staged hourly cap until 18:34, 97% 18:35–19:03 closeout (including queued-run delay),
 # and 19:11 new-day start. A single canonical writer runs at once.
 on:
   push:
@@ -60,7 +60,7 @@ jobs:
           # Progressive cumulative caps across all purposes, including LIVE,
           # Match Status, refresh and history, plus committed reservations.
           # The provider-day shared ledger enforces the absolute 97% cap.
-          # The 18:00 cap applies to the 18:45 launch; 18:50–19:03 uses 97%.
+          # The 18:00 cap applies until 18:34; 18:35–19:03 uses 97%.
           # Do not change the protected 450-call reserve.
           caps = {12: 5700, 13: 6900, 14: 8100, 15: 9300,
                   16: 10500, 17: 12000, 18: 13500}
@@ -68,7 +68,7 @@ jobs:
           minute_of_day = local.hour * 60 + local.minute
           # Evaluate actual runner start, not trigger time: Actions jobs can queue
           # several minutes after the external 18:55 dispatch.
-          final_topup = 18 * 60 + 50 <= minute_of_day <= 19 * 60 + 3
+          final_topup = 18 * 60 + 35 <= minute_of_day <= 19 * 60 + 3
           new_day_start = local.hour == 19 and local.minute == 11
           if local.hour not in caps and not final_topup and not new_day_start and not DRY_RUN:
               print("Outside permitted API dispatch slots; skipping.")
