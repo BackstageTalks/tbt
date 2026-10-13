@@ -1,11 +1,15 @@
 {
   "schema": 1,
   "mode": "preserve-private-only",
-  "scope": "tml-atp-2022-2025",
-  "api_budget_note": "66 percent shared sport API quota already spent; use original pinned public Git source, zero tennis provider requests",
+  "scope": "tml-atp-1975-2026",
+  "api_budget_note": "Read-only SHA-pinned 1975-2026 original source; no provider calls; canonical work separate",
   "original_source_commit": "c5537eed87d8a76f3adb598cdf506d885872923b",
   "user_priority": "highest-data-integration",
   "train_model": false,
   "write_canonical": false,
-  "new_scheduled_jobs": false
+  "new_scheduled_jobs": false,
+  "requested_on": "2026-10-13",
+  "requested_by": "operator_allow_autonomous_source_second_layer",
+  "source_originals": 52,
+  "expected_original_observations": 171415
 }
