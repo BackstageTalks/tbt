@@ -10151,70 +10151,70 @@ body.blinq-compare .footer-system-dot{display:none}
 
 
 /* Admin > Výsledky: readable test-tip ledger and independent odds/outcome filters. */
-body#blinqPremium.blinq-route .admin-test-results{min-width:0;max-width:100%}
-body#blinqPremium.blinq-route .admin-test-head{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:0}
-body#blinqPremium.blinq-route .admin-test-head h3{font-size:22px!important;line-height:1.2}
-body#blinqPremium.blinq-route .admin-test-head p{max-width:760px;font-size:13px!important;line-height:1.5!important}
-body#blinqPremium.blinq-route .admin-test-filters{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin:10px 0 4px;padding:16px;border:1px solid #245143;border-radius:12px;background:rgba(5,23,20,.82)}
-body#blinqPremium.blinq-route .admin-test-filter-main{display:grid;grid-template-columns:minmax(180px,1.8fr) repeat(3,minmax(135px,1fr));gap:12px;align-items:end}
-body#blinqPremium.blinq-route .admin-test-filter-extra{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}
-body#blinqPremium.blinq-route .admin-test-filters label{display:flex;flex-direction:column;gap:7px;min-width:0;color:#a7c7ba!important;font-size:12px!important;font-weight:650;letter-spacing:0}
-body#blinqPremium.blinq-route .admin-test-filters :is(input,select){display:block;width:100%;min-width:0;max-width:100%;min-height:42px;border:1px solid #2a594c!important;border-radius:8px;padding:9px 11px;font-size:13px!important;line-height:1.3}
-body#blinqPremium.blinq-route .admin-test-filters :is(input,select):focus-visible{outline:2px solid #38d88d!important;outline-offset:2px}
-body#blinqPremium.blinq-route .admin-test-filters input::placeholder{color:#729286;opacity:1}
-body#blinqPremium.blinq-route .admin-test-filter-footer{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:2px;color:#a6bdb4;font-size:12px}
-body#blinqPremium.blinq-route .admin-test-filter-footer strong{color:#e3fff0}
-body#blinqPremium.blinq-route .admin-test-filter-error{color:#ffbf9c;font-weight:650}
-body#blinqPremium.blinq-route .admin-test-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:6px 0 10px}
-body#blinqPremium.blinq-route .admin-test-actions>span{margin-right:auto;font-size:13px!important;color:#c5d7cd!important;white-space:normal}
-body#blinqPremium.blinq-route .admin-test-actions .btn,
-body#blinqPremium.blinq-route .admin-test-head .btn,
-body#blinqPremium.blinq-route .admin-test-filter-footer .btn{min-height:40px;padding:9px 14px;font-size:12px!important;line-height:1.35;white-space:normal}
-body#blinqPremium.blinq-route .admin-test-actions button:disabled{opacity:.42;cursor:not-allowed}
-body#blinqPremium.blinq-route .admin-test-table-wrap{width:100%;max-width:100%;min-width:0;overflow-x:auto!important;overscroll-behavior-inline:contain}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table{width:100%;min-width:930px;border-collapse:collapse;font-size:13px!important;table-layout:auto}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table th{padding:13px 12px!important;background:#0d2a24!important;color:#b7d3c6!important;font-size:11px!important;font-weight:700!important;letter-spacing:.02em!important;white-space:nowrap}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table td{padding:13px 12px!important;border-color:#21463b!important;color:#e0ede7!important;font-size:12.5px!important;line-height:1.5!important;vertical-align:middle}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table tbody tr:hover{background:rgba(64,189,126,.065)}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table td strong{font-size:12.5px!important;color:#f0fcf5!important;font-weight:650}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table td small{font-size:11px!important;color:#85a899!important;overflow-wrap:anywhere}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table td:first-child,
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table th:first-child{width:46px;text-align:center}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table td.admin-test-date{white-space:nowrap;font-variant-numeric:tabular-nums;color:#b4cbc1!important}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table td.admin-test-match{min-width:220px;max-width:360px;overflow-wrap:anywhere}
-body#blinqPremium.blinq-route .admin-test-match>span{color:#91a79d}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table td.admin-test-selection{max-width:200px;overflow-wrap:anywhere}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table td.admin-test-odds{font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table input[type=checkbox]{width:19px;height:19px;accent-color:#36d88d;cursor:pointer}
-body#blinqPremium.blinq-route .admin-test-outcome,
-body#blinqPremium.blinq-route .admin-test-excluded-label,
-body#blinqPremium.blinq-route .admin-test-included-label{display:inline-block;padding:4px 8px;border:1px solid transparent;border-radius:7px;font-size:11px!important;font-weight:650;line-height:1.4;white-space:nowrap}
-body#blinqPremium.blinq-route .admin-test-outcome.is-win,
-body#blinqPremium.blinq-route .admin-test-included-label{color:#7ae8ad;border-color:#245b41;background:#0e3226}
-body#blinqPremium.blinq-route .admin-test-outcome.is-loss{color:#ffa7a7;border-color:#663637;background:#351d22}
-body#blinqPremium.blinq-route .admin-test-outcome.is-void{color:#d9b6ff;border-color:#584074;background:#291f3b}
-body#blinqPremium.blinq-route .admin-test-outcome.is-other{color:#b0c4d0;border-color:#35515b;background:#16292d}
-body#blinqPremium.blinq-route .admin-test-excluded-label{color:#ffd092;border-color:#795531;background:#392716}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table tr.is-test-excluded{opacity:.72}
-body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table td.admin-test-empty{padding:25px 14px!important;text-align:center;color:#a7c2b4!important;font-size:13px!important}
-body#blinqPremium.blinq-route .admin-test-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-body#blinqPremium.blinq-route .admin-test-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;min-width:0}
-body#blinqPremium.blinq-route .admin-test-pager .results-pagination-nav{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
-body#blinqPremium.blinq-route .admin-test-pager :is(select,input){min-height:36px;font-size:12px!important}
-body#blinqPremium.blinq-route .admin-test-pager .results-pagination-nav input[type=number]{width:68px;min-width:68px}
+body#blinqPremium.blinq-admin .admin-test-results{min-width:0;max-width:100%}
+body#blinqPremium.blinq-admin .admin-test-head{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:0}
+body#blinqPremium.blinq-admin .admin-test-head h3{font-size:22px!important;line-height:1.2}
+body#blinqPremium.blinq-admin .admin-test-head p{max-width:760px;font-size:13px!important;line-height:1.5!important}
+body#blinqPremium.blinq-admin .admin-test-filters{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin:10px 0 4px;padding:16px;border:1px solid #245143;border-radius:12px;background:rgba(5,23,20,.82)}
+body#blinqPremium.blinq-admin .admin-test-filter-main{display:grid;grid-template-columns:minmax(180px,1.8fr) repeat(3,minmax(135px,1fr));gap:12px;align-items:end}
+body#blinqPremium.blinq-admin .admin-test-filter-extra{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}
+body#blinqPremium.blinq-admin .admin-test-filters label{display:flex;flex-direction:column;gap:7px;min-width:0;color:#a7c7ba!important;font-size:12px!important;font-weight:650;letter-spacing:0}
+body#blinqPremium.blinq-admin .admin-test-filters :is(input,select){display:block;width:100%;min-width:0;max-width:100%;min-height:42px;border:1px solid #2a594c!important;border-radius:8px;padding:9px 11px;font-size:13px!important;line-height:1.3}
+body#blinqPremium.blinq-admin .admin-test-filters :is(input,select):focus-visible{outline:2px solid #38d88d!important;outline-offset:2px}
+body#blinqPremium.blinq-admin .admin-test-filters input::placeholder{color:#729286;opacity:1}
+body#blinqPremium.blinq-admin .admin-test-filter-footer{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:2px;color:#a6bdb4;font-size:12px}
+body#blinqPremium.blinq-admin .admin-test-filter-footer strong{color:#e3fff0}
+body#blinqPremium.blinq-admin .admin-test-filter-error{color:#ffbf9c;font-weight:650}
+body#blinqPremium.blinq-admin .admin-test-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:6px 0 10px}
+body#blinqPremium.blinq-admin .admin-test-actions>span{margin-right:auto;font-size:13px!important;color:#c5d7cd!important;white-space:normal}
+body#blinqPremium.blinq-admin .admin-test-actions .btn,
+body#blinqPremium.blinq-admin .admin-test-head .btn,
+body#blinqPremium.blinq-admin .admin-test-filter-footer .btn{min-height:40px;padding:9px 14px;font-size:12px!important;line-height:1.35;white-space:normal}
+body#blinqPremium.blinq-admin .admin-test-actions button:disabled{opacity:.42;cursor:not-allowed}
+body#blinqPremium.blinq-admin .admin-test-table-wrap{width:100%;max-width:100%;min-width:0;overflow-x:auto!important;overscroll-behavior-inline:contain}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table{width:100%;min-width:930px;border-collapse:collapse;font-size:13px!important;table-layout:auto}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table th{padding:13px 12px!important;background:#0d2a24!important;color:#b7d3c6!important;font-size:11px!important;font-weight:700!important;letter-spacing:.02em!important;white-space:nowrap}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table td{padding:13px 12px!important;border-color:#21463b!important;color:#e0ede7!important;font-size:12.5px!important;line-height:1.5!important;vertical-align:middle}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table tbody tr:hover{background:rgba(64,189,126,.065)}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table td strong{font-size:12.5px!important;color:#f0fcf5!important;font-weight:650}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table td small{font-size:11px!important;color:#85a899!important;overflow-wrap:anywhere}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table td:first-child,
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table th:first-child{width:46px;text-align:center}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table td.admin-test-date{white-space:nowrap;font-variant-numeric:tabular-nums;color:#b4cbc1!important}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table td.admin-test-match{min-width:220px;max-width:360px;overflow-wrap:anywhere}
+body#blinqPremium.blinq-admin .admin-test-match>span{color:#91a79d}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table td.admin-test-selection{max-width:200px;overflow-wrap:anywhere}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table td.admin-test-odds{font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table input[type=checkbox]{width:19px;height:19px;accent-color:#36d88d;cursor:pointer}
+body#blinqPremium.blinq-admin .admin-test-outcome,
+body#blinqPremium.blinq-admin .admin-test-excluded-label,
+body#blinqPremium.blinq-admin .admin-test-included-label{display:inline-block;padding:4px 8px;border:1px solid transparent;border-radius:7px;font-size:11px!important;font-weight:650;line-height:1.4;white-space:nowrap}
+body#blinqPremium.blinq-admin .admin-test-outcome.is-win,
+body#blinqPremium.blinq-admin .admin-test-included-label{color:#7ae8ad;border-color:#245b41;background:#0e3226}
+body#blinqPremium.blinq-admin .admin-test-outcome.is-loss{color:#ffa7a7;border-color:#663637;background:#351d22}
+body#blinqPremium.blinq-admin .admin-test-outcome.is-void{color:#d9b6ff;border-color:#584074;background:#291f3b}
+body#blinqPremium.blinq-admin .admin-test-outcome.is-other{color:#b0c4d0;border-color:#35515b;background:#16292d}
+body#blinqPremium.blinq-admin .admin-test-excluded-label{color:#ffd092;border-color:#795531;background:#392716}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table tr.is-test-excluded{opacity:.72}
+body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table td.admin-test-empty{padding:25px 14px!important;text-align:center;color:#a7c2b4!important;font-size:13px!important}
+body#blinqPremium.blinq-admin .admin-test-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+body#blinqPremium.blinq-admin .admin-test-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;min-width:0}
+body#blinqPremium.blinq-admin .admin-test-pager .results-pagination-nav{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+body#blinqPremium.blinq-admin .admin-test-pager :is(select,input){min-height:36px;font-size:12px!important}
+body#blinqPremium.blinq-admin .admin-test-pager .results-pagination-nav input[type=number]{width:68px;min-width:68px}
 @media(max-width:1020px){
- body#blinqPremium.blinq-route .admin-test-filter-main{grid-template-columns:repeat(2,minmax(0,1fr))}
- body#blinqPremium.blinq-route .admin-test-filter-main label:first-child{grid-column:1/-1}
- body#blinqPremium.blinq-route .admin-test-filter-extra{grid-template-columns:repeat(2,minmax(0,1fr))}
+ body#blinqPremium.blinq-admin .admin-test-filter-main{grid-template-columns:repeat(2,minmax(0,1fr))}
+ body#blinqPremium.blinq-admin .admin-test-filter-main label:first-child{grid-column:1/-1}
+ body#blinqPremium.blinq-admin .admin-test-filter-extra{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(max-width:600px){
- body#blinqPremium.blinq-route .admin-test-filters{padding:12px;gap:10px}
- body#blinqPremium.blinq-route .admin-test-filter-main{grid-template-columns:minmax(0,1fr);gap:10px}
- body#blinqPremium.blinq-route .admin-test-filter-main label:first-child{grid-column:auto}
- body#blinqPremium.blinq-route .admin-test-filter-extra{gap:10px}
- body#blinqPremium.blinq-route .admin-test-head .btn{width:100%}
- body#blinqPremium.blinq-route .admin-test-actions>span{flex-basis:100%}
- body#blinqPremium.blinq-route .admin-test-actions .btn{flex:1 1 calc(50% - 10px);min-width:125px}
- body#blinqPremium.blinq-route .admin-test-pager .results-pagination-nav{width:100%;justify-content:space-between}
- body#blinqPremium.blinq-route .admin-test-results .admin-analytics-table{min-width:900px}
+ body#blinqPremium.blinq-admin .admin-test-filters{padding:12px;gap:10px}
+ body#blinqPremium.blinq-admin .admin-test-filter-main{grid-template-columns:minmax(0,1fr);gap:10px}
+ body#blinqPremium.blinq-admin .admin-test-filter-main label:first-child{grid-column:auto}
+ body#blinqPremium.blinq-admin .admin-test-filter-extra{gap:10px}
+ body#blinqPremium.blinq-admin .admin-test-head .btn{width:100%}
+ body#blinqPremium.blinq-admin .admin-test-actions>span{flex-basis:100%}
+ body#blinqPremium.blinq-admin .admin-test-actions .btn{flex:1 1 calc(50% - 10px);min-width:125px}
+ body#blinqPremium.blinq-admin .admin-test-pager .results-pagination-nav{width:100%;justify-content:space-between}
+ body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table{min-width:900px}
 }
