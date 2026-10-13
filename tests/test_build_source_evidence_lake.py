@@ -134,7 +134,7 @@ class SourceEvidenceLakeTests(unittest.TestCase):
     def test_52_unique_historic_sources_all_retained_and_never_imported(self):
         first = self.save([self.example])
         manifest = [first]
-        for year in range(1975, 2026):
+        for year in (year for year in range(1975, 2027) if year != 2025):
             item = dict(first)
             item["filename"] = f"{year}.csv"
             item["namespace"] = f"tml-atp-{year}"
