@@ -1,0 +1,75 @@
+name: BlinQ CDB 2025 CC0 Sofascore P12302 crosswalk (read only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/cdb-sofascore-p12302-request-20261013.json'
+permissions:
+  contents: read
+jobs:
+  source-to-sofascore-cc0-review:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      CDB2025_SHA: 3a929b356803af6b0f704d4d3066a053ecf995124ec8f4228487c54c0f534c58
+      WIKIDATA_SHA: f843cb67d852050580268f42ca207651ff335009a1ecffd50124d578574259a0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Private-data and public-runner safety guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/$PRIVATE_REPO --jq .private)" = true
+      - name: Download current pinned CDB metadata source and pinned Wikidata CC0 registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/cdb work/private work/result
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" --pattern history-2025.parquet -D work/cdb >/dev/null
+          echo "$CDB2025_SHA  work/cdb/history-2025.parquet" | sha256sum -c
+          gh api -H 'Accept: application/vnd.github.raw+json' 'repos/BackstageTalks/tbt-data/contents/research/player_identity/wikidata-tennis-identity.jsonl.gz?ref=75628adea78e0696fc556b5bc89305534ffc292e' > work/private/wikidata-tennis-identity.jsonl.gz
+          echo "$WIKIDATA_SHA  work/private/wikidata-tennis-identity.jsonl.gz" | sha256sum -c
+      - name: Validate 9 fail-closed regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s scripts/research -p 'test_audit_cdb_wikidata_sofascore_identity_2025.py' -v
+          python -m pip install --quiet 'pyarrow>=17,<25'
+      - name: Compare 2025 private original ID pair against independent Wikidata P12302 and ATP/WTA identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/research/audit_cdb_wikidata_sofascore_identity_2025.py \
+            --history work/cdb/history-2025.parquet \
+            --wikidata work/private/wikidata-tennis-identity.jsonl.gz \
+            --out work/result
+          python - <<'PY'
+          import json
+          r=json.load(open('work/result/report.json'))
+          assert r['cdb_writes']==0 and r['canonical_event_ids_proven']==0
+          assert r['recodex_original_participant_namespace_attested'] is False
+          assert r['rights_to_use_sofascore_source_stats_proven'] is False
+          PY
+      - name: Store detailed evidence ONLY in private repo Release with SHA and full byte readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="blinq-sofascore-p12302-cdb2025-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          (cd work/result && sha256sum report.json cdb-sofa-wikidata-private-review.jsonl > SHA256SUMS)
+          gh release create "$tag" -R "$PRIVATE_REPO" --title 'BlinQ read-only CDB2025 Sofascore P12302 candidate crosswalk' --notes 'CC0-only research mapping, ID namespace proof and CDB event identity unverified, rights to third-party stats unverified. ZERO CDB WRITES.' >/dev/null
+          gh release upload "$tag" work/result/report.json work/result/cdb-sofa-wikidata-private-review.jsonl work/result/SHA256SUMS -R "$PRIVATE_REPO" >/dev/null
+          mkdir work/readback
+          gh release download "$tag" -R "$PRIVATE_REPO" -D work/readback >/dev/null
+          (cd work/readback && sha256sum -c SHA256SUMS)
+          cmp work/result/report.json work/readback/report.json
+          cmp work/result/cdb-sofa-wikidata-private-review.jsonl work/readback/cdb-sofa-wikidata-private-review.jsonl
+          echo "BLINQ_SOFASCORE_WIKIDATA_PRIVATE_READBACK_VERIFIED=$tag"
