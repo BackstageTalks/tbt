@@ -54,8 +54,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m unittest discover -s scripts/research -p 'test_audit_exact_2025_id_namespace.py' -v
           python -m pip install --quiet 'pyarrow>=17,<25' 'pandas>=2,<3'
+          python -m unittest discover -s scripts/research -p 'test_audit_exact_2025_id_namespace.py' -v
       - name: Compare exact event and player IDs without names or approximate dates
         shell: bash
         run: |
