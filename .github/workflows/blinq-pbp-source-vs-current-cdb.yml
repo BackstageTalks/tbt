@@ -50,7 +50,8 @@ jobs:
           python app/scripts/audit_pbp_source_vs_current_cdb.py \
             --source source --cdb /tmp/blinq-pbp-gap/cdb \
             --release /tmp/blinq-pbp-gap/release.json \
-            --out /tmp/blinq-pbp-gap/report/pbp-current-cdb-gap.json
+            --out /tmp/blinq-pbp-gap/report/pbp-current-cdb-gap.json \
+            --candidates /tmp/blinq-pbp-gap/report/pbp-candidates-private.jsonl.gz
       - name: Publish aggregate-only comparison privately with independent SHA readback
         if: success()
         run: |
@@ -65,16 +66,33 @@ jobs:
           assert 'verified_safe_additive_null_cells' not in j['counts']
           assert j['counts']['source_files_byte_identical_to_zip']==262
           assert j['counts']['cdb_rows']>=995143
+          assert j['candidate_ledger_rows']==j['counts']['compound_candidates_without_stat_conflict']
+          assert j['candidate_ledger_rows']>0
+          import gzip,hashlib
+          p='pbp-candidates-private.jsonl.gz'
+          assert hashlib.sha256(open(p,'rb').read()).hexdigest()==j['candidate_ledger_sha256']
+          seen=set();total=0
+          with gzip.open(p,'rt',encoding='utf-8') as f:
+            for line in f:
+              row=json.loads(line)
+              assert row['identity_evidence']=='compound_metadata_only'
+              assert row['independent_identity_verified'] is False and row['write_authorized'] is False
+              assert row['canonical_match_id_candidate'] not in seen
+              seen.add(row['canonical_match_id_candidate'])
+              assert all(row['source_native_key']) and len(set(row['source_player_ids']))==2
+              assert all(v is not None for v in row['missing_candidate_cells'].values())
+              total+=1
+          assert total==j['candidate_ledger_rows']
           PY
-          sha256sum pbp-current-cdb-gap.json > SHA256SUMS
+          sha256sum pbp-current-cdb-gap.json pbp-candidates-private.jsonl.gz > SHA256SUMS
           sha256sum -c SHA256SUMS
           TAG="blinq-pbp-cdb-gap-${{ github.run_id }}-${{ github.run_attempt }}"
           gh release create "$TAG" -R "$PRIVATE_REPO" \
             --title "BlinQ read-only PbP source/current CDB gap ${{ github.run_id }}" \
             --notes "Private aggregate-only comparison; no canonical data writes."
-          gh release upload "$TAG" pbp-current-cdb-gap.json SHA256SUMS -R "$PRIVATE_REPO"
+          gh release upload "$TAG" pbp-current-cdb-gap.json pbp-candidates-private.jsonl.gz SHA256SUMS -R "$PRIVATE_REPO"
           mkdir readback
           gh release download "$TAG" -R "$PRIVATE_REPO" \
-            -p 'pbp-current-cdb-gap.json' -p SHA256SUMS -D readback
+            -p 'pbp-current-cdb-gap.json' -p 'pbp-candidates-private.jsonl.gz' -p SHA256SUMS -D readback
           (cd readback && sha256sum -c SHA256SUMS)
           echo "PRIVATE_AGGREGATE_READBACK_SHA256_VERIFIED"
