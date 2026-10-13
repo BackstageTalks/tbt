@@ -2,16 +2,16 @@
   "schema": 1,
   "mode": "statistics",
   "promote": false,
-  "source": "existing_subscribed_provider_native_event_history_not_hf_mirror_20261013",
-  "purpose": "Enrich missing canonical ATP historical serve/return/ace/DF cells during 2015-2025 using only verified provider-native event ID and the existing paid API; no HF mirror values, no unlicensed ATP mirror write, no guessed identities; enforce single-writer lock, shared daily API budget, immutable prewrite backup, CAS and independent persisted readback. Preserve quarantined Hugging Face raw/stats separately.",
+  "source": "existing_subscribed_provider_native_event_history__wta_2024_2025_verified_event_ids_only_20261013",
+  "purpose": "One-time provider-native WTA 2024-2025 safe canonical missing statistics gapfill; do not import L2 mirror or undated odds. Fail closed at shared daily API ceiling/reserve, max 200 including retries; single global writer, exact native event ID, NULL-only non-overwriting merge, immutable prewrite backup, CAS and independent remote readback. No model training/promotion or cron.",
   "requested_on": "2026-10-13",
-  "max_requests": 1000,
-  "start": "2015-01-01",
+  "max_requests": 200,
+  "start": "2024-01-01",
   "end": "2025-12-31",
   "targeted_statistics": true,
   "historical_match_winner_odds_as_model_feature": false,
   "model_training": false,
   "pre_reset_provider_header_override": false,
   "source_only_tml_write_authorized": false,
-  "target_tour": "atp"
+  "target_tour": "wta"
 }
