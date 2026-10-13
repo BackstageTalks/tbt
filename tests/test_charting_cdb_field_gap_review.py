@@ -45,6 +45,11 @@ class FieldGapReviewTests(unittest.TestCase):
             self.assertGreater(manifest['counts']['missing_candidate_cells_not_approved'],2)
             self.assertEqual(manifest['counts']['matching_canonical_cells'],3)
             self.assertFalse(any(r['write_authorized'] for r in review.rows(Path(t)/'out/field_gap_research_only.jsonl.gz')))
+            # These 22 internally balanced points could be only a match subset.
+            self.assertFalse(manifest['whole_match_coverage_verified'])
+            for row in review.rows(Path(t)/'out/field_gap_research_only.jsonl.gz'):
+                self.assertFalse(row['whole_match_coverage_verified'])
+                self.assertIn('independent_whole_match_coverage',row['remaining_evidence'])
     def test_canonical_conflict_quarantined(self):
         with tempfile.TemporaryDirectory() as t:
             args=self.fixture(t,{'p1_aces':9})
