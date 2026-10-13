@@ -38,6 +38,8 @@ def main():
                 page.evaluate("""() => {
                     const s=adminTestUi.state;
                     s.feed.account={is_admin:true,role:'admin',plan:'admin'};
+                    document.body.classList.remove('blinq-home','blinq-route');
+                    document.body.classList.add('blinq-admin');
                     s.route='admin';s.adminTab='testresults';
                     s.adminTestPage=0;s.adminTestSize=50;s.adminTestSelected=[];
                     s.adminTestData={excluded_total:0,items:Array.from({length:126},(_,i)=>({
