@@ -1,0 +1,57 @@
+name: BlinQ Charting observations protected CDB sidecar append
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-charting-native-cdb-once.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: blinq-charting-native-writer-${{ github.run_id }}
+  cancel-in-progress: false
+jobs:
+  append-source-only:
+    if: github.repository == 'BackstageTalks/tbt' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: BackstageTalks/tbt-data
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          ref: main
+          path: private-data
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test source and publication safety contracts
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_build_charting_observations.py' -v
+          python -m unittest discover -s tests -p 'test_publish_charting_source_native_cdb.py' -v
+          python -m unittest discover -s tests -p 'test_cdb_global_writer_lock.py' -v
+          python -m compileall -q scripts/build_charting_observations.py scripts/publish_charting_source_native_cdb.py
+      - name: Reconstruct pinned original ATP and WTA observations
+        run: |
+          set -euo pipefail
+          python scripts/build_charting_observations.py --source-repo private-data --out work/charting-stage
+          python scripts/publish_charting_source_native_cdb.py --stage-dir work/charting-stage --backup-dir work/charting-backup --readback-dir work/charting-readback --mode verify
+      - name: Acquire canonical CDB global writer lock
+        run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+      - name: Protected source-native sidecar append and independent readback
+        run: |
+          set -euo pipefail
+          python scripts/publish_charting_source_native_cdb.py --stage-dir work/charting-stage --backup-dir work/charting-backup --readback-dir work/charting-readback --mode publish | tee work/charting-publish-receipt.json
+          grep -q '"status": "VERIFIED_CDB_SOURCE_NATIVE_SIDECARS"' work/charting-publish-receipt.json
+      - name: Release canonical CDB lock even on failure
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
