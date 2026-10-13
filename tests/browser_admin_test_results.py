@@ -46,7 +46,7 @@ def main():
                         player1:'Player '+(i+1),player2:'Opponent',
                         section:i%10===0?'sets':'top_daily',
                         market:i%10===0?'sets':'match_winner',
-                        selection:'Player '+(i+1),status:'hit',excluded:false,
+                        selection:'Player '+(i+1),status:['hit','miss','void','pending'][i%4],odds:1.25+(i%5)*0.5,excluded:false,
                     }))};
                     const host=document.getElementById('routePanel');
                     document.getElementById('bootSplash')?.remove();
@@ -82,9 +82,40 @@ def main():
                 assert page.evaluate("adminTestUi.state.adminTestSelected.length")==100, width
                 page.locator('[data-admin-test-action="clear"]').click()
                 assert page.evaluate("adminTestUi.state.adminTestSelected.length")==0, width
+
+                # New filters are independent of the existing inclusion/exclusion status.
+                page.locator('[data-admin-test-action="reset-filters"]').click()
+                assert page.locator(".admin-test-table tbody tr").count()==100, width
+                page.locator('[data-admin-test-filter="outcome"]').select_option('loss')
+                assert page.locator(".admin-test-table tbody tr").count()==32, width
+                assert page.locator(".admin-test-outcome.is-loss").count()==32, width
+                page.locator('[data-admin-test-filter="oddsMin"]').fill('2.25')
+                page.locator('[data-admin-test-filter="oddsMin"]').press('Tab')
+                page.locator('[data-admin-test-filter="oddsMax"]').fill('2.25')
+                page.locator('[data-admin-test-filter="oddsMax"]').press('Tab')
+                assert page.locator(".admin-test-table tbody tr").count()==6, width
+                assert page.locator(".admin-test-odds").first.inner_text().strip()=='2,25', width
+                page.locator('[data-admin-test-filter="oddsMin"]').fill('3.50')
+                page.locator('[data-admin-test-filter="oddsMin"]').press('Tab')
+                assert page.locator('.admin-test-filter-error').count()==1, width
+                assert page.locator('.admin-test-empty').count()==1, width
+                page.locator('[data-admin-test-action="reset-filters"]').click()
+                assert page.locator(".admin-test-table tbody tr").count()==100, width
+                assert page.locator('.admin-test-odds').count()==100, width
+                visual=page.evaluate("""() => ({
+                    head: parseFloat(getComputedStyle(document.querySelector('.admin-test-table th')).fontSize),
+                    cell: parseFloat(getComputedStyle(document.querySelector('.admin-test-table td')).fontSize),
+                    controls: [...document.querySelectorAll('.admin-test-filters input,.admin-test-filters select')].every(el =>
+                        el.getBoundingClientRect().width >= 60 && el.getBoundingClientRect().right <= innerWidth+1),
+                    scroll: document.querySelector('.admin-test-table-wrap').scrollWidth >
+                            document.querySelector('.admin-test-table-wrap').clientWidth
+                })""")
+                assert visual['head']>=11 and visual['cell']>=12, (width,visual)
+                assert visual['controls'], (width,visual)
+                if width==390: assert visual['scroll'], (width,visual)
                 assert not errors, (width,errors)
                 context.close()
-            print("Admin test Results page jump and cross-page multi-select: PASS")
+            print("Admin results filters, odds, outcome, responsive typography, jump and multi-select: PASS")
         finally:
             browser.close()
 
