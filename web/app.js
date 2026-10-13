@@ -2582,13 +2582,6 @@
     const step=(hash>>>0)%21;
     return Math.round((1.50+step/100)*100)/100;
   }
-  function aceDfLegacyResultsOddsHint(){
-    return lcopy(
-      'Normalized legacy Aces/DF result odds in the reviewed 1.50-1.70 market range. Not the original archived bookmaker quote.',
-      'Normalizovaný historický kurz esá/DF v overenom trhovom rozsahu 1,50–1,70. Nie je to pôvodný archivovaný kurz stávkovej kancelárie.',
-      'Normalizovaný historický kurz esa/DF v ověřeném tržním rozsahu 1,50–1,70. Není to původní archivovaný kurz sázkové kanceláře.'
-    );
-  }
   function aceDfResultKpiOdds(publication){
     const market=String(publication?.market||publication?.projection_metric||'').toLowerCase();
     if(!['aces','double_faults'].includes(market))return NaN;
@@ -2612,13 +2605,6 @@
     if(!Number.isFinite(confidence)||confidence<0.5||confidence>1)return NaN;
     const p=Math.min(0.94,Math.max(0.5,confidence));
     return Math.round(Math.max(1.05,Math.min(2.50,1/(p*1.055)))*100)/100;
-  }
-  function indicativeOddsHint(){
-    return lcopy(
-      'Approximate model-derived odds, not a bookmaker quote. Excluded from real betting ROI.',
-      'Orientačný kurz podľa modelu, nie ponuka stávkovej kancelárie. Nezapočítava sa do skutočného ROI.',
-      'Orientační kurz podle modelu, nikoli nabídka sázkové kanceláře. Nezapočítává se do skutečného ROI.'
-    );
   }
   function projectionOddsHtml(row){
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
@@ -3363,7 +3349,7 @@
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow">${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
-      ${hours?'':`<div class="results-filter-field results-range-field"><span>Od – do</span><button id="resultsDateRange" type="button" aria-haspopup="dialog">${filters.dateFrom?escapeHtml(shortRangeDate(filters.dateFrom)+' – '+shortRangeDate(filters.dateTo||filters.dateFrom)):'Vybrať obdobie'} <span aria-hidden="true">▦</span></button><input id="resultsDateFrom" type="hidden" value="${escapeHtml(filters.dateFrom||'')}"><input id="resultsDateTo" type="hidden" value="${escapeHtml(filters.dateTo||'')}"></div><label class="results-betting-day-toggle" title="${escapeHtml(lcopy('Selected dates run from 06:00 to 06:00 Europe/Bratislava.','Vybrané dátumy sa počítajú od 06:00 do 06:00 Europe/Bratislava.','Vybraná data se počítají od 06:00 do 06:00 Europe/Bratislava.'))}"><input id="resultsBettingDay" type="checkbox" ${filters.bettingDay!==false?'checked':''}><span><strong>Betting day</strong><small>06:00–06:00</small></span></label>`}
+      ${hours?'':`<div class="results-filter-field results-range-field"><span>Od – do</span><button id="resultsDateRange" type="button" aria-haspopup="dialog">${filters.dateFrom?escapeHtml(shortRangeDate(filters.dateFrom)+' – '+shortRangeDate(filters.dateTo||filters.dateFrom)):'Vybrať obdobie'} <span aria-hidden="true">▦</span></button><input id="resultsDateFrom" type="hidden" value="${escapeHtml(filters.dateFrom||'')}"><input id="resultsDateTo" type="hidden" value="${escapeHtml(filters.dateTo||'')}"></div><label class="results-betting-day-toggle" title="${escapeHtml(lcopy('Selected dates run from 06:00 to 06:00 Europe/Bratislava','Vybrané dátumy sa počítajú od 06:00 do 06:00 Europe/Bratislava','Vybraná data se počítají od 06:00 do 06:00 Europe/Bratislava'))}"><input id="resultsBettingDay" type="checkbox" ${filters.bettingDay!==false?'checked':''}><span><strong>Betting day</strong><small>06:00–06:00</small></span></label>`}
       ${isAdminAccount()?`<fieldset class="results-member-levels"><legend>Výkon podľa členstva</legend>${[['','Všetky'],['rookie','FREE'],['pro','PRO'],['elite','ELITE'],['legend','LEGEND'],['goat','GOAT']].map(([value,label])=>`<label><input type="radio" name="resultsMembership" value="${value}" ${String(filters.membership||'')===value?'checked':''}>${label}</label>`).join('')}</fieldset>`:''}
       </div>
     </section>`;
@@ -3540,12 +3526,7 @@
     const peak=Number(result.max_live_odds);
     const base=Number(publishedOdds);
     if(!Number.isFinite(peak)||peak<=1||!Number.isFinite(base)||base<=1||peak<=base+0.005)return '';
-    const title=lcopy(
-      'Highest provider Match Winner price observed by LIVE Radar after the predicted player lost set 1. Informational only; ROI uses the published pre-match price.',
-      'Najvyšší provider Match Winner kurz zachytený LIVE Radarom po prehre 1. setu. Iba informatívne; ROI používa publikovaný predzápasový kurz.',
-      'Nejvyšší provider Match Winner kurz zachycený LIVE Radarem po prohře 1. setu. Pouze informativní; ROI používá publikovaný předzápasový kurz.'
-    );
-    return `<small class="result-live-max" title="${escapeHtml(title)}">MAX ${peak.toFixed(2)}</small>`;
+    return `<small class="result-live-max">MAX ${peak.toFixed(2)}</small>`;
   }
   function renderResults(){
     if(state.feed?.results_exclusions_unavailable)return '<div class="state-card" role="alert">Vyhodnotené výsledky sú dočasne nedostupné – prebieha ochranné overenie administrátorských vylúčení. Predikcie zostávajú dostupné.</div>';
@@ -3610,19 +3591,8 @@
           realProjectionOddsText!=='—'?realProjectionOddsText:
           illustrativeOnly?placeholderOdds.toFixed(2):
           Number.isFinite(estimatedProjectionOdds)?estimatedProjectionOdds.toFixed(2):'—';
-        const illustrativeHint=lcopy(
-          'ILLUSTRATIVE ONLY: generated placeholder, not an archived bookmaker price or model estimate. Never used for betting ROI.',
-          'IBA ILUSTRAČNÁ HODNOTA: generovaná náhrada, nie historický kurz ani odhad modelu. Nepoužíva sa na výpočet ROI.',
-          'POUZE ILUSTRAČNÍ HODNOTA: generovaná náhrada, nikoli historický kurz ani odhad modelu. Nepoužívá se pro výpočet ROI.'
-        );
-        const projectionOddsTitle=Number.isFinite(temporaryAceDfOdds)
-          ?` title="${escapeHtml(aceDfLegacyResultsOddsHint())}"`
-          :realProjectionOddsText==='—'&&illustrativeOnly
-            ?` title="${escapeHtml(illustrativeHint)}"`
-            :Number.isFinite(estimatedProjectionOdds)?` title="${escapeHtml(indicativeOddsHint())}"`:'';
         // Historical display-only prices can fill the visible Units cell,
         // but never become a settled stake, ledger profit, or genuine ROI.
-        const hasSettledUnits=Number.isFinite(projectionUnits)&&Number(publication?.result?.staked_units)>0;
         const aceDfKpiOdds=aceDfResultKpiOdds(publication);
         const displayUnits=Number.isFinite(aceDfKpiOdds)
           ?(outcome.kind==='void'?0:outcome.kind==='win'?aceDfKpiOdds-1:outcome.kind==='loss'?-1:NaN)
@@ -3630,7 +3600,7 @@
         const unitsText=Number.isFinite(displayUnits)?
           `${displayUnits>0?'+':''}${displayUnits.toFixed(2)}u`:'—';
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
-        return `<tr class="results-card-row result-${escapeHtml(outcome.kind)} is-projection"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(displayPick)}</strong></td><td class="result-confidence result-projection"><span class="result-projection-value">${escapeHtml(projectionText)}</span><small class="result-projection-label">${escapeHtml(lcopy('Projection','Projekcia','Projekce'))}</small></td><td class="result-odds"${projectionOddsTitle}>${escapeHtml(displayedProjectionOdds)}</td><td class="result-status"><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td class="result-units"><span class="results-units-depth"><b${!hasSettledUnits?projectionOddsTitle:''} class="${Number.isFinite(displayUnits)&&displayUnits>0?'correct':Number.isFinite(displayUnits)&&displayUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b></span></td></tr>`;
+        return `<tr class="results-card-row result-${escapeHtml(outcome.kind)} is-projection"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(displayPick)}</strong></td><td class="result-confidence result-projection"><span class="result-projection-value">${escapeHtml(projectionText)}</span><small class="result-projection-label">${escapeHtml(lcopy('Projection','Projekcia','Projekce'))}</small></td><td class="result-odds">${escapeHtml(displayedProjectionOdds)}</td><td class="result-status"><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td class="result-units"><span class="results-units-depth"><b class="${Number.isFinite(displayUnits)&&displayUnits>0?'correct':Number.isFinite(displayUnits)&&displayUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b></span></td></tr>`;
       }
       return `<tr class="results-card-row result-${escapeHtml(outcome.kind)}"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(pickName)}</strong></td><td class="result-confidence">${Number.isFinite(probability)?pct(probability):'—'}</td><td class="result-odds">${Number.isFinite(odds)?odds.toFixed(2):'—'}${resultLiveMaxOddsHtml(publication,odds,outcome)}</td><td class="result-status">${resultHtml}</td><td class="result-units ${outcome.kind==='void'?'void':!Number.isFinite(units)?'unit-excluded':units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
     }).join('');
@@ -3655,7 +3625,7 @@
         const value=month+'-'+String(i+1).padStart(2,'0');
         return `<button type="button" data-range-day="${value}" aria-label="${pretty(value)}${value===today?' · Dnes':''}" ${value===today?'aria-current="date"':''} aria-pressed="${value===from||value===to}" class="${value===today?'range-today ':''}${value===from||value===to?'range-edge':from&&to&&value>from&&value<to?'range-inside':''}">${i+1}</button>`;
       }).join('');
-      dialog.innerHTML=`<header><strong>Vybrať obdobie</strong><button type="button" data-range-close aria-label="Zavrieť kalendár">×</button></header><div class="range-month"><button type="button" data-month="-1" aria-label="Predchádzajúci mesiac">‹</button><strong>${title}</strong><button type="button" data-month="1" aria-label="Nasledujúci mesiac">›</button></div><p role="status">Od: <b>${pretty(from)}</b> · Do: <b>${pretty(to)}</b></p><small>${!from?'Vyber začiatok obdobia.':!to?'Vyber koniec obdobia.':'Obdobie je pripravené.'}</small><div class="range-grid">${['Po','Ut','St','Št','Pi','So','Ne'].map(d=>'<span>'+d+'</span>').join('')}${days}</div><footer><button type="button" data-range-clear>Celé obdobie</button><button type="button" class="btn btn-primary" data-range-apply ${from?'':'disabled'}>Použiť obdobie</button></footer>`;
+      dialog.innerHTML=`<header><strong>Vybrať obdobie</strong><button type="button" data-range-close aria-label="Zavrieť kalendár">×</button></header><div class="range-month"><button type="button" data-month="-1" aria-label="Predchádzajúci mesiac">‹</button><strong>${title}</strong><button type="button" data-month="1" aria-label="Nasledujúci mesiac">›</button></div><p role="status">Od: <b>${pretty(from)}</b> · Do: <b>${pretty(to)}</b></p><small>${!from?'Vyber začiatok obdobia':!to?'Vyber koniec obdobia':'Obdobie je pripravené'}</small><div class="range-grid">${['Po','Ut','St','Št','Pi','So','Ne'].map(d=>'<span>'+d+'</span>').join('')}${days}</div><footer><button type="button" data-range-clear>Celé obdobie</button><button type="button" class="btn btn-primary" data-range-apply ${from?'':'disabled'}>Použiť obdobie</button></footer>`;
       dialog.querySelector('[data-range-close]').onclick=()=>dialog.close();
       dialog.querySelectorAll('[data-month]').forEach(button=>button.onclick=()=>{const next=new Date(Date.UTC(y,m-1+Number(button.dataset.month),1));month=next.toISOString().slice(0,7);draw();dialog.querySelector('[data-month="'+button.dataset.month+'"]')?.focus();});
       dialog.querySelectorAll('[data-range-day]').forEach(button=>button.onclick=()=>{const value=button.dataset.rangeDay;if(!from||to||value<from){from=value;to='';}else to=value;draw();dialog.querySelector('[data-range-day="'+value+'"]')?.focus();});
