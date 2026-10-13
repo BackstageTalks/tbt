@@ -261,6 +261,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' &&
+       !contains(github.event.head_commit.message, '[audit-only]') &&
        (vars.TBT_DEPLOY_ENABLED == 'true' ||
         contains(github.event.head_commit.message, '[deploy-current]') ||
         needs.checks.outputs.pending_match_status_deploy == 'true'))
