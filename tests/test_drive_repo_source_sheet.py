@@ -77,6 +77,8 @@ class AuditSheetTests(unittest.TestCase):
             path = Path(folder)
             first = generate(drive, repos, {}, cmp, None, path)
             self.assertEqual(first["source_counts"], {"BASELINE": 2})
+            self.assertTrue((path / "potencialne-datove-zdroje.csv").exists())
+            self.assertGreaterEqual(first["candidate_files_metadata_only"], 1)
             self.assertEqual((path / "nove-a-zmenene-zdroje.csv").read_text(encoding="utf-8-sig").count("\n"), 1)
             prev = json.loads((path / "source-baseline.json").read_text())
             same = generate(drive, repos, {}, cmp, prev, path)
