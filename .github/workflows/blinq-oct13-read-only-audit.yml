@@ -40,7 +40,7 @@ jobs:
           from tbt.services.match_status import prediction_rows, runtime_settled_results, _selection_id, _scheduled_in_current_betting_day
           raw=Path('/tmp/blinq-audit-feed/feed.json').read_bytes()
           feed=json.loads(raw)
-          target='38431091568'
+          target='38435206885'
           log=subprocess.run(['gh','run','view',target,'--repo','BackstageTalks/tbt','--log'],capture_output=True,text=True,check=True).stdout
           decoder=json.JSONDecoder()
           state=None
@@ -103,6 +103,7 @@ jobs:
             'observed_outcomes_current_feed':dict(count),'crosswalk':mismatches,
             'published_result_markets_readback':{k:dict(v) for k,v in sorted(markets.items())},
             'published_result_market_count':len(seen_pub),
+            'published_result_nonhits':[x for x in sample_market if x['outcome'] in ('miss','retired','void')],
             'pending_matches':[r for r in row_summaries if r['id'] in pending_ids],
             'current_match_rows':row_summaries,
             'read_only':True,
