@@ -175,6 +175,8 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000):
             raise AssertionError("Research linker claims independent proof/write")
         old_ids={x.event_id for x in old}
         new_ids={x.canonical_event_id for x in new}
+        strong_ids={x.canonical_event_id for x in new
+                    if x.context_tier=="edition_context_strong"}
         r=by_family[family]
         classification = (
             "old_none_new_unique" if not old_ids and len(new_ids)==1 else
@@ -196,6 +198,14 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000):
             ("source_events",1),("old_any",bool(old)),("new_any",bool(new)),
             ("old_unique",len(old_ids)==1),("new_unique",len(new_ids)==1),
             ("new_ambiguous",len(new_ids)>1),
+            ("new_strong_context_any",bool(strong_ids)),
+            ("new_strong_context_unique",len(strong_ids)==1),
+            ("new_strong_context_ambiguous",len(strong_ids)>1),
+            ("new_weak_context_only",bool(new_ids) and not strong_ids),
+            ("old_unique_now_strong_unique",len(old_ids)==1 and len(strong_ids)==1),
+            ("old_unique_now_strong_none",len(old_ids)==1 and not strong_ids),
+            ("old_unique_now_strong_ambiguous",len(old_ids)==1 and len(strong_ids)>1),
+            ("new_only_strong_unique",not old_ids and len(strong_ids)==1),
             ("new_only",bool(new_ids) and not bool(old_ids)),
             ("old_only",bool(old_ids) and not bool(new_ids)),
             ("same_unique",len(old_ids)==len(new_ids)==1 and old_ids==new_ids),
