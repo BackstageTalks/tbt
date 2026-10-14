@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "mode": "dry-run",
+  "workflow": "cdb-sackmann-bp-guarded.yml",
+  "purpose": "Recover only p1/p2_break_point_return_win on original native hist-js completed matches with original source revision and exact CDB provenance; NULL-only. Legacy break_points_won counts untouched.",
+  "source_commit": "83733587353df8a41f2fd4f516147d5aa83f5a8d",
+  "approved_by_operator": false,
+  "provider_requests": 0,
+  "model_training": false,
+  "model_promotion": false,
+  "required": [
+    "current stable checksum-verified CDB",
+    "verified source sha and both native player IDs",
+    "completed boxscores and direct observed stats agree",
+    "independent prewrite release backup",
+    "global CDB single-writer lock",
+    "no pre-existing overwritten values",
+    "manifest CAS",
+    "independent remote complete match-by-match readback"
+  ],
+  "write_state": "NOT_AUTHORIZED_FOR_PRODUCTION_WRITE_YET__DRY_RUN_ONLY"
+}
