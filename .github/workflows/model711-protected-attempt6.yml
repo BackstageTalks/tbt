@@ -2,9 +2,9 @@ name: BlinQ 7.1.1 cached-history protected candidate attempt 6 (no deploy)
 
 on:
   push:
-    branches: [ops/model711-feature-cache-attempt6-20261014]
+    branches: [ops/model711-protected-attempt6-20261014]
     paths:
-      - .github/workflows/model711-feature-cache-attempt6.yml
+      - .github/workflows/model711-protected-attempt6.yml
 
 permissions:
   contents: read
@@ -102,9 +102,33 @@ jobs:
           import faulthandler
           import runpy
           import sys
+          import threading
+          import time
+          from pathlib import Path
           from datetime import datetime, timezone
+
+          def read_stat(path, keys=None):
+              try:
+                  lines = Path(path).read_text().splitlines()
+                  if keys is None:
+                      return " ".join(lines)
+                  return " ".join(line for line in lines if line.split(":")[0] in keys)
+              except OSError:
+                  return "unavailable"
+
+          def memory_monitor():
+              while True:
+                  print("TRAINING_MEMORY", datetime.now(timezone.utc).isoformat(),
+                        "process:", read_stat("/proc/self/status", {"VmRSS", "VmHWM", "VmPeak"}),
+                        "cgroup_current:", read_stat("/sys/fs/cgroup/memory.current"),
+                        "cgroup_max:", read_stat("/sys/fs/cgroup/memory.max"),
+                        "cgroup_events:", read_stat("/sys/fs/cgroup/memory.events"),
+                        flush=True)
+                  time.sleep(60)
+
           faulthandler.enable(all_threads=True)
           faulthandler.dump_traceback_later(480, repeat=True)
+          threading.Thread(target=memory_monitor, daemon=True).start()
           print('Protected candidate fit started', datetime.now(timezone.utc).isoformat(), flush=True)
           sys.argv = ['scripts/pipeline.py', 'train', '--max-requests', '1']
           runpy.run_path('scripts/pipeline.py', run_name='__main__')
