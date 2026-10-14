@@ -99,6 +99,17 @@ def valid(r):
             v['ace']<=v['1stWon']+v['2ndWon'] and v['df']<=v['svpt']-v['1stIn'] and
             v['bpSaved']<=v['bpFaced']<=v['svpt'] and v['svpt']>=4*v['SvGms']):return None
     return stats
+def breakpoint_return_value(side, opponent_faced, opponent_saved):
+    """Conversion rate, never the legacy count-valued *_break_points_won."""
+    if not isinstance(opponent_faced, int) or opponent_faced <= 0:
+        return {side + '_break_point_return_win': None}
+    if (not isinstance(opponent_saved, int) or opponent_saved < 0
+            or opponent_saved > opponent_faced):
+        raise ValueError('Invalid source breakpoint counts')
+    return {side + '_break_point_return_win':
+            (opponent_faced - opponent_saved) / opponent_faced}
+
+
 def sha(path):
     h=hashlib.sha256()
     with path.open('rb') as f:
@@ -254,7 +265,7 @@ def main(src,cdb,release_path,out,candidates=None,*,alias_research=False):
                 side+'_second_serve_win':stats[src_side+'_2ndWon']/se if se else None,
                 side+'_first_return_win':(ofi-stats[opp+'_1stWon'])/ofi if ofi else None,
                 side+'_second_return_win':(ose-stats[opp+'_2ndWon'])/ose if ose else None,
-                side+'_break_points_won':(obp-stats[opp+'_bpSaved'])/obp if obp else None,
+                **breakpoint_return_value(side, obp, stats[opp+'_bpSaved']),
             })
         nulls,errors=compare_cells(existing,values)
         if errors:
