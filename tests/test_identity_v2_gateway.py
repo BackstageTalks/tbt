@@ -37,6 +37,50 @@ class ResearchGateway(unittest.TestCase):
         self.assertIsNone(staged.event)
         self.assertIn("incomplete_source_native_event",staged.reasons)
 
+    def test_native_source_field_map_preserves_real_provider_ids(self):
+        row={"match_no":"native:event:42","h_id":"player-17",
+             "a_id":"player-29","h_name":"A. Player","a_name":"B. Player",
+             "played":"2025-01-14","tour_name":"Example Event",
+             "stage":"Q2","won":"player-29","edition":"event:2025"}
+        fields={"event_id":"match_no","player1_id":"h_id",
+                "player2_id":"a_id","player1_name":"h_name",
+                "player2_name":"a_name","match_day":"played",
+                "tournament":"tour_name","round":"stage",
+                "winner_id":"won","edition_id":"edition"}
+        r=gate.stage_native(row,source_name="externalfeed",tour="atp",
+                            collection="native2025",source_file_sha256=SHA,
+                            line_number=2,field_map=fields)
+        self.assertIsNotNone(r.event)
+        self.assertEqual(r.event.event_id,"native:event:42")
+        self.assertEqual(r.event.winner_native_id,"player-29")
+        self.assertEqual(r.event.round_name,"Q2")
+        self.assertFalse(r.cdb_import_authorized)
+
+    def test_native_source_missing_provider_event_id_quarantined(self):
+        row={"player1_id":"a1","player1_name":"A. Player",
+             "player2_id":"a2","player2_name":"B. Player",
+             "match_day":"2025-01-14"}
+        r=gate.stage_native(row,source_name="charting",tour="atp",
+                            collection="2025",source_file_sha256=SHA,
+                            line_number=3)
+        self.assertIsNone(r.event)
+        self.assertIn("missing_official_source_native_event_id",r.reasons)
+
+    def test_native_source_missing_original_player_ids_quarantined(self):
+        row={"event_id":"native123","player1_name":"A. Player",
+             "player2_name":"B. Player","match_day":"2025-01-14"}
+        r=gate.stage_native(row,source_name="livetennisapi",tour="wta",
+                            collection="2025",source_file_sha256=SHA,
+                            line_number=5)
+        self.assertIsNone(r.event)
+        self.assertIn("incomplete_source_native_event",r.reasons)
+
+    def test_native_field_map_refuses_unknown_columns(self):
+        with self.assertRaises(ValueError):
+            gate.stage_native({},source_name="pbp",tour="atp",
+                 collection="2025",source_file_sha256=SHA,line_number=2,
+                 field_map={"canonical_match_id":"unsafe"})
+
     def test_canonical_context_can_only_be_read(self):
         raw={"match_id":"cdb-1","tour":"atp",
              "player1_id":"c1","player1_name":"Novak Djokovic",
