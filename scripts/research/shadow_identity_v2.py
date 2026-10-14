@@ -97,7 +97,12 @@ def proxy_old_match(source, target):
         return False
     date1=m._day(source.event_date)
     date2=m._day(target.event_date)
-    if date1 and date2 and date1!=date2:
+    if not date1 or not date2:
+        return False
+    if source.date_kind=="tournament_start" and target.date_kind in ("scheduled","played"):
+        if not 0 <= (date2-date1).days <= 28:
+            return False
+    elif abs((date2-date1).days)>1:
         return False
     return True
 
