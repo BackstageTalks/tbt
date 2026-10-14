@@ -228,25 +228,47 @@ class ATPLeaderboardPriors:
         period: str,
         surface: str,
     ) -> dict[str, float | None]:
+        """Resolve identity once and reuse the three board rows per surface.
+
+        Previously each metric performed another full Unicode/name resolution
+        for the same player (up to 32 lookups per snapshot). This changes no
+        matching policy or point-in-time/season choice; it only avoids repeated
+        work on immutable leaderboard rows.
+        """
         surface = _surface_key(surface)
+        player_key = self._player_key(player_name)
         out: dict[str, float | None] = {}
-        for metric in ATP_METRICS:
-            out[f"{metric}_all"] = self._metric(
-                period=period,
-                surface="all",
-                metric=metric,
-                player_name=player_name,
-            )
-            out[f"{metric}_surface"] = (
-                self._metric(
-                    period=period,
-                    surface=surface,
-                    metric=metric,
-                    player_name=player_name,
+
+        if player_key is None:
+            for metric in ATP_METRICS:
+                out[f"{metric}_all"] = None
+                out[f"{metric}_surface"] = None
+            return out
+
+        all_rows = {
+            board: self._by_key.get((period, "all", board, player_key))
+            for board in _BOARD_RATING_FIELD
+        }
+        surface_rows = (
+            {
+                board: self._by_key.get((period, surface, board, player_key))
+                for board in _BOARD_RATING_FIELD
+            }
+            if surface != "all"
+            else all_rows
+        )
+
+        for metric, (board, field) in ATP_METRICS.items():
+            all_row = all_rows[board]
+            all_value = _number(all_row.get(field)) if all_row is not None else None
+            out[f"{metric}_all"] = all_value
+            if surface == "all":
+                out[f"{metric}_surface"] = all_value
+            else:
+                selected = surface_rows[board]
+                out[f"{metric}_surface"] = (
+                    _number(selected.get(field)) if selected is not None else None
                 )
-                if surface != "all"
-                else out[f"{metric}_all"]
-            )
         return out
 
     def features_for_match(self, match, *, current: bool = False) -> dict[str, float]:
