@@ -51,7 +51,7 @@ class ResearchGateway(unittest.TestCase):
         c=row(("Novak Djokovic","Jannik Sinner"),
               namespace="CDB",when="2025-01-10",kind="scheduled")
         result=gate.discover(s,[c])
-        self.assertEqual(result.state,"research_unique_weak_context")
+        self.assertEqual(result.state,"research_unique_strong_context")
         self.assertEqual(len(result.candidates),1)
         self.assertFalse(result.identity_verified)
         self.assertFalse(result.cdb_write_authorized)
@@ -87,8 +87,8 @@ class ResearchGateway(unittest.TestCase):
         c=row(("Novak Djokovic","Jannik Sinner"),namespace="CDB",
               when="2025-01-10",kind="scheduled")
         result,review=gate.compare_baseline(s,[c],legacy.proxy_old_match)
-        self.assertEqual(result.state,"research_unique_weak_context")
-        self.assertEqual(review.bucket,"new_only_unique_weak_context")
+        self.assertEqual(result.state,"research_unique_strong_context")
+        self.assertEqual(review.bucket,"new_only_unique_strong_context")
         self.assertFalse(review.cdb_write_authorized)
 
     def test_no_date_does_not_match_names(self):
