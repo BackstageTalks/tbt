@@ -90,6 +90,10 @@ def name_keys(value: object) -> frozenset[str]:
         if last and first:
             forms.append((first, last))
     forms.append((tokens[:-1], tokens[-1:]))  # given name(s) before surname
+    # Reversed two-token full names (e.g. DJOKOVIC NOVAK) are discovery-only.
+    # Such reversals are ambiguous for East Asian names and NEVER authorize IDs.
+    if len(tokens)==2 and all(len(part)>1 for part in tokens):
+        forms.append((tokens[1:], tokens[:1]))
     # Compound surname suffixes for 'Botic van de Zandschulp' / 'de Minaur'.
     for i in range(2, min(5, len(tokens))):
         forms.append((tokens[:-i], tokens[-i:]))
@@ -255,6 +259,10 @@ class Event:
     def __post_init__(self):
         if self.date_kind not in VALID_DATE_KINDS:
             raise ValueError("Explicit event date semantics required")
+        # Two athletes model singles only. Doubles need verified 4-player team
+        # identity rather than silently treating teams as single players.
+        if self.discipline.casefold()!="singles":
+            raise ValueError("Doubles/mixed not yet supported by v2 player-pair research adapter")
         if len(self.players) != 2:
             raise ValueError("Two player sides required")
         if self.players[0].tour.casefold() != self.tour.casefold() or (
