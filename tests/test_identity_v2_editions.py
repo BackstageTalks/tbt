@@ -50,7 +50,7 @@ class EditionResearch(unittest.TestCase):
 
     def test_same_city_other_year_does_not_merge(self):
         a=edition("atp","paris-2024","paris-2024",year=2024)
-        b=edition("wta","paris-2025","paris-2025",year=2025)
+        b=edition("wta","paris-2025","paris-2025",year=2025,tour="wta")
         reg=ResearchEditionRegistry([a,b])
         self.assertEqual(reg.compare(a,b),"edition_context_conflict")
         self.assertFalse(reg.discover_aliases(name="Australian Open",
