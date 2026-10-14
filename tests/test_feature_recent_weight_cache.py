@@ -132,3 +132,11 @@ def test_nested_scopes_do_not_mix_short_lived_deques():
     finally:
         _RECENT_WEIGHTS_CONTEXT.reset(token)
     assert _RECENT_WEIGHTS_CONTEXT.get() is None
+
+
+def test_training_frame_column_construction_matches_legacy(match_factory):
+    matches = [match_factory(f'column-{i}', 'A', f'Opponent{i % 7}', 'A', day=i % 28 + 1, surface=('hard', 'clay', 'grass')[i % 3]) for i in range(90)]
+    frame = FeatureBuilder().build_training_frame(matches)
+    legacy = pd.DataFrame(frame.to_dict('records'), columns=frame.columns)
+    pd.testing.assert_frame_equal(frame, legacy, check_exact=False, check_dtype=False)
+    assert frame['match_id'].tolist() == legacy['match_id'].tolist()
