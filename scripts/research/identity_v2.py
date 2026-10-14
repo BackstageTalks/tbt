@@ -179,7 +179,7 @@ def discover_players(source: Player, targets: Iterable[Player],
                                         exact_name_key(target.name)).ratio()
                 if ratio >= 0.90:
                     evidence.append("fuzzy_research_only")
-            if not evidence or evidence == ["dob_consistent"] or evidence == ["country_consistent"]:
+            if "fuzzy_research_only" not in evidence:
                 continue
         score = (8.0 if "same_native_identity" in evidence else
                  4.0 if "normalized_or_curated_alias" in evidence else
