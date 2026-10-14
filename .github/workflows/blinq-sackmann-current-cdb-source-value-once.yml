@@ -1,4 +1,7 @@
 name: BlinQ Sackmann full provenance versus CURRENT CDB (one-shot read-only)
+# Refresh corrected candidate data after #739: break-point CONVERSION is a
+# *_break_point_return_win rate, not legacy count-valued *_break_points_won.
+# Read-only release evidence only; NEVER promote source-proposed match identities.
 
 on:
   push:
