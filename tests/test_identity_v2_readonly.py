@@ -24,6 +24,7 @@ class Names(unittest.TestCase):
             ("Djokovic N.","Novak Djokovic"),
             ("N. Djokovic","Novak Djokovic"),
             ("DJOKOVIC, NOVAK","Novak Djokovic"),
+            ("DJOKOVIC NOVAK","Novak Djokovic"),
             ("Auger-Aliassime F.","Félix Auger-Aliassime"),
             ("De Minaur A.","Alex de Minaur"),
             ("Van De Zandschulp B.","Botic van de Zandschulp"),
@@ -125,11 +126,15 @@ class Events(unittest.TestCase):
 
     def test_draw_round_discipline_must_not_conflate(self):
         base=("Novak Djokovic","Jannik Sinner")
-        for options in (dict(draw="qual"),dict(discipline="doubles"),
+        for options in (dict(draw="qual"),
                         dict(round_name="Q2"),dict(tour="wta")):
             with self.subTest(options=options):
                 self.assertFalse(m.discover_events(self.src,[event(
                     base,namespace="cdb",when="2026-01-13",**options)]))
+
+    def test_doubles_need_explicit_four_player_team_schema(self):
+        with self.assertRaises(ValueError):
+            event(("Novak Djokovic","Jannik Sinner"),discipline="doubles")
 
     def test_missing_round_allows_research_discovery(self):
         q=event(("Novak Djokovic","Jannik Sinner"),namespace="cdb",
