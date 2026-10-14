@@ -1,0 +1,51 @@
+name: Emergency single-owner CDB lock recovery without deploy
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - .github/workflows/blinq-pr-recovery-20261014.yml
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  verify-and-restore-picks:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/recover-stale-lock-picks-20261014'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check abandoned lock owner and safely remove exact ref
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo '::error::Missing data-repository credential'; exit 1; }
+          data_repo=BackstageTalks/tbt-data
+          owner_repo=BackstageTalks/tbt
+          expected_sha=9467ecce05bd1705702217b47ff44e778313c19e
+          expected_owner='owner=BackstageTalks/tbt/actions/runs/38486683787/attempts/1'
+          ref="repos/$data_repo/git/ref/tags/blinq-cdb-global-writer"
+          sha="$(gh api "$ref" --jq '.object.sha')"
+          [[ "$sha" == "$expected_sha" ]] || { echo '::error::Lock SHA changed; refusing.'; exit 1; }
+          owner="$(gh api "repos/$data_repo/git/tags/$sha" --jq '.message')"
+          [[ "$owner" == "$expected_owner" ]] || { echo '::error::Unexpected lock owner; refusing.'; exit 1; }
+          conclusion="$(gh api "repos/$owner_repo/actions/runs/38486683787" --jq '.status + ":" + (.conclusion // "")')"
+          [[ "$conclusion" == 'completed:failure' ]] || { echo "::error::Owner still running or not failed: $conclusion"; exit 1; }
+          [[ "$(gh api "$ref" --jq '.object.sha')" == "$expected_sha" ]] || { echo '::error::Lock changed during verification'; exit 1; }
+          gh api -X DELETE "repos/$data_repo/git/refs/tags/blinq-cdb-global-writer" --silent
+          if gh api "$ref" >/tmp/lock-after.json 2>/tmp/lock-after.err; then
+            echo '::error::Lock remains after attempted removal'; exit 1
+          fi
+          grep -q 'HTTP 404' /tmp/lock-after.err || { echo '::error::Tag absence not independently verified'; exit 1; }
+          echo 'CDB global lock: abandoned owner and SHA independently verified; ref now absent.'
+      - name: Start only regular morning prediction recovery
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run morning-refresh.yml -R BackstageTalks/tbt --ref main -f max_requests=300
+          echo 'Normal supervised morning refresh dispatched with 300-request hard cap; separate run must verify publication.'
