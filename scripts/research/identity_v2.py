@@ -50,6 +50,13 @@ ROUND_MAP = {
 SCORE_SET = re.compile(r"^(?:\[)?(\d{1,2})[-:](\d{1,2})(?:\(\d{1,2}\))?(?:\])?$")
 STATUS_TOKENS = {"ret","retired","retirement","wo","w/o","walkover",
                  "def","default","abd","abandoned","unfinished","susp"}
+SCORE_STATUS_CATEGORY = {
+    "ret":"ret","retired":"ret","retirement":"ret",
+    "wo":"walkover","w/o":"walkover","walkover":"walkover",
+    "def":"default","default":"default",
+    "abd":"abandoned","abandoned":"abandoned",
+    "unfinished":"unfinished","susp":"unfinished"
+}
 VALID_DATE_KINDS = {"played", "scheduled", "tournament_start", "unknown"}
 
 
@@ -239,6 +246,9 @@ class Score:
     sets: tuple[tuple[int,int], ...]
     status: str
     valid: bool
+    # Preserve explicitly bracketed deciding match-tiebreak set shape.
+    # A 10-8 set score is not automatically equivalent to a [10-8] MTB.
+    match_tiebreak_indexes: tuple[int,...] = ()
 
 
 def parse_score(raw: object) -> Score:
@@ -246,12 +256,13 @@ def parse_score(raw: object) -> Score:
     tokens = str(raw or "").strip().split()
     sets: list[tuple[int,int]] = []
     statuses: list[str] = []
+    match_tiebreak_indexes: list[int] = []
     if not tokens:
         return Score((), "unknown", False)
     for token in tokens:
         stripped = token.strip(".,;").casefold()
         if stripped in STATUS_TOKENS:
-            statuses.append(stripped)
+            statuses.append(SCORE_STATUS_CATEGORY[stripped])
             continue
         found = SCORE_SET.fullmatch(token)
         if not found:
@@ -259,10 +270,13 @@ def parse_score(raw: object) -> Score:
         first, second = int(found.group(1)), int(found.group(2))
         if first > 99 or second > 99:
             return Score(tuple(sets), "unparsed", False)
+        if token.startswith("[") and token.endswith("]"):
+            match_tiebreak_indexes.append(len(sets))
         sets.append((first, second))
     if not sets and not statuses:
         return Score((), "unparsed", False)
-    return Score(tuple(sets), " ".join(statuses) if statuses else "score_only", True)
+    return Score(tuple(sets), " ".join(statuses) if statuses else "score_only",
+                 True, tuple(match_tiebreak_indexes))
 
 
 @dataclass(frozen=True)
@@ -410,11 +424,20 @@ def discover_events(source: Event, canonical: Iterable[Event],
             if ss.valid and cs.valid:
                 if (ss.status=="score_only") != (cs.status=="score_only"):
                     continue  # cannot silently equate a retirement with a completion
+                if ss.status!="score_only" and ss.status!=cs.status:
+                    continue  # RET, WO and default are not interchangeable
+                desired=ss.sets if sides==(0,1) else tuple((b,a) for a,b in ss.sets)
+                if ss.sets and cs.sets and desired!=cs.sets:
+                    continue
+                if (ss.match_tiebreak_indexes!=cs.match_tiebreak_indexes
+                        and ss.sets and cs.sets):
+                    continue  # [10-8] match tie-break != 10-8 normal set
                 if ss.status=="score_only":
-                    desired=ss.sets if sides==(0,1) else tuple((b,a) for a,b in ss.sets)
-                    if desired != cs.sets:
+                    if desired!=cs.sets:
                         continue
                     evidence.append("score_shape")
+                elif ss.sets and cs.sets:
+                    evidence.append("partial_score_shape")
         context_tier = (
             "edition_context_strong"
             if ("tournament_label" in evidence or "same_source_edition" in evidence)
