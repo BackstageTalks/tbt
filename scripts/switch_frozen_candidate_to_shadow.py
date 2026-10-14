@@ -177,6 +177,13 @@ def main() -> None:
             raise RuntimeError("Shadow changed from approved prior version; refuse replacement")
         if inventory(PRODUCTION_TAG)["model.joblib"][2] not in ("", "sha256:" + CHAMPION_SHA):
             raise RuntimeError("Champion remote digest changed")
+        old_history = json.loads((locations["candidate"] / "promotion_history.json").read_text())
+        frozen_history = json.loads((locations["frozen"] / "promotion_history.json").read_text())
+        if not isinstance(old_history, list) or not isinstance(frozen_history, list):
+            raise RuntimeError("Invalid shadow candidate promotion history")
+        if any(record not in frozen_history for record in old_history):
+            raise RuntimeError("Frozen candidate lacks previous promotion history; no overwrite")
+
         new_report = build_shadow_report(ledger,
                                          production_model_version=CHAMPION_VERSION,
                                          challenger_model_version=NEW_VERSION)
