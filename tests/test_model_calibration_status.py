@@ -176,5 +176,24 @@ class TestModelCalibrationStatus(unittest.TestCase):
         self.assertFalse(fresh["stale"])
 
 
+def test_model_711_alias_keeps_unique_model_id_and_is_bound_to_frozen_run():
+    from pathlib import Path
+    ui=(Path(__file__).resolve().parents[1]/"web"/"app.js").read_text(encoding="utf-8")
+    assert "String(offline.run_id)==='38486683787'" in ui
+    assert "blinq-candidate-frozen-38486683787-[0-9]+" in ui
+    assert "const newCandidateTitle=model711?'Model 7.1.1'" in ui
+    assert "model711?'Model 7.1.1':String(offline.candidate_version||'—')" in ui
+    assert "<summary>Technický pôvod a audit modelu</summary>" in ui
+    assert "<details class=\"admin-calibration-audit\">" in ui
+    assert "Nemenný artefakt:" in ui
+    assert "Záloha tréningových vstupov:" in ui
+    assert "${escapeHtml(String(offline.candidate_version||'—'))}" in ui
+    assert "Nezávislé hodnotenie:" in ui
+    assert "Identifikátor modelu:" in ui
+    assert "String(offline.candidate_release_tag||\'—\')" in ui
+    assert "Model 7.1.1 · čaká na tréning" in ui
+    assert "const offline=d.offline_candidate;" in ui
+
+
 if __name__ == "__main__":
     unittest.main()
