@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from contextvars import ContextVar
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -105,6 +106,43 @@ def stats_surface_key(surface: str) -> str:
     """Surface bucket used by performance statistics. Indoor hard shares the hard pool; indoor remains a separate feature."""
     value = str(surface or "unknown").strip().lower()
     return "hard" if value == "indoor_hard" else value
+
+
+# A snapshot queries the same player's last 80 matches many times (often 30+
+# independent metrics). Previously every query recomputed datetime differences
+# and exponentiation. Cache ONLY these invariant ages and weights for the
+# duration of one pre-match snapshot; all results and PIT boundaries are unchanged.
+# ContextVar isolates nested/concurrent callers and keeps no historical state.
+_RECENT_WEIGHTS_CONTEXT: ContextVar[dict | None] = ContextVar(
+    "blinq_recent_weights_context", default=None
+)
+
+
+def _recent_weights(recent, now: datetime, half_life_days: float):
+    """Return the same per-row decay weights, reusable within one snapshot.
+
+    Hold a reference to each deque in the context to avoid id() recycling
+    across short-lived round/tournament sub-deques. Never retain across state
+    updates, model fits, matches, or threads.
+    """
+    context = _RECENT_WEIGHTS_CONTEXT.get()
+    if context is None:
+        return tuple(
+            0.5 ** (max((now - item.played_at).total_seconds() / 86400.0, 0.0) / half_life_days)
+            for item in recent
+        )
+    key = (id(recent), now)
+    cached = context.get(key)
+    if cached is None or cached[0] is not recent:
+        ages = tuple(max((now - item.played_at).total_seconds() / 86400.0, 0.0) for item in recent)
+        cached = (recent, ages, {})
+        context[key] = cached
+    by_half_life = cached[2]
+    if half_life_days not in by_half_life:
+        by_half_life[half_life_days] = tuple(
+            0.5 ** (age / half_life_days) for age in cached[1]
+        )
+    return by_half_life[half_life_days]
 
 
 @dataclass
@@ -444,9 +482,7 @@ class FeatureBuilder:
 
     @staticmethod
     def _decayed_average(
-        recent: deque[
-            RecentPerformance
-        ],
+        recent: deque[RecentPerformance],
         now: datetime,
         field_name: str,
         half_life_days: float,
@@ -454,56 +490,20 @@ class FeatureBuilder:
         prior: float = 0.5,
         prior_weight: float = 4.0,
     ) -> float:
-        numerator = (
-            prior * prior_weight
-        )
-
+        numerator = prior * prior_weight
         denominator = prior_weight
-
-        for item in recent:
-            if (
-                surface
-                and stats_surface_key(surface) != "unknown"
-                and stats_surface_key(item.surface) != stats_surface_key(surface)
-            ):
+        target_surface = stats_surface_key(surface) if surface else None
+        # Retain the original per-row accumulation order and float formula.
+        weights = _recent_weights(recent, now, half_life_days)
+        for item, weight in zip(recent, weights):
+            if target_surface and target_surface != "unknown" and stats_surface_key(item.surface) != target_surface:
                 continue
-
-            age_days = max(
-                (
-                    now - item.played_at
-                ).total_seconds()
-                / 86400.0,
-                0.0,
-            )
-
-            weight = (
-                0.5
-                ** (
-                    age_days
-                    / half_life_days
-                )
-            )
-
-            value = getattr(
-                item,
-                field_name,
-            )
-
+            value = getattr(item, field_name)
             if value is None:
                 continue
-
-            numerator += (
-                weight
-                * float(value)
-            )
-
+            numerator += weight * float(value)
             denominator += weight
-
-        return (
-            numerator / denominator
-            if denominator
-            else prior
-        )
+        return numerator / denominator if denominator else prior
 
     @classmethod
     def _form(
@@ -525,40 +525,12 @@ class FeatureBuilder:
         state: PlayerState,
         now: datetime,
     ) -> float:
-        # Residual result above/below Elo expectation, shrunk toward
-        # zero.
         numerator = 0.0
         denominator = 6.0
-
-        for item in state.recent:
-            age_days = max(
-                (
-                    now - item.played_at
-                ).total_seconds()
-                / 86400.0,
-                0.0,
-            )
-
-            weight = (
-                0.5
-                ** (
-                    age_days / 60.0
-                )
-            )
-
-            numerator += (
-                weight
-                * (
-                    item.won
-                    - item.expected
-                )
-            )
-
+        for item, weight in zip(state.recent, _recent_weights(state.recent, now, 60.0)):
+            numerator += weight * (item.won - item.expected)
             denominator += weight
-
-        return (
-            numerator / denominator
-        )
+        return numerator / denominator
 
     @classmethod
     def _stat_quality(
@@ -724,7 +696,7 @@ class FeatureBuilder:
         numerator = prior * prior_weight
         denominator = prior_weight
         count = 0
-        for item in state.recent:
+        for item, weight in zip(state.recent, _recent_weights(state.recent, now, half_life_days)):
             if not condition(item):
                 continue
             value = outcome(item)
@@ -736,8 +708,6 @@ class FeatureBuilder:
                 continue
             if not math.isfinite(number):
                 continue
-            age_days = max((now - item.played_at).total_seconds() / 86400.0, 0.0)
-            weight = 0.5 ** (age_days / half_life_days)
             numerator += weight * clamp(number, 0.0, 1.0)
             denominator += weight
             count += 1
@@ -1118,6 +1088,17 @@ class FeatureBuilder:
         )
 
     def snapshot(
+        self,
+        match: MatchRecord,
+    ) -> dict[str, float]:
+        # One match-local cache, discarded even if a feature raises.
+        token = _RECENT_WEIGHTS_CONTEXT.set({})
+        try:
+            return self._snapshot_features(match)
+        finally:
+            _RECENT_WEIGHTS_CONTEXT.reset(token)
+
+    def _snapshot_features(
         self,
         match: MatchRecord,
     ) -> dict[str, float]:
