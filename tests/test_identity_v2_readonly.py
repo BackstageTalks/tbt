@@ -138,6 +138,16 @@ class Events(unittest.TestCase):
         self.assertIn("tournament_edition_unresolved",broad[0].evidence)
         self.assertTrue(m.no_write_contract(broad+same))
 
+    def test_missing_or_invalid_date_cannot_create_event_match(self):
+        # Previous loose branch could match two undated events by name.
+        for source_date,target_date in (("", ""), ("", "2026-01-13"),
+                                        ("2026-01-01", ""),
+                                        ("2026-13-90", "2026-01-13")):
+            with self.subTest(source_date=source_date,target_date=target_date):
+                src=m.Event(**{**self.src.__dict__, "event_date":source_date})
+                dest=m.Event(**{**self.cdb.__dict__,"event_date":target_date})
+                self.assertEqual(m.discover_events(src,[dest]),[])
+
     def test_date_window_reject(self):
         distant=event(("Novak Djokovic","Jannik Sinner"),namespace="cdb",
                       when="2026-03-02")
