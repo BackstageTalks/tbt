@@ -59,3 +59,22 @@ This is expected to be conservative: equivalent ATP/WTA event names may differ r
 - **P2:** Only after separate approval and 78-partition SHA proof, governed writer validation with single lock, compare-and-swap, NULL-only field writes, rights, backup/rollback and independent post-write readback.
 
 No code from obsolete `tbt-pro` has been imported. No production import, model operation, web deployment, or Drive change is part of this PR.
+
+## Extended conflict diagnosis — 14 Oct 2026 (read-only)
+
+Run [#38537392573](https://github.com/BackstageTalks/tbt/actions/runs/38537392573) passed against the same SHA-pinned 2025 original source files and historical CDB snapshot. The expanded regression diagnosis distinguishes **source rows losing every old proxy candidate** from **individual old candidate edges rejected despite other candidates surviving**.
+
+- Exactly **44 source rows** lost all their old strict-name matches; these are included in the broader **193 source rows** where at least one legacy candidate edge was rejected.
+- **197 old candidate edges** rejected by the v2 checks: **177 winner-side conflicts** and **20 ambiguous player-side orientations**. Breakdown by file: ATP Tour 1 winner + 1 ambiguous, ATP Futures 74 winner + 11 ambiguous, ATP qualifying/Challenger 30 winner, WTA Tour 8 winner + 2 ambiguous, WTA qualifying/ITF 64 winner + 6 ambiguous.
+- The diagnostic explains **why the v2 research matcher rejected** an old proxy edge; this does NOT establish which independent source is factually correct. Neither the 44 old-only source rows nor the 197 rejected old edges may be automatically rescued into CDB.
+- Full-year candidate and conflict metrics remain as above; the new diagnostic adds classification, not additional source or CDB facts.
+
+## Official event/both-player witness intake (shape-only)
+
+`scripts/research/identity_v2_witness_preflight.py` and `tests/test_identity_v2_witness_preflight.py` introduce a **source-scoped, SHA-pinned, two-player provider witness preflight**. It checks source row coordinates vs native provider event IDs, original lineage claims vs source lineage, exact source/canonical pair orientation and winner, candidate official played date, independent source/CDB digest consistency, duplicate witness submissions and collisions between provider/native/canonical event and player mappings.
+
+**Critical limitation:** the preflight validates the structure and internal consistency of the provided evidence *claims*. It does **not** retrieve or cryptographically validate the official provider originals or prove the caller's claimed lineage is truly independent. All apparently consistent rows remain `witness_shape_consistent_for_PRIVATE_review`, not `identity_verified`. Zero matches are independently attested by this new code alone.
+
+The existing `scripts/verify_tml_event_witnesses.py`, `scripts/build_cdb_verified_player_crosswalk.py` and `tbt-data/scripts/research/reconcile_l2_identity_bridges.py` remain the authoritative *separate* evidence/audit contracts to reuse. Do not replace their stricter checks with a new surname/score heuristic; all writers remain untouched.
+
+The next valid evidence step is a pinned original official event and both provider player IDs, with independently verified upstream provenance and permitted data use, and a current canonical snapshot and NULL-only comparison. This remains review-only until explicitly authorized and the existing writer gate is independently satisfied. This PR is still DRAFT and shall not be merged/deployed as an importer.
