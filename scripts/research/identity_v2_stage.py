@@ -17,7 +17,7 @@ import re
 
 from scripts.research import identity_v2_adapters as a
 
-ADAPTERS = {"sackmann", "season", "canonical"}
+ADAPTERS = {"sackmann", "season", "canonical", "native"}
 FORMATS = {"csv", "jsonl"}
 
 
@@ -50,7 +50,8 @@ def stream_rows(path: Path, fmt: str):
 
 def stage_readonly(path: Path, *, expected_sha: str, kind: str,
                    fmt: str, tour: str="", collection: str="",
-                   max_rows: int=100000):
+                   max_rows: int=100000, source_name: str="",
+                   date_kind: str="played", field_map=None):
     if kind not in ADAPTERS or fmt not in FORMATS:
         raise ValueError("Unsupported explicit source family or format")
     if not re.fullmatch(r"[a-f0-9]{64}",expected_sha):
@@ -59,8 +60,10 @@ def stage_readonly(path: Path, *, expected_sha: str, kind: str,
         raise ValueError("SOURCE_SHA_GATE_FAILED")
     if not 1<=max_rows<=1000000:
         raise ValueError("Rows limit must be 1..1000000")
-    if kind in ("sackmann","season") and (tour not in ("atp","wta") or not collection):
+    if kind in ("sackmann","season","native") and (tour not in ("atp","wta") or not collection):
         raise ValueError("Native sources require tour and collection")
+    if kind=="native" and not source_name:
+        raise ValueError("Explicit native source provider name required")
     counts=Counter()
     seen=set()
     for lineno,row in stream_rows(path,fmt):
@@ -73,6 +76,11 @@ def stage_readonly(path: Path, *, expected_sha: str, kind: str,
         elif kind=="season":
             result=a.from_season(row,tour=tour,collection=collection,
                                  file_sha256=expected_sha,line_number=lineno)
+        elif kind=="native":
+            result=a.from_native_event(row,source_name=source_name,
+                      tour=tour,collection=collection,
+                      file_sha256=expected_sha,line_number=lineno,
+                      field_map=field_map,date_kind=date_kind)
         else:
             result=a.from_cdb_metadata(row)
         result=a.require_source_only(result)
@@ -99,6 +107,7 @@ def stage_readonly(path: Path, *, expected_sha: str, kind: str,
         "source_kind":kind,
         "tour":tour,
         "source_collection":collection,
+        "native_source_name":source_name if kind=="native" else None,
         "counts":dict(sorted(counts.items())),
         "independently_verified_canonical_events":0,
         "independently_verified_player_ID_links":0,
@@ -117,10 +126,21 @@ def main():
     parser.add_argument("--tour",choices=("atp","wta"),default="")
     parser.add_argument("--collection",default="")
     parser.add_argument("--max-rows",type=int,default=100000)
+    parser.add_argument("--source-name",default="",
+                        help="Required native provider name for --kind native")
+    parser.add_argument("--date-kind",choices=("played","scheduled","tournament_start"),
+                        default="played")
+    parser.add_argument("--field-map-json",default="{}",
+                        help="Optional JSON dict: canonical field names -> raw column names")
     opts=parser.parse_args()
+    field_map=json.loads(opts.field_map_json)
+    if not isinstance(field_map,dict):
+        raise ValueError("Expected a JSON object field map")
     report=stage_readonly(opts.source,expected_sha=opts.source_sha256,
        kind=opts.kind,fmt=opts.format,tour=opts.tour,
-       collection=opts.collection,max_rows=opts.max_rows)
+       collection=opts.collection,max_rows=opts.max_rows,
+       source_name=opts.source_name,date_kind=opts.date_kind,
+       field_map=field_map)
     print(json.dumps(report,sort_keys=True,allow_nan=False))
 
 
