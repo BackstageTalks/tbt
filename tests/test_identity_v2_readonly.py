@@ -124,7 +124,7 @@ class Events(unittest.TestCase):
 
     def test_opponent_orientation_and_score(self):
         swapped=event(("Jannik Sinner","Novak Djokovic"),namespace="cdb",
-                      when="2026-01-13",round_name="R16",score="4-6 6-7(4)")
+                      when="2026-01-13",round_name="R16",score="4-6 6-7(4)",winner="2")
         self.assertEqual(len(m.discover_events(self.src,[swapped])),1)
 
     def test_date_window_reject(self):
