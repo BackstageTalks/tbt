@@ -17,12 +17,13 @@ concurrency:
 jobs:
   full-historical-field-coverage:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 110
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
       PRIVATE_REPO: BackstageTalks/tbt-data
       RELEASE_TAG: tbt-data-v1
-      REPORT_TAG: blinq-cdb-field-gap-inventory-20261011-${{ github.run_id }}
+      REPORT_TAG: blinq-cdb-field-gap-inventory-20261014-${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,18 +35,46 @@ jobs:
           test -n "$GH_TOKEN"
           test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
           python -m pip install "pandas>=2,<3" pyarrow
-          python -m py_compile scripts/audit_all_cdb_enrichment_fields.py
-      - name: Independently download all years and current release metadata
+          python -m py_compile scripts/audit_all_cdb_enrichment_fields.py scripts/download_stable_cdb.py scripts/cdb_global_writer_lock.py
+      - name: Wait for active canonical writer; never analyze a half-published CDB
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/enrichment-audit/years /tmp/enrichment-audit/reports
+          unlocked=0
+          for i in $(seq 1 80); do
+            set +e
+            python - <<'PY'
+          import sys
+          from cdb_global_writer_lock import _remote_lock
+          try:
+              owner = _remote_lock("BackstageTalks/tbt-data")
+          except Exception as e:
+              print("CDB_LOCK_CHECK_ERROR", repr(e), flush=True)
+              sys.exit(2)
+          if owner:
+              print("CDB_WRITER_BUSY_WILL_RETRY", flush=True)
+              sys.exit(1)
+          print("CDB_WRITER_LOCK_ABSENT", flush=True)
+          PY
+            code=$?
+            set -e
+            if [[ "$code" == 0 ]]; then unlocked=1; break; fi
+            if [[ "$code" != 1 ]]; then exit "$code"; fi
+            sleep 30
+          done
+          test "$unlocked" = 1
+
+      - name: Independently download one stable current checksum-verified release snapshot
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/enrichment-audit/reports
+          python scripts/download_stable_cdb.py --repository "$PRIVATE_REPO" \
+            --tag "$RELEASE_TAG" --out /tmp/enrichment-audit/years \
+            --report /tmp/enrichment-audit/reports/snapshot.json
           gh api "repos/$PRIVATE_REPO/releases/tags/$RELEASE_TAG" > /tmp/enrichment-audit/release.json
-          gh release download "$RELEASE_TAG" -R "$PRIVATE_REPO" \
-            -p 'history-*.parquet' -p 'history_manifest.json' \
-            -D /tmp/enrichment-audit/years
           test "$(find /tmp/enrichment-audit/years -name 'history-*.parquet' | wc -l)" -eq 78
       - name: Parse every match and every existing statistic field in CDB
-        timeout-minutes: 25
+        timeout-minutes: 35
         run: |
           set -euo pipefail
           python -u scripts/audit_all_cdb_enrichment_fields.py \
@@ -55,12 +84,22 @@ jobs:
           python - <<'PY'
           import json
           a=json.load(open('/tmp/enrichment-audit/reports/full-cdb-field-coverage.json'))
-          assert a['canonical_match_rows']>=994101
+          assert a['canonical_match_rows']>=995610
           assert a['year_partitions']==78
           assert a['observed_stat_field_count']>=20
           assert a['canonical_db_mutated']==False
           assert a['tennis_provider_requests']==0
           assert all(x['present']+x['missing_or_unknown']==a['canonical_match_rows'] for x in a['top_level'])
+          print('CURRENT_YEAR_GAP_2022_2026',json.dumps([{
+              'year':y['year'],'matches':y['matches'],
+              'both_serve_return_complete':y['serve_return_complete'],
+              'aces_and_df_complete':y['ace_df_complete'],
+              'two_set_outcome_complete':y['two_set_outcome_complete'],
+              'missing_ranks_p1':y['missing_top_level']['player1_rank_missing'],
+              'missing_ranks_p2':y['missing_top_level']['player2_rank_missing'],
+              'missing_best_of':y['missing_top_level']['best_of_missing'],
+              'missing_indoor':y['missing_top_level']['indoor_missing']
+          } for y in a['per_year'] if 2022<=y['year']<=2026],sort_keys=True))
           print('ENRICHMENT_ALL_FIELD_COVERAGE_PASS',a['canonical_match_rows'],
                 'TOP_LEVEL',len(a['top_level']),
                 'STATS',a['observed_stat_field_count'])
@@ -71,12 +110,13 @@ jobs:
           set -euo pipefail
           cd /tmp/enrichment-audit/reports
           test -s full-cdb-field-coverage.json
-          sha256sum full-cdb-field-coverage.json > SHA256SUMS
+          cp snapshot.json current-cdb-snapshot.json
+          sha256sum full-cdb-field-coverage.json current-cdb-snapshot.json > SHA256SUMS
           sha256sum -c SHA256SUMS
           gh release create "$REPORT_TAG" -R "$PRIVATE_REPO" --target main \
-            --title "Current all-match CDB nested field coverage 2026-10-11" \
-            --notes "Read-only 78-year full CDB field and missing-value inventory, exact source year partition SHA. No CDB write or provider requests."
-          gh release upload "$REPORT_TAG" full-cdb-field-coverage.json SHA256SUMS -R "$PRIVATE_REPO"
+            --title "Current post-import 78-year CDB field and 2022-2026 gap coverage" \
+            --notes "Read-only exact stable checksum-verified CDB snapshot after previous writer releases lock, all 78 years, detailed 2022–2026 priorities, no canonical write or provider API requests."
+          gh release upload "$REPORT_TAG" full-cdb-field-coverage.json current-cdb-snapshot.json SHA256SUMS -R "$PRIVATE_REPO"
           mkdir -p readback
           gh release download "$REPORT_TAG" -R "$PRIVATE_REPO" -D readback
           (cd readback && sha256sum --check SHA256SUMS)
