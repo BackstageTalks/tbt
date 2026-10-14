@@ -176,6 +176,22 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000):
         old_ids={x.event_id for x in old}
         new_ids={x.canonical_event_id for x in new}
         r=by_family[family]
+        classification = (
+            "old_none_new_unique" if not old_ids and len(new_ids)==1 else
+            "old_none_new_ambiguous" if not old_ids and len(new_ids)>1 else
+            "old_unique_new_none" if len(old_ids)==1 and not new_ids else
+            "old_unique_new_ambiguous" if len(old_ids)==1 and len(new_ids)>1 else
+            "old_unique_new_different" if len(old_ids)==len(new_ids)==1 and old_ids!=new_ids else
+            "old_ambiguous_new_unique" if len(old_ids)>1 and len(new_ids)==1 else
+            "old_ambiguous_new_none" if len(old_ids)>1 and not new_ids else
+            "other_candidate_set_difference" if old_ids and new_ids and old_ids!=new_ids else
+            "candidate_sets_same"
+        )
+        metrics[classification]+=1
+        r[classification]+=1
+        for entry in new:
+            for evidence in set(entry.evidence):
+                metrics["research_evidence_"+evidence]+=1
         for k,v in (
             ("source_events",1),("old_any",bool(old)),("new_any",bool(new)),
             ("old_unique",len(old_ids)==1),("new_unique",len(new_ids)==1),
