@@ -1,0 +1,122 @@
+name: BlinQ exact original-native Sackmann break points (read-only)
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/blinq-sackmann-native-bp-stage-once.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: blinq-native-breakpoints-stage-only
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      SOURCE_COMMIT: 83733587353df8a41f2fd4f516147d5aa83f5a8d
+      EVIDENCE_TAG: blinq-sackmann-current-value-38558642597-2
+      ROOT: /tmp/blinq-native-bp
+      PYTHONPATH: app/api:app/scripts:app
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Aneeshers/tennis-sackmann-archive
+          ref: 83733587353df8a41f2fd4f516147d5aa83f5a8d
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test exact native identity, source provenance, rate semantics and private rights
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$PRIVATE_REPO" --json visibility -q .visibility)" = PRIVATE
+          test "$(git -C source rev-parse HEAD)" = "$SOURCE_COMMIT"
+          python -m pip install --quiet 'pandas>=2,<3' pyarrow pytest
+          python -m pytest -q app/tests/test_stage_sackmann_native_breakpoints.py app/tests/test_pbp_candidate_audit.py app/tests/test_source_value_routes.py
+          mkdir -p "$ROOT/evidence" "$ROOT/cdb" "$ROOT/output"
+      - name: Independent SHA-verified PRIVATE research report and coherent current CDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          for retry in 1 2 3; do
+            if gh release download "$EVIDENCE_TAG" -R "$PRIVATE_REPO" -D "$ROOT/evidence"; then break; fi
+            if [ "$retry" -eq 3 ]; then exit 1; fi
+            rm -f "$ROOT/evidence/"*
+            sleep $((retry * 8))
+          done
+          (cd "$ROOT/evidence" && sha256sum -c SHA256SUMS)
+          python app/scripts/download_stable_cdb.py --repository "$PRIVATE_REPO" \
+            --out "$ROOT/cdb" --report "$ROOT/current-cdb-snapshot.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ["ROOT"])
+          old=json.loads((p/"evidence/snapshot.json").read_text())
+          now=json.loads((p/"current-cdb-snapshot.json").read_text())
+          assert old["status"]==now["status"]=="verified"
+          assert old["manifest_sha256"]==now["manifest_sha256"], "Drift: rerun full source gap audit"
+          assert now["provider_api_requests"]==0
+          PY
+      - name: Independently recompute exact original match, native players and 0..1 break-point rates
+        timeout-minutes: 55
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u app/scripts/stage_sackmann_native_breakpoints.py \
+            --cdb "$ROOT/cdb" --source source --evidence "$ROOT/evidence" --out "$ROOT/output"
+          python - <<'PY'
+          import gzip,hashlib,json,os
+          from pathlib import Path
+          out=Path(os.environ["ROOT"])/"output"
+          report=json.loads((out/"stage-report.json").read_text())
+          c=report["counts"]
+          assert report["status"]=="RESEARCH_STAGED_EXACT_SAME_ORIGIN_NOT_PUBLISHED"
+          assert report["production_writes"]==0 and report["model_changes"]==0
+          assert report["independent_provider_identity_attested"] is False
+          assert c["original_native_external_cells"]>=c["eligible_same_origin_cells"]>0
+          ledger=out/"native-breakpoint-stage-private.jsonl.gz"
+          assert report["stage_sha256"]==hashlib.sha256(ledger.read_bytes()).hexdigest()
+          seen=set();cells=0
+          with gzip.open(ledger,"rt") as f:
+            for line in f:
+              row=json.loads(line)
+              assert row["write_authorized"] is False
+              assert row["evidence_class"]=="exact_same_origin_original_native_identity"
+              assert set(row["additions"]) <= {"p1_break_point_return_win","p2_break_point_return_win"}
+              assert row["match_id"] not in seen and all(0<=v<=1 for v in row["additions"].values())
+              seen.add(row["match_id"]);cells+=len(row["additions"])
+          assert len(seen)==c["eligible_same_origin_matches"]
+          assert cells==c["eligible_same_origin_cells"]
+          print("PRIVATE_EXACT_NATIVE_BREAKPOINT_PREFLIGHT_VERIFIED",json.dumps(c,sort_keys=True))
+          PY
+      - name: Store only PRIVATE evidence, verify full persisted checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$ROOT/output"
+          sha256sum stage-report.json native-breakpoint-stage-private.jsonl.gz > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          tag="blinq-native-bp-stage-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" -R "$PRIVATE_REPO" --target main \
+            --title "Exact same-origin native Sackmann break points (unapproved research-only)" \
+            --notes "No CDB writes; no model changes; preserve Jeff Sackmann CC BY-NC-SA 4.0 attribution. Independently revalidated source metadata/native IDs, but not cross-provider attested."
+          gh release upload "$tag" stage-report.json native-breakpoint-stage-private.jsonl.gz SHA256SUMS -R "$PRIVATE_REPO"
+          mkdir -p "$ROOT/private-readback"
+          gh release download "$tag" -R "$PRIVATE_REPO" -D "$ROOT/private-readback"
+          (cd "$ROOT/private-readback" && sha256sum -c SHA256SUMS)
+          echo PRIVATE_NATIVE_BREAKPOINT_STAGE_PERSISTED_READBACK_VERIFIED
