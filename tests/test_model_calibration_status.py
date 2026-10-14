@@ -176,23 +176,30 @@ class TestModelCalibrationStatus(unittest.TestCase):
         self.assertFalse(fresh["stale"])
 
 
-def test_model_711_alias_keeps_unique_model_id_and_is_bound_to_frozen_run():
+
+def test_model_711_alias_keeps_unique_model_id_and_is_bound_to_verified_frozen_run():
     from pathlib import Path
     ui=(Path(__file__).resolve().parents[1]/"web"/"app.js").read_text(encoding="utf-8")
-    assert "String(offline.run_id)==='38486683787'" in ui
-    assert "blinq-candidate-frozen-38486683787-[0-9]+" in ui
-    assert "const newCandidateTitle=model711?'Model 7.1.1'" in ui
-    assert "model711?'Model 7.1.1':String(offline.candidate_version||'—')" in ui
+    # Only the verified immutable 7.1.1 binary may receive the readable name.
+    assert "String(offline.run_id)==='38608660910'" in ui
+    assert "blinq-candidate-frozen-38608660910-[0-9]+" in ui
+    assert "String(offline.candidate_version)==='v201-20261014T183415325901Z'" in ui
+    assert "String(offline.candidate_sha256)==='7ac60b0b671091a7f620cca80a7c558b417e20c9448f577878625447e565c141'" in ui
+    assert "String(offline.production_version||'')===String(d.production_version||'')" in ui
+    assert "String(d.candidate_version||'')===String(offline.candidate_version||'')" in ui
+    # Both model areas use the public alias; IDs remain accessible in the audit.
+    assert "const newCandidateTitle=model711?'BlinQ 7.1.1'" in ui
+    assert "model711?'BlinQ 7.1.1':String(offline.candidate_version||'—')" in ui
+    assert "shadowModel711?'BlinQ 7.1.1':String(d.candidate_version||'—')" in ui
+    assert "shadowModel711?'Shadow · ID: '+String(d.candidate_version)" in ui
     assert "<summary>Technický pôvod a audit modelu</summary>" in ui
     assert "<details class=\"admin-calibration-audit\">" in ui
+    assert "Identifikátor modelu:" in ui
     assert "Nemenný artefakt:" in ui
     assert "Záloha tréningových vstupov:" in ui
     assert "${escapeHtml(String(offline.candidate_version||'—'))}" in ui
     assert "Nezávislé hodnotenie:" in ui
-    assert "Identifikátor modelu:" in ui
-    assert "String(offline.candidate_release_tag||\'—\')" in ui
-    assert "Model 7.1.1 · čaká na tréning" in ui
-    assert "const offline=d.offline_candidate;" in ui
+    assert "String(offline.candidate_release_tag||'—')" in ui
 
 
 if __name__ == "__main__":
