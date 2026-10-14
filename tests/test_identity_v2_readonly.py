@@ -232,5 +232,56 @@ class Shadow(unittest.TestCase):
         self.assertEqual(result["counts"]["new_ambiguous"],1)
         self.assertEqual(result["independently_verified_event_links"],0)
 
+class AdapterContract(unittest.TestCase):
+    def test_sackmann_source_native_event_no_cdb_write(self):
+        from scripts.research import identity_v2_adapters as a
+        row={"tourney_date":"20250105","winner_id":"p1","loser_id":"p2",
+             "winner_name":"Djokovic N.","loser_name":"Sinner J.",
+             "tourney_name":"Australian Open","round":"R16","score":"6-4 6-4"}
+        r=a.from_sackmann(row,tour="atp",collection="tour",
+                          file_sha256="f"*64,line_number=12)
+        self.assertIsNotNone(r.event)
+        self.assertEqual(r.event.date_kind,"tournament_start")
+        self.assertFalse(r.cdb_import_authorized)
+        self.assertTrue(a.require_source_only(r).research_only)
+
+    def test_sackmann_same_ids_fail_closed(self):
+        from scripts.research import identity_v2_adapters as a
+        row={"tourney_date":"20250105","winner_id":"p1","loser_id":"p1",
+             "winner_name":"Name One","loser_name":"Name Two"}
+        r=a.from_sackmann(row,tour="atp",collection="tour",
+                          file_sha256="f"*64,line_number=2)
+        self.assertIsNone(r.event)
+        self.assertIn("source_player_id_collision",r.reasons)
+
+    def test_season_requires_native_player_ids(self):
+        from scripts.research import identity_v2_adapters as a
+        row={"date":"2025-01-05","home":"Djokovic N.","away":"Sinner J."}
+        r=a.from_season(row,tour="atp",collection="2025",
+                        file_sha256="f"*64,line_number=2)
+        self.assertIsNone(r.event)
+        self.assertIn("incomplete_source_native_event",r.reasons)
+
+    def test_cdb_is_context_only(self):
+        from scripts.research import identity_v2_adapters as a
+        row={"tour":"atp","match_id":"cdb1","scheduled_at":"2025-01-06T16:00:00Z",
+             "player1_id":"c1","player2_id":"c2","player1_name":"Novak Djokovic",
+             "player2_name":"Jannik Sinner","winner_id":"c1"}
+        r=a.from_cdb_metadata(row)
+        self.assertIsNotNone(r.event)
+        self.assertFalse(r.cdb_import_authorized)
+        self.assertEqual(r.event.date_kind,"scheduled")
+
+    def test_true_zero_not_null_invalid_values_are_quarantined(self):
+        from scripts.research import identity_v2_adapters as a
+        self.assertEqual(a.parse_nonnegative_int(0),0)
+        self.assertIsNone(a.parse_nonnegative_int(""))
+        self.assertIsNone(a.parse_nonnegative_int(None))
+        self.assertEqual(a.parse_nonnegative_int("007"),7)
+        for x in (True,-1,1.5,"3.5","50%","Inf"):
+            with self.subTest(x=x), self.assertRaises(ValueError):
+                a.parse_nonnegative_int(x)
+
+
 if __name__=="__main__":
     unittest.main()
