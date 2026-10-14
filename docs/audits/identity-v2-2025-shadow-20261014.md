@@ -78,3 +78,49 @@ Run [#38537392573](https://github.com/BackstageTalks/tbt/actions/runs/3853739257
 The existing `scripts/verify_tml_event_witnesses.py`, `scripts/build_cdb_verified_player_crosswalk.py` and `tbt-data/scripts/research/reconcile_l2_identity_bridges.py` remain the authoritative *separate* evidence/audit contracts to reuse. Do not replace their stricter checks with a new surname/score heuristic; all writers remain untouched.
 
 The next valid evidence step is a pinned original official event and both provider player IDs, with independently verified upstream provenance and permitted data use, and a current canonical snapshot and NULL-only comparison. This remains review-only until explicitly authorized and the existing writer gate is independently satisfied. This PR is still DRAFT and shall not be merged/deployed as an importer.
+
+## Read-only research gateway closeout — 14 October 2026
+
+**Purpose:** Close the code/research phase of the five-step Identity V2 plan while explicitly isolating *unproven canonical identity* from *proposed match candidates*. The canonical CDB remains unchanged and is not replaced by a proposed new database.
+
+### Shared staged entrypoint
+
+- `scripts/research/identity_v2_gateway.py` exposes a bounded common read-only discovery API, `stage_sackmann`, `stage_season`, `stage_native` and `stage_canonical_context`. Gateway states: `no_research_match`, `research_unique_weak_context`, `research_unique_strong_context`, `research_ambiguous_quarantined`, `source_context_overflow_quarantined`. **Every state always has `identity_verified=False`, `cdb_write_authorized=False`.**
+- `identity_v2_stage.py` accepts SHA-pinned CSV or JSONL for `sackmann`, `season`, `canonical` and the new `native` source kind, with optional explicit field mapping for source-native IDs. Source rows with missing provider event ID or any participant ID go to *source-only quarantine*; a filename, surname, score, fixture position or row line number cannot replace provider-issued identities.
+- `shadow_sackmann2025_vs_cdb.py` now uses the same shared gateway as the native source adapters. Real historical replay must preserve all previously verified counts, with zero canonical writes.
+- `identity_v2_editions.py` treats season/tour/draw/discipline/competition level and SHA-backed aliases as research context only; it is NOT an official tournament edition registry. `identity_v2_triage.py`, `identity_v2_loss_diagnosis.py` and `identity_v2_witness_preflight.py` provide risk-based review categories, negative evidence and independently claimed official provider ID preflight. None verifies a source merely because a JSON object says “official”.
+- `identity_v2_private_review.py` optionally prepares an exclusive local-only private review pack with `0700` parent and `0600` file permissions and refuses GitHub CI. Do NOT upload, commit or expose this package.
+- `BackstageTalks/tbt-pro` is *obsolete*; it remains a read-only historical data and alias archive, **never an active implementation/runtime dependency**.
+
+Example, using a private SHA-pinned source **without** CDB writes:
+
+```bash
+PYTHONPATH=. python scripts/research/identity_v2_stage.py \
+  --source /secure/native-originals.csv \
+  --source-sha256 '<actual 64-hex SHA256>' \
+  --format csv --kind native --tour atp \
+  --collection 2025 --source-name example-official-feed \
+  --date-kind played --max-rows 100000
+```
+
+For different column names use `--field-map-json` with explicit source-field mappings. Match rows missing native IDs remain quarantined. CSV/JSONL are the supported direct on-disk formats in this pilot. XLS/XLSX, ZIP, Parquet and other formats require their own *provenance-preserving conversion/adapters*, not silent acceptance based on a filename.
+
+### Measured research results and meaning
+
+Same five **byte-SHA-pinned 2025 Sackmann sources**: **56,889 input source matches** versus immutable `history-2025.parquet` (**90,571 canonical matches**, SHA-256 `3a929b356803af6b0f704d4d3066a053ecf995124ec8f4228487c54c0f534c58`). Old strict normalized-name proxy found any candidate for **44,057** source matches; v2 found candidates for **45,613**. There are **1,600 v2-only** source matches, **777** old-unique-now-ambiguous, **44** old-only, **936** changed candidate sets where both find something. These are discovery counts, **not ground-truth precision** or CDB NULL coverage.
+
+Of **197 individual old candidate edges rejected**, **177** conflicted on winner orientation and **20** had ambiguous player-side orientation; these affected **193** source matches, of which **44** lost all old candidates. Old-only count and rejected-edge count are different denominators. Strong tournament-label/round/winner context is *not* independently verified provider event identity.
+
+### Go/no-go: explicitly NOT satisfied for production imports
+
+A future governed canonical import requires **all** of:
+
+1. Independently retrieved/checksummed original *provider-issued event ID and both provider-issued player IDs* including documented upstream lineage, unambiguous source-to-provider row/ID bridge, and no many-to-one/one-to-many collisions. Witness format checks alone do not prove external provenance.
+2. Authoritative year/tour/level/draw-specific tournament edition identity with verifiable aliases, consistent exact result/winner/round/date semantics, resolution of ambiguous Futures events and all disputed old-only cases.
+3. Per-source reuse/licence review, observed-at timestamp and prediction-time / post-match leakage separation (especially odds versus later match statistics).
+4. Fresh exact **CURRENT canonical partition manifest and SHA verification**, actual NULL-only field delta, nonconflicting observation semantics and global writer exclusive lock, CAS, verified durable backup/restorability and post-write readback.
+5. A human/authoritative independent **positive-and-negative golden set**, including the 763 high-risk Futures newly ambiguous matches. Demonstrate recall **and false positives** versus source originals; do not infer correctness from candidate count. Full cross-year/ATP/WTA and source-family shadow A/B after official evidence is available.
+6. **Separate explicit production authorization** after all checks and a dry run. This read-only PR must not activate or bypass `tbt`/`tbt-data` governance or start a model training/deployment.
+
+**Current decision:** research code and reproducible 2025 pilot may be archived/merged with an explicit `[audit-only]` no-deploy merge title after green checks, but enabling ANY production importer is **BLOCKED by independent official identity evidence/rights/current-CDB NULL gate**. All claimed verified new CDB identities in the pilot: **0**. New CDB writes: **0**.
+
