@@ -10092,7 +10092,7 @@ body.blinq-compare .footer-system-dot{display:none}
 .admin-calibration-card{display:flex;min-width:0;flex-direction:column;gap:6px;padding:16px;border:1px solid #28536a;background:linear-gradient(145deg,#0b2a3c,#071c2b);border-radius:13px}
 .admin-calibration-card small{font-size:11px;color:#8fb6ca;text-transform:uppercase;font-weight:800;letter-spacing:.065em}
 .admin-calibration-card strong{overflow-wrap:anywhere;font-size:19px;line-height:1.2;color:#f7fbff}
-.admin-calibration-card span{font-size:11px;color:#aac0cf}
+.admin-calibration-card span{font-size:11px;color:#aac0cf;overflow-wrap:anywhere}
 .admin-calibration-progress-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:17px}
 .admin-calibration-progress{border:1px solid #28475e;border-radius:13px;padding:15px;background:#071e2d}
 .admin-calibration-progress-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline;font-size:12px}
