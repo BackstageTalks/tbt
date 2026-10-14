@@ -17,12 +17,20 @@ from pathlib import Path
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_partitions
 from tbt.data.history_safety import sanitize_history_identities
-from tbt.providers.statistics import complete_opponent_service_rates
 
-RECOVERABLE = {
-    "p1_service_points_won", "p2_service_points_won",
-    "p1_return_points_won", "p2_return_points_won",
-}
+# First/second-serve points won and the opponent's first/second-return points
+# won use the same whole-match service-point denominators. These are NOT
+# first-serve-in rates, unweighted aggregates, or independent observations.
+PAIRS = tuple(
+    (f"{own}_{serve}", f"{opponent}_{ret}")
+    for own, opponent in (("p1", "p2"), ("p2", "p1"))
+    for serve, ret in (
+        ("first_serve_win", "first_return_win"),
+        ("second_serve_win", "second_return_win"),
+        ("service_points_won", "return_points_won"),
+    )
+)
+RECOVERABLE = {field for pair in PAIRS for field in pair}
 POLICY = "post_match_only_prior_completed_history; exact whole_match_opponent_complement"
 
 
@@ -50,21 +58,35 @@ def _index(matches):
     return mapping
 
 
-def _inconsistent_observed_pair(stats):
-    """Never derive from a record with contradictory service/return evidence."""
+def _valid_observed_rate(value):
     import math
-    for serve, ret in (("p1_service_points_won", "p2_return_points_won"),
-                       ("p2_service_points_won", "p1_return_points_won")):
-        a, b = stats.get(serve), stats.get(ret)
-        if a is None or b is None:
-            continue
-        if (isinstance(a, bool) or isinstance(b, bool) or
-                not isinstance(a, (int, float)) or not isinstance(b, (int, float)) or
-                not math.isfinite(a) or not math.isfinite(b) or
-                not 0 <= a <= 1 or not 0 <= b <= 1 or
-                abs(float(a) + float(b) - 1.0) > 0.000001):
+    return (not isinstance(value, bool)
+            and isinstance(value, (int, float))
+            and math.isfinite(value)
+            and 0 <= value <= 1)
+
+
+def _inconsistent_observed_pair(stats):
+    """Quarantine an entire match on invalid rates or contradictory evidence."""
+    if not isinstance(stats, dict):
+        return True
+    for service, ret in PAIRS:
+        a, b = stats.get(service), stats.get(ret)
+        if any(v is not None and not _valid_observed_rate(v) for v in (a, b)):
+            return True
+        if a is not None and b is not None and abs(float(a) + float(b) - 1.0) > 1e-6:
             return True
     return False
+
+
+def _complete_verified_complements(values):
+    """Add NULL-only complementary rates; preserve every existing observation."""
+    if _inconsistent_observed_pair(values):
+        raise ValueError("Invalid or conflicting whole-match service/return evidence")
+    for service, ret in PAIRS:
+        for target, source in ((service, ret), (ret, service)):
+            if values.get(target) is None and values.get(source) is not None:
+                values[target] = 1.0 - float(values[source])
 
 
 def stage(matches, *, as_of=None):
@@ -87,7 +109,7 @@ def stage(matches, *, as_of=None):
             summary["contradictory_observed_rates"] += 1
             continue
         proposed = dict(stats)
-        complete_opponent_service_rates(proposed)
+        _complete_verified_complements(proposed)
         additions = {k: proposed[k] for k in sorted(RECOVERABLE)
                      if stats.get(k) is None and proposed.get(k) is not None}
         if not additions:
@@ -131,7 +153,7 @@ def write_local(matches, staged):
         if row.get("source_stats_hash") != _sha(before):
             raise ValueError("Source statistics changed since dry-run")
         actual = dict(before)
-        complete_opponent_service_rates(actual)
+        _complete_verified_complements(actual)
         expected = {k: actual[k] for k in sorted(RECOVERABLE)
                     if before.get(k) is None and actual.get(k) is not None}
         if expected != row.get("additions") or not expected:
@@ -224,7 +246,7 @@ def write_exact_stats_partition(history_dir: Path, year: int, staged: list[dict]
         computed = dict(record.stats or {})
         if _inconsistent_observed_pair(computed):
             raise ValueError("Conflicting observed complement source")
-        complete_opponent_service_rates(computed)
+        _complete_verified_complements(computed)
         expected = {k: computed[k] for k in sorted(RECOVERABLE)
                     if (record.stats or {}).get(k) is None and computed.get(k) is not None}
         if expected != row.get("additions") or not expected:
