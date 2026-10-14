@@ -1,9 +1,7 @@
 name: BlinQ canonical historical Elo and weekly Tennis Abstract audit
 
 on:
-  schedule:
-    # Weekly Monday 04:20 UTC; own CDB replay has zero paid tennis API calls.
-    - cron: "20 4 * * 1"
+  # Weekly timing is externally orchestrated under repository cron policy.
   workflow_dispatch:
   push:
     branches: [main]
