@@ -9,12 +9,14 @@ on:
       - ".github/workflows/blinq-elo-history-weekly.yml"
       - ".github/elo-weekly-trigger.json"
       - "scripts/build_blinq_cdb_elo.py"
+      - "scripts/compare_blinq_elo_ta.py"
       - "tests/test_blinq_cdb_elo.py"
   pull_request:
     paths:
       - ".github/workflows/blinq-elo-history-weekly.yml"
       - ".github/elo-weekly-trigger.json"
       - "scripts/build_blinq_cdb_elo.py"
+      - "scripts/compare_blinq_elo_ta.py"
       - "tests/test_blinq_cdb_elo.py"
 
 permissions:
@@ -40,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install "pandas>=2,<3" pyarrow
-          python -m compileall -q scripts/build_blinq_cdb_elo.py
+          python -m compileall -q scripts/build_blinq_cdb_elo.py scripts/compare_blinq_elo_ta.py
           python -m unittest discover -s tests -p 'test_blinq_cdb_elo.py' -v
 
   weekly-full-replay:
@@ -130,6 +132,12 @@ jobs:
           print(str(json.load(open('.cache/elo/ta/parsed/report.json'))['training_eligible']).lower())
           PY
           )" = "false"
+          python scripts/compare_blinq_elo_ta.py \
+            --current .cache/elo/history/elo-current.csv \
+            --ta-atp .cache/elo/ta/parsed/atp_elo.csv \
+            --ta-wta .cache/elo/ta/parsed/wta_elo.csv \
+            --ta-report .cache/elo/ta/parsed/report.json \
+            --out .cache/elo/ta/ta-vs-own-elo.json
       - name: Record honest TA crosscheck status and verify source has not changed
         shell: bash
         env:
@@ -157,6 +165,7 @@ jobs:
                   "training_eligible":False}
           if report["ta_fetch"]=="success":
               report["snapshot"]=json.load(open(folder/"parsed/report.json"))
+              report["research_comparison"]=json.load(open(folder/"ta-vs-own-elo.json"))
           (folder/"ta-audit.json").write_text(json.dumps(report,indent=2)+"\n")
           print("WEEKLY_TA_VALIDATION",report["ta_fetch"])
           PY
