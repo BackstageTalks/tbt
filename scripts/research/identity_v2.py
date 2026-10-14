@@ -47,7 +47,7 @@ ROUND_MAP = {
     "q2":"q2", "qualifying 2":"q2", "qualification round 2":"q2",
     "q3":"q3", "qualifying 3":"q3", "qualification round 3":"q3",
 }
-SCORE_SET = re.compile(r"^(?:\\[)?(\\d{1,2})[-:](\\d{1,2})(?:\\(\\d{1,2}\\))?(?:\\])?$")
+SCORE_SET = re.compile(r"^(?:\[)?(\d{1,2})[-:](\d{1,2})(?:\(\d{1,2}\))?(?:\])?$")
 STATUS_TOKENS = {"ret","retired","retirement","wo","w/o","walkover",
                  "def","default","abd","abandoned","unfinished","susp"}
 VALID_DATE_KINDS = {"played", "scheduled", "tournament_start", "unknown"}
@@ -61,7 +61,7 @@ def latin_text(value: object) -> str:
     raw = unicodedata.normalize("NFKD", raw.casefold().translate(EXTRA_LATIN))
     raw = "".join(ch for ch in raw if not unicodedata.combining(ch))
     raw = "".join(CYRILLIC.get(ch, GREEK.get(ch, ch)) for ch in raw)
-    return " ".join(re.findall(r"[^\\W_]+", raw, flags=re.UNICODE))
+    return " ".join(re.findall(r"[^\W_]+", raw, flags=re.UNICODE))
 
 
 def exact_name_key(value: object) -> str:
