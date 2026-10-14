@@ -30,4 +30,54 @@ class CandidateSafetyTests(unittest.TestCase):
         self.assertEqual(audit.compare_cells({'p1_aces':3.001},{'p1_aces':3}),([],['p1_aces']))
         self.assertEqual(audit.compare_cells({'p1_aces':3},{'p1_aces':3}),([],[]))
 
+
+    def test_alias_research_requires_opt_in(self):
+        from collections import defaultdict
+        exact=defaultdict(list)
+        aliases=defaultdict(list,{('atp',(('djokovic','n'),('sinner','j'))):['research-candidate']})
+        owners={('atp',('djokovic','n')):{'id-novak'},
+                ('atp',('sinner','j')):{'id-jannik'}}
+        self.assertEqual(audit.lookup_name_pair('atp','Novak Djokovic','Jannik Sinner',
+            exact,aliases,owners), ((),None))
+        self.assertEqual(audit.lookup_name_pair('atp','Novak Djokovic','Jannik Sinner',
+            exact,aliases,owners,alias_research=True),(['research-candidate'],'alias_research_only'))
+
+    def test_initial_surname_aliases_and_compound_names(self):
+        self.assertEqual(audit.initial_surname_signature('Novak Djokovic'),('djokovic','n'))
+        self.assertEqual(audit.initial_surname_signature('Djokovic N.'),('djokovic','n'))
+        self.assertEqual(audit.initial_surname_signature('N. Djokovic'),('djokovic','n'))
+        for name in ('Djokovic','J. M. del Potro','', 'N. N.'):
+            with self.subTest(name=name):
+                self.assertIsNone(audit.initial_surname_signature(name))
+        self.assertIsNone(audit.alias_pair_signature('N. Djokovic','Novak Djokovic'))
+
+    def test_ambiguous_aliases_are_rejected_even_with_matching_metadata(self):
+        aliases={('atp',(('djokovic','n'),('sinner','j'))):['untrusted']}
+        owners={('atp',('djokovic','n')):{'id-novak','id-nikolai'},
+                ('atp',('sinner','j')):{'id-jannik'}}
+        self.assertEqual(audit.lookup_name_pair('atp','Novak Djokovic','Jannik Sinner',
+            {},aliases,owners,alias_research=True),((),None))
+        self.assertFalse(audit.candidate_person_match('Novak Djokovic','Djokovic N.',
+            'atp','id-novak',owners,alias_research=True))
+
+    def test_alias_evidence_never_crosses_tours_or_ids(self):
+        owners={('atp',('djokovic','n')):{'id1'},
+                ('wta',('djokovic','n')):{'id2'}}
+        self.assertTrue(audit.candidate_person_match('Novak Djokovic','Djokovic N.',
+            'atp','id1',owners,alias_research=True))
+        self.assertFalse(audit.candidate_person_match('Novak Djokovic','Djokovic N.',
+            'atp','id2',owners,alias_research=True))
+        self.assertFalse(audit.candidate_person_match('Novak Djokovic','Djokovic N.',
+            'wta','id1',owners,alias_research=True))
+        self.assertFalse(audit.candidate_person_match('Novak Djokovic','Djokovic N.',
+            'atp','id1',owners))
+
+    def test_exact_names_stay_exact_when_aliases_ambiguous(self):
+        exact={('atp',('jannik sinner','novak djokovic')):['baseline']}
+        aliases={}
+        owners={('atp',('djokovic','n')):{'a','b'}}
+        self.assertEqual(audit.lookup_name_pair('atp','Novak Djokovic','Jannik Sinner',
+            exact,aliases,owners,alias_research=True),
+            (['baseline'],'exact_normalized_name_pair'))
+
 if __name__=='__main__':unittest.main()

@@ -23,6 +23,51 @@ def similar(a,b):
     if not ta or not tb:return False
     if ta and tb and (ta==tb or (len(ta)>=2 and ta<=tb) or (len(tb)>=2 and tb<=ta)):return True
     return difflib.SequenceMatcher(None,' '.join(sorted(ta)),' '.join(sorted(tb))).ratio()>=.86
+def initial_surname_signature(name):
+    """Conservative two-token research alias, not a player identity proof.
+
+    Supports 'Novak Djokovic', 'N. Djokovic' and 'Djokovic N.'.
+    Compound surnames, missing initials and one-token names fail closed.
+    """
+    tokens=norm(name).split()
+    if len(tokens)!=2:return None
+    first,last=tokens
+    if len(first)==1 and len(last)>1:
+        return (last,first)
+    if len(last)==1 and len(first)>1:
+        return (first,last)
+    if len(first)>1 and len(last)>1:
+        return (last,first[0])
+    return None
+
+def alias_pair_signature(name_a,name_b):
+    a=initial_surname_signature(name_a)
+    b=initial_surname_signature(name_b)
+    if not a or not b or a==b:return None
+    return tuple(sorted((a,b)))
+
+def lookup_name_pair(tour,name_a,name_b,exact_index,alias_index,alias_owners,*,alias_research=False):
+    """Exact baseline first; ambiguous shorthand never widens production matches."""
+    tour=norm(tour)
+    pair=tuple(sorted((norm(name_a),norm(name_b))))
+    exact=exact_index.get((tour,pair),())
+    if exact:return exact,'exact_normalized_name_pair'
+    if not alias_research:return (),None
+    signature=alias_pair_signature(name_a,name_b)
+    if not signature:return (),None
+    if any(len(alias_owners.get((tour,part),()))!=1 for part in signature):
+        return (),None
+    return alias_index.get((tour,signature),()),'alias_research_only'
+
+def candidate_person_match(source_name,canonical_name,tour,canonical_id,alias_owners,*,alias_research=False):
+    if norm(source_name)==norm(canonical_name):
+        return True
+    if not alias_research:return False
+    signature=initial_surname_signature(source_name)
+    if not signature or signature!=initial_surname_signature(canonical_name):
+        return False
+    return alias_owners.get((norm(tour),signature),set())=={str(canonical_id)}
+
 def missing(v):
     if v is None:return True
     if isinstance(v,str):return v.strip().lower() in ('','nan','none','null','unknown','n/a')
@@ -82,7 +127,7 @@ def native_key(tour,row):
         raise ValueError('Incomplete or colliding source-native identity')
     return (tour,)+values
 
-def main(src,cdb,release_path,out,candidates=None):
+def main(src,cdb,release_path,out,candidates=None,*,alias_research=False):
     release=json.loads(release_path.read_text())
     assets={a['name']:a for a in release['assets']}
     manifest=json.loads((cdb/'history_manifest.json').read_text())['years']
@@ -90,6 +135,8 @@ def main(src,cdb,release_path,out,candidates=None):
     if len(parts)!=78 or len(manifest)!=78:raise RuntimeError('CDB must have 78 years')
     counts=collections.Counter();reasons=collections.Counter()
     index=collections.defaultdict(list)
+    alias_index=collections.defaultdict(list)
+    alias_owners=collections.defaultdict(set)
     cols=['match_id','tour','scheduled_at','player1_id','player2_id','player1_name','player2_name',
           'tournament','round_name','surface','winner_id','stats_json']
     canonical_ids=set()
@@ -106,8 +153,17 @@ def main(src,cdb,release_path,out,candidates=None):
             pair=tuple(sorted((norm(n1),norm(n2))))
             if not all(pair) or pair[0]==pair[1] or missing(id1) or missing(id2) or str(id1)==str(id2) or missing(when):continue
             day=pd.Timestamp(when).date()
-            index[(norm(t),pair)].append((day,norm(event),rnd(round_name),norm(surface),str(winner or ''),
-                                          str(id1),str(id2),str(mid),norm(n1),norm(n2),stats))
+            candidate=(day,norm(event),rnd(round_name),norm(surface),str(winner or ''),
+                       str(id1),str(id2),str(mid),norm(n1),norm(n2),stats)
+            index[(norm(t),pair)].append(candidate)
+            if alias_research:
+                for name,pid in ((n1,id1),(n2,id2)):
+                    key=initial_surname_signature(name)
+                    if key:
+                        alias_owners[(norm(t),key)].add(str(pid))
+                signature=alias_pair_signature(n1,n2)
+                if signature:
+                    alias_index[(norm(t),signature)].append(candidate)
     paths=sorted(p for p in src.rglob('*.csv') if any(re.fullmatch(rx,p.relative_to(src).as_posix()) for rx in FILES))
     if len(paths)!=262:raise RuntimeError('Source CSV count mismatch '+str(len(paths)))
     fprint=2166136261
@@ -141,7 +197,8 @@ def main(src,cdb,release_path,out,candidates=None):
                 counts['distinct_complete_boxscore_source_matches']+=1
                 try:start=dt.datetime.strptime(row['tourney_date'],'%Y%m%d').date()
                 except (ValueError,KeyError):reasons['invalid_event_start']+=1;continue
-                options=index.get((fam,pair),[])
+                options,match_method=lookup_name_pair(fam,row.get('winner_name'),row.get('loser_name'),
+                    index,alias_index,alias_owners,alias_research=alias_research)
                 if not options:reasons['canonical_pair_missing']+=1;continue
                 near=[z for z in options if -1<=(z[0]-start).days<=21]
                 if not near:reasons['pair_no_match_in_event_window']+=1;continue
@@ -151,20 +208,25 @@ def main(src,cdb,release_path,out,candidates=None):
                 if not eligible:reasons['event_round_surface_no_witness']+=1;continue
                 if len(eligible)!=1:reasons['multiple_canonical_candidates']+=1;continue
                 z=eligible[0]
-                if z[4] not in (z[5],z[6]) or norm(row.get('winner_name')) not in (z[8],z[9]):
+                winner_sides=[pid for cname,pid in ((z[8],z[5]),(z[9],z[6]))
+                    if candidate_person_match(row.get('winner_name'),cname,fam,pid,alias_owners,
+                                              alias_research=alias_research)]
+                if z[4] not in (z[5],z[6]) or len(winner_sides)!=1:
                     reasons['winner_unattested']+=1;continue
-                winner_id=z[5] if norm(row['winner_name'])==z[8] else z[6]
+                winner_id=winner_sides[0]
                 if z[4]!=winner_id:reasons['winner_conflict']+=1;continue
                 counts['unique_compound_candidates_winner_consistent']+=1
+                if match_method=='alias_research_only':
+                    counts['alias_research_winner_consistent']+=1
                 mid=z[7]
                 if mid in matches and matches[mid][0]!=sid:
                     quarantined.add(sid);quarantined.add(matches[mid][0])
                     reasons['two_source_ids_one_cdb_match']+=1;continue
-                matches[mid]=(sid,z,row,s)
+                matches[mid]=(sid,z,row,s,match_method)
     matched=additive=already=blocked=0;null_cells=0
     missing_fields=collections.Counter();conflict_fields=collections.Counter()
     candidate_rows=[]
-    for mid,(sid,z,row,stats) in matches.items():
+    for mid,(sid,z,row,stats,match_method) in matches.items():
         if sid in quarantined:blocked+=1;continue
         try:
             if z[10] is None:existing={}
@@ -175,7 +237,10 @@ def main(src,cdb,release_path,out,candidates=None):
         if not isinstance(existing,dict):reasons['canonical_invalid_json']+=1;continue
         values={}
         for side in ('p1','p2'):
-            src_side='w' if norm(row['winner_name'])==(z[8] if side=='p1' else z[9]) else 'l'
+            src_side='w' if candidate_person_match(
+                row['winner_name'],z[8] if side=='p1' else z[9],sid[0],
+                z[5] if side=='p1' else z[6],alias_owners,
+                alias_research=alias_research) else 'l'
             opp='l' if src_side=='w' else 'w'
             sv=stats[src_side+'_svpt'];fi=stats[src_side+'_1stIn'];se=sv-fi
             os=stats[opp+'_svpt'];ofi=stats[opp+'_1stIn'];ose=os-ofi
@@ -196,6 +261,8 @@ def main(src,cdb,release_path,out,candidates=None):
             conflict_fields.update(errors);blocked+=1;reasons['existing_nonnull_stat_conflicts']+=1
             continue
         matched+=1
+        if match_method=='alias_research_only':
+            counts['alias_research_compound_candidates_without_stat_conflict']+=1
         if candidates is not None:
             relative,record_number=locations[sid]
             candidate_rows.append({'source_namespace':'sackmann','tour':sid[0],
@@ -205,7 +272,9 @@ def main(src,cdb,release_path,out,candidates=None):
                 'canonical_match_id_candidate':mid,'canonical_player_ids_candidate':[z[5],z[6]],
                 'canonical_side_source_player_ids':[row['winner_id'] if norm(row['winner_name'])==n else row['loser_id'] for n in (z[8],z[9])],
                 'missing_candidate_cells':{k:values[k] for k in nulls},
-                'identity_evidence':'compound_metadata_only',
+                'identity_evidence':('alias_metadata_research_only' if match_method=='alias_research_only'
+                                     else 'compound_metadata_only'),
+                'name_pair_matching_method':match_method,
                 'independent_identity_verified':False,'source_rights_verified':False,
                 'write_authorized':False})
         if nulls:
@@ -224,6 +293,7 @@ def main(src,cdb,release_path,out,candidates=None):
             'candidate_missing_stat_field_counts':dict(missing_fields),
             'conflicting_existing_stat_field_counts':dict(conflict_fields),
             'approved_cdb_cells':0,'independent_identity_verified':False,'source_rights_verified':False,
+            'alias_research_enabled':alias_research,
             'canonical_writes':0,'training':False,
             'source_file_sha256':source_hashes,
             'safety':'Research candidates only. Require independent event and both-player identity evidence, source rights, current NULL recheck and governed writer before import.'}
@@ -241,4 +311,6 @@ if __name__=='__main__':
     a.add_argument('--release',type=Path,required=True)
     a.add_argument('--out',type=Path,required=True)
     a.add_argument('--candidates',type=Path,help='Optional PRIVATE research-only JSONL.gz ledger; never a writer input')
-    x=a.parse_args();main(x.source,x.cdb,x.release,x.out,x.candidates)
+    a.add_argument('--alias-research',action='store_true',
+                   help='Opt-in research of two-token first-initial/surname aliases; never authorizes CDB writes')
+    x=a.parse_args();main(x.source,x.cdb,x.release,x.out,x.candidates,alias_research=x.alias_research)
