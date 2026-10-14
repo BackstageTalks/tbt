@@ -46,6 +46,11 @@ jobs:
             mode="$(jq -r '.mode // "dry-run"' .github/cdb-sackmann-bp-request.json)"
           fi
           [[ "$mode" == "dry-run" || "$mode" == "write" ]]
+          if [[ "$mode" == "write" ]]; then
+            test "$(jq -r '.approved_by_operator // false' .github/cdb-sackmann-bp-request.json)" = true
+            test "$(jq -r '.source_commit // empty' .github/cdb-sackmann-bp-request.json)" = "83733587353df8a41f2fd4f516147d5aa83f5a8d"
+            test "$(jq -r '.workflow // empty' .github/cdb-sackmann-bp-request.json)" = "cdb-sackmann-bp-guarded.yml"
+          fi
           test "$TBT_DATA_REPOSITORY" = "BackstageTalks/tbt-data"
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "Sackmann native-ID breakpoints mode: $mode"
