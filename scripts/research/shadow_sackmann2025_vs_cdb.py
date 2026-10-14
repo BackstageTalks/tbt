@@ -23,6 +23,7 @@ from scripts.research import identity_v2_triage as triage
 from scripts.research import identity_v2_private_review as private_review
 from scripts.research import identity_v2_loss_diagnosis as loss_diagnosis
 from scripts.research import identity_v2_gateway as gateway
+from scripts.research import identity_v2_futures_risk_roots as futures_roots
 
 # Source bytes audited separately; pin to exactly that independent read-only run.
 SOURCE_SHA = {
@@ -85,7 +86,8 @@ def source_events(root: Path, *, sample_mod: int):
                         namespace,source_id,tour,"singles",(p1,p2),
                         played,"tournament_start",str(row.get("tourney_name") or ""),
                         str(row.get("round") or ""),str(row.get("score") or ""),
-                        winner,draw=("qual" if ("qual_" in rel or "_qual_" in rel) else ""),
+                        winner,edition_id=str(row.get("tourney_id") or ""),
+                        draw=("qual" if ("qual_" in rel or "_qual_" in rel) else ""),
                     )
                 except ValueError:
                     counts["source_schema_quarantine"]+=1
@@ -169,6 +171,7 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000,
     old_rejection_by_family=defaultdict(Counter)
     lost_old_candidate_count=0
     lost_old_source_cases=0
+    futures_counter=futures_roots.FuturesRiskCounter()
     for family,source in source_rows:
         metrics["sample_events"]+=1
         keys_a,keys_b=event_keys(source)
@@ -192,6 +195,7 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000,
         if not ident.no_write_contract(new):
             raise AssertionError("Research linker claims independent proof/write")
         review=triage.review_case(source,old,new)
+        futures_counter.consider(family,source,old,new,context)
         if on_review is not None:
             on_review(family,source,old,new,review)
         if review.independently_verified or review.cdb_write_authorized:
@@ -262,6 +266,7 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000,
             "notes":"Reason categories are research diagnostics, not import approvals."
         },
         "cdb_sha256":CDB_SHA,
+        "futures_ambiguity_root_causes":futures_counter.report(),
         "counts":dict(sorted(metrics.items())),
         "per_source_family":{k:dict(sorted(v.items())) for k,v in sorted(by_family.items())},
         "priority_review_triage":{
