@@ -64,6 +64,15 @@ def latin_text(value: object) -> str:
     return " ".join(re.findall(r"[^\W_]+", raw, flags=re.UNICODE))
 
 
+def transliteration_search_key(value: object) -> str:
+    """Approximate phonetic ASCII index; RESEARCH ONLY, never exact identity."""
+    text = latin_text(value)
+    for before,after in (("dzh","dj"),("kh","h"),("zh","z"),
+                         ("shch","sc"),("sh","s"),("ch","c"),("ts","c")):
+        text = text.replace(before,after)
+    return text
+
+
 def exact_name_key(value: object) -> str:
     return latin_text(value)
 
@@ -79,7 +88,7 @@ def name_keys(value: object) -> frozenset[str]:
     name = exact_name_key(raw)
     if not name:
         return frozenset()
-    result = {"exact:" + name}
+    result = {"exact:" + name, "translit:" + transliteration_search_key(name)}
     tokens = name.split()
     if len(tokens) < 2:
         return frozenset(result)
@@ -169,6 +178,8 @@ def discover_players(source: Player, targets: Iterable[Player],
             evidence.append("normalized_or_curated_alias")
         elif any(k.startswith("initials:") for k in common):
             evidence.append("surname_initial_discovery")
+        elif any(k.startswith("translit:") for k in common):
+            evidence.append("transliteration_research_only")
         if (source.dob and target.dob and source.dob != target.dob):
             # DOB conflict never rescued by a name-based key.
             continue
@@ -177,7 +188,8 @@ def discover_players(source: Player, targets: Iterable[Player],
         if source.country and source.country.casefold() == target.country.casefold():
             evidence.append("country_consistent")
         if not any(x in evidence for x in ("same_native_identity",
-                     "normalized_or_curated_alias", "surname_initial_discovery")):
+                     "normalized_or_curated_alias", "surname_initial_discovery",
+                     "transliteration_research_only")):
             if fuzzy and len(exact_name_key(source.name)) >= 8:
                 ratio = SequenceMatcher(None, exact_name_key(source.name),
                                         exact_name_key(target.name)).ratio()
