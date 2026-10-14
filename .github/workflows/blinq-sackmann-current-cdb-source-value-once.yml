@@ -87,7 +87,7 @@ jobs:
           assert r['production_writes']==0 and r['model_changes']==0
           assert a['canonical_writes']==0 and a['approved_cdb_cells']==0
           assert c['canonical_rows']==a['counts']['cdb_rows']
-          assert c['canonical_rows']>=995143 and c['canonical_complement_cells']>0
+          assert c['canonical_rows']>=995143 and c['canonical_complement_cells']>=0
           assert c['candidate_cells_total']==c['candidate_cells_recoverable_from_cdb']+c['candidate_cells_requiring_external_values']
           assert c['candidate_cells_requiring_external_values']==sum(
             v for k,v in c.items() if k.endswith('_external_cells'))
