@@ -134,9 +134,52 @@ def test_nested_scopes_do_not_mix_short_lived_deques():
     assert _RECENT_WEIGHTS_CONTEXT.get() is None
 
 
+
 def test_training_frame_column_construction_matches_legacy(match_factory):
-    matches = [match_factory(f'column-{i}', 'A', f'Opponent{i % 7}', 'A', day=i % 28 + 1, surface=('hard', 'clay', 'grass')[i % 3]) for i in range(90)]
-    frame = FeatureBuilder().build_training_frame(matches)
-    legacy = pd.DataFrame(frame.to_dict('records'), columns=frame.columns)
-    pd.testing.assert_frame_equal(frame, legacy, check_exact=False, check_dtype=False)
-    assert frame['match_id'].tolist() == legacy['match_id'].tolist()
+    """Independent row-oriented reference, including dtype, order and missing values."""
+    from itertools import groupby
+
+    matches = [
+        match_factory(
+            f"column-{i}", "A", f"Opponent{i % 7}", "A",
+            day=i % 28 + 1,
+            surface=("hard", "clay", "grass")[i % 3],
+        )
+        for i in range(90)
+    ]
+    actual = FeatureBuilder().build_training_frame(matches)
+
+    legacy_builder = FeatureBuilder()
+    completed = sorted(
+        (match for match in matches if match.is_completed),
+        key=lambda match: (match.scheduled_at, match.match_id),
+    )
+    rows = []
+    for _, same_day in groupby(
+        completed,
+        key=lambda match: match.scheduled_at.astimezone(timezone.utc).date(),
+    ):
+        batch = list(same_day)
+        for original in batch:
+            oriented, target = legacy_builder.orient_for_training(original)
+            features = legacy_builder.snapshot(oriented)
+            surface = oriented.surface
+            from tbt.models.feature_builder import stats_surface_key
+            surface_key = stats_surface_key(surface)
+            rows.append({
+                **features,
+                "surface_history_count": min(
+                    legacy_builder._state(oriented, True).surface_matches.get(surface_key, 0),
+                    legacy_builder._state(oriented, False).surface_matches.get(surface_key, 0),
+                ),
+                "target": target,
+                "match_id": original.match_id,
+                "scheduled_at": original.scheduled_at,
+                "tour": original.tour.lower(),
+                "surface": original.surface,
+            })
+        for original in batch:
+            legacy_builder.update(original)
+
+    expected = pd.DataFrame(rows, columns=actual.columns)
+    pd.testing.assert_frame_equal(actual, expected, check_exact=True)
