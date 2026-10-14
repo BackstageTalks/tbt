@@ -155,3 +155,84 @@ def test_exact_stats_patch_refuses_changed_stage_without_disk_mutation(tmp_path)
     with pytest.raises(ValueError, match="reproducible"):
         write_exact_stats_partition(tmp_path, 2024, bad)
     assert path.read_bytes() == original_bytes
+
+
+
+def test_all_first_second_and_total_rate_complements_preserve_orientation():
+    original = match(stats={
+        "p1_first_serve_win": 0.75,
+        "p2_second_return_win": 0.61,
+        "p2_service_points_won": 0.58,
+    })
+    staged, counts = stage([original])
+    assert counts["staged_matches"] == 1
+    assert counts["new_stat_values"] == 3
+    additions = staged[0]["additions"]
+    assert set(additions) == {
+        "p2_first_return_win", "p1_second_serve_win", "p1_return_points_won"
+    }
+    assert additions["p2_first_return_win"] == pytest.approx(0.25)
+    assert additions["p1_second_serve_win"] == pytest.approx(0.39)
+    assert additions["p1_return_points_won"] == pytest.approx(0.42)
+    assert "p1_first_return_win" not in additions  # Never same-side substitution.
+    persisted = deepcopy(original)
+    assert write_local([persisted], staged) == [2024]
+    assert verify_readback([original], [persisted], staged)["new_stat_values"] == 3
+
+
+def test_both_tours_player_sides_have_all_six_recovery_pairs():
+    from scripts.recover_cdb_opponent_service_rates import PAIRS, RECOVERABLE
+    assert len(PAIRS) == 6 and len(RECOVERABLE) == 12
+    original = match(stats={service: 0.8 for service, _ in PAIRS})
+    staged, counts = stage([original])
+    assert counts["new_stat_values"] == 6
+    assert staged[0]["additions"] == {
+        ret: pytest.approx(0.2) for _, ret in PAIRS
+    }
+
+
+def test_first_or_second_rate_conflict_blocks_entire_match():
+    original = match(stats={
+        "p1_first_serve_win": 0.70,
+        "p2_first_return_win": 0.32,
+        "p2_service_points_won": 0.65,  # Safe in isolation; must still skip.
+    })
+    staged, counts = stage([original])
+    assert staged == []
+    assert counts["contradictory_observed_rates"] == 1
+
+
+@pytest.mark.parametrize("bad", [True, -0.1, 1.1, 70, "70%", float("inf"), float("nan")])
+def test_invalid_first_second_or_return_rate_never_imputed(bad):
+    original = match(stats={
+        "p1_first_serve_win": bad,
+        "p2_service_points_won": 0.64,
+    })
+    staged, counts = stage([original])
+    assert staged == []
+    assert counts["contradictory_observed_rates"] == 1
+
+
+def test_changed_first_second_evidence_invalidates_stage():
+    original = match(stats={"p2_second_return_win": 0.31})
+    staged, _ = stage([original])
+    changed = deepcopy(original)
+    changed.stats["p2_second_return_win"] = 0.32
+    with pytest.raises(ValueError, match="changed since dry-run"):
+        write_local([changed], staged)
+    changed = deepcopy(original)
+    changed.stats["p1_second_serve_win"] = 0.75
+    with pytest.raises(ValueError, match="changed since dry-run"):
+        write_local([changed], staged)
+
+
+def test_cdb_historical_pre_1990_year_stages_only_verified_nulls():
+    historical = match(stats={"p1_first_serve_win": 0.71})
+    historical.scheduled_at = datetime(1981, 6, 3, tzinfo=timezone.utc)
+    staged, counts = stage([historical], as_of=datetime(2026, 10, 14, tzinfo=timezone.utc))
+    assert counts["new_stat_values"] == 1
+    assert staged[0]["utc_year"] == 1981
+    assert staged[0]["additions"] == {"p2_first_return_win": pytest.approx(0.29)}
+    persisted = deepcopy(historical)
+    assert write_local([persisted], staged) == [1981]
+    assert verify_readback([historical], [persisted], staged)["new_stat_values"] == 1
