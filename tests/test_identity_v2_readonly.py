@@ -47,6 +47,14 @@ class Names(unittest.TestCase):
         self.assertEqual(m.exact_name_key("Новак Джокович"),"novak dzhokovich")
         self.assertIn("exact:coco gauff",player("Cori Gauff",aliases=("Coco Gauff",)).names())
 
+    def test_cyrillic_transliteration_is_research_only(self):
+        src=player("Новак Джокович",namespace="championat")
+        target=player("Novak Djokovic",namespace="cdb")
+        found=m.discover_players(src,[target])
+        self.assertEqual(len(found),1)
+        self.assertIn("transliteration_research_only",found[0].evidence)
+        self.assertTrue(m.no_write_contract(found))
+
     def test_short_name_collisions_not_verified(self):
         src=player("Zhang R.",native="z")
         dests=[player("Rui Zhang",namespace="cdb",native="1"),
