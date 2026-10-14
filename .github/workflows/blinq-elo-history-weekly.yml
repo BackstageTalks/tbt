@@ -1,0 +1,193 @@
+name: BlinQ canonical historical Elo and weekly Tennis Abstract audit
+
+on:
+  schedule:
+    # Weekly Monday 04:20 UTC; own CDB replay has zero paid tennis API calls.
+    - cron: "20 4 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/blinq-elo-history-weekly.yml"
+      - "scripts/build_blinq_cdb_elo.py"
+      - "tests/test_blinq_cdb_elo.py"
+  pull_request:
+    paths:
+      - ".github/workflows/blinq-elo-history-weekly.yml"
+      - "scripts/build_blinq_cdb_elo.py"
+      - "tests/test_blinq_cdb_elo.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-cdb-independent-elo-weekly
+  cancel-in-progress: false
+
+jobs:
+  elo-selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate production algorithm and sidecar invariants
+        shell: bash
+        env:
+          PYTHONPATH: api:scripts
+        run: |
+          set -euo pipefail
+          python -m pip install "pandas>=2,<3" pyarrow
+          python -m compileall -q scripts/build_blinq_cdb_elo.py
+          python -m unittest discover -s tests -p 'test_blinq_cdb_elo.py' -v
+
+  weekly-full-replay:
+    needs: elo-selftest
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 230
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      TBT_CDB_REPO: BackstageTalks/tbt-data
+      TBT_CDB_TAG: tbt-data-v1
+      ELO_RELEASE_TAG: blinq-elo-history-v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deterministic offline CDB/feature dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install "pandas>=2,<3" pyarrow
+          test "$(gh api "repos/$TBT_CDB_REPO" --jq .private)" = true
+          test -n "$GH_TOKEN"
+      - name: Verify exact CDB bundle and capture before fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/elo
+          gh api "repos/$TBT_CDB_REPO/releases/tags/$TBT_CDB_TAG" > .cache/elo/cdb-before.json
+          python scripts/download_stable_cdb.py \
+            --repository "$TBT_CDB_REPO" --tag "$TBT_CDB_TAG" \
+            --out .cache/elo/cdb --report .cache/elo/download.json
+      - name: Compute EVERY historical PRE Elo from canonical matches
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_SHA="$(git rev-parse HEAD)"
+          python -u scripts/build_blinq_cdb_elo.py \
+            --cdb-dir .cache/elo/cdb \
+            --out .cache/elo/history \
+            --app-sha "$APP_SHA" \
+            --min-input-matches 995610
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/elo/history/elo-manifest.json").read_text())
+          assert r["canonical_input_matches"]>=995610
+          assert r["eligible_completed_matches"]>0
+          assert r["canonical_cdb_writes"]==0 and not r["production_model_changed"]
+          assert r["tennis_provider_requests"]==0
+          assert sum(p["rows"] for p in r["year_partitions"])==r["eligible_completed_matches"]
+          print("CANONICAL_78_YEAR_ELO_REPLAY_PASS",r["canonical_input_matches"],r["eligible_completed_matches"])
+          PY
+      - name: Weekly independent Tennis Abstract four-table snapshot
+        id: ta
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/elo/ta/raw .cache/elo/ta/parsed
+          for board in atp_elo wta_elo atp_yelo wta_yelo; do
+            case "$board" in
+              atp_elo) path=atp_elo_ratings.html ;;
+              wta_elo) path=wta_elo_ratings.html ;;
+              atp_yelo) path=atp_season_yelo_ratings.html ;;
+              wta_yelo) path=wta_season_yelo_ratings.html ;;
+            esac
+            source="https://tennisabstract.com/reports/$path"
+            target=".cache/elo/ta/raw/$board.html"
+            if ! curl -fsSL --retry 2 --max-time 90 -A "BlinQ private Elo validation" "$source" -o "$target"; then
+              curl -fsSL --retry 2 --max-time 90 -H 'X-No-Cache: true' \
+                "https://r.jina.ai/http://tennisabstract.com/reports/$path" -o "$target"
+              grep -q 'URL Source:' "$target"
+            fi
+            test -s "$target"
+          done
+          python scripts/parse_tennis_abstract_elo.py \
+            --atp-elo-html .cache/elo/ta/raw/atp_elo.html \
+            --wta-elo-html .cache/elo/ta/raw/wta_elo.html \
+            --atp-yelo-html .cache/elo/ta/raw/atp_yelo.html \
+            --wta-yelo-html .cache/elo/ta/raw/wta_yelo.html \
+            --out-dir .cache/elo/ta/parsed
+          test "$(python - <<'PY'
+          import json
+          print(str(json.load(open('.cache/elo/ta/parsed/report.json'))['training_eligible']).lower())
+          PY
+          )" = "false"
+      - name: Record honest TA crosscheck status and verify source has not changed
+        shell: bash
+        env:
+          TA_OUTCOME: ${{ steps.ta.outcome }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$TBT_CDB_REPO/releases/tags/$TBT_CDB_TAG" > .cache/elo/cdb-after.json
+          python - <<'PY'
+          import os,json
+          from pathlib import Path
+          a=json.load(open(".cache/elo/cdb-before.json"))
+          b=json.load(open(".cache/elo/cdb-after.json"))
+          def fingerprint(r):
+              x=[y for y in r["assets"] if y["name"]=="_tbt_bundle_manifest.json"]
+              if len(x)!=1: raise ValueError("Canonical bundle manifest asset missing")
+              return x[0]["digest"]
+          if fingerprint(a)!=fingerprint(b):
+              raise ValueError("CDB changed during Elo replay; abort stale sidecar")
+          folder=Path(".cache/elo/ta")
+          folder.mkdir(parents=True,exist_ok=True)
+          report={"schema":1,"ta_fetch":"success" if os.environ["TA_OUTCOME"]=="success" else "blocked",
+                  "four_reports_expected":["atp_elo","wta_elo","atp_yelo","wta_yelo"],
+                  "source":"Tennis Abstract","role":"weekly independent research comparison",
+                  "identity_match":"not yet canonical-ID verified",
+                  "training_eligible":False}
+          if report["ta_fetch"]=="success":
+              report["snapshot"]=json.load(open(folder/"parsed/report.json"))
+          (folder/"ta-audit.json").write_text(json.dumps(report,indent=2)+"\n")
+          print("WEEKLY_TA_VALIDATION",report["ta_fetch"])
+          PY
+      - name: Archive immutable private sidecar with all history and TA evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest=".cache/elo/blinq-elo-$GITHUB_RUN_ID.tar.gz"
+          tar -C .cache/elo -czf "$dest" history ta/ta-audit.json ta/parsed download.json
+          sha256sum "$dest" > .cache/elo/elo-bundle.sha256
+          if ! gh release view "$ELO_RELEASE_TAG" -R "$TBT_CDB_REPO" >/dev/null 2>&1; then
+            gh release create "$ELO_RELEASE_TAG" -R "$TBT_CDB_REPO" --target main \
+              --title "BlinQ canonical historical Elo (independent research sidecar)" \
+              --notes "Weekly historical Elo derived from CDB, never a CDB/model write; each GitHub run yields an immutable tarball. TA comparison is independently flagged."
+          fi
+          gh release upload "$ELO_RELEASE_TAG" "$dest" -R "$TBT_CDB_REPO"
+          mkdir -p .cache/elo/remote-readback
+          gh release download "$ELO_RELEASE_TAG" -R "$TBT_CDB_REPO" \
+            --pattern "$(basename "$dest")" --dir .cache/elo/remote-readback
+          test "$(sha256sum "$dest" | cut -d' ' -f1)" = \
+               "$(sha256sum ".cache/elo/remote-readback/$(basename "$dest")" | cut -d' ' -f1)"
+          echo "PRIVATE_CANONICAL_ELO_ARCHIVED_AND_READBACK_VERIFIED $GITHUB_RUN_ID"
+      - name: Record reproducibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-elo-evidence-${{ github.run_id }}
+          path: |
+            .cache/elo/history/elo-manifest.json
+            .cache/elo/ta/ta-audit.json
+            .cache/elo/download.json
+            .cache/elo/elo-bundle.sha256
+          if-no-files-found: warn
+          retention-days: 90
