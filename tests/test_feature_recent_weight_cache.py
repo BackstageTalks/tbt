@@ -140,3 +140,65 @@ def test_training_frame_column_construction_matches_legacy(match_factory):
     legacy = pd.DataFrame(frame.to_dict('records'), columns=frame.columns)
     pd.testing.assert_frame_equal(frame, legacy, check_exact=False, check_dtype=False)
     assert frame['match_id'].tolist() == legacy['match_id'].tolist()
+
+
+
+def test_workload_windows_match_eight_legacy_sums_on_boundaries_and_invalid_values():
+    from tbt.models.feature_builder import PlayerState
+    now = datetime(2026, 4, 2, 13, tzinfo=timezone.utc)
+    state = PlayerState()
+    for days, sets, games in (
+        (0.0, 0.0, 0.0), (2.0, 2.0, 20.0),
+        (7.0, 3.0, 35.0), (7.00001, 1.0, 17.0),
+        (14.0, 5.0, 45.0), (14.00001, 9.0, 70.0),
+        (-1.0, 2.0, 19.0), (6.0, None, 42.0),
+        (8.0, 4.0, None), (3.0, -2.0, -4.0),
+        (5.0, float('nan'), float('inf')),
+        (5.5, "bad", 12.0),
+    ):
+        state.recent.append(RecentPerformance(
+            played_at=now-timedelta(days=days), won=1.0, expected=0.5,
+            surface='hard', sets_played=sets, games_played=games,
+        ))
+    original = tuple(
+        FeatureBuilder._metric_sum_in_window(state, now, days, field)
+        for days, field in (
+            (7.0, 'sets_played'), (7.0, 'games_played'),
+            (14.0, 'sets_played'), (14.0, 'games_played'),
+        )
+    )
+    assert FeatureBuilder._workload_window_totals(state, now) == original
+    assert FeatureBuilder._workload_window_totals(PlayerState(), now) == (None,)*4
+    # Zero is observed evidence and must not be mistaken for missing.
+    zero = PlayerState(recent=deque([RecentPerformance(
+        played_at=now, won=1.0, expected=0.5, surface='hard',
+        sets_played=0.0, games_played=0.0,
+    )], maxlen=80))
+    assert FeatureBuilder._workload_window_totals(zero, now) == (0.0,)*4
+
+
+def test_workload_window_optimized_training_frame_matches_original_exactly(match_factory):
+    # Both builders share the same frozen chronological inputs. The control uses
+    # the eight historical calls rather than the new grouped calculation.
+    matches = [
+        match_factory(
+            f'workload-parity-{i}', 'A' if i%3 else 'B',
+            f'O{i%11}', 'A' if i%3 else f'O{i%11}',
+            day=i%28+1, surface=('hard','clay','grass')[i%3],
+        ) for i in range(105)
+    ]
+    optimized = FeatureBuilder().build_training_frame(matches)
+    original = FeatureBuilder()
+
+    def legacy_workload(state, now):
+        return tuple(
+            original._metric_sum_in_window(state, now, days, field)
+            for days, field in (
+                (7.0, 'sets_played'), (7.0, 'games_played'),
+                (14.0, 'sets_played'), (14.0, 'games_played'),
+            )
+        )
+
+    original._workload_window_totals = legacy_workload
+    reference = original.build_training_frame(matches)
+    pd.testing.assert_frame_equal(optimized, reference, check_exact=True)
