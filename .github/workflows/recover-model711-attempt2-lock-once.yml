@@ -1,0 +1,52 @@
+name: Recover verified abandoned Model 7.1.1 attempt-2 CDB lock (no deploy)
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - .github/workflows/recover-model711-attempt2-lock-once.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-model711-attempt2-stale-lock-recovery
+  cancel-in-progress: false
+
+jobs:
+  release-exact-abandoned-lock:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/recover-model711-lock-attempt2-20261014'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate terminal run, exact owner and immutable tag before deleting only its lock ref
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo '::error::Missing private data credential'; exit 1; }
+          source_repo='BackstageTalks/tbt'
+          data_repo='BackstageTalks/tbt-data'
+          run_id='38486683787'
+          attempt='2'
+          expected_sha='a9299098c81ea4f2038bae8c844be9020d48e2a8'
+          expected_owner="owner=BackstageTalks/tbt/actions/runs/${run_id}/attempts/${attempt}"
+          ref="repos/${data_repo}/git/ref/tags/blinq-cdb-global-writer"
+          lock_sha="$(gh api "$ref" --jq '.object.sha')"
+          [[ "$lock_sha" == "$expected_sha" ]] || { echo '::error::Different CDB writer owns lock; stopping'; exit 1; }
+          owner="$(gh api "repos/${data_repo}/git/tags/${lock_sha}" --jq '.message')"
+          [[ "$owner" == "$expected_owner" ]] || { echo '::error::Lock owner changed; stopping'; exit 1; }
+          read -r status conclusion actual_attempt < <(
+            gh api "repos/${source_repo}/actions/runs/${run_id}" --jq '[.status, (.conclusion // "none"), (.run_attempt|tostring)] | join(" ")'
+          )
+          [[ "$status" == 'completed' && "$conclusion" == 'failure' && "$actual_attempt" == "$attempt" ]] || {
+            echo "::error::Owner run is not confirmed failed attempt ${attempt}; stopping"; exit 1;
+          }
+          [[ "$(gh api "$ref" --jq '.object.sha')" == "$expected_sha" ]] || { echo '::error::Lock ref changed during verification'; exit 1; }
+          gh api -X DELETE "repos/${data_repo}/git/refs/tags/blinq-cdb-global-writer" --silent
+          if gh api "$ref" >/tmp/blinq-lock-after.json 2>/tmp/blinq-lock-after.err; then
+            echo '::error::Lock still present'; exit 1;
+          fi
+          grep -q 'HTTP 404' /tmp/blinq-lock-after.err || { echo '::error::Unable to prove lock absence'; exit 1; }
+          echo 'Verified abandoned Model 7.1.1 attempt-2 lock released. No model, CDB or deploy changed.'
