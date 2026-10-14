@@ -127,6 +127,17 @@ class Events(unittest.TestCase):
                       when="2026-01-13",round_name="R16",score="4-6 6-7(4)",winner="2")
         self.assertEqual(len(m.discover_events(self.src,[swapped])),1)
 
+    def test_event_edition_strength_never_identity_attestation(self):
+        same=m.discover_events(self.src,[self.cdb])
+        self.assertEqual(len(same),1)
+        self.assertEqual(same[0].context_tier,"edition_context_strong")
+        unknown=m.Event(**{**self.cdb.__dict__,"tournament":"Another Open"})
+        broad=m.discover_events(self.src,[unknown])
+        self.assertEqual(len(broad),1)
+        self.assertEqual(broad[0].context_tier,"unresolved_event_edition")
+        self.assertIn("tournament_edition_unresolved",broad[0].evidence)
+        self.assertTrue(m.no_write_contract(broad+same))
+
     def test_date_window_reject(self):
         distant=event(("Novak Djokovic","Jannik Sinner"),namespace="cdb",
                       when="2026-03-02")
