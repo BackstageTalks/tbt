@@ -146,6 +146,22 @@ class Events(unittest.TestCase):
                   when="2026-01-13",score="6-1 6-0")
         self.assertFalse(m.discover_events(self.src,[bad]))
 
+    def test_cross_provider_winner_orientation_conflict_rejected(self):
+        opposite=event(("Novak Djokovic","Jannik Sinner"),namespace="cdb",
+                       when="2026-01-13",winner="2")
+        self.assertFalse(m.discover_events(self.src,[opposite]))
+
+    def test_retirement_not_equated_with_complete_score(self):
+        partial=event(("Novak Djokovic","Jannik Sinner"),namespace="cdb",
+                      when="2026-01-13",score="6-4 3-2 RET")
+        self.assertFalse(m.discover_events(self.src,[partial]))
+
+    def test_reject_source_namespace_player_mismatch(self):
+        src=event(("Djokovic N.","Sinner J."),namespace="src")
+        other=m.Player("provider", "atp", "1", "Djokovic N.")
+        with self.assertRaises(ValueError):
+            m.Event(**{**src.__dict__,"players":(other,src.players[1])})
+
     def test_same_namespace_different_native_ids_rejected(self):
         bad=event(("Novak Djokovic","Jannik Sinner"),ids=("100","200"),namespace="src",
                   when="2026-01-13")
