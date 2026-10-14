@@ -1,4 +1,5 @@
 name: BlinQ 7.1.1 approved shadow candidate switch (one-time)
+# Retry after promotion-history preservation fix 5c11a9bc; no production activation.
 on:
   push:
     branches: [ops/blinq-shadow-711-switch-20261014]
