@@ -5001,9 +5001,37 @@
     </section>`;
   }
 
-  function adminTestFilter(){return state.adminTestFilter||(state.adminTestFilter={q:'',category:'all',status:'all',from:'',to:''});}
+  function adminTestFilter(){return state.adminTestFilter||(state.adminTestFilter={q:'',category:'all',status:'all',outcome:'all',oddsMin:'',oddsMax:'',from:'',to:''});}
 
-  function adminTestRows(){const f=adminTestFilter();return (state.adminTestData?.items||[]).filter(r=>(f.status==='all'||(f.status==='excluded')===!!r.excluded)&&(f.category==='all'||r.section===f.category||r.market===f.category)&&(!f.from||String(r.scheduled_at).slice(0,10)>=f.from)&&(!f.to||String(r.scheduled_at).slice(0,10)<=f.to)&&(!f.q||[r.player1,r.player2,r.event_id,r.selection,r.market,r.tour].some(v=>String(v||'').toLowerCase().includes(f.q.toLowerCase()))));}
+  function adminTestOutcome(value){
+    const key=String(value||'').trim().toLowerCase();
+    if(['hit','win','won','correct','success','vyhra','výhra'].includes(key))return 'win';
+    if(['miss','loss','lost','lose','incorrect','fail','prehra'].includes(key))return 'loss';
+    if(['void','push','refund','retired','retirement','skrec','skreč','walkover','cancelled','canceled'].includes(key))return 'void';
+    return 'other';
+  }
+  function adminTestOdds(value){
+    if(value==null||String(value).trim()==='')return null;
+    const amount=Number(String(value).trim().replace(',','.'));
+    return Number.isFinite(amount)&&amount>0?amount:null;
+  }
+  function adminTestRows(){
+    const f=adminTestFilter(),min=adminTestOdds(f.oddsMin),max=adminTestOdds(f.oddsMax);
+    if(min!==null&&max!==null&&min>max)return [];
+    const term=String(f.q||'').trim().toLowerCase();
+    return (state.adminTestData?.items||[]).filter(r=>{
+      if(f.status!=='all'&&(f.status==='excluded')!==!!r.excluded)return false;
+      if(f.category!=='all'&&r.section!==f.category&&r.market!==f.category)return false;
+      if(f.outcome&&f.outcome!=='all'&&adminTestOutcome(r.status)!==f.outcome)return false;
+      if(f.from&&String(r.scheduled_at||'').slice(0,10)<f.from)return false;
+      if(f.to&&String(r.scheduled_at||'').slice(0,10)>f.to)return false;
+      if(min!==null||max!==null){
+        const odds=adminTestOdds(r.odds);
+        if(odds===null||(min!==null&&odds<min)||(max!==null&&odds>max))return false;
+      }
+      return !term||[r.player1,r.player2,r.event_id,r.selection,r.market,r.tour].some(v=>String(v||'').toLowerCase().includes(term));
+    });
+  }
 
   function renderAdminTestList(){
  const f=adminTestFilter(), data=state.adminTestData,selected=new Set(state.adminTestSelected||[]);
@@ -5013,11 +5041,35 @@
  const rows=adminTestRows(),size=[50,100].includes(state.adminTestSize)?state.adminTestSize:50,pages=Math.max(1,Math.ceil(rows.length/size));
  state.adminTestPage=Math.max(0,Math.min(pages-1,Number(state.adminTestPage)||0));
  const start=state.adminTestPage*size,view=rows.slice(start,start+size);
- const controls='<div class="admin-test-filters"><label>Hľadať<input data-admin-test-filter="q" value="'+escapeHtml(f.q)+'" placeholder="Hráč, ID, tip…"></label><label>Kategória<select data-admin-test-filter="category">'+opts([['all','Všetky'],['top_daily','TOP'],['prime','ACCA'],['value','Value'],['doubles','Štvorhra'],['aces','Esá'],['double_faults','Dvojchyby'],['sets','Sety'],['games','Gamy']],f.category)+'</select></label><label>Stav<select data-admin-test-filter="status">'+opts([['all','Všetky'],['active','Započítané'],['excluded','Vylúčené']],f.status)+'</select></label><label>Od<input data-admin-test-filter="from" type="date" value="'+escapeHtml(f.from)+'"></label><label>Do<input data-admin-test-filter="to" type="date" value="'+escapeHtml(f.to)+'"></label></div>';
+ const oddsMin=adminTestOdds(f.oddsMin),oddsMax=adminTestOdds(f.oddsMax),invalidRange=oddsMin!==null&&oddsMax!==null&&oddsMin>oddsMax;
+ const controls='<div class="admin-test-filters">'+
+   '<div class="admin-test-filter-main">'+
+     '<label>Hľadať<input data-admin-test-filter="q" value="'+escapeHtml(f.q)+'" placeholder="Hráč, ID, tip…"></label>'+
+     '<label>Kategória<select data-admin-test-filter="category">'+opts([['all','Všetky'],['top_daily','TOP'],['prime','ACCA'],['value','Value'],['doubles','Štvorhra'],['aces','Esá'],['double_faults','Dvojchyby'],['sets','Sety'],['games','Gamy']],f.category)+'</select></label>'+
+     '<label>Stav záznamu<select data-admin-test-filter="status">'+opts([['all','Všetky'],['active','Započítané'],['excluded','Vylúčené']],f.status)+'</select></label>'+
+     '<label>Výsledok tipu<select data-admin-test-filter="outcome">'+opts([['all','Všetky'],['win','Výhra'],['loss','Prehra'],['void','Skreč / void'],['other','Ostatné / nevyhodnotené']],f.outcome||'all')+'</select></label>'+
+   '</div><div class="admin-test-filter-extra">'+
+     '<label>Kurz od<input type="number" inputmode="decimal" min="1" step="0.01" data-admin-test-filter="oddsMin" value="'+escapeHtml(f.oddsMin||'')+'" placeholder="napr. 1,50"></label>'+
+     '<label>Kurz do<input type="number" inputmode="decimal" min="1" step="0.01" data-admin-test-filter="oddsMax" value="'+escapeHtml(f.oddsMax||'')+'" placeholder="napr. 3,00"></label>'+
+     '<label>Dátum od<input data-admin-test-filter="from" type="date" value="'+escapeHtml(f.from)+'"></label>'+
+     '<label>Dátum do<input data-admin-test-filter="to" type="date" value="'+escapeHtml(f.to)+'"></label>'+
+   '</div><div class="admin-test-filter-footer"><span role="status">'+(invalidRange?'<span class="admin-test-filter-error">Kurz od nesmie byť vyšší ako kurz do.</span>':'Filtrované: <strong>'+rows.length+'</strong> z '+(data.items||[]).length+' tipov')+'</span>'+
+     '<button type="button" class="btn btn-ghost" data-admin-test-action="reset-filters">Vymazať filtre</button></div></div>';
  const actions='<div class="admin-test-actions"><span><strong>'+selected.size+'</strong> označených · '+Number(data.excluded_total||0)+' vylúčených</span><button class="btn btn-ghost" data-admin-test-action="select-page">Označiť stranu</button><button class="btn btn-ghost" data-admin-test-action="select-all">Označiť filtrované ('+rows.length+')</button><button class="btn btn-ghost" data-admin-test-action="clear">Zrušiť výber</button><button class="btn btn-primary" data-admin-test-action="exclude" '+(!selected.size?'disabled':'')+'>Vylúčiť označené</button><button class="btn btn-ghost" data-admin-test-action="restore" '+(!selected.size?'disabled':'')+'>Obnoviť označené</button></div>';
- const body=view.map(r=>'<tr class="'+(r.excluded?'is-test-excluded':'')+'"><td><input type="checkbox" data-admin-test-check="'+escapeHtml(r.id)+'" '+(selected.has(r.id)?'checked':'')+' aria-label="Vybrať tip"></td><td>'+escapeHtml(String(r.scheduled_at||'').slice(0,16).replace('T',' '))+'</td><td><strong>'+escapeHtml(r.player1||'—')+'</strong> – '+escapeHtml(r.player2||'—')+'<small>'+escapeHtml(r.event_id||'')+'</small></td><td>'+escapeHtml(r.section||r.market||'—')+'</td><td>'+escapeHtml(r.selection||'—')+'</td><td>'+escapeHtml(r.status||'—')+'</td><td>'+(r.excluded?'<b class="admin-test-excluded-label">TEST · VYLÚČENÉ</b>':'Započítané')+'</td></tr>').join('');
+ const outcomeLabels={win:'Výhra',loss:'Prehra',void:'Skreč / void',other:'Nevyhodnotené'};
+ const body=view.map(r=>{
+   const outcome=adminTestOutcome(r.status),odds=adminTestOdds(r.odds);
+   return '<tr class="'+(r.excluded?'is-test-excluded':'')+'">'+
+     '<td><input type="checkbox" data-admin-test-check="'+escapeHtml(r.id)+'" '+(selected.has(r.id)?'checked':'')+' aria-label="Vybrať tip '+escapeHtml(r.player1||'')+' – '+escapeHtml(r.player2||'')+'"></td>'+
+     '<td class="admin-test-date">'+escapeHtml(String(r.scheduled_at||'').slice(0,16).replace('T',' '))+'</td>'+
+     '<td class="admin-test-match"><strong>'+escapeHtml(r.player1||'—')+'</strong> <span>–</span> <strong>'+escapeHtml(r.player2||'—')+'</strong><small>'+escapeHtml(r.event_id||'')+'</small></td>'+
+     '<td>'+escapeHtml(r.section||r.market||'—')+'</td><td class="admin-test-selection">'+escapeHtml(r.selection||'—')+'</td>'+
+     '<td class="admin-test-odds">'+(odds===null?'—':escapeHtml(odds.toLocaleString('sk-SK',{minimumFractionDigits:2,maximumFractionDigits:2})))+'</td>'+
+     '<td><span class="admin-test-outcome is-'+outcome+'">'+outcomeLabels[outcome]+'</span></td>'+
+     '<td>'+(r.excluded?'<b class="admin-test-excluded-label">Vylúčené</b>':'<span class="admin-test-included-label">Započítané</span>')+'</td></tr>';
+ }).join('')||'<tr><td class="admin-test-empty" colspan="8">Žiadne tipy nezodpovedajú zvoleným filtrom.</td></tr>';
  const pager='<div class="results-pagination admin-test-pager"><div class="results-pagination-meta"><strong>'+(rows.length?start+1:0)+'–'+Math.min(rows.length,start+size)+'</strong><span>z '+rows.length+'</span></div><label>Riadkov <select data-admin-test-size>'+opts([['50','50'],['100','100']],String(size))+'</select></label><div class="results-pagination-nav"><button type="button" data-admin-test-action="prev" '+(state.adminTestPage===0?'disabled':'')+'>←</button><label>Strana <input type="number" id="adminTestGoPage" min="1" max="'+pages+'" value="'+(state.adminTestPage+1)+'" inputmode="numeric" aria-label="Číslo strany"> / '+pages+'</label><button class="btn btn-ghost" data-admin-test-action="go">Prejsť</button><button type="button" data-admin-test-action="next" '+(state.adminTestPage>=pages-1?'disabled':'')+'>→</button></div></div>';
- return '<section class="admin-ux-section admin-test-results">'+intro+controls+actions+'<div class="admin-table-wrap"><table class="admin-analytics-table admin-test-table"><thead><tr><th></th><th>Dátum</th><th>Zápas</th><th>Kategória</th><th>Tip</th><th>Výsledok</th><th>Stav</th></tr></thead><tbody>'+body+'</tbody></table></div>'+pager+'<p class="admin-detail-help">Výber zostáva zachovaný medzi stranami. Vylúčenia môžeš obnoviť. Modelové KPI vypočítané samostatne v historickom datasete sa tým spätne nezmenia.</p></section>';
+ return '<section class="admin-ux-section admin-test-results">'+intro+controls+actions+'<div class="admin-table-wrap admin-test-table-wrap" tabindex="0" role="region" aria-label="Tabuľka testovacích tipov"><table class="admin-analytics-table admin-test-table"><thead><tr><th scope="col"><span class="admin-test-visually-hidden">Výber</span></th><th scope="col">Dátum</th><th scope="col">Zápas</th><th scope="col">Kategória</th><th scope="col">Tip</th><th scope="col">Kurz</th><th scope="col">Výsledok</th><th scope="col">Stav</th></tr></thead><tbody>'+body+'</tbody></table></div>'+pager+'<p class="admin-detail-help">Výber zostáva zachovaný medzi stranami. Vylúčenia môžeš obnoviť. Modelové KPI vypočítané samostatne v historickom datasete sa tým spätne nezmenia.</p></section>';
 }
 
   async function loadAdminTestList(force=false){
@@ -5031,6 +5083,7 @@
   async function adminTestAction(action){
  const selected=new Set(state.adminTestSelected||[]),rows=adminTestRows(),size=[50,100].includes(state.adminTestSize)?state.adminTestSize:50,pages=Math.max(1,Math.ceil(rows.length/size));
  if(action==='refresh'){await loadAdminTestList(true);return;}
+ if(action==='reset-filters'){state.adminTestFilter={q:'',category:'all',status:'all',outcome:'all',oddsMin:'',oddsMax:'',from:'',to:''};state.adminTestPage=0;rerenderAdmin();return;}
  if(action==='prev'||action==='next'){state.adminTestPage=Math.max(0,Math.min(pages-1,(state.adminTestPage||0)+(action==='next'?1:-1)));rerenderAdmin();return;}
  if(action==='go'){const value=Number($('adminTestGoPage')?.value);if(!Number.isSafeInteger(value)){showStatus('Zadaj platné celé číslo strany.');return;}state.adminTestPage=Math.max(0,Math.min(pages-1,value-1));rerenderAdmin();return;}
  if(action==='select-page'||action==='select-all'){const items=action==='select-all'?rows:rows.slice((state.adminTestPage||0)*size,((state.adminTestPage||0)+1)*size);items.forEach(row=>selected.add(row.id));state.adminTestSelected=[...selected];rerenderAdmin();return;}
