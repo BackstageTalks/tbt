@@ -144,6 +144,55 @@ def from_cdb_metadata(row: Mapping[str,object]) -> Adapted:
         _text(row.get("round_name")),_text(row.get("winner_id")))
 
 
+
+# Provider-native research event contract. It is intentionally explicit:
+# if official player or event IDs are absent in PBP/Charting/LiveTennisAPI,
+# the source stays quarantined rather than inventing a canonical crosswalk.
+NATIVE_EVENT_FIELDS = frozenset({
+    "event_id", "player1_id", "player2_id", "player1_name", "player2_name",
+    "match_day", "tournament", "round", "winner_id", "score", "edition_id",
+    "draw",
+})
+
+
+def from_native_event(row: Mapping[str,object], *, source_name: str,
+                      tour: str, collection: str,
+                      file_sha256: str, line_number: int,
+                      field_map: Mapping[str,str] | None = None,
+                      date_kind: str = "played") -> Adapted:
+    """Adapter for explicit native-ID event feeds (PBP, Charting, API, etc.).
+
+    Every source must supply real provider-scoped event AND two player IDs.
+    A row number is provenance, NEVER a fake provider-issued event key.
+    This adapter is source-only and neither verifies independence nor rights.
+    """
+    if tour not in ("atp","wta") or line_number<1:
+        raise ValueError("Explicit native tour and source row required")
+    if not re.fullmatch(r"[0-9a-f]{64}",file_sha256):
+        raise ValueError("Exact source bytes SHA-256 required")
+    if date_kind not in ("played","scheduled","tournament_start"):
+        raise ValueError("Explicit recognized native date semantics required")
+    mapping=dict(field_map or {})
+    if set(mapping)-NATIVE_EVENT_FIELDS or any(
+            not isinstance(key,str) or not key.strip()
+            for key in mapping.values()):
+        raise ValueError("Unknown or invalid source field map")
+    def read(field: str) -> str:
+        return _text(row.get(mapping.get(field,field)))
+    ns=namespace(source_name,tour+"_"+collection)
+    native_event=read("event_id")
+    if not native_event:
+        return Adapted(None,ns,f"{file_sha256[:16]}:{line_number}",
+                       ("missing_official_source_native_event_id",))
+    return _stage(
+        ns,tour,read("player1_id"),read("player1_name"),
+        read("player2_id"),read("player2_name"),native_event,
+        _date(read("match_day"),yyyymmdd=True),date_kind,
+        read("tournament"),read("round"),read("winner_id"),
+        read("score"),read("draw"),edition_id=read("edition_id")
+    )
+
+
 def require_source_only(record: Adapted) -> Adapted:
     if record.cdb_import_authorized or not record.research_only:
         raise ValueError("Adapter must NEVER authorize a canonical CDB mutation")
