@@ -27,7 +27,7 @@ jobs:
       SOURCE_REF: 1c9568bac90913cdda03c174db0f7b1b82bcc29a
       CDB_SHA256: 3a929b356803af6b0f704d4d3066a053ecf995124ec8f4228487c54c0f534c58
       LEDGER_SHA256: 90915bcb5174be1cad2a55ee87ed3dbc998b68b1b6934b4eba849f5aa4a17a00
-      DETAIL_SHA256: f8cf817321ea9a411df7bc21acd5f15c90f285d0de60df70
+      DETAIL_SHA256: f8cf817321ea9a411df7bc21acd5f15a897e6ad100ef195c90f285d0de60df70
     steps:
       - name: Checkout audit code without credential persistence
         uses: actions/checkout@v4
