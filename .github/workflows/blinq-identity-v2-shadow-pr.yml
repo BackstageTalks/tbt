@@ -76,7 +76,7 @@ jobs:
           python scripts/research/shadow_sackmann2025_vs_cdb.py \
             --source-dir /tmp/blinq-id-v2/src \
             --cdb-parquet /tmp/blinq-id-v2/cdb/history-2025.parquet \
-            --sample-mod 13
+            --sample-mod 1
       - name: Confirm no persist or deployment from research step
         run: |
           echo 'READ_ONLY_SHADOW_FINISHED__NO_RELEASE_UPLOAD__NO_CDB_WRITE__NO_MODEL'
