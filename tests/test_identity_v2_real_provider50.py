@@ -70,18 +70,15 @@ class RealProviderFiftyContract(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"participant"):
             verify_details(detail,canonical_by_id(canonical))
 
-    def test_changed_winner_on_existing_canonical_match_rejected(self):
-        canonical,detail=records()
+    def test_stored_api_verdict_cannot_freshly_redetect_opposite_winner(self):
+        canonical, detail = records()
         canonical[0]["winner_id"]=canonical[0]["player2_id"]
-        # Prior verdict does not carry original API winnerCode independently.
-        # Therefore this replay must be labeled as SAME-PROVIDER consistency
-        # only. It still catches invalid canonical-side state when present.
-        self.assertRaises(ValueError,verify_details,detail,canonical_by_id(canonical)
-                          ) if canonical[0]["winner_id"] not in (
-                              canonical[0]["player1_id"],canonical[0]["player2_id"]
-                          ) else self.assertEqual(
-                              verify_details(detail,canonical_by_id(canonical))[
-                                  "external_provider_crosswalks_proven"],0)
+        # This replay has no original provider winnerCode payload to compare.
+        # Immutable CDB pin and original stored verdict are mandatory.
+        result=verify_details(detail,canonical_by_id(canonical))
+        self.assertEqual(result["provider_winner_responses_freshly_rechecked"],0)
+        self.assertEqual(result["stored_original_provider_winner_verdicts"],50)
+        self.assertEqual(result["external_provider_crosswalks_proven"],0)
 
     def test_winner_outside_pair_rejected(self):
         canonical,detail=records()
