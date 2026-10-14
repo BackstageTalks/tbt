@@ -7,7 +7,9 @@ from tbt.services.admin_accounts import tg_private_state
 from tbt.services.auth import public_account
 
 
-def _user(plan="elite", status="active", expires_at="2026-10-14T10:00:00+00:00"):
+# Non-expired paid member fixture must remain valid after 14 Oct 2026.
+# Expiration behavior is covered separately by the explicit expired fixture.
+def _user(plan="elite", status="active", expires_at="2099-10-14T10:00:00+00:00"):
     claims = {"blinq_plan": plan, "blinq_status": status}
     if expires_at is not None:
         claims["blinq_expires_at"] = expires_at
