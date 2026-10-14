@@ -96,7 +96,9 @@ jobs:
           assert counts.get("contradictory_observed_rates",0) >= 0
           assert counts.get("new_stat_values",0) >= counts.get("staged_matches",0)
           assert counts.get("staged_matches",0) < counts["examined"]
-          assert all(1990 <= int(y) <= 2026 for y in report["changed_years"])
+          valid_years=set(map(int,json.loads((root/"history/history_manifest.json").read_text())["years"]))
+          assert report["changed_years"]==sorted(set(report["changed_years"]))
+          assert all(int(y) in valid_years for y in report["changed_years"]), "Staged year absent from canonical snapshot"
           stage=[json.loads(x) for x in (root/"stage/stage.jsonl").read_text().splitlines() if x.strip()]
           assert len(stage)==counts.get("staged_matches",0)
           assert len({row["match_id"] for row in stage})==len(stage)
