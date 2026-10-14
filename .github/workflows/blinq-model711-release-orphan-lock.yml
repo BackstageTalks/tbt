@@ -1,0 +1,55 @@
+name: Safe one-shot CDB lock recovery for model 7.1.1 attempt 2
+on:
+  push:
+    branches:
+      - ops/model711-recover-lock-attempt2-20261014
+    paths:
+      - '.github/workflows/blinq-model711-release-orphan-lock.yml'
+permissions:
+  contents: read
+jobs:
+  verify-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - name: Check exact lock and finished owner; release only orphan SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          data_repo='BackstageTalks/tbt-data'
+          source_repo='BackstageTalks/tbt'
+          run_id='38486683787'
+          expected_sha='a9299098c81ea4f2038bae8c844be9020d48e2a8'
+          expected_owner="owner=$source_repo/actions/runs/$run_id/attempts/2"
+          ref_endpoint="repos/$data_repo/git/ref/tags/blinq-cdb-global-writer"
+          run="$(gh api "repos/$source_repo/actions/runs/$run_id")"
+          [[ "$(jq -r '.status + ":" + (.conclusion // "")' <<<"$run")" == 'completed:failure' ]] || {
+            echo '::error::Owner workflow not conclusively failed'; exit 1;
+          }
+          [[ "$(jq -r '.run_attempt' <<<"$run")" == '2' ]] || {
+            echo '::error::Owner run attempt differs'; exit 1;
+          }
+          jobs="$(gh api "repos/$source_repo/actions/runs/$run_id/jobs?filter=latest&per_page=100")"
+          jq -e '.jobs | any(.name=="frozen-candidate" and .status=="completed" and .conclusion=="failure")' <<<"$jobs" >/dev/null || {
+            echo '::error::Owner job not concluded as failed'; exit 1;
+          }
+          [[ "$(gh api "$ref_endpoint" --jq .object.sha)" == "$expected_sha" ]] || {
+            echo '::error::Lock SHA has changed'; exit 1;
+          }
+          [[ "$(gh api "repos/$data_repo/git/tags/$expected_sha" --jq .message)" == "$expected_owner" ]] || {
+            echo '::error::Lock owner differs'; exit 1;
+          }
+          [[ "$(gh api "$ref_endpoint" --jq .object.sha)" == "$expected_sha" ]] || {
+            echo '::error::Lock changed during verification'; exit 1;
+          }
+          gh api --method DELETE "repos/$data_repo/git/refs/tags/blinq-cdb-global-writer" --silent
+          if gh api "$ref_endpoint" > /tmp/lock.json 2>/tmp/lock.err; then
+            echo '::error::Lock still present'; exit 1;
+          fi
+          grep -q 'HTTP 404' /tmp/lock.err || {
+            echo '::error::Absence cannot be independently proven'; exit 1;
+          }
+          echo "Recovered exact orphan tag $expected_sha from $expected_owner"
