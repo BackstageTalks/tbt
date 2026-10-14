@@ -115,7 +115,10 @@ def pre_match(match: MatchRecord, builder: FeatureBuilder) -> dict:
         "p2_surface_matches_pre": int(p2.surface_matches.get(surface, 0)),
         "p1_yelo_matches_pre": int(ny1),
         "p2_yelo_matches_pre": int(ny2),
-        "p1_expected_win_pre": float(elo_expected(p1.overall_elo, p2.overall_elo)),
+        "p1_expected_win_pre": float(elo_expected(
+            0.48 * p1.overall_elo + 0.52 * p1.get_surface_elo(surface),
+            0.48 * p2.overall_elo + 0.52 * p2.get_surface_elo(surface),
+        )),
     }
     if not all(math.isfinite(result[k]) for k in (
         "p1_elo_pre", "p2_elo_pre", "p1_surface_elo_pre",
@@ -251,7 +254,7 @@ def build(root: Path, out: Path, *, app_sha: str, cutoff: datetime,
             })
     report = {
         "schema": 1, "status": "verified_local",
-        "algorithm": "Bl inQ FeatureBuilder v4".replace(" ", ""),
+        "algorithm": "BlinQ FeatureBuilder state v4",
         "algorithm_source": "BackstageTalks/tbt/api/tbt/models/feature_builder.py",
         "app_sha": app_sha,
         "canonical_source_manifest_sha256": sha256(source),
