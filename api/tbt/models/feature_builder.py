@@ -683,6 +683,45 @@ class FeatureBuilder:
         return sum(values) if values else None
 
     @staticmethod
+    def _workload_window_totals(
+        state: PlayerState,
+        now: datetime,
+    ) -> tuple[float | None, float | None, float | None, float | None]:
+        """Compute 7d/14d sets and games in one chronological history pass.
+
+        Preserve the old per-field item order, Python sum semantics, both
+        inclusive cutoff boundaries and the None-vs-zero contract. No new
+        match outcome can enter here before same-day snapshot batching.
+        """
+        sets_7d: list[float] = []
+        games_7d: list[float] = []
+        sets_14d: list[float] = []
+        games_14d: list[float] = []
+        for item in state.recent:
+            age = (now - item.played_at).total_seconds()
+            if age < 0.0 or age > 14.0 * 86400.0:
+                continue
+            for field_name, short, long in (
+                ("sets_played", sets_7d, sets_14d),
+                ("games_played", games_7d, games_14d),
+            ):
+                value = getattr(item, field_name, None)
+                if value is None:
+                    continue
+                try:
+                    number = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(number) or number < 0.0:
+                    continue
+                long.append(number)
+                if age <= 7.0 * 86400.0:
+                    short.append(number)
+        return tuple(sum(values) if values else None for values in (
+            sets_7d, games_7d, sets_14d, games_14d,
+        ))
+
+    @staticmethod
     def _conditional_rate(
         state: PlayerState,
         now: datetime,
@@ -1449,14 +1488,12 @@ class FeatureBuilder:
 
         surface_h2h_advantage, surface_h2h_known = self._surface_h2h_values(match)
 
-        p1_sets_7d = self._metric_sum_in_window(p1, match.scheduled_at, 7.0, "sets_played")
-        p2_sets_7d = self._metric_sum_in_window(p2, match.scheduled_at, 7.0, "sets_played")
-        p1_games_7d = self._metric_sum_in_window(p1, match.scheduled_at, 7.0, "games_played")
-        p2_games_7d = self._metric_sum_in_window(p2, match.scheduled_at, 7.0, "games_played")
-        p1_sets_14d = self._metric_sum_in_window(p1, match.scheduled_at, 14.0, "sets_played")
-        p2_sets_14d = self._metric_sum_in_window(p2, match.scheduled_at, 14.0, "sets_played")
-        p1_games_14d = self._metric_sum_in_window(p1, match.scheduled_at, 14.0, "games_played")
-        p2_games_14d = self._metric_sum_in_window(p2, match.scheduled_at, 14.0, "games_played")
+        p1_sets_7d, p1_games_7d, p1_sets_14d, p1_games_14d = self._workload_window_totals(
+            p1, match.scheduled_at,
+        )
+        p2_sets_7d, p2_games_7d, p2_sets_14d, p2_games_14d = self._workload_window_totals(
+            p2, match.scheduled_at,
+        )
         workload_known = float(
             None not in (
                 p1_sets_7d, p2_sets_7d, p1_games_7d, p2_games_7d,
