@@ -1,8 +1,8 @@
 {
-  "schema": 1,
+  "schema": 2,
   "mode": "write",
   "workflow": "cdb-service-complement-write.yml",
-  "purpose": "Only exact complements of existing completed-match service/return points won proportions; never infer counts or modify odds, identity, rank, result, provider metadata, model, or production prediction",
+  "purpose": "Single-use protected add-only completion of 253 exact first/second/total serve-return opponent complement fractions in 64 completed matches, using canonical existing stats only. Scope exactly unchanged six complementary pairs, years 2025-2026; no breakpoints, external ingestion, predictions or training.",
   "approved_by_operator": true,
   "source": "canonical checksum verified CDB under global owner lock",
   "requires": [
@@ -24,11 +24,21 @@
   "api_requests": 0,
   "model_training": false,
   "model_promotion": false,
-  "execution_id": "WAIT_FOR_38574303773_TRAIN_AND_38522561687_DRYRUN",
-  "prerequisite": "Do not merge/trigger write until candidate training run 38574303773 is terminal and no other global CDB writer owns lock; current read-only PR dry-run run 38522561687 has completed successfully with observed staged rows, complete before/after parity, zero overwrites and zero quarantined-row forced changes; validate fresh canonical manifest and current writer against new snapshots. The superseded US Open research run 38062494137 is not a source of opponent-derived service/return complements and is excluded from this independently authorised import. Fail closed if any condition is missing.",
-  "request_identifier": "blinq-cdb-null-only-opponent-service-return-20261014",
-  "approval_scope": "Only mathematically exact whole-match first/second/total service-return opponent complements from EXISTING canonical observations; NULL-only, no external source imports, no Sackmann identity guesses, no model activation, no odds, zero provider requests",
+  "execution_id": "FRESH_20261014_64_MATCHES_253_VALUES_AFTER_CANDIDATE_38608660910_COMPLETE",
+  "prerequisite": "2026-10-14 current strict read-only stage #38616584213 21 tests passed; EXACT count 64 matches, 253 values, 1685 quarantine, 995610 total; base immutable SHA cda502a... . Training #38608660910 completed success and tag owner lock was absent before PR. DO NOT MERGE until this PR dry-run rehearses all staged actual Parquet patches with full local readback. At publish, require newly acquired single-writer lock, checked unchanged base release manifest, immutable backup and independent remote persisted readback. Fail closed on any drift.",
+  "request_identifier": "blinq-cdb-exact-253-complements-20261014-38616584213",
+  "approval_scope": "Only already-present canonical exact total/first/second service/return point percentage complements. Exactly 64 completed matches/253 previously NULL cells in years 2025 and 2026 on expected canonical manifest. No new source/player IDs, no breakpoints, no model training/promotion/deploy/API spend.",
   "approval_date": "2026-10-14",
-  "approval_state": "Operator requested protected CDB complement write; execution remains contingent on current dry-run, release backup, global single-writer, immutable digest match, and independent persisted readback",
-  "request_idempotency": "Do not merge twice or retrigger if identical import request has been launched; inspect existing workflow runs and release/audit before acting."
+  "approval_state": "Explicit 2026-10-14 user authorization to write only verified safe CDB NULL values; require successful PR dry-run exact replay and complete per-match readback, then global single-writer + immutable backup + remote independent readback",
+  "request_idempotency": "One-time request. Never rerun as a write if first run published any files. Inspect release/backup/history and previous publication first. Any drift requires new audit and distinct authorization.",
+  "expected_cdb_bundle_sha256": "cda502a84339d0eb101523f9e27fc727b7cbb9a0abff51822db36002b5168070",
+  "expected_canonical_matches": 995610,
+  "expected_staged_matches": 64,
+  "expected_new_stat_values": 253,
+  "expected_quarantined_conflicts": 1685,
+  "expected_changed_years": [
+    2025,
+    2026
+  ],
+  "prior_evidence_run_id": 38616584213
 }

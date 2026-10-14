@@ -6,6 +6,7 @@ on:
       - '.github/workflows/cdb-service-complement-write.yml'
       - 'scripts/recover_cdb_opponent_service_rates.py'
       - 'tests/test_recover_cdb_opponent_service_rates.py'
+      - '.github/cdb-service-complement-write-request.json'
   push:
     branches: [main]
     paths: ['.github/cdb-service-complement-write-request.json']
@@ -92,6 +93,19 @@ jobs:
           report=json.loads((root/"stage/report.json").read_text())
           counts=report["counts"]
           assert report["production_mutated"] is False and report["provider_requests"] == 0
+          # A reviewed, single-use request pins BOTH current source manifest and
+          # exact eligible delta. Never widen scope silently after PR dry-run.
+          request=json.loads(Path(".github/cdb-service-complement-write-request.json").read_text())
+          snapshot=json.loads((root/"source-snapshot.json").read_text())
+          assert request.get("approved_by_operator") is True, "Explicit writer approval missing"
+          assert request.get("mode") == "write", "No explicit write request"
+          assert snapshot["status"] == "verified" and snapshot["provider_api_requests"] == 0
+          assert snapshot["manifest_sha256"] == request.get("expected_cdb_bundle_sha256"), "Current CDB manifest changed; rerun audit before import"
+          assert counts["staged_matches"] == request.get("expected_staged_matches"), "CDB staged match count drift"
+          assert counts["new_stat_values"] == request.get("expected_new_stat_values"), "CDB staged value count drift"
+          assert counts["examined"] == request.get("expected_canonical_matches"), "CDB history size drift"
+          assert counts.get("contradictory_observed_rates",0) == request.get("expected_quarantined_conflicts"), "Quarantine count drift"
+          assert set(map(int,report["changed_years"])) <= set(map(int,request["expected_changed_years"])), "Staged years widened unexpectedly"
           assert counts["examined"] >= 993759, "CDB row-count regression"
           assert counts.get("contradictory_observed_rates",0) >= 0
           assert counts.get("new_stat_values",0) >= counts.get("staged_matches",0)
