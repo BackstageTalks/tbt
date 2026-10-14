@@ -21,6 +21,7 @@ from scripts.research import identity_v2 as ident
 from scripts.research import shadow_identity_v2 as shadow
 from scripts.research import identity_v2_triage as triage
 from scripts.research import identity_v2_private_review as private_review
+from scripts.research import identity_v2_loss_diagnosis as loss_diagnosis
 
 # Source bytes audited separately; pin to exactly that independent read-only run.
 SOURCE_SHA = {
@@ -163,6 +164,10 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000,
     review_bucket_counts=Counter()
     review_blocker_counts=Counter()
     review_by_family=defaultdict(Counter)
+    old_rejection_reasons=Counter()
+    old_rejection_by_family=defaultdict(Counter)
+    lost_old_candidate_count=0
+    lost_old_source_cases=0
     for family,source in source_rows:
         metrics["sample_events"]+=1
         keys_a,keys_b=event_keys(source)
@@ -191,6 +196,13 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000,
         review_by_family[family][review.bucket]+=1
         old_ids={x.event_id for x in old}
         new_ids={x.canonical_event_id for x in new}
+        lost_old=[e for e in old if e.event_id not in new_ids]
+        lost_old_candidate_count+=len(lost_old)
+        lost_old_source_cases+=bool(lost_old)
+        for rejected in lost_old:
+            reason=loss_diagnosis.diagnose_old_only(source,rejected)
+            old_rejection_reasons[reason]+=1
+            old_rejection_by_family[family][reason]+=1
         strong_ids={x.canonical_event_id for x in new
                     if x.context_tier=="edition_context_strong"}
         r=by_family[family]
@@ -233,6 +245,17 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000,
         "schema":"BLINQ_IDENTITY_V2_SACKMANN2025_REAL_DATA_SHADOW_V1",
         "baseline":"normalized_names_plus_tour_round_plus_tournament_start_window_proxy",
         "source_family_hashes":SOURCE_SHA,
+        "old_candidate_rejection_diagnostics":{
+            "schema":"BLINQ_IDENTITY_V2_OLD_CANDIDATE_REJECTION_V1",
+            "source_cases_with_lost_candidates":lost_old_source_cases,
+            "lost_old_candidates_examined":lost_old_candidate_count,
+            "reason_counts":dict(sorted(old_rejection_reasons.items())),
+            "per_source_family":{k:dict(sorted(v.items()))
+                                for k,v in sorted(old_rejection_by_family.items())},
+            "canonical_identity_verified":False,
+            "cdb_write_authorized":False,
+            "notes":"Reason categories are research diagnostics, not import approvals."
+        },
         "cdb_sha256":CDB_SHA,
         "counts":dict(sorted(metrics.items())),
         "per_source_family":{k:dict(sorted(v.items())) for k,v in sorted(by_family.items())},
