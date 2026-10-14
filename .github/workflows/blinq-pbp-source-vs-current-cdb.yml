@@ -44,8 +44,17 @@ jobs:
           test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
           mkdir -p /tmp/blinq-pbp-gap/cdb /tmp/blinq-pbp-gap/report
           gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > /tmp/blinq-pbp-gap/release.json
-          gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
-            -p 'history-*.parquet' -p history_manifest.json -D /tmp/blinq-pbp-gap/cdb
+          python app/scripts/download_stable_cdb.py \
+            --repository "$PRIVATE_REPO" --tag tbt-data-v1 \
+            --out /tmp/blinq-pbp-gap/cdb \
+            --report /tmp/blinq-pbp-gap/report/verified-current-snapshot.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          s=json.loads(Path('/tmp/blinq-pbp-gap/report/verified-current-snapshot.json').read_text())
+          assert s['status']=='verified' and s['provider_api_requests']==0
+          assert len(s['manifest_sha256'])==64
+          PY
           python -m pip install --quiet "pandas>=2,<3" pyarrow
       - name: Test candidate safety and compare verified source bytes with 78 CDB parts
         timeout-minutes: 40
