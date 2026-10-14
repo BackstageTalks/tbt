@@ -305,6 +305,8 @@ class EventCandidate:
     evidence: tuple[str,...]
     identity_verified: bool = False
     cdb_write_authorized: bool = False
+    # Context strength is NOT an independent canonical identity witness.
+    context_tier: str = "unresolved_event_edition"
 
 
 def _day(value: str) -> date | None:
@@ -380,6 +382,11 @@ def discover_events(source: Event, canonical: Iterable[Event],
         elif tournament_key(source.tournament)==tournament_key(event.tournament) and (
                 tournament_key(source.tournament)):
             evidence.append("tournament_label")
+        else:
+            # Keep broad recall in RESEARCH. A different event name can mean
+            # the same event with a sponsor alias OR a different tournament.
+            # Without an edition alias registry it is not a strong event link.
+            evidence.append("tournament_edition_unresolved")
         # Player-side winner consistency does not require the native player ID
         # *values* to be comparable across sources. The pair orientation above
         # provides research-only matching of sides, never cross-provider proof.
@@ -401,8 +408,17 @@ def discover_events(source: Event, canonical: Iterable[Event],
                     if desired != cs.sets:
                         continue
                     evidence.append("score_shape")
-        result.append(EventCandidate(event.event_id,tuple(evidence)))
-    return sorted(result,key=lambda x:(-len(x.evidence),x.canonical_event_id))
+        context_tier = (
+            "edition_context_strong"
+            if ("tournament_label" in evidence or "same_source_edition" in evidence)
+            and "round" in evidence
+            and "winner_orientation_research" in evidence
+            else "unresolved_event_edition"
+        )
+        result.append(EventCandidate(event.event_id,tuple(evidence),
+                                     context_tier=context_tier))
+    return sorted(result,key=lambda x:(x.context_tier!="edition_context_strong",
+                                       -len(x.evidence),x.canonical_event_id))
 
 
 def no_write_contract(candidates: Iterable[Candidate | EventCandidate]) -> bool:
