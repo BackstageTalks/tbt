@@ -4954,17 +4954,24 @@
           const t=delta===null?'—':(delta>0?'+':'')+(key==='accuracy'||key==='roc_auc'||key==='ece_10'?(delta*100).toFixed(2)+' pp':delta.toFixed(4));
           return `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(score(old,key))}</td><td>${escapeHtml(score(next,key))}</td><td class="${delta===0?'':better?'is-better':'is-worse'}">${escapeHtml(t)}</td></tr>`;
         }).join(''):'';
-    // Marketing version is an alias for the exact protected training run only.
-    // The immutable fitted model ID remains visible for audit/reproduction.
-    const model711=offline&&String(offline.run_id)==='38486683787'
-      &&/^blinq-candidate-frozen-38486683787-[0-9]+$/.test(String(offline.candidate_release_tag||''));
-    const newCandidateTitle=model711?'Model 7.1.1':'Nový kandidát na aktuálnej CDB';
+    // Friendly release name is permitted only for the independently verified
+    // immutable artifact. A newer/different offline candidate must never
+    // inherit the "7.1.1" label or change the active shadow card's name.
+    const model711=Boolean(offline
+      &&offline.evaluation_type==='untouched_offline_holdout'
+      &&String(offline.run_id)==='38608660910'
+      &&/^blinq-candidate-frozen-38608660910-[0-9]+$/.test(String(offline.candidate_release_tag||''))
+      &&String(offline.candidate_version)==='v201-20261014T183415325901Z'
+      &&String(offline.candidate_sha256)==='7ac60b0b671091a7f620cca80a7c558b417e20c9448f577878625447e565c141'
+      &&String(offline.production_version||'')===String(d.production_version||''));
+    const shadowModel711=model711&&String(d.candidate_version||'')===String(offline.candidate_version||'');
+    const newCandidateTitle=model711?'BlinQ 7.1.1':'Nový kandidát na aktuálnej CDB';
     const offlinePanel=offline&&offlineRows?`<article class="admin-calibration-panel" aria-label="Nový kandidát na CDB – oddelený offline holdout">
       <h3>${escapeHtml(newCandidateTitle)} · offline holdout</h3>
       <p>Vyhodnotenie rovnakých ${numberOrDash(offline.n)} historických zápasov, ktoré neboli použité v rozhodovacom holdoute. Nie je to Shadow ani živá predikcia. Produkčný model zostáva nezmenený.</p>
       <div class="admin-calibration-grid">
         ${card('Champion',String(offline.production_version||'—'),'Aktuálny produkčný model')}
-        ${card('Kandidát po pretrénovaní',model711?'Model 7.1.1':String(offline.candidate_version||'—'),'Iba offline · nenasadený')}
+        ${card('Kandidát po pretrénovaní',model711?'BlinQ 7.1.1':String(offline.candidate_version||'—'),'Iba offline · nenasadený')}
         ${card('Vyhodnotené zápasy',numberOrDash(offline.n),'Rovnaká testovacia vzorka')}
       </div>
       <div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Metrika</th><th>Champion</th><th>Nový kandidát</th><th>Rozdiel</th></tr></thead><tbody>${offlineRows}</tbody></table></div>
@@ -4980,7 +4987,7 @@
       <div class="admin-calibration-status${d.stale?' is-stale':''}" role="status"><strong>${escapeHtml(status)}</strong><span>${d.stale?'Údaje synchronizácie sú staršie než 8 hodín.':''} Synchronizácia: ${escapeHtml(fmtStamp(d.updated_at))} · Shadow report: ${escapeHtml(fmtStamp(d.shadow_generated_at))}</span></div>
       <div class="admin-calibration-grid">
         ${card('Aktívny champion',String(d.production_version||'—'),'Produkčná verzia')}
-        ${card('Nový kandidát',String(d.candidate_version||'—'),active?'Shadow – bez automatického nasadenia':'Čaká na vytvorenie')}
+        ${card('Nový kandidát',shadowModel711?'BlinQ 7.1.1':String(d.candidate_version||'—'),shadowModel711?'Shadow · ID: '+String(d.candidate_version):active?'Shadow – bez automatického nasadenia':'Čaká na vytvorenie')}
         ${card('Vyhodnotené v shadow',numberOrDash(shadow.settled),'z '+numberOrDash(shadow.captured)+' zaznamenaných')}
         ${card('Čakajú na výsledok',numberOrDash(shadow.pending),'Predzápasové nemenné snapshoty')}
       </div>
