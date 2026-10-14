@@ -78,6 +78,50 @@ class CanonicalEloParityTest(unittest.TestCase):
         self.assertTrue(math.isfinite(v["p1_elo_pre"]))
         self.assertTrue(0.0 < v["p1_expected_win_pre"] < 1.0)
 
+    def test_end_to_end_all_78_canonical_partitions(self):
+        import hashlib
+        import json
+        import tempfile
+        from pathlib import Path
+        import pandas as pd
+        from build_blinq_cdb_elo import build
+
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch) / "cdb"
+            output = Path(scratch) / "elo"
+            root.mkdir()
+            years = {}
+            for year in range(1949, 2027):
+                path = root / f"history-{year}.parquet"
+                pd.DataFrame([{
+                    "match_id": f"match-{year}", "tour": "atp",
+                    "scheduled_at": datetime(year, 6, 1, 11, tzinfo=timezone.utc),
+                    "player1_id": "a", "player1_name": "A",
+                    "player2_id": "b", "player2_name": "B",
+                    "winner_id": "a", "surface": "clay",
+                    "tournament_level": "ATP 250", "status": "completed",
+                }]).to_parquet(path, index=False)
+                years[str(year)] = {
+                    "asset": path.name,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+            (root / "history_manifest.json").write_text(json.dumps({"years": years}))
+            report = build(
+                root, output, app_sha="synthetic-test",
+                cutoff=datetime(2027, 1, 1, tzinfo=timezone.utc),
+                min_input_matches=78,
+            )
+            self.assertEqual(report["canonical_input_matches"], 78)
+            self.assertEqual(report["eligible_completed_matches"], 78)
+            self.assertEqual(len(report["year_partitions"]), 78)
+            self.assertEqual(report["canonical_cdb_writes"], 0)
+            first = pd.read_parquet(output / "elo-history-1949.parquet")
+            self.assertEqual(first.iloc[0]["p1_elo_pre"], 1500.0)
+            last = pd.read_parquet(output / "elo-history-2026.parquet")
+            self.assertGreater(last.iloc[0]["p1_elo_pre"], 1500.0)
+
+
+
 
 if __name__ == "__main__":
     unittest.main()
