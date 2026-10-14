@@ -156,6 +156,9 @@ def aggregate_witness_graph(
     per_provider=defaultdict(set)
     per_canonical=defaultdict(set)
     source_player_map=defaultdict(set)
+    canonical_player_backlinks=defaultdict(set)
+    official_player_map=defaultdict(set)
+    canonical_official_backlinks=defaultdict(set)
     claim_rows=Counter()
     counts=Counter()
     parsed=[]
@@ -176,8 +179,16 @@ def aggregate_witness_graph(
         per_source[s].add((p,c))
         per_provider[p].add(c)
         per_canonical[c].add(p)
-        for sid,cid in zip(_source_pair(source),_canonical_pair(canonical)):
-            source_player_map[(source.namespace,source.tour,sid)].add(cid)
+        official_players=_pair(row,"official_provider_player_ids")
+        for sid,pid,cid in zip(_source_pair(source),official_players,
+                               _canonical_pair(canonical)):
+            source_ref=(source.namespace,source.tour,sid)
+            canonical_ref=(canonical.namespace,canonical.tour,cid)
+            official_ref=(_text(row,"provider_namespace"),source.tour,pid)
+            source_player_map[source_ref].add(canonical_ref)
+            canonical_player_backlinks[canonical_ref].add(source_ref)
+            official_player_map[official_ref].add(canonical_ref)
+            canonical_official_backlinks[canonical_ref].add(official_ref)
     for source,canonical,row,result in parsed:
         if result.status!="witness_shape_consistent_for_PRIVATE_review":
             continue
@@ -188,9 +199,19 @@ def aggregate_witness_graph(
             counts["duplicate_witness_submission_quarantined"]+=1
         elif len(per_source[s])!=1 or len(per_provider[p])!=1 or len(per_canonical[c])!=1:
             counts["event_identity_graph_collision"]+=1
-        elif any(len(source_player_map[(source.namespace,source.tour,sid)])!=1
-                 for sid in _source_pair(source)):
+        elif any(
+            len(source_player_map[(source.namespace,source.tour,sid)])!=1
+            or len(canonical_player_backlinks[(canonical.namespace,canonical.tour,cid)])!=1
+            for sid,cid in zip(_source_pair(source),_canonical_pair(canonical))
+        ):
             counts["player_crosswalk_graph_collision"]+=1
+        elif any(
+            len(official_player_map[(_text(row,"provider_namespace"),source.tour,pid)])!=1
+            or len(canonical_official_backlinks[(canonical.namespace,canonical.tour,cid)])!=1
+            for pid,cid in zip(_pair(row,"official_provider_player_ids"),
+                               _canonical_pair(canonical))
+        ):
+            counts["official_provider_player_crosswalk_collision"]+=1
         else:
             counts["witness_shape_consistent_private_review_only"]+=1
     return {
