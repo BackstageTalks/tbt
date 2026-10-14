@@ -22,6 +22,7 @@ from scripts.research import shadow_identity_v2 as shadow
 from scripts.research import identity_v2_triage as triage
 from scripts.research import identity_v2_private_review as private_review
 from scripts.research import identity_v2_loss_diagnosis as loss_diagnosis
+from scripts.research import identity_v2_gateway as gateway
 
 # Source bytes audited separately; pin to exactly that independent read-only run.
 SOURCE_SHA = {
@@ -183,7 +184,11 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000,
             continue
         context=[cdb[i] for i in intersection]
         old=[x for x in context if shadow.proxy_old_match(source,x)]
-        new=ident.discover_events(source,context)
+        new_result=gateway.discover(source,context,
+                                    max_context_rows=max_review_matches)
+        if new_result.identity_verified or new_result.cdb_write_authorized:
+            raise AssertionError("Gateway improperly grants canonical write status")
+        new=list(new_result.candidates)
         if not ident.no_write_contract(new):
             raise AssertionError("Research linker claims independent proof/write")
         review=triage.review_case(source,old,new)
