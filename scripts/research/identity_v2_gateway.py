@@ -50,6 +50,15 @@ def stage_season(row, *, tour: str, collection: str, source_file_sha256: str,
     return adapters.require_source_only(result)
 
 
+def stage_native(row, *, source_name: str, tour: str, collection: str,
+                 source_file_sha256: str, line_number: int,
+                 field_map=None, date_kind: str = "played") -> adapters.Adapted:
+    return adapters.require_source_only(adapters.from_native_event(
+        row, source_name=source_name, tour=tour, collection=collection,
+        file_sha256=source_file_sha256, line_number=line_number,
+        field_map=field_map, date_kind=date_kind))
+
+
 def stage_canonical_context(row) -> adapters.Adapted:
     return adapters.require_source_only(adapters.from_cdb_metadata(row))
 
