@@ -156,6 +156,7 @@ def aggregate_witness_graph(
     per_provider=defaultdict(set)
     per_canonical=defaultdict(set)
     source_player_map=defaultdict(set)
+    claim_rows=Counter()
     counts=Counter()
     parsed=[]
     for source,canonical,row in entries:
@@ -171,6 +172,7 @@ def aggregate_witness_graph(
         s=(source.namespace,source.event_id)
         p=(_text(row,"provider_namespace"),_text(row,"provider_event_id"))
         c=(canonical.namespace,canonical.event_id)
+        claim_rows[(s,p,c)]+=1
         per_source[s].add((p,c))
         per_provider[p].add(c)
         per_canonical[c].add(p)
@@ -182,7 +184,9 @@ def aggregate_witness_graph(
         s=(source.namespace,source.event_id)
         p=(_text(row,"provider_namespace"),_text(row,"provider_event_id"))
         c=(canonical.namespace,canonical.event_id)
-        if len(per_source[s])!=1 or len(per_provider[p])!=1 or len(per_canonical[c])!=1:
+        if claim_rows[(s,p,c)]!=1:
+            counts["duplicate_witness_submission_quarantined"]+=1
+        elif len(per_source[s])!=1 or len(per_provider[p])!=1 or len(per_canonical[c])!=1:
             counts["event_identity_graph_collision"]+=1
         elif any(len(source_player_map[(source.namespace,source.tour,sid)])!=1
                  for sid in _source_pair(source)):
