@@ -27,7 +27,7 @@ def main():
         exe = os.getenv("BLINQ_BROWSER") or browser_path()
         browser = pw.chromium.launch(headless=True, executable_path=exe) if exe else pw.chromium.launch(headless=True)
         try:
-            for width in (390, 1440):
+            for width in (390, 1200, 1440):
                 context = browser.new_context(viewport={"width": width, "height": 850})
                 page = context.new_page()
                 errors = []
@@ -79,6 +79,27 @@ def main():
                 assert page.locator('#adminTestGoPage').input_value()=='1', width
                 assert page.locator(".admin-test-table tbody tr").count()==100, width
                 assert page.evaluate("adminTestUi.state.adminTestSelected.length")==100, width
+                # Page 2 / 2: the "Prejsť" text must fit its own button, not the next-arrow target.
+                page.locator('[data-admin-test-action="next"]').click()
+                assert page.locator('#adminTestGoPage').input_value()=='2', width
+                pager=page.evaluate("""() => {
+                    const nav=document.querySelector('.admin-test-pager .results-pagination-nav');
+                    const parts=[...nav.children].map(el=>el.getBoundingClientRect());
+                    const go=nav.querySelector('[data-admin-test-action="go"]');
+                    const box=go.getBoundingClientRect();
+                    const collision=(a,b)=>a.left<b.right-1 && b.left<a.right-1 &&
+                        a.top<b.bottom-1 && b.top<a.bottom-1;
+                    return {
+                        goWidth:box.width,
+                        textFits:go.scrollWidth<=go.clientWidth+1,
+                        overlaps:parts.some((a,i)=>parts.slice(i+1).some(b=>collision(a,b))),
+                        buttonLabel:go.textContent.trim()
+                    };
+                }""")
+                assert pager['goWidth']>=80, (width,pager)
+                assert pager['textFits'] and not pager['overlaps'], (width,pager)
+                page.locator('[data-admin-test-action="prev"]').click()
+                assert page.locator('#adminTestGoPage').input_value()=='1', width
                 page.locator('[data-admin-test-filter="category"]').select_option('sets')
                 assert page.locator(".admin-test-table tbody tr").count()==13, width
                 assert page.evaluate("adminTestUi.state.adminTestSelected.length")==100, width
