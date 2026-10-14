@@ -2299,15 +2299,18 @@ class FeatureBuilder:
             ),
         )
 
-        rows: list[
-            dict[
-                str,
-                float
-                | int
-                | str
-                | datetime,
-            ]
-        ] = []
+        # Accumulate only the columns consumed by training. Holding a dict
+        # for every historical match and then transposing it doubled the
+        # peak in-memory representation before pandas could construct a frame.
+        columns = FEATURE_NAMES + [
+            "surface_history_count",
+            "target",
+            "match_id",
+            "scheduled_at",
+            "tour",
+            "surface",
+        ]
+        column_data = {name: [] for name in columns}
 
         current_date = None
 
@@ -2334,28 +2337,25 @@ class FeatureBuilder:
                     oriented
                 )
 
-                rows.append(
-                    {
-                        **features,
-                        "surface_history_count": min(self._state(oriented, True).surface_matches.get(stats_surface_key(oriented.surface), 0),
-                                                     self._state(oriented, False).surface_matches.get(stats_surface_key(oriented.surface), 0)),
-                        "target": (
-                            target
+                # Keep original snapshot order and scalar values. Missing
+                # optional features retain the same None -> NaN semantics.
+                for name in FEATURE_NAMES:
+                    column_data[name].append(features.get(name))
+                column_data["surface_history_count"].append(
+                    min(
+                        self._state(oriented, True).surface_matches.get(
+                            stats_surface_key(oriented.surface), 0
                         ),
-                        "match_id": (
-                            original.match_id
+                        self._state(oriented, False).surface_matches.get(
+                            stats_surface_key(oriented.surface), 0
                         ),
-                        "scheduled_at": (
-                            original.scheduled_at
-                        ),
-                        "tour": (
-                            original.tour.lower()
-                        ),
-                        "surface": (
-                            original.surface
-                        ),
-                    }
+                    )
                 )
+                column_data["target"].append(target)
+                column_data["match_id"].append(original.match_id)
+                column_data["scheduled_at"].append(original.scheduled_at)
+                column_data["tour"].append(original.tour.lower())
+                column_data["surface"].append(original.surface)
 
             for original in day_matches:
                 self.update(
@@ -2393,22 +2393,9 @@ class FeatureBuilder:
                 batch
             )
 
-        columns = (
-            FEATURE_NAMES
-            + [
-                "surface_history_count",
-                "target",
-                "match_id",
-                "scheduled_at",
-                "tour",
-                "surface",
-            ]
-        )
-
-        # Construct columns directly to avoid pandas' costly list-of-dicts conversion.
-        # Preserve row order, feature values, and the declared column ordering.
-        column_data = {column: [row.get(column) for row in rows] for column in columns}
-        del rows
+        # No per-row dictionaries or extra list-of-dicts conversion.
+        # The final frame still has the same columns, order and inference.
+        del completed
         return pd.DataFrame(column_data, columns=columns)
 
     def replay(
