@@ -294,5 +294,39 @@ class AdapterContract(unittest.TestCase):
                 a.parse_nonnegative_int(x)
 
 
+class SourcePreflight(unittest.TestCase):
+    def test_sha_pinned_sackmann_csv_preflight(self):
+        from scripts.research import identity_v2_stage as stage
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        import hashlib
+        with TemporaryDirectory() as folder:
+            path=Path(folder)/"input.csv"
+            path.write_text(
+                "tourney_date,winner_id,loser_id,winner_name,loser_name,tourney_name,round\\n"
+                "20250105,p1,p2,Djokovic N.,Sinner J.,Australian Open,R16\\n"
+                "20250105,p1,p1,Same,Player,Australian Open,R32\\n",encoding="utf-8")
+            digest=hashlib.sha256(path.read_bytes()).hexdigest()
+            result=stage.stage_readonly(path,expected_sha=digest,
+                                        kind="sackmann",fmt="csv",
+                                        tour="atp",collection="main")
+            self.assertEqual(result["counts"]["input_rows"],2)
+            self.assertEqual(result["counts"]["source_only_normalized_events"],1)
+            self.assertEqual(result["counts"]["quarantine_rows"],1)
+            self.assertFalse(result["cdb_import_authorized"])
+            self.assertEqual(result["cdb_writes"],0)
+
+    def test_sha_gate_must_precede_parsing(self):
+        from scripts.research import identity_v2_stage as stage
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as folder:
+            path=Path(folder)/"input.csv"
+            path.write_text("invalid",encoding="utf-8")
+            with self.assertRaisesRegex(ValueError,"SOURCE_SHA_GATE_FAILED"):
+                stage.stage_readonly(path,expected_sha="0"*64,
+                    kind="sackmann",fmt="csv",tour="atp",collection="main")
+
+
 if __name__=="__main__":
     unittest.main()
