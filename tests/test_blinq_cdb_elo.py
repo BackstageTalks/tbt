@@ -123,5 +123,26 @@ class CanonicalEloParityTest(unittest.TestCase):
 
 
 
+    def test_ta_heuristic_is_not_proven_crosswalk(self):
+        from compare_blinq_elo_ta import compare
+        own = [{"tour": "atp", "name": "Sinner J.", "elo": 2200.0},
+               {"tour": "atp", "name": "Djokovic N.", "elo": 2150.0}]
+        ta = [{"tour": "atp", "name": "Jannik Sinner", "elo": 2300.0},
+              {"tour": "atp", "name": "Novak Djokovic", "elo": 2100.0}]
+        result = compare(own, ta, "atp")
+        self.assertEqual(result["unique_heuristic_name_matches"], 2)
+        self.assertFalse(result["identity_crosswalk_verified"])
+        self.assertEqual(result["comparison_status"], "insufficient_heuristic_overlap")
+
+    def test_ta_ambiguous_names_are_quarantined(self):
+        from compare_blinq_elo_ta import compare
+        own = [{"tour": "atp", "name": "Sinner J.", "elo": 2200.0},
+               {"tour": "atp", "name": "Sinner J.", "elo": 2190.0}]
+        ta = [{"tour": "atp", "name": "Jannik Sinner", "elo": 2300.0}]
+        result = compare(own, ta, "atp")
+        self.assertEqual(result["unique_heuristic_name_matches"], 0)
+        self.assertEqual(result["blinq_name_collisions_excluded"], 2)
+
+
 if __name__ == "__main__":
     unittest.main()
