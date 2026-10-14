@@ -328,6 +328,11 @@ def discover_events(source: Event, canonical: Iterable[Event],
         raise ValueError("Provider-scoped source event ID required")
     result: list[EventCandidate] = []
     source_day = _day(source.event_date)
+    if source_day is None:
+        # Zero dates on both sides must never manufacture a link.
+        # Invalid/missing dates are candidates for source normalization review,
+        # not a valid match-discovery time window.
+        return []
     source_names = [x.names() for x in source.players]
     for event in canonical:
         if not event.event_id or (source.tour.casefold(),source.discipline.casefold()) != (
@@ -359,6 +364,8 @@ def discover_events(source: Event, canonical: Iterable[Event],
             continue  # ambiguous orientation and self-matches fail closed
         sides,evidence=alternatives[0]
         target_day=_day(event.event_date)
+        if target_day is None:
+            continue
         if source_day and target_day:
             days=(target_day-source_day).days
             if source.date_kind=="tournament_start" and event.date_kind in ("scheduled","played"):
