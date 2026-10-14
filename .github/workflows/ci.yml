@@ -8,6 +8,7 @@ on:
     paths-ignore:
       - '.github/hourly-api-gapfill-tick.json'
       - '.github/hourly-api-gapfill-smoke.json'
+      - '.github/elo-weekly-trigger.json'
   pull_request:
   workflow_dispatch:
 

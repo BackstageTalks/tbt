@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "component": "blinq-cdb-elo-weekly",
+  "week": "initial",
+  "triggered_by": "external_scheduler",
+  "manual_override": false
+}
