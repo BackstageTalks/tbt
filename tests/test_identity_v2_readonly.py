@@ -191,7 +191,7 @@ class Shadow(unittest.TestCase):
                 "date_kind":"tournament_start","event_date":"2026-01-05",
                 "tournament":"Australian Open","round_name":"R16"
             }
-            path.write_text(json.dumps(d)+"\\n",encoding="utf-8")
+            path.write_text(json.dumps(d)+"\n",encoding="utf-8")
             rows=sh.read_events(path,max_rows=5)
             self.assertEqual(len(rows),1)
             self.assertEqual(rows[0].event_id,"src-event-1")
