@@ -2405,10 +2405,11 @@ class FeatureBuilder:
             ]
         )
 
-        return pd.DataFrame(
-            rows,
-            columns=columns,
-        )
+        # Construct columns directly to avoid pandas' costly list-of-dicts conversion.
+        # Preserve row order, feature values, and the declared column ordering.
+        column_data = {column: [row.get(column) for row in rows] for column in columns}
+        del rows
+        return pd.DataFrame(column_data, columns=columns)
 
     def replay(
         self,
