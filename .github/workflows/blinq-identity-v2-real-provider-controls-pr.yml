@@ -1,0 +1,141 @@
+name: BlinQ Identity V2 real provider ID controls (read-only PR)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/research/verify_identity_v2_real_provider50.py
+      - tests/test_identity_v2_real_provider50.py
+      - .github/workflows/blinq-identity-v2-real-provider-controls-pr.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-identity-v2-native-controls-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  real-native-identity-controls:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'audit/identity-v2-provider50-fieldcheck-20261014'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      REPO_PRIVATE: BackstageTalks/tbt-data
+      SOURCE_REF: 1c9568bac90913cdda03c174db0f7b1b82bcc29a
+      CDB_SHA256: 3a929b356803af6b0f704d4d3066a053ecf995124ec8f4228487c54c0f534c58
+      LEDGER_SHA256: 90915bcb5174be1cad2a55ee87ed3dbc998b68b1b6934b4eba849f5aa4a17a00
+      DETAIL_SHA256: f8cf817321ea9a411df7bc21acd5f15c90f285d0de60df70
+    steps:
+      - name: Checkout audit code without credential persistence
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Checkout frozen private original-ledger index
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 1c9568bac90913cdda03c174db0f7b1b82bcc29a
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+          path: work/private
+
+      - name: Set up offline validation runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate private provenance and immutable CDB year
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$REPO_PRIVATE" --jq .private)" = "true"
+          test "$(git -C work/private rev-parse HEAD)" = "$SOURCE_REF"
+          mkdir -p work/cdb work/positive work/original work/output
+          gh release download tbt-data-v1 -R "$REPO_PRIVATE" \
+            -p history-2025.parquet -D work/cdb >/dev/null
+          echo "$CDB_SHA256  work/cdb/history-2025.parquet" | sha256sum -c
+          # Replays previous independent original provider query; no calls.
+          gh release download blinq-licensed-api50-native-id-review-38458939812-1 \
+            -R "$REPO_PRIVATE" -D work/positive >/dev/null
+          (cd work/positive && sha256sum -c SHA256SUMS)
+          echo "$DETAIL_SHA256  work/positive/api50-match-id-private.jsonl" | sha256sum -c
+          # Negative source: a different native ID namespace, original ledger.
+          cat work/private/research/identity-gaps/source_2025_numeric_ledger_parts/part*.txt \
+            | base64 --decode | gzip -dc > work/original/source2025.jsonl
+          echo "$LEDGER_SHA256  work/original/source2025.jsonl" | sha256sum -c
+
+      - name: Run adversarial offline unit controls
+        shell: bash
+        env:
+          PYTHONPATH: .
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet 'pyarrow>=17,<25' 'pandas>=2,<3'
+          python -m unittest discover -s tests -p test_identity_v2_real_provider50.py -v
+          PYTHONPATH=scripts/research python -m unittest discover \
+            -s scripts/research -p test_audit_exact_2025_id_namespace.py -v
+
+      - name: Recheck 50 stored first-party native provider events
+        shell: bash
+        env:
+          PYTHONPATH: .
+        run: |
+          set -euo pipefail
+          python scripts/research/verify_identity_v2_real_provider50.py \
+            --cdb work/cdb/history-2025.parquet \
+            --detail work/positive/api50-match-id-private.jsonl \
+            --report work/positive/report.json \
+            | tee work/output/positive-counts.log
+          python - <<'PY'
+          import json
+          text=open('work/output/positive-counts.log').read()
+          line=next(x for x in text.splitlines() if x.startswith("BLINQ_IDENTITY_V2_REAL_PROVIDER50 "))
+          data=json.loads(line.partition(" ")[2])
+          assert data["same_provider_native_match_rechecks"]==50
+          assert data["atp_count"]==25 and data["wta_count"]==25
+          assert data["external_provider_crosswalks_proven"]==0
+          assert data["provider_winner_responses_freshly_rechecked"]==0
+          assert data["rapidapi_requests"]==0 and data["identity_v2_CDB_writes"]==0
+          PY
+
+      - name: Replay 2025 cross-provider identical-number false positives
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/research/audit_exact_2025_id_namespace.py \
+            --source work/original/source2025.jsonl \
+            --cdb work/cdb/history-2025.parquet \
+            --out work/output/cross-provider-negative.json \
+            > work/output/negative-counts.log
+          python - <<'PY'
+          import json
+          result=json.load(open('work/output/cross-provider-negative.json'))
+          c=result["counts"]
+          assert c["source_total"]==20732 and c["cdb_total"]==90571
+          assert c["original_source_event_id_equal_to_CDB_provider_ID"]==13
+          assert c["same_event_number_but_different_players"]==13
+          assert c.get("event_and_both_original_participants_equal",0)==0
+          assert result["direct_source_to_cdb_event_and_players_authoritatively_attested"] is False
+          assert result["approved_CDB_NULL_fields"]==0 and result["CDB_writes"]==0
+          print("BLINQ_IDENTITY_V2_CROSS_PROVIDER_NEGATIVE "+json.dumps({
+            "source_matches":c["source_total"],
+            "canonical_matches":c["cdb_total"],
+            "colliding_numeric_event_ids":13,
+            "different_native_player_pairs":13,
+            "verified_cross_source_links":0,
+            "cdb_writes":0,
+            "api_requests":0
+          },sort_keys=True))
+          PY
+
+      - name: Verify research-only no-write boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e work/output/approved-import-batch.json
+          echo 'REAL_ORIGINALS_REPLAY_DONE__SAME_PROVIDER_50__CROSS_PROVIDER_13_NEGATIVE__ZERO_WRITES'
