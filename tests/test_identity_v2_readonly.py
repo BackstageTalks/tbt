@@ -303,9 +303,9 @@ class SourcePreflight(unittest.TestCase):
         with TemporaryDirectory() as folder:
             path=Path(folder)/"input.csv"
             path.write_text(
-                "tourney_date,winner_id,loser_id,winner_name,loser_name,tourney_name,round\\n"
-                "20250105,p1,p2,Djokovic N.,Sinner J.,Australian Open,R16\\n"
-                "20250105,p1,p1,Same,Player,Australian Open,R32\\n",encoding="utf-8")
+                "tourney_date,winner_id,loser_id,winner_name,loser_name,tourney_name,round\n"
+                "20250105,p1,p2,Djokovic N.,Sinner J.,Australian Open,R16\n"
+                "20250105,p1,p1,Same,Player,Australian Open,R32\n",encoding="utf-8")
             digest=hashlib.sha256(path.read_bytes()).hexdigest()
             result=stage.stage_readonly(path,expected_sha=digest,
                                         kind="sackmann",fmt="csv",
