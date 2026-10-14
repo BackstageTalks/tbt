@@ -148,6 +148,8 @@ class WitnessIntake(unittest.TestCase):
                    pinned_source_sha256=S,pinned_cdb_sha256=C)
         self.assertEqual(report["verified_canonical_events"],0)
         self.assertEqual(report["source_claim_rows"],2)
+        self.assertEqual(report["status_counts"][
+            "duplicate_witness_submission_quarantined"],2)
 
     def test_invalid_sha_and_scope_rejected(self):
         s,c,r=claim(source_file_sha256="wrong")
