@@ -157,11 +157,13 @@ def main(src,cdb,release_path,out,candidates=None,*,alias_research=False):
                        str(id1),str(id2),str(mid),norm(n1),norm(n2),stats)
             index[(norm(t),pair)].append(candidate)
             if alias_research:
+                for name,pid in ((n1,id1),(n2,id2)):
+                    key=initial_surname_signature(name)
+                    if key:
+                        alias_owners[(norm(t),key)].add(str(pid))
                 signature=alias_pair_signature(n1,n2)
                 if signature:
                     alias_index[(norm(t),signature)].append(candidate)
-                    for name,pid in ((n1,id1),(n2,id2)):
-                        alias_owners[(norm(t),initial_surname_signature(name))].add(str(pid))
     paths=sorted(p for p in src.rglob('*.csv') if any(re.fullmatch(rx,p.relative_to(src).as_posix()) for rx in FILES))
     if len(paths)!=262:raise RuntimeError('Source CSV count mismatch '+str(len(paths)))
     fprint=2166136261
