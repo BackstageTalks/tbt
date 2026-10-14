@@ -180,6 +180,19 @@ def discover_players(source: Player, targets: Iterable[Player],
             evidence.append("surname_initial_discovery")
         elif any(k.startswith("translit:") for k in common):
             evidence.append("transliteration_research_only")
+        # Keep cross-script provenance even when a coarse surname-initial
+        # key was also shared. This is *never* independent identity evidence.
+        def script(name: str) -> str:
+            for char in name:
+                label = unicodedata.name(char, "")
+                if "CYRILLIC" in label:
+                    return "cyrillic"
+                if "GREEK" in label:
+                    return "greek"
+            return "latin_or_other"
+        if common and script(source.name) != script(target.name):
+            if "transliteration_research_only" not in evidence:
+                evidence.append("transliteration_research_only")
         if (source.dob and target.dob and source.dob != target.dob):
             # DOB conflict never rescued by a name-based key.
             continue
