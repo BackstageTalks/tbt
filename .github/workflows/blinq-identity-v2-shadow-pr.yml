@@ -1,0 +1,82 @@
+name: BlinQ identity v2 real-data shadow (read-only PR)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/research/identity_v2.py
+      - scripts/research/shadow_identity_v2.py
+      - scripts/research/shadow_sackmann2025_vs_cdb.py
+      - tests/test_identity_v2_readonly.py
+      - tests/test_identity_v2_real_shadow.py
+      - .github/workflows/blinq-identity-v2-shadow-pr.yml
+permissions:
+  contents: read
+concurrency:
+  group: blinq-identity-v2-shadow-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  real-historical-shadow:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/identity-v2-readonly-shadow-20261014'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      MIRROR_SHA: 83733587353df8a41f2fd4f516147d5aa83f5a8d
+      CDB_SHA: 3a929b356803af6b0f704d4d3066a053ecf995124ec8f4228487c54c0f534c58
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install offline parquet reader and run local safety tests
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pandas pyarrow pytest
+          python -m pytest -q tests/test_identity_v2_readonly.py tests/test_identity_v2_real_shadow.py
+      - name: Download immutable CDB 2025 history only (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          mkdir -p /tmp/blinq-id-v2/cdb /tmp/blinq-id-v2/src/atp /tmp/blinq-id-v2/src/wta
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
+            -p history-2025.parquet -D /tmp/blinq-id-v2/cdb
+          echo "$CDB_SHA  /tmp/blinq-id-v2/cdb/history-2025.parquet" | sha256sum -c
+      - name: Retrieve only five SHA-pinned original 2025 source CSVs
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://raw.githubusercontent.com/Aneeshers/tennis-sackmann-archive/$MIRROR_SHA"
+          for item in \
+            atp/atp_matches_2025.csv \
+            atp/atp_matches_futures_2025.csv \
+            atp/atp_matches_qual_chall_2025.csv \
+            wta/wta_matches_2025.csv \
+            wta/wta_matches_qual_itf_2025.csv; do
+            curl --fail --silent --show-error --location --retry 2 --max-time 150 \
+              "$base/$item" -o "/tmp/blinq-id-v2/src/$item"
+          done
+          cat <<'EOF' | (cd /tmp/blinq-id-v2/src && sha256sum -c)
+          78c356ef9328b89ae58a17564d61c02cdad2a3a007f6b8af5cfc17992b11bb2d  atp/atp_matches_2025.csv
+          54dd4611505feccd4976e42564f4d9d0796ebd86f64ad195a3ffc0ae0e9da294  atp/atp_matches_futures_2025.csv
+          7690c576689d9cafc28d1b9f3293173e87220573db5fd2c47e3097f2ab505ec0  atp/atp_matches_qual_chall_2025.csv
+          e4eb002bc6d828b0bd21e04ed286e68722ddc8ccbbb27ea980bf62e938377f96  wta/wta_matches_2025.csv
+          af1b439684a55ae0f7cb42ed5da2b11985f08dac50ac68c06da4faa3ffe19da7  wta/wta_matches_qual_itf_2025.csv
+          EOF
+      - name: Run SHA-pinned research comparison (zero canonical writes)
+        shell: bash
+        env:
+          PYTHONPATH: .
+        run: |
+          set -euo pipefail
+          python scripts/research/shadow_sackmann2025_vs_cdb.py \
+            --source-dir /tmp/blinq-id-v2/src \
+            --cdb-parquet /tmp/blinq-id-v2/cdb/history-2025.parquet \
+            --sample-mod 13
+      - name: Confirm no persist or deployment from research step
+        run: |
+          echo 'READ_ONLY_SHADOW_FINISHED__NO_RELEASE_UPLOAD__NO_CDB_WRITE__NO_MODEL'
