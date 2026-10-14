@@ -6,6 +6,8 @@ on:
       - scripts/research/identity_v2.py
       - scripts/research/shadow_identity_v2.py
       - scripts/research/shadow_sackmann2025_vs_cdb.py
+      - scripts/research/identity_v2_futures_risk_roots.py
+      - tests/test_identity_v2_futures_risk_roots.py
       - tests/test_identity_v2_readonly.py
       - tests/test_identity_v2_real_shadow.py
       - .github/workflows/blinq-identity-v2-shadow-pr.yml
@@ -16,7 +18,10 @@ concurrency:
   cancel-in-progress: true
 jobs:
   real-historical-shadow:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/identity-v2-readonly-shadow-20261014'
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.head_ref == 'feat/identity-v2-readonly-shadow-20261014' ||
+       github.head_ref == 'audit/identity-v2-futures-risk-root-20261014')
     runs-on: ubuntu-latest
     timeout-minutes: 18
     env:
@@ -36,6 +41,7 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check pandas pyarrow pytest
           PYTHONPATH=.:api python -m unittest discover -s tests -p test_identity_v2_readonly.py -v
+          PYTHONPATH=.:api python -m unittest discover -s tests -p test_identity_v2_futures_risk_roots.py -v
       - name: Download immutable CDB 2025 history only (read-only)
         shell: bash
         run: |
@@ -76,7 +82,26 @@ jobs:
           python scripts/research/shadow_sackmann2025_vs_cdb.py \
             --source-dir /tmp/blinq-id-v2/src \
             --cdb-parquet /tmp/blinq-id-v2/cdb/history-2025.parquet \
-            --sample-mod 1
+            --sample-mod 1 | tee /tmp/blinq-id-v2/futures-risk-aggregate.log
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          rows=Path('/tmp/blinq-id-v2/futures-risk-aggregate.log').read_text().splitlines()
+          values=[json.loads(row.split(' ',1)[1]) for row in rows
+                  if row.startswith('BLINQ_IDENTITY_V2_REAL_SHADOW ')]
+          assert len(values)==1
+          data=values[0]
+          risk=data["futures_ambiguity_root_causes"]
+          assert data["counts"]["old_unique_new_ambiguous"]==777
+          assert data["per_source_family"]["atp/atp_matches_futures_2025.csv"]["old_unique_new_ambiguous"]==763
+          assert risk["old_unique_new_ambiguous_source_cases"]==763
+          assert sum(risk["candidate_count_bins"].values())==763
+          assert sum(risk["strong_context_count_bins"].values())==763
+          assert risk["cdb_writes"]==0 and risk["cdb_write_authorized"] is False
+          assert risk["independently_verified_sackmann_to_cdb_event_links"]==0
+          assert data["CDB_writes"]==0 and data["CDB_approved_cells"]==0
+          print("BLINQ_FUTURES_2025_RISK_COUNTS "+json.dumps(risk,sort_keys=True))
+          PY
       - name: Confirm no persist or deployment from research step
         run: |
           echo 'READ_ONLY_SHADOW_FINISHED__NO_RELEASE_UPLOAD__NO_CDB_WRITE__NO_MODEL'
