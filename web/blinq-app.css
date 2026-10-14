@@ -10218,3 +10218,35 @@ body#blinqPremium.blinq-admin .admin-test-pager .results-pagination-nav input[ty
  body#blinqPremium.blinq-admin .admin-test-pager .results-pagination-nav{width:100%;justify-content:space-between}
  body#blinqPremium.blinq-admin .admin-test-results .admin-analytics-table{min-width:900px}
 }
+
+
+/* Admin > Výsledky: prevent the wide "Prejsť" label from overflowing a 36px arrow button. */
+body#blinqPremium.blinq-admin .admin-test-pager .results-pagination-nav{
+  gap:12px;
+  max-width:100%;
+}
+body#blinqPremium.blinq-admin .admin-test-pager .results-pagination-nav > label{
+  flex:0 0 auto;
+  white-space:nowrap;
+}
+body#blinqPremium.blinq-admin .admin-test-pager .results-pagination-nav > button[data-admin-test-action="go"]{
+  box-sizing:border-box;
+  flex:0 0 auto;
+  width:auto!important;
+  min-width:86px!important;
+  min-height:40px;
+  height:auto;
+  padding:9px 14px;
+  font-size:12px!important;
+  line-height:1.35;
+  white-space:nowrap;
+}
+body#blinqPremium.blinq-admin .admin-test-pager .results-pagination-nav > button[data-admin-test-action="prev"],
+body#blinqPremium.blinq-admin .admin-test-pager .results-pagination-nav > button[data-admin-test-action="next"]{
+  box-sizing:border-box;
+  flex:0 0 40px;
+  width:40px;
+  min-width:40px;
+  height:40px;
+  white-space:nowrap;
+}
