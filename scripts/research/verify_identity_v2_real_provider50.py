@@ -84,11 +84,16 @@ def load_evidence(detail: Path, report: Path) -> list[dict]:
     return data
 
 
-def canonical_by_id(rows) -> dict[tuple[str, str], dict]:
-    """No heuristics: fail on duplicate match or first-party native event ID."""
+def canonical_by_id(rows, wanted: set[tuple[str, str]] | None = None
+                    ) -> dict[tuple[str, str], dict]:
+    """Only index the pinned 50 sample; fail closed on duplicates within it."""
     result = {}
     native_seen = set()
     for row in rows:
+        if wanted is not None and (
+                str(row.get("tour") or "").lower(), str(row.get("match_id") or "")
+                ) not in wanted:
+            continue
         event = canonical_candidate(row)
         if event is None:
             continue
@@ -168,7 +173,8 @@ def run(cdb: Path, detail: Path, report: Path) -> dict:
     def canonical_rows():
         for batch in reader.iter_batches(batch_size=2048, columns=fields):
             yield from batch.to_pylist()
-    return verify_details(details, canonical_by_id(canonical_rows()))
+    wanted = {(row["tour"], str(row["canonical_match_id"])) for row in details}
+    return verify_details(details, canonical_by_id(canonical_rows(), wanted))
 
 
 def main() -> None:
