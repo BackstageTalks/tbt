@@ -6,6 +6,11 @@ on:
       - .github/workflows/blinq-pbp-source-vs-current-cdb.yml
       - scripts/audit_pbp_source_vs_current_cdb.py
   workflow_dispatch:
+    inputs:
+      alias_research:
+        type: boolean
+        default: false
+        description: "Enable conservative alias candidates (research-only, zero CDB writes)"
 permissions:
   contents: read
 concurrency:
@@ -47,11 +52,15 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest discover -s app/tests -p test_pbp_candidate_audit.py -v
+          flags=()
+          if [[ "${{ inputs.alias_research || 'false' }}" == "true" ]]; then
+            flags+=(--alias-research)
+          fi
           python app/scripts/audit_pbp_source_vs_current_cdb.py \
             --source source --cdb /tmp/blinq-pbp-gap/cdb \
             --release /tmp/blinq-pbp-gap/release.json \
             --out /tmp/blinq-pbp-gap/report/pbp-current-cdb-gap.json \
-            --candidates /tmp/blinq-pbp-gap/report/pbp-candidates-private.jsonl.gz
+            --candidates /tmp/blinq-pbp-gap/report/pbp-candidates-private.jsonl.gz "${flags[@]}"
       - name: Publish private candidate ledger and aggregate report with SHA readback
         if: success()
         run: |
@@ -75,7 +84,10 @@ jobs:
           with gzip.open(p,'rt',encoding='utf-8') as f:
             for line in f:
               row=json.loads(line)
-              assert row['identity_evidence']=='compound_metadata_only'
+              if j.get('alias_research_enabled') is True:
+                assert row['identity_evidence'] in ('compound_metadata_only','alias_metadata_research_only')
+              else:
+                assert row['identity_evidence']=='compound_metadata_only'
               assert row['independent_identity_verified'] is False and row['write_authorized'] is False
               assert row['canonical_match_id_candidate'] not in seen
               seen.add(row['canonical_match_id_candidate'])
