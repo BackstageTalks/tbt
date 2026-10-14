@@ -19,6 +19,7 @@ import re
 
 from scripts.research import identity_v2 as ident
 from scripts.research import shadow_identity_v2 as shadow
+from scripts.research import identity_v2_triage as triage
 
 # Source bytes audited separately; pin to exactly that independent read-only run.
 SOURCE_SHA = {
@@ -157,6 +158,9 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000):
                 index[(event.tour,key)].add(i)
     metrics=Counter()
     by_family=defaultdict(Counter)
+    review_bucket_counts=Counter()
+    review_blocker_counts=Counter()
+    review_by_family=defaultdict(Counter)
     for family,source in source_rows:
         metrics["sample_events"]+=1
         keys_a,keys_b=event_keys(source)
@@ -167,12 +171,20 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000):
         metrics["candidate_index_size_total"]+=len(intersection)
         if len(intersection)>max_review_matches:
             metrics["too_many_context_candidates"]+=1
+            review_bucket_counts["candidate_index_overflow_quarantined"]+=1
+            review_by_family[family]["candidate_index_overflow_quarantined"]+=1
             continue
         context=[cdb[i] for i in intersection]
         old=[x for x in context if shadow.proxy_old_match(source,x)]
         new=ident.discover_events(source,context)
         if not ident.no_write_contract(new):
             raise AssertionError("Research linker claims independent proof/write")
+        review=triage.review_case(source,old,new)
+        if review.independently_verified or review.cdb_write_authorized:
+            raise AssertionError("Research triage cannot approve canonical identity")
+        review_bucket_counts[review.bucket]+=1
+        review_blocker_counts.update(review.blockers)
+        review_by_family[family][review.bucket]+=1
         old_ids={x.event_id for x in old}
         new_ids={x.canonical_event_id for x in new}
         strong_ids={x.canonical_event_id for x in new
@@ -220,6 +232,20 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000):
         "cdb_sha256":CDB_SHA,
         "counts":dict(sorted(metrics.items())),
         "per_source_family":{k:dict(sorted(v.items())) for k,v in sorted(by_family.items())},
+        "priority_review_triage":{
+            "schema":"BLINQ_IDENTITY_V2_RESEARCH_TRIAGE_V1",
+            "evaluated_source_cases":sum(review_bucket_counts.values()),
+            "priority_bucket_counts":dict(sorted(
+                review_bucket_counts.items(),
+                key=lambda entry:(triage.BUCKET_PRIORITIES.get(entry[0],0),entry[0]))),
+            "blocker_counts":dict(sorted(review_blocker_counts.items())),
+            "per_source_family":{k:dict(sorted(v.items()))
+                                 for k,v in sorted(review_by_family.items())},
+            "canonical_independent_witnesses":0,
+            "cdb_import_authorized":False,
+            "cdb_writes":0,
+            "note":"Risk buckets and candidate shifts are not verified identities."
+        },
         "independent_canonical_event_witnesses":0,
         "independent_canonical_player_witnesses":0,
         "CDB_approved_cells":0,
