@@ -65,7 +65,8 @@ def namespace(source: str, category: str) -> str:
 def _stage(ns: str, tour: str, p1_id: str, p1_name: str,
            p2_id: str, p2_name: str, match_id: str, when: str,
            date_kind: str, tournament: str, round_name: str="",
-           winner_id: str="", score: str="", draw: str="") -> Adapted:
+           winner_id: str="", score: str="", draw: str="",
+           edition_id: str="") -> Adapted:
     if not all((ns,tour,match_id,when,p1_id,p2_id,p1_name,p2_name)):
         return Adapted(None,ns,match_id,("incomplete_source_native_event",))
     if p1_id==p2_id:
@@ -75,7 +76,8 @@ def _stage(ns: str, tour: str, p1_id: str, p1_name: str,
     try:
         event=Event(ns,match_id,tour,"singles",
             (Player(ns,tour,p1_id,p1_name),Player(ns,tour,p2_id,p2_name)),
-            when,date_kind,tournament,round_name,score,winner_id,draw=draw)
+            when,date_kind,tournament,round_name,score,winner_id,
+            edition_id=edition_id,draw=draw)
     except ValueError:
         return Adapted(None,ns,match_id,("invalid_event_contract",))
     return Adapted(event,ns,match_id)
@@ -98,7 +100,8 @@ def from_sackmann(row: Mapping[str,object], *, tour: str, collection: str,
         native,when,"tournament_start",_text(row.get("tourney_name")),
         _text(row.get("round")),_text(row.get("winner_id")),
         _text(row.get("score")),
-        "qual" if "qual" in collection else "")
+        "qual" if "qual" in collection else "",
+        edition_id=_text(row.get("tourney_id")))
 
 
 def from_season(row: Mapping[str,object], *, tour: str,
@@ -123,7 +126,8 @@ def from_season(row: Mapping[str,object], *, tour: str,
         _text(row.get("tournament") or row.get("tourney_name")),
         _text(row.get("round")),
         _text(row.get("winner_id")),
-        _text(row.get("score")))
+        _text(row.get("score")),
+        edition_id=_text(row.get("tourney_id") or row.get("tournament_id")))
 
 
 def from_cdb_metadata(row: Mapping[str,object]) -> Adapted:
