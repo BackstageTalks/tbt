@@ -20,6 +20,7 @@ import re
 from scripts.research import identity_v2 as ident
 from scripts.research import shadow_identity_v2 as shadow
 from scripts.research import identity_v2_triage as triage
+from scripts.research import identity_v2_private_review as private_review
 
 # Source bytes audited separately; pin to exactly that independent read-only run.
 SOURCE_SHA = {
@@ -150,7 +151,8 @@ def _query_keys(keys):
             and len(key)>=9]
 
 
-def compare(source_rows, cdb, *, max_review_matches: int=1000):
+def compare(source_rows, cdb, *, max_review_matches: int=1000,
+            on_review=None):
     index=defaultdict(set)
     for i,event in enumerate(cdb):
         for p in event.players:
@@ -180,6 +182,8 @@ def compare(source_rows, cdb, *, max_review_matches: int=1000):
         if not ident.no_write_contract(new):
             raise AssertionError("Research linker claims independent proof/write")
         review=triage.review_case(source,old,new)
+        if on_review is not None:
+            on_review(family,source,old,new,review)
         if review.independently_verified or review.cdb_write_authorized:
             raise AssertionError("Research triage cannot approve canonical identity")
         review_bucket_counts[review.bucket]+=1
@@ -259,12 +263,21 @@ def main(argv=None):
     parser.add_argument("--source-dir",type=Path,required=True)
     parser.add_argument("--cdb-parquet",type=Path,required=True)
     parser.add_argument("--sample-mod",type=int,default=13)
+    parser.add_argument("--private-review-output",type=Path,
+                        help="OPT-IN local 0700 dir JSONL, forbidden in CI")
+    parser.add_argument("--private-review-max-items",type=int,default=5000)
     args=parser.parse_args(argv)
     if not 1<=args.sample_mod<=1000:
         parser.error("--sample-mod must be 1..1000")
     sources,sc=source_events(args.source_dir,sample_mod=args.sample_mod)
     canonical,cc=canonical_events(args.cdb_parquet)
-    data=compare(sources,canonical)
+    reviewer=(private_review.PrivateReviewPack(args.private_review_max_items)
+              if args.private_review_output is not None else None)
+    data=compare(sources,canonical,
+                 on_review=reviewer.consider if reviewer is not None else None)
+    if reviewer is not None:
+        data["private_review_export"]=reviewer.write_private(
+            args.private_review_output)
     data["sample_mod"]=args.sample_mod
     data["source_counts"]=dict(sorted(sc.items()))
     data["canonical_counts"]=dict(sorted(cc.items()))
