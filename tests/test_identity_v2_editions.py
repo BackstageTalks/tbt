@@ -16,6 +16,19 @@ def edition(namespace, native, key, *, name="Australian Open", aliases=(),
 
 
 class EditionResearch(unittest.TestCase):
+    def test_source_adapter_keeps_edition_id_without_granting_identity(self):
+        from scripts.research import identity_v2_adapters as adapter
+        row={"tourney_id":"2025-aus-open","tourney_date":"20250105",
+             "winner_id":"123","loser_id":"456",
+             "winner_name":"Djokovic N.","loser_name":"Sinner J.",
+             "tourney_name":"Australian Open","round":"R16"}
+        adapted=adapter.from_sackmann(row,tour="atp",collection="main",
+                                      file_sha256="f"*64,line_number=8)
+        self.assertIsNotNone(adapted.event)
+        self.assertEqual(adapted.event.edition_id,"2025-aus-open")
+        self.assertFalse(adapted.cdb_import_authorized)
+        self.assertFalse(adapted.research_only is False)
+
     def test_identical_research_edition_does_not_verify_identity(self):
         a=edition("sackmann","2025-aus-open","ao-2025")
         b=edition("cdb-research","ao-2025","ao-2025",aliases=("AO Melbourne",))
