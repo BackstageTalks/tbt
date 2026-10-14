@@ -35,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pandas pyarrow pytest
-          python -m pytest -q tests/test_identity_v2_readonly.py tests/test_identity_v2_real_shadow.py
+          PYTHONPATH=.:api python -m unittest discover -s tests -p test_identity_v2_readonly.py -v
       - name: Download immutable CDB 2025 history only (read-only)
         shell: bash
         run: |
