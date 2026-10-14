@@ -177,12 +177,12 @@ def main() -> None:
             raise RuntimeError("Shadow changed from approved prior version; refuse replacement")
         if inventory(PRODUCTION_TAG)["model.joblib"][2] not in ("", "sha256:" + CHAMPION_SHA):
             raise RuntimeError("Champion remote digest changed")
+        # Shadow-only replacement must never discard historic promotion
+        # decisions. A nonpromoted frozen candidate brings no new decisions.
         old_history = json.loads((locations["candidate"] / "promotion_history.json").read_text())
-        frozen_history = json.loads((locations["frozen"] / "promotion_history.json").read_text())
-        if not isinstance(old_history, list) or not isinstance(frozen_history, list):
-            raise RuntimeError("Invalid shadow candidate promotion history")
-        if any(record not in frozen_history for record in old_history):
-            raise RuntimeError("Frozen candidate lacks previous promotion history; no overwrite")
+        if not isinstance(old_history, list):
+            raise RuntimeError("Invalid prior candidate decision history")
+        old_history_sha = digest(locations["candidate"] / "promotion_history.json")
 
         new_report = build_shadow_report(ledger,
                                          production_model_version=CHAMPION_VERSION,
@@ -203,7 +203,7 @@ def main() -> None:
         # A frozen candidate is not activated as production. Only the private
         # shadow release is switched; the old ledger remains byte-for-byte.
         ReleaseStore(REPOSITORY, CANDIDATE_TAG, locations["candidate"]).upload_bundle(
-            [locations["frozen"] / name for name in CANDIDATE_FILES],
+            [locations["frozen"] / name for name in ("model.joblib", "training_report.json")],
             before_upload=lambda: require_unchanged(CANDIDATE_TAG, observed),
         )
         next_report = locations["shadow"] / "shadow_report.json"
@@ -220,6 +220,8 @@ def main() -> None:
         ReleaseStore(REPOSITORY, SHADOW_TAG, shadow_readback).download(
             extra_names=SHADOW_FILES, required_names=SHADOW_FILES, require_bundle_manifest=True)
         checked_model(candidate_readback / "model.joblib", NEW_VERSION, MODEL_SHA)
+        if digest(candidate_readback / "promotion_history.json") != old_history_sha:
+            raise RuntimeError("Prior candidate promotion history was unexpectedly changed")
         if (shadow_readback / "shadow_ledger.json").read_bytes() != ledger_bytes:
             raise RuntimeError("Historical shadow ledger unexpectedly mutated")
         saved_report = json.loads((shadow_readback / "shadow_report.json").read_text())
