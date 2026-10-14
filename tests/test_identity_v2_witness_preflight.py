@@ -142,6 +142,44 @@ class WitnessIntake(unittest.TestCase):
                    pinned_source_sha256=S,pinned_cdb_sha256=C)
         self.assertEqual(report["status_counts"]["player_crosswalk_graph_collision"],2)
 
+    def test_canonical_backlink_claims_two_source_players(self):
+        first=claim()
+        s2=event("sackmann:atp_2025","row:43",p1="4",p2="5",winner="4")
+        # Different source player 4 attempts to own already-claimed canonical c1.
+        c2=event("CDB","cdb:89","c1","c5","c1")
+        second=claim(source=s2,canonical=c2,
+                     provider_event_id="atp-match-89",
+                     official_provider_player_ids=["atp-p1","atp-p5"])
+        out=aggregate_witness_graph([first,second],
+                pinned_source_sha256=S,pinned_cdb_sha256=C)
+        self.assertEqual(out["status_counts"]["player_crosswalk_graph_collision"],2)
+        self.assertFalse(out["cdb_import_authorized"])
+
+    def test_one_official_provider_player_maps_to_two_canonical_players(self):
+        first=claim()
+        s2=event("sackmann:atp_2025","row:43",p1="3",p2="4",winner="3")
+        c2=event("CDB","cdb:89","c3","c4","c3")
+        second=claim(source=s2,canonical=c2,
+                     provider_event_id="atp-match-89",
+                     official_provider_player_ids=["atp-p1","atp-p4"])
+        out=aggregate_witness_graph([first,second],
+                pinned_source_sha256=S,pinned_cdb_sha256=C)
+        self.assertEqual(out["status_counts"][
+            "official_provider_player_crosswalk_collision"],2)
+        self.assertEqual(out["verified_canonical_events"],0)
+
+    def test_two_official_ids_claim_same_canonical_player(self):
+        first=claim()
+        s2=event("sackmann:atp_2025","row:43",p1="1",p2="5",winner="1")
+        c2=event("CDB","cdb:89","c1","c5","c1")
+        second=claim(source=s2,canonical=c2,
+                     provider_event_id="atp-match-89",
+                     official_provider_player_ids=["atp-alias-p1","atp-p5"])
+        out=aggregate_witness_graph([first,second],
+                pinned_source_sha256=S,pinned_cdb_sha256=C)
+        self.assertEqual(out["status_counts"][
+            "official_provider_player_crosswalk_collision"],2)
+
     def test_duplicate_original_provider_rows_stay_review_only(self):
         a=claim()
         report=aggregate_witness_graph([a,deepcopy(a)],
