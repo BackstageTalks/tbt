@@ -101,11 +101,13 @@ def valid(r):
     return stats
 def breakpoint_return_value(side, opponent_faced, opponent_saved):
     """Conversion rate, never the legacy count-valued *_break_points_won."""
-    if not isinstance(opponent_faced, int) or opponent_faced <= 0:
-        return {side + '_break_point_return_win': None}
-    if (not isinstance(opponent_saved, int) or opponent_saved < 0
-            or opponent_saved > opponent_faced):
+    if (isinstance(opponent_faced, bool) or not isinstance(opponent_faced, int)
+            or opponent_faced < 0 or isinstance(opponent_saved, bool)
+            or not isinstance(opponent_saved, int)
+            or opponent_saved < 0 or opponent_saved > opponent_faced):
         raise ValueError('Invalid source breakpoint counts')
+    if opponent_faced == 0:
+        return {side + '_break_point_return_win': None}
     return {side + '_break_point_return_win':
             (opponent_faced - opponent_saved) / opponent_faced}
 
