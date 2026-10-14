@@ -224,3 +224,15 @@ def test_changed_first_second_evidence_invalidates_stage():
     changed.stats["p1_second_serve_win"] = 0.75
     with pytest.raises(ValueError, match="changed since dry-run"):
         write_local([changed], staged)
+
+
+def test_cdb_historical_pre_1990_year_stages_only_verified_nulls():
+    historical = match(stats={"p1_first_serve_win": 0.71})
+    historical.scheduled_at = datetime(1981, 6, 3, tzinfo=timezone.utc)
+    staged, counts = stage([historical], as_of=datetime(2026, 10, 14, tzinfo=timezone.utc))
+    assert counts["new_stat_values"] == 1
+    assert staged[0]["utc_year"] == 1981
+    assert staged[0]["additions"] == {"p2_first_return_win": pytest.approx(0.29)}
+    persisted = deepcopy(historical)
+    assert write_local([persisted], staged) == [1981]
+    assert verify_readback([historical], [persisted], staged)["new_stat_values"] == 1
