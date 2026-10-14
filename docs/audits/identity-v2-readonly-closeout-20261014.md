@@ -2,7 +2,7 @@
 
 ## Scope and immutable decisions
 
-- **Canonical remains authoritative.** No direct write, release promotion, model training, website deployment or mutation of obsolete \`tbt-pro\` is part of Identity V2 research.
+- **Canonical remains authoritative.** No direct write, release promotion, model training, website deployment or mutation of obsolete `tbt-pro` is part of Identity V2 research.
 - A new candidate is a **search result**, never an independently verified source-to-CDB link. A strong event/tournament-context label is likewise **not identity proof**.
 - Feature approval requires a separate **official original event identifier, both provider-native player identifiers, independent lineage and event/date/round/winner validation**. Source-native *row coordinates* are NOT provider-issued event IDs.
 - All source rights, attributed origin, as-of/point-in-time rules, current complete canonical partition SHA, CURRENT NULL-field delta and a governed single-writer lock + rollback/readback remain distinct, mandatory production gates. Reusing existing validators is preferred to inventing duplicate weaker gates.
@@ -12,15 +12,15 @@
 
 | Requested capability | Audit-only implementation | Production activation |
 |---|---|---|
-| 1. One resolver for heterogeneous import sources | \`identity_v2_gateway.py\` and \`identity_v2_adapters.py\` with explicit scoped native IDs, dates and no-write research gateway; bounded input preflight | **BLOCKED**: legacy governed importers intentionally not rewired while source-native IDs and independent witness remain unproven |
-| 2. Broad initial/alias/transliteration/formats discovery | \`identity_v2.py\` with source-specific names/aliases, Unicode and cautious fuzzy research keys | Research-only; no name-key identity authorization |
-| 3. Independent source/event/player verification | \`identity_v2_witness_preflight.py\` and external existing \`verify_tml_event_witnesses.py\`, \`build_cdb_verified_player_crosswalk.py\`; collide/duplicate/winner/date safety tests | **BLOCKED**: preflight checks *claims/shape*, not independent byte-authenticated official provider originals for each disputed match |
-| 4. Tournament editions, dates, rounds, scores | \`identity_v2_editions.py\` and \`identity_v2.py\`; source edition/date-kind, draw/season/tour/level, explicit score/retirement and side-orientation hard negatives | Doubles/mixed 4-player team identity not yet supported; never misrepresent 2 names as doubles teams |
-| 5. Historical shadow old/new | \`shadow_sackmann2025_vs_cdb.py\`, SHA-pinned workflow, \`identity_v2_triage.py\`, \`identity_v2_loss_diagnosis.py\` | Verified candidate diagnostics are **not** an exhaustive comparison with all legacy importers and all CDB years |
+| 1. One resolver for heterogeneous import sources | `identity_v2_gateway.py` and `identity_v2_adapters.py` with explicit scoped native IDs, dates and no-write research gateway; bounded input preflight | **BLOCKED**: legacy governed importers intentionally not rewired while source-native IDs and independent witness remain unproven |
+| 2. Broad initial/alias/transliteration/formats discovery | `identity_v2.py` with source-specific names/aliases, Unicode and cautious fuzzy research keys | Research-only; no name-key identity authorization |
+| 3. Independent source/event/player verification | `identity_v2_witness_preflight.py` and external existing `verify_tml_event_witnesses.py`, `build_cdb_verified_player_crosswalk.py`; collide/duplicate/winner/date safety tests | **BLOCKED**: preflight checks *claims/shape*, not independent byte-authenticated official provider originals for each disputed match |
+| 4. Tournament editions, dates, rounds, scores | `identity_v2_editions.py` and `identity_v2.py`; source edition/date-kind, draw/season/tour/level, explicit score/retirement and side-orientation hard negatives | Doubles/mixed 4-player team identity not yet supported; never misrepresent 2 names as doubles teams |
+| 5. Historical shadow old/new | `shadow_sackmann2025_vs_cdb.py`, SHA-pinned workflow, `identity_v2_triage.py`, `identity_v2_loss_diagnosis.py` | Verified candidate diagnostics are **not** an exhaustive comparison with all legacy importers and all CDB years |
 
 ## Reproducible prior snapshot (not current CDB)
 
-Original 2025 Sackmann ATP/WTA 5-source inputs: **56,889 matches**. Immutable historical CDB 2025 parquet: **90,571 matches**, SHA-256 \`3a929b356803af6b0f704d4d3066a053ecf995124ec8f4228487c54c0f534c58\`. Test workflow checks every source file hash and this specific CDB hash before any comparison.
+Original 2025 Sackmann ATP/WTA 5-source inputs: **56,889 matches**. Immutable historical CDB 2025 parquet: **90,571 matches**, SHA-256 `3a929b356803af6b0f704d4d3066a053ecf995124ec8f4228487c54c0f534c58`. Test workflow checks every source file hash and this specific CDB hash before any comparison.
 
 Research baseline (strict normalized name/date/round proxy) found 44,057 source rows with candidates. V2 found 45,613. New-only: **1,600** source cases, including **10** with a single strong edition-context candidate. Old-only: **44** cases. Old unique became ambiguous: **777** cases, including **763 ATP Futures**. Candidate sets differ in **936** source cases where both sides found candidates.
 
@@ -33,7 +33,7 @@ Every currently reviewed cross-source new identity remains **unverified** and ev
 1. **ATP Futures**: 763 old-unique-now-ambiguous cases, distinguish native edition/year/level/draw + independently issued match/event IDs; never rely on one-city/same-names assumptions.
 2. **Regressions**: review 44 source rows losing all prior links and 197 rejected candidate edges against original independent provider results; never override winner conflict just to increase recall.
 3. **Broader recovery**: 1,600 new-only research cases (esp. WTA ITF/qualifying), of which 10 have strong event context but 0 independently authenticated canonical event and both-player links.
-4. **Independent golden set**: source-original verified ID pairs and provider lineage in private review; \`identity_v2_private_review.py\` exports only with explicit private local permissions and is **forbidden in CI**. Official evidence validation must be performed separately.
+4. **Independent golden set**: source-original verified ID pairs and provider lineage in private review; `identity_v2_private_review.py` exports only with explicit private local permissions and is **forbidden in CI**. Official evidence validation must be performed separately.
 5. **Additional sources**: explicit provider-native adapters for odds, Match Charting and PBP; quarantine whenever source lacks actual native event **and both player** IDs. Doubles require four-player/team identity model and separate tests.
 
 ## What would genuinely qualify as *production complete*
