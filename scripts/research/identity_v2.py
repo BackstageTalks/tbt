@@ -265,6 +265,10 @@ class Event:
             raise ValueError("Doubles/mixed not yet supported by v2 player-pair research adapter")
         if len(self.players) != 2:
             raise ValueError("Two player sides required")
+        if any(p.namespace != self.namespace or not p.native_id for p in self.players):
+            raise ValueError("Event participants must have native IDs in event namespace")
+        if self.players[0].key() == self.players[1].key():
+            raise ValueError("A match cannot contain the same native player twice")
         if self.players[0].tour.casefold() != self.tour.casefold() or (
                 self.players[1].tour.casefold() != self.tour.casefold()):
             raise ValueError("Tour/player mismatch")
@@ -351,23 +355,27 @@ def discover_events(source: Event, canonical: Iterable[Event],
         elif tournament_key(source.tournament)==tournament_key(event.tournament) and (
                 tournament_key(source.tournament)):
             evidence.append("tournament_label")
-        # Winner is a hard-negative only if both sides have source-native ID
-        # inside the SAME namespace. Differing namespaces need crosswalk proof.
-        if source.winner_native_id and event.winner_native_id and source.namespace==event.namespace:
+        # Player-side winner consistency does not require the native player ID
+        # *values* to be comparable across sources. The pair orientation above
+        # provides research-only matching of sides, never cross-provider proof.
+        if source.winner_native_id and event.winner_native_id:
             sw=next((idx for idx,p in enumerate(source.players)
                      if p.native_id==source.winner_native_id),None)
             cw=next((idx for idx,p in enumerate(event.players)
                      if p.native_id==event.winner_native_id),None)
             if sw is None or cw is None or sides[sw]!=cw:
                 continue
-            evidence.append("same_namespace_winner")
+            evidence.append("winner_orientation_research")
         if source.score and event.score:
             ss,cs=parse_score(source.score),parse_score(event.score)
-            if ss.valid and cs.valid and ss.status=="score_only" and cs.status=="score_only":
-                desired=ss.sets if sides==(0,1) else tuple((b,a) for a,b in ss.sets)
-                if desired != cs.sets:
-                    continue
-                evidence.append("score_shape")
+            if ss.valid and cs.valid:
+                if (ss.status=="score_only") != (cs.status=="score_only"):
+                    continue  # cannot silently equate a retirement with a completion
+                if ss.status=="score_only":
+                    desired=ss.sets if sides==(0,1) else tuple((b,a) for a,b in ss.sets)
+                    if desired != cs.sets:
+                        continue
+                    evidence.append("score_shape")
         result.append(EventCandidate(event.event_id,tuple(evidence)))
     return sorted(result,key=lambda x:(-len(x.evidence),x.canonical_event_id))
 
