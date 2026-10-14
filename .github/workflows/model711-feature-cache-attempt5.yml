@@ -1,0 +1,219 @@
+name: BlinQ 7.1.1 cached-history protected candidate attempt 5 (no deploy)
+
+on:
+  push:
+    branches: [ops/model711-feature-cache-attempt5-20261014]
+    paths:
+      - .github/workflows/model711-feature-cache-attempt5.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-model-backup-single-writer
+  cancel-in-progress: false
+
+jobs:
+  wait-for-cdb:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - name: Wait read-only for the current CDB owner to release global lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          endpoint='repos/BackstageTalks/tbt-data/git/ref/tags/blinq-cdb-global-writer'
+          for attempt in $(seq 1 110); do
+            if ref="$(gh api "$endpoint" 2>/tmp/blinq-lock-status.err)"; then
+              sha="$(jq -er '.object.sha' <<<"$ref")"
+              owner="$(gh api "repos/BackstageTalks/tbt-data/git/tags/$sha" --jq .message)"
+              echo "CDB busy; $owner; attempt $attempt/110"
+            else
+              if grep -q 'HTTP 404' /tmp/blinq-lock-status.err; then
+                echo 'Global CDB writer lock is absent; training gate may proceed'
+                exit 0
+              fi
+              cat /tmp/blinq-lock-status.err >&2
+              exit 1
+            fi
+            sleep 30
+          done
+          echo '::error::Timed out waiting for writer lock; no training attempted'
+          exit 1
+  frozen-candidate:
+    needs: [wait-for-cdb]
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      PYTHONPATH: api:scripts
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUNBUFFERED: '1'
+      BLINQ_RAPIDAPI_MAX_RPS: '0'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install existing training dependencies
+        run: python -m pip install -r api/requirements-train.txt pytest
+      - name: Verify backup and fail-closed training contracts
+        run: |
+          set -euo pipefail
+          python -m pytest -q \
+            tests/test_immutable_training_backup.py \
+            tests/test_candidate_training_requires_backup.py \
+            tests/test_champion_rollback_rehearsal.py \
+            tests/test_cdb_global_writer_lock.py \
+            tests/test_atp_leaderboard_priors.py \
+            tests/test_feature_recent_weight_cache.py \
+            tests/test_features.py \
+            tests/test_feature_v3.py
+      - name: Acquire exact global private writer lock
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$TBT_DATA_REPOSITORY" = 'BackstageTalks/tbt-data'
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+      - name: Freeze all inputs and independently restore champion
+        run: |
+          set -euo pipefail
+          python scripts/guarded_candidate_backup.py prepare
+          python scripts/guarded_candidate_backup.py verify
+      - name: Fit separate candidate with periodic diagnostic traceback
+        run: |
+          set -euo pipefail
+          # CI-tested ATP lookup and PIT weight cache; full immutable inputs, no --promote or deployment.
+          # Emit Python stacks every 8 minutes during long silent computations.
+          python - <<'PY'
+          import faulthandler
+          import runpy
+          import sys
+          from datetime import datetime, timezone
+          faulthandler.enable(all_threads=True)
+          faulthandler.dump_traceback_later(480, repeat=True)
+          print('Protected candidate fit started', datetime.now(timezone.utc).isoformat(), flush=True)
+          sys.argv = ['scripts/pipeline.py', 'train', '--max-requests', '1']
+          runpy.run_path('scripts/pipeline.py', run_name='__main__')
+          print('Protected candidate fit finished', datetime.now(timezone.utc).isoformat(), flush=True)
+          PY
+          python scripts/guarded_candidate_backup.py verify
+      - name: Independently persist champion versus candidate offline holdout
+        if: success()
+        run: |
+          set -euo pipefail
+          python scripts/publish_frozen_candidate_evidence.py
+          test -s .cache/tbt/training-backup/frozen-candidate-evaluation.json
+      - name: Update signed Admin comparison without activation
+        if: success()
+        env:
+          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          python scripts/publish_model_calibration_status.py \
+            --output .cache/tbt/training-backup/admin-snapshot.json
+          test -s .cache/tbt/training-backup/admin-snapshot.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d = json.loads(Path('.cache/tbt/training-backup/admin-snapshot.json').read_text())
+          assert d.get('offline_candidate')
+          assert d['offline_candidate']['model_promoted'] is False
+          print('Nonpromoted candidate included in signed Admin snapshot')
+          PY
+      - name: Write private result summary
+        if: success()
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          cert = json.loads(Path('.cache/tbt/training-backup/verified-certificate.json').read_text())
+          report = json.loads(Path('.cache/tbt/model/training_report.json').read_text())
+          rows = [
+              '### BlinQ 7.1.1 cached-history attempt 5 — no deployment',
+              f"Backup: {cert['backup_tag']}",
+              f"Frozen canonical matches: {cert['canonical_matches']}",
+              f"Backup assets verified: {cert['all_assets_remotely_verified']}",
+              f"Candidate release: {cert['candidate_tag']}",
+              f"Champion isolated restore: {cert['champion_restore']['status']}",
+              f"Candidate holdout: {report.get('holdout',{})}",
+              f"Champion holdout: {report.get('production_holdout',{})}",
+              f"Promotion: {report.get('promotion_decision',{})}",
+              'No provider requests, no CDB mutation, no champion replacement or production deployment.',
+          ]
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as handle:
+              handle.write('\n'.join(rows) + '\n')
+          PY
+      - name: Persist non-sensitive verification proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-model711-protected-${{ github.run_id }}
+          path: |
+            .cache/tbt/training-backup/verified-certificate.json
+            .cache/tbt/model/training_report.json
+            .cache/tbt/production/leakage_audit_report.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Release lock when runner survives
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
+
+  independent-lock-cleanup:
+    if: always()
+    needs: frozen-candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - name: Verify run-bound tag owner before any orphan cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          repo='BackstageTalks/tbt-data'
+          ref_endpoint="repos/$repo/git/ref/tags/blinq-cdb-global-writer"
+          expected="owner=$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT"
+          if ! result="$(gh api "$ref_endpoint" 2>/tmp/blinq-lock.err)"; then
+            if grep -q 'HTTP 404' /tmp/blinq-lock.err; then
+              echo 'No global lock remains (verified 404).'
+              exit 0
+            fi
+            cat /tmp/blinq-lock.err >&2
+            exit 1
+          fi
+          sha="$(jq -er '.object.sha' <<<"$result")"
+          owner="$(gh api "repos/$repo/git/tags/$sha" --jq .message)"
+          if [[ "$owner" != "$expected" ]]; then
+            echo 'Global lock belongs to another run; leaving it unchanged.'
+            exit 0
+          fi
+          [[ "$(gh api "$ref_endpoint" --jq .object.sha)" == "$sha" ]] || {
+            echo '::error::Global lock SHA changed; refusing deletion'; exit 1;
+          }
+          gh api --method DELETE "repos/$repo/git/refs/tags/blinq-cdb-global-writer" --silent
+          if gh api "$ref_endpoint" >/tmp/blinq-check.json 2>/tmp/blinq-check.err; then
+            echo '::error::Global lock still exists'; exit 1;
+          fi
+          grep -q 'HTTP 404' /tmp/blinq-check.err || {
+            echo '::error::Cannot confirm lock absence'; exit 1;
+          }
+          echo "Verified orphan recovery for exact owner $expected"
