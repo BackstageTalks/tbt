@@ -159,5 +159,54 @@ class Events(unittest.TestCase):
         self.assertTrue(m.no_write_contract(got))
 
 
+
+
+class Shadow(unittest.TestCase):
+    def test_broader_discovery_without_false_import_claim(self):
+        from scripts.research import shadow_identity_v2 as sh
+        src=event(("Djokovic N.","Sinner J."),namespace="sackmann",
+                  when="2026-01-05",when_kind="tournament_start")
+        target=event(("Novak Djokovic","Jannik Sinner"),namespace="cdb",
+                     when="2026-01-18")
+        result=sh.comparison([src],[target])
+        self.assertEqual(result["counts"]["old_any"],0)
+        self.assertEqual(result["counts"]["new_any"],1)
+        self.assertEqual(result["counts"]["new_only_any"],1)
+        self.assertEqual(result["CDB_writes"],0)
+        self.assertEqual(result["independently_verified_event_links"],0)
+
+    def test_pinned_jsonl_input_contract(self):
+        from scripts.research import shadow_identity_v2 as sh
+        import tempfile
+        from pathlib import Path
+        import json
+        with tempfile.TemporaryDirectory() as temp:
+            path=Path(temp)/"source.jsonl"
+            d={
+                "namespace":"sackmann","event_id":"src-event-1",
+                "tour":"atp","discipline":"singles",
+                "players":[
+                    {"namespace":"sackmann","native_id":"a","name":"Djokovic N."},
+                    {"namespace":"sackmann","native_id":"b","name":"Sinner J."}],
+                "date_kind":"tournament_start","event_date":"2026-01-05",
+                "tournament":"Australian Open","round_name":"R16"
+            }
+            path.write_text(json.dumps(d)+"\\n",encoding="utf-8")
+            rows=sh.read_events(path,max_rows=5)
+            self.assertEqual(len(rows),1)
+            self.assertEqual(rows[0].event_id,"src-event-1")
+            self.assertEqual(len(sh.sha(path)),64)
+
+    def test_duplicate_event_candidates_not_auto_accepted(self):
+        from scripts.research import shadow_identity_v2 as sh
+        src=event(("Djokovic N.","Sinner J."),namespace="src",
+                  when="2026-01-01",when_kind="tournament_start")
+        cdb=event(("Novak Djokovic","Jannik Sinner"),namespace="cdb",
+                  when="2026-01-13",event_id="one")
+        other=m.Event(**{**cdb.__dict__,"event_id":"two"})
+        result=sh.comparison([src],[cdb,other])
+        self.assertEqual(result["counts"]["new_ambiguous"],1)
+        self.assertEqual(result["independently_verified_event_links"],0)
+
 if __name__=="__main__":
     unittest.main()
