@@ -162,3 +162,61 @@ def test_atp_features_have_explicit_model_and_swap_contract():
     assert swapped["atp_leaderboard_known_both"] == 1.0
     assert swapped["atp_surface_leaderboard_known_both"] == 1.0
     assert swapped["target"] == 0
+
+
+def test_player_snapshot_matches_original_field_lookup_on_all_periods_and_surfaces():
+    """Optimization must not change the unique-name gate or a single data cell."""
+    from tbt.data.atp_leaderboards import ATP_METRICS, _surface_key
+
+    priors = ATPLeaderboardPriors(_rows())
+    for name in (
+        "Jannik Sinner", "J. Sinner", "Carlos Alcaraz",
+        "C. Alcaraz", "No Matching Player",
+    ):
+        for period in ("2024", "2025", "52week", "nonexistent"):
+            for surface in ("all", "hard", "clay", "indoor_hard"):
+                actual = priors.player_snapshot(name, period=period, surface=surface)
+                expected = {}
+                normalized_surface = _surface_key(surface)
+                for metric in ATP_METRICS:
+                    expected[f"{metric}_all"] = priors._metric(
+                        period=period, surface="all", metric=metric, player_name=name,
+                    )
+                    expected[f"{metric}_surface"] = (
+                        priors._metric(
+                            period=period, surface=normalized_surface,
+                            metric=metric, player_name=name,
+                        )
+                        if normalized_surface != "all"
+                        else expected[f"{metric}_all"]
+                    )
+                assert actual == expected, (name, period, surface)
+                assert set(actual) == {
+                    f"{metric}_{scope}"
+                    for metric in ATP_METRICS for scope in ("all", "surface")
+                }
+
+
+def test_player_snapshot_resolves_name_only_once(monkeypatch):
+    priors = ATPLeaderboardPriors(_rows())
+    original = priors._player_key
+    calls = []
+
+    def counted(name):
+        calls.append(name)
+        return original(name)
+
+    monkeypatch.setattr(priors, "_player_key", counted)
+    priors.player_snapshot("Jannik Sinner", period="2024", surface="hard")
+    assert calls == ["Jannik Sinner"]
+
+
+def test_snapshot_optimization_preserves_state_roundtrip_and_missing_values():
+    priors = ATPLeaderboardPriors(_rows())
+    restored = ATPLeaderboardPriors.from_state(priors.export_state())
+    for name in ("Jannik Sinner", "J. Sinner", "Not Recognized"):
+        for surface in ("all", "hard", "clay"):
+            assert (
+                restored.player_snapshot(name, period="2024", surface=surface)
+                == priors.player_snapshot(name, period="2024", surface=surface)
+            )
