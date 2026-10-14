@@ -81,6 +81,29 @@ class ResearchGateway(unittest.TestCase):
                  collection="2025",source_file_sha256=SHA,line_number=2,
                  field_map={"canonical_match_id":"unsafe"})
 
+    def test_native_sha_pinned_stage_csv_quarantines_unidentified_rows(self):
+        from scripts.research import identity_v2_stage as stage
+        from hashlib import sha256
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as folder:
+            path=Path(folder)/"native.csv"
+            path.write_text(
+                "event_id,player1_id,player2_id,player1_name,player2_name,match_day,tournament,round\n"
+                "provider-m1,p1,p2,Player One,Player Two,2025-01-03,Sample,R16\n"
+                ",p3,p4,Player Three,Player Four,2025-01-03,Sample,R16\n",
+                encoding="utf-8")
+            digest=sha256(path.read_bytes()).hexdigest()
+            out=stage.stage_readonly(path,expected_sha=digest,
+                kind="native",fmt="csv",tour="atp",
+                collection="2025",source_name="official-atp")
+            self.assertEqual(out["counts"]["source_only_normalized_events"],1)
+            self.assertEqual(out["counts"]["quarantine_rows"],1)
+            self.assertEqual(out["counts"][
+                "blocked_missing_official_source_native_event_id"],1)
+            self.assertFalse(out["cdb_import_authorized"])
+            self.assertEqual(out["cdb_writes"],0)
+
     def test_canonical_context_can_only_be_read(self):
         raw={"match_id":"cdb-1","tour":"atp",
              "player1_id":"c1","player1_name":"Novak Djokovic",
