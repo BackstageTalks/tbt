@@ -103,6 +103,22 @@ class TournamentAndScore(unittest.TestCase):
         self.assertIn("ret",ret.status)
         self.assertFalse(m.parse_score("weird unknown").valid)
 
+    def test_match_tiebreak_shape_preserved_and_nonstandard_short_sets(self):
+        mtb=m.parse_score("6-4 4-6 [10-8]")
+        self.assertTrue(mtb.valid)
+        self.assertEqual(mtb.sets,((6,4),(4,6),(10,8)))
+        self.assertEqual(mtb.match_tiebreak_indexes,(2,))
+        self.assertEqual(m.parse_score("4-3 4-3").match_tiebreak_indexes,())
+        self.assertEqual(m.parse_score("6-4 4-6 10-8").match_tiebreak_indexes,())
+
+    def test_retirement_synonyms_and_walkovers_are_distinct(self):
+        self.assertEqual(m.parse_score("6-4 RET").status,"ret")
+        self.assertEqual(m.parse_score("6-4 retired").status,"ret")
+        self.assertEqual(m.parse_score("W/O").status,"walkover")
+        self.assertEqual(m.parse_score("WO").status,"walkover")
+        self.assertEqual(m.parse_score("DEF").status,"default")
+        self.assertNotEqual(m.parse_score("RET").status,m.parse_score("WO").status)
+
     def test_reject_wrong_date_semantics(self):
         with self.assertRaises(ValueError):
             event(("A Player","B Player"),when_kind="maybe")
@@ -190,6 +206,28 @@ class Events(unittest.TestCase):
         other=m.Player("provider", "atp", "1", "Djokovic N.")
         with self.assertRaises(ValueError):
             m.Event(**{**src.__dict__,"players":(other,src.players[1])})
+
+    def test_score_deciding_match_tiebreak_not_normal_set(self):
+        src=event(("Djokovic N.","Sinner J."),namespace="src",
+                  when="2026-01-01",when_kind="tournament_start",
+                  score="6-4 4-6 [10-8]")
+        exact=event(("Novak Djokovic","Jannik Sinner"),namespace="cdb",
+                    when="2026-01-13",score="6-4 4-6 [10-8]")
+        other=event(("Novak Djokovic","Jannik Sinner"),namespace="cdb",
+                    when="2026-01-13",score="6-4 4-6 10-8")
+        self.assertEqual(len(m.discover_events(src,[exact])),1)
+        self.assertEqual(m.discover_events(src,[other]),[])
+
+    def test_retirement_vs_walkover_is_a_hard_negative(self):
+        src=event(("Djokovic N.","Sinner J."),namespace="src",
+                  when="2026-01-01",when_kind="tournament_start",
+                  score="6-4 3-1 RET")
+        wo=event(("Novak Djokovic","Jannik Sinner"),namespace="cdb",
+                 when="2026-01-13",score="WO")
+        mismatch=event(("Novak Djokovic","Jannik Sinner"),namespace="cdb",
+                 when="2026-01-13",score="6-0 3-1 RET")
+        self.assertEqual(m.discover_events(src,[wo]),[])
+        self.assertEqual(m.discover_events(src,[mismatch]),[])
 
     def test_same_namespace_different_native_ids_rejected(self):
         bad=event(("Novak Djokovic","Jannik Sinner"),ids=("100","200"),namespace="src",
