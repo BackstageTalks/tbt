@@ -26,6 +26,17 @@ class CandidateSafetyTests(unittest.TestCase):
         for existing in ({},{'p1_aces':None}):
             self.assertEqual(audit.compare_cells(existing,{'p1_aces':3}),(['p1_aces'],[]))
 
+    def test_bp_conversions_use_rate_keys_not_legacy_count_keys(self):
+        for side in ('p1','p2'):
+            values = audit.breakpoint_return_value(side, 7, 2)
+            self.assertEqual(values, {side+'_break_point_return_win': 5/7})
+            self.assertNotIn(side+'_break_points_won', values)
+            self.assertEqual(audit.breakpoint_return_value(side, 0, 0),
+                             {side+'_break_point_return_win': None})
+        for bad in ((5, 6), (4, -1), (-1, 0)):
+            with self.assertRaises(ValueError):
+                audit.breakpoint_return_value('p1', *bad)
+
     def test_count_conflicts_are_not_rounded_away(self):
         self.assertEqual(audit.compare_cells({'p1_aces':3.001},{'p1_aces':3}),([],['p1_aces']))
         self.assertEqual(audit.compare_cells({'p1_aces':3},{'p1_aces':3}),([],[]))
