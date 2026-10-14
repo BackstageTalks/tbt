@@ -13,11 +13,22 @@
     "independent-backup-restore-download",
     "unchanged-publish-manifest",
     "full-persisted-match-by-match-readback",
-    "zero-training-or-model-activation"
+    "zero-training-or-model-activation",
+    "current-six-opponent-pairs-regression-tests",
+    "completed-recent-dry-run-for-entire-CDB",
+    "holdout-candidate-training-no-longer-owns-CDB-lock",
+    "global-lock-absent-prior-to-import",
+    "no-conflict-overwrites",
+    "post-write-remote-complete-stats-readback"
   ],
   "api_requests": 0,
   "model_training": false,
   "model_promotion": false,
-  "execution_id": "pending-usopen-38062494137-verified-readback",
-  "prerequisite": "Do not merge until US Open 2024 import run 38062494137 has succeeded with independent persisted readback; a merged request triggers CDB writer."
+  "execution_id": "WAIT_FOR_38574303773_TRAIN_AND_38522561687_DRYRUN",
+  "prerequisite": "Do not merge/trigger write until candidate training run 38574303773 is terminal and no other global CDB writer owns lock; current read-only PR dry-run run 38522561687 has completed successfully with observed staged rows, complete before/after parity, zero overwrites and zero quarantined-row forced changes; validate fresh canonical manifest and current writer against new snapshots. The superseded US Open research run 38062494137 is not a source of opponent-derived service/return complements and is excluded from this independently authorised import. Fail closed if any condition is missing.",
+  "request_identifier": "blinq-cdb-null-only-opponent-service-return-20261014",
+  "approval_scope": "Only mathematically exact whole-match first/second/total service-return opponent complements from EXISTING canonical observations; NULL-only, no external source imports, no Sackmann identity guesses, no model activation, no odds, zero provider requests",
+  "approval_date": "2026-10-14",
+  "approval_state": "Operator requested protected CDB complement write; execution remains contingent on current dry-run, release backup, global single-writer, immutable digest match, and independent persisted readback",
+  "request_idempotency": "Do not merge twice or retrigger if identical import request has been launched; inspect existing workflow runs and release/audit before acting."
 }
