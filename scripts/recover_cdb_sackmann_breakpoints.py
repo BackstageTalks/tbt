@@ -65,7 +65,6 @@ def _valid_cdb_lineage(match, row: dict, tour: str, kind: str, file: Path, *, na
     original_date = str(row.get("tourney_date") or "").strip()
     if not re.fullmatch(r"\d{8}", original_date):
         return False
-    from datetime import datetime
     source_date = datetime.strptime(original_date, "%Y%m%d").date()
     date_delta = (match.scheduled_at.date() - source_date).days
     if not 0 <= date_delta <= (21 if native_fallback else 0):
