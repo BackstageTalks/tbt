@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install offline Parquet reader
-        run: python -m pip install 'duckdb==1.4.1'
+        run: python -m pip install 'duckdb==1.4.1' 'pytz==2025.2'
       - name: Classify canonical as-of rank without publishing private rows
         env:
           CDB_FILE: ${{ runner.temp }}/private-2021/history-2021.parquet
