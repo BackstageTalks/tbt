@@ -236,3 +236,60 @@ def test_cdb_historical_pre_1990_year_stages_only_verified_nulls():
     persisted = deepcopy(historical)
     assert write_local([persisted], staged) == [1981]
     assert verify_readback([historical], [persisted], staged)["new_stat_values"] == 1
+
+
+def test_opt_in_pairwise_quarantines_only_conflicting_rate_pair():
+    original=match(stats={
+        "p1_service_points_won": 0.62,
+        "p1_first_return_win": 0.80,
+        "p2_first_serve_win": 0.50,
+        "p1_aces": 0.0,
+    })
+    blocked, strict_counts=stage([original])
+    assert blocked == [] and strict_counts["contradictory_observed_rates"] == 1
+    rows, counts=stage([original],pairwise=True)
+    assert counts["staged_matches"] == 1
+    assert counts["new_stat_values"] == 1
+    assert counts["conflicting_rate_pairs_quarantined"] == 1
+    assert rows[0]["additions"] == {"p2_return_points_won": pytest.approx(0.38)}
+    after=deepcopy(original)
+    assert write_local([after],rows)==[2024]
+    assert after.stats["p2_first_serve_win"] == 0.50
+    assert after.stats["p1_first_return_win"] == 0.80
+    assert after.stats["p1_aces"] == 0.0
+    assert verify_readback([original],[after],rows)["existing_values_overwritten"] == 0
+    again, second_counts=stage([after],pairwise=True)
+    assert again == [] and second_counts.get("new_stat_values",0) == 0
+
+
+def test_opt_in_pairwise_refuses_invalid_direct_rates_and_malicious_stage():
+    original=match(stats={"p1_service_points_won": 0.62,
+                          "p1_first_return_win": 1.3,
+                          "p2_first_serve_win": 0.5})
+    rows,counts=stage([original],pairwise=True)
+    assert len(rows)==1 and counts["conflicting_rate_pairs_quarantined"]>=1
+    assert rows[0]["additions"]=={"p2_return_points_won": pytest.approx(0.38)}
+    forged=deepcopy(rows)
+    forged[0]["additions"]["p2_return_points_won"]=0.999
+    with pytest.raises(ValueError,match="not reproducible"):
+        write_local([deepcopy(original)],forged)
+
+
+def test_opt_in_pairwise_exact_parquet_patch_and_idempotence(tmp_path):
+    original=match(stats={"p1_service_points_won":0.62,
+                          "p2_first_serve_win":0.5,"p1_first_return_win":0.8})
+    untouched=match("other",stats={"p2_aces":4.0})
+    path=tmp_path/"history-2024.parquet"
+    meta=write_snapshot([original,untouched],path)
+    update_year_manifest(tmp_path,2024,meta)
+    before=load_snapshot(path)
+    frame_before=pd.read_parquet(path)
+    rows,_=stage(before,pairwise=True)
+    assert len(rows)==1
+    write_exact_stats_partition(tmp_path,2024,rows)
+    after=load_snapshot(path)
+    assert verify_readback(before,after,rows)["new_stat_values"]==1
+    frame_after=pd.read_parquet(path)
+    assert frame_before.loc[frame_before.match_id=="other"].equals(
+           frame_after.loc[frame_after.match_id=="other"])
+    assert stage(after,pairwise=True)[0]==[]
