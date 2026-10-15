@@ -1,0 +1,152 @@
+name: BlinQ 2025-2026 Drive to CDB gap - one-shot read-only
+
+'on':
+  push:
+    branches: [main]
+    paths:
+      - .github/cdb-gap-20261015-request.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-drive-cdb-gap-source-audit-single-read
+  cancel-in-progress: false
+
+jobs:
+  cdb_gap_read_only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install read-only parsers and test
+        run: |
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check google-auth requests pyarrow
+          python -m compileall -q scripts/drive_source_cdb_gap.py
+          test -n "$GH_TOKEN" && test -n "$BLINQ_DRIVE_READER_JSON"
+          test "$(gh api repos/$PRIVATE_REPO --jq .private)" = true
+      - name: Pin current CDB release assets and fetch exact canonical years
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/source-gap
+          gh api repos/$PRIVATE_REPO/releases/tags/tbt-data-v1 >work/release-before.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("work/release-before.json").read_text())
+          needed={"history-2025.parquet","history-2026.parquet",
+                  "blinq-uploaded-player-metadata-2025.jsonl.gz",
+                  "blinq-uploaded-enrichment-manifest.json"}
+          items={v["name"]:v for v in r.get("assets",[]) if v["name"] in needed}
+          assert set(items)==needed
+          assert all(str(v.get("digest","")).startswith("sha256:") and v.get("size",0)>0 for v in items.values())
+          Path("work/asset-pins.json").write_text(json.dumps({k:{"id":v["id"],"digest":v["digest"],"size":v["size"]} for k,v in items.items()},sort_keys=True))
+          PY
+          for asset in history-2025.parquet history-2026.parquet blinq-uploaded-player-metadata-2025.jsonl.gz blinq-uploaded-enrichment-manifest.json; do
+            gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p "$asset" -D work/source-gap
+          done
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          pins=json.loads(Path("work/asset-pins.json").read_text())
+          for name,meta in pins.items():
+            f=Path("work/source-gap")/name
+            assert f.stat().st_size==meta["size"]
+            digest=hashlib.file_digest(f.open("rb"),"sha256").hexdigest()
+            assert "sha256:"+digest==meta["digest"]
+          print("CANONICAL_CDB_ASSET_SHA256_VERIFIED")
+          PY
+      - name: Download fixed Drive source CSVs with checksum and metadata freezes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          from google.oauth2.service_account import Credentials
+          from google.auth.transport.requests import AuthorizedSession
+          src={
+           "atp_matches_2025.csv":"1hveECvwuaHNDjExiooWQBZmUwsxHI-Qk",
+           "atp_matches_2026.csv":"1yIzSnYWpAdZKdnJ2VWdbBh9hXjg7LQQX",
+           "wta_matches_2025.csv":"1HMwdbUUvn4smYbCqLr6NVuwryxb6tOaF",
+           "wta_matches_2026.csv":"1SYb44DPQrXBjecBHXuwQySuxus-gAJSy",
+          }
+          root="1jzdzztz8cXquO8VDswqE19PHupQau-xM"
+          auth=Credentials.from_service_account_info(json.loads(os.environ["BLINQ_DRIVE_READER_JSON"]),
+                 scopes=["https://www.googleapis.com/auth/drive.readonly"])
+          session=AuthorizedSession(auth)
+          endpoint="https://www.googleapis.com/drive/v3/files/"
+          saved={}
+          for name,fid in src.items():
+            def metadata():
+              res=session.get(endpoint+fid,params={"fields":"id,name,mimeType,size,parents,md5Checksum,sha256Checksum,version,modifiedTime,trashed","supportsAllDrives":"true"},timeout=40)
+              res.raise_for_status()
+              return res.json()
+            before=metadata()
+            assert before["id"]==fid and before["name"]==name and before.get("parents")==[root]
+            assert before["mimeType"]=="text/csv" and not before.get("trashed") and 0<int(before["size"])<8_000_000
+            md5,sha=hashlib.md5(),hashlib.sha256()
+            local=Path("work/source-gap")/name
+            req=session.get(endpoint+fid,params={"alt":"media","supportsAllDrives":"true"},stream=True,timeout=90)
+            req.raise_for_status()
+            count=0
+            with local.open("wb") as f:
+              for chunk in req.iter_content(1024*1024):
+                if not chunk:continue
+                count+=len(chunk)
+                if count>8_000_000: raise RuntimeError("SOURCE_LIMIT")
+                f.write(chunk); md5.update(chunk); sha.update(chunk)
+            req.close()
+            assert count==int(before["size"])
+            assert before.get("md5Checksum") in (None,md5.hexdigest())
+            assert before.get("sha256Checksum") in (None,sha.hexdigest())
+            assert metadata()==before, "SOURCE_CHANGED_DURING_GAP_PROBE"
+            saved[name]={"file_id":fid,"size":count,"sha256":sha.hexdigest()}
+          Path("work/source-fingerprints.json").write_text(json.dumps(saved,sort_keys=True))
+          print("DRIVE_FOUR_SOURCE_SHA256_AND_METADATA_READBACK_PASS")
+          PY
+      - name: Compare source field coverage against two actual current CDB partitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/drive_source_cdb_gap.py --input work/source-gap --out work/private-gap-report.json >work/private-counts.json
+          gh api repos/$PRIVATE_REPO/releases/tags/tbt-data-v1 >work/release-after.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          old=json.loads(Path("work/asset-pins.json").read_text())
+          after=json.loads(Path("work/release-after.json").read_text())
+          found={a["name"]:{"id":a["id"],"digest":a["digest"],"size":a["size"]} for a in after["assets"] if a["name"] in old}
+          assert found==old, "CANONICAL_CDB_CHANGED_DURING_GAP_PROBE"
+          report=json.loads(Path("work/private-gap-report.json").read_text())
+          assert report["cdb_writes"]==0 and report["cdb_import_ready_rows"]==0
+          assert report["counts"]["source_rows"]>0 and report["counts"]["canonical_2025_rows"]>0
+          print("READ_ONLY_CDB_GAP_COMPARISON_PASS")
+          PY
+          cat work/private-counts.json
+      - name: Publish private evidence and verify complete read-back
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/private-evidence work/readback
+          cp work/private-gap-report.json work/private-counts.json work/source-fingerprints.json work/asset-pins.json work/private-evidence/
+          (cd work/private-evidence && sha256sum ./*.json > SHA256SUMS)
+          tar -czf work/drive-cdb-gap-evidence.tar.gz -C work/private-evidence .
+          tag="blinq-drive-cdb-gap-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" -R "$PRIVATE_REPO" --target main --title "Private Drive CSV to CDB gap $GITHUB_RUN_ID" --notes 'Read-only; no imports, no identity mapping, no source or canonical writes.' work/drive-cdb-gap-evidence.tar.gz >/dev/null
+          gh release download "$tag" -R "$PRIVATE_REPO" -p drive-cdb-gap-evidence.tar.gz -D work/readback >/dev/null
+          cmp work/drive-cdb-gap-evidence.tar.gz work/readback/drive-cdb-gap-evidence.tar.gz
+          (cd work/readback && tar -xzf drive-cdb-gap-evidence.tar.gz && sha256sum -c SHA256SUMS)
+          echo PRIVATE_CDB_GAP_EVIDENCE_READBACK_PASS
