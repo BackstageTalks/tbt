@@ -17,9 +17,14 @@ import json
 import os
 from pathlib import Path
 
-from drive_sort_prefolders import (
-    ROOT, DESTINATIONS, FOLDER_MIME, SHORTCUT_MIME, DriveAPI, classify,
-)
+try:
+    from scripts.drive_sort_prefolders import (
+        ROOT, DESTINATIONS, FOLDER_MIME, SHORTCUT_MIME, DriveAPI, classify,
+    )
+except ModuleNotFoundError:  # direct invocation: python scripts/drive_content_organizer.py
+    from drive_sort_prefolders import (
+        ROOT, DESTINATIONS, FOLDER_MIME, SHORTCUT_MIME, DriveAPI, classify,
+    )
 
 REVIEW = "12_NA_KONTROLU"
 PROTECTED_SUFFIXES = (".zip", ".7z", ".rar", ".tar", ".gz", ".sqlite", ".db")
