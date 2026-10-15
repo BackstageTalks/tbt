@@ -298,3 +298,12 @@ def test_controlled_manual_extras_smoke_cannot_spend_bulk_quota_or_promote():
     assert '[[ "$promote" == "false" ]]' in workflow
     assert 'Extras smoke cannot enable targeted-statistics' in workflow
     assert "python scripts/verify_tennisapi_extras.py" in workflow
+
+def test_extras_batch_quota_is_handled_before_provider_rejection():
+    """A normal 30-call smoke budget stop must not trip the 25-rejection gate."""
+    source = (Path(__file__).resolve().parents[1] /
+              "scripts/download_tennis_history.py").read_text()
+    extras = source.split('elif args.mode == "extras":', 1)[1]
+    loop = extras.split('            checkpoint(changed, True)', 1)[0]
+    assert loop.index("except RequestBudgetExceeded:") < loop.index("except ProviderError as exc:")
+    assert 'report["extras_rejected"] += 1' in loop
