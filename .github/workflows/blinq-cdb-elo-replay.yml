@@ -1,0 +1,198 @@
+name: BlinQ CDB Elo daily replay and weekly Tennis Abstract audit
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/blinq-cdb-elo-replay.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-cdb-elo-replay.yml
+  workflow_dispatch:
+  workflow_run:
+    workflows: ['Tennis data and predictions']
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-cdb-elo-operational-runner
+  cancel-in-progress: false
+
+jobs:
+  point-in-time-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      PYTHONPATH: api:private-data/scripts
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout private source and validation tests
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: private-data
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run focused independent Elo replay tests
+        run: |
+          set -euo pipefail
+          python -m pip install 'pandas>=2,<3' pyarrow pytest
+          python -m pytest private-data/tests/test_blinq_elo_history.py tests/test_elo.py -q
+          python -m compileall -q private-data/scripts/build_blinq_elo.py private-data/scripts/compare_blinq_elo_ta.py
+
+  derived-elo-release:
+    needs: point-in-time-tests
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      ELO_RELEASE: blinq-cdb-derived-elo-v1
+      PYTHONPATH: api:scripts:private-data/scripts
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout current private Elo projection source
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: private-data
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify data isolation and install analytical dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          python -m pip install 'pandas>=2,<3' pyarrow pytest
+          python -m pytest private-data/tests/test_blinq_elo_history.py tests/test_elo.py -q
+      - name: Read 78 coherent CDB shards with SHA-256 checksums (no writer)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/blinq-elo
+          python scripts/download_stable_cdb.py \
+            --repository "$PRIVATE_REPO" --tag tbt-data-v1 \
+            --out /tmp/blinq-elo/history \
+            --report /tmp/blinq-elo/cdb-readback.json
+          test "$(find /tmp/blinq-elo/history -name 'history-*.parquet' | wc -l)" -eq 78
+      - name: Replay point-in-time Elo for every completed CDB match
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="$(python -c 'import json;print(json.load(open("/tmp/blinq-elo/cdb-readback.json"))["manifest_sha256"])')"
+          ENGINE_SHA="$GITHUB_SHA"
+          python -u private-data/scripts/build_blinq_elo.py \
+            --history-dir /tmp/blinq-elo/history \
+            --out /tmp/blinq-elo/derived \
+            --source-manifest-sha "$SOURCE_SHA" \
+            --engine-sha "$ENGINE_SHA"
+          python private-data/scripts/build_blinq_elo.py \
+            --out /tmp/blinq-elo/derived --verify-only
+      - name: Weekly fresh Tennis Abstract comparison (Monday UTC)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$(date -u +%u)" != "1" && "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+            echo 'Not Monday; no fresh TA request'
+            exit 0
+          fi
+          mkdir -p /tmp/blinq-elo/ta/raw /tmp/blinq-elo/ta/parsed
+          success=1
+          for name in atp_elo wta_elo atp_yelo wta_yelo; do
+            case "$name" in
+              atp_elo) name_url='atp_elo_ratings.html' ;;
+              wta_elo) name_url='wta_elo_ratings.html' ;;
+              atp_yelo) name_url='atp_season_yelo_ratings.html' ;;
+              wta_yelo) name_url='wta_season_yelo_ratings.html' ;;
+            esac
+            url="https://www.tennisabstract.com/reports/$name_url"
+            raw="/tmp/blinq-elo/ta/raw/$name.html"
+            if ! curl -fsSL --retry 2 --connect-timeout 12 --max-time 55 \
+                     -A 'Mozilla/5.0 BlinQ research archive/1.0' "$url" -o "$raw"; then
+              reader="https://r.jina.ai/http://www.tennisabstract.com/reports/$name_url"
+              if ! curl -fsSL --retry 2 --connect-timeout 12 --max-time 70 \
+                       -H 'X-No-Cache: true' "$reader" -o "$raw"; then
+                success=0
+                break
+              fi
+            fi
+          done
+          if [[ "$success" == 1 ]]; then
+            if python scripts/parse_tennis_abstract_elo.py \
+              --atp-elo-html /tmp/blinq-elo/ta/raw/atp_elo.html \
+              --wta-elo-html /tmp/blinq-elo/ta/raw/wta_elo.html \
+              --atp-yelo-html /tmp/blinq-elo/ta/raw/atp_yelo.html \
+              --wta-yelo-html /tmp/blinq-elo/ta/raw/wta_yelo.html \
+              --out-dir /tmp/blinq-elo/ta/parsed; then
+              python private-data/scripts/compare_blinq_elo_ta.py \
+                --current /tmp/blinq-elo/derived/elo-current.csv \
+                --ta-dir /tmp/blinq-elo/ta/parsed \
+                --out /tmp/blinq-elo/derived/elo-ta-comparison.json
+            else
+              success=0
+            fi
+          fi
+          if [[ "$success" != 1 ]]; then
+            echo '::warning::Fresh TA reports unavailable; never claim success'
+            printf '{"schema":1,"status":"fresh_ta_check_failed","no_backfill":true}\n' \
+              > /tmp/blinq-elo/derived/elo-ta-comparison.json
+          fi
+      - name: Publish SEPARATE private derived release (never edit canonical CDB)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$ELO_RELEASE" -R "$PRIVATE_REPO" >/dev/null 2>&1; then
+            gh release create "$ELO_RELEASE" -R "$PRIVATE_REPO" --target main \
+              --title 'BlinQ CDB-derived chronological Elo (point-in-time)' \
+              --notes 'Derived, noncanonical, no model promotion. Every match is snapshotted before date results.'
+          fi
+          gh release upload "$ELO_RELEASE" \
+            /tmp/blinq-elo/derived/elo-*.parquet \
+            /tmp/blinq-elo/derived/elo-current.csv \
+            -R "$PRIVATE_REPO" --clobber
+          if test -s /tmp/blinq-elo/derived/elo-ta-comparison.json; then
+            gh release upload "$ELO_RELEASE" \
+              /tmp/blinq-elo/derived/elo-ta-comparison.json \
+              -R "$PRIVATE_REPO" --clobber
+          fi
+          gh release upload "$ELO_RELEASE" \
+            /tmp/blinq-elo/derived/elo-manifest.json \
+            -R "$PRIVATE_REPO" --clobber
+      - name: Independently re-download and SHA-verify every persisted Elo asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/blinq-elo/persisted
+          gh release download "$ELO_RELEASE" -R "$PRIVATE_REPO" \
+            --pattern 'elo-*.parquet' --dir /tmp/blinq-elo/persisted
+          gh release download "$ELO_RELEASE" -R "$PRIVATE_REPO" \
+            --pattern 'elo-current.csv' --dir /tmp/blinq-elo/persisted
+          gh release download "$ELO_RELEASE" -R "$PRIVATE_REPO" \
+            --pattern 'elo-manifest.json' --dir /tmp/blinq-elo/persisted
+          python private-data/scripts/build_blinq_elo.py \
+            --out /tmp/blinq-elo/persisted --verify-only
+          cmp /tmp/blinq-elo/derived/elo-manifest.json /tmp/blinq-elo/persisted/elo-manifest.json
+          echo 'ELO_ALL_HISTORICAL_PARTITIONS_PERSISTED_AND_VERIFIED'
+      - name: Retain immutable run evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-elo-${{ github.run_id }}
+          retention-days: 90
+          if-no-files-found: warn
+          path: |
+            /tmp/blinq-elo/cdb-readback.json
+            /tmp/blinq-elo/derived/elo-manifest.json
+            /tmp/blinq-elo/derived/elo-ta-comparison.json
