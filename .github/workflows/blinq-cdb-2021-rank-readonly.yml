@@ -1,0 +1,91 @@
+name: BlinQ private CDB 2021 Madrid rank read-only
+on:
+  push:
+    branches: [ci/bridge-tbt-data-offline-20261015]
+    paths: ['.github/workflows/blinq-cdb-2021-rank-readonly.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  canonical-2021-rank:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Download exact private release asset, no publishing
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$GH_TOKEN" ]]; then echo "::error::Private release access absent"; exit 45; fi
+          mkdir -p "$RUNNER_TEMP/private-2021"
+          gh release download tbt-data-v1 -R BackstageTalks/tbt-data --pattern history-2021.parquet --dir "$RUNNER_TEMP/private-2021"
+          (cd "$RUNNER_TEMP/private-2021"; echo '5d52b79fe9671a048f3375ac4676a645a2d2cd90142dbd960c15c7c6ace03952  history-2021.parquet' | sha256sum -c -)
+          echo "RELEASE_2021_BINARY_SHA_VERIFIED"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install offline Parquet reader
+        run: python -m pip install 'duckdb==1.4.1'
+      - name: Classify canonical as-of rank without publishing private rows
+        env:
+          CDB_FILE: ${{ runner.temp }}/private-2021/history-2021.parquet
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, datetime
+          import duckdb
+          p=os.environ['CDB_FILE']
+          c=duckdb.connect()
+          wanted=['tour','scheduled_at','player1_name','player2_name','player1_id','player2_id','player1_rank','player2_rank','winner_id','tournament','round_name']
+          schema={r[0] for r in c.execute('DESCRIBE SELECT * FROM read_parquet(?)',[p]).fetchall()}
+          if not set(wanted).issubset(schema):
+              raise SystemExit('BLOCKED_CDB_2021_MISSING_CANONICAL_COLUMNS')
+          count=c.execute('SELECT COUNT(*) FROM read_parquet(?)',[p]).fetchone()[0]
+          rows=c.execute("""SELECT tour,scheduled_at,player1_name,player2_name,player1_id,player2_id,
+                             player1_rank,player2_rank,winner_id,tournament,round_name
+                             FROM read_parquet(?)
+                             WHERE (lower(player1_name) LIKE '%alcaraz%' AND lower(player2_name) LIKE '%mannarino%')
+                             OR (lower(player2_name) LIKE '%alcaraz%' AND lower(player1_name) LIKE '%mannarino%')""",[p]).fetchall()
+          candidates=[]
+          for item in rows:
+              r=dict(zip(wanted,item))
+              stamp=r['scheduled_at']
+              if isinstance(stamp,str):
+                  stamp=datetime.datetime.fromisoformat(stamp.replace('Z','+00:00'))
+              day=stamp.date() if hasattr(stamp,'date') else stamp
+              if (str(r['tour']).casefold()=='atp'
+                  and datetime.date(2021,5,1)<=day<=datetime.date(2021,5,10)
+                  and 'madrid' in str(r['tournament']).casefold()):
+                  candidates.append((r,day))
+          print('CANONICAL_2021_ROWS='+str(count))
+          print('NAME_PAIR_ROWS='+str(len(rows)))
+          print('MADRID_2021_CANDIDATE_ROWS='+str(len(candidates)))
+          if len(candidates)!=1:
+              print('RANK_WRITE_GATE=BLOCKED_NOT_UNIQUE')
+              raise SystemExit(0)
+          r,day=candidates[0]
+          valid_ids=bool(r['player1_id'] and r['player2_id'] and r['player1_id']!=r['player2_id'])
+          first_winner='alcaraz' in r['player1_name'].casefold()
+          win_id=r['player1_id'] if first_winner else r['player2_id']
+          winner_ok=bool(win_id and win_id==r['winner_id'])
+          print('DISTINCT_CANONICAL_PLAYERS='+str(valid_ids).lower())
+          print('WINNER_ORIENTATION_VALID='+str(winner_ok).lower())
+          print('MATCH_DATE_2021_05_03='+str(day==datetime.date(2021,5,3)).lower())
+          print('CANONICAL_ROUND_R64='+str(str(r['round_name']).lower() in {'r64','round of 64','1r','first round'}).lower())
+          loser_rank=r['player2_rank'] if first_winner else r['player1_rank']
+          if not valid_ids or not winner_ok:
+              status='BLOCKED_INDEPENDENT_IDENTITY'
+          elif loser_rank is None:
+              status='NULL_CANDIDATE_NOT_WRITER_AUTHORIZED'
+          else:
+              try: status='ALREADY_PRESENT_34' if float(loser_rank)==34 else 'NON_NULL_CONFLICT_DO_NOT_OVERWRITE'
+              except (TypeError,ValueError): status='INVALID_EXISTING_VALUE'
+          print('CANONICAL_LOSER_RANK_STATUS='+status)
+          print('CANONICAL_WRITES=0')
+          PY
+      - name: Remove ephemeral source partition
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/private-2021"
