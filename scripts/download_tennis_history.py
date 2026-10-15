@@ -608,6 +608,7 @@ def main():
     statistics_changed_years = set()
     extras_expected = {}
     extras_changed_years = set()
+    extras_processed_by_year = Counter()
     provider_quarantine = []
     enricher = None
     primary_error = None
@@ -620,6 +621,9 @@ def main():
             changed = set()
             pending = _extras_candidates(matches, start, end)
             report["extras_candidate_rows"] = len(pending)
+            report["extras_candidate_rows_by_year"] = dict(Counter(
+                str(m.scheduled_at.year) for m in pending
+            ))
             report["extras_priority_policy"] = "newest_season_first_then_verified_identity"
             report["extras_first_100_by_year"] = dict(Counter(
                 str(m.scheduled_at.year) for m in pending[:100]
@@ -630,6 +634,8 @@ def main():
                 try:
                     outcome = enrich_event_extras(match, provider)
                     report["extras_" + outcome["status"]] += 1
+                    if outcome["status"] == "processed":
+                        extras_processed_by_year[str(match.scheduled_at.year)] += 1
                     for field in ("markets", "pbp"):
                         report[f"extras_{field}_{outcome[field]}"] += 1
                 except RequestBudgetExceeded:
@@ -745,6 +751,7 @@ def main():
                 }
             if args.mode == "extras":
                 output_report["extras_observed_matches"] = len(extras_expected)
+                output_report["extras_processed_by_year"] = dict(extras_processed_by_year)
                 output_report["extras_coverage_policy"] = (
                     "Post-match research only. Opening/latest lack as-of timestamps; "
                     "PBP is structural, not model features."
