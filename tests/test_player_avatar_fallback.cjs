@@ -50,10 +50,10 @@ const scope = {
   HTMLImageElement: MockImage,
   URL,
   escapeHtml: value => String(value).replace(/&/g, '&amp;'),
-  initials: name => String(name).split(/\\s+/).slice(0, 2).map(n => n[0]).join('').toUpperCase(),
+  initials: name => String(name).split(/\s+/).slice(0, 2).map(n => n[0]).join('').toUpperCase(),
 };
 vm.runInNewContext(app.slice(start, end) +
-  '\\n;globalThis.avatarFns={playerAvatarParts,playerAvatarHtml};', scope);
+  '\n;globalThis.avatarFns={playerAvatarParts,playerAvatarHtml};', scope);
 const {playerAvatarParts, playerAvatarHtml} = scope.avatarFns;
 assert.equal(typeof listeners.error, 'function');
 assert.equal(typeof listeners.load, 'function');
@@ -83,7 +83,7 @@ assert.equal(host.classList.contains('using-fallback'), true);
 const fallback = new MockImage('fallback', '/assets/missing_foto_m.webp?p=736-r61&photo-pairs=1', host);
 listeners.error({target: fallback});
 assert.equal(fallback.dataset.localFallbackRetry, '1');
-assert.match(fallback.src, /missing_foto_m\\.webp\\?p=736-r61&photo-pairs=1&retry=1$/);
+assert.match(fallback.src, /missing_foto_m\.webp\?p=736-r61&photo-pairs=1&retry=1$/);
 assert.equal(fallback.hidden, false);
 assert.equal(host.classList.contains('using-initials'), false);
 
@@ -104,5 +104,5 @@ assert.equal(host.classList.contains('has-photo'), false);
 const customHost = mockHost('wta');
 const broken = new MockImage('fallback', '/assets/deleted-custom.webp', customHost);
 listeners.error({target: broken});
-assert.match(broken.src, /missing_foto_w\\.webp\\?p=736-r61&photo-pairs=1&retry=1$/);
+assert.match(broken.src, /missing_foto_w\.webp\?p=736-r61&photo-pairs=1&retry=1$/);
 console.log('player avatar fallbacks: PASS');
