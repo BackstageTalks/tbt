@@ -16,6 +16,11 @@ name: BlinQ private Drive CDB audit - bounded free public runner
         required: true
         default: '2048'
         options: ['256', '512', '1024', '2048', '4096', '8192']
+      organize_drive:
+        type: boolean
+        description: Explicitly enable bounded byte-verified root-file relocation (no deletes)
+        required: false
+        default: false
       force_scan:
         type: boolean
         description: Override the 90-minute GitHub Actions budget cooldown for an explicitly authorized one-off scan
@@ -30,6 +35,8 @@ name: BlinQ private Drive CDB audit - bounded free public runner
       - tests/test_drive_cdb_private_bridge.py
       - scripts/drive_sort_prefolders.py
       - tests/test_drive_sort_prefolders.py
+      - scripts/drive_content_organizer.py
+      - tests/test_drive_content_organizer.py
 
 permissions:
   contents: read
@@ -107,6 +114,7 @@ jobs:
           set -euo pipefail
           python -m unittest discover -s tests -p test_drive_cdb_private_bridge.py -v
           python -m unittest discover -s tests -p test_drive_sort_prefolders.py -v
+          python -m unittest discover -s tests -p test_drive_content_organizer.py -v
           python -m unittest discover -s tests -p test_drive_repo_source_sheet.py -v
           python -m compileall -q scripts/drive_sort_prefolders.py scripts/drive_repo_source_sheet.py
 
@@ -492,7 +500,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Test classifier and install metadata-only Drive dependencies
+      - name: Test classifier, content organizer and install Drive dependencies
         run: |
           set -euo pipefail
           python -m unittest discover -s tests -p test_drive_sort_prefolders.py -v
@@ -505,21 +513,43 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p work/drive-folder-selection
-          # A separate Drive editor is required to create shortcuts.
-          # Existing reader credentials are always PLAN ONLY.
-          if [[ -n "$DRIVE_ORGANIZER_JSON" ]]; then
-            mode=apply
+          # The cron owner controls both invocation time and the explicit
+          # organize_drive flag. Ordinary audit dispatches retain old behavior.
+          if [[ "${{ inputs.organize_drive }}" == "true" ]]; then
+            test -n "$DRIVE_ORGANIZER_JSON" || {
+              echo 'DRIVE_ORGANIZER_CREDENTIALS_MISSING: no relocation attempted'
+              exit 1
+            }
             export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_ORGANIZER_JSON"
+            python -m scripts.drive_content_organizer --mode organize \
+              --max-moves 50 --max-download-mb 512 --max-items 12000 \
+              --out work/drive-folder-selection/private-report.json \
+              >work/drive-folder-selection/public-counts.json
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path('work/drive-folder-selection/private-report.json').read_text())
+          assert data['source_originals_deleted']==0 and data['cdb_writes']==0
+          assert data['moved_readback_verified']<=50
+          assert data['root_loose_before']-data['root_loose_after_verified']==data['moved_readback_verified']
+          assert len(data['details'])==data['root_loose_before']
+          print('DRIVE_CONTENT_ORGANIZER_CONSISTENCY_PASS')
+          PY
           else
-            mode=plan
-            export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_READER_JSON"
-          fi
-          test -n "$BLINQ_DRIVE_SORT_CREDENTIALS"
-          python scripts/drive_sort_prefolders.py --mode "$mode" \
-            --max-files 10000 --max-folders 2000 --max-new 300 \
-            --out work/drive-folder-selection/private-report.json \
-            >work/drive-folder-selection/public-counts.json
-          python - <<'PY'
+            # Legacy no-move classification/shortcuts retained unchanged.
+            if [[ -n "$DRIVE_ORGANIZER_JSON" ]]; then
+              mode=apply
+              export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_ORGANIZER_JSON"
+            else
+              mode=plan
+              export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_READER_JSON"
+            fi
+            test -n "$BLINQ_DRIVE_SORT_CREDENTIALS"
+            python scripts/drive_sort_prefolders.py --mode "$mode" \
+              --max-files 10000 --max-folders 2000 --max-new 300 \
+              --out work/drive-folder-selection/private-report.json \
+              >work/drive-folder-selection/public-counts.json
+            python - <<'PY'
           import json
           from pathlib import Path
           data=json.loads(Path('work/drive-folder-selection/private-report.json').read_text())
@@ -529,6 +559,7 @@ jobs:
           assert data['new_shortcuts_verified']+data['already_linked']+data['pending_unlinked']==data['source_file_count']
           print('DRIVE_FOLDER_SELECTION_CONSISTENCY_PASS')
           PY
+          fi
           echo DRIVE_FOLDER_SELECTION_COUNTS_ONLY
           cat work/drive-folder-selection/public-counts.json
       - name: Publish full manifest ONLY in verified private Release
@@ -554,7 +585,11 @@ jobs:
           {
             echo '## Drive folder selection'
             if [[ -s work/drive-folder-selection/public-counts.json ]]; then
-              echo 'Original source files remain untouched; category entries are shortcuts.'
+              if [[ "${{ inputs.organize_drive }}" == "true" ]]; then
+                echo 'Content-verified relocations only; no deletes, CDB writes or source-tree moves.'
+              else
+                echo 'Original source files remain untouched; category entries are shortcuts.'
+              fi
               cat work/drive-folder-selection/public-counts.json
             else
               echo 'Folder classification not verified. No success claim.'
