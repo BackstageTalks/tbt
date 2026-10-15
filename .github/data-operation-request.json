@@ -1,17 +1,14 @@
 {
   "schema": 1,
-  "mode": "statistics",
+  "mode": "extras",
   "promote": false,
-  "source": "existing_subscribed_provider_native_event_history__wta_2024_2025_verified_event_ids_only_20261013",
-  "purpose": "One-time provider-native WTA 2024-2025 safe canonical missing statistics gapfill; do not import L2 mirror or undated odds. Fail closed at shared daily API ceiling/reserve, max 200 including retries; single global writer, exact native event ID, NULL-only non-overwriting merge, immutable prewrite backup, CAS and independent remote readback. No model training/promotion or cron.",
-  "requested_on": "2026-10-13",
-  "max_requests": 200,
-  "start": "2024-01-01",
-  "end": "2025-12-31",
-  "targeted_statistics": true,
-  "historical_match_winner_odds_as_model_feature": false,
+  "source": "tennisapi_provider1_live_endpoints_20261015_retry_fixed_budget",
+  "purpose": "Repeat capped 30-call live TennisApi markets/PBP smoke after quota-exception fix PR 773; canonical single-writer with independent remote readback; no model promotion.",
+  "requested_on": "2026-10-15",
+  "max_requests": 30,
+  "start": "2026-10-12",
+  "end": "2026-10-14",
+  "targeted_statistics": false,
   "model_training": false,
-  "pre_reset_provider_header_override": false,
-  "source_only_tml_write_authorized": false,
-  "target_tour": "wta"
+  "historical_match_winner_odds_as_model_feature": false
 }
