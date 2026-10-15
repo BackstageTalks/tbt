@@ -388,7 +388,7 @@ jobs:
           for file in work/private-tests.log work/private-cdb.log work/private-audit.log work/private-current-null.log; do
             if test -f "$file"; then cp "$file" work/private-output/; fi
           done
-          for name in drive-inventory.json files.json candidate-fields.jsonl report.json; do
+          # Preserve the private CDB gap and source discovery evidence per run.\n          # Never expose source rows in public Actions artifacts or logs.\n          if test -s work/source-sheet-counts.json; then\n            cp work/source-sheet-counts.json work/private-output/source-sheet-counts.json\n          fi\n          for name in drive-inventory.json files.json candidate-fields.jsonl report.json; do
             if test -f "work/report/$name"; then cp "work/report/$name" work/private-output/; fi
           done
           if test -d work/source-sheet; then
