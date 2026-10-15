@@ -26,6 +26,11 @@ except ModuleNotFoundError:  # direct invocation: python scripts/drive_content_o
         ROOT, DESTINATIONS, FOLDER_MIME, SHORTCUT_MIME, DriveAPI, classify,
     )
 
+# The legacy pinned BlinQ subfolder contains category 11/12 only.
+# Actual source uploads and categories 01-10 live in its parent BlinQ_data.
+# Confirmed by independent Google Drive IDs and current parent read-back.
+SOURCE_ROOT = "1jzdzztz8cXquO8VDswqE19PHupQau-xM"
+CONTAINER_ROOT = ROOT
 REVIEW = "12_NA_KONTROLU"
 PROTECTED_SUFFIXES = (".zip", ".7z", ".rar", ".tar", ".gz", ".sqlite", ".db")
 MAX_SINGLE_FILE = 128 * 1024 * 1024
@@ -135,16 +140,26 @@ def audit(api, *, max_download_mb=512, max_items=12000):
     """Read the source once, fail closed on incomplete listings, make no changes."""
     if not 1 <= max_download_mb <= 2048:
         raise ValueError("Invalid download cap")
-    root = api.metadata(ROOT)
-    if root.get("mimeType") != FOLDER_MIME or root.get("trashed"):
-        raise ValueError("Pinned root identity mismatch")
+    source_root = api.metadata(SOURCE_ROOT)
+    if (source_root.get("id") != SOURCE_ROOT or source_root.get("name") != "BlinQ_data"
+            or source_root.get("mimeType") != FOLDER_MIME
+            or source_root.get("trashed")):
+        raise ValueError("Pinned source parent identity mismatch")
+    container = api.metadata(CONTAINER_ROOT)
+    if (container.get("id") != CONTAINER_ROOT
+            or container.get("name") != "BlinQ"
+            or container.get("mimeType") != FOLDER_MIME
+            or container.get("parents") != [SOURCE_ROOT]
+            or container.get("trashed")):
+        raise ValueError("Pinned child container identity mismatch")
     records = []
     categories = {}
     for name, folder_id in DESTINATIONS.items():
         folder = api.metadata(folder_id)
+        expected_parent = CONTAINER_ROOT if name in ("11_ZALOHY", "12_NA_KONTROLU") else SOURCE_ROOT
         if (folder.get("id") != folder_id or folder.get("name") != name
                 or folder.get("mimeType") != FOLDER_MIME
-                or folder.get("parents") != [ROOT] or folder.get("trashed")):
+                or folder.get("parents") != [expected_parent] or folder.get("trashed")):
             raise ValueError("Pinned category identity mismatch")
         categories[folder_id] = [f for f in api.children(folder_id)
                                   if f.get("size") is not None
@@ -152,10 +167,10 @@ def audit(api, *, max_download_mb=512, max_items=12000):
         if any(f.get("parents") != [folder_id] for f in categories[folder_id]):
             raise ValueError("Unexpected category file parent")
         records.extend(categories[folder_id])
-    root_files = [f for f in api.children(ROOT) if f.get("size") is not None
+    root_files = [f for f in api.children(SOURCE_ROOT) if f.get("size") is not None
                   and f.get("mimeType") not in (FOLDER_MIME, SHORTCUT_MIME)]
-    if any(f.get("parents") != [ROOT] for f in root_files):
-        raise ValueError("Unexpected root parent")
+    if any(f.get("parents") != [SOURCE_ROOT] for f in root_files):
+        raise ValueError("Unexpected source parent")
     records.extend(root_files)
     if len(records) > max_items or len({f["id"] for f in records}) != len(records):
         raise ValueError("Incomplete, oversized or duplicate-ID inventory")
@@ -191,7 +206,7 @@ def audit(api, *, max_download_mb=512, max_items=12000):
         size = int(source["size"])
         entry = {
             "id": source["id"], "name": source["name"], "size": size,
-            "parent": ROOT, "sha256": digests.get(source["id"]),
+            "parent": SOURCE_ROOT, "sha256": digests.get(source["id"]),
             "metadata_category_hypothesis": classify(source["name"], ()),
             "content_schema_category": None, "status": "unverified",
         }
