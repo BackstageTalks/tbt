@@ -1,7 +1,7 @@
 name: BlinQ canonical historical Elo and weekly Tennis Abstract audit
 
 on:
-  # Weekly timing is externally orchestrated under repository cron policy.
+  # Weekly activation must come from the external scheduler under repository policy.
   workflow_dispatch:
   push:
     branches: [main]
@@ -10,6 +10,8 @@ on:
       - ".github/elo-weekly-trigger.json"
       - "scripts/build_blinq_cdb_elo.py"
       - "scripts/compare_blinq_elo_ta.py"
+      - "scripts/parse_tennis_abstract_elo_independent.py"
+      - "tests/test_ta_independent_dates.py"
       - "tests/test_blinq_cdb_elo.py"
   pull_request:
     paths:
@@ -42,12 +44,18 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install "pandas>=2,<3" pyarrow
-          python -m compileall -q scripts/build_blinq_cdb_elo.py scripts/compare_blinq_elo_ta.py
+          python -m compileall -q scripts/build_blinq_cdb_elo.py scripts/compare_blinq_elo_ta.py scripts/parse_tennis_abstract_elo_independent.py
+          python -m unittest discover -s tests -p test_ta_independent_dates.py -v
           python -m unittest discover -s tests -p 'test_blinq_cdb_elo.py' -v
 
   weekly-full-replay:
     needs: elo-selftest
-    if: github.event_name != 'pull_request'
+    # Only operator dispatch or the external scheduler's marker commit may start
+    # the expensive historical replay. A code/PR merge runs selftests ONLY.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       contains(toJSON(github.event.commits), '.github/elo-weekly-trigger.json'))
     runs-on: ubuntu-latest
     timeout-minutes: 230
     env:
@@ -121,7 +129,7 @@ jobs:
             fi
             test -s "$target"
           done
-          python scripts/parse_tennis_abstract_elo.py \
+          python scripts/parse_tennis_abstract_elo_independent.py \
             --atp-elo-html .cache/elo/ta/raw/atp_elo.html \
             --wta-elo-html .cache/elo/ta/raw/wta_elo.html \
             --atp-yelo-html .cache/elo/ta/raw/atp_yelo.html \
