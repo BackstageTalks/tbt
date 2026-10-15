@@ -1,0 +1,240 @@
+name: CDB private uploaded 2025-26 source layer (immutable one-shot)
+
+'on':
+  pull_request:
+    paths:
+      - scripts/build_uploaded_cdb_source_layer.py
+      - tests/test_build_uploaded_cdb_source_layer.py
+      - .github/workflows/cdb-source-layer-upload-20261015.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/cdb-source-layer-upload-20261015-request.json
+
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: cdb-source-layer-8202ff4b485495546e507317357b9f1c-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Source-only builder and regression contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q scripts/build_uploaded_cdb_source_layer.py
+          python -m unittest discover -s tests -p test_build_uploaded_cdb_source_layer.py -v
+          python - <<'PY'
+          from pathlib import Path
+          code=Path('scripts/build_uploaded_cdb_source_layer.py').read_text()
+          assert "'canonical_rows_written': 0" in code
+          assert "'canonical_cells_written': 0" in code
+          assert "'training_allowed': False" in code
+          assert 'upload_bundle(' not in code
+          print('CDB_PRIVATE_LAYER_FAIL_CLOSED_CONTRACT_PASS')
+          PY
+
+  publish-private-layer:
+    needs: contract
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      SOURCE_DRIVE_ID: 1IJYJR8R6911XbP4cxO8VfIO-wAeKg9_v
+      BUNDLE_SHA256: 9848ba815a7a850bac6a829e8f719e6f0281518706749fd57353ee479d258c35
+      TAG: blinq-uploaded-2025-26-source-layer-8202ff4b4854-v1
+      REGISTRY: research/source-layers/uploaded-2025-2026/manifest.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require explicit one-shot private source-layer request and private repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$DRIVE_READER_JSON"
+          test "$(gh api repos/$PRIVATE_REPO --jq .private)" = true
+          test "$(jq -r .mode .github/cdb-source-layer-upload-20261015-request.json)" = private-source-layer-only
+          test "$(jq -r .bundle_sha256 .github/cdb-source-layer-upload-20261015-request.json)" = "$BUNDLE_SHA256"
+          test "$(jq -r .canonical_write .github/cdb-source-layer-upload-20261015-request.json)" = false
+          test "$(jq -r .training_allowed .github/cdb-source-layer-upload-20261015-request.json)" = false
+      - name: Authenticated pinned archive fetch from operator Drive intake
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/intake work/layer work/regenerated work/readback
+          python -m pip install --disable-pip-version-check -q google-auth requests
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          from google.oauth2.service_account import Credentials
+          from google.auth.transport.requests import AuthorizedSession
+          credentials=Credentials.from_service_account_info(json.loads(os.environ['DRIVE_READER_JSON']),
+              scopes=['https://www.googleapis.com/auth/drive.readonly'])
+          res=AuthorizedSession(credentials).get('https://www.googleapis.com/drive/v3/files/'+os.environ['SOURCE_DRIVE_ID'],
+              params={'alt':'media'},timeout=120)
+          res.raise_for_status()
+          content=res.content
+          if hashlib.sha256(content).hexdigest()!=os.environ['BUNDLE_SHA256']:
+              raise SystemExit('PINNED_UPLOAD_BUNDLE_DIGEST_MISMATCH')
+          Path('work/intake/bundle.zip').write_bytes(content)
+          print('CDB_SOURCE_LAYER_OPERATOR_ZIP_PINNED',len(content))
+          PY
+      - name: Validate complete asset inventory and independently rebuild source layer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,zipfile
+          from pathlib import Path
+          archive=zipfile.ZipFile('work/intake/bundle.zip')
+          expected={'SHA256SUMS','source-layer-manifest.json','source-original-raw-20261015.zip',
+            'source-statistics-validated-stage.jsonl.gz','source-matches.jsonl.gz',
+            'source-market-observations.jsonl.gz','source-quarantine.jsonl.gz',
+            'source-canonical-links.jsonl.gz'}
+          if archive.testzip() is not None or set(archive.namelist())!=expected:
+              raise SystemExit('SOURCE_LAYER_ARCHIVE_INVENTORY_OR_CRC_INVALID')
+          for name in sorted(expected):
+              Path('work/layer',name).write_bytes(archive.read(name))
+          PY
+          (cd work/layer && sha256sum -c SHA256SUMS)
+          python scripts/build_uploaded_cdb_source_layer.py \
+            --raw-zip work/layer/source-original-raw-20261015.zip \
+            --validated-stage work/layer/source-statistics-validated-stage.jsonl.gz \
+            --out work/regenerated > work/regenerated-output.json
+          (cd work/regenerated && sha256sum -c SHA256SUMS)
+          for name in work/layer/*; do
+            cmp "$name" "work/regenerated/$(basename "$name")"
+          done
+          python - <<'PY'
+          import json
+          m=json.load(open('work/layer/source-layer-manifest.json'))
+          assert m['source_native_events']==10927 and m['source_market_observations']==5791
+          assert m['validated_stat_rows']==9741 and m['validated_stat_values']==154342
+          assert m['quarantine_findings']==70 and m['canonical_cells_written']==0
+          assert m['training_allowed'] is False and m['prematch_feature_allowed'] is False
+          assert m['canonical_links']==0 and m['rights_reuse_approved'] is False
+          print('CDB_SOURCE_LAYER_REGENERATED_BYTE_IDENTICAL')
+          PY
+      - name: Create once-only immutable private release (never canonical tag)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" -R "$PRIVATE_REPO" >/dev/null 2>&1; then
+            echo CDB_SOURCE_LAYER_EXISTING_RELEASE_REUSE_VERIFY_FIRST
+          else
+            gh release create "$TAG" work/layer/* -R "$PRIVATE_REPO" \
+              --title 'CDB source layer: user uploaded ATP/WTA 2025-2026' \
+              --notes 'Private RAW + VALIDATED + source markets + quarantine. No canonical match IDs, no canonical writer, no model/training or prematch odds. Source rights unverified.' \
+              --latest=false
+          fi
+      - name: Independent persisted private release byte readback and semantic safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" -R "$PRIVATE_REPO" -D work/readback
+          test "$(find work/readback -maxdepth 1 -type f | wc -l)" = 8
+          (cd work/readback && sha256sum -c SHA256SUMS)
+          for filename in work/layer/*; do cmp "$filename" "work/readback/$(basename "$filename")"; done
+          python - <<'PY'
+          from pathlib import Path
+          import gzip,json
+          d=Path('work/readback');m=json.loads((d/'source-layer-manifest.json').read_text())
+          def verify(name, count, check):
+              actual=0
+              with gzip.open(d/name,'rt',encoding='utf8') as file:
+                  for line in file:
+                      row=json.loads(line)
+                      assert check(row),name
+                      actual+=1
+              assert actual==count,(name,actual,count)
+          verify('source-matches.jsonl.gz',10927,lambda x:
+              x['canonical_match_id'] is None and x['write_authorized'] is False and
+              x['training_allowed'] is False and x['prematch_feature_allowed'] is False)
+          verify('source-market-observations.jsonl.gz',5791,lambda x:
+              x['quote_capture_utc'] is None and x['prematch_feature_allowed'] is False and
+              x['canonical_match_id'] is None and x['write_authorized'] is False)
+          verify('source-statistics-validated-stage.jsonl.gz',9741,lambda x:
+              x.get('source_tour') in ('ATP','WTA') and bool(x.get('source_match_id')))
+          verify('source-quarantine.jsonl.gz',70,lambda x:bool(x.get('issue')))
+          verify('source-canonical-links.jsonl.gz',0,lambda x:False)
+          assert m['canonical_cells_written']==0 and m['canonical_links']==0
+          print('PRIVATE_RELEASE_ALL_SOURCE_ROWS_INDEPENDENT_READBACK_PASS')
+          PY
+      - name: Register verified private source layer in canonical data repository main
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64,json,os,subprocess
+          from pathlib import Path
+          m=json.loads(Path('work/readback/source-layer-manifest.json').read_text())
+          registry={
+            'schema':'BLINQ_CDB_SOURCE_REGISTRY_V1',
+            'status':'VERIFIED_PRIVATE_SOURCE_LAYER',
+            'private_release_tag':os.environ['TAG'],
+            'private_release_repository':os.environ['PRIVATE_REPO'],
+            'source_archive_sha256':m['source_sha256'],
+            'intake_bundle_sha256':os.environ['BUNDLE_SHA256'],
+            'validated_stage_sha256':m['validated_stage_sha256'],
+            'assets':m['assets'],
+            'source_native_events':m['source_native_events'],
+            'source_market_observations':m['source_market_observations'],
+            'validated_stat_rows':m['validated_stat_rows'],
+            'validated_stat_values':m['validated_stat_values'],
+            'quarantine_findings':m['quarantine_findings'],
+            'canonical_links':0,'canonical_cells_written':0,
+            'training_allowed':False,'prematch_feature_allowed':False,
+            'source_rights_status':'UNVERIFIED_PRIVATE_RETENTION_ONLY',
+            'upgrade_policy':'independently_attested_provider_event_and_both_players; strict NULL-only protected writer',
+          }
+          content=(json.dumps(registry,indent=2,sort_keys=True)+'\n').encode()
+          endpoint='repos/'+os.environ['PRIVATE_REPO']+'/contents/'+os.environ['REGISTRY']
+          get=subprocess.run(['gh','api',endpoint],capture_output=True,text=True)
+          if get.returncode==0:
+              old=base64.b64decode(json.loads(get.stdout)['content'])
+              if old!=content:raise SystemExit('EXISTING_SOURCE_REGISTRY_DIFFERS_FAIL_CLOSED')
+              print('PRIVATE_SOURCE_REGISTRY_ALREADY_BYTE_EQUAL')
+          else:
+              if 'HTTP 404' not in get.stderr:raise SystemExit('REGISTRY_GET_ERROR '+get.stderr[:300])
+              payload={'message':'data(cdb): register verified operator upload source layer',
+                       'content':base64.b64encode(content).decode()}
+              put=subprocess.run(['gh','api','--method','PUT',endpoint,'--input','-'],
+                   input=json.dumps(payload),capture_output=True,text=True)
+              if put.returncode:raise SystemExit('REGISTRY_WRITE_FAILED '+put.stderr[:300])
+          back=subprocess.check_output(['gh','api',endpoint],text=True)
+          if base64.b64decode(json.loads(back)['content'])!=content:
+              raise SystemExit('PRIVATE_CDB_SOURCE_REGISTRY_REMOTE_READBACK_FAILED')
+          Path('work/layer/publish-report.json').write_text(json.dumps({
+              'status':'VERIFIED_PRIVATE_SOURCE_LAYER','release_tag':os.environ['TAG'],
+              'source_native_events':m['source_native_events'],
+              'source_market_observations':m['source_market_observations'],
+              'validated_stat_values':m['validated_stat_values'],
+              'canonical_cells_written':0,'training_allowed':False,
+              'private_release_readback':'all SHA and gzip records pass',
+              'source_registry_readback':'byte-equal',
+          },sort_keys=True,indent=2)+'\n')
+          print('PRIVATE_CDB_SOURCE_REGISTRY_REMOTE_READBACK_PASS')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blinq-cdb-private-source-layer-publish-${{ github.run_id }}
+          path: work/layer/publish-report.json
+          retention-days: 90
+          if-no-files-found: warn
