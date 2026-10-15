@@ -156,6 +156,19 @@ def normalize_set_statistics(payload: Any, *, home_is_player1: bool) -> dict[str
     return result
 
 
+def normalize_set_statistics_home_away(payload: Any) -> dict[str, dict]:
+    """Store stable provider-side labels; canonical p1/p2 order may later swap."""
+    sets = normalize_set_statistics(payload, home_is_player1=True)
+    return {
+        number: {
+            ("home_" + key[3:] if key.startswith("p1_") else
+             "away_" + key[3:] if key.startswith("p2_") else key): value
+            for key, value in values.items()
+        }
+        for number, values in sets.items()
+    }
+
+
 def point_by_point_inventory(payload: Any, *, event_id: str | int) -> dict:
     """Count provider PBP structure only; do NOT infer point outcomes.
 
