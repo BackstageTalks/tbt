@@ -1,6 +1,6 @@
 from __future__ import annotations
 import unittest
-from audit_fix4_cdb_native import native_key,official_keys_from_context
+from scripts.research.audit_fix4_cdb_native import native_key,official_keys_from_context
 
 class NativeSourceKeyTests(unittest.TestCase):
     def test_original_id(self):
