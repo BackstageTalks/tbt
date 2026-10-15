@@ -11,5 +11,7 @@
   "mode": "read_only",
   "allow_cdb_writes": false,
   "allow_drive_writes": false,
-  "request_reason": "user_requested_real_gap_vs_current_cdb"
+  "request_reason": "Verify full source demographics, published 2025/26 CDB schema, 78-year exact-linked field deltas, and independently corroborated 139 research links against CURRENT immutable SHA-pinned release",
+  "audit_cycle": "2026-10-15-latest-release-identity-and-field-readback",
+  "rerun_counter": 2
 }
