@@ -164,3 +164,50 @@ def test_cdb_orientation_and_score_change_rejected():
     m = canonical(row)
     row = dict(row, winner_name="Someone Else")
     assert candidate(m, row, "atp", Path("atp_matches_2020.csv"), 2, "x")[1] == "lineage_rejected"
+
+
+def test_independent_native_proof_enriches_absent_provenance_without_names_only(tmp_path):
+    from recover_cdb_sackmann_breakpoints import NATIVE_POLICY
+    row=original()
+    row["tourney_name"]="Strict Match Open"
+    row["surface"]="Hard"
+    path=_build_source(tmp_path,[row])
+    m=canonical(row)
+    m.provider_payload={}
+    m.tournament_id=row["tourney_id"]
+    m.tournament=row["tourney_name"]
+    m.round_name=row["round"]
+    m.surface=row["surface"]
+    m.scheduled_at=datetime(2020,1,9,12,tzinfo=timezone.utc)
+    assert candidate(m,row,"atp",path,2,"a"*64)[1]=="lineage_rejected"
+    match,why=candidate(m,row,"atp",path,2,"a"*64,native_fallback=True)
+    assert why=="staged" and match["policy"]==NATIVE_POLICY
+    assert len(match["additions"])==2
+    staged,counts,_=stage([m],tmp_path,native_fallback=True)
+    assert counts["staged_matches"]==1
+    write_local([m],staged,tmp_path,native_fallback=True)
+    assert stage([m],tmp_path,native_fallback=True)[0]==[]
+
+
+def test_native_fallback_rejects_cross_tournament_and_provenance_disagreement(tmp_path):
+    row=original()
+    row["tourney_name"]="Strict Match Open"
+    row["surface"]="Hard"
+    path=_build_source(tmp_path,[row])
+    m=canonical(row)
+    m.provider_payload={}
+    m.tournament_id=row["tourney_id"]
+    m.tournament=row["tourney_name"]
+    m.round_name=row["round"]
+    m.surface=row["surface"]
+    for attr,bad in (("tournament_id","2020-999"),
+                     ("tournament","Unrelated Tourney"),
+                     ("round_name","SF"),("surface","Clay")):
+        trial=deepcopy(m)
+        setattr(trial,attr,bad)
+        assert candidate(trial,row,"atp",path,2,"a"*64,native_fallback=True)[1]=="lineage_rejected"
+    m.provider_payload={"_tbt_statistics":{"source":"different_source"}}
+    assert candidate(m,row,"atp",path,2,"a"*64,native_fallback=True)[1]=="lineage_rejected"
+    m.provider_payload={}
+    m.scheduled_at=datetime(2020,2,12,12,tzinfo=timezone.utc)
+    assert candidate(m,row,"atp",path,2,"a"*64,native_fallback=True)[1]=="lineage_rejected"
