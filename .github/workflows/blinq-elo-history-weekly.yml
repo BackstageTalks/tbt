@@ -125,7 +125,7 @@ jobs:
             fi
             test -s "$target"
           done
-          python scripts/parse_tennis_abstract_elo.py \
+          python scripts/parse_tennis_abstract_elo_independent.py \
             --atp-elo-html .cache/elo/ta/raw/atp_elo.html \
             --wta-elo-html .cache/elo/ta/raw/wta_elo.html \
             --atp-yelo-html .cache/elo/ta/raw/atp_yelo.html \
