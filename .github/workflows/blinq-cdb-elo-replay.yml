@@ -27,13 +27,13 @@ jobs:
       PYTHONPATH: api:private-data/scripts
     steps:
       - uses: actions/checkout@v4
-      - name: Checkout exact BlinQ Elo engine
+      - name: Checkout private source and validation tests
         uses: actions/checkout@v4
         with:
           repository: BackstageTalks/tbt-data
           token: ${{ secrets.TBT_DATA_GH_TOKEN }}
           path: private-data
-          ref: feat/blinq-elo-history-20261014
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -57,13 +57,13 @@ jobs:
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4
-      - name: Checkout live production feature algorithm without promoting model
+      - name: Checkout current private Elo projection source
         uses: actions/checkout@v4
         with:
           repository: BackstageTalks/tbt-data
           token: ${{ secrets.TBT_DATA_GH_TOKEN }}
           path: private-data
-          ref: feat/blinq-elo-history-20261014
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
