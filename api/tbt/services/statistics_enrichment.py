@@ -179,7 +179,10 @@ class StatisticsEnricher:
             # Malformed or contradictory set-only data must not poison valid
             # whole-match CDB enrichment. No partial per-set cells are written.
             per_set = {}
-        if per_set:
+        # A future retry must never replace earlier provider-side evidence
+        # with fewer sets or conflicting lower-quality data. Reconciliation
+        # belongs to an explicit audited, provenance-aware CDB writer.
+        if per_set and "_tbt_statistics_by_set" not in raw:
             raw = {**raw, "_tbt_statistics_by_set": {
                 "schema": 1, "source": "tennisapi1",
                 "event_id": str(event_id), "orientation": "provider_home_away",
