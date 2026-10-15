@@ -621,6 +621,10 @@ def main():
                     report["extras_" + outcome["status"]] += 1
                     for field in ("markets", "pbp"):
                         report[f"extras_{field}_{outcome[field]}"] += 1
+                except RequestBudgetExceeded:
+                    # Reaching the allocated API cap is a normal checkpoint stop,
+                    # not a rejected provider event. The outer handler saves progress.
+                    raise
                 except ProviderError as exc:
                     report["extras_rejected"] += 1
                     print(json.dumps({"extras_rejected_match_id": str(match.match_id),
