@@ -99,23 +99,34 @@ class ReadOnlyAuditTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Pinned category"):
             audit(api)
 
-    def test_source_parent_mismatch_blocks(self):
+    def test_legacy_child_not_required_and_excluded_explicitly(self):
         api = FakeReader([], {})
-        baseline = api.metadata
+        original = api.metadata
         api.metadata = lambda fid: (
-            {"id": fid, "name": "BlinQ_data", "mimeType": FOLDER_MIME, "parents": [CONTAINER_ROOT]}
-            if fid == CONTAINER_ROOT else baseline(fid))
-        with self.assertRaisesRegex(ValueError, "Pinned child container"):
-            audit(api)
+            (_ for _ in ()).throw(AssertionError("child metadata must not be fetched"))
+            if fid in (CONTAINER_ROOT, DESTINATIONS["11_ZALOHY"], DESTINATIONS["12_NA_KONTROLU"])
+            else original(fid))
+        result = audit(api)
+        self.assertEqual(result["root_loose_files"], 0)
+        self.assertEqual(result["excluded_category_names"], ["11_ZALOHY", "12_NA_KONTROLU"])
 
-    def test_nested_review_category_under_container_valid(self):
+    def test_nested_review_category_is_outside_scoped_inventory(self):
         review = source("r", "review.csv", b"R", DESTINATIONS["12_NA_KONTROLU"])
         loose = source("n", "matches.csv", b"N")
         api = FakeReader([review, loose], {"r": b"R", "n": b"N"})
         result = audit(api)
         self.assertEqual(result["root_loose_files"], 1)
-        self.assertEqual(result["category_direct_files"], 1)
+        self.assertEqual(result["category_direct_files"], 0)
         self.assertEqual(result["details"][0]["parent"], SOURCE_ROOT)
+
+    def test_actual_root_name_validation_fails_closed(self):
+        api = FakeReader([], {})
+        original = api.metadata
+        api.metadata = lambda fid: (
+            {"id": SOURCE_ROOT, "name": "unexpected", "mimeType": FOLDER_MIME}
+            if fid == SOURCE_ROOT else original(fid))
+        with self.assertRaisesRegex(ValueError, "Pinned source parent"):
+            audit(api)
 
 
 if __name__ == "__main__":
