@@ -149,10 +149,12 @@
       // Retry the shipped local ATP/WTA fallback once before showing initials.
       const localFallback=host?.classList.contains('player-fallback-wta')
         ?'/assets/missing_foto_w.webp':'/assets/missing_foto_m.webp';
-      if(img.dataset.localFallbackRetry!=='1' &&
-         new URL(img.src,location.href).pathname!==localFallback){
+      // Even the shipped fallback can fail once due to a transient/cached 404.
+      // Give it one versioned re-fetch before exposing the initials layer.
+      if(img.dataset.localFallbackRetry!=='1'){
         img.dataset.localFallbackRetry='1';
-        img.src=localFallback;
+        img.hidden=false;
+        img.src=versionedPlayerAsset(localFallback)+'&retry=1';
         return;
       }
       img.hidden=true;
@@ -162,7 +164,18 @@
       }
     }
   }
+  function handleAssetImageLoad(event){
+    const img=event?.target;
+    if(!(img instanceof HTMLImageElement)||!img.matches('[data-player-fallback]'))return;
+    const host=img.parentElement;
+    img.hidden=false;
+    if(host){
+      host.classList.remove('using-initials');
+      host.classList.add('has-photo');
+    }
+  }
   document.addEventListener('error',handleAssetImageError,true);
+  document.addEventListener('load',handleAssetImageLoad,true);
   // Layered avatar contract: real photo -> local ATP/WTA fallback -> initials.
   // The fallback stays mounted underneath the real photo, so a cached/late 404
   // can never leave the avatar blank or require a second asynchronous src swap.
