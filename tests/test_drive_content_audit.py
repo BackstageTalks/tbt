@@ -2,10 +2,10 @@ import copy
 import hashlib
 import unittest
 
-from scripts.drive_content_audit import audit, ROOT, DESTINATIONS, FOLDER_MIME
+from scripts.drive_content_audit import audit, ROOT, SOURCE_ROOT, CONTAINER_ROOT, DESTINATIONS, FOLDER_MIME
 
 
-def source(fid, name, body, parent=ROOT):
+def source(fid, name, body, parent=SOURCE_ROOT):
     return {
         "id": fid, "name": name, "mimeType": "text/csv",
         "size": str(len(body)), "parents": [parent],
@@ -23,11 +23,14 @@ class FakeReader:
         self.bytes_downloaded = 0
 
     def metadata(self, fid):
-        if fid == ROOT:
-            return {"id": ROOT, "mimeType": FOLDER_MIME}
+        if fid == SOURCE_ROOT:
+            return {"id": SOURCE_ROOT, "name": "BlinQ_data", "mimeType": FOLDER_MIME}
+        if fid == CONTAINER_ROOT:
+            return {"id": CONTAINER_ROOT, "name": "BlinQ", "mimeType": FOLDER_MIME, "parents": [SOURCE_ROOT]}
         for name, value in DESTINATIONS.items():
             if fid == value:
-                return {"id": fid, "name": name, "mimeType": FOLDER_MIME, "parents": [ROOT]}
+                parent = CONTAINER_ROOT if name in ("11_ZALOHY", "12_NA_KONTROLU") else SOURCE_ROOT
+                return {"id": fid, "name": name, "mimeType": FOLDER_MIME, "parents": [parent]}
         return copy.deepcopy(self.items[fid])
 
     def children(self, parent):
@@ -89,9 +92,30 @@ class ReadOnlyAuditTest(unittest.TestCase):
 
     def test_invalid_folder_identity_fails(self):
         api = FakeReader([], {})
-        api.metadata = lambda fid: {"id": fid, "mimeType": FOLDER_MIME, "parents": []}
+        baseline = api.metadata
+        api.metadata = lambda fid: (
+            {"id": fid, "name": "BAD", "mimeType": FOLDER_MIME, "parents": [SOURCE_ROOT]}
+            if fid == DESTINATIONS["01_ZAPASY_A_VYSLEDKY"] else baseline(fid))
         with self.assertRaisesRegex(ValueError, "Pinned category"):
             audit(api)
+
+    def test_source_parent_mismatch_blocks(self):
+        api = FakeReader([], {})
+        baseline = api.metadata
+        api.metadata = lambda fid: (
+            {"id": fid, "name": "BlinQ_data", "mimeType": FOLDER_MIME, "parents": [CONTAINER_ROOT]}
+            if fid == CONTAINER_ROOT else baseline(fid))
+        with self.assertRaisesRegex(ValueError, "Pinned child container"):
+            audit(api)
+
+    def test_nested_review_category_under_container_valid(self):
+        review = source("r", "review.csv", b"R", DESTINATIONS["12_NA_KONTROLU"])
+        loose = source("n", "matches.csv", b"N")
+        api = FakeReader([review, loose], {"r": b"R", "n": b"N"})
+        result = audit(api)
+        self.assertEqual(result["root_loose_files"], 1)
+        self.assertEqual(result["category_direct_files"], 1)
+        self.assertEqual(result["details"][0]["parent"], SOURCE_ROOT)
 
 
 if __name__ == "__main__":
