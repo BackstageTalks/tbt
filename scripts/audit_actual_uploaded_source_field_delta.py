@@ -341,8 +341,8 @@ def main():
         with gzip.open(args.stage_output,"wt",encoding="utf-8") as fh:
             for item in stages:
                 fh.write(json.dumps(item,sort_keys=True,ensure_ascii=False)+"\n")
-        assert len(stages)==d["completed_match_score_comparison"]["stageable_score_matches_read_only"]
-        assert sum(len(v["add_only_missing_score_fields"]) for v in stages)==d["completed_match_score_comparison"]["stageable_score_missing_cells_read_only"]
+        assert len(stages)==d["completed_match_score_comparison"].get("stageable_score_matches_read_only",0)
+        assert sum(len(v["add_only_missing_score_fields"]) for v in stages)==d["completed_match_score_comparison"].get("stageable_score_missing_cells_read_only",0)
     print("BLINQ_ACTUAL_SOURCE_TO_CDB_FIELD_GAPS",json.dumps({k:v for k,v in d.items() if k not in ("sources","by_year")},sort_keys=True))
     print("BLINQ_GAP_BY_YEAR",json.dumps(d["by_year"],sort_keys=True))
 if __name__=="__main__":main()
