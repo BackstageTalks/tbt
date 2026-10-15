@@ -55,3 +55,44 @@ Tournament logos are presentation-only and never model inputs.
 - surface Elo time series
 
 When BlinQ exposes such concepts, they must be explicitly derived from stored point-in-time data rather than presented as raw TennisApi fields.
+
+## Provider clarification received 2026-10-14
+
+Confirmed provider-1 market IDs: 1 = Match Winner (1 home / 2 away),
+11 = First Set Winner (1 / 2), 12 = Total Games Over/Under (line in
+choiceGroup), 15 = Current Set Winner (live only). These markets are not
+guaranteed on every ATP/WTA/Challenger/WTA125/ITF event. For total games,
+marketPeriod may be "Extra time": key on marketId + choiceGroup, NEVER period.
+
+Event odds routes: /api/tennis/event/{id}/odds and
+/api/tennis/event/{id}/odds/1/all; by-date
+/api/tennis/events/odds/{day}/{month}/{year} returns match-winner only.
+initialFractionalValue is opening, fractionalValue latest stored. Historical
+re-queries are NOT time-stamped price movements or guaranteed closing quotes.
+A valid HTTP 204 means no coverage.
+
+Unavailable: set correct score, handicaps, player games totals,
+aces/double faults O/U, tie-break and total-sets betting markets,
+multi-bookmaker odds, timestamped historical price movements and bulk export.
+
+Post-match endpoint /api/tennis/event/{id}/statistics may return ALL and
+per-set serve/return/aces/DF. /api/tennis/event/{id}/point-by-point may
+return sets/games/points. Both may return 204, especially on smaller events.
+Point/game score.serving (1 home, 2 away) and score.scoring refer to the
+provider event orientation; do not assume canonical p1/p2 orientation.
+
+Implementation (2026-10-15):
+- RapidTennisClient.event_markets_snapshot / event_point_by_point use existing
+  guarded provider-1 enrichment calls.
+- tennisapi_extra.normalize_market_snapshot has strict eventId/marketId/line
+  handling, flags provider_quote_timestamp_known=False and
+  pre_match_asof_verified=False; it is NOT directly a model or CLV input.
+- tennisapi_extra.normalize_set_statistics reuses the established, strict
+  whole-match parser on explicit per-set periods only.
+- tennisapi_extra.point_by_point_inventory audits structure only; it cannot
+  assert a complete match or derive pre-match features.
+- probe_tennis_provider.py optionally samples finished singles point-by-point
+  with --pbp-samples N (default 0) and respects its existing --max-requests cap.
+- No automated canonical sidecar import, backfill, or model promotion is
+  enabled until independent event identity, completeness, source provenance,
+  writer isolation and persisted read-back pass.
