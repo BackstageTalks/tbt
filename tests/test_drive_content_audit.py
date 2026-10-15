@@ -66,7 +66,7 @@ class ReadOnlyAuditTest(unittest.TestCase):
     def test_valid_content_schema_can_confirm_classification(self):
         row = source("a", "matches.csv", b"winner,loser,date")
         api = FakeReader([row], {"a": b"winner,loser,date"}, hints={"a": "01_ZAPASY_A_VYSLEDKY"})
-        self.assertEqual(audit(api)["details"][0]["status"], "schema_confirmed_plan_only")
+        self.assertEqual(audit(api)["details"][0]["status"], "header_signature_match_plan_only")
 
     def test_name_schema_disagreement_is_blocked(self):
         row = source("a", "matches.csv", b"player_id,rank,ranking_date")
