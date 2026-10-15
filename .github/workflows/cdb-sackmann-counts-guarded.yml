@@ -105,7 +105,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/import_cdb_sackmann_bp_counts.py \
-            --mode stage --source-dir source --shard-modulus 256 --shard-index 0 \
+            --mode stage --source-dir source --canonical-year 2018 --shard-modulus 16 --shard-index 0 \
             --history-dir .cache/tbt/cdb-sackmann-counts/history \
             --out-dir .cache/tbt/cdb-sackmann-counts/stage
           python - <<'PY'
@@ -120,7 +120,7 @@ jobs:
             snap=json.loads((root/"source-snapshot.json").read_text())
             assert snap["status"]=="verified" and snap["manifest_sha256"]==request.get("expected_cdb_bundle_sha256"), "CDB manifest drift"
             assert request.get("mode")=="write" and request.get("approved_by_operator") is True
-            assert request.get("shard_modulus")==256 and request.get("shard_index")==0
+            assert request.get("canonical_year")==2018 and request.get("shard_modulus")==16 and request.get("shard_index")==0
             assert counts.get("staged_matches",0)==request.get("expected_staged_matches"), "Stage count drift"
             assert counts.get("new_stat_values",0)==request.get("expected_new_stat_values"), "Added fields drift"
             assert report["changed_years"]==request.get("expected_changed_years"), "Year scope drift"
@@ -149,7 +149,7 @@ jobs:
           root=.cache/tbt/cdb-sackmann-counts
           cp -a "$root/history" "$root/rehearsal-before"
           python scripts/import_cdb_sackmann_bp_counts.py \
-            --mode write --source-dir source --shard-modulus 256 --shard-index 0 --history-dir "$root/history" \
+            --mode write --source-dir source --canonical-year 2018 --shard-modulus 16 --shard-index 0 --history-dir "$root/history" \
             --stage-file "$root/stage/stage.jsonl" \
             --out-dir "$root/rehearsal"
           python scripts/import_cdb_sackmann_bp_counts.py \
@@ -221,7 +221,7 @@ jobs:
                   "stage_sha256":hashlib.sha256(data).hexdigest(),
                   "matched_rows":report["counts"]["staged_matches"],
                   "added_count_fields":report["counts"]["new_stat_values"],
-                  "fixed_shard":"0/256",
+                  "fixed_shard":"2018@0/16",
                   "policy":"sackmann_proven_hist_js_bp_converted_counts_null_only_shard_v1",
                   "overwriting_preexisting":False,
                   "model_promotion":False}
@@ -243,7 +243,7 @@ jobs:
           set -euo pipefail
           root=.cache/tbt/cdb-sackmann-counts
           python scripts/import_cdb_sackmann_bp_counts.py \
-            --mode write --source-dir source --shard-modulus 256 --shard-index 0 --history-dir "$root/history" \
+            --mode write --source-dir source --canonical-year 2018 --shard-modulus 16 --shard-index 0 --history-dir "$root/history" \
             --stage-file "$root/stage/stage.jsonl" --out-dir "$root/write"
           python scripts/import_cdb_sackmann_bp_counts.py \
             --mode verify --history-dir "$root/history" --before-dir "$root/before" \
@@ -321,7 +321,7 @@ jobs:
           set -euo pipefail
           root=.cache/tbt/cdb-sackmann-counts
           python scripts/import_cdb_sackmann_bp_counts.py \
-            --mode stage --source-dir source --shard-modulus 256 --shard-index 0 \
+            --mode stage --source-dir source --canonical-year 2018 --shard-modulus 16 --shard-index 0 \
             --history-dir "$root/persisted" --out-dir "$root/idempotence"
           python - <<'PY'
           import json
