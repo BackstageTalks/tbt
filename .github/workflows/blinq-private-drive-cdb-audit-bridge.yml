@@ -505,15 +505,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p work/drive-folder-selection
-          # A separate Drive editor is required to create shortcuts.
-          # Existing reader credentials are always PLAN ONLY.
-          if [[ -n "$DRIVE_ORGANIZER_JSON" ]]; then
-            mode=apply
-            export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_ORGANIZER_JSON"
-          else
-            mode=plan
-            export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_READER_JSON"
-          fi
+          # Reader-only safe mode: neither source relocation nor shortcut
+          # creation has passed the full dependency/content audit gate.
+          # Never select writable organizer credentials in a nightly audit.
+          mode=plan
+          export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_READER_JSON"
           test -n "$BLINQ_DRIVE_SORT_CREDENTIALS"
           python scripts/drive_sort_prefolders.py --mode "$mode" \
             --max-files 10000 --max-folders 2000 --max-new 300 \
@@ -554,10 +550,20 @@ jobs:
           {
             echo '## Drive folder selection'
             if [[ -s work/drive-folder-selection/public-counts.json ]]; then
-              echo 'Original source files remain untouched; category entries are shortcuts.'
+              echo 'Original sources remain untouched; no shortcuts or file moves were made (plan only).'
               cat work/drive-folder-selection/public-counts.json
             else
               echo 'Folder classification not verified. No success claim.'
             fi
             echo 'Full manifest stays in the paired PRIVATE tbt-data release.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  drive-content-readonly:
+    # Invoked by the existing external cron URL (this bridge workflow).
+    # Independent of the CDB audit cooldown: hash checks must run daily.
+    # Does not mutate Drive, CDB, repositories, model or production UI.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/blinq-drive-content-audit.yml
+    with:
+      download_mb: '512'
+    secrets: inherit
