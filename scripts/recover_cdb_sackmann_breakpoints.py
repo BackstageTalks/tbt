@@ -30,6 +30,7 @@ from tbt.data.offline_odds import norm_text
 
 FIELDS = frozenset(("p1_break_point_return_win", "p2_break_point_return_win"))
 POLICY = "sackmann_hist_js_native_id_exact_source_bp_conversion_null_only_v1"
+NATIVE_POLICY = "sackmann_hist_js_full_independent_metadata_bp_return_null_only_v1"
 SOURCE_REVISION = "83733587353df8a41f2fd4f516147d5aa83f5a8d"
 SOURCE = "jeff_sackmann_match_snapshot:"
 
@@ -54,7 +55,7 @@ def source_match_id(tour: str, path: Path, row: dict, line_no: int) -> tuple[str
     return f"hist-js:{tour}:{hashlib.sha256(key.encode('utf-8')).hexdigest()[:24]}", kind
 
 
-def _valid_cdb_lineage(match, row: dict, tour: str, kind: str, file: Path) -> bool:
+def _valid_cdb_lineage(match, row: dict, tour: str, kind: str, file: Path, *, native_fallback=False) -> bool:
     """Require exact native original IDs AND the historical import's provenance."""
     if (str(match.tour).lower() != tour or
             not match.is_completed or
@@ -62,8 +63,12 @@ def _valid_cdb_lineage(match, row: dict, tour: str, kind: str, file: Path) -> bo
             match.scheduled_at >= datetime.now(timezone.utc)):
         return False
     original_date = str(row.get("tourney_date") or "").strip()
-    if (not re.fullmatch(r"\d{8}", original_date) or
-            match.scheduled_at.strftime("%Y%m%d") != original_date):
+    if not re.fullmatch(r"\d{8}", original_date):
+        return False
+    from datetime import datetime
+    source_date = datetime.strptime(original_date, "%Y%m%d").date()
+    date_delta = (match.scheduled_at.date() - source_date).days
+    if not 0 <= date_delta <= (21 if native_fallback else 0):
         return False
     w, l = str(row.get("winner_id") or "").strip(), str(row.get("loser_id") or "").strip()
     if not w or not l or w == l or not re.fullmatch(r"[A-Za-z0-9_.:-]+", w + l):
@@ -79,10 +84,33 @@ def _valid_cdb_lineage(match, row: dict, tour: str, kind: str, file: Path) -> bo
     if not isinstance(ctx, dict):
         return False
     evidence = ctx.get("_tbt_statistics")
-    return (isinstance(evidence, dict) and
+    lineage_ok = (isinstance(evidence, dict) and
             evidence.get("source") == SOURCE + file.name and
             ctx.get("_tbt_provider_event_id") == str(match.match_id) and
             ctx.get("_tbt_source_category_name") == "historical_" + kind)
+    if lineage_ok:
+        return True
+    if not native_fallback:
+        return False
+    # Fallback only for absent lineage metadata, never contradictory claims.
+    if isinstance(evidence, dict) and evidence.get("source"):
+        return False
+    if ctx.get("_tbt_provider_event_id") not in (None, "", str(match.match_id)):
+        return False
+    if ctx.get("_tbt_source_category_name") not in (None, "", "historical_" + kind):
+        return False
+    # The canonical hist-js ID is the original SHA-derived tournament ID,
+    # native match number, round and both normalized names (checked by caller).
+    # Require independent positive metadata confirmation; names alone never suffice.
+    if str(match.tournament_id or "").strip() != str(row.get("tourney_id") or "").strip():
+        return False
+    if _round(match.round_name) != _round(row.get("round")):
+        return False
+    if norm_text(match.tournament) != norm_text(row.get("tourney_name")):
+        return False
+    if norm_text(match.surface) != norm_text(row.get("surface")):
+        return False
+    return True
 
 
 def _source_rates(row: dict) -> dict[str, float]:
@@ -101,10 +129,11 @@ def _source_rates(row: dict) -> dict[str, float]:
 
 
 def candidate(match, row: dict, tour: str, path: Path, line_no: int,
-              file_hash: str) -> tuple[dict | None, str]:
+              file_hash: str, *, native_fallback=False) -> tuple[dict | None, str]:
     """Pure per-match eligibility; no fuzzy player match and no mutations."""
     mid, kind = source_match_id(tour, path, row, line_no)
-    if str(match.match_id) != mid or not _valid_cdb_lineage(match, row, tour, kind, path):
+    if str(match.match_id) != mid or not _valid_cdb_lineage(match, row, tour, kind, path,
+                                                            native_fallback=native_fallback):
         return None, "lineage_rejected"
     rates = _source_rates(row)
     if not rates:
@@ -142,7 +171,7 @@ def candidate(match, row: dict, tour: str, path: Path, line_no: int,
         return None, "already_filled"
     assert additions.keys() <= FIELDS
     return {
-        "schema": 1, "policy": POLICY, "match_id": mid,
+        "schema": 1, "policy": NATIVE_POLICY if native_fallback else POLICY, "match_id": mid,
         "utc_year": match.scheduled_at.astimezone(timezone.utc).year,
         "prewrite_hash": _sha(_storage(match)),
         "source_stats_hash": _sha(previous),
@@ -163,7 +192,7 @@ def _iter_csv(root: Path):
         yield tour, path, rel
 
 
-def stage(matches, source_root: Path):
+def stage(matches, source_root: Path, *, native_fallback=False):
     if not source_root.is_dir():
         raise ValueError("Pinned original source directory missing")
     index = {str(m.match_id): m for m in matches if str(m.match_id).startswith("hist-js:")}
@@ -191,7 +220,8 @@ def stage(matches, source_root: Path):
                     staged.pop(mid, None)
                     counts["duplicate_source_target_quarantined"] += 1
                     continue
-                proposed, status = candidate(record, row, tour, path, line_no, file_hash)
+                proposed, status = candidate(record, row, tour, path, line_no, file_hash,
+                                             native_fallback=native_fallback)
                 counts[status] += 1
                 if proposed is not None:
                     proposed["source"]["file"] = rel
@@ -204,14 +234,14 @@ def stage(matches, source_root: Path):
     return output, dict(counts), source_hashes
 
 
-def write_local(matches, staged: list[dict], source_root: Path):
+def write_local(matches, staged: list[dict], source_root: Path, *, native_fallback=False):
     """Full deterministic source replay + baseline CAS BEFORE any local write."""
-    expected, _, _ = stage(matches, source_root)
+    expected, _, _ = stage(matches, source_root, native_fallback=native_fallback)
     if expected != staged or len({r["match_id"] for r in staged}) != len(staged):
         raise ValueError("Source, identity, baseline or source SHA changed since stage")
     by_id = {str(m.match_id): m for m in matches}
     for row in staged:
-        if row["policy"] != POLICY or set(row["additions"]) - FIELDS:
+        if row["policy"] != (NATIVE_POLICY if native_fallback else POLICY) or set(row["additions"]) - FIELDS:
             raise ValueError("Unapproved or altered breakpoint stage")
         match = by_id[row["match_id"]]
         for key, value in row["additions"].items():
@@ -237,6 +267,8 @@ def write_exact(history_dir: Path, matches, staged):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--mode", choices=("stage", "write", "verify"), required=True)
+    p.add_argument("--native-fallback", action="store_true",
+                   help="Opt-in independent full metadata proof only if original provenance is missing")
     p.add_argument("--history-dir", type=Path, required=True)
     p.add_argument("--source-dir", type=Path)
     p.add_argument("--before-dir", type=Path)
@@ -247,7 +279,8 @@ def main():
     if args.mode == "stage":
         if args.source_dir is None:
             p.error("--source-dir required for stage")
-        staged, counts, sources = stage(_load(args.history_dir), args.source_dir)
+        staged, counts, sources = stage(_load(args.history_dir), args.source_dir,
+                                         native_fallback=args.native_fallback)
         with (args.out_dir / "stage.jsonl").open("w", encoding="utf-8") as fh:
             for row in staged:
                 fh.write(json.dumps(row, sort_keys=True, allow_nan=False) + "\n")
@@ -260,7 +293,8 @@ def main():
             p.error("--stage-file and --source-dir required for write")
         staged = [json.loads(x) for x in args.stage_file.read_text().splitlines() if x.strip()]
         matches = _load(args.history_dir)
-        years = write_local(matches, staged, args.source_dir)
+        years = write_local(matches, staged, args.source_dir,
+                            native_fallback=args.native_fallback)
         write_exact(args.history_dir, matches, staged)
         report = {"schema": 1, "mode": "write", "updated": len(staged),
                   "new_stat_values": sum(len(x["additions"]) for x in staged),
