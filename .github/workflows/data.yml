@@ -158,7 +158,7 @@ jobs:
           test -s "$request" || { echo "Missing controlled data request"; exit 1; }
           mode="$(jq -r '.mode // empty' "$request")"
           case "$mode" in
-            train|backtest|feature-audit|production-preflight|comparator-build|deploy-current|ace-statistics|statistics) ;;
+            train|backtest|feature-audit|production-preflight|comparator-build|deploy-current|ace-statistics|statistics|extras) ;;
             *) echo "Push data request forbids mode: $mode"; exit 1 ;;
           esac
           promote="$(jq -r '.promote // false' "$request")"
@@ -167,6 +167,13 @@ jobs:
           [[ "$max_requests" =~ ^[0-9]+$ ]] && (( 10#$max_requests >= 1 && 10#$max_requests <= 10000 )) || {
             echo "Invalid max_requests: $max_requests (expected 1..10000)"; exit 1;
           }
+          if [[ "$mode" == "extras" ]]; then
+            [[ "$promote" == "false" ]] || { echo "Extras smoke never promotes a model"; exit 1; }
+            (( 10#$max_requests <= 30 )) || { echo "Extras smoke max_requests must be <=30"; exit 1; }
+            [[ "$(jq -r '.targeted_statistics // false' "$request")" == "false" ]] || {
+              echo "Extras smoke cannot enable targeted-statistics"; exit 1;
+            }
+          fi
           start_date="$(jq -r '.start // empty' "$request")"
           end_date="$(jq -r '.end // empty' "$request")"
           pre_reset_override="$(jq -r '.pre_reset_provider_header_override // false' "$request")"
