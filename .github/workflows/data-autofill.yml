@@ -8,7 +8,7 @@ on:
         required: true
         default: auto
         type: choice
-        options: [auto, mega-data, statistics, ace-statistics, sg-scores]
+        options: [auto, mega-data, statistics, extras, ace-statistics, sg-scores]
       max_requests:
         description: "Per-run Tennis RapidAPI cap. Shared provider-day budget remains authoritative."
         required: true
@@ -62,7 +62,7 @@ jobs:
           minute = local.hour * 60 + local.minute
           blocked = 5 * 60 <= minute < 6 * 60 + 30
 
-          if requested_mode not in {"auto", "mega-data", "statistics", "ace-statistics", "sg-scores"}:
+          if requested_mode not in {"auto", "mega-data", "statistics", "extras", "ace-statistics", "sg-scores"}:
               raise SystemExit(f"Unsupported mode: {requested_mode}")
 
           if requested_mode == "auto":

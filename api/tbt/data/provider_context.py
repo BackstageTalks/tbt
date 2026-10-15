@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 
@@ -113,6 +114,87 @@ def minimize_provider_payload(
                 compact = list(dict.fromkeys(value[:96] for value in values if isinstance(value, str) and value))[:limit]
                 if compact:
                     out["_tbt_statistics"][name] = compact
+    # Post-match provider-side evidence. Canonical p1/p2 stats and model inputs
+    # remain unchanged; these bounded markers survive parquet minimization.
+    by_set = raw.get("_tbt_statistics_by_set")
+    if (isinstance(by_set, dict) and by_set.get("schema") == 1
+            and by_set.get("source") == "tennisapi1"
+            and by_set.get("orientation") == "provider_home_away"
+            and by_set.get("scope") == "post_match_only"
+            and isinstance(by_set.get("sets"), dict)
+            and 0 < len(by_set["sets"]) <= 5):
+        result = {}
+        for n, fields in by_set["sets"].items():
+            if str(n) not in {"1", "2", "3", "4", "5"} or not isinstance(fields, dict) or len(fields) > 40:
+                result = {}
+                break
+            clean = {}
+            for k, v in fields.items():
+                if (not isinstance(k, str) or not k.startswith(("home_", "away_"))
+                        or isinstance(v, bool) or not isinstance(v, (int, float))
+                        or not math.isfinite(v) or v < 0):
+                    clean = None
+                    break
+                clean[k] = float(v)
+            if clean is None:
+                result = {}
+                break
+            result[str(n)] = clean
+        if result:
+            out["_tbt_statistics_by_set"] = {
+                "schema": 1, "source": "tennisapi1",
+                "event_id": str(by_set.get("event_id") or "")[:32],
+                "orientation": "provider_home_away", "scope": "post_match_only",
+                "sets": result,
+            }
+
+    odds = raw.get("_tbt_tennisapi_markets")
+    if (isinstance(odds, dict) and odds.get("schema") == 1
+            and odds.get("source") == "tennisapi1"
+            and odds.get("status") in ("available", "unavailable")
+            and odds.get("provider_quote_timestamp_known") is False
+            and odds.get("pre_match_asof_verified") is False
+            and isinstance(odds.get("quotes"), list) and len(odds["quotes"]) <= 64):
+        quoted = []
+        for q in odds["quotes"]:
+            if (not isinstance(q, dict) or q.get("market_id") not in (1, 11, 12, 15)
+                    or q.get("selection") not in ("1", "2", "Over", "Under")
+                    or not isinstance(q.get("is_live"), bool)
+                    or q.get("latest_decimal") is None):
+                quoted = []
+                break
+            nums = (q.get(k) for k in ("line_games", "opening_decimal", "latest_decimal"))
+            if any(v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))
+                                      or not math.isfinite(v) or v <= 0) for v in nums):
+                quoted = []
+                break
+            quoted.append({k: q.get(k) for k in ("market_id", "market", "is_live",
+                            "line_games", "selection", "opening_decimal",
+                            "latest_decimal", "settled_winning")})
+        if quoted or odds["status"] == "unavailable":
+            out["_tbt_tennisapi_markets"] = {
+                "schema": 1, "source": "tennisapi1",
+                "event_id": str(odds.get("event_id") or "")[:32],
+                "observed_at_utc": str(odds.get("observed_at_utc") or "")[:40],
+                "status": odds["status"],
+                "provider_quote_timestamp_known": False,
+                "pre_match_asof_verified": False, "quotes": quoted,
+            }
+
+    pbp = raw.get("_tbt_tennisapi_pbp")
+    fields = ("sets", "games", "points", "games_with_explicit_server", "games_with_explicit_winner")
+    if (isinstance(pbp, dict) and pbp.get("schema") == 1
+            and pbp.get("source") == "tennisapi1"
+            and pbp.get("status") in ("available", "unavailable")
+            and pbp.get("quality_status") in ("structural_only", "unavailable")
+            and pbp.get("eligible_for_cdb_point_features") is False
+            and all(isinstance(pbp.get(k), int) and not isinstance(pbp[k], bool)
+                    and 0 <= pbp[k] <= 100000 for k in fields)):
+        out["_tbt_tennisapi_pbp"] = {
+            k: pbp[k] for k in ("schema", "source", "event_id",
+            "observed_at_utc", "status", *fields, "quality_status",
+            "eligible_for_cdb_point_features")
+        }
     score_marker = raw.get("_tbt_score")
     if isinstance(score_marker, dict):
         out["_tbt_score"] = {k: score_marker[k] for k in
@@ -304,7 +386,18 @@ def merge_provider_context(existing: Any, incoming: Any) -> dict[str, Any]:
     merged = dict(left)
 
     for key, value in right.items():
-        if key == "_tbt_rank_provenance":
+        if key == "_tbt_statistics_by_set":
+            # Do not replace a previous source-native set observation with
+            # a partial later re-query during canonical history merge.
+            if key not in merged:
+                merged[key] = value
+        elif key in ("_tbt_tennisapi_markets", "_tbt_tennisapi_pbp"):
+            # A missing/late provider response cannot downgrade verified
+            # observed coverage. Keep the first positive research snapshot.
+            prior = merged.get(key)
+            if not isinstance(prior, dict) or prior.get("status") != "available":
+                merged[key] = value
+        elif key == "_tbt_rank_provenance":
             # A provenance claim is atomic; never assemble one from two sources.
             merged[key] = dict(value)
         elif isinstance(value, dict) and isinstance(merged.get(key), dict):

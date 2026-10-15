@@ -26,6 +26,26 @@ def verify_added_fields(rows, expected):
     return count
 
 
+def verify_per_set_markers(rows, expected):
+    """Strict source-native post-match marker readback, independent of stats."""
+    found = set()
+    for row in rows:
+        mid = str(row.match_id)
+        if mid not in expected:
+            continue
+        if mid in found:
+            raise ValueError("Duplicate persisted per-set match identity")
+        found.add(mid)
+        marker = (row.provider_payload or {}).get("_tbt_statistics_by_set")
+        if marker != expected[mid]:
+            raise ValueError("Missing or modified per-set TennisApi statistics")
+        if marker.get("scope") != "post_match_only" or marker.get("orientation") != "provider_home_away":
+            raise ValueError("Unsafe per-set scope/orientation")
+    if found != set(expected):
+        raise ValueError("Missing persisted per-set matches")
+    return len(found)
+
+
 def main():
     from _bootstrap import ROOT  # noqa: F401
     from tbt.data.history_snapshot import load_snapshot
@@ -45,6 +65,8 @@ def main():
         manifest = json.loads((remote/'_tbt_bundle_manifest.json').read_text())['files']
         count = 0
         remaining = dict(expected['added_fields'])
+        remaining_sets = dict(expected.get('per_set_markers') or {})
+        set_count = 0
         for name in names:
             digest = hashlib.sha256((remote/name).read_bytes()).hexdigest()
             if digest != hashlib.sha256((root/name).read_bytes()).hexdigest() or digest != manifest[name]['sha256']:
@@ -53,16 +75,23 @@ def main():
             ids = {str(row.match_id) for row in rows}
             subset = {mid: remaining[mid] for mid in ids & remaining.keys()}
             count += verify_added_fields(rows, subset)
+            set_subset = {mid: remaining_sets[mid] for mid in ids & remaining_sets.keys()}
+            set_count += verify_per_set_markers(rows, set_subset)
+            for mid in set_subset:
+                del remaining_sets[mid]
             for mid in subset:
                 del remaining[mid]
             proof[name] = digest
         if remaining:
             raise ValueError('Missing enriched matches in persisted partitions')
+        if remaining_sets:
+            raise ValueError('Missing newly persisted per-set evidence')
     collection = json.loads((root/'download_report.json').read_text())
     if count != collection.get('statistics_data_value', {}).get('new_statistic_values', 0):
         raise ValueError('Collector field count differs from independent readback')
     report = {'status':'VERIFIED' if count else 'VERIFIED_NO_NEW_FIELDS',
-              'persisted_new_statistic_values':count, 'partition_sha256':proof,
+              'persisted_new_statistic_values':count, 'persisted_new_per_set_matches':set_count,
+              'partition_sha256':proof,
               'note':'Exact remote/local partition hashes and all proposed new fields verified; no accuracy claim.'}
     (root/'statistics_readback.json').write_text(json.dumps(report,indent=2))
     print(json.dumps(report))
