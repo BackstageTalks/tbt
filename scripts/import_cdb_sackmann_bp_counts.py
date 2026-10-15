@@ -20,7 +20,7 @@ POLICY="sackmann_proven_hist_js_bp_converted_counts_null_only_shard_v1"
 def in_scope(match_id,modulus,index):
     return int(str(match_id).rsplit(":",1)[-1][:8],16) % modulus == index
 
-def stage(matches,source,*,modulus=256,index=0):
+def stage(matches,source,*,modulus=16,index=0,canonical_year=2018):
     if not 0<=index<modulus or modulus<1:
         raise ValueError("Invalid fixed hash shard")
     by_id={str(m.match_id):m for m in matches if str(m.match_id).startswith("hist-js:")}
@@ -39,6 +39,8 @@ def stage(matches,source,*,modulus=256,index=0):
                 mid,kind=source_match_id(tour,path,row,lineno)
                 match=by_id.get(mid)
                 if match is None:
+                    continue
+                if (canonical_year is not None and match.scheduled_at.year != canonical_year):
                     continue
                 if not in_scope(mid,modulus,index):
                     continue
@@ -73,8 +75,8 @@ def stage(matches,source,*,modulus=256,index=0):
     stats["new_stat_values"]=sum(len(row["additions"]) for row in rows)
     return rows,dict(stats)
 
-def write_local(matches,staged,source,*,modulus=256,index=0):
-    expected,_=stage(matches,source,modulus=modulus,index=index)
+def write_local(matches,staged,source,*,modulus=16,index=0,canonical_year=2018):
+    expected,_=stage(matches,source,modulus=modulus,index=index,canonical_year=canonical_year)
     if expected!=staged or len({x["match_id"] for x in staged})!=len(staged):
         raise ValueError("Pinned source, identity or baseline changed since staging")
     by_id={str(m.match_id):m for m in matches}
@@ -116,25 +118,29 @@ def main():
     p.add_argument("--before-dir",type=Path)
     p.add_argument("--stage-file",type=Path)
     p.add_argument("--out-dir",type=Path,required=True)
-    p.add_argument("--shard-modulus",type=int,default=256)
+    p.add_argument("--shard-modulus",type=int,default=16)
+    p.add_argument("--canonical-year",type=int,default=2018)
     p.add_argument("--shard-index",type=int,default=0)
     a=p.parse_args()
     a.out_dir.mkdir(parents=True,exist_ok=True)
     if a.mode=="stage":
         if not a.source_dir:p.error("--source-dir required for stage")
-        rows,counts=stage(_load(a.history_dir),a.source_dir,modulus=a.shard_modulus,index=a.shard_index)
+        rows,counts=stage(_load(a.history_dir),a.source_dir,modulus=a.shard_modulus,index=a.shard_index,
+                          canonical_year=a.canonical_year)
         with (a.out_dir/"stage.jsonl").open("w") as stream:
             for row in rows:stream.write(json.dumps(row,sort_keys=True,allow_nan=False)+"\n")
         result={"schema":1,"mode":"stage","counts":counts,
                 "changed_years":sorted({r["utc_year"] for r in rows}),
                 "source_commit":SOURCE_REVISION,
                 "shard":{"modulus":a.shard_modulus,"index":a.shard_index},
+                "canonical_year":a.canonical_year,
                 "production_mutated":False,"provider_requests":0}
     elif a.mode=="write":
         if not a.source_dir or not a.stage_file:p.error("--stage-file and --source-dir required")
         rows=[json.loads(line) for line in a.stage_file.read_text().splitlines() if line.strip()]
         matches=_load(a.history_dir)
-        years=write_local(matches,rows,a.source_dir,modulus=a.shard_modulus,index=a.shard_index)
+        years=write_local(matches,rows,a.source_dir,modulus=a.shard_modulus,index=a.shard_index,
+                          canonical_year=a.canonical_year)
         if years:write_exact(a.history_dir,matches,rows)
         result={"schema":1,"mode":"write","updated":len(rows),
                 "new_stat_values":sum(len(r["additions"]) for r in rows),
