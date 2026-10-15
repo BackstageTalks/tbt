@@ -115,7 +115,8 @@ def main():
     result = {
         "schema": 1,
         "source": "Tennis Abstract (independent private research)",
-        "ta_snapshot_date": official["snapshot_date"],
+        "ta_snapshot_dates": (official.get("snapshot_dates") or {"common":official.get("snapshot_date")}),
+        "ta_reports_same_date": official.get("all_boards_same_date"),
         "ta_training_eligible": bool(official["training_eligible"]),
         "canonical_model_mutated": False,
         "canonical_cdb_mutated": False,
