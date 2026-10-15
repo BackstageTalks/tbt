@@ -1,0 +1,125 @@
+name: BlinQ Drive content audit - read-only plan
+
+# External scheduler controls the time. This job never moves or deletes files.
+'on':
+  workflow_dispatch:
+    inputs:
+      download_mb:
+        type: choice
+        description: Maximum full-content hashing MiB for same-size candidates
+        required: true
+        default: '512'
+        options: ['128', '256', '512']
+  pull_request:
+    paths:
+      - .github/workflows/blinq-drive-content-audit.yml
+      - scripts/drive_content_audit.py
+      - tests/test_drive_content_audit.py
+      - scripts/drive_sort_prefolders.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-drive-content-audit-${{ github.event_name == 'pull_request' && 'pr-tests' || 'private-readonly' }}
+  cancel-in-progress: false
+
+jobs:
+  safety-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify no-mutating-source-audit and regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_drive_content_audit.py -v
+          python -m unittest discover -s tests -p test_drive_sort_prefolders.py -v
+          python -m compileall -q scripts/drive_content_audit.py
+          if grep -En 'def move\(|removeParents|files/.*delete|request\("PATCH"\)' scripts/drive_content_audit.py; then
+            echo 'Auditor unexpectedly contains a Drive write operation'
+            exit 1
+          fi
+
+  audit:
+    needs: safety-tests
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_DRIVE_SORT_CREDENTIALS: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      HASH_LIMIT_MB: ${{ inputs.download_mb }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify private report destination and reader-only access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = BackstageTalks/tbt
+          test -n "$GH_TOKEN"
+          test -n "$BLINQ_DRIVE_SORT_CREDENTIALS"
+          test "$(gh api repos/$PRIVATE_REPO --jq .private)" = true
+          python -m pip install --disable-pip-version-check -q google-auth requests
+      - name: Run complete-bounded read-only content and schema inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/private-audit
+          python -m scripts.drive_content_audit \
+            --max-download-mb "$HASH_LIMIT_MB" --max-items 12000 \
+            --out work/private-audit/report.json >work/public-counts.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("work/private-audit/report.json").read_text())
+          assert r["mode"] == "read_only_plan" and r["drive_mutations"] == 0
+          assert r["source_originals_moved"] == r["source_originals_deleted"] == r["cdb_writes"] == 0
+          assert len(r["details"]) == r["root_loose_files"]
+          assert sum(r["statuses"].values()) == r["root_loose_files"]
+          print("DRIVE_CONTENT_PLAN_CONSISTENCY_PASS")
+          PY
+          cat work/public-counts.json
+      - name: Seal exact report in private repo release and verify remote bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="blinq-drive-content-audit-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          (cd work/private-audit && sha256sum report.json > SHA256SUMS)
+          tar -czf work/drive-content-audit.tar.gz -C work/private-audit report.json SHA256SUMS
+          gh release create "$tag" -R "$PRIVATE_REPO" --target main \
+            --title "Drive content audit: $GITHUB_RUN_ID" --notes 'Private read-only evidence. Not a relocation/import authorization.' \
+            work/drive-content-audit.tar.gz >/dev/null
+          mkdir -p work/readback
+          gh release download "$tag" -R "$PRIVATE_REPO" -p drive-content-audit.tar.gz -D work/readback >/dev/null
+          cmp work/drive-content-audit.tar.gz work/readback/drive-content-audit.tar.gz
+          (cd work/readback && tar -xzf drive-content-audit.tar.gz && sha256sum -c SHA256SUMS)
+          echo DRIVE_CONTENT_AUDIT_PRIVATE_READBACK_PASS
+
+  report:
+    needs: [safety-tests, audit]
+    if: always() && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Counts-only status - no private Drive identifiers
+        env:
+          AUDIT_STATE: ${{ needs.audit.result }}
+        run: |
+          {
+            echo '## BlinQ Drive byte audit'
+            echo "Read-only result: $AUDIT_STATE"
+            echo 'No moves, deletions, CDB imports, model training, paid API calls or web deployment.'
+            echo 'Private SHA-verified source evidence: BackstageTalks/tbt-data release for this run, if audit passed.'
+          } >> "$GITHUB_STEP_SUMMARY"
