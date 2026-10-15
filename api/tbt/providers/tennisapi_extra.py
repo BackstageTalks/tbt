@@ -175,25 +175,42 @@ def point_by_point_inventory(payload: Any, *, event_id: str | int) -> dict:
     No PBP statistic is attached to CDB until coverage/completeness, event
     identity, server changes and winner attribution are independently proven.
     """
-    raw = _check_event(payload, event_id)
-    container = raw.get("pointByPoint", raw)
-    if not isinstance(container, dict):
-        raise ProviderError("Invalid point-by-point envelope")
-    sets = container.get("sets", [])
+    # Provider responses may wrap the sets in pointByPoint, return them as
+    # a top-level array, or omit the optional feed entirely (204 -> {}).
+    # Only recognize known structural containers; do not infer missing points.
+    if payload is None:
+        sets = []
+    elif isinstance(payload, list):
+        sets = payload
+    else:
+        raw = _check_event(payload, event_id)
+        container = raw.get("pointByPoint", raw)
+        if container is None:
+            sets = []
+        elif isinstance(container, list):
+            sets = container
+        elif isinstance(container, dict):
+            sets = container.get("sets", [])
+        else:
+            raise ProviderError("Unsupported point-by-point envelope shape")
     if not isinstance(sets, list) or len(sets) > 5:
-        raise ProviderError("Invalid point-by-point sets")
+        raise ProviderError("Unsupported point-by-point sets shape")
     games_count = points_count = explicit_server_games = explicit_winner_games = 0
     for set_row in sets:
         if not isinstance(set_row, dict):
             raise ProviderError("Invalid point-by-point set")
-        games = set_row.get("games", [])
+        if "games" not in set_row:
+            raise ProviderError("Unsupported point-by-point set record")
+        games = set_row["games"]
         if not isinstance(games, list) or len(games) > 100:
             raise ProviderError("Invalid point-by-point games")
         games_count += len(games)
         for game in games:
             if not isinstance(game, dict):
                 raise ProviderError("Invalid point-by-point game")
-            points = game.get("points", [])
+            if "points" not in game:
+                raise ProviderError("Unsupported point-by-point game record")
+            points = game["points"]
             if not isinstance(points, list) or len(points) > 300:
                 raise ProviderError("Invalid point-by-point points")
             if any(not isinstance(p, dict) for p in points):
