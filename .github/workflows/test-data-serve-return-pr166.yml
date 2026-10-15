@@ -1,0 +1,32 @@
+name: One-time external Serve Return CDB gate check
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/test-data-serve-return-pr166.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-data-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact private data commit
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 92e6f9fdd8464449b52d8dec7dcf49c33ba98ea2
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+          path: data
+      - name: Check source SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C data rev-parse HEAD)" = 92e6f9fdd8464449b52d8dec7dcf49c33ba98ea2
+      - name: Compile offline identity gate
+        run: python -m py_compile data/scripts/research/reconcile_uploaded_serve_return.py
+      - name: Execute full identity and NULL-only regressions
+        run: python -m unittest discover -s data/scripts/research -p 'test_reconcile_uploaded_serve_return.py' -v
