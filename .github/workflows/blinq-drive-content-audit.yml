@@ -2,6 +2,12 @@ name: BlinQ Drive content audit - read-only plan
 
 # External scheduler controls the time. This job never moves or deletes files.
 'on':
+  workflow_call:
+    inputs:
+      download_mb:
+        type: string
+        required: false
+        default: '512'
   workflow_dispatch:
     inputs:
       download_mb:
@@ -15,6 +21,8 @@ name: BlinQ Drive content audit - read-only plan
       - .github/workflows/blinq-drive-content-audit.yml
       - scripts/drive_content_audit.py
       - tests/test_drive_content_audit.py
+      - tests/test_drive_cron_bridge.py
+      - .github/workflows/blinq-private-drive-cdb-audit-bridge.yml
       - scripts/drive_sort_prefolders.py
 
 permissions:
@@ -40,6 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest discover -s tests -p test_drive_content_audit.py -v
+          python -m unittest discover -s tests -p test_drive_cron_bridge.py -v
           python -m unittest discover -s tests -p test_drive_sort_prefolders.py -v
           python -m compileall -q scripts/drive_content_audit.py
           if grep -En 'def move\(|removeParents|files/.*delete|request\("PATCH"\)' scripts/drive_content_audit.py; then
