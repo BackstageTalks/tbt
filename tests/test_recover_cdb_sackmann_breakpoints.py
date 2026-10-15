@@ -102,7 +102,7 @@ def _build_source(root, rows):
     path = root / "atp" / "atp_matches_2020.csv"
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(original()))
+        writer = csv.DictWriter(fh, fieldnames=sorted(set(original()).union(*(set(r) for r in rows))))
         writer.writeheader()
         writer.writerows(rows)
     return path
