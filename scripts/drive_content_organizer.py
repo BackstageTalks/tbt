@@ -101,13 +101,16 @@ class ContentDriveAPI(DriveAPI):
         url = "https://www.googleapis.com/drive/v3/files/" + item["id"]
         response = self.session.request(
             "GET", url, params={"alt": "media", "supportsAllDrives": "true"},
-            headers={"Range": "bytes=0-8191"}, timeout=30,
+            headers={"Range": "bytes=0-8191"}, stream=True, timeout=30,
         )
         try:
             # A non-Range 200 could silently download a huge file; never use it.
-            if response.status_code != 206 or len(response.content) > 8192:
+            if response.status_code != 206:
                 return None
-            header = next(csv.reader(io.StringIO(response.content.decode("utf-8-sig").splitlines()[0])), [])
+            snippet = next(response.iter_content(chunk_size=8193), b"")
+            if len(snippet) > 8192:
+                return None
+            header = next(csv.reader(io.StringIO(snippet.decode("utf-8-sig").splitlines()[0])), [])
             keys = {k.strip().casefold().replace(" ", "_") for k in header}
             signals = [
                 ({"winner", "loser", "date"}, "01_ZAPASY_A_VYSLEDKY"),
@@ -207,6 +210,16 @@ def organize(api, *, apply=False, max_moves=50, max_download_mb=512, max_items=1
         dest_names[(fid, f["name"])].append(f)
         categorized_ids.add(f["id"])
     root_ids = {f["id"] for f in root_files}
+    root_by_name = defaultdict(list)
+    for f in root_files:
+        root_by_name[f["name"]].append(f)
+    # Never silently merge distinct datasets that merely share a filename.
+    colliding_root_names = {
+        name for name, group in root_by_name.items()
+        if len(group) > 1 and (any(int(f["size"]) in blocked_sizes for f in group)
+                               or len({digests.get(f["id"]) for f in group}) != 1)
+    }
+    planned_dest_names = {}
     details = []
     actions = []
     for item in sorted(root_files, key=lambda x: x["id"]):
@@ -214,6 +227,9 @@ def organize(api, *, apply=False, max_moves=50, max_download_mb=512, max_items=1
         result = {"source_id": fid, "name": item["name"], "size": item["size"],
                   "original_parent": ROOT, "state": "held", "destination": None}
         details.append(result)
+        if item["name"] in colliding_root_names:
+            result["state"] = "root_name_collision"
+            continue
         if item["name"].casefold().endswith(PROTECTED_SUFFIXES):
             result["state"] = "protected_archive"
             continue
@@ -253,12 +269,25 @@ def organize(api, *, apply=False, max_moves=50, max_download_mb=512, max_items=1
             if result["state"] != "verified_duplicate_review":
                 result["state"] = "destination_name_collision"
                 continue
+        if result["state"] != "verified_duplicate_review":
+            key = (dest, item["name"])
+            # Even two distinct root names cannot be moved into the same
+            # destination with the same filename unless they are byte-identical.
+            if key in planned_dest_names and planned_dest_names[key] != digests.get(fid):
+                result["state"] = "planned_name_collision"
+                continue
         if fid not in digests:
             try:
                 digests[fid] = api.digest(item, max_download)
             except (BudgetExceeded, ValueError, OSError):
                 result["state"] = "unverified_bytes"
                 continue
+        if result["state"] != "verified_duplicate_review":
+            key = (dest, item["name"])
+            if key in planned_dest_names and planned_dest_names[key] != digests[fid]:
+                result["state"] = "planned_name_collision"
+                continue
+            planned_dest_names[key] = digests[fid]
         result["sha256"] = digests[fid]
         result["destination"] = dest
         result["category"] = target
