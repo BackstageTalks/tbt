@@ -13,14 +13,14 @@ from audit_pbp_source_vs_current_cdb import FILES,valid
 from import_historical_match_foundation import _stats
 from recover_cdb_sackmann_breakpoints import (_load,source_match_id,
                                               _valid_cdb_lineage)
-COUNTS=("p1_break_points_won","p2_break_points_won")
+COUNTS=("p1_return_break_points_converted_count","p2_return_break_points_converted_count")
 
 def source_bp_counts(row):
     raw=valid(row)
     if raw is None:
         return None
-    return {"p1_break_points_won":int(raw["l_bpFaced"]-raw["l_bpSaved"]),
-            "p2_break_points_won":int(raw["w_bpFaced"]-raw["w_bpSaved"])}
+    return {"p1_return_break_points_converted_count":int(raw["l_bpFaced"]-raw["l_bpSaved"]),
+            "p2_return_break_points_converted_count":int(raw["w_bpFaced"]-raw["w_bpSaved"])}
 
 def candidate(match,row,tour,kind,path):
     if not _valid_cdb_lineage(match,row,tour,kind,path):
@@ -46,7 +46,7 @@ def candidate(match,row,tour,kind,path):
             if not isinstance(old,(int,float)) or isinstance(old,bool) or abs(old-num)>1e-6:
                 rejected+=1
             continue
-        if key=="p1_break_points_won":
+        if key=="p1_return_break_points_converted_count":
             faced=float(row["l_bpFaced"])
             rate=previous.get("p1_break_point_return_win")
             opposite=previous.get("p2_break_point_serve_win")
