@@ -12,6 +12,17 @@ RATE_NAMES = (
     "return_points_won", "break_point_serve_win", "break_point_return_win",
 )
 COUNT_NAMES = ("aces", "double_faults")
+RECOVERY_PAIRS = tuple((f"{a}_{s}",f"{b}_{t}")
+    for a,b in (("p1","p2"),("p2","p1"))
+    for s,t in (("first_serve_win","first_return_win"),
+                ("second_serve_win","second_return_win"),
+                ("service_points_won","return_points_won")))
+
+
+def valid_rate(value):
+    import math
+    return (isinstance(value,(int,float)) and not isinstance(value,bool)
+            and math.isfinite(value) and 0 <= value <= 1)
 
 
 def json_object(value):
@@ -65,6 +76,23 @@ def profile(rows):
                     counter["inconsistent_serve_return_pairs"] += 1
             elif (x is None) != (y is None):
                 counter["current_exact_complement_null_cells"] += 1
+        pair_errors = 0
+        pair_nulls = 0
+        for own,opp in RECOVERY_PAIRS:
+            own_v,opp_v=stats.get(own),stats.get(opp)
+            if own_v is not None and not valid_rate(own_v) or opp_v is not None and not valid_rate(opp_v):
+                pair_errors += 1
+            elif own_v is not None and opp_v is not None and abs(own_v+opp_v-1)>1e-6:
+                pair_errors += 1
+            elif (own_v is None) != (opp_v is None):
+                pair_nulls += 1
+                counter["potential_pairwise_complement_cells"] += 1
+                counter["candidate_"+(own if own_v is None else opp)] += 1
+        if pair_errors:
+            counter["matches_with_any_pair_error"] += 1
+        if pair_nulls and pair_errors:
+            counter["potential_complements_in_otherwise_conflicting_match"] += pair_nulls
+            counter["matches_with_valid_candidate_and_other_pair_conflict"] += 1
         if not stats:
             counter[f"no_stats_{family}"] += 1
     return dict(sorted(counter.items())), dict(sorted(samples.items()))
