@@ -218,7 +218,7 @@ def audit(api, *, max_download_mb=512, max_items=12000):
             entry["status"] = "schema_name_disagreement"
         elif entry["status"] == "no_known_duplicate_scoped":
             entry["status"] = (
-                "schema_confirmed_plan_only"
+                "header_signature_match_plan_only"
                 if category != REVIEW and entry["content_schema_category"] == category
                 else "filename_only_or_schema_unknown"
             )
@@ -239,9 +239,10 @@ def audit(api, *, max_download_mb=512, max_items=12000):
         "source_originals_deleted": 0, "drive_mutations": 0, "cdb_writes": 0,
         "root_loose_files": len(root_files), "category_direct_files": len(records) - len(root_files),
         "confirmed_identical_groups": len(duplicate_groups),
-        "confirmed_identical_root_files": sum(any(f["id"] in roots for f in g) for g in duplicate_groups),
+        "confirmed_identical_root_files": sum(sum(f["id"] in roots for f in g) for g in duplicate_groups),
         "unverified_equal_size_groups": len(blocked_sizes),
         "downloaded_bytes": api.bytes_downloaded, "statuses": dict(sorted(stats.items())),
+        "note": "Header signature is a hypothesis, not row-semantic validation or permission to move/import.",
         "details": output,
     }
 
