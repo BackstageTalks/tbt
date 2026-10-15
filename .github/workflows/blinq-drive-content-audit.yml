@@ -2,6 +2,12 @@ name: BlinQ Drive content audit - read-only plan
 
 # External scheduler controls the time. This job never moves or deletes files.
 'on':
+  workflow_call:
+    inputs:
+      download_mb:
+        type: string
+        required: false
+        default: '512'
   workflow_dispatch:
     inputs:
       download_mb:
