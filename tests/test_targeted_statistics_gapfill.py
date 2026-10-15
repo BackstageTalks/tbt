@@ -332,7 +332,7 @@ def test_wta_older_underserved_years_rotate_instead_of_starving(match_factory):
 def test_hourly_high_yield_flag_is_not_enabled_for_manual_operator_request():
     from pathlib import Path
     wf=(Path(__file__).resolve().parents[1] / '.github/workflows/data.yml').read_text()
-    assert "BLINQ_AUTOFILL_HIGH_YIELD: ${{ inputs.hourly_autofill && 'true' || 'false' }}" in wf
+    assert "BLINQ_AUTOFILL_HIGH_YIELD: ${{ inputs.hourly_autofill && inputs.mode == 'statistics' && 'true' || 'false' }}" in wf
     script=(Path(__file__).resolve().parents[1] / 'scripts/download_tennis_history.py').read_text()
     assert 'historical_high_yield=high_yield_setting == "true"' in script
     assert 'targeted_statistics' in script
