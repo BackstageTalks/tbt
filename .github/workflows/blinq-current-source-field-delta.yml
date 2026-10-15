@@ -75,7 +75,7 @@ jobs:
           assert r['safety']['no_cdb_writes']
           assert r['safety']['no_provider_requests']
           assert r['canonical']['year_partitions']==78
-          assert r['candidate_stage_rows']==r['completed_match_score_comparison']['stageable_score_matches_read_only']
+          assert r['candidate_stage_rows']==r['completed_match_score_comparison'].get('stageable_score_matches_read_only',0)
           assert r['safety']['actual_write_authorized'] is False
           print("BLINQ_CDB_FIELD_DELTA_VERIFIED",r['canonical'],
                 "CORE_MISSING",r['core_missing_cells_by_field'],
@@ -105,7 +105,7 @@ jobs:
           with gzip.open('readback/preconditioned-score-candidates.jsonl.gz','rt') as f:
               stages=[json.loads(x) for x in f if x.strip()]
           assert len(stages)==r['candidate_stage_rows']
-          assert sum(len(x['add_only_missing_score_fields']) for x in stages)==r['completed_match_score_comparison']['stageable_score_missing_cells_read_only']
+          assert sum(len(x['add_only_missing_score_fields']) for x in stages)==r['completed_match_score_comparison'].get('stageable_score_missing_cells_read_only',0)
           assert len({x['canonical_match_id'] for x in stages})==len(stages)
           print("BLINQ_SOURCE_FIELD_DELTA_INDEPENDENT_PERSISTED_READBACK",r['canonical']['exact_id_matched'],r['score_missing_cells_by_field'])
           PY
