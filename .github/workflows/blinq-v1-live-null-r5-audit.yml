@@ -169,6 +169,53 @@ jobs:
           print('PRODUCTION_CDB_WRITES=0')
           print('PAID_PROVIDER_API_CALLS=0')
           PY
+      - name: Research-only native event clock and identity witness audit (never a writer gate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import collections, gzip, json
+          from pathlib import Path
+          import audit_uploaded_clock_bridge as bridge
+          # Fixed reviewed R5 SHA; the prior workflow steps already byte-attested
+          # the stage and proved each original CSV source_sha256.
+          bridge.SOURCE_SHA='d6d62982c438c625d531a50fc38faa2179835fe336d6e40d5b10a7ef63919210'
+          root=Path('work/blinq-v1')
+          src=root/'source/repaired-stage-r5.jsonl.gz'
+          index=root/'source/blinq-flashscore-event-index-2026.jsonl.gz'
+          out=root/'clock-research-private'
+          r=bridge.run(src,index,root/'before',out)
+          cand=[json.loads(line) for line in gzip.open(out/'private-candidates.jsonl.gz','rt') if line.strip()]
+          conflict=[json.loads(line) for line in gzip.open(out/'private-conflicts.jsonl.gz','rt') if line.strip()]
+          unique_source=len(set(x['source_key'] for x in cand))==len(cand)
+          unique_target=len(set(x['canonical_match_id'] for x in cand))==len(cand)
+          if not unique_source or not unique_target:
+              raise SystemExit('BLOCKED_DUPLICATE_CLOCK_RESEARCH_CROSSWALK')
+          if r.get('canonical_cells_written')!=0 or r.get('model_training') is not False:
+              raise SystemExit('BLOCKED_CLOCK_PROBE_WRITE_POLICY')
+          ct=r['counts']
+          print('RESEARCH_CLOCK_STAGE_R5_SHA_VERIFIED=TRUE')
+          print('RESEARCH_NATIVE_EVENT_CORROBORATED='+str(ct.get('proven_same_native_event_players_score_four_stats',0)))
+          print('RESEARCH_UNIQUE_NULL_CANDIDATE_MATCHES='+str(len(cand)))
+          print('RESEARCH_POTENTIAL_NULL_CELLS='+str(ct.get('potential_new_null_cells',0)))
+          print('RESEARCH_CONFLICTING_MATCHES='+str(len(conflict)))
+          print('RESEARCH_ALREADY_COMPLETE='+str(ct.get('already_complete',0)))
+          print('RESEARCH_CLOCK_BUCKETS='+json.dumps(r['clock_discrepancy_buckets'],sort_keys=True))
+          print('RESEARCH_REJECTION_COUNTS='+json.dumps(ct,sort_keys=True))
+          # Determine whether source and index actually provide independent IDs
+          # for BOTH sides. Only emit schema-field names, never real player data.
+          index_first=next(iter(bridge.rows(index)))
+          src_first=next(iter(bridge.rows(src)))
+          idx_fields=sorted(index_first)
+          source_fields=sorted(src_first)
+          print('PRIVATE_SOURCE_SCHEMA_FIELD_NAMES='+json.dumps(source_fields))
+          print('PRIVATE_EVENT_INDEX_SCHEMA_FIELD_NAMES='+json.dumps(idx_fields))
+          print('PRIVATE_EVENT_INDEX_LINK_FIELD_NAMES='+json.dumps(sorted(index_first.get('link') or {})))
+          # Research clock differences are NOT certified start time, identity,
+          # ranking as-of, or proof of production import eligibility.
+          print('RESEARCH_CLOCK_PROBE_WRITE_AUTHORIZED=FALSE')
+          print('PRODUCTION_CDB_WRITES=0')
+          PY
       - name: Reconfirm baseline has not changed during private computation
         shell: bash
         run: |
