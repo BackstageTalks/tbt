@@ -104,7 +104,7 @@ def enrich_event_extras(match, provider, *, now: datetime | None = None) -> dict
             "quotes": parsed["quotes"][:64],
         }
         # Keep older positive evidence if a provider temporarily retracts it.
-        if raw.get(_MARKET_KEY, {}).get("status") != "available":
+        if not (isinstance(raw.get(_MARKET_KEY), dict) and raw[_MARKET_KEY].get("status") == "available"):
             raw[_MARKET_KEY] = marker
             match.provider_payload = dict(raw)
             outcomes["changed"] = True
@@ -123,7 +123,7 @@ def enrich_event_extras(match, provider, *, now: datetime | None = None) -> dict
             "quality_status": parsed["quality_status"],
             "eligible_for_cdb_point_features": False,
         }
-        if raw.get(_PBP_KEY, {}).get("status") != "available":
+        if not (isinstance(raw.get(_PBP_KEY), dict) and raw[_PBP_KEY].get("status") == "available"):
             raw[_PBP_KEY] = marker
             match.provider_payload = dict(raw)
             outcomes["changed"] = True
