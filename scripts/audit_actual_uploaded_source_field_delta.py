@@ -326,6 +326,21 @@ def audit(history,release,uploaded,market,source):
                   "require_independent_score_source_corroboration_and_fresh_sha_before_writer":True}
     }, proposed_stage
 
+def verify_stage_counts(stage, comparison):
+    """A zero-candidate read-only audit is success, not a missing-key error."""
+    if not isinstance(comparison, dict):
+        raise ValueError("Invalid completed-match comparison report")
+    expected_rows=int(comparison.get("stageable_score_matches_read_only",0))
+    expected_cells=int(comparison.get("stageable_score_missing_cells_read_only",0))
+    if expected_rows < 0 or expected_cells < 0:
+        raise ValueError("Negative stage counts")
+    if len(stage)!=expected_rows:
+        raise ValueError("Stage row count differs from comparison evidence")
+    actual_cells=sum(len(row["add_only_missing_score_fields"]) for row in stage)
+    if actual_cells!=expected_cells:
+        raise ValueError("Stage cell count differs from comparison evidence")
+
+
 def main():
     parser=argparse.ArgumentParser()
     for k in ("history","release-json","uploaded","market","source","output"):
@@ -341,8 +356,7 @@ def main():
         with gzip.open(args.stage_output,"wt",encoding="utf-8") as fh:
             for item in stages:
                 fh.write(json.dumps(item,sort_keys=True,ensure_ascii=False)+"\n")
-        assert len(stages)==d["completed_match_score_comparison"].get("stageable_score_matches_read_only",0)
-        assert sum(len(v["add_only_missing_score_fields"]) for v in stages)==d["completed_match_score_comparison"].get("stageable_score_missing_cells_read_only",0)
+        verify_stage_counts(stages,d["completed_match_score_comparison"])
     print("BLINQ_ACTUAL_SOURCE_TO_CDB_FIELD_GAPS",json.dumps({k:v for k,v in d.items() if k not in ("sources","by_year")},sort_keys=True))
     print("BLINQ_GAP_BY_YEAR",json.dumps(d["by_year"],sort_keys=True))
 if __name__=="__main__":main()
