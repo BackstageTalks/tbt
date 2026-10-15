@@ -10250,3 +10250,22 @@ body#blinqPremium.blinq-admin .admin-test-pager .results-pagination-nav > button
   height:40px;
   white-space:nowrap;
 }
+
+
+/* Player avatar resilience: the shipped fallback art is also a CSS backplate.
+   Avoid an initials-only flash while a failed/missing portrait is re-fetched. */
+body#blinqPremium .layered-player-avatar.player-fallback-atp{
+  background-image:url('/assets/missing_foto_m.webp')!important;
+  background-position:center!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+}
+body#blinqPremium .layered-player-avatar.player-fallback-wta{
+  background-image:url('/assets/missing_foto_w.webp')!important;
+  background-position:center!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+}
+body#blinqPremium .layered-player-avatar.has-photo .player-avatar-initials{
+  background:transparent!important;
+}
