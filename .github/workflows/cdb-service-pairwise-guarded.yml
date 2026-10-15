@@ -206,12 +206,22 @@ jobs:
           report=json.loads((root/"stage/report.json").read_text())
           snap=json.loads((root/"source-snapshot.json").read_text())
           stage=(root/"evidence/stage.jsonl").read_bytes()
+          rows=[json.loads(line) for line in stage.decode("utf8").splitlines() if line.strip()]
+          assert len(rows)==report["counts"]["staged_matches"]
+          player_rows=sum(
+              int(any(k.startswith("p1_") for k in row["additions"])) +
+              int(any(k.startswith("p2_") for k in row["additions"]))
+              for row in rows
+          )
+          assert len(rows) <= player_rows <= 2*len(rows)
+          print("PAIRWISE_CDB_ENRICHED_PLAYER_RECORDS",player_rows,flush=True)
           record={"batch_id":f"blinq-cdb-pairwise-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}",
             "canonical_manifest_sha256":snap["manifest_sha256"],
             "script_commit_sha":os.environ["GITHUB_SHA"],
             "stage_sha256":hashlib.sha256(stage).hexdigest(),
             "stage_rows":report["counts"]["staged_matches"],
             "additive_stat_fields":report["counts"]["new_stat_values"],
+            "enriched_player_records":player_rows,
             "policy":"post_match_prior_history; per_independent_pair_exact_null_complement_v1",
             "source":"existing_canonical_serves_only",
             "existing_stats_overwrites_allowed":False}
