@@ -160,3 +160,81 @@ def test_provider_endpoint_paths_and_shared_enrichment_budget(monkeypatch):
         ("/api/tennis/event/55/point-by-point", True),
         ("/api/tennis/event/17305441/odds/1/all", True),
     ]
+
+
+def test_enrichment_reuses_paid_statistics_and_stores_provider_side_sets(
+        match_factory, tmp_path):
+    from tbt.services.statistics_enrichment import StatisticsEnricher
+
+    class Provider:
+        calls = []
+
+        def _get(self, path, **kwargs):
+            self.calls.append(path)
+            if path.endswith("/statistics"):
+                return {"statistics": [
+                    {"period": "ALL", "groups": [{"statisticsItems": [
+                        {"key": "aces", "homeValue": 10, "awayValue": 20},
+                    ]}]},
+                    {"period": "1ST", "groups": [{"statisticsItems": [
+                        {"key": "aces", "homeValue": 3, "awayValue": 9},
+                    ]}]},
+                    {"period": "2ND", "groups": [{"statisticsItems": [
+                        {"key": "aces", "homeValue": 7, "awayValue": 11},
+                    ]}]},
+                ]}
+            return {"event": {
+                "homeTeam": {"id": "B"}, "awayTeam": {"id": "A"},
+                "status": {"type": "finished"},
+            }}
+
+    provider = Provider()
+    match = match_factory("x", "A", "B", "A")
+    match.provider_payload = {"id": "17305441"}
+    enricher = StatisticsEnricher(provider, tmp_path / "per_set.sqlite")
+    try:
+        assert enricher.enrich(match) == "enriched"
+        assert match.stats["p1_aces"] == 20
+        assert match.stats["p2_aces"] == 10
+        per_set = match.provider_payload["_tbt_statistics_by_set"]
+        assert per_set["orientation"] == "provider_home_away"
+        assert per_set["scope"] == "post_match_only"
+        assert per_set["sets"]["1"]["home_aces"] == 3
+        assert per_set["sets"]["1"]["away_aces"] == 9
+        # Player order in canonical history can change without modifying
+        # source-side (home/away) per-set evidence.
+        assert match.swapped().provider_payload["_tbt_statistics_by_set"] == per_set
+        assert len(provider.calls) == 2
+    finally:
+        enricher.close()
+
+
+def test_invalid_per_set_totals_never_override_valid_whole_match(
+        match_factory, tmp_path):
+    from tbt.services.statistics_enrichment import StatisticsEnricher
+
+    class Provider:
+        def _get(self, path, **kwargs):
+            if path.endswith("/statistics"):
+                return {"statistics": [
+                    {"period": "ALL", "groups": [{"statisticsItems": [
+                        {"key": "aces", "homeValue": 2, "awayValue": 1},
+                    ]}]},
+                    {"period": "1ST", "groups": [{"statisticsItems": [
+                        {"key": "aces", "homeValue": 9, "awayValue": 1},
+                    ]}]},
+                ]}
+            return {"event": {
+                "homeTeam": {"id": "A"}, "awayTeam": {"id": "B"},
+                "status": {"type": "finished"},
+            }}
+
+    match = match_factory("x", "A", "B", "A")
+    match.provider_payload = {"id": "123"}
+    enricher = StatisticsEnricher(Provider(), tmp_path / "per_set_bad.sqlite")
+    try:
+        assert enricher.enrich(match) == "enriched"
+        assert match.stats["p1_aces"] == 2
+        assert "_tbt_statistics_by_set" not in match.provider_payload
+    finally:
+        enricher.close()
