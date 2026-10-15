@@ -350,3 +350,61 @@ def test_extras_batch_quota_is_handled_before_provider_rejection():
     loop = extras.split('            checkpoint(changed, True)', 1)[0]
     assert loop.index("except RequestBudgetExceeded:") < loop.index("except ProviderError as exc:")
     assert 'report["extras_rejected"] += 1' in loop
+
+def test_daily_extras_prefers_2026_before_older_verified_years(match_factory):
+    """The new endpoint backlog starts in 2026 and moves back only when due."""
+
+    from datetime import date
+    from download_tennis_history import _extras_candidates
+
+    def sample(name, year, month, day, *, verified=False, cached=False, completed=True):
+        match = match_factory(name, "A", "B", "A" if completed else None)
+        match.scheduled_at = datetime(year, month, day, 12, tzinfo=timezone.utc)
+        match.provider_payload = {"id": "100"}
+        if verified:
+            match.provider_payload["_tbt_event_identity"] = {
+                "event_id": "100", "status": "finished", "home": "A", "away": "B",
+            }
+        if cached:
+            marker = {
+                "schema": 1, "event_id": "100", "status": "available",
+                "observed_at_utc": NOW.isoformat(),
+            }
+            match.provider_payload["_tbt_tennisapi_markets"] = dict(marker)
+            match.provider_payload["_tbt_tennisapi_pbp"] = dict(marker)
+        return match
+
+    # A verified historical event may save a detail call but must not leapfrog 2026.
+    old_verified = sample("old_verified", 2025, 12, 20, verified=True)
+    earliest = sample("earliest", 2024, 11, 5)
+    latest_2026 = sample("latest_2026", 2026, 10, 12)
+    verified_2026 = sample("verified_2026", 2026, 1, 17, verified=True)
+    cached_2026 = sample("cached_2026", 2026, 10, 13, cached=True)
+    upcoming_2026 = sample("upcoming_2026", 2026, 10, 14, completed=False)
+
+    rows = _extras_candidates(
+        [old_verified, cached_2026, earliest, latest_2026,
+         upcoming_2026, verified_2026],
+        date(2024, 1, 1), date(2026, 10, 15),
+    )
+    assert [m.match_id for m in rows] == [
+        "verified_2026", "latest_2026", "old_verified", "earliest",
+    ]
+    assert [m.scheduled_at.year for m in rows[:2]] == [2026, 2026]
+
+
+def test_daily_extras_slots_keep_2026_first_and_share_provider_budget():
+    """Daily extras run twice without disabling normal statistics or 3% reserve."""
+    root = Path(__file__).resolve().parents[1]
+    dispatch = (root / ".github/workflows/data-hourly-quota-gapfill.yml").read_text()
+    source = (root / "scripts/download_tennis_history.py").read_text()
+
+    assert "extras_slot = local.hour in (14, 17)" in dispatch
+    assert "proposed = min(proposed, 450)" in dispatch
+    assert 'payload["inputs"]["mode"] = "extras"' in dispatch
+    assert '"start": "2022-01-01"' in dispatch
+    assert "14550" in dispatch and "reserved_provider_headroom" in dispatch
+    assert "newest_season_first_then_verified_identity" in source
+    assert 'report["extras_candidate_rows_by_year"]' in source
+    assert 'output_report["extras_processed_by_year"]' in source
+    assert 'report["extras_first_100_by_year"]' in source
