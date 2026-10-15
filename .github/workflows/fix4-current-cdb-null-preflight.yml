@@ -135,13 +135,30 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          (cd work/fix4/out && sha256sum report.json protected-null-only-stage.jsonl conflict_review_private.jsonl > SHA256SUMS && sha256sum -c SHA256SUMS)
+          # GitHub refuses 0-byte release assets. For zero safe additions,
+          # retain report + private conflict ledger but NEVER publish an empty writer stage.
+          assets=(work/fix4/out/report.json work/fix4/out/conflict_review_private.jsonl)
+          if test -s work/fix4/out/protected-null-only-stage.jsonl; then
+            assets+=(work/fix4/out/protected-null-only-stage.jsonl)
+          else
+            python - <<'PY'
+          import json
+          r=json.load(open('work/fix4/out/report.json'))
+          if r['counts'].get('candidate_null_cells',0)!=0:
+           raise SystemExit('NONEMPTY_CDB_DELTA_WITH_EMPTY_STAGE')
+          print('FIX4_EMPTY_CDB_NULL_STAGE_SAFELY_OMITTED')
+          PY
+          fi
+          (cd work/fix4/out && sha256sum report.json conflict_review_private.jsonl > SHA256SUMS)
+          if test -s work/fix4/out/protected-null-only-stage.jsonl; then
+            (cd work/fix4/out && sha256sum protected-null-only-stage.jsonl >> SHA256SUMS)
+          fi
+          (cd work/fix4/out && sha256sum -c SHA256SUMS)
           tag="blinq-fix4-protected-null-stage-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           gh release create "$tag" -R "$PRIVATE_REPO" --target main \
             --title 'BlinQ FIX4 guarded exact CDB NULL delta research stage' \
-            --notes 'Private immutable source-verified post-match field delta only; no canonical writer called. Cross-provider conflict and source quality quarantine retained.' \
-            --latest=false work/fix4/out/report.json work/fix4/out/protected-null-only-stage.jsonl \
-            work/fix4/out/conflict_review_private.jsonl work/fix4/out/SHA256SUMS
+            --notes 'Private immutable source-verified post-match field delta only; no canonical writer called. Cross-provider conflict and source quality quarantine retained. Empty writer stage intentionally omitted.' \
+            --latest=false "${assets[@]}" work/fix4/out/SHA256SUMS
           gh release download "$tag" -R "$PRIVATE_REPO" -D work/fix4/readback
           (cd work/fix4/readback && sha256sum -c SHA256SUMS)
           cmp work/fix4/out/report.json work/fix4/readback/report.json
