@@ -238,3 +238,39 @@ def test_invalid_per_set_totals_never_override_valid_whole_match(
         assert "_tbt_statistics_by_set" not in match.provider_payload
     finally:
         enricher.close()
+
+
+def test_previous_set_evidence_cannot_be_downgraded_by_retry(
+        match_factory, tmp_path):
+    from tbt.services.statistics_enrichment import StatisticsEnricher
+
+    class Provider:
+        def _get(self, path, **kwargs):
+            if path.endswith("/statistics"):
+                return {"statistics": [
+                    {"period": "ALL", "groups": [{"statisticsItems": [
+                        {"key": "aces", "homeValue": 7, "awayValue": 6},
+                    ]}]},
+                    {"period": "1ST", "groups": [{"statisticsItems": [
+                        {"key": "aces", "homeValue": 1, "awayValue": 2},
+                    ]}]},
+                ]}
+            return {"event": {
+                "homeTeam": {"id": "A"}, "awayTeam": {"id": "B"},
+                "status": {"type": "finished"},
+            }}
+
+    retained = {
+        "schema": 1, "source": "tennisapi1", "event_id": "123",
+        "orientation": "provider_home_away", "scope": "post_match_only",
+        "sets": {"1": {"home_aces": 3}, "2": {"home_aces": 4}},
+    }
+    match = match_factory("x", "A", "B", "A")
+    match.provider_payload = {"id": "123", "_tbt_statistics_by_set": retained}
+    enricher = StatisticsEnricher(Provider(), tmp_path / "retry.sqlite")
+    try:
+        assert enricher.enrich(match) == "enriched"
+        assert match.provider_payload["_tbt_statistics_by_set"] == retained
+        assert match.stats["p1_aces"] == 7
+    finally:
+        enricher.close()
