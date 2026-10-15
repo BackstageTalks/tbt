@@ -1206,7 +1206,12 @@ def main():
             raise SystemExit("Refresh budget exhausted; previously deployed feed stays available with its timestamp")
         write_json(budget_path, ledger)
         history_store.upload_bundle([budget_path])
-    budget = LocalRequestBudget(history_dir / "local_request_budget.sqlite", duration_seconds=1800)
+    # A complete refresh now includes the verified rank-history/identity inputs,
+    # canonical recent-history checkpoints, and multiple odds-backed markets.
+    # The former 30-minute local deadline expired *before* upcoming discovery on
+    # 2026-10-15. Allow up to two hours for provider work; per-run request caps,
+    # the shared provider-day budget, and the Actions job timeout stay enforced.
+    budget = LocalRequestBudget(history_dir / "local_request_budget.sqlite", duration_seconds=7200)
     provider = RapidTennisClient(request_budget=budget)
     provider.request_limit = allowance
     now = datetime.now(timezone.utc)
