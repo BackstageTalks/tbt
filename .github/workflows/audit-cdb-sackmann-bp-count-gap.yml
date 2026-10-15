@@ -1,0 +1,64 @@
+name: Audit native historical BP converted counts absent from CDB
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/audit_cdb_sackmann_bp_count_gap.py'
+      - '.github/workflows/audit-cdb-sackmann-bp-count-gap.yml'
+permissions:
+  contents: read
+jobs:
+  read-only-native-bp-counts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install and verify source code contract
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view BackstageTalks/tbt-data --json visibility -q .visibility)" = PRIVATE
+          python -m pip install -q -r api/requirements-train.txt
+          python -m py_compile scripts/audit_cdb_sackmann_bp_count_gap.py
+      - uses: actions/checkout@v4
+        with:
+          repository: Aneeshers/tennis-sackmann-archive
+          ref: 83733587353df8a41f2fd4f516147d5aa83f5a8d
+          path: source
+          persist-credentials: false
+      - name: Verify source commit
+        run: test "$(git -C source rev-parse HEAD)" = 83733587353df8a41f2fd4f516147d5aa83f5a8d
+      - name: Download coherent private canonical release
+        run: python scripts/download_stable_cdb.py --repository BackstageTalks/tbt-data --out .cache/native-bp-count/cdb --report .cache/native-bp-count/snapshot.json
+      - name: Census strict proven source-native BP converted count fields
+        run: |
+          set -euo pipefail
+          python scripts/audit_cdb_sackmann_bp_count_gap.py --source-dir source --history-dir .cache/native-bp-count/cdb --out .cache/native-bp-count/report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path(".cache/native-bp-count")
+          snap=json.loads((root/"snapshot.json").read_text())
+          audit=json.loads((root/"report.json").read_text())
+          assert snap["status"]=="verified"
+          assert audit["counts"]["matching_cdb_ids"]>400000
+          assert audit["canonical_writes"]==0
+          assert audit["counts"].get("eligible_stat_cells",0)>=audit["counts"].get("eligible_unique_matches",0)
+          print("PINNED_CANONICAL_MANIFEST",snap["manifest_sha256"])
+          print("STRICT_BP_COUNT_GAP_COUNTS",json.dumps(audit["counts"],sort_keys=True))
+          print("STRICT_BP_COUNT_GAP_YEAR_COUNTS",json.dumps(audit["years"],sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cdb-bp-count-readonly-gap
+          path: .cache/native-bp-count/report.json
+          retention-days: 21
