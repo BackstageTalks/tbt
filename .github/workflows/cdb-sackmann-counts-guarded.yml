@@ -52,6 +52,12 @@ jobs:
             test "$(jq -r '.approved_by_operator // false' .github/cdb-sackmann-counts-request.json)" = true
             test "$(jq -r '.source_commit // empty' .github/cdb-sackmann-counts-request.json)" = "83733587353df8a41f2fd4f516147d5aa83f5a8d"
             test "$(jq -r '.workflow // empty' .github/cdb-sackmann-counts-request.json)" = "cdb-sackmann-counts-guarded.yml"
+            # The original Sackmann source is CC BY-NC-SA 4.0.
+            # Operator data-import authorization is NOT source license clearance.
+            rights="$(jq -r '.source_rights_disposition // empty' .github/cdb-sackmann-counts-request.json)"
+            [[ "$rights" == "explicit_commercial_permission" || "$rights" == "verified_noncommercial_use" ]]
+            test "$(jq -r '.source_rights_evidence_ref // empty' .github/cdb-sackmann-counts-request.json)" != ""
+            test "$(jq -r '.source_attribution // empty' .github/cdb-sackmann-counts-request.json)" = "Jeff Sackmann / Tennis Abstract"
           fi
           test "$TBT_DATA_REPOSITORY" = "BackstageTalks/tbt-data"
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
@@ -115,7 +121,7 @@ jobs:
           report=json.loads((root/"stage/report.json").read_text())
           counts=report["counts"]
           assert report["production_mutated"] is False and report["provider_requests"] == 0
-          if os.environ.get("GITHUB_EVENT_NAME") == "push":
+          if os.environ.get("GITHUB_EVENT_NAME") == "push" and json.loads(Path(".github/cdb-sackmann-counts-request.json").read_text()).get("mode") == "write":
             request=json.loads(Path(".github/cdb-sackmann-counts-request.json").read_text())
             snap=json.loads((root/"source-snapshot.json").read_text())
             assert snap["status"]=="verified" and snap["manifest_sha256"]==request.get("expected_cdb_bundle_sha256"), "CDB manifest drift"
