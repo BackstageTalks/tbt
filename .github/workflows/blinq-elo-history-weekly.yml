@@ -1,8 +1,7 @@
 name: BlinQ canonical historical Elo and weekly Tennis Abstract audit
 
 on:
-  schedule:
-    - cron: "20 4 * * 1"
+  # Weekly activation must come from the external scheduler under repository policy.
   workflow_dispatch:
   push:
     branches: [main]
