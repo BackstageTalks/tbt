@@ -154,6 +154,83 @@ def match_one(src,possible):
  if len(candidates)!=1:return None,rejected,'ambiguous_target' if len(candidates)>1 else 'no_complete_proof'
  return candidates[0],rejected,'unique_full_proof'
 
+
+def grow_independent_player_links(sources,canonical,seed,maximum_rounds=8):
+ """Iteratively attest ATP player codes with >=2 distinct canonical score events.
+
+ A proposal needs one PREVIOUSLY independent mapped opponent, unique finished
+ event with full CDB set tape, exact winner, round, tournament and date window,
+ and matching unknown-side *display* name as a veto. Names never grant a link.
+ Two proposed events MUST belong to different tournament ids; any competing
+ canonical owner or claimed event blocks candidate entirely.
+ """
+ known=dict(seed);seed_reverse={v for v in known.values()};new=[]
+ metrics=collections.Counter()
+ by_player=collections.defaultdict(list)
+ for (year,pair),rows in canonical.items():
+  for pid in pair:by_player[(year,pid)].extend(rows)
+ for iteration in range(maximum_rounds):
+  proposals=collections.defaultdict(list);target_claims=collections.defaultdict(set)
+  for source in sources.values():
+   winner_code=source['winner_atp_id'];loser_code=source['loser_atp_id']
+   a=known.get(winner_code);b=known.get(loser_code)
+   if bool(a)==bool(b):continue
+   known_id=a or b;unknown_code=loser_code if a else winner_code
+   if known_id is None:continue
+   candidates=[]
+   for row in by_player.get((source['year'],known_id),()):
+    p1,p2=str(row['player1_id']),str(row['player2_id'])
+    other=p2 if p1==known_id else p1
+    if other in seed_reverse or other in known.values():continue
+    inferred=dict(source,winner_cdb_id=a or other)
+    single,_,state=match_one(inferred,[row])
+    if not single:continue
+    # Exact source opponent name is corroboration, never an identifier by itself.
+    unknown_name=source['loser_name'] if a else source['winner_name']
+    actual_name=norm(row['player2_name'] if p1==known_id else row['player1_name'])
+    if not unknown_name or actual_name!=unknown_name:continue
+    candidates.append((row,other))
+   if len(candidates)!=1:
+    if candidates:metrics['ambiguous_partially_matched_event']+=1
+    continue
+   row,other=candidates[0]
+   tournament_key='/'.join(source['source_native_key'].split('/')[:2])
+   proof={'atp_id':unknown_code,'canonical_id':other,'source_event':source['source_native_key'],
+          'canonical_match_id':str(row['match_id']),'source_tournament':tournament_key,
+          'evidence':'trusted_one_player_plus_exact_full_set_and_metadata'}
+   proposals[unknown_code].append(proof)
+   target_claims[str(row['match_id'])].add(unknown_code)
+  verified_now=[]
+  all_target_claims={p['canonical_id'] for rows in proposals.values() for p in rows}
+  target_owner=collections.defaultdict(set)
+  for code,rows in proposals.items():
+   for p in rows:target_owner[p['canonical_id']].add(code)
+  for code,rows in sorted(proposals.items()):
+   canon={p['canonical_id'] for p in rows}
+   if len(canon)!=1:
+    metrics['player_code_conflicting_canonical_targets']+=1;continue
+   dest=next(iter(canon))
+   if len(target_owner[dest])!=1 or dest in known.values():
+    metrics['canonical_id_competing_owner']+=1;continue
+   distinct_events={p['source_event'] for p in rows}
+   tournaments={p['source_tournament'] for p in rows}
+   if len(distinct_events)<2 or len(tournaments)<2:
+    metrics['needs_second_distinct_tournament_proof']+=1;continue
+   if any(len(target_claims[p['canonical_match_id']])!=1 for p in rows):
+    metrics['shared_canonical_event_claim']+=1;continue
+   seen_canonical_events={p['canonical_match_id'] for p in rows}
+   if len(seen_canonical_events)!=len(distinct_events):
+    metrics['many_source_events_to_one_cdb_event']+=1;continue
+   verified_now.append({'source_atp_id':code,'canonical_player_id':dest,'evidence_events':len(distinct_events),
+    'distinct_tournaments':len(tournaments),'provenance':rows[:10],
+    'status':'EXACT_MULTIEVENT_ATP_CDB_IDENTITY','write_authorized':False})
+  if not verified_now:break
+  for item in verified_now:
+   known[item['source_atp_id']]=item['canonical_player_id'];new.append(item)
+  metrics['new_player_ids']+=len(verified_now)
+  metrics['rounds_completed']+=1
+ return known,new,dict(sorted(metrics.items()))
+
 def audit(stage,bridge,crosswalk_file,cdb,out):
  for p,expected in ((stage,STAGE_SHA),(bridge,BRIDGE_SHA)):
   if sha(p)!=expected:raise ValueError('SOURCE_HASH_MISMATCH:'+str(p))
@@ -162,6 +239,9 @@ def audit(stage,bridge,crosswalk_file,cdb,out):
  ids,collisions=canonical_ids(cw)
  idx,counts,manifest_sha=canonical_index(cdb)
  counts.update(c); counts['canonical_crosswalk_atp_ids']=len(ids);counts['crosswalk_ambiguous_ids']=collisions
+ ids,discovered,expansion=grow_independent_player_links(sources,idx,ids)
+ counts['extended_crosswalk_atp_ids']=len(ids)
+ counts['new_independent_player_links']=len(discovered)
  verified=[]; review=collections.Counter();match_owners=collections.Counter()
  for source in sources.values():
   a=ids.get(source['winner_atp_id']);b=ids.get(source['loser_atp_id'])
@@ -185,6 +265,8 @@ def audit(stage,bridge,crosswalk_file,cdb,out):
   verified=[x for x in verified if x['canonical_match_id'] not in collisions]
   review['many_to_one_canonical_collision']+=len(collisions)
  out=Path(out);out.mkdir(parents=True,exist_ok=True)
+ with gzip.open(out/'private_discovered_player_links.jsonl.gz','wt',encoding='utf8') as f:
+  for row in discovered:f.write(json.dumps(row,sort_keys=True)+'\n')
  verified.sort(key=lambda x:x['canonical_match_id'])
  private=out/'private_verified_links.jsonl.gz'
  with gzip.open(private,'wt',encoding='utf8') as f:
@@ -193,7 +275,8 @@ def audit(stage,bridge,crosswalk_file,cdb,out):
   'source_stage_sha256':STAGE_SHA,'source_bridge_sha256':BRIDGE_SHA,
   'trusted_cdb_release_manifest_sha256':manifest_sha,'trusted_crosswalk_sha256':sha(crosswalk_file),
   'counts':dict(sorted(counts.items())),'review':dict(sorted(review.items())),
-  'verified_unique_match_links':len(verified),'private_links_sha256':sha(private),
+  'verified_unique_match_links':len(verified),'private_links_sha256':sha(private),'new_player_links_sha256':sha(out/'private_discovered_player_links.jsonl.gz'),
+  'crosswalk_expansion':expansion,
   'source_total_strict_triples':15790,'provider_api_calls':0,'cdb_writes':0,'model_changes':0,
   'write_authorized':False,'limitation':'Full-set source and independent canonical player ID witness required. No production import or field NULL audit in this read-only phase.'}
  (out/'report.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
