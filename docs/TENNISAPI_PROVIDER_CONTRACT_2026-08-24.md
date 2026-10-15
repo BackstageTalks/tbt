@@ -93,6 +93,11 @@ Implementation (2026-10-15):
   assert a complete match or derive pre-match features.
 - probe_tennis_provider.py optionally samples finished singles point-by-point
   with --pbp-samples N (default 0) and respects its existing --max-requests cap.
-- No automated canonical sidecar import, backfill, or model promotion is
-  enabled until independent event identity, completeness, source provenance,
-  writer isolation and persisted read-back pass.
+- The existing identity-verified post-match StatisticsEnricher now stores
+  provider home/away per-set metrics as _tbt_statistics_by_set on future
+  successful statistics fetches. Invalid or contradictory set data are skipped;
+  existing whole-match values take precedence, with no extra API requests.
+  Cached history is NOT automatically re-fetched to obtain these new fields.
+- New odds and point-by-point historical backfill, independent raw-sidecar
+  publication and model promotion remain disabled until identity, completeness,
+  provenance, single-writer and independent persisted read-back pass.
