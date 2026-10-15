@@ -427,7 +427,13 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
 
 
 def _extras_candidates(matches, start, end):
-    """Deterministic backlog; exact verified provider identity first."""
+    """Newest season first (2026, then 2025, ...), verified identity within year.
+
+    The daily extras backlog must not let a previously verified old event jump
+    ahead of a 2026 event. Completed/cooldown-covered matches are skipped by
+    needs_extras; the queue naturally advances to older seasons when current
+    season coverage is exhausted, without re-spending calls on cached markers.
+    """
     rows = [m for m in matches
             if start <= m.scheduled_at.date() <= end and needs_extras(m)]
     def key(match):
@@ -438,7 +444,8 @@ def _extras_candidates(matches, start, end):
                     and ident.get("status") == "finished"
                     and {ident.get("home"), ident.get("away")}
                     == {match.player1_id, match.player2_id})
-        return (int(not verified), -match.scheduled_at.timestamp(), str(match.match_id))
+        return (-match.scheduled_at.year, int(not verified),
+                -match.scheduled_at.timestamp(), str(match.match_id))
     return sorted(rows, key=key)
 
 
@@ -613,6 +620,10 @@ def main():
             changed = set()
             pending = _extras_candidates(matches, start, end)
             report["extras_candidate_rows"] = len(pending)
+            report["extras_priority_policy"] = "newest_season_first_then_verified_identity"
+            report["extras_first_100_by_year"] = dict(Counter(
+                str(m.scheduled_at.year) for m in pending[:100]
+            ))
             for index, match in enumerate(pending, 1):
                 before = dict(match.provider_payload or {})
                 before_calls = provider.request_count
