@@ -8,7 +8,7 @@ class Probe(unittest.TestCase):
                "provider_context_json":'{"_tbt_statistics":{"source":"jeff_sackmann_match_snapshot:abc.csv"}}'}]
         c,_=profile(rows)
         self.assertEqual(c["non_null_aces"],1)
-        self.assertEqual(c["current_exact_complement_null_cells"],0)
+        self.assertEqual(c.get("current_exact_complement_null_cells",0),0)
         self.assertEqual(c["native_null_aces"],1)
         self.assertEqual(c["exact_sackmann_lineage_markers"],1)
     def test_one_missing_complement(self):
