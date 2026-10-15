@@ -1,0 +1,66 @@
+name: BlinQ private CDB NULL-only gate offline CI
+on:
+  push:
+    branches: [ci/bridge-tbt-data-offline-20261015]
+    paths:
+      - '.github/workflows/blinq-private-cdb-null-only-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  null-only-regressions:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require private source read access
+        env:
+          PRIVATE_READ_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          if [[ -z "$PRIVATE_READ_TOKEN" ]]; then
+            echo "::error::Private checkout token unavailable. This is a setup failure."
+            exit 45
+          fi
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 8dc539ccc63088091ad585f3a4a03b7acc5a7052
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+          path: private-data
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            scripts/drive_cdb_current_null_gate.py
+            scripts/drive_cdb_audit.py
+            scripts/sackmann_boxscore_rates.py
+            scripts/wta_xlsx_research.py
+            scripts/research/reconcile_uploaded_serve_return.py
+            tests/test_drive_cdb_current_null_gate.py
+            research/operator_internal_analytics_scope_20261015.json
+      - name: Verify immutable private revision
+        shell: bash
+        run: |
+          test "$(git -C private-data rev-parse HEAD)" = "8dc539ccc63088091ad585f3a4a03b7acc5a7052"
+          test -f private-data/tests/test_drive_cdb_current_null_gate.py
+          echo "PRIVATE_REVISION_PIN_VERIFIED"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run real private current NULL-only safety regressions
+        shell: bash
+        working-directory: private-data
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          log_file="$(mktemp "$RUNNER_TEMP/cdb-null-only.XXXXXX")"
+          trap 'rm -f "$log_file"' EXIT
+          if ! python tests/test_drive_cdb_current_null_gate.py -q >"$log_file" 2>&1; then
+            echo "::error::Private CDB NULL-only regression failed. Private output withheld from public log."
+            exit 61
+          fi
+          echo "REAL_PRIVATE_CURRENT_NULL_ONLY_GATE_PASS"
