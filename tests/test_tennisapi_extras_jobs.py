@@ -157,3 +157,38 @@ def test_targeted_statistics_readback_requires_exact_provider_set_evidence(match
         verify_per_set_markers(
             [match], {str(match.match_id): {**marker, "sets": {"1": {"home_aces": 5}}}}
         )
+
+
+def test_merge_never_downgrades_provider_side_postmatch_evidence():
+    from tbt.data.provider_context import merge_provider_context
+
+    old = {
+        "_tbt_statistics_by_set": {
+            "schema": 1, "source": "tennisapi1", "event_id": "100",
+            "orientation": "provider_home_away", "scope": "post_match_only",
+            "sets": {"1": {"home_aces": 3}, "2": {"home_aces": 4}},
+        },
+        "_tbt_tennisapi_pbp": {
+            "schema": 1, "source": "tennisapi1", "event_id": "100",
+            "observed_at_utc": NOW.isoformat(), "status": "available",
+            "sets": 2, "games": 18, "points": 100,
+            "games_with_explicit_server": 18,
+            "games_with_explicit_winner": 18,
+            "quality_status": "structural_only",
+            "eligible_for_cdb_point_features": False,
+        },
+    }
+    incoming = {
+        "_tbt_statistics_by_set": {
+            **old["_tbt_statistics_by_set"],
+            "sets": {"1": {"home_aces": 1}},
+        },
+        "_tbt_tennisapi_pbp": {
+            **old["_tbt_tennisapi_pbp"],
+            "status": "unavailable", "sets": 0, "games": 0, "points": 0,
+        },
+    }
+    merged = merge_provider_context(old, incoming)
+    assert merged["_tbt_statistics_by_set"]["sets"] == {"1": {"home_aces": 3.0}, "2": {"home_aces": 4.0}}
+    assert merged["_tbt_tennisapi_pbp"]["status"] == "available"
+    assert merged["_tbt_tennisapi_pbp"]["points"] == 100
