@@ -87,6 +87,49 @@ def test_extras_reuse_identity_and_do_not_touch_model_fields(match_factory):
     assert compact["_tbt_tennisapi_pbp"]["eligible_for_cdb_point_features"] is False
 
 
+def test_daily_extras_priority_2026_then_2025_then_older(match_factory):
+    from datetime import date
+    from download_tennis_history import _extras_candidates
+
+    def candidate(name, year, month, day, *, verified=False, covered=False):
+        match = match_factory(name, "A", "B", "A")
+        match.scheduled_at = datetime(year, month, day, 12, tzinfo=timezone.utc)
+        raw = {"id": "100"}
+        if verified:
+            raw["_tbt_event_identity"] = {
+                "event_id": "100", "status": "finished",
+                "home": "A", "away": "B",
+            }
+        if covered:
+            for marker in ("_tbt_tennisapi_markets", "_tbt_tennisapi_pbp"):
+                raw[marker] = {
+                    "schema": 1, "event_id": "100", "status": "available",
+                    "observed_at_utc": NOW.isoformat(),
+                }
+        match.provider_payload = raw
+        return match
+
+    older_verified = candidate("older-2022", 2022, 7, 4, verified=True)
+    previous_verified = candidate("previous-2025", 2025, 9, 1, verified=True)
+    current_unverified = candidate("current-2026-unverified", 2026, 10, 13)
+    current_verified = candidate("current-2026-verified", 2026, 8, 3, verified=True)
+    current_covered = candidate("current-2026-covered", 2026, 10, 14, covered=True)
+    future = candidate("future-2026", 2026, 12, 1)
+    backlog = [older_verified, previous_verified, current_unverified,
+               current_verified, current_covered, future]
+    dates = (date(2022, 1, 1), date(2026, 10, 14))
+    result = _extras_candidates(backlog, *dates)
+    assert [m.match_id for m in result] == [
+        "current-2026-verified", "current-2026-unverified",
+        "previous-2025", "older-2022",
+    ]
+    # When the current year is fully covered, daily runs automatically
+    # advance to 2025 rather than repeatedly querying cached 2026 events.
+    remaining = _extras_candidates(
+        [current_covered, previous_verified, older_verified], *dates)
+    assert [m.match_id for m in remaining] == ["previous-2025", "older-2022"]
+
+
 def test_shared_budget_stop_keeps_successful_first_endpoint_for_resume(match_factory):
     match = match_for_extras(match_factory)
     provider = Provider(exhausted_pbp=True)
