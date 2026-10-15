@@ -30,7 +30,7 @@ jobs:
           python-version: '3.11'
       - name: Compile isolated additive writer (safe on PR, no CDB access)
         run: |
-          python -m compileall -q scripts/gated_uploaded_2025_2026_writer.py scripts/link_uploaded_flashscore_verified.py
+          python -m compileall -q scripts/gated_uploaded_2025_2026_writer.py scripts/link_uploaded_flashscore_verified.py scripts/verify_uploaded_2025_2026_raw_parity.py
           python -m unittest discover -s tests -p test_link_uploaded_flashscore_verified.py -v
 
   exact-link-and-protected-write:
