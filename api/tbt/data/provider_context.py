@@ -386,7 +386,18 @@ def merge_provider_context(existing: Any, incoming: Any) -> dict[str, Any]:
     merged = dict(left)
 
     for key, value in right.items():
-        if key == "_tbt_rank_provenance":
+        if key == "_tbt_statistics_by_set":
+            # Do not replace a previous source-native set observation with
+            # a partial later re-query during canonical history merge.
+            if key not in merged:
+                merged[key] = value
+        elif key in ("_tbt_tennisapi_markets", "_tbt_tennisapi_pbp"):
+            # A missing/late provider response cannot downgrade verified
+            # observed coverage. Keep the first positive research snapshot.
+            prior = merged.get(key)
+            if not isinstance(prior, dict) or prior.get("status") != "available":
+                merged[key] = value
+        elif key == "_tbt_rank_provenance":
             # A provenance claim is atomic; never assemble one from two sources.
             merged[key] = dict(value)
         elif isinstance(value, dict) and isinstance(merged.get(key), dict):
