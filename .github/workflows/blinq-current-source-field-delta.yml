@@ -44,6 +44,7 @@ jobs:
           test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
           python -m pip install --quiet "pandas>=2,<3" pyarrow
           python -m py_compile app/scripts/audit_actual_uploaded_source_field_delta.py
+          (cd app && python -m unittest discover -s tests -p test_audit_uploaded_zero_delta.py -v)
       - name: Download and SHA-pin current canonical 78 years and exact source sidecars
         run: |
           set -euo pipefail
