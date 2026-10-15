@@ -136,10 +136,28 @@ jobs:
         run: |
           set -euo pipefail
           # GitHub refuses 0-byte release assets. For zero safe additions,
-          # retain report + private conflict ledger but NEVER publish an empty writer stage.
-          assets=(work/fix4/out/report.json work/fix4/out/conflict_review_private.jsonl)
+          # omit empty conflict and stage assets only if the report proves zero; never publish empty assets.
+          assets=(work/fix4/out/report.json)
+          test -f work/fix4/out/conflict_review_private.jsonl || { echo MISSING_CONFLICT_LEDGER; exit 1; }
+          if test -s work/fix4/out/conflict_review_private.jsonl; then
+            assets+=(work/fix4/out/conflict_review_private.jsonl)
+          else
+            python - <<'PYCONFLICT'
+          import json
+          r=json.load(open('work/fix4/out/report.json'))
+          if r.get('review_count',0)!=0 or r['counts'].get('source_stat_conflicts',0)!=0:
+           raise SystemExit('NONEMPTY_CONFLICT_COUNT_WITH_EMPTY_LEDGER')
+          print('FIX4_EMPTY_CONFLICT_LEDGER_SAFELY_OMITTED')
+          PYCONFLICT
+          fi
           if test -s work/fix4/out/protected-null-only-stage.jsonl; then
             assets+=(work/fix4/out/protected-null-only-stage.jsonl)
+            python - <<'PYSTAGE'
+          import json
+          r=json.load(open('work/fix4/out/report.json'))
+          if r['counts'].get('candidate_null_cells',0)<=0:
+           raise SystemExit('NONEMPTY_STAGE_WITH_ZERO_CANDIDATE_COUNT')
+          PYSTAGE
           else
             python - <<'PY'
           import json
@@ -149,10 +167,7 @@ jobs:
           print('FIX4_EMPTY_CDB_NULL_STAGE_SAFELY_OMITTED')
           PY
           fi
-          (cd work/fix4/out && sha256sum report.json conflict_review_private.jsonl > SHA256SUMS)
-          if test -s work/fix4/out/protected-null-only-stage.jsonl; then
-            (cd work/fix4/out && sha256sum protected-null-only-stage.jsonl >> SHA256SUMS)
-          fi
+          (cd work/fix4/out && sha256sum "${assets[@]##*/}" > SHA256SUMS)
           (cd work/fix4/out && sha256sum -c SHA256SUMS)
           tag="blinq-fix4-protected-null-stage-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           gh release create "$tag" -R "$PRIVATE_REPO" --target main \
