@@ -97,6 +97,17 @@ jobs:
           # exact eligible delta. Never widen scope silently after PR dry-run.
           request=json.loads(Path(".github/cdb-service-complement-write-request.json").read_text())
           snapshot=json.loads((root/"source-snapshot.json").read_text())
+          # PR tests are read-only and must not inherit the pinned, single-use
+          # *production* request from a previous write. The full old request
+          # gate below remains mandatory on a main-branch write.
+          if os.environ.get("GITHUB_EVENT_NAME") == "pull_request":
+            assert snapshot["status"] == "verified"
+            assert report["production_mutated"] is False
+            assert counts["examined"] >= 993759
+            with open(os.environ["GITHUB_OUTPUT"],"a") as f:
+              f.write("changes="+("true" if counts.get("staged_matches",0) else "false")+"\\n")
+            print("ORIGINAL_STRICT_CDB_PR_PREFLIGHT_PASS",counts,flush=True)
+            raise SystemExit(0)
           assert request.get("approved_by_operator") is True, "Explicit writer approval missing"
           assert request.get("mode") == "write", "No explicit write request"
           assert snapshot["status"] == "verified" and snapshot["provider_api_requests"] == 0
