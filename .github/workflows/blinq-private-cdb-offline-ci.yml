@@ -1,0 +1,108 @@
+name: BlinQ private CDB offline regression bridge
+
+# Run actual private repository regression code on a standard public-repo runner,
+# without publishing any private source bytes, artifacts, fixtures, or logs.
+# Never run this job on pull_request / pull_request_target / untrusted forks.
+on:
+  push:
+    branches:
+      - ci/bridge-tbt-data-offline-20261015
+    paths:
+      - '.github/workflows/blinq-private-cdb-offline-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-private-cdb-offline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  read-only-offline-tests:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      # Immutable ref, must be explicitly updated after a separately reviewed commit.
+      PRIVATE_DATA_SHA: 8dc539ccc63088091ad585f3a4a03b7acc5a7052
+    steps:
+      - name: Fail closed if private checkout token is absent
+        shell: bash
+        env:
+          PRIVATE_CHECKOUT_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          if [[ -z "$PRIVATE_CHECKOUT_TOKEN" ]]; then
+            echo "::error::TBT_DATA_GH_TOKEN unavailable; no test executed (not a test failure)."
+            exit 45
+          fi
+
+      - name: Checkout SHA-pinned private source (sparse, no persisted credential)
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: 8dc539ccc63088091ad585f3a4a03b7acc5a7052
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+          path: private-data
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            scripts/research/
+            scripts/audit_prepared_evidence_gate.py
+            tests/test_audit_prepared_evidence_gate.py
+            audit/import-preparation/observation.schema.json
+            research/operator_internal_analytics_scope_20261015.json
+
+      - name: Verify exact source revision and required fixture files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C private-data rev-parse HEAD)" = "$PRIVATE_DATA_SHA"
+          for file in \
+            scripts/research/reconcile_uploaded_serve_return.py \
+            scripts/research/test_reconcile_uploaded_serve_return.py \
+            scripts/audit_prepared_evidence_gate.py \
+            tests/test_audit_prepared_evidence_gate.py \
+            audit/import-preparation/observation.schema.json \
+            research/operator_internal_analytics_scope_20261015.json; do
+            if [[ ! -f "private-data/$file" ]]; then
+              echo "::error::Required private test input absent (setup failure, not test failure)."
+              exit 46
+            fi
+          done
+          echo "PRIVATE_SOURCE_PIN_VERIFIED=$PRIVATE_DATA_SHA"
+
+      - name: Python and schema validator
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install offline schema checker
+        shell: bash
+        run: python -m pip install 'jsonschema>=4.18,<5'
+
+      - name: Run REAL private CDB regressions without publishing source/logs
+        shell: bash
+        working-directory: private-data
+        run: |
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          export PYTHONNOUSERSITE=1
+          export PIP_DISABLE_PIP_VERSION_CHECK=1
+          echo "REAL_PRIVATE_TEST_PHASE_STARTED (no CDB writes, no paid APIs)"
+          # Public Actions logs MUST NOT receive stack traces, records or private paths.
+          # Local runner log is intentionally not uploaded or cached.
+          log_file="$(mktemp "$RUNNER_TEMP/blinq-private-tests.XXXXXX")"
+          trap 'rm -f "$log_file"' EXIT
+          if ! python scripts/research/test_reconcile_uploaded_serve_return.py -q >"$log_file" 2>&1; then
+            echo "::error::Real Serve/Return regression failed; detailed trace withheld from public logs."
+            exit 61
+          fi
+          echo "REAL_PRIVATE_SERVE_RETURN_PASS"
+          if ! python tests/test_audit_prepared_evidence_gate.py -q >"$log_file" 2>&1; then
+            echo "::error::Real prepared-evidence regression failed; detailed trace withheld from public logs."
+            exit 62
+          fi
+          echo "REAL_PRIVATE_PREPARED_EVIDENCE_PASS"
+          echo "READ_ONLY_NO_PRODUCTION_MUTATION"
