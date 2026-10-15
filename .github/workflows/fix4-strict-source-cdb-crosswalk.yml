@@ -133,12 +133,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          (cd work/fix4/report && sha256sum report.json private_verified_links.jsonl.gz > SHA256SUMS && sha256sum -c SHA256SUMS)
+          (cd work/fix4/report && sha256sum report.json private_verified_links.jsonl.gz private_discovered_player_links.jsonl.gz > SHA256SUMS && sha256sum -c SHA256SUMS)
           tag="blinq-fix4-independent-cdb-links-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           gh release create "$tag" -R "$PRIVATE_REPO" --target main \
             --title 'BlinQ FIX4 strict independently verified source-to-CDB event links' \
             --notes 'Private immutable research identity evidence; no source/CDB writer or model activation. Link by independently verified ATP player IDs, exact tournament window/round/winner/full set tape.' \
-            --latest=false work/fix4/report/report.json work/fix4/report/private_verified_links.jsonl.gz work/fix4/report/SHA256SUMS
+            --latest=false work/fix4/report/report.json work/fix4/report/private_verified_links.jsonl.gz work/fix4/report/private_discovered_player_links.jsonl.gz work/fix4/report/SHA256SUMS
           mkdir -p work/fix4/readback
           gh release download "$tag" -R "$PRIVATE_REPO" -D work/fix4/readback
           (cd work/fix4/readback && sha256sum -c SHA256SUMS)
