@@ -508,15 +508,15 @@ jobs:
           # A separate Drive editor is required to create shortcuts.
           # Existing reader credentials are always PLAN ONLY.
           if [[ -n "$DRIVE_ORGANIZER_JSON" ]]; then
-            mode=apply
-            export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_ORGANIZER_JSON"
+            mode=plan
+            # Existing shortcut selector is metadata-only and does not verify\n            # content/duplicate conflicts. Fail closed until content-aware\n            # sorting and collision gates are implemented and tested.\n            export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_ORGANIZER_JSON"
           else
             mode=plan
             export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_READER_JSON"
           fi
           test -n "$BLINQ_DRIVE_SORT_CREDENTIALS"
           python scripts/drive_sort_prefolders.py --mode "$mode" \
-            --max-files 10000 --max-folders 2000 --max-new 300 \
+            --max-files 10000 --max-folders 2000 --max-new 50 \
             --out work/drive-folder-selection/private-report.json \
             >work/drive-folder-selection/public-counts.json
           python - <<'PY'
