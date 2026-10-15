@@ -81,13 +81,13 @@ jobs:
           Path('work/source/bridge.zip').write_bytes(r.content)
           print('FIX4_SOURCE_INPUT_HASH_PASS')
           PY
-      - name: Fetch only CDB partitions relevant to 2015-2025 and manifests
+      - name: Fetch only CDB partitions relevant to 2015-2017 and 2019 and manifests
         shell: bash
         run: |
           set -euo pipefail
           gh release download tbt-data-v1 -R "$REPO" --dir work/cdb \
             -p history_manifest.json -p _tbt_bundle_manifest.json \
-            $(seq -f '-p history-%g.parquet' 2015 2025)
+            -p history-2015.parquet -p history-2016.parquet -p history-2017.parquet -p history-2019.parquet
       - name: Deterministic read-only actual CDB native-event overlap measurement
         shell: bash
         run: |
@@ -102,7 +102,7 @@ jobs:
           set -euo pipefail
           gh release download tbt-data-v1 -R "$REPO" --dir work/after \
             -p history_manifest.json -p _tbt_bundle_manifest.json \
-            $(seq -f '-p history-%g.parquet' 2015 2025)
+            -p history-2015.parquet -p history-2016.parquet -p history-2017.parquet -p history-2019.parquet
           for f in work/cdb/*; do cmp "$f" "work/after/$(basename "$f")"; done
           sha256sum work/result/fix4_cdb_native_gap_report.json | tee work/result/SHA256SUMS
           python - <<'PY'
