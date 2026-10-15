@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "mode": "dry-run",
+  "workflow": "cdb-sackmann-counts-guarded.yml",
+  "purpose": "Refresh authoritative current CDB Serve/Return native converted breakpoint count pilot and rehearse full 2018 partition readback without publication",
+  "source_commit": "83733587353df8a41f2fd4f516147d5aa83f5a8d",
+  "canonical_year": 2018,
+  "shard_modulus": 16,
+  "shard_index": 0,
+  "source_rights_disposition": "NOT_ATTESTED_RESEARCH_ONLY",
+  "source_rights_evidence_ref": null,
+  "source_attribution": "Jeff Sackmann / Tennis Abstract",
+  "approved_by_operator": false,
+  "expected_cdb_bundle_sha256": null,
+  "canonical_writes_permitted": false,
+  "model_training_permitted": false,
+  "provider_requests_permitted": 0,
+  "notes": "This is a dry-run. Rights of CC BY-NC-SA data for production/commercial CDB use must be specifically attested before any later one-shot write request. No automatic promotion."
+}
