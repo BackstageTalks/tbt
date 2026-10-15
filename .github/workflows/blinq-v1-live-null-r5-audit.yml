@@ -282,6 +282,126 @@ jobs:
           print('CURRENT_CANONICAL_BASELINE_STABLE_DURING_DRYRUN=TRUE')
           print('PRODUCTION_CDB_WRITES=0')
           PY
+      - name: Persist SHA-versioned private quarantined research stage, then independently read back
+        if: github.repository == 'BackstageTalks/tbt' && github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh repo view "$SOURCE_REPO" --json visibility -q .visibility)" = PRIVATE
+          python - <<'PY'
+          import gzip,hashlib,json
+          from collections import Counter
+          from pathlib import Path
+          root=Path('work/blinq-v1')
+          source=root/'source/repaired-stage-r5.jsonl.gz'
+          research=root/'clock-research-private'
+          attest=root/'research-checkpoint'
+          attest.mkdir(parents=True,exist_ok=True)
+          stage_sha=hashlib.sha256(source.read_bytes()).hexdigest()
+          assert stage_sha=='d6d62982c438c625d531a50fc38faa2179835fe336d6e40d5b10a7ef63919210'
+          src={}
+          for line in gzip.open(source,'rt',encoding='utf8'):
+              if not line.strip(): continue
+              r=json.loads(line)
+              if r['source_key'] in src: raise SystemExit('Duplicate source identity before checkpoint')
+              src[r['source_key']]=r
+          can=[]
+          for line in gzip.open(research/'private-candidates.jsonl.gz','rt',encoding='utf8'):
+              if not line.strip():continue
+              r=json.loads(line);s=src[r['source_key']]
+              expected={'source_key':r['source_key'],'canonical_match_id':r['canonical_match_id'],
+                  'source_native_event_id':s['source_match_id'],
+                  'source_winner_native_id':s['source_winner_id'],
+                  'source_loser_native_id':s['source_loser_id'],
+                  'source_original_file_sha256':s['source_sha256'],
+                  'source_raw_row_sha256':s['source_row_sha256'],
+                  'source_tour':s['source_tour'],'source_season':s['source_season'],
+                  'candidate_null_stat_names':sorted(set(r['new_null_keys'])),
+                  'source_minus_index_seconds':r['source_minus_index_seconds'],
+                  'source_minus_canonical_seconds':r['source_minus_canonical_seconds'],
+                  'identity_status':'RESEARCH_CROSS_NAMESPACE_NOT_INDEPENDENTLY_ATTESTED',
+                  'timestamp_status':'DISAGREEMENT_REQUIRES_EXTERNAL_WITNESS',
+                  'write_authorized':False,'canonical_import_ready':False,
+                  'rights_source_specific_clearance_pending':True,
+                  'model_training_allowed':False}
+              if not expected['candidate_null_stat_names']:raise SystemExit('Empty candidate missing stats')
+              can.append(expected)
+          can.sort(key=lambda x:(x['source_tour'],x['source_native_event_id'],x['canonical_match_id']))
+          if len(can)!=139 or len({r['source_key'] for r in can})!=len(can) or len({r['canonical_match_id'] for r in can})!=len(can):
+              raise SystemExit('Research cardinality/uniqueness changed')
+          cells=sum(len(r['candidate_null_stat_names']) for r in can)
+          if cells!=524:raise SystemExit('Research NULL candidate cardinality changed')
+          def persist(name,items):
+              with (attest/name).open('wb') as fh:
+                  with gzip.GzipFile(filename='',fileobj=fh,mode='wb',mtime=0) as z:
+                      z.write(''.join(json.dumps(x,sort_keys=True,ensure_ascii=False)+'\n' for x in items).encode('utf8'))
+          persist('research-identity-pending.jsonl.gz',can)
+          conflicts=[]
+          for line in gzip.open(research/'private-conflicts.jsonl.gz','rt',encoding='utf8'):
+              if not line.strip():continue
+              r=json.loads(line)
+              s=src.get(r['source_key'])
+              if s is None:raise SystemExit('Untraceable conflict source row')
+              conflicts.append({
+                  'source_key':r['source_key'],
+                  'native_event_id':s['source_match_id'],
+                  'original_file_sha256':s['source_sha256'],
+                  'conflicting_keys':sorted(set(r['conflicting_keys'])),
+                  'quarantine_only':True,'write_authorized':False})
+          if len(conflicts)!=395:raise SystemExit('Unexpected private quarantine count')
+          conflicts.sort(key=lambda x:x['source_key'])
+          persist('conflict-quarantine.jsonl.gz',conflicts)
+          prior=json.loads((research/'report.json').read_text())
+          snapshots=json.loads((root/'before/release-api.json').read_text())
+          names=['history-2024.parquet','history-2025.parquet','history-2026.parquet',
+                 'history_manifest.json','_tbt_bundle_manifest.json']
+          sha={a['name']:a['digest'] for a in snapshots['assets'] if a['name'] in names}
+          if len(sha)!=len(names):raise SystemExit('Missing canonical release asset hashes')
+          report={
+              'schema':'BLINQ_R5_PRIVATE_CDB_RESEARCH_STAGE_V1',
+              'state':'PERSIST_PRIVATE_UNAPPROVED_RESEARCH_ONLY',
+              'source_raw_archive_sha256':'8202ff4b485495546e507317357b9f1c3c84ad9b5f806931044bfede16a9783d',
+              'repaired_stage_sha256':stage_sha,
+              'independent_event_index_sha256':'328f9c36c0f4021c745ca7119ea904a4ae7cadb66cee17cc63f2ca6f5774a952',
+              'canonical_asset_release_digests':sha,
+              'canonical_before_and_after_unchanged':True,
+              'input_source_rows':len(src),'identity_pending_research_candidates':len(can),
+              'candidate_null_field_names_only':cells,
+              'quarantined_conflicting_matches':len(conflicts),
+              'native_event_clock_disagreement':prior['counts'].get('clock_diff_with_same_native_event',0),
+              'source_ids_proven_same_namespace_as_cdb':False,
+              'all_both_player_cross_provider_ids_attested':False,
+              'positive_import_eligibility':0,
+              'production_cdb_written_cells':0,
+              'source_operator_supplied_internal_use_attested':True,
+              'source_specific_exclusions_still_override':True,
+              'model_training_allowed':False,'rights_for_raw_redistribution':False,
+              'next':'Independently attest original native event and both participant IDs across provider namespaces; resolve clock conflict without fuzzy matching; rerun fresh CAS NULL gate and restore proof before any writer.'
+          }
+          (attest/'report.json').write_text(json.dumps(report,sort_keys=True,indent=2)+'\n',encoding='utf8')
+          with (attest/'SHA256SUMS').open('w') as z:
+              for item in sorted(attest.iterdir()):
+                  if item.name!='SHA256SUMS':
+                      z.write(hashlib.sha256(item.read_bytes()).hexdigest()+'  '+item.name+'\n')
+          print('PREPARED_RESEARCH_CANDIDATES='+str(len(can)))
+          print('PREPARED_NULL_FIELD_NAMES_ONLY='+str(cells))
+          print('PREPARED_QUARANTINED_CONFLICTS='+str(len(conflicts)))
+          print('PREPARED_CANONICAL_WRITES=0')
+          PY
+          (cd work/blinq-v1/research-checkpoint && sha256sum -c SHA256SUMS)
+          tag="blinq-r5-private-current-crosswalk-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" -R "$SOURCE_REPO" --target main \
+            --title "BlinQ R5 private current-CDB crosswalk research; not import-ready" \
+            --notes 'Private only. Original CSV SHA-pinned. 139 timestamp/identity candidates and 395 conflicts quarantined; no canonical source/player bridge attested, no CDB writes or model training.' \
+            work/blinq-v1/research-checkpoint/*
+          mkdir -p work/blinq-v1/research-readback
+          gh release download "$tag" -R "$SOURCE_REPO" -D work/blinq-v1/research-readback
+          (cd work/blinq-v1/research-readback && sha256sum -c SHA256SUMS)
+          cmp work/blinq-v1/research-checkpoint/report.json work/blinq-v1/research-readback/report.json
+          cmp work/blinq-v1/research-checkpoint/research-identity-pending.jsonl.gz work/blinq-v1/research-readback/research-identity-pending.jsonl.gz
+          cmp work/blinq-v1/research-checkpoint/conflict-quarantine.jsonl.gz work/blinq-v1/research-readback/conflict-quarantine.jsonl.gz
+          echo "PRIVATE_RESEARCH_STAGE_REMOTE_SHA_READBACK_VERIFIED=$tag"
+          echo "CDB_PRODUCTION_WRITES=0"
       - name: Clean ephemeral private data
         if: always()
         shell: bash
