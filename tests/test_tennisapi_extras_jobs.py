@@ -287,3 +287,14 @@ def test_wrong_event_in_optional_pbp_is_hard_conflict(match_factory):
         enrich_event_extras(match, WrongEventProvider(), now=NOW)
     assert "_tbt_tennisapi_pbp" not in match.provider_payload
     assert match.provider_payload["_tbt_tennisapi_markets"]["status"] == "available"
+
+
+def test_controlled_manual_extras_smoke_cannot_spend_bulk_quota_or_promote():
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/data.yml").read_text()
+    assert "ace-statistics|statistics|extras) ;;" in workflow
+    assert '[[ "$mode" == "extras" ]]' in workflow
+    assert '(( 10#$max_requests <= 30 ))' in workflow
+    assert '[[ "$promote" == "false" ]]' in workflow
+    assert 'Extras smoke cannot enable targeted-statistics' in workflow
+    assert "python scripts/verify_tennisapi_extras.py" in workflow
