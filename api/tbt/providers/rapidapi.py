@@ -639,6 +639,26 @@ class RapidTennisClient:
             enrichment=True,
         )
 
+    def event_point_by_point(self, event_id: str | int) -> Any:
+        """Post-match point-by-point payload (may be empty/204).
+
+        This fetch does not attach raw points to canonical history or compute
+        pre-match features. It uses the existing guarded enrichment budget.
+        """
+        return self._get(
+            f"/api/tennis/event/{event_id}/point-by-point",
+            enrichment=True,
+        )
+
+    def event_markets_snapshot(self, event_id: str | int) -> dict[str, Any]:
+        """Provider-1 supported lines, explicitly *not* an as-of odds history."""
+        from .tennisapi_extra import normalize_market_snapshot
+
+        return normalize_market_snapshot(
+            self.event_odds(event_id, provider_id=1),
+            event_id=event_id,
+        )
+
     def event_odds(self, event_id: str | int, provider_id: int = 1) -> Any:
         """Pre-match event markets for a concrete TennisApi odds provider."""
         provider_id = int(provider_id)

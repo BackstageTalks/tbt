@@ -23,6 +23,7 @@ from typing import Any
 from tbt.errors import ProviderError
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
+from tbt.providers.tennisapi_extra import normalize_market_snapshot, point_by_point_inventory
 from tbt.providers.statistics import RATE_ALIASES, COUNT_ALIASES
 from tbt.services.market_selection import _outcome_text, _price, _walk_market_rows
 from tbt.utils import first_present
@@ -290,6 +291,8 @@ def main() -> None:
     parser.add_argument("--max-events-per-day", type=int, default=500)
     parser.add_argument("--odds-samples", type=int, default=10)
     parser.add_argument("--stats-samples", type=int, default=4)
+    parser.add_argument("--pbp-samples", type=int, default=0,
+                        help="Optional finished-singles PBP structural audit; costs one API request per sample")
     parser.add_argument("--live-odds-samples", type=int, default=4)
     parser.add_argument("--out", default=".cache/tbt/provider-probe/provider_probe_report.json")
     parser.add_argument("--markdown", default=".cache/tbt/provider-probe/provider_probe_report.md")
@@ -308,6 +311,7 @@ def main() -> None:
         "doubles_samples": [],
         "odds_samples": [],
         "statistics_samples": [],
+        "point_by_point_samples": [],
         "live_events": [],
         "live_odds_samples": [],
         "notes": [
@@ -426,6 +430,7 @@ def main() -> None:
                     "home": row["home"].get("name"),
                     "away": row["away"].get("name"),
                     "odds": odds,
+                    "confirmed_markets": normalize_market_snapshot(payload, event_id=event_id),
                 })
             except (ProviderError, RequestBudgetExceeded) as exc:
                 report["odds_samples"].append({"event_id": event_id, "kind": row["kind"], "error": str(exc)})
@@ -464,6 +469,24 @@ def main() -> None:
                 })
             except (ProviderError, RequestBudgetExceeded) as exc:
                 report["statistics_samples"].append({"event_id": event_id, "kind": row["kind"], "error": str(exc)})
+                if isinstance(exc, RequestBudgetExceeded):
+                    break
+        # Optional point-by-point structural probe. Never infer win/serve rates
+        # or write a score/point record to canonical training history.
+        for row in finished_singles:
+            if len(report["point_by_point_samples"]) >= max(0, args.pbp_samples):
+                break
+            eid = row.get("event_id") or ""
+            if not eid:
+                continue
+            try:
+                raw_pbp = client.event_point_by_point(eid)
+                report["point_by_point_samples"].append({
+                    "event_id": eid, "kind": row["kind"],
+                    "inventory": point_by_point_inventory(raw_pbp, event_id=eid),
+                })
+            except (ProviderError, RequestBudgetExceeded) as exc:
+                report["point_by_point_samples"].append({"event_id": eid, "error": str(exc)})
                 if isinstance(exc, RequestBudgetExceeded):
                     break
     except Exception as exc:  # preserve a report even when provider shape changes
@@ -534,6 +557,11 @@ def main() -> None:
         f"- live events returned: **{len(report.get('live_events') or [])}**",
         f"- live events with odds samples: **{len(report.get('live_odds_samples') or [])}**",
         f"- sampled Set-2 priced rows: **{sum(len(x.get('second_set_rows') or []) for x in (report.get('live_odds_samples') or []) if isinstance(x, dict))}**",
+        "",
+        "## Point-by-point sample (structural only)",
+        "",
+        f"- sampled finished singles: **{len(report.get('point_by_point_samples') or [])}**",
+        f"- samples with points: **{sum(bool((x.get('inventory') or {}).get('points')) for x in report.get('point_by_point_samples', []))}**",
         "",
         "## Interpretation",
         "",
