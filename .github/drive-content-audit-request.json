@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "requested_at_utc": "2026-10-15",
-  "reason": "one_time_verification_after_drive_scope_mapping_fix",
+  "reason": "verify_real_root_only_after_legacy_child_metadata_mismatch",
   "max_download_mb": 512,
   "allowed_operations": [
     "read_metadata",
@@ -13,5 +13,6 @@
     "drive_delete",
     "cdb_write",
     "deploy"
-  ]
+  ],
+  "iteration": 2
 }
