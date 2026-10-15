@@ -1,7 +1,8 @@
 name: BlinQ canonical historical Elo and weekly Tennis Abstract audit
 
 on:
-  # Weekly timing is externally orchestrated under repository cron policy.
+  schedule:
+    - cron: "20 4 * * 1"
   workflow_dispatch:
   push:
     branches: [main]
@@ -10,6 +11,8 @@ on:
       - ".github/elo-weekly-trigger.json"
       - "scripts/build_blinq_cdb_elo.py"
       - "scripts/compare_blinq_elo_ta.py"
+      - "scripts/parse_tennis_abstract_elo_independent.py"
+      - "tests/test_ta_independent_dates.py"
       - "tests/test_blinq_cdb_elo.py"
   pull_request:
     paths:
@@ -42,7 +45,8 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install "pandas>=2,<3" pyarrow
-          python -m compileall -q scripts/build_blinq_cdb_elo.py scripts/compare_blinq_elo_ta.py
+          python -m compileall -q scripts/build_blinq_cdb_elo.py scripts/compare_blinq_elo_ta.py scripts/parse_tennis_abstract_elo_independent.py
+          python -m unittest discover -s tests -p test_ta_independent_dates.py -v
           python -m unittest discover -s tests -p 'test_blinq_cdb_elo.py' -v
 
   weekly-full-replay:
