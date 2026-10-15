@@ -246,7 +246,14 @@ def organize(api, *, apply=False, max_moves=50, max_download_mb=512, max_items=1
             # Prefer an existing categorized original; otherwise retain one
             # deterministic canonical root original, separate the other copies.
             category_members = [m for m in members if m in categorized_ids]
-            canonical = sorted(category_members)[0] if category_members else sorted(members)[0]
+            preferred_root = [
+                x for x in root_files
+                if x["id"] in members and classify(x["name"], ()) != REVIEW
+                and not x["name"].casefold().endswith(PROTECTED_SUFFIXES)
+            ]
+            canonical = (sorted(category_members)[0] if category_members
+                         else sorted(preferred_root, key=lambda x: x["id"])[0]["id"] if preferred_root
+                         else sorted(members)[0])
             if canonical != fid:
                 target = REVIEW
                 result["state"] = "verified_duplicate_review"
@@ -301,6 +308,7 @@ def organize(api, *, apply=False, max_moves=50, max_download_mb=512, max_items=1
         actions.append((item, result))
 
     moved = 0
+    moved_ids = set()
     # No mutation beyond this point unless apply is expressly selected.
     if apply:
         for item, result in actions[:max_moves]:
@@ -321,12 +329,18 @@ def organize(api, *, apply=False, max_moves=50, max_download_mb=512, max_items=1
             if api.digest(check, max_download) != result["sha256"]:
                 raise ValueError("Post-move byte read-back mismatch; stop writes")
             result["state"] = "moved_readback_verified"
+            moved_ids.add(item["id"])
             moved += 1
+        # Independent final root listing: all other originals remain in place.
+        expected = {f["id"] for f in root_files} - moved_ids
+        observed = {f["id"] for f in api.children(ROOT) if _is_file(f)}
+        if observed != expected:
+            raise ValueError("Final Drive root read-back mismatch")
     counts = Counter(r["state"] for r in details)
     return {
         "schema": 1, "mode": "organize" if apply else "organize_plan",
         "root_loose_before": len(root_files),
-        "root_loose_after_verified": len(root_files) - moved if apply else None,
+        "root_loose_after_verified": len(observed) if apply else None,
         "categorized_existing": len(categorized),
         "confirmed_byte_identical_groups": sum(len(v) > 1 for v in hashes.values()),
         "confirmed_byte_identical_root_files": sum(fid in group_by_id for fid in root_ids),
