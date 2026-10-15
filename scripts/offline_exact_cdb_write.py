@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import math
 import json
 from pathlib import Path
 
@@ -53,7 +54,7 @@ def _additions(original, changed, *, approved_count_fields=frozenset()):
                    "p2_return_break_points_converted_count"}:
         raise ValueError("Unapproved CDB count-valued field")
     if any(not isinstance(v,(int,float)) or isinstance(v,bool)
-           or v < 0 or int(v) != v for k,v in added.items() if k in approved):
+           or not math.isfinite(v) or v < 0 or int(v) != v for k,v in added.items() if k in approved):
         raise ValueError("Invalid source count value")
     if not added or not set(added).issubset(ALLOWED | approved):
         raise ValueError("Missing or invalid additive source statistics")
