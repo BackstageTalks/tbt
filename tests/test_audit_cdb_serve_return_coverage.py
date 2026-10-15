@@ -17,6 +17,16 @@ class Probe(unittest.TestCase):
     def test_inconsistent_complement(self):
         c,_=profile([{"match_id":"other","stats_json":'{"p1_service_points_won":0.7,"p2_return_points_won":0.4}',"provider_context_json":"{}"}])
         self.assertEqual(c["inconsistent_serve_return_pairs"],1)
+    def test_pairwise_candidate_survives_unrelated_conflicting_pair(self):
+        stats={"p1_service_points_won":0.7,
+               "p2_first_serve_win":0.6,"p1_first_return_win":0.5}
+        c,_=profile([{"match_id":"hist-js:atp:example",
+                      "stats_json":__import__("json").dumps(stats),
+                      "provider_context_json":"{}"}])
+        self.assertEqual(c["potential_pairwise_complement_cells"],1)
+        self.assertEqual(c["potential_complements_in_otherwise_conflicting_match"],1)
+        self.assertEqual(c["candidate_p2_return_points_won"],1)
+
     def test_invalid_json(self):
         with self.assertRaises(ValueError):
             json_object('[]')
