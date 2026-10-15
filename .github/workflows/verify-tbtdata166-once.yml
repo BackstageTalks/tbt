@@ -1,0 +1,40 @@
+name: Read-only cross-repo Serve/Return PR166 verification
+on:
+  push:
+    branches: [ops/verify-private-serve-return-pr166-20261015]
+    paths: [.github/workflows/verify-tbtdata166-once.yml]
+permissions:
+  contents: read
+jobs:
+  verify-source-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_SHA: 92e6f9fdd8464449b52d8dec7dcf49c33ba98ea2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download pinned private PR source without data or CDB access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          mkdir -p .cache/pr166/scripts/research
+          cd .cache/pr166
+          for file in reconcile_uploaded_serve_return.py test_reconcile_uploaded_serve_return.py; do
+            gh api "repos/BackstageTalks/tbt-data/contents/scripts/research/$file?ref=$DATA_SHA" --jq .content | base64 -d > "scripts/research/$file"
+            test -s "scripts/research/$file"
+          done
+      - name: Run independent full unit tests on pinned source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd .cache/pr166
+          python -m py_compile scripts/research/reconcile_uploaded_serve_return.py scripts/research/test_reconcile_uploaded_serve_return.py
+          python -m unittest discover -s scripts/research -p test_reconcile_uploaded_serve_return.py -v
+          python scripts/research/reconcile_uploaded_serve_return.py --help > /tmp/blinq-pr166-cli-help.txt
+          grep -q 'canonical-index' /tmp/blinq-pr166-cli-help.txt
+          echo VERIFIED_TBT_DATA_PR166_SOURCE_ONLY_TESTS_PASS
