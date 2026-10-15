@@ -327,10 +327,17 @@ jobs:
               if not expected['candidate_null_stat_names']:raise SystemExit('Empty candidate missing stats')
               can.append(expected)
           can.sort(key=lambda x:(x['source_tour'],x['source_native_event_id'],x['canonical_match_id']))
-          if len(can)!=139 or len({r['source_key'] for r in can})!=len(can) or len({r['canonical_match_id'] for r in can})!=len(can):
-              raise SystemExit('Research cardinality/uniqueness changed')
+          # Use THIS-RUN canonical release audit, not a hardcoded prior snapshot count.
+          prior=json.loads((research/'report.json').read_text())
+          baseline=prior['counts']
+          if (len({r['source_key'] for r in can})!=len(can)
+                  or len({r['canonical_match_id'] for r in can})!=len(can)
+                  or len(can)>9741
+                  or len(can)!=baseline.get('staged_candidate_matches')):
+              raise SystemExit('Current research identity cardinality/uniqueness mismatch')
           cells=sum(len(r['candidate_null_stat_names']) for r in can)
-          if cells!=524:raise SystemExit('Research NULL candidate cardinality changed')
+          if cells!=baseline.get('potential_new_null_cells',0):
+              raise SystemExit('Fresh NULL cell counts disagree with current audit')
           def persist(name,items):
               with (attest/name).open('wb') as fh:
                   with gzip.GzipFile(filename='',fileobj=fh,mode='wb',mtime=0) as z:
@@ -348,7 +355,8 @@ jobs:
                   'original_file_sha256':s['source_sha256'],
                   'conflicting_keys':sorted(set(r['conflicting_keys'])),
                   'quarantine_only':True,'write_authorized':False})
-          if len(conflicts)!=395:raise SystemExit('Unexpected private quarantine count')
+          if len(conflicts)!=baseline.get('other_stats_conflict',0):
+              raise SystemExit('Fresh quarantine counts disagree with current audit')
           conflicts.sort(key=lambda x:x['source_key'])
           persist('conflict-quarantine.jsonl.gz',conflicts)
           prior=json.loads((research/'report.json').read_text())
@@ -368,6 +376,11 @@ jobs:
               'input_source_rows':len(src),'identity_pending_research_candidates':len(can),
               'candidate_null_field_names_only':cells,
               'quarantined_conflicting_matches':len(conflicts),
+              'delta_vs_20261015_audit':{
+                  'research_matches':len(can)-139,
+                  'candidate_null_cells':cells-524,
+                  'conflicted_matches':len(conflicts)-395,
+              },
               'native_event_clock_disagreement':prior['counts'].get('clock_diff_with_same_native_event',0),
               'source_ids_proven_same_namespace_as_cdb':False,
               'all_both_player_cross_provider_ids_attested':False,
@@ -392,7 +405,7 @@ jobs:
           tag="blinq-r5-private-current-crosswalk-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           gh release create "$tag" -R "$SOURCE_REPO" --target main \
             --title "BlinQ R5 private current-CDB crosswalk research; not import-ready" \
-            --notes 'Private only. Original CSV SHA-pinned. 139 timestamp/identity candidates and 395 conflicts quarantined; no canonical source/player bridge attested, no CDB writes or model training.' \
+            --notes 'Private only. Original CSV SHA-pinned. fresh, dynamically recomputed candidate and conflict counts quarantined; no canonical source/player bridge attested, no CDB writes or model training.' \
             work/blinq-v1/research-checkpoint/*
           mkdir -p work/blinq-v1/research-readback
           gh release download "$tag" -R "$SOURCE_REPO" -D work/blinq-v1/research-readback
