@@ -125,10 +125,10 @@ jobs:
             assert counts.get("new_stat_values",0)==request.get("expected_new_stat_values"), "Added fields drift"
             assert report["changed_years"]==request.get("expected_changed_years"), "Year scope drift"
             assert counts.get("staged_matches",0)>0, "No positive count delta"
-          assert counts["source_files"] > 0 and counts["matching_cdb_id"] > 0, "No verified historical CDB candidates"
+          assert counts["source_files"] > 0 and counts["matched_in_fixed_shard"] > 0, "No verified historical CDB candidates"
           assert counts.get("lineage_rejected",0) >= 0
           assert counts.get("new_stat_values",0) <= 2 * counts.get("staged_matches",0)
-          assert counts.get("staged_matches",0) <= counts["matching_cdb_id"]
+          assert counts.get("staged_matches",0) <= counts["matched_in_fixed_shard"]
           valid_years=set(map(int,json.loads((root/"history/history_manifest.json").read_text())["years"]))
           assert report["changed_years"]==sorted(set(report["changed_years"]))
           assert all(int(y) in valid_years for y in report["changed_years"]), "Staged year absent from canonical snapshot"
