@@ -1,0 +1,160 @@
+name: BlinQ V1 current private CDB NULL-only source crosswalk audit
+
+# This branch-only workflow CANNOT mutate the CDB. Do not enable on main:
+# the actual protected publisher is a separate, rigorously gated workflow.
+on:
+  push:
+    branches: [audit/blinq-v1-live-cdb-null-diff-20261015]
+    paths:
+      - .github/workflows/blinq-v1-live-null-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-private-readonly-crosswalk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  exact-current-cdb-dry-run:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      SOURCE_REPO: BackstageTalks/tbt-data
+      SOURCE_TAG: blinq-uploaded-2025-26-source-layer-8202ff4b4854-v1
+      CDB_TAG: tbt-data-v1
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install tested Parquet dependencies and validate identity tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q -r api/requirements-train.txt
+          python -m unittest discover -s tests -p test_link_uploaded_flashscore_verified.py -v
+      - name: Require private destination and retrieve frozen input sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$SOURCE_REPO" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p work/blinq-v1/source work/blinq-v1/before work/blinq-v1/out work/blinq-v1/after
+          gh release download "$SOURCE_TAG" -R "$SOURCE_REPO" \
+            -p source-statistics-validated-stage.jsonl.gz -D work/blinq-v1/source
+          gh release download "$CDB_TAG" -R "$SOURCE_REPO" \
+            -p blinq-flashscore-event-index-2026.jsonl.gz -D work/blinq-v1/source
+          gh release download "$CDB_TAG" -R "$SOURCE_REPO" \
+            -p history-2024.parquet -p history-2025.parquet -p history-2026.parquet \
+            -p history_manifest.json -p _tbt_bundle_manifest.json -D work/blinq-v1/before
+          gh api "repos/$SOURCE_REPO/releases/tags/$CDB_TAG" > work/blinq-v1/before/release-api.json
+          echo 'e66e6de58d70801fe2dca7b049f75f442237516a7e5042947b892d63daa1dae8  work/blinq-v1/source/source-statistics-validated-stage.jsonl.gz' | sha256sum -c
+          echo '328f9c36c0f4021c745ca7119ea904a4ae7cadb66cee17cc63f2ca6f5774a952  work/blinq-v1/source/blinq-flashscore-event-index-2026.jsonl.gz' | sha256sum -c
+      - name: Independently verify all current baseline release digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root=Path('work/blinq-v1/before')
+          meta=json.loads((root/'release-api.json').read_text())
+          assets={a['name']:a for a in meta['assets']}
+          bundle=json.loads((root/'_tbt_bundle_manifest.json').read_text())['files']
+          hist=json.loads((root/'history_manifest.json').read_text())['years']
+          names=['history-2024.parquet','history-2025.parquet','history-2026.parquet',
+                 'history_manifest.json','_tbt_bundle_manifest.json']
+          for name in names:
+              value=hashlib.sha256((root/name).read_bytes()).hexdigest()
+              if assets[name].get('digest') != 'sha256:'+value:
+                  raise SystemExit('BLOCKED_RELEASE_API_ASSET_DIGEST_CHANGED')
+              if name != '_tbt_bundle_manifest.json' and bundle[name]['sha256'] != value:
+                  raise SystemExit('BLOCKED_BUNDLE_MANIFEST_DIGEST_CHANGED')
+              if name.endswith('.parquet') and hist[name[8:12]]['sha256'] != value:
+                  raise SystemExit('BLOCKED_YEAR_MANIFEST_DIGEST_CHANGED')
+          print('CURRENT_CANONICAL_RELEASE_DIGESTS_VERIFIED=5')
+          print('PINNED_YEARS=2024,2025,2026')
+          PY
+      - name: Compute real current exact-source identity and NULL delta (never publish candidate rows)
+        shell: bash
+        run: |
+          set -euo pipefail
+          log_file="$RUNNER_TEMP/blinq-private-exact-link.txt"
+          trap 'rm -f "$log_file"' EXIT
+          if ! python scripts/link_uploaded_flashscore_verified.py \
+            --source-stage work/blinq-v1/source/source-statistics-validated-stage.jsonl.gz \
+            --flashscore-index work/blinq-v1/source/blinq-flashscore-event-index-2026.jsonl.gz \
+            --history-dir work/blinq-v1/before \
+            --out work/blinq-v1/out >"$log_file" 2>&1; then
+            echo "::error::Real private source crosswalk failed; no private trace exposed in public logs."
+            exit 61
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          r=json.loads(Path('work/blinq-v1/out/direct_link_report.json').read_text())
+          c=r['counts']; n=int(r['stage_rows'])
+          stage=Path('work/blinq-v1/out/cdb_import_stage_EXACT_DIRECT_ONLY.jsonl')
+          rows=[json.loads(line) for line in stage.read_text().splitlines() if line.strip()]
+          if len(rows)!=n or len({v['match_id'] for v in rows})!=n:
+              raise SystemExit('BLOCKED_DUPLICATE_OR_MISMATCHED_STAGE')
+          if (r.get('canonical_writes')!=0 or r.get('writer_executed') is not False
+              or any(v.get('import_ready') is not True for v in rows)):
+              raise SystemExit('BLOCKED_INVALID_LINKER_STATUS')
+          field_counts={}
+          for v in rows:
+              for name in v.get('incoming_stats',{}):
+                  field_counts[name]=field_counts.get(name,0)+1
+          if sum(field_counts.values())!=c.get('staged_new_canonical_null_cells',0):
+              raise SystemExit('BLOCKED_SOURCE_STAT_CELL_COUNT_MISMATCH')
+          print('DRYRUN_REAL_SOURCE_ROWS='+str(c.get('source_rows',0)))
+          print('DRYRUN_MATCHES_IN_STAGE='+str(n))
+          print('DRYRUN_NEW_NULL_CELLS='+str(sum(field_counts.values())))
+          print('DRYRUN_FOUR_COUNT_AND_TWO_SET_PROOFS='+str(c.get('verified_four_counts_and_two_sets',0)))
+          print('DRYRUN_ALREADY_COMPLETE='+str(c.get('already_complete',0)))
+          print('DRYRUN_CONFLICTS='+str(c.get('other_stats_conflict',0)))
+          print('DRYRUN_AMBIGUOUS_OR_DUPLICATE_TARGETS='+str(c.get('duplicate_canonical_target',0)))
+          print('DRYRUN_REJECTED_BY_CAUSE='+json.dumps({k:v for k,v in c.items()
+                  if k not in ('source_rows','staged_new_canonical_null_cells')},sort_keys=True))
+          print('DRYRUN_STAT_FIELD_COUNTS='+json.dumps(field_counts,sort_keys=True))
+          print('PRODUCTION_CDB_WRITES=0')
+          print('PAID_PROVIDER_API_CALLS=0')
+          PY
+      - name: Reconfirm baseline has not changed during private computation
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$SOURCE_REPO/releases/tags/$CDB_TAG" > work/blinq-v1/after/release-api.json
+          gh release download "$CDB_TAG" -R "$SOURCE_REPO" \
+            -p history_manifest.json -p _tbt_bundle_manifest.json -D work/blinq-v1/after
+          cmp work/blinq-v1/before/history_manifest.json work/blinq-v1/after/history_manifest.json
+          cmp work/blinq-v1/before/_tbt_bundle_manifest.json work/blinq-v1/after/_tbt_bundle_manifest.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('work/blinq-v1')
+          old=json.loads((p/'before/release-api.json').read_text())
+          new=json.loads((p/'after/release-api.json').read_text())
+          chosen=['history-2024.parquet','history-2025.parquet','history-2026.parquet',
+                  'history_manifest.json','_tbt_bundle_manifest.json']
+          def subset(d):
+              return {a['name']:(a['id'],a['digest'],a['size'])
+                      for a in d['assets'] if a['name'] in chosen}
+          if subset(old)!=subset(new):
+              raise SystemExit('BLOCKED_CDB_RELEASE_CHANGED_DURING_READ_ONLY_DRYRUN')
+          if len(subset(new))!=5:
+              raise SystemExit('BLOCKED_CDB_RELEASE_MISSING_PARTITIONS')
+          print('CURRENT_CANONICAL_BASELINE_STABLE_DURING_DRYRUN=TRUE')
+          print('PRODUCTION_CDB_WRITES=0')
+          PY
+      - name: Clean ephemeral private data
+        if: always()
+        shell: bash
+        run: rm -rf work/blinq-v1
