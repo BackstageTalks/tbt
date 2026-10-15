@@ -1,6 +1,7 @@
 import sys, unittest
 from pathlib import Path
-sys.path.insert(0,str(Path(__file__).resolve().parent))
+root = Path(__file__).resolve().parents[1] / 'scripts'
+sys.path.insert(0, str(root if root.is_dir() else Path(__file__).resolve().parent))
 from finalize_uploaded_research_crosswalk import unique_or_reject
 
 def source(k,mid='e'):
