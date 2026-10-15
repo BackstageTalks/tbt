@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from ..errors import ProviderError
 from ..providers.statistics import (NoSupportedStatisticsError, complete_opponent_service_rates, parse_statistics)
+from ..providers.tennisapi_extra import normalize_set_statistics_home_away
 from .statistics_gapfill import event_id as resolve_event_id, missing_fields, retry_due
 
 
@@ -160,6 +161,30 @@ class StatisticsEnricher:
                 "status": "unavailable", "reason": "empty_whole_match_statistics",
             }}
             return "unavailable"
+        # Reuse this already-paid verified post-match response for per-set
+        # research. Do NOT map these side-labelled values into pre-match model
+        # features or replace any authoritative whole-match statistics.
+        try:
+            per_set = normalize_set_statistics_home_away(payload)
+            # A partly covered set tape may undercount ALL, never exceed it.
+            for side, player in (("home", "p1" if home == match.player1_id else "p2"),
+                                 ("away", "p1" if away == match.player1_id else "p2")):
+                for metric in ("aces", "double_faults"):
+                    official = stats.get(f"{player}_{metric}")
+                    observed = sum(v.get(f"{side}_{metric}", 0)
+                                   for v in per_set.values())
+                    if official is not None and observed > official + 1e-6:
+                        raise ProviderError("Per-set statistics exceed whole-match totals")
+        except ProviderError:
+            # Malformed or contradictory set-only data must not poison valid
+            # whole-match CDB enrichment. No partial per-set cells are written.
+            per_set = {}
+        if per_set:
+            raw = {**raw, "_tbt_statistics_by_set": {
+                "schema": 1, "source": "tennisapi1",
+                "event_id": str(event_id), "orientation": "provider_home_away",
+                "scope": "post_match_only", "sets": per_set,
+            }}
         match.stats = {**(match.stats or {}), **stats}
         match.provider_payload = {**raw, "_tbt_statistics": {
             "schema": STATISTICS_SCHEMA_VERSION, "event_id": str(event_id), "source": "tennisapi1",
