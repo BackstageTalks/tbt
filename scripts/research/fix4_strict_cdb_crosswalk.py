@@ -121,7 +121,7 @@ def canonical_index(cdb_dir,years=YEARS):
  base=Path(cdb_dir);man=base/'history_manifest.json';bundle=base/'_tbt_bundle_manifest.json'
  mi=json.loads(man.read_text());bm=json.loads(bundle.read_text());index=collections.defaultdict(list)
  counts=collections.Counter()
- cols=['match_id','tour','scheduled_at','status','player1_id','player2_id','player1_name','player2_name','winner_id','round_name','tournament','stats_json']
+ cols=['match_id','tour','scheduled_at','status','player1_id','player2_id','player1_name','player2_name','winner_id','round_name','tournament','surface','stats_json']
  for year in years:
   entry=mi['years'].get(str(year))
   part=base/f'history-{year}.parquet'
