@@ -30,6 +30,8 @@ name: BlinQ private Drive CDB audit - bounded free public runner
       - tests/test_drive_cdb_private_bridge.py
       - scripts/drive_sort_prefolders.py
       - tests/test_drive_sort_prefolders.py
+      - tests/test_drive_cron_bridge.py
+      - .github/workflows/blinq-drive-content-audit.yml
 
 permissions:
   contents: read
@@ -107,6 +109,7 @@ jobs:
           set -euo pipefail
           python -m unittest discover -s tests -p test_drive_cdb_private_bridge.py -v
           python -m unittest discover -s tests -p test_drive_sort_prefolders.py -v
+          python -m unittest discover -s tests -p test_drive_cron_bridge.py -v
           python -m unittest discover -s tests -p test_drive_repo_source_sheet.py -v
           python -m compileall -q scripts/drive_sort_prefolders.py scripts/drive_repo_source_sheet.py
 
