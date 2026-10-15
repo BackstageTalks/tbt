@@ -112,11 +112,32 @@ def enrich_event_extras(match, provider, *, now: datetime | None = None) -> dict
 
     if fetch_pbp:
         payload = provider.event_point_by_point(eid)
-        parsed = point_by_point_inventory(payload, event_id=eid)
+        # A positive identity mismatch is a hard conflict, never "unavailable".
+        # The existing event-detail/player check is necessary but not sufficient
+        # if the separately fetched PBP envelope claims a different event.
+        if isinstance(payload, dict):
+            claimed = payload.get("eventId", payload.get("event_id"))
+            if claimed is not None and str(claimed) != eid:
+                raise ProviderError("Point-by-point event ID mismatch")
+        try:
+            parsed = point_by_point_inventory(payload, event_id=eid)
+        except ProviderError:
+            # Unexpected OPTIONAL endpoint structures must be quarantined with
+            # an explicit status, not counted as no-coverage, and must not halt
+            # every subsequent canonical history event. No raw point fields
+            # enter the CDB or training features.
+            parsed = {
+                "sets": 0, "games": 0, "points": 0,
+                "games_with_explicit_server": 0,
+                "games_with_explicit_winner": 0,
+                "quality_status": "unsupported_shape",
+            }
+        status = ("unsupported_shape" if parsed["quality_status"] == "unsupported_shape"
+                  else "available" if parsed["points"] else "unavailable")
         marker = {
             "schema": 1, "source": "tennisapi1", "event_id": eid,
             "observed_at_utc": stamp,
-            "status": "available" if parsed["points"] else "unavailable",
+            "status": status,
             "sets": parsed["sets"], "games": parsed["games"], "points": parsed["points"],
             "games_with_explicit_server": parsed["games_with_explicit_server"],
             "games_with_explicit_winner": parsed["games_with_explicit_winner"],
