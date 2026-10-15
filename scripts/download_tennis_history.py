@@ -12,6 +12,7 @@ from pathlib import Path
 
 from _bootstrap import ROOT
 from tbt.config import settings
+from tbt.errors import ProviderError
 from tbt.data.history_snapshot import (
     load_partitions,
     merge_matches,
