@@ -82,6 +82,11 @@ jobs:
           print("VERIFIED_SACKMANN_ORIGINAL_NATIVE_BP_STAGE",json.dumps({"counts":r["counts"],"changed_years":r["changed_years"],"production_mutated":r["production_mutated"]},sort_keys=True))
           assert r["production_mutated"] is False
           PY
+      - name: Explain all source-native breakpoint match lineage exclusions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/audit_cdb_sackmann_native_bp_lineage.py --history-dir .cache/cdb-serve-return/current --source-dir source --out .cache/cdb-serve-return/native-bp-lineage.json
       - name: Upload read-only audit report
         uses: actions/upload-artifact@v4
         with:
@@ -90,4 +95,5 @@ jobs:
             .cache/cdb-serve-return/current-coverage.json
             .cache/cdb-serve-return/stage/report.json
             .cache/cdb-serve-return/native-bp/report.json
+            .cache/cdb-serve-return/native-bp-lineage.json
           retention-days: 30
