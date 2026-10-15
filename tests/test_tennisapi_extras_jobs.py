@@ -140,3 +140,20 @@ def test_hourly_scheduler_keeps_bounded_extras_and_same_writer():
     assert "python scripts/cdb_global_writer_lock.py acquire" in data
     assert "python scripts/verify_tennisapi_extras.py" in data
     assert "BLINQ_AUTOFILL_HIGH_YIELD:" in data
+
+
+def test_targeted_statistics_readback_requires_exact_provider_set_evidence(match_factory):
+    from verify_targeted_statistics import verify_per_set_markers
+
+    match = match_for_extras(match_factory)
+    marker = {
+        "schema": 1, "source": "tennisapi1", "event_id": "100",
+        "orientation": "provider_home_away", "scope": "post_match_only",
+        "sets": {"1": {"home_aces": 3.0, "away_aces": 4.0}},
+    }
+    match.provider_payload["_tbt_statistics_by_set"] = marker
+    assert verify_per_set_markers([match], {str(match.match_id): marker}) == 1
+    with pytest.raises(ValueError, match="Missing or modified"):
+        verify_per_set_markers(
+            [match], {str(match.match_id): {**marker, "sets": {"1": {"home_aces": 5}}}}
+        )
