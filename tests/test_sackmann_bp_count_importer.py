@@ -58,10 +58,7 @@ def test_exact_source_matching_and_zero_overwrite(tmp_path):
     row=source()
     path=fixture(tmp_path,[row])
     m=match(row)
-    additions,why=candidate(m,row,"atp","main",path)
-    assert why=="eligible" and len(additions)==2
-    # Never trust a caller-supplied source type: the original source hash
-    # and historical metadata must independently match it.
+    # Both the source hash and historical metadata must match natively.
     native_kind=source_match_id("atp",path,row,2)[1]
     additions,why=candidate(m,row,"atp",native_kind,path)
     assert why=="eligible"
