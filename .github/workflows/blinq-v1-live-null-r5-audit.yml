@@ -102,6 +102,45 @@ jobs:
           gh api "repos/$SOURCE_REPO/releases/tags/$CDB_TAG" > work/blinq-v1/before/release-api.json
           echo 'd6d62982c438c625d531a50fc38faa2179835fe336d6e40d5b10a7ef63919210  work/blinq-v1/source/repaired-stage-r5.jsonl.gz' | sha256sum -c
           echo '328f9c36c0f4021c745ca7119ea904a4ae7cadb66cee17cc63f2ca6f5774a952  work/blinq-v1/source/blinq-flashscore-event-index-2026.jsonl.gz' | sha256sum -c
+      - name: Validate original Flashscore player ID consistency (source-only, never canonical proof)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import collections,gzip,json,re
+          from pathlib import Path
+          stage=Path('work/blinq-v1/source/repaired-stage-r5.jsonl.gz')
+          identities=collections.defaultdict(set); events=set()
+          blank_or_same=0; duplicate_events=0; by_season=collections.Counter()
+          for raw in gzip.open(stage,'rt',encoding='utf8'):
+              if not raw.strip(): continue
+              row=json.loads(raw)
+              tour=str(row.get('source_tour') or '')
+              eid=str(row.get('source_match_id') or '')
+              pair=(tour,eid)
+              if not eid or pair in events:
+                  duplicate_events+=1
+              events.add(pair)
+              ids=(row.get('source_winner_id'),row.get('source_loser_id'))
+              if not all(isinstance(x,str) and re.fullmatch(r'[A-Za-z0-9]{8}',x) for x in ids) or ids[0]==ids[1]:
+                  blank_or_same+=1
+              for pid,name in ((ids[0],row.get('source_winner_name')),(ids[1],row.get('source_loser_name'))):
+                  if pid:
+                      identities[tour,pid].add(str(name or '').strip())
+              by_season[tour,str(row.get('source_season'))]+=1
+          aliases=sum(len(values)>1 for values in identities.values())
+          if len(events)!=9741 or blank_or_same or duplicate_events or aliases:
+              raise SystemExit('BLOCKED_SOURCE_PLAYER_ID_ALIAS_COLLISION_OR_DUPLICATE')
+          print('SOURCE_NATIVE_IDENTITY_ROWS='+str(len(events)))
+          print('SOURCE_NATIVE_PLAYER_IDS_DISTINCT='+str(len(identities)))
+          print('SOURCE_NATIVE_ID_WITH_MULTIPLE_NAMES='+str(aliases))
+          print('SOURCE_NATIVE_PLAYER_ID_FAILURES='+str(blank_or_same))
+          print('SOURCE_NATIVE_EVENT_DUPLICATES='+str(duplicate_events))
+          print('SOURCE_SEASON_COUNTS='+json.dumps(
+              {tour+'_'+year:n for (tour,year),n in sorted(by_season.items())},sort_keys=True))
+          print('SOURCE_TO_CANONICAL_ID_INDEPENDENTLY_ATTESTED=FALSE')
+          print('CANONICAL_WRITES=0')
+          PY
       - name: Independently verify all current baseline release digests
         shell: bash
         run: |
