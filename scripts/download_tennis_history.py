@@ -597,6 +597,7 @@ def main():
     statistics_segments = {}
     statistics_unavailable_reasons = Counter()
     expected_statistics = {}
+    expected_per_set = {}
     statistics_changed_years = set()
     extras_expected = {}
     extras_changed_years = set()
@@ -659,8 +660,12 @@ def main():
             for match in statistics_candidates:
                 processed += 1
                 stats_before = dict(match.stats or {})
+                per_set_before = (match.provider_payload or {}).get("_tbt_statistics_by_set")
                 requests_before = provider.request_count
                 status = enricher.enrich(match)
+                per_set_after = (match.provider_payload or {}).get("_tbt_statistics_by_set")
+                if args.targeted_statistics and per_set_after and per_set_before != per_set_after:
+                    expected_per_set[str(match.match_id)] = per_set_after
                 value_change = statistics_value_change(stats_before, match.stats)
                 if args.targeted_statistics and value_change["new_statistic_values"]:
                     expected_statistics[str(match.match_id)] = {
@@ -741,6 +746,7 @@ def main():
                 write_json(directory / "statistics_expected.json", {
                     "years": sorted(statistics_changed_years),
                     "added_fields": expected_statistics,
+                    "per_set_markers": expected_per_set,
                 })
             if args.mode == "extras":
                 write_json(directory / "extras_expected.json", {
