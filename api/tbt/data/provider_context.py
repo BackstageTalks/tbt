@@ -185,8 +185,8 @@ def minimize_provider_payload(
     fields = ("sets", "games", "points", "games_with_explicit_server", "games_with_explicit_winner")
     if (isinstance(pbp, dict) and pbp.get("schema") == 1
             and pbp.get("source") == "tennisapi1"
-            and pbp.get("status") in ("available", "unavailable")
-            and pbp.get("quality_status") in ("structural_only", "unavailable")
+            and pbp.get("status") in ("available", "unavailable", "unsupported_shape")
+            and pbp.get("quality_status") in ("structural_only", "unavailable", "unsupported_shape")
             and pbp.get("eligible_for_cdb_point_features") is False
             and all(isinstance(pbp.get(k), int) and not isinstance(pbp[k], bool)
                     and 0 <= pbp[k] <= 100000 for k in fields)):
