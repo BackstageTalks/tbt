@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "year_scope": [
+    2025,
+    2026
+  ],
+  "sources": [
+    "ATP",
+    "WTA"
+  ],
+  "mode": "read_only",
+  "allow_cdb_writes": false,
+  "allow_drive_writes": false,
+  "request_reason": "user_requested_real_gap_vs_current_cdb"
+}
