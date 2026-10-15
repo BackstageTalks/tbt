@@ -2,6 +2,12 @@ name: BlinQ Drive content audit - read-only plan
 
 # External scheduler controls the time. This job never moves or deletes files.
 'on':
+  # One-time audited read-only smoke after merging the dated request marker.
+  # Normal nightly execution still comes from the existing external Cronjobs URL.
+  push:
+    branches: [main]
+    paths:
+      - .github/drive-content-audit-request.json
   workflow_call:
     inputs:
       download_mb:
@@ -58,14 +64,14 @@ jobs:
 
   audit:
     needs: safety-tests
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
       PRIVATE_REPO: BackstageTalks/tbt-data
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       BLINQ_DRIVE_SORT_CREDENTIALS: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
-      HASH_LIMIT_MB: ${{ inputs.download_mb }}
+      HASH_LIMIT_MB: ${{ inputs.download_mb || '512' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,7 +125,7 @@ jobs:
 
   report:
     needs: [safety-tests, audit]
-    if: always() && github.event_name == 'workflow_dispatch'
+    if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     runs-on: ubuntu-latest
     steps:
       - name: Counts-only status - no private Drive identifiers
