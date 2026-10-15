@@ -60,6 +60,28 @@ jobs:
           print("VERIFIED_CDB_SERVE_RETURN_STAGE_COUNTS",json.dumps({"counts":r["counts"],"changed_years":r["changed_years"],"production_mutated":r["production_mutated"]},sort_keys=True))
           assert r["production_mutated"] is False
           PY
+      - name: Checkout exact upstream Sackmann data snapshot for verified native-ID historical matches
+        uses: actions/checkout@v4
+        with:
+          repository: Aneeshers/tennis-sackmann-archive
+          ref: 83733587353df8a41f2fd4f516147d5aa83f5a8d
+          path: source
+          persist-credentials: false
+      - name: Stage original source-native break-point return rates only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = 83733587353df8a41f2fd4f516147d5aa83f5a8d
+          test -f source/atp/atp_matches_2020.csv
+          python -m pytest -q tests/test_recover_cdb_sackmann_breakpoints.py
+          python scripts/recover_cdb_sackmann_breakpoints.py --mode stage --source-dir source --history-dir .cache/cdb-serve-return/current --out-dir .cache/cdb-serve-return/native-bp
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/cdb-serve-return/native-bp/report.json").read_text())
+          print("VERIFIED_SACKMANN_ORIGINAL_NATIVE_BP_STAGE",json.dumps({"counts":r["counts"],"changed_years":r["changed_years"],"production_mutated":r["production_mutated"]},sort_keys=True))
+          assert r["production_mutated"] is False
+          PY
       - name: Upload read-only audit report
         uses: actions/upload-artifact@v4
         with:
@@ -67,4 +89,5 @@ jobs:
           path: |
             .cache/cdb-serve-return/current-coverage.json
             .cache/cdb-serve-return/stage/report.json
+            .cache/cdb-serve-return/native-bp/report.json
           retention-days: 30
