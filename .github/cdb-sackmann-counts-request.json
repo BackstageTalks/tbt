@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "mode": "write",
+  "mode": "dry-run",
   "workflow": "cdb-sackmann-counts-guarded.yml",
-  "purpose": "One-shot production NULL-only import of exact-native 2018@0/16 breakpoint return count fields, with full backup, CAS, independent readback and zero-delta rerun",
+  "purpose": "Post-pilot read-only verification; revoke the completed one-shot production write authorization",
   "source_commit": "83733587353df8a41f2fd4f516147d5aa83f5a8d",
   "canonical_year": 2018,
   "shard_modulus": 16,
@@ -10,15 +10,13 @@
   "source_rights_disposition": "verified_noncommercial_use",
   "source_rights_evidence_ref": "https://github.com/BackstageTalks/tbt/issues/738",
   "source_attribution": "Jeff Sackmann / Tennis Abstract",
-  "approved_by_operator": true,
-  "expected_cdb_bundle_sha256": "a16f498dc8df69041c60c40194f788767c983c94c1d2debdac556c23696f9a66",
-  "expected_staged_matches": 192,
-  "expected_new_stat_values": 384,
-  "expected_changed_years": [
-    2018
-  ],
-  "canonical_writes_permitted": true,
+  "approved_by_operator": false,
+  "expected_cdb_bundle_sha256": null,
+  "expected_staged_matches": null,
+  "expected_new_stat_values": null,
+  "expected_changed_years": null,
+  "canonical_writes_permitted": false,
   "model_training_permitted": false,
   "provider_requests_permitted": 0,
-  "notes": "BlinQ owner described a free analysis-only project with no raw-data redistribution; issue #738 records the intended noncommercial scope. The licensed source remains CC BY-NC-SA 4.0; no commercial reuse, no model training/promotion, no raw publication. Abort on any source-rights, digest, count, identity, integrity, concurrency or read-back mismatch."
+  "notes": "Read-only after one-shot #38824831943. No new production writes without a fresh SHA/count-pinned operator-approved request, source-rights review and all mandatory backup/CAS/read-back checks. Noncommercial source attribution remains; no model activation."
 }
