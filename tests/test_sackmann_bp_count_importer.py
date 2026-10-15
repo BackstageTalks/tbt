@@ -63,15 +63,15 @@ def test_exact_source_matching_and_zero_overwrite(tmp_path):
     additions,why=candidate(m,row,"atp",native_kind,path)
     assert why=="eligible"
     shard=int(m.match_id.rsplit(":",1)[-1][:8],16)%256
-    rows,counts=stage([m],tmp_path,modulus=256,index=shard)
+    rows,counts=stage([m],tmp_path,modulus=256,index=shard,canonical_year=2020)
     assert counts["staged_matches"]==1
     assert counts["new_stat_values"]==2
     before=deepcopy(m)
-    assert write_local([m],rows,tmp_path,modulus=256,index=shard)==[2020]
+    assert write_local([m],rows,tmp_path,modulus=256,index=shard,canonical_year=2020)==[2020]
     assert m.stats["p1_return_break_points_converted_count"]==5
     assert m.stats["p2_return_break_points_converted_count"]==2
     assert all(m.stats[k]==v for k,v in before.stats.items())
-    rows2,counts2=stage([m],tmp_path,modulus=256,index=shard)
+    rows2,counts2=stage([m],tmp_path,modulus=256,index=shard,canonical_year=2020)
     assert not rows2 and counts2.get("new_stat_values",0)==0
 
 def test_source_rate_conflict_and_absent_identity_quarantine(tmp_path):
