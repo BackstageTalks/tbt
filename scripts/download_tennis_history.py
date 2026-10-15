@@ -24,6 +24,7 @@ from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.statistics_enrichment import StatisticsEnricher
 from tbt.services.statistics_enrichment import STATISTICS_SCHEMA_VERSION
 from tbt.services.statistics_gapfill import event_id, missing_fields, retry_due
+from tbt.services.tennisapi_extras_enrichment import needs_extras, enrich_event_extras
 
 
 from release_store import ReleaseStore
@@ -422,12 +423,30 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
     }
 
 
+
+
+def _extras_candidates(matches, start, end):
+    """Deterministic backlog; exact verified provider identity first."""
+    rows = [m for m in matches
+            if start <= m.scheduled_at.date() <= end and needs_extras(m)]
+    def key(match):
+        raw = match.provider_payload or {}
+        ident = raw.get("_tbt_event_identity") if isinstance(raw, dict) else None
+        eid = event_id(match)
+        verified = (isinstance(ident, dict) and ident.get("event_id") == eid
+                    and ident.get("status") == "finished"
+                    and {ident.get("home"), ident.get("away")}
+                    == {match.player1_id, match.player2_id})
+        return (int(not verified), -match.scheduled_at.timestamp(), str(match.match_id))
+    return sorted(rows, key=key)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start", default=None, help="Optional oldest date; overrides lookback")
     parser.add_argument("--end", default=None, help="Optional newest date; default yesterday UTC")
     parser.add_argument("--lookback-days", type=int, default=1095)
-    parser.add_argument("--mode", choices=["history", "statistics"], default="history")
+    parser.add_argument("--mode", choices=["history", "statistics", "extras"], default="history")
     parser.add_argument("--targeted-statistics", action="store_true",
                         help="Queue only identifiable missing fields whose retry is due, recent years first")
     parser.add_argument("--target-tour", choices=("atp", "wta"), default=None,
@@ -438,6 +457,8 @@ def main():
     parser.add_argument("--release-tag", default="tbt-data-v1")
     parser.add_argument("--publish", action="store_true", help="Download/publish via gh; use the supplied serialized workflow")
     args = parser.parse_args()
+    if args.targeted_statistics and args.mode != "statistics":
+        parser.error("--targeted-statistics requires statistics mode")
     if args.target_tour and (args.mode != "statistics" or not args.targeted_statistics):
         parser.error("--target-tour requires targeted statistics mode")
     high_yield_setting = os.environ.get("BLINQ_AUTOFILL_HIGH_YIELD", "false").lower()
@@ -576,6 +597,8 @@ def main():
     statistics_unavailable_reasons = Counter()
     expected_statistics = {}
     statistics_changed_years = set()
+    extras_expected = {}
+    extras_changed_years = set()
     provider_quarantine = []
     enricher = None
     primary_error = None
@@ -584,6 +607,41 @@ def main():
     try:
         if args.mode == "history":
             download_days(provider, matches, progress, start, end, checkpoint, provider_quarantine)
+        elif args.mode == "extras":
+            changed = set()
+            pending = _extras_candidates(matches, start, end)
+            report["extras_candidate_rows"] = len(pending)
+            for index, match in enumerate(pending, 1):
+                before = dict(match.provider_payload or {})
+                before_calls = provider.request_count
+                try:
+                    outcome = enrich_event_extras(match, provider)
+                    report["extras_" + outcome["status"]] += 1
+                    for field in ("markets", "pbp"):
+                        report[f"extras_{field}_{outcome[field]}"] += 1
+                except ProviderError as exc:
+                    report["extras_rejected"] += 1
+                    print(json.dumps({"extras_rejected_match_id": str(match.match_id),
+                                      "reason_type": type(exc).__name__}), flush=True)
+                    if report["extras_rejected"] >= 25:
+                        raise RuntimeError("Too many rejected extras events; fail closed") from exc
+                finally:
+                    if (match.provider_payload or {}) != before:
+                        year = match.scheduled_at.year
+                        changed.add(year)
+                        pending_years.add(year)
+                        extras_changed_years.add(year)
+                        raw = match.provider_payload or {}
+                        observed = {key: raw[key] for key in
+                                    ("_tbt_tennisapi_markets", "_tbt_tennisapi_pbp")
+                                    if key in raw and before.get(key) != raw[key]}
+                        if observed:
+                            extras_expected[str(match.match_id)] = observed
+                    report["extras_requests"] += provider.request_count - before_calls
+                if index % 40 == 0:
+                    checkpoint(changed, True)
+                    changed.clear()
+            checkpoint(changed, True)
         else:
             enricher = StatisticsEnricher(provider, directory / "statistics_cache.sqlite",
                                          targeted=args.targeted_statistics)
@@ -652,7 +710,7 @@ def main():
             report["provider_identity_quarantined"] = len(provider_quarantine)
         try:
             output_report = dict(report)
-            if args.mode != "history":
+            if args.mode == "statistics":
                 requests = provider.request_count
                 output_report["statistics_data_value"] = {
                     **dict(statistics_value),
@@ -664,6 +722,12 @@ def main():
                     ),
                     "policy": "Actual full serve+return readiness transitions; cache/local gains separated. Denominator includes provider retries/failures. Not an estimate of model accuracy gain.",
                 }
+            if args.mode == "extras":
+                output_report["extras_observed_matches"] = len(extras_expected)
+                output_report["extras_coverage_policy"] = (
+                    "Post-match research only. Opening/latest lack as-of timestamps; "
+                    "PBP is structural, not model features."
+                )
             if args.targeted_statistics:
                 output_report["statistics_segment_yield"] = _statistics_segment_yield(statistics_segments)
                 output_report["statistics_unavailable_reasons"] = dict(statistics_unavailable_reasons)
@@ -676,6 +740,10 @@ def main():
                 write_json(directory / "statistics_expected.json", {
                     "years": sorted(statistics_changed_years),
                     "added_fields": expected_statistics,
+                })
+            if args.mode == "extras":
+                write_json(directory / "extras_expected.json", {
+                    "years": sorted(extras_changed_years), "markers": extras_expected,
                 })
             print(json.dumps(output_report, indent=2), flush=True)
         except Exception as exc:
