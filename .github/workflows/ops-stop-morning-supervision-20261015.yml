@@ -1,0 +1,36 @@
+name: One-shot stop morning supervisor after detached recovery dispatch
+on:
+  push:
+    branches:
+      - ops/stop-morning-supervision-20261015
+    paths:
+      - .github/workflows/ops-stop-morning-supervision-20261015.yml
+permissions:
+  actions: write
+  contents: read
+jobs:
+  stop:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stop supervisor before its unrelated promotion step
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          child_sha="$(gh api "repos/$repo/actions/runs/38685517764" --jq '.head_sha')"
+          if [[ "$child_sha" != "77b221acbfd88330b3c743bc7454156614851465" ]]; then
+            echo "::error::Detached data refresh is not at expected fixed SHA"
+            exit 1
+          fi
+          supervisor_status="$(gh api "repos/$repo/actions/runs/38675299480" --jq '.status')"
+          if [[ "$supervisor_status" == "completed" ]]; then
+            echo "::notice::Supervisor already completed, no cancellation needed"
+            exit 0
+          fi
+          # Detached data.yml child is an independent workflow run. Cancelling the
+          # supervisor must not cancel, retry, or alter the child publication.
+          gh api -X POST "repos/$repo/actions/runs/38675299480/cancel"
+          echo "Requested cancellation of supervisor only; no model training dispatched."
