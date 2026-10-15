@@ -1,0 +1,145 @@
+name: BlinQ uploaded source crosswalk refresh (research-only one-shot)
+'on':
+  pull_request:
+    paths:
+      - scripts/finalize_uploaded_research_crosswalk.py
+      - tests/test_finalize_uploaded_research_crosswalk.py
+      - .github/workflows/blinq-uploaded-crosswalk-recheck-once.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-uploaded-crosswalk-recheck-once.yml
+permissions:
+  contents: read
+concurrency:
+  group: blinq-uploaded-crosswalk-review-${{ github.run_id }}
+  cancel-in-progress: false
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: No canonical mutation, model activation or rights bypass
+        run: |
+          set -euo pipefail
+          python -m compileall -q scripts/finalize_uploaded_research_crosswalk.py
+          python -m unittest discover -s tests -p test_finalize_uploaded_research_crosswalk.py -v
+          python - <<'PY'
+          from pathlib import Path
+          code=Path('scripts/finalize_uploaded_research_crosswalk.py').read_text()
+          assert "'write_authorized':False" in code
+          assert "'canonical_import_ready':False" in code
+          assert "'model_training_allowed':False" in code
+          assert 'upload_bundle' not in code and 'write_partition' not in code
+          PY
+  audit-private:
+    needs: regression
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      CDB_REPO: BackstageTalks/tbt-data
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check private repository and Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/$CDB_REPO --jq .private)" = 'true'
+          python -m pip install -q 'pyarrow>=17,<25' 'pandas>=2,<3'
+          mkdir -p work/crosswalk/source work/crosswalk/before work/crosswalk/current work/crosswalk/output
+      - name: Retrieve pinned original proof and current canonical CDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release download blinq-uploaded-2025-26-source-layer-8202ff4b4854-v1 -R "$CDB_REPO" \
+            -p source-statistics-validated-stage.jsonl.gz -D work/crosswalk/source
+          gh release download blinq-uploaded-clock-bridge-audit-38704795156-1 -R "$CDB_REPO" \
+            -p private-candidates.jsonl.gz -D work/crosswalk/source
+          gh release download tbt-data-v1 -R "$CDB_REPO" \
+            -p blinq-flashscore-event-index-2026.jsonl.gz -D work/crosswalk/source
+          gh release download tbt-data-v1 -R "$CDB_REPO" \
+            -p history-2024.parquet -p history-2025.parquet -p history-2026.parquet \
+            -p history_manifest.json -p _tbt_bundle_manifest.json -D work/crosswalk/before
+          echo 'e66e6de58d70801fe2dca7b049f75f442237516a7e5042947b892d63daa1dae8  work/crosswalk/source/source-statistics-validated-stage.jsonl.gz' | sha256sum -c
+          echo '4efc0e0b0f5ff9272f39f7ba8ca55c5b7b85981bf3dd192ff8c974cf0c9114b1  work/crosswalk/source/private-candidates.jsonl.gz' | sha256sum -c
+          echo '328f9c36c0f4021c745ca7119ea904a4ae7cadb66cee17cc63f2ca6f5774a952  work/crosswalk/source/blinq-flashscore-event-index-2026.jsonl.gz' | sha256sum -c
+      - name: Independently recompute current same-event links and filter duplicates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/finalize_uploaded_research_crosswalk.py \
+            --source work/crosswalk/source/source-statistics-validated-stage.jsonl.gz \
+            --index work/crosswalk/source/blinq-flashscore-event-index-2026.jsonl.gz \
+            --baseline work/crosswalk/source/private-candidates.jsonl.gz \
+            --history work/crosswalk/before \
+            --out work/crosswalk/output
+          python - <<'PY'
+          import gzip,json
+          from pathlib import Path
+          p=Path('work/crosswalk/output')
+          r=json.loads((p/'report.json').read_text())
+          if r['canonical_writes'] != 0 or r['canonical_import_authorized'] is not False or r['model_training_allowed'] is not False:
+              raise SystemExit('research write gate failed')
+          a=[json.loads(x) for x in gzip.open(p/'research-native-links.jsonl.gz','rt') if x.strip()]
+          if len(a)!=r['research_links_unique'] or len({x['source_key'] for x in a})!=len(a) or len({x['canonical_match_id'] for x in a})!=len(a):
+              raise SystemExit('crosswalk duplicated/ambiguous current IDs')
+          if any(x['write_authorized'] or x['source_reuse_authorized'] or x['prematch_feature_allowed'] or x['model_training_allowed'] for x in a):
+              raise SystemExit('unlicensed source must not enter canonical features')
+          print('VERIFIED_PRIVATE_RESEARCH_LINKS_ONLY',r['research_links_unique'],r['research_null_stat_keys'])
+          PY
+      - name: Confirm CDB did not change during crosswalk construction
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release download tbt-data-v1 -R "$CDB_REPO" \
+            -p history-2024.parquet -p history-2025.parquet -p history-2026.parquet \
+            -p history_manifest.json -p _tbt_bundle_manifest.json -D work/crosswalk/current
+          for p in history-2024.parquet history-2025.parquet history-2026.parquet history_manifest.json _tbt_bundle_manifest.json; do
+            cmp "work/crosswalk/before/$p" "work/crosswalk/current/$p" || { echo CDB_UPDATED_DURING_LINKAGE; exit 1; }
+          done
+      - name: Publish private audit evidence, sha verification and readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd work/crosswalk/output && sha256sum report.json research-native-links.jsonl.gz > SHA256SUMS && sha256sum -c SHA256SUMS)
+          tag="blinq-uploaded-research-crosswalk-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" -R "$CDB_REPO" --target main \
+            --title 'BlinQ independently checked private research-only event crosswalk' \
+            --notes 'Source rights unverified; NEVER canonical import-ready or model/training eligible. Current pinned CDB independent readback; no overwritten stats.' \
+            work/crosswalk/output/report.json work/crosswalk/output/research-native-links.jsonl.gz work/crosswalk/output/SHA256SUMS
+          mkdir -p work/crosswalk/readback
+          gh release download "$tag" -R "$CDB_REPO" -D work/crosswalk/readback
+          (cd work/crosswalk/readback && sha256sum -c SHA256SUMS)
+          cmp work/crosswalk/output/report.json work/crosswalk/readback/report.json
+          python - <<'PY'
+          import gzip,json
+          from pathlib import Path
+          root=Path('work/crosswalk/readback')
+          report=json.loads((root/'report.json').read_text())
+          a=[json.loads(x) for x in gzip.open(root/'research-native-links.jsonl.gz','rt') if x.strip()]
+          assert len(a)==report['research_links_unique']
+          assert all(x['rights_status']=='UNVERIFIED_PRIVATE_RESEARCH_ONLY' and x['write_authorized'] is False for x in a)
+          print('PRIVATE_RELEASE_READBACK_PROVEN',len(a),'matches')
+          PY
+          echo "PRIVATE_RESEARCH_CROSSWALK_TAG=$tag" >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain operator-readable verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-uploaded-research-crosswalk-${{ github.run_id }}
+          path: |
+            work/crosswalk/output/report.json
+            work/crosswalk/output/current-audit/report.json
+          if-no-files-found: warn
+          retention-days: 30
