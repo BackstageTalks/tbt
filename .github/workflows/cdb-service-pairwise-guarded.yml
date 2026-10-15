@@ -95,7 +95,8 @@ jobs:
           assert report["production_mutated"] is False and report["provider_requests"] == 0
           # A reviewed, single-use request pins BOTH current source manifest and
           # exact eligible delta. Never widen scope silently after PR dry-run.
-          request=json.loads(Path(".github/cdb-service-pairwise-request.json").read_text())
+          request_path=Path(".github/cdb-service-pairwise-request.json")
+          request=json.loads(request_path.read_text()) if request_path.is_file() else {}
           snapshot=json.loads((root/"source-snapshot.json").read_text())
           if os.environ.get("GITHUB_EVENT_NAME") == "pull_request":
             assert snapshot["status"] == "verified"
