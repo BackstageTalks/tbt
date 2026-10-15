@@ -32,6 +32,7 @@ PAIRS = tuple(
 )
 RECOVERABLE = {field for pair in PAIRS for field in pair}
 POLICY = "post_match_only_prior_completed_history; exact whole_match_opponent_complement"
+PAIRWISE_POLICY = "post_match_prior_history; per_independent_pair_exact_null_complement_v1"
 
 
 def _sha(value) -> str:
@@ -88,8 +89,28 @@ def _complete_verified_complements(values):
             if values.get(target) is None and values.get(source) is not None:
                 values[target] = 1.0 - float(values[source])
 
+def _pairwise_additions(stats):
+    """Return only mathematically valid independent opponent rate complements."""
+    if not isinstance(stats, dict):
+        raise ValueError("Canonical statistics must be a dictionary")
+    additions = {}
+    invalid_pairs = 0
+    for service, ret in PAIRS:
+        a, b = stats.get(service), stats.get(ret)
+        if any(x is not None and not _valid_observed_rate(x) for x in (a, b)):
+            invalid_pairs += 1
+            continue
+        if a is not None and b is not None:
+            if abs(float(a) + float(b) - 1) > 1e-6:
+                invalid_pairs += 1
+            continue
+        if (a is None) != (b is None):
+            target, observed = (service, b) if a is None else (ret, a)
+            additions[target] = 1.0 - float(observed)
+    return additions, invalid_pairs
 
-def stage(matches, *, as_of=None):
+
+def stage(matches, *, as_of=None, pairwise=False):
     now = as_of or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise ValueError("as_of must be timezone aware")
@@ -105,11 +126,16 @@ def stage(matches, *, as_of=None):
         if not isinstance(stats, dict):
             summary["invalid_stats"] += 1
             continue
-        if _inconsistent_observed_pair(stats):
+        if not pairwise and _inconsistent_observed_pair(stats):
             summary["contradictory_observed_rates"] += 1
             continue
         proposed = dict(stats)
-        _complete_verified_complements(proposed)
+        if pairwise:
+            values, bad_pairs = _pairwise_additions(stats)
+            summary["conflicting_rate_pairs_quarantined"] += bad_pairs
+            proposed.update(values)
+        else:
+            _complete_verified_complements(proposed)
         additions = {k: proposed[k] for k in sorted(RECOVERABLE)
                      if stats.get(k) is None and proposed.get(k) is not None}
         if not additions:
@@ -122,7 +148,7 @@ def stage(matches, *, as_of=None):
             "prewrite_hash": _sha(_storage(match)),
             "source_stats_hash": _sha(stats),
             "additions": additions,
-            "policy": POLICY,
+            "policy": PAIRWISE_POLICY if pairwise else POLICY,
         })
         summary["staged_matches"] += 1
         summary["new_stat_values"] += len(additions)
@@ -134,7 +160,7 @@ def write_local(matches, staged):
     seen, mutations = set(), []
     # Validate ALL rows before mutating even a local copy.
     for row in staged:
-        if not isinstance(row, dict) or row.get("schema") != 1 or row.get("policy") != POLICY:
+        if not isinstance(row, dict) or row.get("schema") != 1 or row.get("policy") not in (POLICY, PAIRWISE_POLICY):
             raise ValueError("Unverified derived-statistics staging schema")
         key = str(row.get("match_id") or "")
         if key in seen or not key:
@@ -148,12 +174,16 @@ def write_local(matches, staged):
         if row.get("prewrite_hash") != _sha(_storage(match)):
             raise ValueError("Canonical match changed since dry-run")
         before = match.stats or {}
-        if _inconsistent_observed_pair(before):
+        if row["policy"] == POLICY and _inconsistent_observed_pair(before):
             raise ValueError("Conflicting observed service/return evidence")
         if row.get("source_stats_hash") != _sha(before):
             raise ValueError("Source statistics changed since dry-run")
         actual = dict(before)
-        _complete_verified_complements(actual)
+        if row["policy"] == PAIRWISE_POLICY:
+            rates, _ = _pairwise_additions(before)
+            actual.update(rates)
+        else:
+            _complete_verified_complements(actual)
         expected = {k: actual[k] for k in sorted(RECOVERABLE)
                     if before.get(k) is None and actual.get(k) is not None}
         if expected != row.get("additions") or not expected:
@@ -230,7 +260,7 @@ def write_exact_stats_partition(history_dir: Path, year: int, staged: list[dict]
         record = by_id.get(mid)
         if record is None or mid not in offsets:
             raise ValueError("Staged canonical match not present in original partition")
-        if row.get("schema") != 1 or row.get("policy") != POLICY:
+        if row.get("schema") != 1 or row.get("policy") not in (POLICY, PAIRWISE_POLICY):
             raise ValueError("Unverified staged complement schema")
         if _sha(_storage(record)) != row["prewrite_hash"]:
             raise ValueError("Canonical match changed before Parquet patch")
@@ -244,9 +274,13 @@ def write_exact_stats_partition(history_dir: Path, year: int, staged: list[dict]
         if not isinstance(stats, dict):
             raise ValueError("Original statistics must be a JSON object")
         computed = dict(record.stats or {})
-        if _inconsistent_observed_pair(computed):
-            raise ValueError("Conflicting observed complement source")
-        _complete_verified_complements(computed)
+        if row["policy"] == PAIRWISE_POLICY:
+            rates, _ = _pairwise_additions(computed)
+            computed.update(rates)
+        else:
+            if _inconsistent_observed_pair(computed):
+                raise ValueError("Conflicting observed complement source")
+            _complete_verified_complements(computed)
         expected = {k: computed[k] for k in sorted(RECOVERABLE)
                     if (record.stats or {}).get(k) is None and computed.get(k) is not None}
         if expected != row.get("additions") or not expected:
@@ -300,6 +334,7 @@ def _load(directory):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--mode", choices=["stage", "write", "verify"], required=True)
+    p.add_argument("--pairwise", action="store_true", help="Isolate unrelated conflicting rate pairs")
     p.add_argument("--history-dir", type=Path)
     p.add_argument("--before-dir", type=Path)
     p.add_argument("--stage-file", type=Path)
@@ -309,7 +344,7 @@ def main():
     if a.mode == "stage":
         if not a.history_dir:
             p.error("--history-dir is required")
-        staged, counts = stage(_load(a.history_dir))
+        staged, counts = stage(_load(a.history_dir), pairwise=a.pairwise)
         with (a.out_dir / "stage.jsonl").open("w", encoding="utf-8") as fh:
             for row in staged:
                 fh.write(json.dumps(row, sort_keys=True) + "\n")
