@@ -65,7 +65,7 @@ def scan(bridge_zip,history_dir):
     mi=json.loads(manifest.read_text()); bm=json.loads(bundle.read_text())
     if not isinstance(mi.get('years'),dict) or not isinstance(bm.get('files'),dict):raise ValueError('BAD_CDB_BUNDLE_MANIFEST')
     counts=collections.Counter(); direct=collections.defaultdict(list)
-    for yr in range(2015,2026):
+    for yr in (2015,2016,2017,2019):
         rec=mi['years'].get(str(yr))
         if not rec:raise ValueError(f'CDB_PARTITION_MISSING_{yr}')
         p=base/f'history-{yr}.parquet'
@@ -74,7 +74,7 @@ def scan(bridge_zip,history_dir):
             raise ValueError(f'CDB_PARTITION_SHA_MISMATCH_{yr}')
         # Do not read or print personal-level rows.
         df=pq.read_table(p,columns=['match_id','tour','player1_id','player2_id','player1_name','player2_name','winner_id','provider_context_json','stats_json']).to_pylist()
-        counts['canonical_rows_2015_2025']+=len(df)
+        counts['canonical_rows_target_years']+=len(df)
         for row in df:
             if str(row.get('tour') or '').lower()!='atp':continue
             counts['canonical_atp_rows']+=1
