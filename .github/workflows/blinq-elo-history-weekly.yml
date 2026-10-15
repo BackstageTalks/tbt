@@ -50,7 +50,12 @@ jobs:
 
   weekly-full-replay:
     needs: elo-selftest
-    if: github.event_name != 'pull_request'
+    # Only operator dispatch or the external scheduler's marker commit may start
+    # the expensive historical replay. A code/PR merge runs selftests ONLY.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       contains(toJSON(github.event.commits), '.github/elo-weekly-trigger.json'))
     runs-on: ubuntu-latest
     timeout-minutes: 230
     env:
