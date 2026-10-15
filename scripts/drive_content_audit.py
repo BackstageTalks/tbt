@@ -145,21 +145,19 @@ def audit(api, *, max_download_mb=512, max_items=12000):
             or source_root.get("mimeType") != FOLDER_MIME
             or source_root.get("trashed")):
         raise ValueError("Pinned source parent identity mismatch")
-    container = api.metadata(CONTAINER_ROOT)
-    if (container.get("id") != CONTAINER_ROOT
-            or container.get("name") != "BlinQ"
-            or container.get("mimeType") != FOLDER_MIME
-            or container.get("parents") != [SOURCE_ROOT]
-            or container.get("trashed")):
-        raise ValueError("Pinned child container identity mismatch")
+    # The two legacy 11/12 folders live under a different subfolder and are
+    # outside the real upload/root scope. Do not require access to that child:
+    # its identity/parents cannot be independently verified by this runner.
+    # Report the explicit coverage limitation rather than silently scanning it.
     records = []
     categories = {}
-    for name, folder_id in DESTINATIONS.items():
+    included_categories = {name: fid for name, fid in DESTINATIONS.items()
+                           if name not in ("11_ZALOHY", "12_NA_KONTROLU")}
+    for name, folder_id in included_categories.items():
         folder = api.metadata(folder_id)
-        expected_parent = CONTAINER_ROOT if name in ("11_ZALOHY", "12_NA_KONTROLU") else SOURCE_ROOT
         if (folder.get("id") != folder_id or folder.get("name") != name
                 or folder.get("mimeType") != FOLDER_MIME
-                or folder.get("parents") != [expected_parent] or folder.get("trashed")):
+                or folder.get("parents") != [SOURCE_ROOT] or folder.get("trashed")):
             raise ValueError("Pinned category identity mismatch")
         categories[folder_id] = [f for f in api.children(folder_id)
                                   if f.get("size") is not None
@@ -257,6 +255,8 @@ def audit(api, *, max_download_mb=512, max_items=12000):
         "confirmed_identical_root_files": sum(sum(f["id"] in roots for f in g) for g in duplicate_groups),
         "unverified_equal_size_groups": len(blocked_sizes),
         "downloaded_bytes": api.bytes_downloaded, "statuses": dict(sorted(stats.items())),
+        "excluded_category_names": ["11_ZALOHY", "12_NA_KONTROLU"],
+        "scope_note": "Only direct BlinQ_data uploads and its verified categories 01-10; legacy child BlinQ folders 11/12 not scanned.",
         "note": "Header signature is a hypothesis, not row-semantic validation or permission to move/import.",
         "details": output,
     }
