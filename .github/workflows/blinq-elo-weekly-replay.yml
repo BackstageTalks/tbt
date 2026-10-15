@@ -1,0 +1,138 @@
+name: BlinQ Elo canonical full replay and weekly Tennis Abstract check
+on:
+  push:
+    branches:
+      - main
+      - feat/blinq-elo-runner-20261015
+    paths:
+      - ".github/workflows/blinq-elo-weekly-replay.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "37 3 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-cdb-elo-independent-readonly
+  cancel-in-progress: false
+
+jobs:
+  full-elo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: BackstageTalks/tbt-data
+      PYTHONPATH: api:.cache/blinq-elo/scripts:scripts
+      ELO_RELEASE: blinq-cdb-elo-verified-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Verify destination and install exact BlinQ engine dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+          python -m pip install -r api/requirements-train.txt pytest
+      - name: Fetch versioned Elo replay and TA comparison logic from private data repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/blinq-elo/scripts .cache/blinq-elo/tests
+          for path in scripts/build_blinq_elo.py scripts/compare_blinq_elo_ta.py tests/test_blinq_elo_history.py; do
+            gh api "repos/$TBT_DATA_REPOSITORY/contents/$path?ref=main" --jq .content | base64 -d > ".cache/blinq-elo/$path"
+            test -s ".cache/blinq-elo/$path"
+          done
+          python -m pytest -q .cache/blinq-elo/tests/test_blinq_elo_history.py
+          python -m py_compile .cache/blinq-elo/scripts/build_blinq_elo.py .cache/blinq-elo/scripts/compare_blinq_elo_ta.py
+          git rev-parse HEAD > .cache/blinq-elo/engine-sha
+          gh api "repos/$TBT_DATA_REPOSITORY/git/ref/heads/main" --jq .object.sha > .cache/blinq-elo/data-code-sha
+      - name: Download complete coherent checksum-verified canonical CDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/download_stable_cdb.py --repository "$TBT_DATA_REPOSITORY" \
+            --tag tbt-data-v1 --out .cache/blinq-elo/cdb \
+            --report .cache/blinq-elo/source-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/blinq-elo/source-report.json").read_text())
+          assert r["status"]=="verified"
+          assert r["provider_api_requests"]==0
+          print("SOURCE_CDB_STABLE",r["manifest_sha256"])
+          PY
+      - name: Compute full historical pre-match Elo from 78-year canonical CDB
+        timeout-minutes: 100
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_sha="$(python -c 'import json;print(json.load(open(".cache/blinq-elo/source-report.json"))["manifest_sha256"])')"
+          python .cache/blinq-elo/scripts/build_blinq_elo.py \
+            --history-dir .cache/blinq-elo/cdb \
+            --out .cache/blinq-elo/elo \
+            --source-manifest-sha "$source_sha" \
+            --engine-sha "$(cat .cache/blinq-elo/engine-sha)"
+          python .cache/blinq-elo/scripts/build_blinq_elo.py \
+            --out .cache/blinq-elo/elo --verify-only
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path(".cache/blinq-elo/elo/elo-manifest.json")
+          r=json.loads(p.read_text())
+          assert r["year_partitions"]==78
+          assert r["completed_matches"]>=250000
+          assert r["training_promoted"] is False
+          assert r["canonical_cdb_mutated"] is False
+          assert r["provider_requests"]==0
+          print("ELO_ALL_YEARS_REPLAY_PASS",r["completed_matches"],r["player_states"])
+          PY
+      - name: Download approved weekly Tennis Abstract reports for independent comparison
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/blinq-elo/ta/raw .cache/blinq-elo/ta/parsed
+          for name in atp_elo wta_elo atp_yelo wta_yelo; do
+            case "$name" in
+              atp_elo) url="https://www.tennisabstract.com/reports/atp_elo_ratings.html";;
+              wta_elo) url="https://www.tennisabstract.com/reports/wta_elo_ratings.html";;
+              atp_yelo) url="https://www.tennisabstract.com/reports/atp_season_yelo_ratings.html";;
+              wta_yelo) url="https://www.tennisabstract.com/reports/wta_season_yelo_ratings.html";;
+            esac
+            if ! curl -fsSL --max-time 40 "$url" -o ".cache/blinq-elo/ta/raw/$name.html"; then
+              curl -fsSL --max-time 60 "https://r.jina.ai/http://${url#https://}" -o ".cache/blinq-elo/ta/raw/$name.html"
+            fi
+          done
+          python scripts/parse_tennis_abstract_elo.py \
+            --atp-elo-html .cache/blinq-elo/ta/raw/atp_elo.html \
+            --wta-elo-html .cache/blinq-elo/ta/raw/wta_elo.html \
+            --atp-yelo-html .cache/blinq-elo/ta/raw/atp_yelo.html \
+            --wta-yelo-html .cache/blinq-elo/ta/raw/wta_yelo.html \
+            --out-dir .cache/blinq-elo/ta/parsed
+          python .cache/blinq-elo/scripts/compare_blinq_elo_ta.py \
+            --current .cache/blinq-elo/elo/elo-current.csv \
+            --ta-dir .cache/blinq-elo/ta/parsed \
+            --out .cache/blinq-elo/elo/ta-comparison.json
+      - name: Publish independent private Elo release and verify persisted readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd .cache/blinq-elo
+          tar -czf elo-history.tar.gz -C elo .
+          sha256sum elo-history.tar.gz > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          gh release create "$ELO_RELEASE" --repo "$TBT_DATA_REPOSITORY" --target main \
+            --title "BlinQ complete canonical Elo pre-match history" \
+            --notes "Immutable independent Elo sidecar; canonical CDB unchanged, model unchanged. Includes all source and output SHA256, exact source and engine commit, and TA comparison when available."
+          gh release upload "$ELO_RELEASE" elo-history.tar.gz SHA256SUMS --repo "$TBT_DATA_REPOSITORY"
+          mkdir -p readback
+          gh release download "$ELO_RELEASE" --repo "$TBT_DATA_REPOSITORY" -D readback
+          (cd readback && sha256sum -c SHA256SUMS)
+          echo "VERIFIED_CANONICAL_ELO_PRIVATE_RELEASE $ELO_RELEASE"
