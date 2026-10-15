@@ -192,3 +192,109 @@ def test_merge_never_downgrades_provider_side_postmatch_evidence():
     assert merged["_tbt_statistics_by_set"]["sets"] == {"1": {"home_aces": 3.0}, "2": {"home_aces": 4.0}}
     assert merged["_tbt_tennisapi_pbp"]["status"] == "available"
     assert merged["_tbt_tennisapi_pbp"]["points"] == 100
+
+
+def test_pbp_wrapped_list_from_provider_is_counted_not_rejected(match_factory):
+    from tbt.providers.tennisapi_extra import point_by_point_inventory
+
+    sample = {
+        "eventId": 100,
+        "pointByPoint": [{"games": [{
+            "score": {"serving": 1, "scoring": 2},
+            "points": [{"home": 15}, {"home": 30}],
+        }]}],
+    }
+    result = point_by_point_inventory(sample, event_id=100)
+    assert result["sets"] == 1
+    assert result["games"] == 1
+    assert result["points"] == 2
+
+    # Some events return an unwrapped list of sets.
+    assert point_by_point_inventory(sample["pointByPoint"], event_id=100)["points"] == 2
+
+    class WrappedProvider(Provider):
+        def event_point_by_point(self, eid):
+            self.calls.append("pbp")
+            self.request_count += 1
+            return sample
+
+    match = match_for_extras(match_factory)
+    p = WrappedProvider()
+    result = enrich_event_extras(match, p, now=NOW)
+    assert result["pbp"] == "available"
+    assert result["changed"] is True
+    assert match.provider_payload["_tbt_tennisapi_pbp"]["points"] == 2
+    assert not needs_extras(match, now=NOW + timedelta(days=1))
+    assert p.request_count == 3
+
+
+def test_optional_pbp_204_and_empty_arrays_are_not_provider_errors(match_factory):
+    from tbt.providers.tennisapi_extra import point_by_point_inventory
+
+    for body in ({}, None, [], {"pointByPoint": []}, {"pointByPoint": None}):
+        parsed = point_by_point_inventory(body, event_id=100)
+        assert parsed["points"] == 0
+        assert parsed["quality_status"] == "unavailable"
+
+    class EmptyProvider(Provider):
+        def event_point_by_point(self, eid):
+            self.calls.append("pbp")
+            self.request_count += 1
+            return {"pointByPoint": []}
+
+    match = match_for_extras(match_factory)
+    outcome = enrich_event_extras(match, EmptyProvider(), now=NOW)
+    assert outcome["pbp"] == "unavailable"
+    assert not needs_extras(match, now=NOW + timedelta(days=7))
+    assert needs_extras(match, now=NOW + timedelta(days=31))
+
+
+def test_unsupported_pbp_shape_is_quarantined_not_reported_as_no_data(match_factory):
+    class UnsupportedProvider(Provider):
+        def event_point_by_point(self, eid):
+            self.calls.append("pbp")
+            self.request_count += 1
+            return {"eventId": 100, "pointByPoint": "not-a-sets-list"}
+
+    match = match_for_extras(match_factory)
+    p = UnsupportedProvider()
+    result = enrich_event_extras(match, p, now=NOW)
+    assert result["pbp"] == "unsupported_shape"
+    assert result["markets"] == "available"
+    assert p.request_count == 3
+    marker = match.provider_payload["_tbt_tennisapi_pbp"]
+    assert marker["quality_status"] == "unsupported_shape"
+    assert marker["eligible_for_cdb_point_features"] is False
+    assert marker["points"] == 0
+    assert not needs_extras(match, now=NOW + timedelta(days=7))
+    assert needs_extras(match, now=NOW + timedelta(days=31))
+    compact = minimize_provider_payload(match.provider_payload)
+    assert compact["_tbt_tennisapi_pbp"] == marker
+    assert verify_markers([match], {str(match.match_id): {
+        "_tbt_tennisapi_pbp": marker,
+    }}) == 1
+
+
+def test_wrong_event_in_optional_pbp_is_hard_conflict(match_factory):
+    class WrongEventProvider(Provider):
+        def event_point_by_point(self, eid):
+            self.calls.append("pbp")
+            self.request_count += 1
+            return {"eventId": 101, "pointByPoint": []}
+
+    match = match_for_extras(match_factory)
+    with pytest.raises(ProviderError, match="event ID mismatch"):
+        enrich_event_extras(match, WrongEventProvider(), now=NOW)
+    assert "_tbt_tennisapi_pbp" not in match.provider_payload
+    assert match.provider_payload["_tbt_tennisapi_markets"]["status"] == "available"
+
+
+def test_controlled_manual_extras_smoke_cannot_spend_bulk_quota_or_promote():
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/data.yml").read_text()
+    assert "ace-statistics|statistics|extras) ;;" in workflow
+    assert '[[ "$mode" == "extras" ]]' in workflow
+    assert '(( 10#$max_requests <= 30 ))' in workflow
+    assert '[[ "$promote" == "false" ]]' in workflow
+    assert 'Extras smoke cannot enable targeted-statistics' in workflow
+    assert "python scripts/verify_tennisapi_extras.py" in workflow
