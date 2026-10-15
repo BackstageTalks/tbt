@@ -4,6 +4,7 @@ name: BlinQ uploaded 2025-26 canonical exact import (one-shot fail-closed)
     paths:
       - scripts/gated_uploaded_2025_2026_writer.py
       - scripts/link_uploaded_flashscore_verified.py
+      - scripts/verify_uploaded_2025_2026_raw_parity.py
       - .github/workflows/blinq-uploaded-2025-26-cdb-guarded.yml
   push:
     branches: [main]
@@ -94,6 +95,39 @@ jobs:
                   (Path("work/source")/name).write_bytes(data)
           print("PRIVATE_SOURCE_SHA_VERIFIED",len(blob),"bytes")
           PY
+
+      - name: SHA-pin current October 15 raw upload and replay prepared source stats
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          from google.oauth2.service_account import Credentials
+          from google.auth.transport.requests import AuthorizedSession
+          upload_id="1x-_iuzFtDNLW4bqbQJ0DMKG3n9T27pNJ"
+          expected="8202ff4b485495546e507317357b9f1c3c84ad9b5f806931044bfede16a9783d"
+          credentials=Credentials.from_service_account_info(
+              json.loads(os.environ["DRIVE_READER_JSON"]),
+              scopes=["https://www.googleapis.com/auth/drive.readonly"])
+          result=AuthorizedSession(credentials).get(
+              "https://www.googleapis.com/drive/v3/files/"+upload_id,
+              params={"alt":"media"},timeout=120)
+          result.raise_for_status()
+          blob=result.content
+          if hashlib.sha256(blob).hexdigest()!=expected:
+              raise SystemExit("CURRENT_RAW_UPLOAD_SHA_MISMATCH")
+          target=Path("work/source/current_upload_RAW_QA_20261015.zip")
+          target.write_bytes(blob)
+          print("CURRENT_RAW_UPLOAD_SHA_VERIFIED",len(blob))
+          PY
+          python -m compileall -q scripts/verify_uploaded_2025_2026_raw_parity.py
+          python scripts/verify_uploaded_2025_2026_raw_parity.py \
+            --raw-zip work/source/current_upload_RAW_QA_20261015.zip \
+            --stage work/source/cdb_oriented_source_candidates.jsonl.gz \
+            --raw-sha256 8202ff4b485495546e507317357b9f1c3c84ad9b5f806931044bfede16a9783d \
+            --stage-sha256 e66e6de58d70801fe2dca7b049f75f442237516a7e5042947b892d63daa1dae8 \
+            --report work/source/raw-to-stage-parity.json
 
       - name: Source identity matcher adversarial regression tests
         run: |
