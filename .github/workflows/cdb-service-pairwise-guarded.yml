@@ -190,6 +190,42 @@ jobs:
           (cd "$root/backup-readback" && sha256sum -c SHA256SUMS)
           cp -a "$root/history" "$root/before"
 
+      - name: Store exact import batch stage only in private canonical evidence release
+        if: ${{ steps.request.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/cdb-pairwise-write
+          mkdir -p "$root/evidence" "$root/evidence-readback"
+          cp "$root/stage/stage.jsonl" "$root/evidence/stage.jsonl"
+          cp "$root/stage/report.json" "$root/evidence/report.json"
+          python - <<'PY'
+          import json,hashlib,os
+          from pathlib import Path
+          root=Path(".cache/tbt/cdb-pairwise-write")
+          report=json.loads((root/"stage/report.json").read_text())
+          snap=json.loads((root/"source-snapshot.json").read_text())
+          stage=(root/"evidence/stage.jsonl").read_bytes()
+          record={"batch_id":f"blinq-cdb-pairwise-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}",
+            "canonical_manifest_sha256":snap["manifest_sha256"],
+            "script_commit_sha":os.environ["GITHUB_SHA"],
+            "stage_sha256":hashlib.sha256(stage).hexdigest(),
+            "stage_rows":report["counts"]["staged_matches"],
+            "additive_stat_fields":report["counts"]["new_stat_values"],
+            "policy":"post_match_prior_history; per_independent_pair_exact_null_complement_v1",
+            "source":"existing_canonical_serves_only",
+            "existing_stats_overwrites_allowed":False}
+          (root/"evidence/batch.json").write_text(json.dumps(record,sort_keys=True,indent=2))
+          PY
+          (cd "$root/evidence" && sha256sum stage.jsonl report.json batch.json >SHA256SUMS)
+          tag="blinq-cdb-pairwise-evidence-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$root/evidence/"* -R "$TBT_DATA_REPOSITORY" --target main \
+            --title "Private CDB pairwise Serve Return import batch evidence" \
+            --notes "Immutable source SHA, canonical manifest, additive stage IDs and exact policy; PRIVATE only."
+          gh release download "$tag" -R "$TBT_DATA_REPOSITORY" -D "$root/evidence-readback"
+          (cd "$root/evidence-readback" && sha256sum -c SHA256SUMS)
+          echo "PRIVATE_CANONICAL_BATCH_EVIDENCE_READBACK_PASS:$tag"
+
       - name: Apply verified local year partitions and compare full before/after CDB
         if: ${{ steps.request.outputs.mode == 'write' && steps.gate.outputs.changes == 'true' }}
         shell: bash
@@ -294,7 +330,6 @@ jobs:
           path: |
             .cache/tbt/cdb-pairwise-write/source-snapshot.json
             .cache/tbt/cdb-pairwise-write/stage/report.json
-            .cache/tbt/cdb-pairwise-write/stage/stage.jsonl
             .cache/tbt/cdb-pairwise-write/write/report.json
             .cache/tbt/cdb-pairwise-write/local-readback/report.json
             .cache/tbt/cdb-pairwise-write/persisted-download.json
