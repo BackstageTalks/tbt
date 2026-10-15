@@ -37,7 +37,7 @@ def _same_except_stats(left, right):
     return before == after
 
 
-def _additions(original, changed):
+def _additions(original, changed, *, approved_count_fields=frozenset()):
     if not _same_except_stats(original, changed):
         raise ValueError("Staged write attempted canonical identity or context change")
     old = dict(original.stats or {})
@@ -47,7 +47,15 @@ def _additions(original, changed):
             raise ValueError("Existing canonical statistic changed")
     from import_offline_linked_serve_return import ALLOWED
     added = {key: value for key, value in new.items() if old.get(key) is None and value is not None}
-    if not added or not set(added).issubset(ALLOWED):
+    # Opt-in typed count cells; existing allowed rates retain exact old contract.
+    approved=frozenset(approved_count_fields)
+    if approved - {"p1_return_break_points_converted_count",
+                   "p2_return_break_points_converted_count"}:
+        raise ValueError("Unapproved CDB count-valued field")
+    if any(not isinstance(v,(int,float)) or isinstance(v,bool)
+           or v < 0 or int(v) != v for k,v in added.items() if k in approved):
+        raise ValueError("Invalid source count value")
+    if not added or not set(added).issubset(ALLOWED | approved):
         raise ValueError("Missing or invalid additive source statistics")
     return added
 
@@ -68,7 +76,7 @@ def _verify_entire_partition(before, persisted, expected_additions):
     return len(before_by)
 
 
-def write_exact_stats_partition(history_dir, year, changed_matches, changed_ids):
+def write_exact_stats_partition(history_dir, year, changed_matches, changed_ids, *, approved_count_fields=frozenset()):
     """Patch exact stats_json rows for proven additions; fail before local replace."""
     directory = Path(history_dir)
     year = int(year)
@@ -97,7 +105,7 @@ def write_exact_stats_partition(history_dir, year, changed_matches, changed_ids)
             if old.to_storage_dict() != updated.to_storage_dict():
                 raise ValueError(f"Unstaged match mutated in memory: {mid}")
             continue
-        additions = _additions(old, updated)
+        additions = _additions(old, updated, approved_count_fields=approved_count_fields)
         raw = frame.at[by_index[mid], "stats_json"]
         if not isinstance(raw, str):
             raise ValueError("Missing original stats_json")
