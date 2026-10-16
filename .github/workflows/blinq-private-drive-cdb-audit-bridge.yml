@@ -489,6 +489,16 @@ jobs:
           # The writer enforces 4 GiB raw and 1.8 GB gzip bounds.
           # Preserve immutable checkpoint and independent SHA-256 readback.
           python scripts/drive_cdb_private_bridge.py write-checkpoint --cache-file work/cache/audit.sqlite --code-file private/scripts/drive_cdb_audit.py --folder-id "$DRIVE_ROOT" --output work/cache-export
+          # The previous rolling checkpoint was SHA-verified during restore.
+          # If the exact bytes did not change, it is redundant to upload an
+          # additional ~320 MiB immutable Release and rewrite the rolling tag.
+          if test -s work/cache-input/audit.sqlite.gz \
+            && test -s work/cache-input/checkpoint.json \
+            && cmp -s work/cache-export/audit.sqlite.gz work/cache-input/audit.sqlite.gz \
+            && cmp -s work/cache-export/checkpoint.json work/cache-input/checkpoint.json; then
+            echo 'UNCHANGED_PRIVATE_CHECKPOINT_REUSED_NO_NEW_GITHUB_RELEASE'
+            exit 0
+          fi
           # Retain an immutable per-run checkpoint before updating the rolling
           # pointer. A partial pointer upload must not lose the completed batch.
           checkpoint_tag="blinq-drive-cdb-checkpoint-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
