@@ -40,7 +40,10 @@ def gh_get(repo: str, path: str) -> dict:
         text=True, capture_output=True, check=False,
     )
     if proc.returncode:
-        # Never interpret auth/rate-limit/network errors as absent locks.
+        # A positive 404 on the exact lock-ref GET is distinct from a
+        # permission/rate-limit/network error. It never authorizes a writer.
+        if path == LOCK_PATH and re.search(r"HTTP 404\b", proc.stderr):
+            return {"_lock_not_found": True}
         raise AuditBlocked("GitHub metadata read failed (never an unlock signal)")
     try:
         value = json.loads(proc.stdout)
@@ -70,6 +73,26 @@ def assess(fetch: Callable[[str, str], dict]) -> dict:
     """Check owner/run liveness and ref+manifest consistency in two reads."""
     release_before = _manifest_pin(fetch(DATA_REPO, RELEASE_PATH))
     lock_before = fetch(DATA_REPO, LOCK_PATH)
+    if lock_before.get("_lock_not_found") is True:
+        # No owner can be verified when no ref exists. Record an observation,
+        # not a lease, writer authorization, or CAS-safe unlock guarantee.
+        lock_after = fetch(DATA_REPO, LOCK_PATH)
+        release_after = _manifest_pin(fetch(DATA_REPO, RELEASE_PATH))
+        stable = lock_after.get("_lock_not_found") is True and release_before == release_after
+        return {
+            "schema": "BLINQ_CDB_LOCK_LIVENESS_READONLY_V1",
+            "classification": ("NO_LOCK_REF_AT_READ_TIME_ONLY" if stable
+                               else "LOCK_OR_RELEASE_CHANGED_DURING_AUDIT"),
+            "lock_sha_first": None,
+            "lock_sha_second": lock_after.get("object", {}).get("sha"),
+            "owner": None,
+            "release_first": release_before,
+            "release_second": release_after,
+            "canonical_write_authorized": False,
+            "lock_release_authorized": False,
+            "delete_attempts": 0,
+            "warning": "No lock observed is not a writer lease or atomic CAS guarantee",
+        }
     lock_sha = lock_before.get("object", {}).get("sha")
     if not isinstance(lock_sha, str) or not SHA_RE.fullmatch(lock_sha):
         raise AuditBlocked("lock ref SHA missing or invalid")
