@@ -5,7 +5,9 @@ on:
     paths:
       - .github/workflows/model-shadow-evaluation-readonly.yml
       - scripts/audit_model_shadow_readonly.py
+      - api/tbt/services/shadow_calibration_research.py
       - tests/test_audit_model_shadow_readonly.py
+      - tests/test_shadow_calibration_research.py
   workflow_dispatch:
 
 permissions:
@@ -34,7 +36,7 @@ jobs:
       - name: Install existing model dependencies
         run: python -m pip install -r api/requirements-train.txt pytest
       - name: Run read-only shadow integrity and evaluation unit tests
-        run: python -m pytest tests/test_audit_model_shadow_readonly.py tests/test_shadow_evaluation.py -q
+        run: python -m pytest tests/test_audit_model_shadow_readonly.py tests/test_shadow_calibration_research.py tests/test_shadow_evaluation.py -q
       - name: Independently read current champion, challenger and private issued shadow ledger
         run: python scripts/audit_model_shadow_readonly.py --out .cache/tbt/model-shadow-audit/report.json
       - name: Publish aggregate summary only
@@ -51,6 +53,8 @@ jobs:
             f"Matched / settled: {r['cohort']['captured']} / {r['cohort']['settled']}",
             f"Sample gate: {r['gate']['minimum_matches_met']}; days gate: {r['gate']['minimum_days_met']}",
             f"Full aggregate metrics: {r['overall']}",
+            f"Temporal calibration research status: {r['calibration_research']['status']}",
+            f"Out-of-time Platt research metrics: {r['calibration_research'].get('overall', {})}",
             'No model training, production promotion, CDB write or provider calls.',
           ]
           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
