@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/rank00s-private-offline-ci.yml"
-SOURCE_SHA = "5d1e59e800e3f3861ebcd3beadaeb3bdf1485179"
+SOURCE_SHA = "48ddcace6a07d024fe94268a7b40d193722f6360"
 
 
 class ReadOnlyBridgeContract(unittest.TestCase):
@@ -27,7 +27,7 @@ class ReadOnlyBridgeContract(unittest.TestCase):
         self.assertIn("SOURCE_COMMIT: " + SOURCE_SHA, text)
         self.assertIn("scripts/preflight_rank00s_cdb.py?ref=$SOURCE_COMMIT", text)
         self.assertIn("tests/test_preflight_rank00s_cdb.py?ref=$SOURCE_COMMIT", text)
-        self.assertIn("12a31420b21075409783f1b3797f174440442091", text)
+        self.assertIn("fc83bf3f0c936841c4c2bd20cd0d64d35d0cda88", text)
         self.assertIn("23ed65dc526d300fd24994d01640d06f84f12ba5", text)
         self.assertNotIn("checkout@v4\n        with:\n          repository: BackstageTalks/tbt-data", text)
 
