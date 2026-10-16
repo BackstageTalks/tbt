@@ -14,6 +14,7 @@ class ReadOnlyBridgeContract(unittest.TestCase):
     def test_no_cron_no_push_no_release_writer(self):
         text = self.text
         self.assertNotIn("  push:", text)
+        self.assertNotIn("  pull_request:", text)
         self.assertNotIn("  schedule:", text)
         self.assertNotIn("releases/tags/", text)
         self.assertNotIn("git/refs", text)
@@ -31,8 +32,12 @@ class ReadOnlyBridgeContract(unittest.TestCase):
         self.assertIn("508e54a39d0848c4b247d4d53503b66019c885d0", text)
         self.assertNotIn("checkout@v4\n        with:\n          repository: BackstageTalks/tbt-data", text)
 
-    def test_unsafe_fork_pr_excluded(self):
-        self.assertIn("github.event.pull_request.head.repo.full_name == github.repository", self.text)
+    def test_manual_run_on_protected_main_only_and_secret_step_scoped(self):
+        self.assertIn("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'", self.text)
+        self.assertNotIn("github.event.pull_request", self.text)
+        self.assertNotIn("  pull_request:", self.text)
+        self.assertIn("          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}", self.text)
+        self.assertNotIn("\n      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}", self.text)
 
     def test_no_private_output_artifact_or_test_dump(self):
         text = self.text
