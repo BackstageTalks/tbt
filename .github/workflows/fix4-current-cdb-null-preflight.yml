@@ -135,13 +135,45 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          (cd work/fix4/out && sha256sum report.json protected-null-only-stage.jsonl conflict_review_private.jsonl > SHA256SUMS && sha256sum -c SHA256SUMS)
+          # GitHub refuses 0-byte release assets. For zero safe additions,
+          # omit empty conflict and stage assets only if the report proves zero; never publish empty assets.
+          assets=(work/fix4/out/report.json)
+          test -f work/fix4/out/conflict_review_private.jsonl || { echo MISSING_CONFLICT_LEDGER; exit 1; }
+          if test -s work/fix4/out/conflict_review_private.jsonl; then
+            assets+=(work/fix4/out/conflict_review_private.jsonl)
+          else
+            python - <<'PYCONFLICT'
+          import json
+          r=json.load(open('work/fix4/out/report.json'))
+          if r.get('review_count',0)!=0 or r['counts'].get('source_stat_conflicts',0)!=0:
+           raise SystemExit('NONEMPTY_CONFLICT_COUNT_WITH_EMPTY_LEDGER')
+          print('FIX4_EMPTY_CONFLICT_LEDGER_SAFELY_OMITTED')
+          PYCONFLICT
+          fi
+          if test -s work/fix4/out/protected-null-only-stage.jsonl; then
+            assets+=(work/fix4/out/protected-null-only-stage.jsonl)
+            python - <<'PYSTAGE'
+          import json
+          r=json.load(open('work/fix4/out/report.json'))
+          if r['counts'].get('candidate_null_cells',0)<=0:
+           raise SystemExit('NONEMPTY_STAGE_WITH_ZERO_CANDIDATE_COUNT')
+          PYSTAGE
+          else
+            python - <<'PY'
+          import json
+          r=json.load(open('work/fix4/out/report.json'))
+          if r['counts'].get('candidate_null_cells',0)!=0:
+           raise SystemExit('NONEMPTY_CDB_DELTA_WITH_EMPTY_STAGE')
+          print('FIX4_EMPTY_CDB_NULL_STAGE_SAFELY_OMITTED')
+          PY
+          fi
+          (cd work/fix4/out && sha256sum "${assets[@]##*/}" > SHA256SUMS)
+          (cd work/fix4/out && sha256sum -c SHA256SUMS)
           tag="blinq-fix4-protected-null-stage-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           gh release create "$tag" -R "$PRIVATE_REPO" --target main \
             --title 'BlinQ FIX4 guarded exact CDB NULL delta research stage' \
-            --notes 'Private immutable source-verified post-match field delta only; no canonical writer called. Cross-provider conflict and source quality quarantine retained.' \
-            --latest=false work/fix4/out/report.json work/fix4/out/protected-null-only-stage.jsonl \
-            work/fix4/out/conflict_review_private.jsonl work/fix4/out/SHA256SUMS
+            --notes 'Private immutable source-verified post-match field delta only; no canonical writer called. Cross-provider conflict and source quality quarantine retained. Empty writer stage intentionally omitted.' \
+            --latest=false "${assets[@]}" work/fix4/out/SHA256SUMS
           gh release download "$tag" -R "$PRIVATE_REPO" -D work/fix4/readback
           (cd work/fix4/readback && sha256sum -c SHA256SUMS)
           cmp work/fix4/out/report.json work/fix4/readback/report.json
