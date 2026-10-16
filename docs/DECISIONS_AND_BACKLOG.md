@@ -2,7 +2,7 @@
 
 > Living project record. This file is the working source for a later complete technical documentation of BlinQ/TBT.
 >
-> **Update rule:** every meaningful implementation, architecture decision, data-source discovery, production incident, validation result, UI/content decision and open hypothesis should be appended here while the work is being done. Do not rewrite history just because the implementation later changes; mark old decisions as superseded and link the replacement.
+> **Lightweight update rule (2026-10-16):** record only material, lasting architectural decisions, changes to production behavior, or incidents requiring future action. Routine audit runs, repeated QA, data-source snapshots and resolved one-off hypotheses belong in their existing run/commit evidence—not as duplicate chronological entries in this file. Keep historic decisions as history; mark only materially superseded decisions when relevant.
 
 Last updated: **2026-09-08**
 Current working line: **v5.9**
