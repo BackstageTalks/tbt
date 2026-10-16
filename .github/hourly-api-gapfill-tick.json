@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "local_day": "2026-10-09",
-  "local_hour": 14,
-  "requested_utc": "2026-10-09T12:27:40Z",
-  "source": "external-hourly-scheduler"
+  "local_day": "2026-10-16",
+  "local_hour": 18,
+  "requested_utc": "2026-10-16T16:47:04Z",
+  "source": "operator-request-97pct-closeout"
 }
