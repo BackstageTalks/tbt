@@ -18,7 +18,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PRIVATE_REPO: BackstageTalks/tbt-data
-      SOURCE_COMMIT: 5d1e59e800e3f3861ebcd3beadaeb3bdf1485179
+      SOURCE_COMMIT: 48ddcace6a07d024fe94268a7b40d193722f6360
     steps:
       - name: Checkout only public safety-contract tests
         uses: actions/checkout@v4
@@ -40,7 +40,7 @@ jobs:
           mkdir -p private/scripts private/tests
           gh api "repos/$PRIVATE_REPO/contents/scripts/preflight_rank00s_cdb.py?ref=$SOURCE_COMMIT" --jq .content | base64 --decode >private/scripts/preflight_rank00s_cdb.py
           gh api "repos/$PRIVATE_REPO/contents/tests/test_preflight_rank00s_cdb.py?ref=$SOURCE_COMMIT" --jq .content | base64 --decode >private/tests/test_preflight_rank00s_cdb.py
-          test "$(git hash-object private/scripts/preflight_rank00s_cdb.py)" = "12a31420b21075409783f1b3797f174440442091"
+          test "$(git hash-object private/scripts/preflight_rank00s_cdb.py)" = "fc83bf3f0c936841c4c2bd20cd0d64d35d0cda88"
           test "$(git hash-object private/tests/test_preflight_rank00s_cdb.py)" = "23ed65dc526d300fd24994d01640d06f84f12ba5"
           echo 'PRIVATE_SCRIPT_TEST_BLOB_SHA_VERIFIED'
       - name: Compile and execute private synthetic QA offline without secrets
