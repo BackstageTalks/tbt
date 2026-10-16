@@ -43,6 +43,9 @@ class CronWiringTests(unittest.TestCase):
         self.assertIn("SOURCE_INVENTORY_TAG: blinq-drive-source-inventory-archive-20261016-v1", text)
         self.assertNotIn("blinq-drive-source-inventory-latest-v1", text)
         self.assertIn("DRIVE_ARCHIVE_ROOT_AUTHENTICATED_NONEMPTY", text)
+        self.assertIn("UNCHANGED_PRIVATE_CHECKPOINT_REUSED_NO_NEW_GITHUB_RELEASE", text)
+        self.assertIn("inputs.content_audit == true", text)
+        self.assertIn("if: always() && (github.event_name == 'pull_request'", text)
         self.assertLess(
             text.index("Confirm populated permitted Drive archive before downloading CDB"),
             text.index("Download and checksum-verify canonical CDB privately"),
