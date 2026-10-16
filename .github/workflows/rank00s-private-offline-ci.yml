@@ -1,9 +1,5 @@
 name: BlinQ rank00s private source offline QA on public runner
 'on':
-  pull_request:
-    paths:
-      - '.github/workflows/rank00s-private-offline-ci.yml'
-      - 'tests/test_rank00s_private_offline_ci_contract.py'
   workflow_dispatch:
 
 permissions:
@@ -11,12 +7,11 @@ permissions:
 
 jobs:
   private-source-contract:
-    # Fork PRs do not get private-repository credentials.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    # Never execute a ref controlled by an unreviewed PR while a private token is available.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
-      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PRIVATE_REPO: BackstageTalks/tbt-data
       SOURCE_COMMIT: c9a1b4df15bc87c955418d86467368339f47c8c7
     steps:
@@ -33,6 +28,9 @@ jobs:
           set -euo pipefail
           python -m unittest discover -q -s tests -p 'test_rank00s_private_offline_ci_contract.py'
       - name: Authenticated pin-only read of two private Python files
+        env:
+          # Scope the private read token to this single step; never job-wide.
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
