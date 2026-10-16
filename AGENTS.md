@@ -13,23 +13,23 @@ Applies to work on BackstageTalks/tbt and BackstageTalks/tbt-data. This document
 
 ## Two independent operational safeguards
 
-### A. Before **every** model training (even shadow/candidate, promote=false)
-1. Identify the current serving champion and its exact binary, training report, calibration, feature schema/order, configuration, dependencies, release/tag, application SHA, and model version.
-2. Identify and **freeze the input canonical release and training dataset** (all partitions/manifests, provenance and hashes); prevent concurrent writer changes to the training input.
-3. Produce a **new, dated, non-overwriting, durable backup** of prior serving model + configuration + relevant source code/metadata + canonical/training inputs. Use BackstageTalks/tbt-data/main/backup/<source>/<YYYY-MM-DD>/<dataset>/ for the inventory, checksums and reference to immutable assets; keep large binary copies in an immutable external release/blob asset, not unbounded Git history.
-4. Verify source and backup SHA-256, file inventories, independent persisted read-back, and that the prior serving stack can be restored in isolation with prediction/health parity. Record evidence (run ID, date, digests, reference, restore result). For one-time migration, the first training must wait until the baseline rollback is demonstrated.
+### A. Model work: distinguish read-only shadow checks from actual training
+1. For actual model fitting, identify and pin the serving champion, frozen training inputs, configuration and feature schema. Read-only shadow evaluation of already-issued outputs does **not** require a new backup or model fit.
+2. For fitting, freeze and verify the exact canonical/training inputs and prevent concurrent writer changes to the training input.
+3. Preserve a verifiable rollback of the serving model and training inputs before any fit or production change. **Google Drive is the target archive for original datasets and durable backups**, not a growing collection of duplicate GitHub backups. Until the currently enforced GitHub-release-based training backup is replaced by a tested Drive-backed equivalent, obey its executable fail-closed gate. Do not create extra backups for read-only shadow comparisons.
+4. Verify the exact relevant backup and restore path with independent read-back; reuse a previously verified immutable backup where an executable gate supports it. Record a compact run/version reference instead of duplicating full inventories in multiple reports. A new backup is mandatory whenever the existing verified rollback would no longer cover the change.
 5. **Fail closed** before fitting if any mandatory input, backup, checksum or restoration check is unavailable. This gate must be implemented in executable workflow/script; this document alone does not make it true.
 6. Only after the gate: candidate training, leakage + identity checks, chronological holdout, ATP/WTA and market-quality gates. Never promote/activate a production model without explicit user permission.
 
 ### B. Shared RapidAPI budget and automation (separate task from model backup)
 - Do not count a scheduler configuration or successful smoke test as a real scheduled collection.
-- Respect effective provider-day **15,000 absolute**, **13,500 guarded ceiling** with **1,500 headroom**, **6 requests/sec**, and provider reset per active verified runtime contract (19:10 Europe/Bratislava at time of this writing). Never spend requests merely to exhaust quota.
+- Respect the **runtime shared-budget implementation** as the source of truth: **15,000 provider/day**, **14,550 global BlinQ ceiling**, **450 reserved**, **6 requests/sec**, reset **19:10 Europe/Bratislava** and the 19:08–19:10 stop. Do not reproduce historical caps as independent standing policy. Never spend requests merely to exhaust quota.
 - A quota job is **VERIFIED** only after a real scheduled tick, workflow completion, governed writer evidence, source API usage, persisted read-back and coverage/quality delta. Report a blocked or skipped tick as such.
 - The external scheduler depends on its actual enabled state, permissions and expected first real run, and is not a substitute for proof of execution.
 
 ## Canonical data and destructive actions
 
-- Canonical remains authoritative. Single writer, deterministic fail-closed identity linking, evidence precedence, provenance/license audit, duplicate/overlap checks and point-in-time leakage gates are mandatory.
+- Canonical CDB remains authoritative. Keep a single coordinated writer, reliable match/player identities, deduplication, NULL-only supplementation and point-in-time leakage protection. Original files live in the Drive archive; **do not demand original-file SHA/Drive ID in each CDB record or value**. Project-owner source-use attestation is already recorded; avoid repeated approvals for the same internal use. Keep archive-level source/rights notes; do not assume this independently permits external redistribution.
 - New point-by-point / same-match stats belong to post-match history and may only influence *subsequent* pre-match feature calculations. Historical odds require reliable pre-start timestamps.
 - Do not delete a sole raw source, uncertain identity or quarantined conflict. Delete only hash-identical proven redundant transient copies after verified durable backup and dependency check.
 
