@@ -18,7 +18,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PRIVATE_REPO: BackstageTalks/tbt-data
-      SOURCE_COMMIT: d81b32b3ee0990990652a1736b9e539487a91746
+      SOURCE_COMMIT: c9a1b4df15bc87c955418d86467368339f47c8c7
     steps:
       - name: Checkout only public safety-contract tests
         uses: actions/checkout@v4
@@ -40,8 +40,8 @@ jobs:
           mkdir -p private/scripts private/tests
           gh api "repos/$PRIVATE_REPO/contents/scripts/preflight_rank00s_cdb.py?ref=$SOURCE_COMMIT" --jq .content | base64 --decode >private/scripts/preflight_rank00s_cdb.py
           gh api "repos/$PRIVATE_REPO/contents/tests/test_preflight_rank00s_cdb.py?ref=$SOURCE_COMMIT" --jq .content | base64 --decode >private/tests/test_preflight_rank00s_cdb.py
-          test "$(git hash-object private/scripts/preflight_rank00s_cdb.py)" = "fa47632338e9d034e9a36a951caffb0e4aefb08b"
-          test "$(git hash-object private/tests/test_preflight_rank00s_cdb.py)" = "23ed65dc526d300fd24994d01640d06f84f12ba5"
+          test "$(git hash-object private/scripts/preflight_rank00s_cdb.py)" = "2553a906fcd4ab74dafcd9995888d71da92e8233"
+          test "$(git hash-object private/tests/test_preflight_rank00s_cdb.py)" = "508e54a39d0848c4b247d4d53503b66019c885d0"
           echo 'PRIVATE_SCRIPT_TEST_BLOB_SHA_VERIFIED'
       - name: Compile and execute private synthetic QA offline without secrets
         shell: bash
@@ -52,7 +52,7 @@ jobs:
           python -m py_compile private/scripts/preflight_rank00s_cdb.py private/tests/test_preflight_rank00s_cdb.py
           # Never print private source rows, source code, traceback or logs in public job.
           if python -m unittest discover -q -s private/tests -p 'test_preflight_rank00s_cdb.py' >/tmp/private-offline-test.log 2>&1; then
-            echo 'PINNED_RANK00S_12_SYNTHETIC_TESTS_PASSED'
+            echo 'PINNED_RANK00S_21_SYNTHETIC_TESTS_PASSED'
           else
             echo 'PRIVATE_OFFLINE_QA_FAILED_DETAILS_REDACTED'
             exit 1
