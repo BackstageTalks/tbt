@@ -72,6 +72,10 @@ def test_unknown_writer_state_fails_closed():
 
 
 def test_hourly_workflow_rechecks_budget_and_keeps_quota_and_writer_guards():
+    # Workflow must load repository files before importing scripts.api_writer_wait.
+    checkout = WORKFLOW.index("      - uses: actions/checkout@v4")
+    importer = WORKFLOW.index("from scripts.api_writer_wait import wait_for_writer")
+    assert checkout < importer
     assert "timeout-minutes: 350" in WORKFLOW
     assert "wait_for_writer(check_writers, retry_deadline)" in WORKFLOW
     assert "now + timedelta(hours=5, minutes=40)" in WORKFLOW
