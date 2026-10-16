@@ -56,6 +56,16 @@ jobs:
           set -euo pipefail
           python scripts/guarded_candidate_backup.py prepare
           python scripts/guarded_candidate_backup.py verify
+      - name: Audit frozen training history for identity and point-in-time leakage
+        run: |
+          set -euo pipefail
+          # Read-only audit after the immutable input snapshot; fit is forbidden
+          # unless all checks pass and the run-bound backup remains valid.
+          python scripts/audit_training_leakage.py \
+            --history-dir .cache/tbt/history \
+            --report .cache/tbt/production/leakage_audit_report.json
+          python scripts/guarded_candidate_backup.py verify
+
       - name: Fit separate candidate only if immutable backup gate passed
         run: |
           set -euo pipefail
