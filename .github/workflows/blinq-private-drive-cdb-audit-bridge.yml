@@ -58,6 +58,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
           FORCE_SCAN: ${{ inputs.force_scan }}
+          PRIVATE_CACHE_RELEASE: blinq-drive-cdb-audit-cache-archive-20261016-v1
         run: |
           set -euo pipefail
           if [[ "$FORCE_SCAN" == "true" ]]; then
@@ -70,7 +71,7 @@ jobs:
             echo 'DRIVE_AUDIT_BUDGET_BLOCKED_MISSING_PRIVATE_TOKEN'
             exit 0
           fi
-          if ! release="$(gh api repos/BackstageTalks/tbt-data/releases/tags/blinq-drive-cdb-audit-cache-v1 2>/dev/null)"; then
+          if ! release="$(gh api "repos/BackstageTalks/tbt-data/releases/tags/$PRIVATE_CACHE_RELEASE" 2>/dev/null)"; then
             # Fail closed on permission/rate-limit/network errors; never
             # interpret an unknown checkpoint as permission to spend.
             echo 'proceed=false' >> "$GITHUB_OUTPUT"
@@ -121,8 +122,11 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PRIVATE_REPO: BackstageTalks/tbt-data
-      DRIVE_ROOT: 17UChTTWLpC-7tZIbvTXKA4_2eqooV44A
-      PRIVATE_CACHE_RELEASE: blinq-drive-cdb-audit-cache-v1
+      DRIVE_ROOT: 1jzdzztz8cXquO8VDswqE19PHupQau-xM
+      PRIVATE_CACHE_RELEASE: blinq-drive-cdb-audit-cache-archive-20261016-v1
+      # A new folder requires a separate cache namespace. Do not restore the
+      # old 17UCh... root checkpoint against this archive root.
+      SOURCE_INVENTORY_TAG: blinq-drive-source-inventory-archive-20261016-v1
       # Immutable modern reader, explicitly validated against legacy checkpoint parser.
       SOURCE_REF: 10806400e536195890600c4256303697912ab95f
       LEGACY_SOURCE_REF: cf96b6085f93696eb7c319e9109a2040a04cfc4e
@@ -202,6 +206,35 @@ jobs:
             echo 'BLOCKED: private tests failed; details will stay private'
             exit 1
           fi
+
+      - name: Confirm populated permitted Drive archive before downloading CDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import google.auth
+          from google.auth.transport.requests import AuthorizedSession
+          root = os.environ['DRIVE_ROOT']
+          credentials, _ = google.auth.default(
+              scopes=['https://www.googleapis.com/auth/drive.readonly'])
+          session = AuthorizedSession(credentials)
+          response = session.get(
+              'https://www.googleapis.com/drive/v3/files',
+              params={
+                  'q': f"'{root}' in parents and trashed = false",
+                  'pageSize': 1,
+                  'fields': 'nextPageToken,files(id)',
+                  'includeItemsFromAllDrives': 'true',
+                  'supportsAllDrives': 'true',
+              },
+              timeout=30,
+          )
+          response.raise_for_status()
+          if not response.json().get('files'):
+              raise SystemExit('BLOCKED: DRIVE_ARCHIVE_ROOT_EMPTY_OR_INACCESSIBLE')
+          print('DRIVE_ARCHIVE_ROOT_AUTHENTICATED_NONEMPTY')
+          PY
 
       - name: Restore verified private checkpoint with historical-reader migration
         shell: bash
@@ -284,8 +317,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p work/source-previous
-          if gh release view blinq-drive-source-inventory-latest-v1 -R "$PRIVATE_REPO" >/dev/null 2>&1; then
-            gh release download blinq-drive-source-inventory-latest-v1 -R "$PRIVATE_REPO" -p source-baseline.json -p source-baseline.sha256 -D work/source-previous >/dev/null
+          if gh release view $SOURCE_INVENTORY_TAG -R "$PRIVATE_REPO" >/dev/null 2>&1; then
+            gh release download $SOURCE_INVENTORY_TAG -R "$PRIVATE_REPO" -p source-baseline.json -p source-baseline.sha256 -D work/source-previous >/dev/null
             (cd work/source-previous && sha256sum --status -c source-baseline.sha256)
             echo PREVIOUS_SOURCE_INVENTORY_SHA_VERIFIED
           else
@@ -426,7 +459,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag=blinq-drive-source-inventory-latest-v1
+          tag=$SOURCE_INVENTORY_TAG
           if ! gh release view "$tag" -R "$PRIVATE_REPO" >/dev/null 2>&1; then
             gh release create "$tag" -R "$PRIVATE_REPO" --target main --title "Private Drive and Git source inventory baseline" --notes "Read-only observations; not a CDB import." >/dev/null
           fi
