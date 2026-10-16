@@ -42,7 +42,7 @@ def gh_get(repo: str, path: str) -> dict:
     if proc.returncode:
         # A positive 404 on the exact lock-ref GET is distinct from a
         # permission/rate-limit/network error. It never authorizes a writer.
-        if path == LOCK_PATH and re.search(r"HTTP 404\\b", proc.stderr):
+        if path == LOCK_PATH and re.search(r"HTTP 404\b", proc.stderr):
             return {"_lock_not_found": True}
         raise AuditBlocked("GitHub metadata read failed (never an unlock signal)")
     try:
