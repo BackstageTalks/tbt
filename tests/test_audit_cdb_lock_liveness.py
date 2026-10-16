@@ -95,5 +95,55 @@ class LockAuditTests(unittest.TestCase):
                 os.environ["GH_TOKEN"] = old
 
 
+
+    def test_two_absent_ref_reads_are_observation_not_lease(self):
+        calls = {"ref": 0}
+        def fetch(repo, path):
+            if path == m.RELEASE_PATH:
+                return {"id": 42, "updated_at": "2026-10-16",
+                        "assets": [{"name": "history_manifest.json",
+                                    "digest": "sha256:" + MANIFEST_SHA}]}
+            if path == m.LOCK_PATH:
+                calls["ref"] += 1
+                return {"_lock_not_found": True}
+            raise AssertionError("Unexpected private operation")
+        report = m.assess(fetch)
+        self.assertEqual(calls["ref"], 2)
+        self.assertEqual(report["classification"], "NO_LOCK_REF_AT_READ_TIME_ONLY")
+        self.assertIsNone(report["owner"])
+        self.assertFalse(report["canonical_write_authorized"])
+        self.assertFalse(report["lock_release_authorized"])
+        self.assertEqual(report["delete_attempts"], 0)
+
+    def test_ref_appears_during_missing_ref_probe(self):
+        calls = {"ref": 0}
+        def fetch(repo, path):
+            if path == m.RELEASE_PATH:
+                return {"id": 42, "updated_at": "2026-10-16",
+                        "assets": [{"name": "history_manifest.json",
+                                    "digest": "sha256:" + MANIFEST_SHA}]}
+            if path == m.LOCK_PATH:
+                calls["ref"] += 1
+                return {"_lock_not_found": True} if calls["ref"] == 1 else {"object": {"sha": TAG_SHA}}
+            raise AssertionError("Unexpected private operation")
+        report = m.assess(fetch)
+        self.assertEqual(report["classification"], "LOCK_OR_RELEASE_CHANGED_DURING_AUDIT")
+        self.assertFalse(report["canonical_write_authorized"])
+
+    def test_exact_ref_404_vs_permission_error(self):
+        import os
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"GH_TOKEN": "synthetic"}):
+            with patch.object(m.subprocess, "run",
+                              return_value=SimpleNamespace(returncode=1, stderr="gh: Not Found (HTTP 404)", stdout="")):
+                self.assertTrue(m.gh_get(m.DATA_REPO, m.LOCK_PATH)["_lock_not_found"])
+                with self.assertRaisesRegex(m.AuditBlocked, "metadata read failed"):
+                    m.gh_get(m.DATA_REPO, m.RELEASE_PATH)
+            with patch.object(m.subprocess, "run",
+                              return_value=SimpleNamespace(returncode=1, stderr="gh: Forbidden (HTTP 403)", stdout="")):
+                with self.assertRaisesRegex(m.AuditBlocked, "metadata read failed"):
+                    m.gh_get(m.DATA_REPO, m.LOCK_PATH)
+
 if __name__ == "__main__":
     unittest.main()
