@@ -36,6 +36,21 @@ class CronWiringTests(unittest.TestCase):
         self.assertNotIn('export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_ORGANIZER_JSON"', text)
         self.assertIn('export BLINQ_DRIVE_SORT_CREDENTIALS="$DRIVE_READER_JSON"', text)
 
+    def test_archive_root_has_independent_resume_checkpoint_and_cheap_preflight(self):
+        text = BRIDGE.read_text(encoding="utf-8")
+        self.assertIn("DRIVE_ROOT: 1jzdzztz8cXquO8VDswqE19PHupQau-xM", text)
+        self.assertIn("PRIVATE_CACHE_RELEASE: blinq-drive-cdb-audit-cache-archive-20261016-v1", text)
+        self.assertIn("SOURCE_INVENTORY_TAG: blinq-drive-source-inventory-archive-20261016-v1", text)
+        self.assertNotIn("blinq-drive-source-inventory-latest-v1", text)
+        self.assertIn("DRIVE_ARCHIVE_ROOT_AUTHENTICATED_NONEMPTY", text)
+        self.assertIn("UNCHANGED_PRIVATE_CHECKPOINT_REUSED_NO_NEW_GITHUB_RELEASE", text)
+        self.assertIn("inputs.content_audit == true", text)
+        self.assertIn("if: always() && (github.event_name == 'pull_request'", text)
+        self.assertLess(
+            text.index("Confirm populated permitted Drive archive before downloading CDB"),
+            text.index("Download and checksum-verify canonical CDB privately"),
+        )
+
     def test_read_only_auditor_has_no_write_route(self):
         text = (ROOT / "scripts/drive_content_audit.py").read_text(encoding="utf-8")
         for expression in ('removeParents', 'def move(', 'request("PATCH"', 'request("DELETE"'):

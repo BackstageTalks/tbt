@@ -18,7 +18,12 @@ name: BlinQ private Drive CDB audit - bounded free public runner
         options: ['256', '512', '1024', '2048', '4096', '8192']
       force_scan:
         type: boolean
-        description: Override the 90-minute GitHub Actions budget cooldown for an explicitly authorized one-off scan
+        description: Bootstrap a new folder-scoped source audit, or override cooldown with explicit authorization
+        required: false
+        default: false
+      content_audit:
+        type: boolean
+        description: Explicit read-only content check; do not create a GitHub Release on every scheduler tick
         required: false
         default: false
   pull_request:
@@ -58,6 +63,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
           FORCE_SCAN: ${{ inputs.force_scan }}
+          PRIVATE_CACHE_RELEASE: blinq-drive-cdb-audit-cache-archive-20261016-v1
         run: |
           set -euo pipefail
           if [[ "$FORCE_SCAN" == "true" ]]; then
@@ -70,7 +76,7 @@ jobs:
             echo 'DRIVE_AUDIT_BUDGET_BLOCKED_MISSING_PRIVATE_TOKEN'
             exit 0
           fi
-          if ! release="$(gh api repos/BackstageTalks/tbt-data/releases/tags/blinq-drive-cdb-audit-cache-v1 2>/dev/null)"; then
+          if ! release="$(gh api "repos/BackstageTalks/tbt-data/releases/tags/$PRIVATE_CACHE_RELEASE" 2>/dev/null)"; then
             # Fail closed on permission/rate-limit/network errors; never
             # interpret an unknown checkpoint as permission to spend.
             echo 'proceed=false' >> "$GITHUB_OUTPUT"
@@ -95,6 +101,10 @@ jobs:
           fi
 
   safety-tests:
+    needs: [scan_budget]
+    # Run on PRs or only when an actual permitted source batch is due.
+    # A 15-minute external tick must not trigger repeated full test jobs.
+    if: always() && (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && needs.scan_budget.outputs.proceed == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -121,8 +131,11 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PRIVATE_REPO: BackstageTalks/tbt-data
-      DRIVE_ROOT: 17UChTTWLpC-7tZIbvTXKA4_2eqooV44A
-      PRIVATE_CACHE_RELEASE: blinq-drive-cdb-audit-cache-v1
+      DRIVE_ROOT: 1jzdzztz8cXquO8VDswqE19PHupQau-xM
+      PRIVATE_CACHE_RELEASE: blinq-drive-cdb-audit-cache-archive-20261016-v1
+      # A new folder requires a separate cache namespace. Do not restore the
+      # old 17UCh... root checkpoint against this archive root.
+      SOURCE_INVENTORY_TAG: blinq-drive-source-inventory-archive-20261016-v1
       # Immutable modern reader, explicitly validated against legacy checkpoint parser.
       SOURCE_REF: 10806400e536195890600c4256303697912ab95f
       LEGACY_SOURCE_REF: cf96b6085f93696eb7c319e9109a2040a04cfc4e
@@ -202,6 +215,35 @@ jobs:
             echo 'BLOCKED: private tests failed; details will stay private'
             exit 1
           fi
+
+      - name: Confirm populated permitted Drive archive before downloading CDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import google.auth
+          from google.auth.transport.requests import AuthorizedSession
+          root = os.environ['DRIVE_ROOT']
+          credentials, _ = google.auth.default(
+              scopes=['https://www.googleapis.com/auth/drive.readonly'])
+          session = AuthorizedSession(credentials)
+          response = session.get(
+              'https://www.googleapis.com/drive/v3/files',
+              params={
+                  'q': f"'{root}' in parents and trashed = false",
+                  'pageSize': 1,
+                  'fields': 'nextPageToken,files(id)',
+                  'includeItemsFromAllDrives': 'true',
+                  'supportsAllDrives': 'true',
+              },
+              timeout=30,
+          )
+          response.raise_for_status()
+          if not response.json().get('files'):
+              raise SystemExit('BLOCKED: DRIVE_ARCHIVE_ROOT_EMPTY_OR_INACCESSIBLE')
+          print('DRIVE_ARCHIVE_ROOT_AUTHENTICATED_NONEMPTY')
+          PY
 
       - name: Restore verified private checkpoint with historical-reader migration
         shell: bash
@@ -284,8 +326,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p work/source-previous
-          if gh release view blinq-drive-source-inventory-latest-v1 -R "$PRIVATE_REPO" >/dev/null 2>&1; then
-            gh release download blinq-drive-source-inventory-latest-v1 -R "$PRIVATE_REPO" -p source-baseline.json -p source-baseline.sha256 -D work/source-previous >/dev/null
+          if gh release view $SOURCE_INVENTORY_TAG -R "$PRIVATE_REPO" >/dev/null 2>&1; then
+            gh release download $SOURCE_INVENTORY_TAG -R "$PRIVATE_REPO" -p source-baseline.json -p source-baseline.sha256 -D work/source-previous >/dev/null
             (cd work/source-previous && sha256sum --status -c source-baseline.sha256)
             echo PREVIOUS_SOURCE_INVENTORY_SHA_VERIFIED
           else
@@ -426,7 +468,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag=blinq-drive-source-inventory-latest-v1
+          tag=$SOURCE_INVENTORY_TAG
           if ! gh release view "$tag" -R "$PRIVATE_REPO" >/dev/null 2>&1; then
             gh release create "$tag" -R "$PRIVATE_REPO" --target main --title "Private Drive and Git source inventory baseline" --notes "Read-only observations; not a CDB import." >/dev/null
           fi
@@ -447,6 +489,16 @@ jobs:
           # The writer enforces 4 GiB raw and 1.8 GB gzip bounds.
           # Preserve immutable checkpoint and independent SHA-256 readback.
           python scripts/drive_cdb_private_bridge.py write-checkpoint --cache-file work/cache/audit.sqlite --code-file private/scripts/drive_cdb_audit.py --folder-id "$DRIVE_ROOT" --output work/cache-export
+          # The previous rolling checkpoint was SHA-verified during restore.
+          # If the exact bytes did not change, it is redundant to upload an
+          # additional ~320 MiB immutable Release and rewrite the rolling tag.
+          if test -s work/cache-input/audit.sqlite.gz \
+            && test -s work/cache-input/checkpoint.json \
+            && cmp -s work/cache-export/audit.sqlite.gz work/cache-input/audit.sqlite.gz \
+            && cmp -s work/cache-export/checkpoint.json work/cache-input/checkpoint.json; then
+            echo 'UNCHANGED_PRIVATE_CHECKPOINT_REUSED_NO_NEW_GITHUB_RELEASE'
+            exit 0
+          fi
           # Retain an immutable per-run checkpoint before updating the rolling
           # pointer. A partial pointer upload must not lose the completed batch.
           checkpoint_tag="blinq-drive-cdb-checkpoint-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
@@ -562,10 +614,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   drive-content-readonly:
-    # Invoked by the existing external cron URL (this bridge workflow).
-    # Independent of the CDB audit cooldown: hash checks must run daily.
+    # Explicit opt-in: the caller should request this at most once per day.
+    # Do not generate an immutable GitHub Release for every 15-minute tick.
     # Does not mutate Drive, CDB, repositories, model or production UI.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.content_audit == true
     uses: ./.github/workflows/blinq-drive-content-audit.yml
     with:
       download_mb: '512'
