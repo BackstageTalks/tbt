@@ -23,6 +23,42 @@ def published(event="101", section="top_daily", price=1.7, selection="11"):
     }
 
 
+@pytest.mark.parametrize(("result", "expected"), [
+    ({"correct": True, "profit_units": 0.53}, "win"),
+    ({"correct": False, "profit_units": -1.0}, "loss"),
+    ({"status": "hit", "correct": True}, "win"),
+    ({"status": "miss", "correct": False}, "loss"),
+    ({"status": "hit", "correct": False}, "loss"),
+    ({"status": "miss", "correct": True}, "win"),
+    ({"status": "void", "correct": None}, "void"),
+    ({"void": True, "correct": False}, "void"),
+    ({"status": "hit"}, "hit"),  # Preserve legacy status-only label.
+    ({"status": "miss"}, "miss"),
+    ({"settled_at": "2026-10-10T12:00:00Z"}, ""),
+])
+def test_admin_results_use_public_outcome_for_statusless_settlements(result, expected):
+    row = published()
+    row["market_publications"][0]["result"] = result
+    original = deepcopy(row)
+    candidates = result_exclusions.result_candidates({"results": [row]})
+    assert len(candidates) == 1
+    assert candidates[0]["status"] == expected
+    assert candidates[0]["id"] == result_exclusions.result_bet_id(
+        row, row["market_publications"][0]
+    )
+    assert row == original  # Read-only admin normalization, no ledger edit.
+
+
+def test_admin_results_normalize_canonical_win_and_loss_together():
+    winner, loser = published("17275059"), published("17331783")
+    winner["market_publications"][0]["result"] = {"correct": True}
+    loser["market_publications"][0]["result"] = {"correct": False}
+    rows = result_exclusions.result_candidates({"results": [winner, loser]})
+    assert {row["event_id"]: row["status"] for row in rows} == {
+        "17275059": "win", "17331783": "loss"
+    }
+
+
 def test_exclusion_round_trip_restores_and_keeps_immutable_source(monkeypatch):
     table=Table()
     monkeypatch.setattr(result_exclusions, "_table", lambda _:table)
