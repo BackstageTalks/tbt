@@ -12,6 +12,7 @@ import hashlib
 import re
 
 from .admin_storage import _table, UI_TABLE, AdminStorageUnavailable
+from .dashboard_kpis import _result_outcome
 
 PARTITION = "result-test-exclusions-v1"
 PUBLIC_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
@@ -51,6 +52,16 @@ def _eligible(publication: dict) -> bool:
     return bool(publication.get("issued_at") or (publication.get("result") or {}).get("runtime_source") == "match_status_snapshot")
 
 
+def _admin_result_status(publication: dict) -> str:
+    """Use the public Results outcome for statusless, already-settled bets."""
+    outcome = _result_outcome(publication)
+    if outcome != "pending":
+        return outcome
+    # Preserve the legacy admin label mapping for status-only records.
+    result = publication.get("result") or {}
+    return str(result.get("status") or result.get("outcome") or "")
+
+
 def result_candidates(feed: dict) -> list[dict]:
     """Return complete page-independent admin inventory, no 50/100 row cap."""
     seen = {}
@@ -75,7 +86,7 @@ def result_candidates(feed: dict) -> list[dict]:
                 "section": str(publication.get("section") or ""),
                 "market": str(publication.get("market") or ""),
                 "selection": selected,
-                "status": str(result.get("status") or result.get("outcome") or ""),
+                "status": _admin_result_status(publication),
                 "odds": publication.get("odds"),
             }
     return sorted(seen.values(), key=lambda r: (r["scheduled_at"], r["id"]), reverse=True)
