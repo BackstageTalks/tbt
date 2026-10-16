@@ -18,7 +18,12 @@ name: BlinQ private Drive CDB audit - bounded free public runner
         options: ['256', '512', '1024', '2048', '4096', '8192']
       force_scan:
         type: boolean
-        description: Override the 90-minute GitHub Actions budget cooldown for an explicitly authorized one-off scan
+        description: Bootstrap a new folder-scoped source audit, or override cooldown with explicit authorization
+        required: false
+        default: false
+      content_audit:
+        type: boolean
+        description: Explicit read-only content check; do not create a GitHub Release on every scheduler tick
         required: false
         default: false
   pull_request:
@@ -96,6 +101,10 @@ jobs:
           fi
 
   safety-tests:
+    needs: [scan_budget]
+    # Run on PRs or only when an actual permitted source batch is due.
+    # A 15-minute external tick must not trigger repeated full test jobs.
+    if: always() && (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && needs.scan_budget.outputs.proceed == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -595,10 +604,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   drive-content-readonly:
-    # Invoked by the existing external cron URL (this bridge workflow).
-    # Independent of the CDB audit cooldown: hash checks must run daily.
+    # Explicit opt-in: the caller should request this at most once per day.
+    # Do not generate an immutable GitHub Release for every 15-minute tick.
     # Does not mutate Drive, CDB, repositories, model or production UI.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.content_audit == true
     uses: ./.github/workflows/blinq-drive-content-audit.yml
     with:
       download_mb: '512'
