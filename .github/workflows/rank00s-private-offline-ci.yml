@@ -1,0 +1,59 @@
+name: BlinQ rank00s private source offline QA on public runner
+'on':
+  pull_request:
+    paths:
+      - '.github/workflows/rank00s-private-offline-ci.yml'
+      - 'tests/test_rank00s_private_offline_ci_contract.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  private-source-contract:
+    # Fork PRs do not get private-repository credentials.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      SOURCE_COMMIT: 5d1e59e800e3f3861ebcd3beadaeb3bdf1485179
+    steps:
+      - name: Checkout only public safety-contract tests
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate offline bridge never mutates private data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -q -s tests -p 'test_rank00s_private_offline_ci_contract.py'
+      - name: Authenticated pin-only read of two private Python files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'BLOCKED_MISSING_PRIVATE_READ_TOKEN'; exit 1; }
+          mkdir -p private/scripts private/tests
+          gh api "repos/$PRIVATE_REPO/contents/scripts/preflight_rank00s_cdb.py?ref=$SOURCE_COMMIT" --jq .content | base64 --decode >private/scripts/preflight_rank00s_cdb.py
+          gh api "repos/$PRIVATE_REPO/contents/tests/test_preflight_rank00s_cdb.py?ref=$SOURCE_COMMIT" --jq .content | base64 --decode >private/tests/test_preflight_rank00s_cdb.py
+          test "$(git hash-object private/scripts/preflight_rank00s_cdb.py)" = "12a31420b21075409783f1b3797f174440442091"
+          test "$(git hash-object private/tests/test_preflight_rank00s_cdb.py)" = "23ed65dc526d300fd24994d01640d06f84f12ba5"
+          echo 'PRIVATE_SCRIPT_TEST_BLOB_SHA_VERIFIED'
+      - name: Compile and execute private synthetic QA offline without secrets
+        shell: bash
+        env:
+          GH_TOKEN: ''
+        run: |
+          set -euo pipefail
+          python -m py_compile private/scripts/preflight_rank00s_cdb.py private/tests/test_preflight_rank00s_cdb.py
+          # Never print private source rows, source code, traceback or logs in public job.
+          if python -m unittest discover -q -s private/tests -p 'test_preflight_rank00s_cdb.py' >/tmp/private-offline-test.log 2>&1; then
+            echo 'PINNED_RANK00S_12_SYNTHETIC_TESTS_PASSED'
+          else
+            echo 'PRIVATE_OFFLINE_QA_FAILED_DETAILS_REDACTED'
+            exit 1
+          fi
