@@ -37,7 +37,7 @@ class ReadOnlyBridgeContract(unittest.TestCase):
         self.assertNotIn("github.event.pull_request", self.text)
         self.assertNotIn("  pull_request:", self.text)
         self.assertIn("          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}", self.text)
-        self.assertNotIn("      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}", self.text)
+        self.assertNotIn("\n      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}", self.text)
 
     def test_no_private_output_artifact_or_test_dump(self):
         text = self.text
