@@ -19,6 +19,7 @@ from release_store import ReleaseStore
 from tbt.models.artifact import load_model
 from tbt.models.metrics import evaluate_probabilities
 from tbt.services.shadow_evaluation import build_shadow_report
+from tbt.services.shadow_calibration_research import research_comparison
 
 
 def _datetime(value):
@@ -107,6 +108,7 @@ def summarize(rows, production_version, challenger_version, source_ts=None):
         "cohort": summary["cohort"],
         "overall": _metrics(settled),
         "paired": summary["paired"],
+        "calibration_research": research_comparison(cohort, production_version, challenger_version),
         "gate": summary["gate"],
         "segments": segments,
         "roi_yield_status": "NOT_EVALUABLE_WITHOUT_VERIFIED_PREMATCH_ODDS",
