@@ -47,7 +47,10 @@ from tbt.services.projection_odds import (
     extract_match_total_odds,
 )
 from tbt.services.indicative_odds import annotate_feed_indicative_odds
-from tbt.services.propline_live import PropLineClient, discover_propline_fallback
+from tbt.services.propline_live import (
+    PropLineClient, discover_propline_fallback,
+    PROVIDER_DAILY_PLAN_LIMIT, MIN_PROVIDER_REMAINING,
+)
 from tbt.services.doubles_selection import (
     build_predictions as build_doubles_predictions,
     select_picks as select_doubles_picks,
@@ -737,22 +740,22 @@ def main():
     parser = argparse.ArgumentParser(description="Offline BlinQ training and prediction publication")
     parser.add_argument("mode", choices=["train", "refresh", "current-refresh", "backtest"])
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data"))
-    parser.add_argument("--max-requests", type=int, default=750)
+    parser.add_argument("--max-requests", type=int, default=14500)
     parser.add_argument(
         "--market-odds-max-events",
         type=int,
-        default=150,
-        help="Maximum provider-1 odds calls for the current BlinQ betting day",
+        default=-1,
+        help="Provider-1 odds event cap (-1 = use remaining request budget; 0 = disable)",
     )
     parser.add_argument(
-        "--propline-max-events", type=int, default=75,
-        help="Max PropLine fallback events per refresh (0 disables, max 75)",
+        "--propline-max-events", type=int, default=-1,
+        help="PropLine fallback events (-1 = provider-quota guarded; 0 = disable)",
     )
     parser.add_argument(
         "--doubles-odds-max-events",
         type=int,
-        default=40,
-        help="Maximum provider-1 Match Winner odds calls for isolated doubles candidates",
+        default=-1,
+        help="Doubles event cap (-1 = unlimited events, bounded by request budget; 0 = disable)",
     )
     parser.add_argument(
         "--betting-day-start-hour",
@@ -781,14 +784,14 @@ def main():
             training_certificate = _require_training_backup_gate()
         except RuntimeError as exc:
             parser.error(str(exc))
-    if not 1 <= args.max_requests <= 3000:
-        parser.error("refresh allowance must be 1..3000")
-    if args.market_odds_max_events < 0:
-        parser.error("market-odds-max-events must be >= 0")
-    if not 0 <= args.propline_max_events <= 75:
-        parser.error("propline-max-events must be 0..75")
-    if args.doubles_odds_max_events < 0:
-        parser.error("doubles-odds-max-events must be >= 0")
+    if not 1 <= args.max_requests <= 14500:
+        parser.error("refresh allowance must be 1..14500")
+    if args.market_odds_max_events < -1:
+        parser.error("market-odds-max-events must be >= -1 (-1 means uncapped)")
+    if args.propline_max_events < -1:
+        parser.error("propline-max-events must be >= -1 (-1 means provider-quota guarded)")
+    if args.doubles_odds_max_events < -1:
+        parser.error("doubles-odds-max-events must be >= -1 (-1 means uncapped)")
     if not 0 <= args.betting_day_start_hour <= 23:
         parser.error("betting-day-start-hour must be 0..23")
     cache = ROOT / ".cache/tbt"
@@ -1364,14 +1367,6 @@ def main():
                 candidate_min_probability=0.55, candidate_min_data_depth=0.35,
                 candidate_min_surface_matches=2,
             )
-        doubles_picks, doubles_selection_report = select_doubles_picks(doubles_predictions)
-        doubles_report = {
-            "history": doubles_history_state,
-            "model": doubles_model_report,
-            "odds": doubles_odds_report,
-            "selection": doubles_selection_report,
-        }
-
         # Odds-first for ACES/DF/GAMES/SETS: obtain actual available offers
         # BEFORE evaluating their projection models. Match Winner continues to
         # use its independent qualification rules and shares cached payloads.
@@ -1462,7 +1457,11 @@ def main():
                     }
                 }, ensure_ascii=False), flush=True)
 
-        projection_odds_cap = max(0, int(args.market_odds_max_events or 0))
+        projection_odds_cap = (
+            max(0, int(provider.request_limit) - int(provider.request_count))
+            if args.market_odds_max_events == -1
+            else max(0, int(args.market_odds_max_events))
+        )
         market_odds_cap = projection_odds_cap
         # current-refresh now uses the same complete market discovery as a normal
         # refresh. The shared provider budget and per-run cap are the safety rails;
@@ -1499,21 +1498,9 @@ def main():
                     for market in ("sets", "games") if market in markets
                 }
 
-            # ACES / Double Faults real-odds contract: the legacy RapidAPI
-            # prop prices are not trusted for publication. Keep RapidAPI as
-            # the primary source for Games/Sets and Match Winner, but require
-            # PropLine for current Aces/DF. If PropLine has no exact complete
-            # player market, the projection remains unpublished.
-            ignored_rapid_ace_df = {"aces": 0, "double_faults": 0}
-            for event_id, markets in list(available_projection_markets.items()):
-                trusted = set(markets)
-                for metric in ("aces", "double_faults"):
-                    if metric in trusted:
-                        ignored_rapid_ace_df[metric] += 1
-                        trusted.discard(metric)
-                available_projection_markets[event_id] = trusted
-            projection_discovery_report["ace_df_real_odds_policy"] = "propline_only_v1"
-            projection_discovery_report["rapidapi_ace_df_markets_ignored"] = ignored_rapid_ace_df
+            # Use the same priority for all five existing markets: exact
+            # API PRO contract first, then exact PropLine fallback only.
+            projection_discovery_report["ace_df_real_odds_policy"] = "rapidapi_first_propline_fallback"
 
             # Primary Match Winner enrichment runs first. PropLine is a true
             # fallback: it may fill only contracts that provider 1 did not price.
@@ -1539,69 +1526,83 @@ def main():
                     for event_id, markets in available_projection_markets.items()
                 }
                 primary_match_winner = 0
-                for row in predictions:
+                for row in predictions + doubles_predictions:
                     event_id = str(row.get("event_id") or "").strip()
                     betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
-                    if event_id and betting.get("market") == "match_winner" and betting.get("odds"):
+                    if not event_id:
+                        continue
+                    # Doubles only uses exact two-team H2H. Never request
+                    # irrelevant singles prop totals for a doubles fixture.
+                    if row.get("prediction_family") == "doubles":
+                        propline_existing.setdefault(event_id, set()).update(
+                            ("aces", "double_faults", "games", "sets")
+                        )
+                    if betting.get("market") == "match_winner" and betting.get("odds"):
                         propline_existing.setdefault(event_id, set()).add("match_winner")
                         primary_match_winner += 1
 
                 prop_client = PropLineClient(
-                    prop_key, max_calls=1 + 2 * args.propline_max_events,
-                    min_remaining=150,
+                    prop_key,
+                    max_calls=PROVIDER_DAILY_PLAN_LIMIT - MIN_PROVIDER_REMAINING,
+                    min_remaining=MIN_PROVIDER_REMAINING,
                 )
                 prop_market_payloads, prop_report = discover_propline_fallback(
-                    prop_client, predictions, propline_existing,
+                    prop_client, predictions + doubles_predictions, propline_existing,
                     now=now, max_events=args.propline_max_events,
                 )
 
                 match_winner_fallback_attached = 0
-                for index, row in enumerate(predictions):
-                    event_id = str(row.get("event_id") or "").strip()
-                    if not event_id:
-                        continue
-                    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
-                    if betting.get("market") == "match_winner" and betting.get("odds"):
-                        continue
-                    quote = (prop_market_payloads.get(event_id) or {}).get("match_winner")
-                    if not isinstance(quote, dict):
-                        continue
-                    p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
-                    p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
-                    market = extract_match_winner_odds(
-                        quote.get("payload"),
-                        str(p1.get("name") or ""),
-                        str(p2.get("name") or ""),
-                    )
-                    if market is None:
-                        continue
-                    try:
-                        captured_at = datetime.fromisoformat(
-                            str(quote.get("captured_at") or "").replace("Z", "+00:00")
+                doubles_match_winner_fallback_attached = 0
+                for target_predictions in (predictions, doubles_predictions):
+                    for index, row in enumerate(target_predictions):
+                        event_id = str(row.get("event_id") or "").strip()
+                        if not event_id:
+                            continue
+                        betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+                        if betting.get("market") == "match_winner" and betting.get("odds"):
+                            continue
+                        quote = (prop_market_payloads.get(event_id) or {}).get("match_winner")
+                        if not isinstance(quote, dict):
+                            continue
+                        p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
+                        p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
+                        market = extract_match_winner_odds(
+                            quote.get("payload"),
+                            str(p1.get("name") or ""),
+                            str(p2.get("name") or ""),
                         )
-                        if captured_at.tzinfo is None:
-                            captured_at = captured_at.replace(tzinfo=timezone.utc)
-                    except (TypeError, ValueError):
-                        captured_at = selection_now
-                    enriched = attach_match_winner_market(
-                        row, market, captured_at=captured_at,
-                        provider_id=2, betting_day=odds_report.get("betting_day"),
-                    )
-                    provenance = {
-                        "source": "propline",
-                        "bookmaker": quote.get("bookmaker"),
-                        "provider_event_id": quote.get("provider_event_id"),
-                    }
-                    if isinstance(enriched.get("match_winner_market"), dict):
-                        enriched["match_winner_market"].update(provenance)
-                    if isinstance(enriched.get("betting"), dict):
-                        enriched["betting"].update({
-                            "odds_source": "propline",
-                            "odds_bookmaker": quote.get("bookmaker"),
-                            "odds_provider_event_id": quote.get("provider_event_id"),
-                        })
-                    predictions[index] = enriched
-                    match_winner_fallback_attached += 1
+                        if market is None:
+                            continue
+                        try:
+                            captured_at = datetime.fromisoformat(
+                                str(quote.get("captured_at") or "").replace("Z", "+00:00")
+                            )
+                            if captured_at.tzinfo is None:
+                                captured_at = captured_at.replace(tzinfo=timezone.utc)
+                        except (TypeError, ValueError):
+                            captured_at = selection_now
+                        enriched = attach_match_winner_market(
+                            row, market, captured_at=captured_at,
+                            provider_id=2, betting_day=odds_report.get("betting_day"),
+                        )
+                        provenance = {
+                            "source": "propline",
+                            "bookmaker": quote.get("bookmaker"),
+                            "provider_event_id": quote.get("provider_event_id"),
+                        }
+                        if isinstance(enriched.get("match_winner_market"), dict):
+                            enriched["match_winner_market"].update(provenance)
+                        if isinstance(enriched.get("betting"), dict):
+                            enriched["betting"].update({
+                                "odds_source": "propline",
+                                "odds_bookmaker": quote.get("bookmaker"),
+                                "odds_provider_event_id": quote.get("provider_event_id"),
+                            })
+                        target_predictions[index] = enriched
+                        if row.get("prediction_family") == "doubles":
+                            doubles_match_winner_fallback_attached += 1
+                        else:
+                            match_winner_fallback_attached += 1
 
                 for rapid_id, by_metric in prop_market_payloads.items():
                     for metric, quote in by_metric.items():
@@ -1616,6 +1617,7 @@ def main():
 
                 prop_report["match_winner_primary_preserved"] = primary_match_winner
                 prop_report["match_winner_fallback_attached"] = match_winner_fallback_attached
+                prop_report["doubles_match_winner_fallback_attached"] = doubles_match_winner_fallback_attached
                 prop_report["fallback_order"] = [
                     "primary_match_winner", "propline_match_winner",
                     "propline_aces_df_sets_games",
@@ -1629,6 +1631,16 @@ def main():
                         "PROPL_secret_missing" if not prop_key else "disabled_by_event_cap"
                     ), "calls": 0,
                 }
+        # Doubles selection is performed only after both trusted H2H providers
+        # have had the chance to price an otherwise eligible fixture.
+        doubles_picks, doubles_selection_report = select_doubles_picks(doubles_predictions)
+        doubles_report = {
+            "history": doubles_history_state,
+            "model": doubles_model_report,
+            "odds": doubles_odds_report,
+            "selection": doubles_selection_report,
+        }
+
         # In odds-first mode the projection models operate only on events
         # that have a complete matching market from the provider. Keep an
         # expanded *eligible* pool so publication can independently rank each

@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       max_requests:
-        description: Tennis RapidAPI requests to reserve (1-750)
+        description: Tennis RapidAPI max requests (1-14500; shared daily budget stops earlier)
         type: number
         required: false
-        default: 300
+        default: 14500
       force:
         description: Explicit manual override of the once-per-Bratislava-day guard
         type: boolean
@@ -32,15 +32,15 @@ jobs:
     timeout-minutes: 240
     env:
       GH_TOKEN: ${{ github.token }}
-      MORNING_MAX_REQUESTS: ${{ inputs.max_requests || vars.TBT_MORNING_REFRESH_MAX_REQUESTS || '300' }}
+      MORNING_MAX_REQUESTS: ${{ inputs.max_requests || vars.TBT_MORNING_REFRESH_MAX_REQUESTS || '14500' }}
     steps:
       - name: Validate daily request cap
         shell: bash
         run: |
           set -euo pipefail
           if ! [[ "$MORNING_MAX_REQUESTS" =~ ^[0-9]+$ ]] ||
-             (( 10#$MORNING_MAX_REQUESTS < 1 || 10#$MORNING_MAX_REQUESTS > 750 )); then
-            echo "::error::Morning max_requests must be an integer from 1 to 750."
+             (( 10#$MORNING_MAX_REQUESTS < 1 || 10#$MORNING_MAX_REQUESTS > 14500 )); then
+            echo "::error::Morning max_requests must be an integer from 1 to 14500."
             exit 1
           fi
 
@@ -99,7 +99,7 @@ jobs:
             local before=".cache/tbt/morning/before-$attempt.txt"
             gh api "$workflow_runs_api" --jq '.workflow_runs[].id' > "$before"
 
-            gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main -f mode=refresh -f morning_refresh=true -f max_requests="$MORNING_MAX_REQUESTS" -f market_odds_max_events=90 -f doubles_odds_max_events=25 -f betting_day_start_hour=6
+            gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main -f mode=refresh -f morning_refresh=true -f max_requests="$MORNING_MAX_REQUESTS" -f market_odds_max_events=-1 -f doubles_odds_max_events=-1 -f propline_max_events=-1 -f betting_day_start_hour=6
 
             CHILD_RUN_ID=""
             for _ in $(seq 1 30); do

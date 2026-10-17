@@ -122,7 +122,6 @@ def test_admin_diagnostics_uses_runtime_budget_caps_and_exposes_external_schedul
         "global": 80,
         "live": 80,
         "match": 80,
-        "refresh": 80,
     }
 
     live = payload["live_worker"]

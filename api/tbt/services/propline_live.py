@@ -28,10 +28,11 @@ KEYS = ("h2h", "totals", "total_games", "total_sets", "player_aces", "player_dou
 METRIC = {"h2h": "match_winner", "totals": "games", "total_games": "games",
           "total_sets": "sets", "player_aces": "aces",
           "player_double_faults": "double_faults"}
-# Shared 1000/day PROPL: four refreshes x (1 board + 2x75) <= 604 calls.
-# CLV pilot is capped at 250/day; reserve >=146 for variable/manual demand.
-MAX_EVENTS_PER_REFRESH = 75
+# PropLine has its own provider-day budget (separate from RapidAPI).
+# There is no artificial event cap: -1 enumerates all matching events.
+PROVIDER_DAILY_PLAN_LIMIT = 1000
 MIN_PROVIDER_REMAINING = 150
+MAX_EVENTS_PER_REFRESH = -1
 
 
 def _name(value: Any) -> str:
@@ -108,7 +109,7 @@ class PropLineClient:
     def get(self, path: str, params: dict | None = None) -> Any:
         if self.calls >= self.max_calls:
             raise RuntimeError("PropLine local request cap reached")
-        if self.remaining is not None and self.remaining < self.min_remaining:
+        if self.remaining is not None and self.remaining <= self.min_remaining:
             raise RuntimeError("PropLine daily quota reserve reached")
         url = BASE + path + ("?" + urllib.parse.urlencode(params) if params else "")
         req = urllib.request.Request(url, headers={
@@ -120,8 +121,11 @@ class PropLineClient:
         try:
             with urllib.request.urlopen(req, timeout=20) as response:
                 remaining = response.headers.get("X-Daily-Remaining")
-                if remaining is not None:
-                    self.remaining = int(remaining)
+                if remaining is None:
+                    raise RuntimeError("PropLine quota header unavailable")
+                self.remaining = int(remaining)
+                if self.remaining < self.min_remaining:
+                    raise RuntimeError("PropLine quota reserve reached")
                 return json.load(response)
         except urllib.error.HTTPError as exc:
             remaining = exc.headers.get("X-Daily-Remaining")
@@ -202,7 +206,8 @@ def _match_board_with_diagnostics(
             method = "full"
         else:
             candidates = [(row, when) for row, _key, short, when in singles
-                          if abbreviated is not None and short == abbreviated
+                          if row.get("prediction_family") != "doubles"
+                          and abbreviated is not None and short == abbreviated
                           and abs((start - when).total_seconds()) <= 2700]
             method = "abbreviated"
         identities = {str(row["event_id"]) for row, _when in candidates}
@@ -380,8 +385,11 @@ def discover_propline_fallback(
     matched, match_diagnostics = _match_board_with_diagnostics(predictions, board, now)
     report["matched_events"] = len(matched)
     report["fixture_match_diagnostics"] = match_diagnostics
-    report["events_limited_out"] = max(0, len(matched) - max(0, min(MAX_EVENTS_PER_REFRESH, int(max_events))))
-    for row, event in matched[:max(0, min(MAX_EVENTS_PER_REFRESH, int(max_events)))]:
+    # No arbitrary fixture cap. Provider remaining headers, 150-call reserve,
+    # and the finite maximum provider-day allowance bound this sweep.
+    candidates = matched if int(max_events) < 0 else matched[:max(0, int(max_events))]
+    report["events_limited_out"] = len(matched) - len(candidates)
+    for row, event in candidates:
         rapid_id, prop_id = str(row["event_id"]), str(event["id"])
         missing = set(("match_winner", "aces", "double_faults", "games", "sets")) - existing.get(rapid_id, set())
         if not missing or client.calls + 2 > client.max_calls:
@@ -455,7 +463,7 @@ def discover_propline_fallback(
                                 })
         except (RuntimeError, ValueError):
             report["errors"] += 1
-        if client.remaining is not None and client.remaining < client.min_remaining:
+        if client.remaining is not None and client.remaining <= client.min_remaining:
             report["stopped_on_quota_reserve"] = True
             break
     report["calls"] = client.calls

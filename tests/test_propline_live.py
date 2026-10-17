@@ -163,7 +163,7 @@ def test_zero_budget_does_not_use_propline_event_endpoints():
 
 def test_wide_market_discovery_reports_advertised_versus_genuine_two_sided_quotes():
     from tbt.services.propline_live import MAX_EVENTS_PER_REFRESH, MIN_PROVIDER_REMAINING
-    assert MAX_EVENTS_PER_REFRESH == 75
+    assert MAX_EVENTS_PER_REFRESH == -1
     assert MIN_PROVIDER_REMAINING == 150
     client = FakeProp()
     found, audit = discover_propline_fallback(client, [MATCH], {},
@@ -193,7 +193,7 @@ def test_shared_free_tier_quota_budget_and_active_clv_defaults():
     refresh = (root / ".github/workflows/data.yml").read_text(encoding="utf-8")
     clv = (root / "scripts/propline_clv_collect.py").read_text(encoding="utf-8")
     active_workflow = (root / ".github/workflows/propline-clv-pilot.yml").read_text(encoding="utf-8")
-    assert "default: 75" in refresh
+    assert "default: -1" in refresh
     assert "DAILY_LIMIT = 250" in clv
     assert "MIN_PROVIDER_REMAINING = 150" in clv
     assert "propline_clv_collect.py" in active_workflow
@@ -243,3 +243,136 @@ def test_match_winner_h2h_is_not_returned_when_primary_already_has_price():
     assert "match_winner" not in found["rapid-133"]
     assert report["priced_by_market"]["match_winner"] == 0
     assert set(found["rapid-133"]) == {"aces", "double_faults", "games", "sets"}
+
+
+
+def test_unlimited_propline_fallback_checks_all_eligible_events_not_first_75():
+    """No artificial fixture cap: only provider quota may stop discovery."""
+    fixtures = []
+    board = []
+    for i in range(82):
+        fixtures.append({
+            "event_id": f"rapid-{i}", "scheduled_at": START, "tour": "ATP",
+            "player1": {"id": f"p{i}", "name": f"First Player{i:03d}"},
+            "player2": {"id": f"q{i}", "name": f"Second Opponent{i:03d}"},
+        })
+        board.append({
+            "id": str(1000 + i), "home_team": f"First Player{i:03d}",
+            "away_team": f"Second Opponent{i:03d}", "commence_time": START,
+        })
+
+    class LargeBoard:
+        max_calls = 1000
+        min_remaining = 150
+        remaining = 800
+
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, path, params=None):
+            self.calls += 1
+            if path == "/sports/tennis/events":
+                return board
+            if path.endswith("/markets"):
+                return [{"key": "h2h"}]
+            if path.endswith("/odds"):
+                eid = int(path.split("/")[-2]) - 1000
+                return {"bookmakers": [{
+                    "key": "test-book",
+                    "markets": [{"key": "h2h", "outcomes": [
+                        {"name": f"First Player{eid:03d}", "price": -120},
+                        {"name": f"Second Opponent{eid:03d}", "price": 110},
+                    ]}],
+                }]}
+            raise AssertionError(path)
+
+    client = LargeBoard()
+    found, report = discover_propline_fallback(
+        client, fixtures, {}, now=NOW, max_events=-1,
+    )
+    assert report["matched_events"] == 82
+    assert report["events_limited_out"] == 0
+    assert report["priced_by_market"]["match_winner"] == 82
+    assert len(found) == 82
+    assert client.calls == 165
+
+
+def test_propline_client_does_not_spend_a_known_final_reserve_call():
+    from tbt.services.propline_live import MIN_PROVIDER_REMAINING
+    import pytest
+
+    client = PropLineClient("placeholder", max_calls=1000)
+    client.remaining = MIN_PROVIDER_REMAINING
+    with pytest.raises(RuntimeError, match="reserve"):
+        client.get("/sports/tennis/events")
+    assert client.calls == 0
+
+
+def test_primary_ace_df_markets_are_not_deleted_before_fallback():
+    from pathlib import Path
+    pipeline = (Path(__file__).resolve().parents[1] / "scripts/pipeline.py").read_text()
+    assert '"rapidapi_first_propline_fallback"' in pipeline
+    assert "ignored_rapid_ace_df" not in pipeline
+    assert "propline_only_v1" not in pipeline
+
+
+
+def test_doubles_fallback_requires_full_team_identity_and_complete_h2h():
+    from tbt.services.market_selection import attach_match_winner_market
+    from tbt.services.propline_live import _match_board_with_diagnostics
+
+    first = "Jamie Murray / Bruno Soares"
+    second = "Rajeev Ram / Joe Salisbury"
+    doubles = {
+        "event_id": "doubles-001", "prediction_family": "doubles",
+        "scheduled_at": START, "tour": "ATP", "winner_id": "team1",
+        "data_depth": 0.9,
+        "player1": {"id": "team1", "name": first, "probability": 0.81},
+        "player2": {"id": "team2", "name": second, "probability": 0.19},
+    }
+    event = {"id": "24680", "home_team": first, "away_team": second,
+             "commence_time": START}
+    matches, _ = _match_board_with_diagnostics([doubles], [event], NOW)
+    assert len(matches) == 1
+    ambiguous_short = {**event, "home_team": "J. Soares",
+                       "away_team": "R. Salisbury"}
+    matches, _ = _match_board_with_diagnostics([doubles], [ambiguous_short], NOW)
+    assert matches == []
+
+    class Book:
+        calls = 0
+        max_calls = 9
+        remaining = 600
+        min_remaining = 150
+
+        def get(self, path, params=None):
+            self.calls += 1
+            if path.endswith("/events"):
+                return [event]
+            if path.endswith("/markets"):
+                return [{"key": "h2h"}]
+            if path.endswith("/odds"):
+                assert params["markets"] == "h2h"
+                return {"bookmakers": [{
+                    "key": "test-book", "markets": [
+                        {"key": "h2h", "outcomes": [
+                            {"name": first, "price": -120},
+                            {"name": second, "price": 110},
+                        ]}
+                    ],
+                }]}
+            raise AssertionError(path)
+
+    quote, audit = discover_propline_fallback(
+        Book(), [doubles],
+        {"doubles-001": {"aces", "double_faults", "games", "sets"}},
+        now=NOW, max_events=-1,
+    )
+    assert audit["priced_by_market"]["match_winner"] == 1
+    market = extract_match_winner_odds(
+        quote["doubles-001"]["match_winner"]["payload"], first, second)
+    enriched = attach_match_winner_market(
+        doubles, market, captured_at=NOW, provider_id=2)
+    assert enriched["betting"]["market"] == "match_winner"
+    assert enriched["betting"]["provider_id"] == 2
+    assert enriched["betting"]["odds"] > 1.5

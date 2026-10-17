@@ -1,8 +1,8 @@
-name: BlinQ targeted CDB API gapfill (90% staged, 97% closeout)
+name: BlinQ targeted CDB API gapfill (90% staged, 96.67% closeout)
 
 # GitHub cron is intentionally forbidden by the repository contract.
 # Manual workflow_dispatch is intended for an external hourly schedule with
-# a 90% staged hourly cap until 18:34, 97% 18:35–19:03 closeout (including queued-run delay),
+# a 90% staged hourly cap until 18:34, 96.67% 18:35–19:03 closeout (including queued-run delay),
 # and 19:11 new-day start. A single canonical writer runs at once.
 on:
   push:
@@ -61,9 +61,9 @@ jobs:
 
           # Progressive cumulative caps across all purposes, including LIVE,
           # Match Status, refresh and history, plus committed reservations.
-          # The provider-day shared ledger enforces the absolute 97% cap.
-          # The 18:00 cap applies until 18:34; 18:35–19:03 uses 97%.
-          # Do not change the protected 450-call reserve.
+          # The provider-day shared ledger enforces the absolute 96.67% cap.
+          # The 18:00 cap applies until 18:34; 18:35–19:03 uses 96.67%.
+          # Do not change the protected 500-call reserve.
           caps = {12: 5700, 13: 6900, 14: 8100, 15: 9300,
                   16: 10500, 17: 12000, 18: 13500}
           print(f"Bratislava time: {local.isoformat()}; dry_run={DRY_RUN}", flush=True)
@@ -123,8 +123,8 @@ jobs:
           if not isinstance(budget, dict) or (
               budget.get("window") != "provider_day_19_10_europe_bratislava"
               or budget.get("provider_plan_limit") != 15000
-              or budget.get("global_limit") != 14550
-              or budget.get("reserved_provider_headroom") != 450
+              or budget.get("global_limit") != 14500
+              or budget.get("reserved_provider_headroom") != 500
           ):
               raise SystemExit("Unrecognized budget contract; no dispatch")
 
@@ -133,19 +133,19 @@ jobs:
           history_remaining = int(budget["remaining"]["history"])
           if local.hour not in caps and not final_topup and not new_day_start:
               print(f"No new job outside guarded hours Europe/Bratislava; "
-                    f"shared ledger {spent}/15000, remaining to 97%={remaining}.")
+                    f"shared ledger {spent}/15000, remaining to 96.67%={remaining}.")
               if DRY_RUN:
                   print("DRY RUN active writer check: " + str(check_writers()))
               sys.exit(0)
-          if spent < 0 or remaining != max(0, 14550-spent):
+          if spent < 0 or remaining != max(0, 14500-spent):
               raise SystemExit("Shared budget inconsistency; no dispatch")
           reset = datetime.fromisoformat(str(budget["next_reset_utc"]).replace("Z", "+00:00"))
           expected_reset_date = local.date() + timedelta(days=1) if new_day_start else local.date()
           if reset.tzinfo is None or reset.astimezone(ZONE).date() != expected_reset_date or reset.astimezone(ZONE).hour != 19 or reset.astimezone(ZONE).minute != 10:
               raise SystemExit("Provider reset time inconsistent; no dispatch")
 
-          limit = 3000 if new_day_start else (14550 if final_topup else caps[local.hour])
-          # At most 3000 per job; the provider rechecks the 450-remaining
+          limit = 3000 if new_day_start else (14500 if final_topup else caps[local.hour])
+          # At most 3000 per job; the provider rechecks the 500-remaining
           # header and the shared ETag ledger before every billable attempt.
           # Two bounded DAILY slots collect provider-1 market IDs and PBP.
           # The extras downloader consumes 2026 first, then 2025, then older
@@ -160,7 +160,7 @@ jobs:
                 f"global remaining={remaining}; proposed max={proposed}", flush=True)
 
           if proposed < 1:
-              print("No request allowance left beneath the applicable staged/97% ceiling.")
+              print("No request allowance left beneath the applicable staged/96.67% ceiling.")
               sys.exit(0)
 
 
@@ -210,14 +210,14 @@ jobs:
               if not isinstance(budget, dict) or (
                   budget.get("window") != "provider_day_19_10_europe_bratislava"
                   or budget.get("provider_plan_limit") != 15000
-                  or budget.get("global_limit") != 14550
-                  or budget.get("reserved_provider_headroom") != 450
+                  or budget.get("global_limit") != 14500
+                  or budget.get("reserved_provider_headroom") != 500
               ):
                   raise SystemExit("Unrecognized budget contract after writer wait; no dispatch")
               spent = int(budget["global_spent"])
               remaining = int(budget["global_remaining"])
               history_remaining = int(budget["remaining"]["history"])
-              if spent < 0 or remaining != max(0, 14550-spent):
+              if spent < 0 or remaining != max(0, 14500-spent):
                   raise SystemExit("Shared budget inconsistency after writer wait; no dispatch")
               reset = datetime.fromisoformat(str(budget["next_reset_utc"]).replace("Z", "+00:00"))
               expected_reset_date = local.date() + timedelta(days=1) if new_day_start else local.date()
@@ -228,7 +228,7 @@ jobs:
                   or reset.astimezone(ZONE).minute != 10
               ):
                   raise SystemExit("Provider reset inconsistent after writer wait; no dispatch")
-              limit = 3000 if new_day_start else (14550 if final_topup else caps[local.hour])
+              limit = 3000 if new_day_start else (14500 if final_topup else caps[local.hour])
               extras_slot = local.hour in (14, 17) and not final_topup and not new_day_start
               proposed = min(3000, limit-spent, remaining, history_remaining)
               if extras_slot:
