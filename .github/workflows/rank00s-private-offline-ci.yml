@@ -1,5 +1,9 @@
 name: BlinQ rank00s private source offline QA on public runner
 'on':
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/rank00s-private-offline-ci.yml'
   workflow_dispatch:
 
 permissions:
@@ -7,13 +11,14 @@ permissions:
 
 jobs:
   private-source-contract:
-    # Never execute a ref controlled by an unreviewed PR while a private token is available.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    # Never execute code from an unreviewed PR with private credentials.
+    # Auto-run only after this exact workflow is merged to protected main.
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
       PRIVATE_REPO: BackstageTalks/tbt-data
-      SOURCE_COMMIT: c9a1b4df15bc87c955418d86467368339f47c8c7
+      SOURCE_COMMIT: 02f98b3404b974e48899ce88e48586d270821bfe
     steps:
       - name: Checkout only public safety-contract tests
         uses: actions/checkout@v4
@@ -38,8 +43,8 @@ jobs:
           mkdir -p private/scripts private/tests
           gh api "repos/$PRIVATE_REPO/contents/scripts/preflight_rank00s_cdb.py?ref=$SOURCE_COMMIT" --jq .content | base64 --decode >private/scripts/preflight_rank00s_cdb.py
           gh api "repos/$PRIVATE_REPO/contents/tests/test_preflight_rank00s_cdb.py?ref=$SOURCE_COMMIT" --jq .content | base64 --decode >private/tests/test_preflight_rank00s_cdb.py
-          test "$(git hash-object private/scripts/preflight_rank00s_cdb.py)" = "2553a906fcd4ab74dafcd9995888d71da92e8233"
-          test "$(git hash-object private/tests/test_preflight_rank00s_cdb.py)" = "508e54a39d0848c4b247d4d53503b66019c885d0"
+          test "$(git hash-object private/scripts/preflight_rank00s_cdb.py)" = "020198a54d5e44ec455457e1056b5c7442cb68fe"
+          test "$(git hash-object private/tests/test_preflight_rank00s_cdb.py)" = "a9219fdc6ec72ff4517a2b8a48b8ba6afe2748be"
           echo 'PRIVATE_SCRIPT_TEST_BLOB_SHA_VERIFIED'
       - name: Compile and execute private synthetic QA offline without secrets
         shell: bash
@@ -50,7 +55,7 @@ jobs:
           python -m py_compile private/scripts/preflight_rank00s_cdb.py private/tests/test_preflight_rank00s_cdb.py
           # Never print private source rows, source code, traceback or logs in public job.
           if python -m unittest discover -q -s private/tests -p 'test_preflight_rank00s_cdb.py' >/tmp/private-offline-test.log 2>&1; then
-            echo 'PINNED_RANK00S_21_SYNTHETIC_TESTS_PASSED'
+            echo 'PINNED_RANK00S_24_SYNTHETIC_TESTS_PASSED'
           else
             echo 'PRIVATE_OFFLINE_QA_FAILED_DETAILS_REDACTED'
             exit 1
