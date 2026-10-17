@@ -21,6 +21,7 @@ jobs:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       DATA_REPO: BackstageTalks/tbt-data
       ROOT: .cache/live-pairwise-fiveyear
+      PYTHONPATH: api:scripts
     steps:
       - uses: actions/checkout@v4
         with:
