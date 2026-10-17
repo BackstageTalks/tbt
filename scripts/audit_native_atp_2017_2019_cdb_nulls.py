@@ -210,6 +210,14 @@ def main() -> None:
     print("ATP_2017_2019_NATIVE_NULL_GAP_READONLY", json.dumps({
         "verified_link_count": report["verified_link_count"],
         "original_match_stat_lineage": report["counts"].get("original_match_stat_lineage", 0),
+        "per_field_nulls": {
+            name: report["verified_link_count"] - states.get("present", 0)
+            for name, states in report["field_status"].items()
+        },
+        "per_field_research_only_gaps": {
+            name: states.get("research_gap_requires_full_candidate_and_rights_review", 0)
+            for name, states in report["field_status"].items()
+        },
         "canonical_writes": 0,
         "import_authorized": False,
     }, sort_keys=True))
