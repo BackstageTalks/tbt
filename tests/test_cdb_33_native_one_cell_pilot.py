@@ -68,6 +68,31 @@ class CanaryContract(unittest.TestCase):
         with self.assertRaises(ValueError):
             pilot.verified_links(path)
 
+    def test_sha_pinned_multisegment_original_tournament_ids(self):
+        rows = []
+        for n in range(33):
+            native = ("2020-M-DC-2020-WG-M-USA-ITA-01:11" if n == 0
+                      else f"2021-8888:{100+n}")
+            rows.append({
+                "tour": "atp",
+                "source_namespace": "drive-atp-main-sackmann",
+                "source_event_id": native,
+                "canonical_match_id": f"hist-js:atp:{n:024x}",
+            })
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        path = Path(temp.name) / "original-id-sidecar.jsonl"
+        payload = "".join(json.dumps(row) + "\n" for row in rows)
+        path.write_text(payload)
+        import hashlib
+        with patch.object(pilot, "VERIFIED_SHA", hashlib.sha256(payload.encode()).hexdigest()):
+            self.assertEqual(len(pilot.verified_links(path)), 33)
+            rows[0]["source_event_id"] = "2020-../../unsafe:11"
+            path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+            with patch.object(pilot, "VERIFIED_SHA", hashlib.sha256(path.read_bytes()).hexdigest()):
+                with self.assertRaisesRegex(ValueError, "Unexpected tournament-match"):
+                    pilot.verified_links(path)
+
     def test_pinned_private_receipt_scope(self):
         self.assertEqual(pilot.VERIFIED_SHA, "e0945ee8437203b6db2e8a5e3e2eccc72e21df38a3a247925abc17eedc7c0935")
         self.assertEqual(pilot.SOURCE_COMMIT, "83733587353df8a41f2fd4f516147d5aa83f5a8d")
