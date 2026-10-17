@@ -6,6 +6,7 @@ on:
     paths:
       - audit/top-value-pit/backtest_top_value_pit.py.gz.b64
       - audit/top-value-pit/backtest_archived_candidates.py.gz.b64
+      - audit/top-value-pit/patch_betting_day.py
       - tests/test_backtest_archived_candidates.py
       - tests/test_backtest_top_value_pit.py
       - .github/workflows/blinq-top-value-readonly-pr.yml
@@ -43,6 +44,8 @@ jobs:
           python -m py_compile scripts/backtest_top_value_pit.py
           base64 -d audit/top-value-pit/backtest_archived_candidates.py.gz.b64 | gzip -d > scripts/backtest_archived_candidates.py
           python -m py_compile scripts/backtest_archived_candidates.py
+          python audit/top-value-pit/patch_betting_day.py
+          python -m py_compile scripts/backtest_top_value_pit.py scripts/backtest_archived_candidates.py
       - name: Test deterministic selection and leakage protection
         run: |
           set -euo pipefail
