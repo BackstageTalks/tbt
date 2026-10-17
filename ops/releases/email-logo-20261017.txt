@@ -1,0 +1,6 @@
+BlinQ original transactional email logo release
+Change: PR #803 (merged b0db558420b222d62fff4ab602834fef33d6924a)
+All auth, inactivity, subscription and admin transactional emails use the original hosted /assets/blinq_logo_email.png.
+Gmail observed: SPF=pass DKIM=pass DMARC=pass (2026-10-17).
+Full PR CI: https://github.com/BackstageTalks/tbt/actions/runs/39010624573
+This file is a deployment trigger only; no runtime configuration change.
