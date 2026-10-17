@@ -4,6 +4,8 @@ No network, GitHub API, secrets, writer-lock manipulation, release publishing,
 model changes or production paths. This tool does not authorize CDB writes.
 Only a separately governed existing publisher can use the resulting review
 artifacts after verified rights, identity proofs, restore and live CAS/readback.
+Preview files deliberately use preview- names: they are not publishable
+canonical year partitions and no canonical manifest is generated.
 """
 from __future__ import annotations
 
@@ -206,10 +208,13 @@ def run(*, baseline_dir, stage_path, report_path, output_dir):
     if out.exists():
         raise GateError('Output directory must not preexist')
     out.mkdir(parents=True)
+    # Create non-release marker before any possibly partial Parquet output.
+    (out / 'NOT_FOR_CDB_RELEASE.txt').write_text(
+        'ISOLATED rank00s PREVIEW ONLY. NOT A CANONICAL CDB RELEASE.\n', encoding='utf-8')
     assets = {}
     modified_years = sorted({int(x['canonical_year']) for x in rows})
     for year in modified_years:
-        dest = out / f'history-{year}.parquet'
+        dest = out / f'preview-history-{year}.parquet'
         patched[year].to_parquet(dest, engine='pyarrow', compression='zstd', index=False)
         pd.testing.assert_frame_equal(pd.read_parquet(dest), patched[year], check_dtype=True)
         assets[dest.name] = digest(dest)
