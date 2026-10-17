@@ -1,0 +1,266 @@
+name: BlinQ CDB single-cell native-33 guarded pilot
+'on':
+  push:
+    branches: [main]
+    paths: [.github/workflows/blinq-cdb-33-single-cell-guarded.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native33-onecell-${{ github.run_id }}
+  cancel-in-progress: false
+jobs:
+  pilot:
+    if: github.repository == 'BackstageTalks/tbt' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: app/api:app/scripts
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      ROOT: .cache/native33-onecell
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: Aneeshers/tennis-sackmann-archive
+          ref: 83733587353df8a41f2fd4f516147d5aa83f5a8d
+          path: source
+          persist-credentials: false
+          sparse-checkout: |
+            atp/atp_matches_2020.csv
+            atp/atp_matches_2021.csv
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test exact native proof and locked single-cell writer
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          test "$(git -C source rev-parse HEAD)" = 83733587353df8a41f2fd4f516147d5aa83f5a8d
+          test "$(git hash-object source/atp/atp_matches_2020.csv)" = 33e6e0b0d9d29df4b7920943322dcb73b02e6fe7
+          test "$(git hash-object source/atp/atp_matches_2021.csv)" = d95f705c240efe6b535e943cc07125f6f2b367e9
+          python -m pip install --quiet --disable-pip-version-check -r app/api/requirements-train.txt pytest
+          python -m unittest discover -v -s app/tests -p test_cdb_33_native_one_cell_pilot.py
+          python -m py_compile app/scripts/cdb_33_native_one_cell_pilot.py
+          mkdir -p "$ROOT"/{source,cdb,output}
+      - name: Pin private 33 verified links, Drive ledger and current two-year CDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          gh release download blinq-drive-atp2020-2021-native-identity-39053414186-1 \
+            -R "$PRIVATE_REPO" -p verified-secondary-ids.jsonl -D "$ROOT/source" >/dev/null
+          echo "e0945ee8437203b6db2e8a5e3e2eccc72e21df38a3a247925abc17eedc7c0935  $ROOT/source/verified-secondary-ids.jsonl" | sha256sum -c >/dev/null
+          gh api "repos/$PRIVATE_REPO/contents/audit/identity-pilots/drive-atp-main-2020-2021-source-identities.tsv?ref=a83ac75768e0520b849dca671afeea79add7649f" --jq .content | base64 --decode > "$ROOT/source/ledger.tsv"
+          test "$(git hash-object "$ROOT/source/ledger.tsv")" = e65fcd36534787b898b04a259fde4405553084d6
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > "$ROOT/release-before.json"
+          for y in 2020 2021; do
+            gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p "history-$y.parquet" -D "$ROOT/cdb" >/dev/null
+          done
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p history_manifest.json -p _tbt_bundle_manifest.json -D "$ROOT/cdb" >/dev/null
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > "$ROOT/release-after.json"
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ['ROOT'])
+          a=json.loads((root/'release-before.json').read_text())
+          b=json.loads((root/'release-after.json').read_text())
+          names=('history-2020.parquet','history-2021.parquet','history_manifest.json','_tbt_bundle_manifest.json')
+          def pins(r):
+              assets={x['name']:x for x in r['assets']}
+              return r['id'],[(assets[n]['id'],assets[n]['digest'],assets[n]['size']) for n in names]
+          assert pins(a)==pins(b),'canonical release drift'
+          assets={x['name']:x for x in a['assets']}
+          bundle=json.loads((root/'cdb/_tbt_bundle_manifest.json').read_text())
+          hist=json.loads((root/'cdb/history_manifest.json').read_text())
+          for name in names:
+              path=root/'cdb'/name
+              sha=hashlib.sha256(path.read_bytes()).hexdigest()
+              assert assets[name]['digest']=='sha256:'+sha
+              if name!='_tbt_bundle_manifest.json':
+                  assert bundle['files'][name]['sha256']==sha
+              if name.startswith('history-'):
+                  assert hist['years'][name[8:12]]['sha256']==sha
+          print('NATIVE33_PREWRITE_REMOTE_CDB_DIGEST_VERIFIED')
+          PY
+      - name: Select deterministic first NULL-only postmatch cell, or skip
+        id: preflight
+        shell: bash
+        env:
+          GH_TOKEN: ''
+          GITHUB_TOKEN: ''
+        run: |
+          set -euo pipefail
+          python app/scripts/cdb_33_native_one_cell_pilot.py --mode stage \
+            --ledger "$ROOT/source/ledger.tsv" --verified "$ROOT/source/verified-secondary-ids.jsonl" \
+            --source-dir source/atp --history-dir "$ROOT/cdb" \
+            --out "$ROOT/output/stage-report.json" >"$ROOT/output/stage-quiet.log" 2>&1 || { echo "NATIVE33_PREFLIGHT_FAILED_REDACTED"; exit 1; }
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ['ROOT'])/'output/stage-report.json').read_text())
+          assert r['state']=='PREFLIGHT_READONLY' and r['counts']['verified_eligible_id_population']==33
+          assert r['selected'] in (0,1) and r['production_writes']==0
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('changes='+('true' if r['selected']==1 else 'false')+'\n')
+          print('NATIVE33_PREFLIGHT',json.dumps(r['counts'],sort_keys=True))
+          PY
+      - name: Acquire canonical single-writer lock, verify unchanged baseline
+        if: steps.preflight.outputs.changes == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python app/scripts/cdb_global_writer_lock.py acquire --wait-seconds 600
+          python app/scripts/cdb_global_writer_lock.py verify
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > "$ROOT/release-locked.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ['ROOT'])
+          a=json.loads((root/'release-before.json').read_text())
+          b=json.loads((root/'release-locked.json').read_text())
+          names=('history-2020.parquet','history-2021.parquet','history_manifest.json','_tbt_bundle_manifest.json')
+          def pins(r):
+              d={x['name']:x for x in r['assets']}
+              return r['id'],[(d[n]['id'],d[n]['digest'],d[n]['size']) for n in names]
+          assert pins(a)==pins(b),'canonical baseline moved before lock'
+          PY
+      - name: Publish immutable prewrite backup with independent checksum readback
+        if: steps.preflight.outputs.changes == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          year="$(python -c 'import json,os;from pathlib import Path;print(json.loads((Path(os.environ["ROOT"])/"output/pilot-stage.jsonl").read_text())["utc_year"])')"
+          test "$year" = 2020 || test "$year" = 2021
+          mkdir -p "$ROOT"/{backup,backup-readback,before}
+          cp "$ROOT/cdb/history-$year.parquet" "$ROOT/cdb/history_manifest.json" "$ROOT/cdb/_tbt_bundle_manifest.json" "$ROOT/backup/"
+          (cd "$ROOT/backup" && sha256sum history-*.parquet history_manifest.json _tbt_bundle_manifest.json >SHA256SUMS)
+          tag="blinq-native33-onecell-prewrite-${{ github.run_id }}-${{ github.run_attempt }}"
+          gh release create "$tag" "$ROOT/backup/"* -R "$PRIVATE_REPO" --target main \
+            --title "Immutable one-cell pilot canonical prewrite" \
+            --notes "One exact canonical year and complete bundle+history manifest rollback, never overwrite." >/dev/null
+          gh release download "$tag" -R "$PRIVATE_REPO" -D "$ROOT/backup-readback" >/dev/null
+          (cd "$ROOT/backup-readback" && sha256sum -c SHA256SUMS >/dev/null)
+          cp "$ROOT/cdb/history-$year.parquet" "$ROOT/cdb/history_manifest.json" "$ROOT/before/"
+          echo "NATIVE33_PRIVATE_IMMUTABLE_PREWRITE_BACKUP_VERIFIED"
+      - name: Publish private one-cell evidence, not source data in public logs
+        if: steps.preflight.outputs.changes == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$ROOT"/{evidence,evidence-readback}
+          cp "$ROOT/output/pilot-stage.jsonl" "$ROOT/output/stage-report.json" "$ROOT/evidence/"
+          (cd "$ROOT/evidence" && sha256sum pilot-stage.jsonl stage-report.json >SHA256SUMS)
+          tag="blinq-native33-onecell-evidence-${{ github.run_id }}-${{ github.run_attempt }}"
+          gh release create "$tag" "$ROOT/evidence/"* -R "$PRIVATE_REPO" --target main \
+            --title "One-cell CDB pilot locked original proof" --notes "Exact native 33-link stage before writer." >/dev/null
+          gh release download "$tag" -R "$PRIVATE_REPO" -D "$ROOT/evidence-readback" >/dev/null
+          (cd "$ROOT/evidence-readback" && sha256sum -c SHA256SUMS >/dev/null)
+          echo "NATIVE33_PRIVATE_ONE_CELL_STAGE_READBACK_VERIFIED"
+      - name: Write EXACT one NULL field locally and full-year verify
+        if: steps.preflight.outputs.changes == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ''
+          GITHUB_TOKEN: ''
+        run: |
+          set -euo pipefail
+          python app/scripts/cdb_33_native_one_cell_pilot.py --mode write \
+            --ledger "$ROOT/source/ledger.tsv" --verified "$ROOT/source/verified-secondary-ids.jsonl" \
+            --source-dir source/atp --history-dir "$ROOT/cdb" \
+            --stage-file "$ROOT/output/pilot-stage.jsonl" --out "$ROOT/output/local-write.json" \
+            >"$ROOT/output/local-write-quiet.log" 2>&1 || { echo "NATIVE33_LOCAL_CAS_FAILED_REDACTED"; exit 1; }
+          python app/scripts/cdb_33_native_one_cell_pilot.py --mode verify \
+            --before-dir "$ROOT/before" --history-dir "$ROOT/cdb" \
+            --stage-file "$ROOT/output/pilot-stage.jsonl" --out "$ROOT/output/local-readback.json" >/dev/null
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ['ROOT'])/'output/local-readback.json').read_text())
+          assert r['state']=='VERIFIED_ONE_CANONICAL_CDB_CELL'
+          assert r['new_stat_values']==1 and r['existing_values_overwritten']==0
+          print('NATIVE33_ONE_CELL_LOCAL_YEAR_VERIFIED')
+          PY
+      - name: CAS-publish only the single altered canonical year
+        if: steps.preflight.outputs.changes == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python app/scripts/cdb_global_writer_lock.py verify
+          mkdir -p "$ROOT/fresh"
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p history_manifest.json -p _tbt_bundle_manifest.json -D "$ROOT/fresh" >/dev/null
+          cmp "$ROOT/backup/history_manifest.json" "$ROOT/fresh/history_manifest.json"
+          cmp "$ROOT/backup/_tbt_bundle_manifest.json" "$ROOT/fresh/_tbt_bundle_manifest.json"
+          python - <<'PY'
+          import json,os,subprocess
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from cdb_global_writer_lock import verify
+          root=Path(os.environ['ROOT'])
+          year=json.loads((root/'output/pilot-stage.jsonl').read_text())['utc_year']
+          assert year in (2020,2021)
+          def cas():
+              verify('BackstageTalks/tbt-data',Path('.cdb-global-writer-lock.json'))
+              new=root/'cas-final'
+              new.mkdir(parents=True,exist_ok=True)
+              subprocess.run(['gh','release','download','tbt-data-v1','-R','BackstageTalks/tbt-data',
+                              '-p','_tbt_bundle_manifest.json','-D',str(new)],
+                             check=True,stdout=subprocess.DEVNULL)
+              if (new/'_tbt_bundle_manifest.json').read_bytes() != (root/'backup/_tbt_bundle_manifest.json').read_bytes():
+                  raise RuntimeError('Canonical bundle manifest CAS drift')
+          base=root/'cdb'
+          ReleaseStore('BackstageTalks/tbt-data','tbt-data-v1',base).upload_bundle(
+              [base/f'history-{year}.parquet',base/'history_manifest.json'],before_upload=cas)
+          print('CDB_SINGLE_YEAR_CANARY_PUBLISHED')
+          PY
+      - name: Independently remote-readback exactly ONE new cell
+        if: steps.preflight.outputs.changes == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          year="$(python -c 'import json,os;from pathlib import Path;print(json.loads((Path(os.environ["ROOT"])/"output/pilot-stage.jsonl").read_text())["utc_year"])')"
+          mkdir -p "$ROOT/persisted"
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p "history-$year.parquet" \
+            -p history_manifest.json -p _tbt_bundle_manifest.json -D "$ROOT/persisted" >/dev/null
+          python - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          root=Path(os.environ['ROOT'])
+          year=json.loads((root/'output/pilot-stage.jsonl').read_text())['utc_year']
+          release=json.loads(subprocess.check_output(['gh','api','repos/BackstageTalks/tbt-data/releases/tags/tbt-data-v1'],text=True))
+          assets={x['name']:x for x in release['assets']}
+          p=root/'persisted'
+          b=json.loads((p/'_tbt_bundle_manifest.json').read_text())
+          m=json.loads((p/'history_manifest.json').read_text())
+          for n in (f'history-{year}.parquet','history_manifest.json','_tbt_bundle_manifest.json'):
+              sha=hashlib.sha256((p/n).read_bytes()).hexdigest()
+              assert assets[n]['digest']=='sha256:'+sha,'Canonical release SHA readback failed'
+              if n!='_tbt_bundle_manifest.json':
+                  assert b['files'][n]['sha256']==sha
+              if n.startswith('history-'):assert m['years'][str(year)]['sha256']==sha
+          print('ONE_CANONICAL_CDB_REMOTE_RELEASE_DIGEST_VERIFIED')
+          PY
+          python app/scripts/cdb_33_native_one_cell_pilot.py --mode verify \
+            --before-dir "$ROOT/before" --history-dir "$ROOT/persisted" \
+            --stage-file "$ROOT/output/pilot-stage.jsonl" --out "$ROOT/output/persisted-readback.json" >/dev/null
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ['ROOT'])/'output/persisted-readback.json').read_text())
+          assert r['state']=='VERIFIED_ONE_CANONICAL_CDB_CELL'
+          assert r['new_stat_values']==1 and r['existing_values_overwritten']==0
+          print('CDB_NATIVE33_ONE_CELL_REMOTE_READBACK_SUCCESS')
+          PY
+      - name: Release global canonical writer lock
+        if: always()
+        run: python app/scripts/cdb_global_writer_lock.py release --if-held
+      - name: Delete runner-local private source and CDB copies
+        if: always()
+        run: rm -rf .cache/native33-onecell
