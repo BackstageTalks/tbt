@@ -748,8 +748,8 @@ def main():
         help="Provider-1 odds event cap (-1 = use remaining request budget; 0 = disable)",
     )
     parser.add_argument(
-        "--propline-max-events", type=int, default=75,
-        help="Max PropLine fallback events per refresh (0 disables, max 75)",
+        "--propline-max-events", type=int, default=-1,
+        help="PropLine fallback events (-1 = provider-quota guarded; 0 = disable)",
     )
     parser.add_argument(
         "--doubles-odds-max-events",
