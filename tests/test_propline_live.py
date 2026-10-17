@@ -163,7 +163,7 @@ def test_zero_budget_does_not_use_propline_event_endpoints():
 
 def test_wide_market_discovery_reports_advertised_versus_genuine_two_sided_quotes():
     from tbt.services.propline_live import MAX_EVENTS_PER_REFRESH, MIN_PROVIDER_REMAINING
-    assert MAX_EVENTS_PER_REFRESH == 75
+    assert MAX_EVENTS_PER_REFRESH == -1
     assert MIN_PROVIDER_REMAINING == 150
     client = FakeProp()
     found, audit = discover_propline_fallback(client, [MATCH], {},
@@ -193,7 +193,7 @@ def test_shared_free_tier_quota_budget_and_active_clv_defaults():
     refresh = (root / ".github/workflows/data.yml").read_text(encoding="utf-8")
     clv = (root / "scripts/propline_clv_collect.py").read_text(encoding="utf-8")
     active_workflow = (root / ".github/workflows/propline-clv-pilot.yml").read_text(encoding="utf-8")
-    assert "default: 75" in refresh
+    assert "default: -1" in refresh
     assert "DAILY_LIMIT = 250" in clv
     assert "MIN_PROVIDER_REMAINING = 150" in clv
     assert "propline_clv_collect.py" in active_workflow
