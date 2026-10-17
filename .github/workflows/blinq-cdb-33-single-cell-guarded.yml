@@ -103,7 +103,23 @@ jobs:
           python app/scripts/cdb_33_native_one_cell_pilot.py --mode stage \
             --ledger "$ROOT/source/ledger.tsv" --verified "$ROOT/source/verified-secondary-ids.jsonl" \
             --source-dir source/atp --history-dir "$ROOT/cdb" \
-            --out "$ROOT/output/stage-report.json" >"$ROOT/output/stage-quiet.log" 2>&1 || { echo "NATIVE33_PREFLIGHT_FAILED_REDACTED"; exit 1; }
+            --out "$ROOT/output/stage-report.json" >"$ROOT/output/stage-quiet.log" 2>&1 || {
+            python - <<'PY'
+          import ast,os
+          from pathlib import Path
+          tree=ast.parse(Path('app/scripts/cdb_33_native_one_cell_pilot.py').read_text())
+          allowed=set()
+          for node in ast.walk(tree):
+              if isinstance(node,ast.Raise) and isinstance(node.exc,ast.Call) and isinstance(node.exc.func,ast.Name) and node.exc.func.id=='ValueError':
+                  if node.exc.args and isinstance(node.exc.args[0],ast.Constant) and isinstance(node.exc.args[0].value,str):
+                      allowed.add(node.exc.args[0].value)
+          log=(Path(os.environ['ROOT'])/'output/stage-quiet.log').read_text().splitlines()
+          last=log[-1] if log else ''
+          reason=last.removeprefix('ValueError: ')
+          print('NATIVE33_SAFE_GATE_BLOCK:',reason if last.startswith('ValueError: ') and reason in allowed else 'UNCLASSIFIED')
+          PY
+            exit 1;
+          }
           python - <<'PY'
           import json,os
           from pathlib import Path
