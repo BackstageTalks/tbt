@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - audit/top-value-pit/backtest_top_value_pit.py.gz.b64
+      - audit/top-value-pit/backtest_archived_candidates.py.gz.b64
       - tests/test_backtest_top_value_pit.py
       - .github/workflows/blinq-top-value-readonly-pr.yml
       - audit/blinq-top-value-public-key.pem
@@ -39,6 +40,8 @@ jobs:
           mkdir -p scripts
           base64 -d audit/top-value-pit/backtest_top_value_pit.py.gz.b64 | gzip -d > scripts/backtest_top_value_pit.py
           python -m py_compile scripts/backtest_top_value_pit.py
+          base64 -d audit/top-value-pit/backtest_archived_candidates.py.gz.b64 | gzip -d > scripts/backtest_archived_candidates.py
+          python -m py_compile scripts/backtest_archived_candidates.py
       - name: Test deterministic selection and leakage protection
         run: |
           set -euo pipefail
@@ -118,6 +121,15 @@ jobs:
             --daily .cache/tbt/top-value-private/daily_offer_snapshot.json \
             --out .cache/tbt/top-value-private/aggregate.json \
             --rows .cache/tbt/top-value-private/top_value_rows.jsonl
+      - name: Replay full archived candidate shortlist against original selections
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/backtest_archived_candidates.py \
+            --ledger .cache/tbt/top-value-private/ledger.json \
+            --candidates .cache/tbt/top-value-private/selection_candidates_2026-10.json.gz \
+            --out .cache/tbt/top-value-private/candidate-replay.json \
+            --rows .cache/tbt/top-value-private/candidate-replay-rows.jsonl
       - name: Encrypt row-level research dataset
         shell: bash
         run: |
@@ -129,7 +141,10 @@ jobs:
             -pass file:"$d/top_value_rows.pass"
           openssl pkeyutl -encrypt -pubin -inkey audit/blinq-top-value-public-key.pem \
             -in "$d/top_value_rows.pass" -out "$d/top_value_rows.key.rsa"
-          rm -f "$d/top_value_rows.jsonl" "$d/top_value_rows.pass"
+          openssl enc -aes-256-cbc -pbkdf2 -salt \
+            -in "$d/candidate-replay-rows.jsonl" -out "$d/candidate-replay-rows.jsonl.enc" \
+            -pass file:"$d/top_value_rows.pass"
+          rm -f "$d/top_value_rows.jsonl" "$d/candidate-replay-rows.jsonl" "$d/top_value_rows.pass"
       - name: Upload aggregate and ciphertext only
         if: always()
         uses: actions/upload-artifact@v4
@@ -137,7 +152,9 @@ jobs:
           name: blinq-top-value-pit-${{ github.run_id }}
           path: |
             .cache/tbt/top-value-private/aggregate.json
+            .cache/tbt/top-value-private/candidate-replay.json
             .cache/tbt/top-value-private/top_value_rows.jsonl.enc
+            .cache/tbt/top-value-private/candidate-replay-rows.jsonl.enc
             .cache/tbt/top-value-private/top_value_rows.key.rsa
           if-no-files-found: warn
           retention-days: 7
