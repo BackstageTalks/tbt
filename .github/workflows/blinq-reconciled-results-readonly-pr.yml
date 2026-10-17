@@ -78,15 +78,69 @@ jobs:
               'confirmed_strategies': r['confirmed_strategies'],
           },sort_keys=True))
           PY
+      - name: Read live public feed and reconcile its visible settled overlay
+        # Public API returns the serving merged feed. It is NOT an exhaustive
+        # Azure Table export: matching archived outcomes may be inlined in feed.
+        shell: bash
+        env:
+          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/reconciled-results
+          curl --fail-with-body --silent --show-error --compressed \
+            --retry 1 --max-time 90 --max-filesize 35000000 \
+            -H 'Accept: application/json' \
+            "${BLINQ_BASE_URL%/}/api/v1/feed" > "$root/live-public-feed.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('.cache/tbt/reconciled-results')
+          feed=json.loads((root/'live-public-feed.json').read_text(encoding='utf-8'))
+          if not isinstance(feed,dict) or not isinstance(feed.get('results'),list):
+              raise SystemExit('Live endpoint is not a feed containing results[]; no ROI reported')
+          results=feed['results']
+          overlay=[row for row in results if isinstance(row,dict)
+              and row.get('runtime_result_overlay') is True
+              and row.get('archive_source')=='verified_match_status_snapshot']
+          (root/'live-visible-overlays.json').write_text(
+              json.dumps(overlay,ensure_ascii=False),encoding='utf-8')
+          print('PUBLIC_LIVE_FEED_READBACK',json.dumps({
+              'feed_results':len(results),'archive_marked_visible_rows':len(overlay),
+              'is_full_azure_archive':False,'private_rows_exposed':False
+          },sort_keys=True))
+          PY
+          python scripts/audit_settled_archive_reconciled.py \
+            --ledger "$root/predictions/ledger.json" \
+            --feed "$root/live-public-feed.json" \
+            --archive "$root/live-visible-overlays.json" \
+            --out "$root/public-live-feed-reconciliation.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('.cache/tbt/reconciled-results')
+          historical=json.loads((root/'issued-ledger-report.json').read_text())
+          live=json.loads((root/'public-live-feed-reconciliation.json').read_text())
+          assert live['sources']['azure_archive_loaded'] is False
+          assert live['complete_issued_history_verified'] is False
+          assert live['confirmed_strategies']==0
+          assert live['production_mutated'] is False and live['provider_requests']==0
+          print('LIVE_FEED_RECONCILIATION_AGGREGATE',json.dumps({
+              'historical_total':historical['total'],
+              'live_feed_total':live['total'],
+              'live_feed_counters':live['input_counters'],
+              'full_azure_archive_verified':False,
+              'strategy_certified':False,
+          },sort_keys=True))
+          PY
       - name: Retain aggregate report only, not private release bytes
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: blinq-issued-ledger-aggregate-${{ github.run_id }}
-          path: .cache/tbt/reconciled-results/issued-ledger-report.json
+          path: |\n            .cache/tbt/reconciled-results/issued-ledger-report.json\n            .cache/tbt/reconciled-results/public-live-feed-reconciliation.json
           if-no-files-found: warn
           retention-days: 7
       - name: Remove locally downloaded private release bytes
         if: always()
         shell: bash
-        run: rm -rf .cache/tbt/reconciled-results/predictions .cache/tbt/reconciled-results/archive-not-available.json
+        run: rm -rf .cache/tbt/reconciled-results/predictions .cache/tbt/reconciled-results/archive-not-available.json .cache/tbt/reconciled-results/live-public-feed.json .cache/tbt/reconciled-results/live-visible-overlays.json
