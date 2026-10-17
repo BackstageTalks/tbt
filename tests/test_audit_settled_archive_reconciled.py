@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import audit_settled_archive_reconciled as audit
@@ -85,6 +86,33 @@ class FullReconciliationTests(unittest.TestCase):
         report = audit.reconcile([], {'results': []}, [pick('evt6')])
         self.assertEqual(report['total']['issued_unique'], 0)
         self.assertEqual(report['input_counters']['archive_unverified_origin'], 1)
+
+    def test_naive_timestamps_rejected_not_assumed_utc(self):
+        self.assertIsNone(audit.at('2026-10-10T08:00:00'))
+        report = audit.reconcile([pick('naive', issued='2026-10-10T08:00:00')],
+                                 {'results': []}, [])
+        self.assertEqual(report['total']['issued_unique'], 0)
+        self.assertEqual(report['input_counters']['missing_immutable_issued_at'], 1)
+
+    def test_unparseable_market_quote_time_excludes_roi(self):
+        offered = pick('quote', correct=True)
+        offered['market_publications'][0]['issued_snapshot'] = {
+            'market_captured_at': 'not-a-timestamp'
+        }
+        report = audit.reconcile([offered], {'results': []}, [])
+        self.assertEqual(report['total']['wins'], 1)
+        self.assertEqual(report['total']['priced_settled'], 0)
+        self.assertEqual(report['input_counters']['late_quote_rejected'], 1)
+
+    def test_missing_private_release_cannot_create_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(audit.subprocess, 'run',
+                                   side_effect=subprocess.CalledProcessError(1, ['gh', 'api'])) as run:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    audit._download_private_release_readonly(
+                        'BackstageTalks/tbt-data', Path(directory))
+                self.assertEqual(run.call_count, 1)
+                self.assertEqual(run.call_args.args[0][:2], ['gh', 'api'])
 
     def test_no_source_mutations_and_cli_produces_report(self):
         ledger = [pick('evt7')]
