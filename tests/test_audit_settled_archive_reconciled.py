@@ -104,6 +104,39 @@ class FullReconciliationTests(unittest.TestCase):
         self.assertEqual(report['total']['priced_settled'], 0)
         self.assertEqual(report['input_counters']['late_quote_rejected'], 1)
 
+    def test_archive_only_reports_partial_scope_and_never_passes_strategy_screen(self):
+        row = archive(pick('archive-only', correct=True))
+        report = audit.reconcile([], {'results': []}, [row], archive_only=True)
+        self.assertEqual(report['scope'], 'settled_archive_only')
+        self.assertEqual(report['total']['wins'], 1)
+        self.assertEqual(report['total']['priced_settled'], 1)
+        self.assertEqual(report['total']['roi_flat_stake'], 0.6)
+        self.assertFalse(report['complete_issued_history_verified'])
+        self.assertFalse(report['sources']['azure_archive_loaded'])
+        self.assertFalse(any(x['historical_screen_pass']
+                             for x in report['historical_screen'].values()))
+        self.assertEqual(report['confirmed_strategies'], 0)
+
+    def test_archive_only_cli_works_without_ledger_and_rejects_mixed_sources(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / 'archive.json'
+            source.write_text(json.dumps([archive(pick('single'))]), encoding='utf-8')
+            dest = root / 'results.json'
+            cli = [sys.executable, str(Path(audit.__file__)), '--archive-only',
+                   '--archive', str(source), '--out', str(dest)]
+            completed = subprocess.run(cli, text=True, capture_output=True)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            report = json.loads(dest.read_text(encoding='utf-8'))
+            self.assertEqual(report['scope'], 'settled_archive_only')
+            self.assertEqual(report['total']['wins'], 1)
+            self.assertNotIn('ledger', report['sources']['sha256'])
+            self.assertFalse(report['sources']['azure_archive_loaded'])
+            invalid = subprocess.run(cli + ['--ledger', str(source)],
+                                     text=True, capture_output=True)
+            self.assertNotEqual(invalid.returncode, 0)
+            self.assertIn('cannot be combined', invalid.stderr)
+
     def test_missing_private_release_cannot_create_it(self):
         with tempfile.TemporaryDirectory() as directory:
             with mock.patch.object(audit.subprocess, 'run',
