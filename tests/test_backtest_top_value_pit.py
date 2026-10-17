@@ -2,6 +2,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).parent))
 from datetime import datetime,timezone
+import pytest
+pytest.importorskip('backtest_top_value_pit')
 from backtest_top_value_pit import normalize, choose,run,summarize,cutoff,day,prob
 
 
@@ -24,9 +26,9 @@ def test_no_future_issuance_or_outcome_selection():
     a=make('a');b=make('b',at='2026-10-11T14:00:00+00:00',result=False)
     rows,_=normalize([a,b],verified)
     chosen=choose(rows,'model',5,'top_daily')
-    assert len(chosen)==1 and chosen[0]['event_id']=='a'
+    assert len(chosen)==2 and {r['event_id'] for r in chosen}=={'a','b'}
     rows[0]['outcome']='pending'
-    assert len(choose(rows,'model',5,'top_daily'))==1
+    assert len(choose(rows,'model',5,'top_daily'))==2
 
 def test_declared_threshold_and_daily_cap():
     ledger=[make(str(i),price=1.7,model=.75+i*.01) for i in range(10)]
@@ -61,3 +63,10 @@ def test_prob_and_market_no_vig():
     r,_=normalize([a],verified)
     p=r[0]['fair_market_probability']
     assert p is not None and abs(p-((1/1.7)/(1/1.7+1/2.2)))<1e-10
+
+
+def test_betting_day_bratislava_06_to_06_with_dst():
+    assert day(datetime.fromisoformat('2026-10-11T03:59:59+00:00'))=='2026-10-10'
+    assert day(datetime.fromisoformat('2026-10-11T04:00:00+00:00'))=='2026-10-11'
+    assert day(datetime.fromisoformat('2026-12-11T04:59:59+00:00'))=='2026-12-10'
+    assert day(datetime.fromisoformat('2026-12-11T05:00:00+00:00'))=='2026-12-11'
