@@ -87,10 +87,22 @@ jobs:
         run: |
           set -euo pipefail
           root=.cache/tbt/reconciled-results
-          curl --fail-with-body --silent --show-error --compressed \
+          # A 401 is an actual authorization boundary; do not bypass it.
+          http_code="$(curl --silent --show-error --compressed \
             --retry 1 --max-time 90 --max-filesize 35000000 \
             -H 'Accept: application/json' \
-            "${BLINQ_BASE_URL%/}/api/v1/feed" > "$root/live-public-feed.json"
+            --write-out '%{http_code}' \
+            --output "$root/live-public-feed.json" \
+            "${BLINQ_BASE_URL%/}/api/v1/feed" || true)"
+          if [[ "$http_code" != 200 ]]; then
+            printf '{"state":"BLOCKED_AUTH_OR_TRANSPORT","http_status":"%s","is_full_azure_archive":false,"production_mutated":false}\n' "$http_code" \
+              > "$root/public-live-feed-access.json"
+            rm -f "$root/live-public-feed.json"
+            echo "PUBLIC_LIVE_FEED_UNAVAILABLE HTTP_STATUS=$http_code (not a settled archive audit)"
+            exit 0
+          fi
+          printf '{"state":"HTTP_200_FEED_READ","http_status":"200","is_full_azure_archive":false,"production_mutated":false}\n' \
+            > "$root/public-live-feed-access.json"
           python - <<'PY'
           import json
           from pathlib import Path
@@ -140,6 +152,7 @@ jobs:
           path: |
             .cache/tbt/reconciled-results/issued-ledger-report.json
             .cache/tbt/reconciled-results/public-live-feed-reconciliation.json
+            .cache/tbt/reconciled-results/public-live-feed-access.json
           if-no-files-found: warn
           retention-days: 7
       - name: Remove locally downloaded private release bytes
