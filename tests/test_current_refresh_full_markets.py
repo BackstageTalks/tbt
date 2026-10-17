@@ -23,5 +23,5 @@ def test_ace_df_settlement_statistics_are_targeted_before_new_market_discovery()
     assert '"ace_df_settlement_statistics": ace_df_settlement_stats_report' in PIPELINE
     call = "ace_df_settlement_stats_report = _enrich_pending_ace_df_settlement_stats("
     assert call in PIPELINE
-    assert PIPELINE.index(call) < PIPELINE.index("projection_odds_cap = max(")
+    assert PIPELINE.index(call) < PIPELINE.index("projection_odds_cap = (")
     assert "market not in {\"aces\", \"double_faults\"}" in PIPELINE
