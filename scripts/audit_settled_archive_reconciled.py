@@ -142,7 +142,8 @@ def _priced_band(odds: float | None) -> str:
     return 'B_1.70_plus'
 
 
-def reconcile(ledger: list, feed: dict, archive: list, *, source_sha256: dict | None = None) -> dict:
+def reconcile(ledger: list, feed: dict, archive: list, *, source_sha256: dict | None = None,
+              archive_only: bool = False, archive_from_azure: bool = False) -> dict:
     if not isinstance(ledger, list) or not isinstance(feed, dict) or not isinstance(archive, list):
         raise ValueError('ledger must be list, feed must be object, archive must be list')
     if not isinstance(feed.get('results', []), list):
@@ -218,7 +219,8 @@ def reconcile(ledger: list, feed: dict, archive: list, *, source_sha256: dict | 
             # This is only a historical screen. Unseen forward shadow data
             # and exact original hypothesis definitions are required to certify.
             pass_screen = bool(
-                all_metrics['distinct_events'] >= 300 and ho['distinct_events'] >= 60
+                not archive_only
+                and all_metrics['distinct_events'] >= 300 and ho['distinct_events'] >= 60
                 and all_metrics['hit_rate'] is not None and all_metrics['hit_rate'] >= threshold
                 and tr['hit_rate'] is not None and tr['hit_rate'] >= threshold
                 and ho['hit_rate'] is not None and ho['hit_rate'] >= threshold
@@ -231,8 +233,11 @@ def reconcile(ledger: list, feed: dict, archive: list, *, source_sha256: dict | 
             }
     report = {
         'schema': 1, 'generated_at': datetime.now(timezone.utc).isoformat(),
-        'status': 'read_only_reconciliation', 'production_mutated': False, 'provider_requests': 0,
-        'sources': {'sha256': source_sha256 or {}, 'azure_archive_loaded': True},
+        'status': 'read_only_archive_audit' if archive_only else 'read_only_reconciliation',
+        'production_mutated': False, 'provider_requests': 0,
+        'scope': 'settled_archive_only' if archive_only else 'ledger_feed_archive_reconciliation',
+        'complete_issued_history_verified': False,
+        'sources': {'sha256': source_sha256 or {}, 'azure_archive_loaded': archive_from_azure},
         'input_counters': dict(sorted(counts.items())),
         'total': aggregate(clean), 'sections': sections, 'by_section_tour_price_band': segments,
         'chronological_cutoff_utc': boundary.isoformat() if boundary else None,
@@ -240,6 +245,7 @@ def reconcile(ledger: list, feed: dict, archive: list, *, source_sha256: dict | 
         'confirmed_strategies': 0,
         'limits': [
             'The 1200 original hypotheses were not supplied; descriptive segment screens are not substitutes.',
+            'Archive-only mode includes only saved settled rows, not the full issued denominator; it cannot certify a strategy.' if archive_only else 'Even with ledger and feed, independent coverage and prospective validation are required before certification.',
             'Historical split is not prospective shadow validation.',
             'Missing issuance time, contract, contradicting result or quote is excluded, never imputed.',
             'One match with several bets is correlated and counts only once towards independent-event minimum.',
@@ -298,23 +304,31 @@ def main(argv=None):
     parser.add_argument('--ledger', type=Path, help='Immutable ledger JSON, or use --from-release')
     parser.add_argument('--feed', type=Path, help='Deployed feed JSON, or use --from-release')
     parser.add_argument('--from-release', action='store_true', help='Download verified tbt-predictions-v1 bundle via existing ReleaseStore')
+    parser.add_argument('--archive-only', action='store_true',
+                        help='Audit verified settled archive alone; outputs are partial, not full issued history')
     parser.add_argument('--data-repository', default='BackstageTalks/tbt-data')
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--archive', type=Path, help='JSON array exported read-only from Azure Results')
     group.add_argument('--azure', action='store_true', help='Read Azure Table using runtime read credentials, no writes')
     parser.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
-    if args.from_release:
+    if args.archive_only and (args.from_release or args.ledger or args.feed):
+        parser.error('--archive-only cannot be combined with ledger, feed or --from-release')
+    if args.archive_only:
+        ledger, feed, sha = [], {'results': []}, {}
+    elif args.from_release:
         if args.ledger or args.feed:
             parser.error('--from-release cannot be combined with --ledger/--feed')
         cache = Path(__file__).resolve().parents[1] / '.cache/tbt/reconciled-results/predictions'
         ledger_path, feed_path = _download_private_release_readonly(args.data_repository, cache)
-    else:
+        ledger, feed = _load(ledger_path), _load(feed_path)
+        sha = {'ledger': _digest(ledger_path), 'feed': _digest(feed_path)}
+    elif not args.archive_only:
         if not args.ledger or not args.feed:
             parser.error('both --ledger and --feed are required unless --from-release is set')
         ledger_path, feed_path = args.ledger, args.feed
-    ledger, feed = _load(ledger_path), _load(feed_path)
-    sha = {'ledger': _digest(ledger_path), 'feed': _digest(feed_path)}
+        ledger, feed = _load(ledger_path), _load(feed_path)
+        sha = {'ledger': _digest(ledger_path), 'feed': _digest(feed_path)}
     if args.azure:
         api = Path(__file__).resolve().parents[1] / 'api'
         sys.path.insert(0, str(api))
@@ -325,10 +339,13 @@ def main(argv=None):
     else:
         archive = _load(args.archive)
         sha['archive'] = _digest(args.archive)
-    report = reconcile(ledger, feed, archive, source_sha256=sha)
+    report = reconcile(ledger, feed, archive, source_sha256=sha,
+                       archive_only=args.archive_only, archive_from_azure=args.azure)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + '\n', encoding='utf-8')
-    print(json.dumps({'output': str(args.out), 'settled': report['total']['wins'] + report['total']['losses'],
+    print(json.dumps({'output': str(args.out), 'scope': report['scope'],
+                      'complete_issued_history_verified': False,
+                      'settled': report['total']['wins'] + report['total']['losses'],
                       'priced': report['total']['priced_settled'], 'confirmed_strategies': 0,
                       'quarantine': {k:v for k,v in report['input_counters'].items() if 'conflict' in k or 'rejected' in k}}))
 
