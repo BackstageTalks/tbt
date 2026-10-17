@@ -1,0 +1,201 @@
+name: BlinQ Results ledger reconciliation (read-only PR)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/audit_settled_archive_reconciled.py
+      - tests/test_audit_settled_archive_reconciled.py
+      - .github/workflows/blinq-reconciled-results-readonly-pr.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-results-readonly-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    # Only the designated same-repository audit PR can access the private data token.
+    if: >-
+      github.repository == 'BackstageTalks/tbt' &&
+      github.event.pull_request.head.repo.full_name == 'BackstageTalks/tbt' &&
+      github.head_ref == 'audit/reconcile-azure-results-20261017'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test read-only reconciliation contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q pytest
+          python -m pytest -q tests/test_audit_settled_archive_reconciled.py
+      - name: Verify private canonical release access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = true
+          gh api repos/BackstageTalks/tbt-data/releases/tags/tbt-predictions-v1 --jq .tag_name
+      - name: Reconcile entire available immutable ledger and feed without Azure credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/reconciled-results
+          printf '[]\n' > .cache/tbt/reconciled-results/archive-not-available.json
+          python scripts/audit_settled_archive_reconciled.py \
+            --from-release \
+            --archive .cache/tbt/reconciled-results/archive-not-available.json \
+            --out .cache/tbt/reconciled-results/issued-ledger-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path=Path('.cache/tbt/reconciled-results/issued-ledger-report.json')
+          r=json.loads(path.read_text(encoding='utf-8'))
+          assert r['production_mutated'] is False and r['provider_requests'] == 0
+          assert r['scope'] == 'ledger_feed_archive_reconciliation'
+          assert r['complete_issued_history_verified'] is False
+          assert r['sources']['azure_archive_loaded'] is False
+          assert set(r['sources']['sha256']) == {'ledger','feed','archive'}
+          assert all(len(s)==64 for s in r['sources']['sha256'].values())
+          print('ISSUED_LEDGER_AGGREGATE',json.dumps({
+              'scope': r['scope'],
+              'azure_overlay_included': False,
+              'total': r['total'],
+              'sections': r['sections'],
+              'counters': r['input_counters'],
+              'hypotheses_tested': r['hypotheses_tested'],
+              'confirmed_strategies': r['confirmed_strategies'],
+          },sort_keys=True))
+          PY
+      - name: Inspect pre-match ranking signal availability (aggregate only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from collections import Counter
+          import json
+          import re
+          from pathlib import Path
+          from audit_settled_archive_reconciled import _iter_publications, number
+          root=Path('.cache/tbt/reconciled-results/predictions')
+          ledger=json.loads((root/'ledger.json').read_text(encoding='utf-8'))
+          seen=Counter()
+          available=Counter()
+          sections=Counter()
+          valid=0
+          for key,row,pub,issued,scheduled in _iter_publications(ledger,'ledger',Counter()):
+              odds=number(pub.get('odds'))
+              if odds is None or odds<1.50:
+                  continue
+              valid+=1
+              sections[str(pub.get('section') or 'unknown')]+=1
+              for label,item in (('publication',pub),('issued_snapshot',pub.get('issued_snapshot'))):
+                  if not isinstance(item,dict):
+                      continue
+                  for name,value in item.items():
+                      if re.search('confidence|prob|score|edge|certainty|strength|reliab|rating',name,re.I):
+                          path=f'{label}.{name}'
+                          seen[path]+=1
+                          if isinstance(value,(float,int)) and not isinstance(value,bool):
+                              available[path]+=1
+          print('PREMATCH_RANKING_COVERAGE',json.dumps({
+              'priced_issued_publications_min_1_50':valid,
+              'sections':dict(sorted(sections.items())),
+              'potential_score_keys':dict(sorted(seen.items())),
+              'numeric_score_coverage':dict(sorted(available.items())),
+              'raw_player_or_match_identifiers_logged':False,
+              'production_mutated':False,
+          },sort_keys=True))
+          PY
+      - name: Read live public feed and reconcile its visible settled overlay
+        # Public API returns the serving merged feed. It is NOT an exhaustive
+        # Azure Table export: matching archived outcomes may be inlined in feed.
+        shell: bash
+        env:
+          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        run: |
+          set -euo pipefail
+          root=.cache/tbt/reconciled-results
+          # A 401 is an actual authorization boundary; do not bypass it.
+          http_code="$(curl --silent --show-error --compressed \
+            --retry 1 --max-time 90 --max-filesize 35000000 \
+            -H 'Accept: application/json' \
+            --write-out '%{http_code}' \
+            --output "$root/live-public-feed.json" \
+            "${BLINQ_BASE_URL%/}/api/v1/feed" || true)"
+          if [[ "$http_code" != 200 ]]; then
+            printf '{"state":"BLOCKED_AUTH_OR_TRANSPORT","http_status":"%s","is_full_azure_archive":false,"production_mutated":false}\n' "$http_code" \
+              > "$root/public-live-feed-access.json"
+            rm -f "$root/live-public-feed.json"
+            echo "PUBLIC_LIVE_FEED_UNAVAILABLE HTTP_STATUS=$http_code (not a settled archive audit)"
+            exit 0
+          fi
+          printf '{"state":"HTTP_200_FEED_READ","http_status":"200","is_full_azure_archive":false,"production_mutated":false}\n' \
+            > "$root/public-live-feed-access.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('.cache/tbt/reconciled-results')
+          feed=json.loads((root/'live-public-feed.json').read_text(encoding='utf-8'))
+          if not isinstance(feed,dict) or not isinstance(feed.get('results'),list):
+              raise SystemExit('Live endpoint is not a feed containing results[]; no ROI reported')
+          results=feed['results']
+          overlay=[row for row in results if isinstance(row,dict)
+              and row.get('runtime_result_overlay') is True
+              and row.get('archive_source')=='verified_match_status_snapshot']
+          (root/'live-visible-overlays.json').write_text(
+              json.dumps(overlay,ensure_ascii=False),encoding='utf-8')
+          print('PUBLIC_LIVE_FEED_READBACK',json.dumps({
+              'feed_results':len(results),'archive_marked_visible_rows':len(overlay),
+              'is_full_azure_archive':False,'private_rows_exposed':False
+          },sort_keys=True))
+          PY
+          python scripts/audit_settled_archive_reconciled.py \
+            --ledger "$root/predictions/ledger.json" \
+            --feed "$root/live-public-feed.json" \
+            --archive "$root/live-visible-overlays.json" \
+            --out "$root/public-live-feed-reconciliation.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('.cache/tbt/reconciled-results')
+          historical=json.loads((root/'issued-ledger-report.json').read_text())
+          live=json.loads((root/'public-live-feed-reconciliation.json').read_text())
+          assert live['sources']['azure_archive_loaded'] is False
+          assert live['complete_issued_history_verified'] is False
+          assert live['confirmed_strategies']==0
+          assert live['production_mutated'] is False and live['provider_requests']==0
+          print('LIVE_FEED_RECONCILIATION_AGGREGATE',json.dumps({
+              'historical_total':historical['total'],
+              'live_feed_total':live['total'],
+              'live_feed_counters':live['input_counters'],
+              'full_azure_archive_verified':False,
+              'strategy_certified':False,
+          },sort_keys=True))
+          PY
+      - name: Retain aggregate report only, not private release bytes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-issued-ledger-aggregate-${{ github.run_id }}
+          path: |
+            .cache/tbt/reconciled-results/issued-ledger-report.json
+            .cache/tbt/reconciled-results/public-live-feed-reconciliation.json
+            .cache/tbt/reconciled-results/public-live-feed-access.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Remove locally downloaded private release bytes
+        if: always()
+        shell: bash
+        run: rm -rf .cache/tbt/reconciled-results/predictions .cache/tbt/reconciled-results/archive-not-available.json .cache/tbt/reconciled-results/live-public-feed.json .cache/tbt/reconciled-results/live-visible-overlays.json
