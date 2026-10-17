@@ -45,6 +45,7 @@ def test_pre_dawn_completion_does_not_wait_for_optional_artwork():
 def test_morning_odds_event_caps_are_disabled_but_daily_quota_is_hard():
     assert "-f market_odds_max_events=-1" in MORNING
     assert "-f doubles_odds_max_events=-1" in MORNING
+    assert "-f propline_max_events=-1" in MORNING
     assert "default: 14500" in MORNING
     assert "10#$MORNING_MAX_REQUESTS > 14500" in MORNING
     assert "default: -1" in DATA
