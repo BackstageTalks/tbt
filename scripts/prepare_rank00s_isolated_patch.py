@@ -4,6 +4,8 @@ No network, GitHub API, secrets, writer-lock manipulation, release publishing,
 model changes or production paths. This tool does not authorize CDB writes.
 Only a separately governed existing publisher can use the resulting review
 artifacts after verified rights, identity proofs, restore and live CAS/readback.
+Preview files deliberately use preview- names: they are not publishable
+canonical year partitions and no canonical manifest is generated.
 """
 from __future__ import annotations
 
@@ -12,6 +14,7 @@ from collections import Counter
 import hashlib
 import json
 from pathlib import Path
+import re
 
 import pandas as pd
 
@@ -54,11 +57,13 @@ def json_object(path):
     return value
 
 
-def stage_from_preflight(stage_path, report_path):
+def stage_from_preflight(stage_path, report_path, *, current_manifest_sha256=CANONICAL_MANIFEST_SHA):
     """Review-only signed-by-digest pair. Does NOT attest real-world identity."""
     report = json_object(report_path)
     if (report.get('state') != 'PREPARED_READONLY_NO_CDB_WRITE'
-            or report.get('history_manifest_sha256') != CANONICAL_MANIFEST_SHA
+            or report.get('history_manifest_sha256') != current_manifest_sha256
+            or (current_manifest_sha256 != CANONICAL_MANIFEST_SHA
+                and report.get('historical_baseline_manifest_sha256') != CANONICAL_MANIFEST_SHA)
             or report.get('source_sha256') != SOURCE_ZIP_SHA
             or report.get('canonical_writes') != 0
             or report.get('safe_for_production_write') is not False):
@@ -82,13 +87,32 @@ def stage_from_preflight(stage_path, report_path):
     return rows, report
 
 
-def validate_release_files(directory):
-    """Fail closed on ANY manifest drift, even when decade partition SHA stable."""
+def validate_release_files(directory, *, current_manifest_sha256=CANONICAL_MANIFEST_SHA):
+    """Verify explicitly pinned current manifest plus every historic year entry/byte."""
+    if (not isinstance(current_manifest_sha256, str)
+            or re.fullmatch(r'[0-9a-f]{64}', current_manifest_sha256) is None):
+        raise GateError('Current manifest SHA missing/invalid')
     d = Path(directory)
-    if digest(d / 'history_manifest.json') != CANONICAL_MANIFEST_SHA:
+    manifest_path = d / 'history_manifest.json'
+    if digest(manifest_path) != current_manifest_sha256:
         raise GateError('Canonical manifest release changed: fresh preflight required')
+    try:
+        metadata = json_object(manifest_path)
+        entries = metadata['years']
+        if not isinstance(entries, dict):
+            raise TypeError('years')
+    except (ValueError, TypeError, KeyError, OSError) as exc:
+        raise GateError('Invalid canonical release manifest') from exc
     for year, sha in PARTITIONS.items():
-        if digest(d / f'history-{year}.parquet') != sha:
+        name = f'history-{year}.parquet'
+        entry = entries.get(str(year))
+        if (not isinstance(entry, dict) or entry.get('asset') != name
+                or entry.get('sha256') != sha
+                or type(entry.get('bytes')) is not int or entry['bytes'] <= 0
+                or type(entry.get('rows')) is not int or entry['rows'] <= 0):
+            raise GateError('Canonical year manifest entry mismatch: '+str(year))
+        file = d / name
+        if file.stat().st_size != entry['bytes'] or digest(file) != sha:
             raise GateError('Canonical partition drift for '+str(year))
 
 
@@ -192,28 +216,32 @@ def apply_exact(before, rows):
     return result, dict(counters)
 
 
-def run(*, baseline_dir, stage_path, report_path, output_dir):
+def run(*, baseline_dir, stage_path, report_path, output_dir, current_manifest_sha256=CANONICAL_MANIFEST_SHA):
     base, out = Path(baseline_dir), Path(output_dir)
     if base.resolve() == out.resolve() or base.resolve() in out.resolve().parents:
         raise GateError('Output must be outside canonical baseline directory')
     if out.exists() and any(out.iterdir()):
         raise GateError('Output directory must be empty for isolated patch')
-    validate_release_files(base)
-    rows, report = stage_from_preflight(stage_path, report_path)
+    validate_release_files(base, current_manifest_sha256=current_manifest_sha256)
+    rows, report = stage_from_preflight(stage_path, report_path, current_manifest_sha256=current_manifest_sha256)
     original = {y: pd.read_parquet(base / f'history-{y}.parquet') for y in PARTITIONS}
     patched, counts = apply_exact(original, rows)
-    validate_release_files(base)
+    validate_release_files(base, current_manifest_sha256=current_manifest_sha256)
     if out.exists():
         raise GateError('Output directory must not preexist')
     out.mkdir(parents=True)
+    # Create non-release marker before any possibly partial Parquet output.
+    (out / 'NOT_FOR_CDB_RELEASE.txt').write_text(
+        'ISOLATED rank00s PREVIEW ONLY. NOT A CANONICAL CDB RELEASE.\n', encoding='utf-8')
     assets = {}
     modified_years = sorted({int(x['canonical_year']) for x in rows})
     for year in modified_years:
-        dest = out / f'history-{year}.parquet'
+        dest = out / f'preview-history-{year}.parquet'
         patched[year].to_parquet(dest, engine='pyarrow', compression='zstd', index=False)
         pd.testing.assert_frame_equal(pd.read_parquet(dest), patched[year], check_dtype=True)
         assets[dest.name] = digest(dest)
-    result = {'state':'ISOLATED_REVIEW_ONLY_NOT_PRODUCTION','base_manifest_sha256':CANONICAL_MANIFEST_SHA,
+    result = {'state':'ISOLATED_REVIEW_ONLY_NOT_PRODUCTION','base_manifest_sha256':current_manifest_sha256,
+              'historical_baseline_manifest_sha256':CANONICAL_MANIFEST_SHA,
               'source_zip_sha256':SOURCE_ZIP_SHA,'original_candidate_stage_sha256':digest(stage_path),
               'after_sha256':assets, 'counts':counts, 'modified_years':modified_years,
               'production_writes':0, 'write_authorized':False,'requires':'separate source rights, actual identity proof, backed-up single-writer live CAS and independent remote readback'}
@@ -227,6 +255,8 @@ def main():
     p.add_argument('--stage-path',type=Path,required=True)
     p.add_argument('--report-path',type=Path,required=True)
     p.add_argument('--output-dir',type=Path,required=True)
+    p.add_argument('--current-manifest-sha256',default=CANONICAL_MANIFEST_SHA,
+                   help='Exact currently downloaded release history_manifest.json SHA-256; never inferred')
     args=p.parse_args()
     print(json.dumps(run(**vars(args)),sort_keys=True))
 
