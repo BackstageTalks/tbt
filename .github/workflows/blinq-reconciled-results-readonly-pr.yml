@@ -78,6 +78,46 @@ jobs:
               'confirmed_strategies': r['confirmed_strategies'],
           },sort_keys=True))
           PY
+      - name: Inspect pre-match ranking signal availability (aggregate only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from collections import Counter
+          import json
+          import re
+          from pathlib import Path
+          from audit_settled_archive_reconciled import _iter_publications, number
+          root=Path('.cache/tbt/reconciled-results/predictions')
+          ledger=json.loads((root/'ledger.json').read_text(encoding='utf-8'))
+          seen=Counter()
+          available=Counter()
+          sections=Counter()
+          valid=0
+          for key,row,pub,issued,scheduled in _iter_publications(ledger,'ledger',Counter()):
+              odds=number(pub.get('odds'))
+              if odds is None or odds<1.50:
+                  continue
+              valid+=1
+              sections[str(pub.get('section') or 'unknown')]+=1
+              for label,item in (('publication',pub),('issued_snapshot',pub.get('issued_snapshot'))):
+                  if not isinstance(item,dict):
+                      continue
+                  for name,value in item.items():
+                      if re.search('confidence|prob|score|edge|certainty|strength|reliab|rating',name,re.I):
+                          path=f'{label}.{name}'
+                          seen[path]+=1
+                          if isinstance(value,(float,int)) and not isinstance(value,bool):
+                              available[path]+=1
+          print('PREMATCH_RANKING_COVERAGE',json.dumps({
+              'priced_issued_publications_min_1_50':valid,
+              'sections':dict(sorted(sections.items())),
+              'potential_score_keys':dict(sorted(seen.items())),
+              'numeric_score_coverage':dict(sorted(available.items())),
+              'raw_player_or_match_identifiers_logged':False,
+              'production_mutated':False,
+          },sort_keys=True))
+          PY
       - name: Read live public feed and reconcile its visible settled overlay
         # Public API returns the serving merged feed. It is NOT an exhaustive
         # Azure Table export: matching archived outcomes may be inlined in feed.
