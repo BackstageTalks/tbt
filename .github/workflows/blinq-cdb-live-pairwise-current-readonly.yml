@@ -1,6 +1,5 @@
-name: BlinQ live CDB Serve Return read-only audit (private receipt)
-
-# Trusted main only. No public artifacts, canonical writes, or training.
+name: BlinQ live 2022-2026 Serve Return NULL audit (private receipt)
+# Restricted to trusted main, no public artifacts or canonical writer.
 on:
   push:
     branches: [main]
@@ -9,7 +8,6 @@ on:
 
 permissions:
   contents: read
-
 concurrency:
   group: blinq-cdb-live-pairwise-readonly
   cancel-in-progress: false
@@ -18,12 +16,11 @@ jobs:
   audit:
     if: github.repository == 'BackstageTalks/tbt' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 75
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       DATA_REPO: BackstageTalks/tbt-data
-      ROOT: .cache/live-pairwise-readonly
-      PYTHONPATH: api:scripts
+      ROOT: .cache/live-pairwise-fiveyear
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,71 +28,65 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Verify trust and existing canonical gapfill tests
+      - name: Test the guarded five-year Parquet reader
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN"
           test "$(gh api "repos/$DATA_REPO" --jq .private)" = true
-          python -m pip install --disable-pip-version-check -r api/requirements-train.txt pytest
-          python -m pytest -q tests/test_recover_cdb_opponent_service_rates.py tests/test_download_stable_cdb.py
-      - name: Download the entire current verified private CDB
+          python -m pip install --disable-pip-version-check 'pyarrow==18.1.0' pytest
+          python -m pytest -q tests/test_audit_live_five_year_serve_return.py
+      - name: Snapshot and recheck five actual CDB years, retry on release drift
         run: |
           set -euo pipefail
           mkdir -p "$ROOT"
-          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > "$ROOT/before.json"
-          python scripts/download_stable_cdb.py --repository "$DATA_REPO" --out "$ROOT/history" --report "$ROOT/snapshot.json" > "$ROOT/private-download.log" 2>&1
-          python scripts/recover_cdb_opponent_service_rates.py --mode stage --pairwise --history-dir "$ROOT/history" --out-dir "$ROOT/stage" > "$ROOT/private-stage.log" 2>&1
-          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > "$ROOT/after.json"
-      - name: Verify no release drift and retain counts only
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json,os,hashlib
+          ok=0
+          for attempt in 1 2 3 4; do
+            rm -rf "$ROOT/history" "$ROOT/report.json" "$ROOT/after.json"
+            mkdir -p "$ROOT/history"
+            gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > "$ROOT/before.json"
+            for year in 2022 2023 2024 2025 2026; do
+              gh release download tbt-data-v1 -R "$DATA_REPO" -p "history-$year.parquet" -D "$ROOT/history" >/dev/null 2>&1
+            done
+            gh release download tbt-data-v1 -R "$DATA_REPO" -p history_manifest.json -p _tbt_bundle_manifest.json -D "$ROOT/history" >/dev/null 2>&1
+            if ! python scripts/audit_live_five_year_serve_return.py --history-dir "$ROOT/history" \
+                --release-json "$ROOT/before.json" --out "$ROOT/report.json" > "$ROOT/quiet.log" 2>&1; then
+              echo "AUDIT_SOURCE_CHANGED_OR_INVALID retry=$attempt"
+              continue
+            fi
+            gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > "$ROOT/after.json"
+            if PYTHONPATH=scripts python - <<'PY'
+          import json,os
           from pathlib import Path
-          from collections import Counter
+          from audit_live_five_year_serve_return import release_assets
           p=Path(os.environ['ROOT'])
           a=json.loads((p/'before.json').read_text())
           b=json.loads((p/'after.json').read_text())
-          def assets(x): return {r['name']:(r.get('digest'),r['size']) for r in x['assets']}
-          assert a['tag_name']==b['tag_name']=='tbt-data-v1' and assets(a)==assets(b), 'Release drift'
-          snap=json.loads((p/'snapshot.json').read_text())
-          stage=json.loads((p/'stage/report.json').read_text())
-          assert snap['status']=='verified' and snap['provider_api_requests']==0
-          assert stage['production_mutated'] is False and stage['provider_requests']==0
-          rows=[json.loads(s) for s in (p/'stage/stage.jsonl').read_text().splitlines() if s.strip()]
-          assert len(rows)==stage['counts'].get('staged_matches',0)
-          assert len(set(r['match_id'] for r in rows))==len(rows)
-          assert sum(len(r['additions']) for r in rows)==stage['counts'].get('new_stat_values',0)
-          m=Counter(); f=Counter()
-          for r in rows:
-              y=int(r['utc_year'])
-              if y in range(2022,2027):
-                  m[str(y)]+=1
-                  f[str(y)]+=len(r['additions'])
-          h=json.loads((p/'history/history_manifest.json').read_text())
-          years={str(y):{'matches':m[str(y)],'null_fields':f[str(y)],
-                'canonical_rows':h['years'][str(y)]['rows'],
-                'parquet_sha256':hashlib.sha256((p/'history'/('history-%d.parquet'%y)).read_bytes()).hexdigest()}
-                for y in range(2022,2027)}
-          report={'schema':'BLINQ_CDB_LIVE_PAIRWISE_READONLY_V1',
-                  'status':'VERIFIED_SNAPSHOT_NOT_WRITE_AUTHORIZATION',
-                  'manifest_sha256':snap['manifest_sha256'],'years_2022_2026':years,
-                  'full_cdb_counts':stage['counts'],'production_writes':0,
-                  'source_L2_player_event_identity_verified':0,
-                  'requires_fresh_CAS_lock_backup_readback_for_any_write':True}
-          (p/'aggregate.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
-          print('VERIFIED_PRIVATE_CURRENT_CDB_AUDIT_PASS')
+          assert a['tag_name']==b['tag_name']=='tbt-data-v1'
+          assert release_assets(a)==release_assets(b), 'release drift'
+          report=json.loads((p/'report.json').read_text())
+          assert report['state']=='READ_ONLY_CURRENT_SNAPSHOT_NOT_WRITE_AUTHORIZATION'
+          assert report['production_writes']==0
+          print('FIVE_YEAR_CURRENT_SNAPSHOT_COHERENT')
           PY
-      - name: Persist aggregate in private tbt-data and independently read back
+            then
+              ok=1
+              break
+            fi
+            echo "RELEASE_DRIFT_RETRY attempt=$attempt"
+          done
+          test "$ok" = 1
+      - name: Save only private aggregate report, re-download byte-identical
         run: |
           set -euo pipefail
-          tag="blinq-cdb-live-pairwise-readonly-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$ROOT/aggregate.json" -R "$DATA_REPO" --target main --title "Read-only current Serve Return NULLs" --notes "Private aggregate only; no CDB mutations, source import or model change." >/dev/null
+          tag="blinq-cdb-fiveyear-live-audit-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$ROOT/report.json" -R "$DATA_REPO" --target main \
+            --title 'Five-year CDB Serve Return read-only NULL audit' \
+            --notes 'Private counts/digests only. No player IDs, no CDB data writes, no training.' >/dev/null
           mkdir -p "$ROOT/readback"
-          gh release download "$tag" -R "$DATA_REPO" -p aggregate.json -D "$ROOT/readback" >/dev/null
-          cmp "$ROOT/aggregate.json" "$ROOT/readback/aggregate.json"
-          echo "PRIVATE_AGGREGATE_INDEPENDENT_READBACK_PASS"
+          gh release download "$tag" -R "$DATA_REPO" -p report.json -D "$ROOT/readback" >/dev/null 2>&1
+          cmp "$ROOT/report.json" "$ROOT/readback/report.json"
+          echo "PRIVATE_FIVE_YEAR_NULL_AUDIT_READBACK_PASS"
           echo "Private receipt: $tag" >> "$GITHUB_STEP_SUMMARY"
-      - name: Delete ephemeral private CDB bytes
+      - name: Erase canonical source from ephemeral public runner
         if: always()
-        run: rm -rf .cache/live-pairwise-readonly
+        run: rm -rf .cache/live-pairwise-fiveyear
