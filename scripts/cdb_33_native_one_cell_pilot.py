@@ -25,11 +25,15 @@ from offline_exact_cdb_write import write_exact_stats_partition
 from recover_cdb_opponent_service_rates import _sha, _storage, verify_readback
 from recover_cdb_sackmann_breakpoints import candidate, digest, POLICY, _source_rates, source_match_id, SOURCE_REVISION
 from import_historical_match_foundation import _stats
+from audit_cdb_sackmann_bp_count_gap import candidate as native_count_candidate, COUNTS
 from tbt.data.history_snapshot import load_snapshot, partition_path
 
 RELEASE_TAG = "blinq-drive-atp2020-2021-native-identity-39053414186-1"
 VERIFIED_SHA = "e0945ee8437203b6db2e8a5e3e2eccc72e21df38a3a247925abc17eedc7c0935"
-ALLOWED = frozenset(("p1_break_point_return_win", "p2_break_point_return_win"))
+RATES = frozenset(("p1_break_point_return_win", "p2_break_point_return_win"))
+COUNT_FIELDS = frozenset(COUNTS)
+ALLOWED = RATES | COUNT_FIELDS
+COUNT_POLICY = "sackmann_native_33_full_source_bp_converted_count_null_only_canary_v1"
 SOURCE_COMMIT = "83733587353df8a41f2fd4f516147d5aa83f5a8d"
 
 def verified_links(path: Path) -> list[dict]:
@@ -215,12 +219,33 @@ def stage(ledger: Path, verified: Path, original_dir: Path, history: Path) -> tu
         if proposed is None and reason == "lineage_rejected":
             proposed, fallback_reason = attested_rank_only_candidate(m, csv_row, path, line_no, filesha[year])
             stats[fallback_reason] += 1
+        if proposed is None and reason == "already_filled":
+            # Existing rates are already in CDB; prefer exactly one original
+            # integer converted BP count from the same SHA-pinned source.
+            counts, count_reason = native_count_candidate(m, csv_row, "atp", "main", path)
+            stats["count_" + count_reason] += 1
+            if counts:
+                proposed = {
+                    "schema": 1, "policy": COUNT_POLICY,
+                    "match_id": mid, "utc_year": m.scheduled_at.year,
+                    "prewrite_hash": _sha(_storage(m)),
+                    "source_stats_hash": _sha(m.stats or {}),
+                    "source": {
+                        "commit": SOURCE_REVISION, "file": path.as_posix(),
+                        "sha256": filesha[year], "csv_line": line_no,
+                        "winner_id": str(csv_row["winner_id"]),
+                        "loser_id": str(csv_row["loser_id"]),
+                    },
+                    "additions": dict(sorted(counts.items())),
+                }
         if proposed is None:
             continue
-        if proposed["match_id"] != mid or proposed["policy"] != POLICY:
+        if proposed["match_id"] != mid or proposed["policy"] not in (POLICY, COUNT_POLICY):
             raise ValueError("BP candidate identity or policy mismatch")
         for field, value in sorted(proposed["additions"].items()):
-            if field not in ALLOWED or type(value) not in (int, float) or not 0 <= value <= 1:
+            if (field not in ALLOWED or type(value) not in (int, float)
+                or (field in RATES and not 0 <= value <= 1)
+                or (field in COUNT_FIELDS and (type(value) is not int or value < 0))):
                 raise ValueError("Unapproved breakpoint rate")
             if m.stats.get(field) is not None:
                 raise ValueError("BP proposed to overwrite present CDB field")
@@ -240,17 +265,24 @@ def stage(ledger: Path, verified: Path, original_dir: Path, history: Path) -> tu
         "reason_counts": dict(sorted(stats.items())),
         "canonical_writes": 0,
         "existing_values_overwritten": 0,
-        "import_scope": "ONE_POSTMATCH_BREAKPOINT_RATE_NULL_ONLY",
+        "import_scope": "ONE_POSTMATCH_BREAKPOINT_RATE_OR_CONVERTED_COUNT_NULL_ONLY",
     }
 
 def load_stage(path: Path) -> list[dict]:
     rows = [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
     if len(rows) != 1 or rows[0].get("pilot") != "blinq-native-33-single-cell-v1":
         raise ValueError("Pilot must be one exact staged cell on one existing match")
-    if (rows[0].get("policy") != POLICY or rows[0].get("utc_year") not in (2020, 2021)
+    if (rows[0].get("policy") not in (POLICY, COUNT_POLICY) or rows[0].get("utc_year") not in (2020, 2021)
         or set(rows[0].get("additions", {})) - ALLOWED
         or len(rows[0].get("additions", {})) != 1):
         raise ValueError("Unapproved native single-cell write scope")
+    field = next(iter(rows[0]["additions"]))
+    if rows[0]["policy"] != (COUNT_POLICY if field in COUNT_FIELDS else POLICY):
+        raise ValueError("Converted count/rate source policy mismatch")
+    value = rows[0]["additions"][field]
+    if (type(value) not in (int, float) or (field in COUNT_FIELDS and (type(value) is not int or value < 0))
+        or (field in RATES and not 0 <= value <= 1)):
+        raise ValueError("Untrusted count or rate payload")
     return rows
 
 def exact_write(stage_rows: list[dict], history: Path) -> dict:
@@ -269,10 +301,10 @@ def exact_write(stage_rows: list[dict], history: Path) -> dict:
     for field, value in row["additions"].items():
         if (m.stats or {}).get(field) is not None:
             raise ValueError("Cannot overwrite non-NULL canonical field")
-        if field not in ALLOWED or not 0 <= value <= 1:
-            raise ValueError("Invalid rate for pilot")
+        if field not in ALLOWED or (field in RATES and not 0 <= value <= 1) or (field in COUNT_FIELDS and (type(value) is not int or value < 0)):
+            raise ValueError("Invalid count/rate for pilot")
     m.stats = {**(m.stats or {}), **row["additions"]}
-    info = write_exact_stats_partition(history, year, after, {row["match_id"]})
+    info = write_exact_stats_partition(history, year, after, {row["match_id"]}, approved_count_fields=COUNT_FIELDS)
     readback = verify_readback(before, load_snapshot(partition_path(history, year)), stage_rows)
     if (readback["status"] != "verified" or readback["new_stat_values"] != 1
         or readback["existing_values_overwritten"] != 0

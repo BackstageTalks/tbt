@@ -32,6 +32,23 @@ class CanaryContract(unittest.TestCase):
                 "p2_break_point_return_win": 0.4,
             }}))
 
+    def test_exactly_one_integer_converted_count_allowed(self):
+        row={**ROW,"policy":pilot.COUNT_POLICY,
+            "additions":{"p1_return_break_points_converted_count":3}}
+        self.assertEqual(pilot.load_stage(self.stage_file(row)),[row])
+
+    def test_float_converted_count_rejected(self):
+        row={**ROW,"policy":pilot.COUNT_POLICY,
+            "additions":{"p1_return_break_points_converted_count":3.5}}
+        with self.assertRaises(ValueError):
+            pilot.load_stage(self.stage_file(row))
+
+    def test_count_with_rate_policy_rejected(self):
+        row={**ROW,"policy":pilot.POLICY,
+            "additions":{"p2_return_break_points_converted_count":1}}
+        with self.assertRaises(ValueError):
+            pilot.load_stage(self.stage_file(row))
+
     def test_no_non_bp_fields(self):
         with self.assertRaises(ValueError):
             pilot.load_stage(self.stage_file({**ROW, "additions": {"p1_aces": 99}}))
