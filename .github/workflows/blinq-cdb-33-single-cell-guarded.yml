@@ -3,7 +3,6 @@ name: BlinQ CDB single-cell native-33 guarded pilot
   push:
     branches: [main]
     paths: [.github/workflows/blinq-cdb-33-single-cell-guarded.yml]
-  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -77,6 +76,9 @@ jobs:
               assets={x['name']:x for x in r['assets']}
               return r['id'],[(assets[n]['id'],assets[n]['digest'],assets[n]['size']) for n in names]
           assert pins(a)==pins(b),'canonical release drift'
+          expected_bundle='6100be2dbce7ae57e926952aa94e50b60a5f606d382fb60decee0cfde6c81f9e'
+          actual_bundle=hashlib.sha256((root/'cdb/_tbt_bundle_manifest.json').read_bytes()).hexdigest()
+          assert actual_bundle==expected_bundle,'Single-use approved CDB baseline changed: cannot run another canary'
           assets={x['name']:x for x in a['assets']}
           bundle=json.loads((root/'cdb/_tbt_bundle_manifest.json').read_text())
           hist=json.loads((root/'cdb/history_manifest.json').read_text())
