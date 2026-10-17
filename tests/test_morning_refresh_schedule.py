@@ -40,3 +40,13 @@ def test_pre_dawn_completion_does_not_wait_for_optional_artwork():
     assert "needs: [pipeline, deploy]" in DATA
     assert "mode=deploy-current" in DATA
     assert "MORNING_REFRESH != 'true'" in DATA
+
+
+def test_morning_odds_event_caps_are_disabled_but_daily_quota_is_hard():
+    assert "-f market_odds_max_events=-1" in MORNING
+    assert "-f doubles_odds_max_events=-1" in MORNING
+    assert "default: 14500" in MORNING
+    assert "10#$MORNING_MAX_REQUESTS > 14500" in MORNING
+    assert "default: -1" in DATA
+    assert "10#$MAX_REQUESTS > 14500" in DATA
+    assert "BLINQ_PROVIDER_REQUEST_RESERVE=500" in DATA
