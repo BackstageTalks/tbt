@@ -1,0 +1,92 @@
+name: BlinQ Results ledger reconciliation (read-only PR)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/audit_settled_archive_reconciled.py
+      - tests/test_audit_settled_archive_reconciled.py
+      - .github/workflows/blinq-reconciled-results-readonly-pr.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-results-readonly-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    # Only the designated same-repository audit PR can access the private data token.
+    if: >-
+      github.repository == 'BackstageTalks/tbt' &&
+      github.event.pull_request.head.repo.full_name == 'BackstageTalks/tbt' &&
+      github.head_ref == 'audit/reconcile-azure-results-20261017'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test read-only reconciliation contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q pytest
+          python -m pytest -q tests/test_audit_settled_archive_reconciled.py
+      - name: Verify private canonical release access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = true
+          gh api repos/BackstageTalks/tbt-data/releases/tags/tbt-predictions-v1 --jq .tag_name
+      - name: Reconcile entire available immutable ledger and feed without Azure credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/reconciled-results
+          printf '[]\n' > .cache/tbt/reconciled-results/archive-not-available.json
+          python scripts/audit_settled_archive_reconciled.py \
+            --from-release \
+            --archive .cache/tbt/reconciled-results/archive-not-available.json \
+            --out .cache/tbt/reconciled-results/issued-ledger-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path=Path('.cache/tbt/reconciled-results/issued-ledger-report.json')
+          r=json.loads(path.read_text(encoding='utf-8'))
+          assert r['production_mutated'] is False and r['provider_requests'] == 0
+          assert r['scope'] == 'ledger_feed_archive_reconciliation'
+          assert r['complete_issued_history_verified'] is False
+          assert r['sources']['azure_archive_loaded'] is False
+          assert set(r['sources']['sha256']) == {'ledger','feed','archive'}
+          assert all(len(s)==64 for s in r['sources']['sha256'].values())
+          print('ISSUED_LEDGER_AGGREGATE',json.dumps({
+              'scope': r['scope'],
+              'azure_overlay_included': False,
+              'total': r['total'],
+              'sections': r['sections'],
+              'counters': r['input_counters'],
+              'hypotheses_tested': r['hypotheses_tested'],
+              'confirmed_strategies': r['confirmed_strategies'],
+          },sort_keys=True))
+          PY
+      - name: Retain aggregate report only, not private release bytes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-issued-ledger-aggregate-${{ github.run_id }}
+          path: .cache/tbt/reconciled-results/issued-ledger-report.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Remove locally downloaded private release bytes
+        if: always()
+        shell: bash
+        run: rm -rf .cache/tbt/reconciled-results/predictions .cache/tbt/reconciled-results/archive-not-available.json
