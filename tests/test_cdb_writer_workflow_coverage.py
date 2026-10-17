@@ -43,3 +43,11 @@ def test_main_data_pipeline_never_cancels_while_owner():
     text = (ROOT / "data.yml").read_text(encoding="utf-8")
     assert "cancel-in-progress: false" in text
     assert "[replace-stale-data-run]" not in text
+
+
+def test_lock_contract_checks_current_private_main_not_old_working_branch():
+    contents = (ROOT / "cdb-global-writer-validation.yml").read_text(encoding="utf-8")
+    assert "repository: BackstageTalks/tbt-data" in contents
+    assert "ref: main" in contents
+    assert "ref: fix/cdb-global-single-writer-20261010" not in contents
+    assert "cmp scripts/cdb_global_writer_lock.py private-data/scripts/cdb_global_writer_lock.py" in contents
