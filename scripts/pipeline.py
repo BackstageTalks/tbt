@@ -1367,14 +1367,6 @@ def main():
                 candidate_min_probability=0.55, candidate_min_data_depth=0.35,
                 candidate_min_surface_matches=2,
             )
-        doubles_picks, doubles_selection_report = select_doubles_picks(doubles_predictions)
-        doubles_report = {
-            "history": doubles_history_state,
-            "model": doubles_model_report,
-            "odds": doubles_odds_report,
-            "selection": doubles_selection_report,
-        }
-
         # Odds-first for ACES/DF/GAMES/SETS: obtain actual available offers
         # BEFORE evaluating their projection models. Match Winner continues to
         # use its independent qualification rules and shares cached payloads.
@@ -1534,10 +1526,18 @@ def main():
                     for event_id, markets in available_projection_markets.items()
                 }
                 primary_match_winner = 0
-                for row in predictions:
+                for row in predictions + doubles_predictions:
                     event_id = str(row.get("event_id") or "").strip()
                     betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
-                    if event_id and betting.get("market") == "match_winner" and betting.get("odds"):
+                    if not event_id:
+                        continue
+                    # Doubles only uses exact two-team H2H. Never request
+                    # irrelevant singles prop totals for a doubles fixture.
+                    if row.get("prediction_family") == "doubles":
+                        propline_existing.setdefault(event_id, set()).update(
+                            ("aces", "double_faults", "games", "sets")
+                        )
+                    if betting.get("market") == "match_winner" and betting.get("odds"):
                         propline_existing.setdefault(event_id, set()).add("match_winner")
                         primary_match_winner += 1
 
@@ -1547,57 +1547,62 @@ def main():
                     min_remaining=MIN_PROVIDER_REMAINING,
                 )
                 prop_market_payloads, prop_report = discover_propline_fallback(
-                    prop_client, predictions, propline_existing,
+                    prop_client, predictions + doubles_predictions, propline_existing,
                     now=now, max_events=args.propline_max_events,
                 )
 
                 match_winner_fallback_attached = 0
-                for index, row in enumerate(predictions):
-                    event_id = str(row.get("event_id") or "").strip()
-                    if not event_id:
-                        continue
-                    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
-                    if betting.get("market") == "match_winner" and betting.get("odds"):
-                        continue
-                    quote = (prop_market_payloads.get(event_id) or {}).get("match_winner")
-                    if not isinstance(quote, dict):
-                        continue
-                    p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
-                    p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
-                    market = extract_match_winner_odds(
-                        quote.get("payload"),
-                        str(p1.get("name") or ""),
-                        str(p2.get("name") or ""),
-                    )
-                    if market is None:
-                        continue
-                    try:
-                        captured_at = datetime.fromisoformat(
-                            str(quote.get("captured_at") or "").replace("Z", "+00:00")
+                doubles_match_winner_fallback_attached = 0
+                for target_predictions in (predictions, doubles_predictions):
+                    for index, row in enumerate(target_predictions):
+                        event_id = str(row.get("event_id") or "").strip()
+                        if not event_id:
+                            continue
+                        betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+                        if betting.get("market") == "match_winner" and betting.get("odds"):
+                            continue
+                        quote = (prop_market_payloads.get(event_id) or {}).get("match_winner")
+                        if not isinstance(quote, dict):
+                            continue
+                        p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
+                        p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
+                        market = extract_match_winner_odds(
+                            quote.get("payload"),
+                            str(p1.get("name") or ""),
+                            str(p2.get("name") or ""),
                         )
-                        if captured_at.tzinfo is None:
-                            captured_at = captured_at.replace(tzinfo=timezone.utc)
-                    except (TypeError, ValueError):
-                        captured_at = selection_now
-                    enriched = attach_match_winner_market(
-                        row, market, captured_at=captured_at,
-                        provider_id=2, betting_day=odds_report.get("betting_day"),
-                    )
-                    provenance = {
-                        "source": "propline",
-                        "bookmaker": quote.get("bookmaker"),
-                        "provider_event_id": quote.get("provider_event_id"),
-                    }
-                    if isinstance(enriched.get("match_winner_market"), dict):
-                        enriched["match_winner_market"].update(provenance)
-                    if isinstance(enriched.get("betting"), dict):
-                        enriched["betting"].update({
-                            "odds_source": "propline",
-                            "odds_bookmaker": quote.get("bookmaker"),
-                            "odds_provider_event_id": quote.get("provider_event_id"),
-                        })
-                    predictions[index] = enriched
-                    match_winner_fallback_attached += 1
+                        if market is None:
+                            continue
+                        try:
+                            captured_at = datetime.fromisoformat(
+                                str(quote.get("captured_at") or "").replace("Z", "+00:00")
+                            )
+                            if captured_at.tzinfo is None:
+                                captured_at = captured_at.replace(tzinfo=timezone.utc)
+                        except (TypeError, ValueError):
+                            captured_at = selection_now
+                        enriched = attach_match_winner_market(
+                            row, market, captured_at=captured_at,
+                            provider_id=2, betting_day=odds_report.get("betting_day"),
+                        )
+                        provenance = {
+                            "source": "propline",
+                            "bookmaker": quote.get("bookmaker"),
+                            "provider_event_id": quote.get("provider_event_id"),
+                        }
+                        if isinstance(enriched.get("match_winner_market"), dict):
+                            enriched["match_winner_market"].update(provenance)
+                        if isinstance(enriched.get("betting"), dict):
+                            enriched["betting"].update({
+                                "odds_source": "propline",
+                                "odds_bookmaker": quote.get("bookmaker"),
+                                "odds_provider_event_id": quote.get("provider_event_id"),
+                            })
+                        target_predictions[index] = enriched
+                        if row.get("prediction_family") == "doubles":
+                            doubles_match_winner_fallback_attached += 1
+                        else:
+                            match_winner_fallback_attached += 1
 
                 for rapid_id, by_metric in prop_market_payloads.items():
                     for metric, quote in by_metric.items():
@@ -1612,6 +1617,7 @@ def main():
 
                 prop_report["match_winner_primary_preserved"] = primary_match_winner
                 prop_report["match_winner_fallback_attached"] = match_winner_fallback_attached
+                prop_report["doubles_match_winner_fallback_attached"] = doubles_match_winner_fallback_attached
                 prop_report["fallback_order"] = [
                     "primary_match_winner", "propline_match_winner",
                     "propline_aces_df_sets_games",
@@ -1625,6 +1631,16 @@ def main():
                         "PROPL_secret_missing" if not prop_key else "disabled_by_event_cap"
                     ), "calls": 0,
                 }
+        # Doubles selection is performed only after both trusted H2H providers
+        # have had the chance to price an otherwise eligible fixture.
+        doubles_picks, doubles_selection_report = select_doubles_picks(doubles_predictions)
+        doubles_report = {
+            "history": doubles_history_state,
+            "model": doubles_model_report,
+            "odds": doubles_odds_report,
+            "selection": doubles_selection_report,
+        }
+
         # In odds-first mode the projection models operate only on events
         # that have a complete matching market from the provider. Keep an
         # expanded *eligible* pool so publication can independently rank each
