@@ -58,6 +58,27 @@ jobs:
             --pattern 'selection_candidates_2026-10.json.gz' --clobber
           test -s .cache/tbt/top-value-private/ledger.json
           test -s .cache/tbt/top-value-private/selection_candidates_2026-10.json.gz
+      - name: Inspect candidate snapshot schema (keys and counts only)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import gzip,json
+          p='.cache/tbt/top-value-private/selection_candidates_2026-10.json.gz'
+          with gzip.open(p,'rt') as f: payload=json.load(f)
+          snaps=payload.get('snapshots')
+          print('CANDIDATE_SCHEMAS',json.dumps({
+            'snapshots_type':type(snaps).__name__,
+            'snapshots_length':len(snaps),
+            'first_snapshot_type':type(snaps[0]).__name__ if isinstance(snaps,list) and snaps else None,
+            'first_snapshot_keys':sorted(snaps[0]) if isinstance(snaps,list) and snaps and isinstance(snaps[0],dict) else None,
+            'first_snapshot_field_shapes':{
+              k: {'type':type(v).__name__,'count':len(v) if isinstance(v,(list,dict)) else None,
+                  'keys':sorted(v)[:30] if isinstance(v,dict) else
+                         sorted(v[0])[:45] if isinstance(v,list) and v and isinstance(v[0],dict) else None}
+              for k,v in (snaps[0].items() if isinstance(snaps,list) and snaps and isinstance(snaps[0],dict) else [])},
+            'snapshot_container_keys':sorted(snaps)[:15] if isinstance(snaps,dict) else None,
+          },sort_keys=True))
+          PY
       - name: Compute read-only TOP/VALUE fixed-cutoff test
         shell: bash
         run: |
