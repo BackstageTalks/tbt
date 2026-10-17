@@ -23,7 +23,8 @@ def test_15000_shared_budget_and_provider_headroom():
     assert shared_budget.PROVIDER_RESERVE == 500
     assert shared_budget.GLOBAL_CEILING == 15000
     assert shared_budget.PURPOSE_CAPS["history"] == 15000
-    assert DEFAULT_PROVIDER_REQUEST_RESERVE == 500
+    # The shared budget is the hard 500-request reserve; provider-header fallback is legacy.
+    assert DEFAULT_PROVIDER_REQUEST_RESERVE == 450
     assert 'budget.get("global_limit") != 15000' in HOURLY
     assert 'budget.get("reserved_provider_headroom") != 500' in HOURLY
     assert 'remaining != max(0, 15000-spent)' in HOURLY
