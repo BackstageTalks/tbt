@@ -1,0 +1,151 @@
+name: BlinQ Drive ATP 2017-2019 native CDB identity pilot (private read-only)
+'on':
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-drive-atp-2017-2019-native-cdb-audit.yml
+      - scripts/audit_drive_atp_2017_2019_current_cdb.py
+      - tests/test_drive_atp_2017_2019_current_cdb.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: blinq-drive-atp-2017-2019-readonly
+  cancel-in-progress: false
+jobs:
+  native-link-audit:
+    if: github.repository == 'BackstageTalks/tbt' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout trusted app
+        uses: actions/checkout@v4
+        with:
+          path: app
+          persist-credentials: false
+      - name: Checkout independent pinned public source
+        uses: actions/checkout@v4
+        with:
+          repository: Aneeshers/tennis-sackmann-archive
+          ref: 83733587353df8a41f2fd4f516147d5aa83f5a8d
+          path: source
+          persist-credentials: false
+          sparse-checkout: |
+            atp/atp_matches_2017.csv
+            atp/atp_matches_2018.csv
+            atp/atp_matches_2019.csv
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test strict fail-closed source and CDB matching
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile app/scripts/audit_drive_atp_2017_2019_current_cdb.py
+          python -m unittest discover -v -s app/tests -p test_drive_atp_2017_2019_current_cdb.py
+          test "$(git -C source rev-parse HEAD)" = "83733587353df8a41f2fd4f516147d5aa83f5a8d"
+          test "$(git hash-object source/atp/atp_matches_2017.csv)" = "70015182e04c9a6a589cac127996b9d1d5b8a171"
+          test "$(git hash-object source/atp/atp_matches_2018.csv)" = "0f4af87f7bc22ed525c1fd2634a0dbd79c8b5ac7"
+          test "$(git hash-object source/atp/atp_matches_2019.csv)" = "cae0152824354b50ceede3d93f856cbfa2d94f38"
+          echo "INDEPENDENT_PINNED_SOURCE_SHA_PASS"
+      - name: Fetch SHA-pinned private Drive identity ledger and CURRENT CDB bytes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          PRIVATE_REPO: BackstageTalks/tbt-data
+          LEDGER_COMMIT: 6a809c8d696c64f3dcb7333da48f9eae270ea7ba
+        run: |
+          set -euo pipefail
+          set +x
+          test -n "$GH_TOKEN" || { echo "BLOCKED_MISSING_PRIVATE_READ_TOKEN"; exit 1; }
+          test "$(gh api "repos/$PRIVATE_REPO" --jq .private)" = true
+          mkdir -p "$RUNNER_TEMP/drive-atp/cdb" "$RUNNER_TEMP/drive-atp/output"
+          for year in 2017 2018 2019; do
+            path="$RUNNER_TEMP/drive-atp/ledger-$year.tsv"
+            gh api "repos/$PRIVATE_REPO/contents/audit/identity-pilots/drive-atp-main-$year-source-identities.tsv?ref=$LEDGER_COMMIT" --jq .content | base64 --decode >"$path"
+            case "$year" in
+              2017) expected="a4b2881977e6282c410795c085e4a99d8557e77c" ;;
+              2018) expected="7fff4fd43f27ba688c0bfa84203dc11ceabaafac" ;;
+              2019) expected="6d144662201c3c3ecfc121e72a19619cdd3c3ad1" ;;
+            esac
+            test "$(git hash-object "$path")" = "$expected" || { echo "PRIVATE_LEDGER_BLOB_DRIFT"; exit 1; }
+          done
+          head -n 1 "$RUNNER_TEMP/drive-atp/ledger-2017.tsv" >"$RUNNER_TEMP/drive-atp/ledger.tsv"
+          for year in 2017 2018 2019; do
+            tail -n +2 "$RUNNER_TEMP/drive-atp/ledger-$year.tsv" >>"$RUNNER_TEMP/drive-atp/ledger.tsv"
+          done
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" >"$RUNNER_TEMP/drive-atp/release-before.json"
+          for year in 2017 2018 2019; do
+            gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p "history-$year.parquet" -D "$RUNNER_TEMP/drive-atp/cdb" >/dev/null
+          done
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" -p history_manifest.json -D "$RUNNER_TEMP/drive-atp/cdb" >/dev/null
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" >"$RUNNER_TEMP/drive-atp/release-after.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])/"drive-atp"
+          a=json.loads((root/"release-before.json").read_text())
+          b=json.loads((root/"release-after.json").read_text())
+          names=("history-2017.parquet","history-2018.parquet","history-2019.parquet","history_manifest.json")
+          def pinned(release):
+              asset={x["name"]:x for x in release["assets"]}
+              return release["id"],tuple((asset[n]["id"],asset[n]["size"],asset[n].get("digest")) for n in names)
+          assert pinned(a)==pinned(b),"CURRENT_CDB_RELEASE_CHANGED_DURING_DOWNLOAD"
+          print("PRIVATE_2017_2019_CDB_ASSETS_STABLE")
+          PY
+      - name: Join ALL 8556 audited Drive IDs against current canonical native-event provenance
+        shell: bash
+        env:
+          GH_TOKEN: ''
+          GITHUB_TOKEN: ''
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet --disable-pip-version-check "pyarrow==18.1.0"
+          python app/scripts/audit_drive_atp_2017_2019_current_cdb.py \
+            --ledger "$RUNNER_TEMP/drive-atp/ledger.tsv" \
+            --pinned-source-dir source/atp \
+            --cdb-dir "$RUNNER_TEMP/drive-atp/cdb" \
+            --release-json "$RUNNER_TEMP/drive-atp/release-before.json" \
+            --out "$RUNNER_TEMP/drive-atp/output/report.json" \
+            >"$RUNNER_TEMP/drive-atp/quiet-scan.log" 2>&1 || { echo "NATIVE_CDB_JOIN_FAILED_REDACTED"; exit 1; }
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ["RUNNER_TEMP"])/"drive-atp/output/report.json"
+          r=json.loads(p.read_text())
+          assert r["source_rows"]==8556 and r["production_cdb_writes"]==0
+          assert r["bulk_import_authorized"] is False
+          assert len(r["per_event"])==8556
+          assert len(r["verified_secondary_ids"])==r["verified_ids"]
+          print("DRIVE_ATP_2017_2019_READONLY_VERIFIED",json.dumps({
+              "source_rows":r["source_rows"],"verified_native_links":r["verified_ids"],
+              "rejected_or_unresolved":r["source_rows"]-r["verified_ids"],
+              "original_archive_event_matches":r["source_crosscheck"]["exact_original_event_witness"],
+              "canonical_writes":0},sort_keys=True))
+          PY
+      - name: Persist event-level results PRIVATE ONLY with independent readback
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          PRIVATE_REPO: BackstageTalks/tbt-data
+        run: |
+          set -euo pipefail
+          set +x
+          cd "$RUNNER_TEMP/drive-atp/output"
+          sha256sum report.json verified-secondary-ids.jsonl >SHA256SUMS
+          sha256sum -c SHA256SUMS >/dev/null
+          tag="blinq-drive-atp2017-2019-native-identity-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" -R "$PRIVATE_REPO" --target main \
+            --title "Read-only Drive ATP 2017-2019 exact original-native CDB identity" \
+            --notes "Private event-level read-only audit; no CDB writes, no training." \
+            report.json verified-secondary-ids.jsonl SHA256SUMS >/dev/null
+          mkdir -p "$RUNNER_TEMP/drive-atp/readback"
+          gh release download "$tag" -R "$PRIVATE_REPO" -D "$RUNNER_TEMP/drive-atp/readback" >/dev/null
+          (cd "$RUNNER_TEMP/drive-atp/readback" && sha256sum -c SHA256SUMS >/dev/null)
+          cmp report.json "$RUNNER_TEMP/drive-atp/readback/report.json"
+          echo "PRIVATE_IDENTITY_LEDGER_INDEPENDENT_READBACK_PASS"
+          echo "Private receipt: $tag" >>"$GITHUB_STEP_SUMMARY"
+      - name: Remove private data from runner
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/drive-atp"
