@@ -279,6 +279,10 @@ def load_stage(path: Path) -> list[dict]:
     field = next(iter(rows[0]["additions"]))
     if rows[0]["policy"] != (COUNT_POLICY if field in COUNT_FIELDS else POLICY):
         raise ValueError("Converted count/rate source policy mismatch")
+    value = rows[0]["additions"][field]
+    if (type(value) not in (int, float) or (field in COUNT_FIELDS and (type(value) is not int or value < 0))
+        or (field in RATES and not 0 <= value <= 1)):
+        raise ValueError("Untrusted count or rate payload")
     return rows
 
 def exact_write(stage_rows: list[dict], history: Path) -> dict:
