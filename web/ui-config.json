@@ -59,8 +59,8 @@
     "elite": {
       "label": "BlinQ ELITE",
       "enabled": true,
-      "note": "180-day premium access; workspace permissions remain configurable in Admin.",
-      "duration_days": 180,
+      "note": "30-day premium access; workspace permissions remain configurable in Admin.",
+      "duration_days": 30,
       "lifetime": false,
       "hide_ads_allowed": false,
       "description": "Expanded analytical access for users who follow more matches and context.",
@@ -76,8 +76,8 @@
     "legend": {
       "label": "BlinQ LEGEND",
       "enabled": true,
-      "note": "365-day premium access; workspace permissions remain configurable in Admin.",
-      "duration_days": 365,
+      "note": "180-day premium access; workspace permissions remain configurable in Admin.",
+      "duration_days": 180,
       "lifetime": false,
       "hide_ads_allowed": false,
       "description": "The highest publicly available BlinQ tier.",
