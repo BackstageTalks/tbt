@@ -137,7 +137,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: blinq-issued-ledger-aggregate-${{ github.run_id }}
-          path: |\n            .cache/tbt/reconciled-results/issued-ledger-report.json\n            .cache/tbt/reconciled-results/public-live-feed-reconciliation.json
+          path: |
+            .cache/tbt/reconciled-results/issued-ledger-report.json
+            .cache/tbt/reconciled-results/public-live-feed-reconciliation.json
           if-no-files-found: warn
           retention-days: 7
       - name: Remove locally downloaded private release bytes
