@@ -103,7 +103,20 @@ jobs:
           python app/scripts/cdb_33_native_one_cell_pilot.py --mode stage \
             --ledger "$ROOT/source/ledger.tsv" --verified "$ROOT/source/verified-secondary-ids.jsonl" \
             --source-dir source/atp --history-dir "$ROOT/cdb" \
-            --out "$ROOT/output/stage-report.json" >"$ROOT/output/stage-quiet.log" 2>&1 || { echo "NATIVE33_PREFLIGHT_FAILED_REDACTED"; exit 1; }
+            --out "$ROOT/output/stage-report.json" >"$ROOT/output/stage-quiet.log" 2>&1 || {
+            python - "$ROOT/output/stage-quiet.log" <<'PY'
+          import json,re,sys
+          from pathlib import Path
+          log=Path(sys.argv[1]).read_text(encoding='utf-8',errors='replace')
+          frames=re.findall(r'File "([^"]+)", line (\d+), in ([^\n]+)',log)
+          classes=re.findall(r'(?m)^([A-Za-z_][A-Za-z_0-9]*(?:Error|Exception)):',log)
+          clean=lambda s: re.sub(r'[^A-Za-z0-9_.-]','_',s)[:72]
+          safe=[{'file':clean(Path(p).name),'line':int(n),'function':clean(f)} for p,n,f in frames[-3:]]
+          print('NATIVE33_PREFLIGHT_DIAG',json.dumps({'error_class':clean(classes[-1]) if classes else 'UNKNOWN','frames':safe},sort_keys=True))
+          PY
+            echo "NATIVE33_PREFLIGHT_FAILED_REDACTED"
+            exit 1
+          }
           python - <<'PY'
           import json,os
           from pathlib import Path
