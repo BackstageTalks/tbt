@@ -1,0 +1,60 @@
+name: Audit live BlinQ membership expiry (read-only)
+on:
+  push:
+    paths:
+      - '.github/workflows/audit-live-membership-expiries.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read_live_expiries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read exact production membership policy (no credentials or writes)
+        env:
+          TARGET_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, urllib.request, datetime
+          base = os.environ['TARGET_URL'].rstrip('/')
+          if not base.startswith('https://'):
+              raise SystemExit('HTTPS production URL required')
+          request = urllib.request.Request(
+              base + '/api/v1/ui-config?live_expiry_audit=' + os.environ['GITHUB_SHA'],
+              headers={'Cache-Control':'no-cache','Accept':'application/json'},
+          )
+          with urllib.request.urlopen(request, timeout=20) as response:
+              if response.status != 200:
+                  raise SystemExit('Production API did not return 200')
+              data = json.load(response)
+          cfg = data.get('config') or {}
+          plans = cfg.get('plans') or {}
+          keep = ('trial','rookie','pro','elite','legend','goat','admin')
+          output = {
+              'observed_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              'production_base': base,
+              'source': data.get('source'),
+              'runtime_configured': data.get('runtime_configured'),
+              'storage_available': data.get('storage_available'),
+              'memberships': {
+                  p:{
+                      'duration_days':(plans.get(p) or {}).get('duration_days'),
+                      'unlimited':(plans.get(p) or {}).get('unlimited'),
+                      'lifetime':(plans.get(p) or {}).get('lifetime'),
+                      'enabled':(plans.get(p) or {}).get('enabled'),
+                  } for p in keep
+              },
+              'account_inactivity':{
+                  k: (cfg.get('account_inactivity') or {}).get(k)
+                  for k in ('enabled','inactive_days','warning_days','notify_user','auto_expire_rookie')
+              },
+          }
+          print('BLINQ_LIVE_MEMBERSHIP_AUDIT=' + json.dumps(output, sort_keys=True, ensure_ascii=False))
+          if data.get('storage_available') is not True or data.get('runtime_configured') is not True:
+              raise SystemExit('Production runtime configuration not confirmed')
+          if not isinstance(plans, dict) or not plans:
+              raise SystemExit('Production plans missing')
+          PY
