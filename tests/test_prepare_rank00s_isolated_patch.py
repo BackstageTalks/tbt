@@ -130,3 +130,46 @@ def test_isolated_artifacts_cannot_masquerade_as_canonical_release():
     assert "NOT_FOR_CDB_RELEASE.txt" in source
     assert "dest = out / f'history-{year}.parquet'" not in source
     assert source.index('NOT_FOR_CDB_RELEASE.txt') < source.index("dest = out / f'preview-history-")
+
+
+def test_changed_global_manifest_needs_explicit_current_sha_and_repin():
+    _, candidate = cohort()
+    with tempfile.TemporaryDirectory() as tmp:
+        d=Path(tmp);stage=d/'stage.jsonl'; report=d/'report.json'
+        stage.write_text(json.dumps(candidate)+'\n')
+        current='c'*64
+        meta={'state':'PREPARED_READONLY_NO_CDB_WRITE',
+              'history_manifest_sha256':current,
+              'historical_baseline_manifest_sha256':r.CANONICAL_MANIFEST_SHA,
+              'source_sha256':r.SOURCE_ZIP_SHA,
+              'canonical_writes':0,'safe_for_production_write':False,
+              'stage_sha256':r.digest(stage),'candidate_cells':1,'crosswalk_players':2}
+        report.write_text(json.dumps(meta))
+        with pytest.raises(r.GateError,match='stale'):
+            r.stage_from_preflight(stage,report)
+        assert len(r.stage_from_preflight(stage,report,current_manifest_sha256=current)[0])==1
+        del meta['historical_baseline_manifest_sha256']
+        report.write_text(json.dumps(meta))
+        with pytest.raises(r.GateError,match='stale'):
+            r.stage_from_preflight(stage,report,current_manifest_sha256=current)
+
+
+def test_current_manifest_requires_all_ten_independently_pinned_years(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmp:
+        d=Path(tmp); current='c'*64
+        years={}
+        for year,digest in r.PARTITIONS.items():
+            name=f'history-{year}.parquet'
+            (d/name).write_bytes(b'x')
+            years[str(year)]={'asset':name,'sha256':digest,'bytes':1,'rows':1}
+        (d/'history_manifest.json').write_text(json.dumps({'years':years}))
+        def test_digest(path):
+            if Path(path).name=='history_manifest.json':
+                return current
+            return r.PARTITIONS[int(Path(path).stem.split('-')[1])]
+        monkeypatch.setattr(r,'digest',test_digest)
+        r.validate_release_files(d,current_manifest_sha256=current)
+        years['2007']['sha256']='f'*64
+        (d/'history_manifest.json').write_text(json.dumps({'years':years}))
+        with pytest.raises(r.GateError,match='year manifest entry mismatch'):
+            r.validate_release_files(d,current_manifest_sha256=current)
