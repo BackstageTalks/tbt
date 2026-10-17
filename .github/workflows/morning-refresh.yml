@@ -99,7 +99,7 @@ jobs:
             local before=".cache/tbt/morning/before-$attempt.txt"
             gh api "$workflow_runs_api" --jq '.workflow_runs[].id' > "$before"
 
-            gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main -f mode=refresh -f morning_refresh=true -f max_requests="$MORNING_MAX_REQUESTS" -f market_odds_max_events=-1 -f doubles_odds_max_events=-1 -f betting_day_start_hour=6
+            gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main -f mode=refresh -f morning_refresh=true -f max_requests="$MORNING_MAX_REQUESTS" -f market_odds_max_events=-1 -f doubles_odds_max_events=-1 -f propline_max_events=-1 -f betting_day_start_hour=6
 
             CHILD_RUN_ID=""
             for _ in $(seq 1 30); do
