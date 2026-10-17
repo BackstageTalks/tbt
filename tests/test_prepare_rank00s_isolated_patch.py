@@ -120,3 +120,13 @@ def test_output_path_must_not_be_baseline():
         p=Path(t)
         with pytest.raises(r.GateError,match='outside canonical baseline'):
             r.run(baseline_dir=p,stage_path=p/'stage',report_path=p/'report',output_dir=p)
+
+
+def test_isolated_artifacts_cannot_masquerade_as_canonical_release():
+    # A syntactically valid patched Parquet is NOT a permission to publish it.
+    import inspect
+    source = inspect.getsource(r.run)
+    assert "dest = out / f'preview-history-{year}.parquet'" in source
+    assert "NOT_FOR_CDB_RELEASE.txt" in source
+    assert "dest = out / f'history-{year}.parquet'" not in source
+    assert source.index('NOT_FOR_CDB_RELEASE.txt') < source.index("dest = out / f'preview-history-")
