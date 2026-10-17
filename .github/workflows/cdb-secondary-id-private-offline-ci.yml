@@ -55,7 +55,12 @@ jobs:
           GITHUB_TOKEN: ''
         run: |
           set -euo pipefail
-          python -m py_compile private/scripts/reconcile_l2_cdb_identity.py private/scripts/l2_metadata_candidates.py private/scripts/secondary_id_map.py private/tests/test_reconcile_l2_cdb_identity.py private/tests/test_secondary_id_map.py
+          if python -m py_compile private/scripts/reconcile_l2_cdb_identity.py private/scripts/l2_metadata_candidates.py private/scripts/secondary_id_map.py private/tests/test_reconcile_l2_cdb_identity.py private/tests/test_secondary_id_map.py >/tmp/cdb-secondary-compile.log 2>&1; then
+            echo 'CDB_SECONDARY_ID_FIVE_PRIVATE_FILES_COMPILED'
+          else
+            echo 'CDB_SECONDARY_ID_COMPILE_FAILED_REDACTED'
+            exit 1
+          fi
           # Private source, test output, and exceptions must never enter public logs/artifacts.
           if PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -q -s private/tests -p 'test_secondary_id_map.py' >/tmp/cdb-secondary-unit.log 2>&1; then
             echo 'CDB_SECONDARY_ID_UNIT_SUITE_PASSED'
