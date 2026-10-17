@@ -151,9 +151,19 @@ jobs:
           assert gaps["exact_full_candidate_policy_executed"] is False
           for name, states in gaps["field_status"].items():
               assert sum(states.values()) == original["verified_ids"], name
+          summary={}
+          for name,states in gaps["field_status"].items():
+              count=gaps["verified_link_count"]
+              present=states.get("present",0)
+              candidate=states.get("research_gap_requires_full_candidate_and_rights_review",0)
+              assert 0<=present<=count and 0<=candidate<=count-present
+              summary[name]={"existing_values":present,
+                             "null_values":count-present,
+                             "source_attested_research_gaps":candidate}
           print("NATIVE_2017_2019_NULL_GAP_READONLY",json.dumps({
               "verified_native_links":gaps["verified_link_count"],
               "source_stats_lineage":gaps["counts"].get("original_match_stat_lineage",0),
+              "field_counts":summary,
               "production_writes":0,
               "import_authorized":False
           },sort_keys=True))
