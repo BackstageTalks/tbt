@@ -47,7 +47,10 @@ from tbt.services.projection_odds import (
     extract_match_total_odds,
 )
 from tbt.services.indicative_odds import annotate_feed_indicative_odds
-from tbt.services.propline_live import PropLineClient, discover_propline_fallback
+from tbt.services.propline_live import (
+    PropLineClient, discover_propline_fallback,
+    PROVIDER_DAILY_PLAN_LIMIT, MIN_PROVIDER_REMAINING,
+)
 from tbt.services.doubles_selection import (
     build_predictions as build_doubles_predictions,
     select_picks as select_doubles_picks,
@@ -785,8 +788,8 @@ def main():
         parser.error("refresh allowance must be 1..14500")
     if args.market_odds_max_events < -1:
         parser.error("market-odds-max-events must be >= -1 (-1 means uncapped)")
-    if not 0 <= args.propline_max_events <= 75:
-        parser.error("propline-max-events must be 0..75")
+    if args.propline_max_events < -1:
+        parser.error("propline-max-events must be >= -1 (-1 means provider-quota guarded)")
     if args.doubles_odds_max_events < -1:
         parser.error("doubles-odds-max-events must be >= -1 (-1 means uncapped)")
     if not 0 <= args.betting_day_start_hour <= 23:
@@ -1503,21 +1506,9 @@ def main():
                     for market in ("sets", "games") if market in markets
                 }
 
-            # ACES / Double Faults real-odds contract: the legacy RapidAPI
-            # prop prices are not trusted for publication. Keep RapidAPI as
-            # the primary source for Games/Sets and Match Winner, but require
-            # PropLine for current Aces/DF. If PropLine has no exact complete
-            # player market, the projection remains unpublished.
-            ignored_rapid_ace_df = {"aces": 0, "double_faults": 0}
-            for event_id, markets in list(available_projection_markets.items()):
-                trusted = set(markets)
-                for metric in ("aces", "double_faults"):
-                    if metric in trusted:
-                        ignored_rapid_ace_df[metric] += 1
-                        trusted.discard(metric)
-                available_projection_markets[event_id] = trusted
-            projection_discovery_report["ace_df_real_odds_policy"] = "propline_only_v1"
-            projection_discovery_report["rapidapi_ace_df_markets_ignored"] = ignored_rapid_ace_df
+            # Use the same priority for all five existing markets: exact
+            # API PRO contract first, then exact PropLine fallback only.
+            projection_discovery_report["ace_df_real_odds_policy"] = "rapidapi_first_propline_fallback"
 
             # Primary Match Winner enrichment runs first. PropLine is a true
             # fallback: it may fill only contracts that provider 1 did not price.
@@ -1537,7 +1528,7 @@ def main():
             # reserve. Its h2h output is used only when the primary provider left
             # the Match Winner contract unpriced; primary quotes are never replaced.
             prop_key = os.getenv("PROPL", "").strip()
-            if prop_key and args.propline_max_events:
+            if prop_key and args.propline_max_events != 0:
                 propline_existing = {
                     event_id: set(markets)
                     for event_id, markets in available_projection_markets.items()
@@ -1551,8 +1542,9 @@ def main():
                         primary_match_winner += 1
 
                 prop_client = PropLineClient(
-                    prop_key, max_calls=1 + 2 * args.propline_max_events,
-                    min_remaining=150,
+                    prop_key,
+                    max_calls=PROVIDER_DAILY_PLAN_LIMIT - MIN_PROVIDER_REMAINING,
+                    min_remaining=MIN_PROVIDER_REMAINING,
                 )
                 prop_market_payloads, prop_report = discover_propline_fallback(
                     prop_client, predictions, propline_existing,
