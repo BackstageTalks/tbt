@@ -23,7 +23,8 @@ from audit_drive_atp_2020_2021_current_cdb import (
 )
 from offline_exact_cdb_write import write_exact_stats_partition
 from recover_cdb_opponent_service_rates import _sha, _storage, verify_readback
-from recover_cdb_sackmann_breakpoints import candidate, digest, POLICY
+from recover_cdb_sackmann_breakpoints import candidate, digest, POLICY, _source_rates, source_match_id, SOURCE_REVISION
+from import_historical_match_foundation import _stats
 from tbt.data.history_snapshot import load_snapshot, partition_path
 
 RELEASE_TAG = "blinq-drive-atp2020-2021-native-identity-39053414186-1"
@@ -105,6 +106,78 @@ def cdb_index(folder: Path) -> dict:
             result[year][str(m.match_id)] = m
     return result
 
+def attested_rank_only_candidate(match, original: dict, path: Path, line_no: int, file_hash: str):
+    """Narrow fallback ONLY after both event+player IDs and original file were proven.
+
+    Older historical canonical rows may carry original-source _tbt_rank_provenance
+    but no _tbt_statistics (stats were absent at original import). This is NOT
+    a name/date join: stage() first reattests both native IDs and exact
+    historical event marker against the separate 33-ID receipt + Drive ledger.
+    """
+    from datetime import datetime, timezone
+    mid, kind = source_match_id("atp", path, original, line_no)
+    original_source = "jeff_sackmann_match_snapshot:" + path.name
+    ctx = match.provider_payload
+    if (str(match.match_id) != mid or kind != "main"
+        or not match.is_completed or str(match.status).lower() != "completed"
+        or match.scheduled_at >= datetime.now(timezone.utc)
+        or match.scheduled_at.strftime("%Y%m%d") != original.get("tourney_date")
+        or str(match.player1_id) != "hist-js:atp:" + str(original.get("winner_id") or "")
+        or str(match.player2_id) != "hist-js:atp:" + str(original.get("loser_id") or "")
+        or str(match.winner_id) != str(match.player1_id)
+        or not isinstance(ctx, dict)):
+        return None, "rank_only_original_identity_conflict"
+    marker = ctx.get("_tbt_statistics")
+    if marker is not None:
+        # No fallback if canonical already attributes stats to any source.
+        return None, "canonical_stats_marker_present_no_rank_fallback"
+    rank = ctx.get("_tbt_rank_provenance")
+    if (not isinstance(rank, dict) or rank.get("source") != original_source):
+        return None, "missing_original_rank_source_witness"
+    rates = _source_rates(original)
+    if not rates:
+        return None, "invalid_or_zero_bp_denominator_rank_only"
+    previous = match.stats
+    if not isinstance(previous, dict):
+        return None, "bad_canonical_stats_rank_only"
+    import math
+    for key, observed in _stats(original).items():
+        current = previous.get(key)
+        if current is not None and (
+            isinstance(current, bool) or not isinstance(current, (int, float))
+            or not math.isfinite(current) or abs(float(current)-observed)>1e-6
+        ):
+            return None, "rank_only_original_stats_conflict"
+    for key, value in rates.items():
+        current = previous.get(key)
+        if current is not None and (
+            isinstance(current, bool) or not isinstance(current, (int, float))
+            or not math.isfinite(current) or abs(float(current)-value)>1e-6
+        ):
+            return None, "rank_only_existing_bp_conflict"
+        opposite = "p2_break_point_serve_win" if key.startswith("p1_") else "p1_break_point_serve_win"
+        other = previous.get(opposite)
+        if other is not None and (
+            isinstance(other, bool) or not isinstance(other, (int, float))
+            or not math.isfinite(other) or abs(float(other)+value-1)>1e-6
+        ):
+            return None, "rank_only_existing_serve_counterpart_conflict"
+    additions = {k:v for k,v in rates.items() if previous.get(k) is None}
+    if not additions:
+        return None, "rank_only_already_filled"
+    return {
+        "schema":1, "policy":POLICY, "match_id":mid,
+        "utc_year":match.scheduled_at.year,
+        "prewrite_hash":_sha(_storage(match)),
+        "source_stats_hash":_sha(previous),
+        "source":{
+            "commit":SOURCE_REVISION, "file":path.as_posix(),
+            "sha256":file_hash, "csv_line":line_no,
+            "winner_id":str(original["winner_id"]), "loser_id":str(original["loser_id"]),
+        },
+        "additions":dict(sorted(additions.items())),
+    }, "staged_attested_rank_only_original"
+
 def stage(ledger: Path, verified: Path, original_dir: Path, history: Path) -> tuple[list, dict]:
     links = verified_links(verified)
     proof, raw, filesha = indexes(ledger, original_dir)
@@ -139,6 +212,9 @@ def stage(ledger: Path, verified: Path, original_dir: Path, history: Path) -> tu
         verified_rechecked.add(mid)
         proposed, reason = candidate(m, csv_row, "atp", path, line_no, filesha[year])
         stats[reason] += 1
+        if proposed is None and reason == "lineage_rejected":
+            proposed, fallback_reason = attested_rank_only_candidate(m, csv_row, path, line_no, filesha[year])
+            stats[fallback_reason] += 1
         if proposed is None:
             continue
         if proposed["match_id"] != mid or proposed["policy"] != POLICY:
