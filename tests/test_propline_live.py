@@ -243,3 +243,74 @@ def test_match_winner_h2h_is_not_returned_when_primary_already_has_price():
     assert "match_winner" not in found["rapid-133"]
     assert report["priced_by_market"]["match_winner"] == 0
     assert set(found["rapid-133"]) == {"aces", "double_faults", "games", "sets"}
+
+
+
+def test_unlimited_propline_fallback_checks_all_eligible_events_not_first_75():
+    """No artificial fixture cap: only provider quota may stop discovery."""
+    fixtures = []
+    board = []
+    for i in range(82):
+        fixtures.append({
+            "event_id": f"rapid-{i}", "scheduled_at": START, "tour": "ATP",
+            "player1": {"id": f"p{i}", "name": f"First Player{i:03d}"},
+            "player2": {"id": f"q{i}", "name": f"Second Opponent{i:03d}"},
+        })
+        board.append({
+            "id": str(1000 + i), "home_team": f"First Player{i:03d}",
+            "away_team": f"Second Opponent{i:03d}", "commence_time": START,
+        })
+
+    class LargeBoard:
+        max_calls = 1000
+        min_remaining = 150
+        remaining = 800
+
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, path, params=None):
+            self.calls += 1
+            if path == "/sports/tennis/events":
+                return board
+            if path.endswith("/markets"):
+                return [{"key": "h2h"}]
+            if path.endswith("/odds"):
+                eid = int(path.split("/")[-2]) - 1000
+                return {"bookmakers": [{
+                    "key": "test-book",
+                    "markets": [{"key": "h2h", "outcomes": [
+                        {"name": f"First Player{eid:03d}", "price": -120},
+                        {"name": f"Second Opponent{eid:03d}", "price": 110},
+                    ]}],
+                }]}
+            raise AssertionError(path)
+
+    client = LargeBoard()
+    found, report = discover_propline_fallback(
+        client, fixtures, {}, now=NOW, max_events=-1,
+    )
+    assert report["matched_events"] == 82
+    assert report["events_limited_out"] == 0
+    assert report["priced_by_market"]["match_winner"] == 82
+    assert len(found) == 82
+    assert client.calls == 165
+
+
+def test_propline_client_does_not_spend_a_known_final_reserve_call():
+    from tbt.services.propline_live import MIN_PROVIDER_REMAINING
+    import pytest
+
+    client = PropLineClient("placeholder", max_calls=1000)
+    client.remaining = MIN_PROVIDER_REMAINING
+    with pytest.raises(RuntimeError, match="reserve"):
+        client.get("/sports/tennis/events")
+    assert client.calls == 0
+
+
+def test_primary_ace_df_markets_are_not_deleted_before_fallback():
+    from pathlib import Path
+    pipeline = (Path(__file__).resolve().parents[1] / "scripts/pipeline.py").read_text()
+    assert '"rapidapi_first_propline_fallback"' in pipeline
+    assert "ignored_rapid_ace_df" not in pipeline
+    assert "propline_only_v1" not in pipeline
