@@ -206,7 +206,8 @@ def _match_board_with_diagnostics(
             method = "full"
         else:
             candidates = [(row, when) for row, _key, short, when in singles
-                          if abbreviated is not None and short == abbreviated
+                          if row.get("prediction_family") != "doubles"
+                          and abbreviated is not None and short == abbreviated
                           and abs((start - when).total_seconds()) <= 2700]
             method = "abbreviated"
         identities = {str(row["event_id"]) for row, _when in candidates}
