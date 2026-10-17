@@ -99,5 +99,5 @@ jobs:
           set -euo pipefail
           set +x
           DATA="$(base64 -w0 "$RUNNER_TEMP/blinq26/results/report.json")"
-          gh api -X PUT "repos/$PRIVATE_REPO/contents/audit/l2_cdb_26_current_release_context_candidates.json" -f message="audit(cdb): private read-only 26-case context results" -f branch="$PRIVATE_REPORT_BRANCH" -f content="$DATA" >/dev/null 2>"$RUNNER_TEMP/blinq26/private-upload.err" || { echo 'PRIVATE_REPORT_WRITE_SCOPE_BLOCKED'; exit 1; }
+          gh api -X PUT "repos/$PRIVATE_REPO/contents/audit/l2_cdb_26_current_release_winner_checked_candidates.json" -f message="audit(cdb): private read-only 26-case context results" -f branch="$PRIVATE_REPORT_BRANCH" -f content="$DATA" >/dev/null 2>"$RUNNER_TEMP/blinq26/private-upload.err" || { echo 'PRIVATE_REPORT_WRITE_SCOPE_BLOCKED'; exit 1; }
           echo 'PRIVATE_CDB26_AUDIT_RESULT_PERSISTED_ZERO_CDB_WRITES'
