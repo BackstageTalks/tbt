@@ -63,13 +63,33 @@ jobs:
           GITHUB_TOKEN: ''
         run: |
           set -euo pipefail
-          python -m pip install --quiet --disable-pip-version-check pyarrow
+          python -m pip install --quiet --disable-pip-version-check pyarrow cryptography
           python scripts/cdb_26_live_candidate_scan.py --cdb-dir "$RUNNER_TEMP/blinq26/cdb" --source "$RUNNER_TEMP/blinq26/source.psv" --release-json "$RUNNER_TEMP/blinq26/release.json" --output "$RUNNER_TEMP/blinq26/results/report.json" >"$RUNNER_TEMP/blinq26/scan.log" 2>&1 || { echo 'PRIVATE_SCAN_FAILED_REDACTED'; exit 1; }
           python - <<'PY'
           import json,os,pathlib
           r=json.loads((pathlib.Path(os.environ['RUNNER_TEMP'])/'blinq26/results/report.json').read_text())
           assert r['source_count']==26 and r['cdb_writes']==0 and r['bulk_import_authorized'] is False
           print('CDB26_RESEARCH_ONLY',json.dumps(r['counts'],sort_keys=True))
+          PY
+      - name: Emit compressed encrypted per-ID audit (no plaintext in public logs)
+        shell: bash
+        env:
+          GH_TOKEN: ''
+          GITHUB_TOKEN: ''
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64,gzip,json,os,pathlib
+          from cryptography.hazmat.primitives import serialization,hashes
+          from cryptography.hazmat.primitives.asymmetric import padding
+          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+          pub=serialization.load_der_public_key(base64.b64decode("MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAkkLE87AI4azjWq73W7RjYHkrC3o9TzMPkVL1uj3Lpw3P0xDwdcrIYvU+/9nxZcvV4UPFhWpYZVW4t6xBDnySB/2pFhG9kzfgi2L1Ym3i/Pxnk0LPIeaLXaH5lL/b4fAWBTzo41SgKDAjpUQ79l73QOHptrxU70YpB1AMadoXGj3zI5kVB0P77AIodEnwkWglAhoh93RFjEai6blHKSvTnTwjqlRqk5PrBHzTVeLGQkjUOl3n1OcpkLs3ac/S2CjXUHCiyFxS/HwaTPWBfpW4awlYbs0SaJY3hbwHiVp09rgfq/jSOP3LVtAPx44C3ERzJ/pZxEKVdQpLLyxmYiI8AyHSQkPFZXZ+I1SFPVDa3doIEOGMgT3w4HlPETue7j8K8BLQFfibvcH6OtJm65nFhcamNydLDjY3BzkI8b963V5n/zplp9TXiotE9CZ/E0fJDHMsZlsCy1S05+mq446HL91J3DfrvyjxjwX98B/QqOztJfmEU8xc9OrPE7YgT54NAgMBAAE="))
+          raw=(pathlib.Path(os.environ['RUNNER_TEMP'])/'blinq26/results/report.json').read_bytes()
+          key=os.urandom(32);nonce=os.urandom(12)
+          data=AESGCM(key).encrypt(nonce,gzip.compress(raw),None)
+          wrap=pub.encrypt(key,padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),algorithm=hashes.SHA256(),label=None))
+          envelope={'v':1,'key':base64.b64encode(wrap).decode(),'nonce':base64.b64encode(nonce).decode(),'ciphertext':base64.b64encode(data).decode()}
+          print('BLINQ26_ENCRYPTED_REPORT_V1='+base64.b64encode(json.dumps(envelope,separators=(',',':')).encode()).decode())
           PY
       - name: Store sensitive report exclusively in private audit branch
         shell: bash
