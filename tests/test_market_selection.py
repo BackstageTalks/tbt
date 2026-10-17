@@ -380,3 +380,24 @@ def test_prime_display_ranking_blends_probability_and_relative_odds_without_chan
     assert rule["display_ranking_only"] is True
     assert rule["eligibility_pool_unchanged"] is True
     assert rule["display_weights"] == {"probability_percentile": .75, "odds_percentile": .25}
+
+
+def test_uncapped_odds_enrichment_attempts_every_eligible_match_before_budget():
+    provider = _OddsProvider()
+    rows = [
+        row(f"uncapped-{i}", .75 + i * .01, 1.8, 2.2, depth=.95,
+            surface1=10, surface2=10)
+        for i in range(5)
+    ]
+    for item in rows:
+        item.pop("betting", None)
+        item.pop("match_winner_market", None)
+    enriched, report = enrich_current_betting_day_odds(
+        provider, rows, now=datetime(2026, 9, 7, 8, tzinfo=timezone.utc),
+        max_events=-1,
+    )
+    assert len(provider.called) == 5
+    assert report["eligible_candidates"] == 5
+    assert report["limited_out"] == 0
+    assert report["odds_available"] == 5
+    assert all(item.get("betting") for item in enriched)
