@@ -13,7 +13,7 @@ class ReadOnlyBridgeContract(unittest.TestCase):
 
     def test_main_only_path_restricted_push_without_writer(self):
         text = self.text
-        self.assertIn("  push:\\n    branches: [main]\\n    paths:\\n      - '.github/workflows/rank00s-private-offline-ci.yml'", text)
+        self.assertIn("  push:\n    branches: [main]\n    paths:\n      - '.github/workflows/rank00s-private-offline-ci.yml'", text)
         self.assertNotIn("  pull_request:", text)
         self.assertNotIn("  schedule:", text)
         self.assertNotIn("releases/tags/", text)
