@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import re
+import subprocess
 from pathlib import Path
 import sys
 from typing import Any
@@ -26,7 +28,7 @@ SOURCE_PRIORITY = ('ledger', 'feed', 'archive')
 def at(value: Any) -> datetime | None:
     try:
         out = datetime.fromisoformat(str(value or '').replace('Z', '+00:00'))
-        return out.replace(tzinfo=timezone.utc) if out.tzinfo is None else out.astimezone(timezone.utc)
+        return out.astimezone(timezone.utc) if out.tzinfo is not None else None
     except (ValueError, TypeError):
         return None
 
@@ -173,7 +175,7 @@ def reconcile(ledger: list, feed: dict, archive: list, *, source_sha256: dict | 
             if odds is not None and odds > 1:
                 snap = item['pub'].get('issued_snapshot')
                 quote_at = at(snap.get('market_captured_at')) if isinstance(snap, dict) and snap.get('market_captured_at') else None
-                if quote_at is not None and quote_at > item['issued']:
+                if isinstance(snap, dict) and snap.get('market_captured_at') and (quote_at is None or quote_at > item['issued']):
                     counts['late_quote_rejected'] += 1
                     continue
                 known_odds.append(odds)
@@ -260,6 +262,37 @@ def _digest(path: Path) -> str:
     return h.hexdigest()
 
 
+
+def _download_private_release_readonly(repository: str, directory: Path) -> tuple[Path, Path]:
+    """Fetch immutable release inputs, without using ReleaseStore's creation path.
+
+    ReleaseStore initializes missing tags by creating them, which is not allowed
+    in a read-only audit. A missing tag or checksum mismatch fails closed.
+    """
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository):
+        raise ValueError('Invalid private data repository name')
+    tag = 'tbt-predictions-v1'
+    subprocess.run(['gh', 'api', f'repos/{repository}/releases/tags/{tag}'],
+                   check=True, stdout=subprocess.DEVNULL)
+    directory.mkdir(parents=True, exist_ok=True)
+    for name in ('_tbt_bundle_manifest.json', 'ledger.json', 'feed.json'):
+        subprocess.run(['gh', 'release', 'download', tag, '--repo', repository,
+                        '--pattern', name, '--dir', str(directory), '--clobber'],
+                       check=True, stdout=subprocess.DEVNULL)
+    manifest = _load(directory / '_tbt_bundle_manifest.json')
+    committed = manifest.get('files') if isinstance(manifest, dict) else None
+    if not isinstance(committed, dict):
+        raise ValueError('Missing immutable release bundle manifest')
+    for name in ('ledger.json', 'feed.json'):
+        meta = committed.get(name)
+        expected = meta.get('sha256') if isinstance(meta, dict) else None
+        if not (isinstance(expected, str) and re.fullmatch(r'[0-9a-f]{64}', expected)):
+            raise ValueError(f'Missing release checksum for {name}')
+        if _digest(directory / name) != expected:
+            raise ValueError(f'Immutable release checksum mismatch for {name}')
+    return directory / 'ledger.json', directory / 'feed.json'
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--ledger', type=Path, help='Immutable ledger JSON, or use --from-release')
@@ -274,12 +307,8 @@ def main(argv=None):
     if args.from_release:
         if args.ledger or args.feed:
             parser.error('--from-release cannot be combined with --ledger/--feed')
-        from release_store import ReleaseStore
         cache = Path(__file__).resolve().parents[1] / '.cache/tbt/reconciled-results/predictions'
-        pred = ReleaseStore(args.data_repository, 'tbt-predictions-v1', cache)
-        pred.download(extra_names=('feed.json', 'ledger.json'),
-                      required_names=('feed.json', 'ledger.json'), require_bundle_manifest=True)
-        ledger_path, feed_path = cache / 'ledger.json', cache / 'feed.json'
+        ledger_path, feed_path = _download_private_release_readonly(args.data_repository, cache)
     else:
         if not args.ledger or not args.feed:
             parser.error('both --ledger and --feed are required unless --from-release is set')
