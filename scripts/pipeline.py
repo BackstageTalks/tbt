@@ -737,12 +737,12 @@ def main():
     parser = argparse.ArgumentParser(description="Offline BlinQ training and prediction publication")
     parser.add_argument("mode", choices=["train", "refresh", "current-refresh", "backtest"])
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data"))
-    parser.add_argument("--max-requests", type=int, default=750)
+    parser.add_argument("--max-requests", type=int, default=14500)
     parser.add_argument(
         "--market-odds-max-events",
         type=int,
-        default=150,
-        help="Maximum provider-1 odds calls for the current BlinQ betting day",
+        default=-1,
+        help="Provider-1 odds event cap (-1 = use remaining request budget; 0 = disable)",
     )
     parser.add_argument(
         "--propline-max-events", type=int, default=75,
@@ -751,8 +751,8 @@ def main():
     parser.add_argument(
         "--doubles-odds-max-events",
         type=int,
-        default=40,
-        help="Maximum provider-1 Match Winner odds calls for isolated doubles candidates",
+        default=-1,
+        help="Doubles event cap (-1 = unlimited events, bounded by request budget; 0 = disable)",
     )
     parser.add_argument(
         "--betting-day-start-hour",
@@ -781,14 +781,14 @@ def main():
             training_certificate = _require_training_backup_gate()
         except RuntimeError as exc:
             parser.error(str(exc))
-    if not 1 <= args.max_requests <= 3000:
-        parser.error("refresh allowance must be 1..3000")
-    if args.market_odds_max_events < 0:
-        parser.error("market-odds-max-events must be >= 0")
+    if not 1 <= args.max_requests <= 14500:
+        parser.error("refresh allowance must be 1..14500")
+    if args.market_odds_max_events < -1:
+        parser.error("market-odds-max-events must be >= -1 (-1 means uncapped)")
     if not 0 <= args.propline_max_events <= 75:
         parser.error("propline-max-events must be 0..75")
-    if args.doubles_odds_max_events < 0:
-        parser.error("doubles-odds-max-events must be >= 0")
+    if args.doubles_odds_max_events < -1:
+        parser.error("doubles-odds-max-events must be >= -1 (-1 means uncapped)")
     if not 0 <= args.betting_day_start_hour <= 23:
         parser.error("betting-day-start-hour must be 0..23")
     cache = ROOT / ".cache/tbt"
@@ -1462,7 +1462,11 @@ def main():
                     }
                 }, ensure_ascii=False), flush=True)
 
-        projection_odds_cap = max(0, int(args.market_odds_max_events or 0))
+        projection_odds_cap = (
+            max(0, int(provider.request_limit) - int(provider.request_count))
+            if args.market_odds_max_events == -1
+            else max(0, int(args.market_odds_max_events))
+        )
         market_odds_cap = projection_odds_cap
         # current-refresh now uses the same complete market discovery as a normal
         # refresh. The shared provider budget and per-run cap are the safety rails;
