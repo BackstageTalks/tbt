@@ -1,0 +1,97 @@
+name: BlinQ TOP VALUE point-in-time backtest (read-only PR)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - audit/top-value-pit/backtest_top_value_pit.py.gz.b64
+      - tests/test_backtest_top_value_pit.py
+      - .github/workflows/blinq-top-value-readonly-pr.yml
+      - audit/blinq-top-value-public-key.pem
+
+permissions:
+  contents: read
+concurrency:
+  group: blinq-top-value-audit-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  backtest:
+    if: >-
+      github.repository == 'BackstageTalks/tbt' &&
+      github.event.pull_request.head.repo.full_name == 'BackstageTalks/tbt' &&
+      github.head_ref == 'audit/top-value-pit-20261017'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Restore pinned audited research script
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p scripts
+          base64 -d audit/top-value-pit/backtest_top_value_pit.py.gz.b64 | gzip -d > scripts/backtest_top_value_pit.py
+          python -m py_compile scripts/backtest_top_value_pit.py
+      - name: Test deterministic selection and leakage protection
+        run: |
+          set -euo pipefail
+          python -m pip install -q pytest
+          python -m pytest -q tests/test_backtest_top_value_pit.py
+      - name: Verify private access and download immutable inputs only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = true
+          mkdir -p .cache/tbt/top-value-private
+          gh release download tbt-predictions-v1 --repo BackstageTalks/tbt-data \
+            --dir .cache/tbt/top-value-private \
+            --pattern '_tbt_bundle_manifest.json' --pattern 'ledger.json' \
+            --pattern 'feed.json' --pattern 'daily_offer_snapshot.json' \
+            --pattern 'selection_candidates_2026-10.json.gz' --clobber
+          test -s .cache/tbt/top-value-private/ledger.json
+          test -s .cache/tbt/top-value-private/selection_candidates_2026-10.json.gz
+      - name: Compute read-only TOP/VALUE fixed-cutoff test
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/backtest_top_value_pit.py \
+            --ledger .cache/tbt/top-value-private/ledger.json \
+            --feed .cache/tbt/top-value-private/feed.json \
+            --candidates .cache/tbt/top-value-private/selection_candidates_2026-10.json.gz \
+            --daily .cache/tbt/top-value-private/daily_offer_snapshot.json \
+            --out .cache/tbt/top-value-private/aggregate.json \
+            --rows .cache/tbt/top-value-private/top_value_rows.jsonl
+      - name: Encrypt row-level research dataset
+        shell: bash
+        run: |
+          set -euo pipefail
+          d=.cache/tbt/top-value-private
+          openssl rand -hex 32 > "$d/top_value_rows.pass"
+          openssl enc -aes-256-cbc -pbkdf2 -salt \
+            -in "$d/top_value_rows.jsonl" -out "$d/top_value_rows.jsonl.enc" \
+            -pass file:"$d/top_value_rows.pass"
+          openssl pkeyutl -encrypt -pubin -inkey audit/blinq-top-value-public-key.pem \
+            -in "$d/top_value_rows.pass" -out "$d/top_value_rows.key.rsa"
+          rm -f "$d/top_value_rows.jsonl" "$d/top_value_rows.pass"
+      - name: Upload aggregate and ciphertext only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-top-value-pit-${{ github.run_id }}
+          path: |
+            .cache/tbt/top-value-private/aggregate.json
+            .cache/tbt/top-value-private/top_value_rows.jsonl.enc
+            .cache/tbt/top-value-private/top_value_rows.key.rsa
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Erase private release bytes from runner
+        if: always()
+        run: rm -rf .cache/tbt/top-value-private
