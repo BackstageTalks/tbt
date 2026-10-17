@@ -84,7 +84,7 @@ def test_reset_email_uses_original_logo_without_cid(monkeypatch):
     assert msg["From"] == "BlinQ <security@example.test>"
 
 
-def test_lifecycle_email_uses_same_image_free_template(monkeypatch):
+def test_lifecycle_email_uses_original_hosted_logo(monkeypatch):
     FakeSMTP.delivered = []
     monkeypatch.setattr(auth_email.smtplib, "SMTP", FakeSMTP)
     sent = auth_email.send_blinq_transactional_email(
@@ -101,11 +101,38 @@ def test_lifecycle_email_uses_same_image_free_template(monkeypatch):
     )
     assert sent is True
     assert len(FakeSMTP.delivered) == 1
-    plain, html = _assert_gmail_safe(FakeSMTP.delivered[0])
+    plain, html = _assert_gmail_safe(FakeSMTP.delivered[0], hosted_logo=True)
     assert "Účet prejde na ROOKIE" in plain
     assert "Subscription expires" in html
     assert 'href="https://blinq.example/account"' in html
 
+
+
+def test_every_account_lifecycle_mail_uses_original_hosted_logo(monkeypatch):
+    from datetime import datetime, timezone
+    from tbt.services import account_inactivity
+
+    FakeSMTP.delivered = []
+    monkeypatch.setattr(auth_email.smtplib, "SMTP", FakeSMTP)
+    cfg = _config()
+    cfg.blinq_admin_emails = "admin@example.test"
+    cfg.blinq_admin_email = ""
+    user = {"email": "member@example.test"}
+    expiry = datetime(2026, 10, 24, tzinfo=timezone.utc)
+
+    assert account_inactivity._send_mail(cfg, user["email"], "BlinQ · Update", "Test")
+    assert account_inactivity._send_inactivity_warning(
+        cfg, user, days_inactive=23, expiry=expiry,
+    )
+    assert account_inactivity._send_inactivity_expired(cfg, user)
+    assert account_inactivity._send_subscription_expiry(
+        cfg, user, {"plan": "pro"}, days=7, expiry=expiry,
+    )
+    assert account_inactivity._send_admin_summary(cfg, "Test summary") == 1
+
+    assert len(FakeSMTP.delivered) == 5
+    for message in FakeSMTP.delivered:
+        _assert_gmail_safe(message, hosted_logo=True)
 
 def test_text_brand_remains_present_when_all_images_blocked():
     plain, html = auth_email.render_blinq_email(
