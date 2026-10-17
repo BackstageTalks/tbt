@@ -84,7 +84,7 @@ def test_reset_email_uses_original_logo_without_cid(monkeypatch):
     assert msg["From"] == "BlinQ <security@example.test>"
 
 
-def test_lifecycle_email_uses_same_image_free_template(monkeypatch):
+def test_lifecycle_email_uses_original_hosted_logo(monkeypatch):
     FakeSMTP.delivered = []
     monkeypatch.setattr(auth_email.smtplib, "SMTP", FakeSMTP)
     sent = auth_email.send_blinq_transactional_email(
@@ -101,7 +101,7 @@ def test_lifecycle_email_uses_same_image_free_template(monkeypatch):
     )
     assert sent is True
     assert len(FakeSMTP.delivered) == 1
-    plain, html = _assert_gmail_safe(FakeSMTP.delivered[0])
+    plain, html = _assert_gmail_safe(FakeSMTP.delivered[0], hosted_logo=True)
     assert "Účet prejde na ROOKIE" in plain
     assert "Subscription expires" in html
     assert 'href="https://blinq.example/account"' in html
