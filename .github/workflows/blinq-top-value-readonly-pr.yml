@@ -79,6 +79,34 @@ jobs:
             'snapshot_container_keys':sorted(snaps)[:15] if isinstance(snaps,dict) else None,
           },sort_keys=True))
           PY
+      - name: Inspect candidate time, feature and settlement coverage (aggregates only)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import gzip,json,collections
+          with gzip.open('.cache/tbt/top-value-private/selection_candidates_2026-10.json.gz','rt') as f: a=json.load(f)
+          ledger=json.load(open('.cache/tbt/top-value-private/ledger.json'))
+          snaps=a['snapshots']
+          rows=[r for s in snaps for r in s.get('rows',[]) if isinstance(r,dict)]
+          first=rows[0]
+          bets=[r.get('betting') for r in rows if isinstance(r.get('betting'),dict)]
+          market=[r.get('two_way_market') for r in rows if isinstance(r.get('two_way_market'),dict)]
+          lrow=next((r for r in ledger if isinstance(r,dict) and r.get('market_publications')), {})
+          covers={str(r.get('event_id')) for r in ledger if isinstance(r,dict)}
+          print('CANDIDATE_PIT_COVERAGE',json.dumps({
+            'snapshot_times':[s.get('generated_at') for s in snaps],
+            'rows_total':len(rows),'unique_events':len({r.get('event_id') for r in rows}),
+            'per_snapshot_rows':[len(s.get('rows') or []) for s in snaps],
+            'section_counts':dict(collections.Counter(str(r.get('selected_section')) for r in rows)),
+            'betting_keys':sorted(bets[0]) if bets else [],
+            'two_way_market_keys':sorted(market[0]) if market else [],
+            'betting_field_presence':{k:sum(r.get(k) is not None for r in bets) for k in ('odds','model_probability','fair_implied_probability','captured_at','selection_id','expected_value')},
+            'ledger_event_keys':sorted(lrow),'ledger_result_keys':sorted(lrow.get('result') or {}),
+            'candidate_events_in_ledger':sum(str(r.get('event_id')) in covers for r in rows),
+            'candidate_has_winner_id':sum(bool(r.get('winner_id')) for r in rows),
+            'candidate_has_betting':len(bets),
+          },sort_keys=True,default=str))
+          PY
       - name: Compute read-only TOP/VALUE fixed-cutoff test
         shell: bash
         run: |
