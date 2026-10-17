@@ -37,3 +37,15 @@ def test_membership_admin_survives_newer_release_patches():
     match=re.fullmatch(r'736-r(\d+)', RELEASE['patch'])
     assert match and int(match.group(1)) >= 22
     assert f"runtime patch 7.3.6-r{match.group(1)}" in CSS
+
+
+def test_membership_fallback_expiries_match_live_published_terms():
+    # Release fallback only: real account expiry timestamps remain authoritative
+    # and Admin-published runtime membership durations may change independently.
+    cfg=json.loads((ROOT/'web'/'ui-config.json').read_text(encoding='utf-8'))
+    plans=cfg['plans']
+    assert plans['rookie']['duration_days'] is None
+    assert plans['rookie']['unlimited'] is True
+    assert {name: plans[name]['duration_days'] for name in ('pro','elite','legend','goat')} == {
+        'pro': 30, 'elite': 30, 'legend': 180, 'goat': 365,
+    }
