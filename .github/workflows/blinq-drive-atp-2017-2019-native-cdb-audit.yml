@@ -43,6 +43,8 @@ jobs:
         run: |
           set -euo pipefail
           python -m py_compile app/scripts/audit_drive_atp_2017_2019_current_cdb.py
+          python -m py_compile app/scripts/audit_native_atp_2017_2019_cdb_nulls.py
+          python -m unittest discover -v -s app/tests -p test_native_atp_2017_2019_cdb_nulls.py
           python -m unittest discover -v -s app/tests -p test_drive_atp_2017_2019_current_cdb.py
           test "$(git -C source rev-parse HEAD)" = "83733587353df8a41f2fd4f516147d5aa83f5a8d"
           test "$(git hash-object source/atp/atp_matches_2017.csv)" = "70015182e04c9a6a589cac127996b9d1d5b8a171"
@@ -124,6 +126,38 @@ jobs:
               "original_archive_event_matches":r["source_crosscheck"]["exact_original_event_witness"],
               "canonical_writes":0},sort_keys=True))
           PY
+      - name: Inspect full SHA-pinned current CDB field NULLs on proven native IDs (read only)
+        shell: bash
+        env:
+          GH_TOKEN: ''
+          GITHUB_TOKEN: ''
+        run: |
+          set -euo pipefail
+          python app/scripts/audit_native_atp_2017_2019_cdb_nulls.py \
+            --identity-report "$RUNNER_TEMP/drive-atp/output/report.json" \
+            --source-dir source/atp \
+            --cdb-dir "$RUNNER_TEMP/drive-atp/cdb" \
+            --out "$RUNNER_TEMP/drive-atp/output/native-null-gap.json" \
+            >"$RUNNER_TEMP/drive-atp/quiet-null-gap.log" 2>&1 || { echo "NATIVE_NULL_GAP_FAILED_REDACTED"; exit 1; }
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])/"drive-atp/output"
+          original=json.loads((root/"report.json").read_text())
+          gaps=json.loads((root/"native-null-gap.json").read_text())
+          assert gaps["verified_link_count"] == original["verified_ids"]
+          assert gaps["canonical_writes"] == 0 and gaps["import_authorized"] is False
+          assert gaps["rights_cleared_for_import"] is False
+          assert gaps["exact_full_candidate_policy_executed"] is False
+          for name, states in gaps["field_status"].items():
+              assert sum(states.values()) == original["verified_ids"], name
+          print("NATIVE_2017_2019_NULL_GAP_READONLY",json.dumps({
+              "verified_native_links":gaps["verified_link_count"],
+              "source_stats_lineage":gaps["counts"].get("original_match_stat_lineage",0),
+              "production_writes":0,
+              "import_authorized":False
+          },sort_keys=True))
+          PY
       - name: Persist event-level results PRIVATE ONLY with independent readback
         shell: bash
         env:
@@ -133,17 +167,18 @@ jobs:
           set -euo pipefail
           set +x
           cd "$RUNNER_TEMP/drive-atp/output"
-          sha256sum report.json verified-secondary-ids.jsonl >SHA256SUMS
+          sha256sum report.json verified-secondary-ids.jsonl native-null-gap.json >SHA256SUMS
           sha256sum -c SHA256SUMS >/dev/null
           tag="blinq-drive-atp2017-2019-native-identity-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           gh release create "$tag" -R "$PRIVATE_REPO" --target main \
             --title "Read-only Drive ATP 2017-2019 exact original-native CDB identity" \
             --notes "Private event-level read-only audit; no CDB writes, no training." \
-            report.json verified-secondary-ids.jsonl SHA256SUMS >/dev/null
+            report.json verified-secondary-ids.jsonl native-null-gap.json SHA256SUMS >/dev/null
           mkdir -p "$RUNNER_TEMP/drive-atp/readback"
           gh release download "$tag" -R "$PRIVATE_REPO" -D "$RUNNER_TEMP/drive-atp/readback" >/dev/null
           (cd "$RUNNER_TEMP/drive-atp/readback" && sha256sum -c SHA256SUMS >/dev/null)
           cmp report.json "$RUNNER_TEMP/drive-atp/readback/report.json"
+          cmp native-null-gap.json "$RUNNER_TEMP/drive-atp/readback/native-null-gap.json"
           echo "PRIVATE_IDENTITY_LEDGER_INDEPENDENT_READBACK_PASS"
           echo "Private receipt: $tag" >>"$GITHUB_STEP_SUMMARY"
       - name: Remove private data from runner
