@@ -43,8 +43,8 @@ jobs:
           set -euo pipefail
           mkdir -p "$ROOT"
           gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > "$ROOT/before.json"
-          python scripts/download_stable_cdb.py --repository "$DATA_REPO" --out "$ROOT/history" --report "$ROOT/snapshot.json"
-          python scripts/recover_cdb_opponent_service_rates.py --mode stage --pairwise --history-dir "$ROOT/history" --out-dir "$ROOT/stage"
+          python scripts/download_stable_cdb.py --repository "$DATA_REPO" --out "$ROOT/history" --report "$ROOT/snapshot.json" > "$ROOT/private-download.log" 2>&1
+          python scripts/recover_cdb_opponent_service_rates.py --mode stage --pairwise --history-dir "$ROOT/history" --out-dir "$ROOT/stage" > "$ROOT/private-stage.log" 2>&1
           gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > "$ROOT/after.json"
       - name: Verify no release drift and retain counts only
         run: |
