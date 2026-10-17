@@ -1520,7 +1520,7 @@ def main():
             # reserve. Its h2h output is used only when the primary provider left
             # the Match Winner contract unpriced; primary quotes are never replaced.
             prop_key = os.getenv("PROPL", "").strip()
-            if prop_key and args.propline_max_events != 0:
+            if prop_key and args.propline_max_events:
                 propline_existing = {
                     event_id: set(markets)
                     for event_id, markets in available_projection_markets.items()
