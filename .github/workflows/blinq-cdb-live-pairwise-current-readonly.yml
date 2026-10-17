@@ -84,7 +84,7 @@ jobs:
                   'source_L2_player_event_identity_verified':0,
                   'requires_fresh_CAS_lock_backup_readback_for_any_write':True}
           (p/'aggregate.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
-          print('VERIFIED_PRIVATE_CURRENT_CDB_AGGREGATES',json.dumps(years,sort_keys=True))
+          print('VERIFIED_PRIVATE_CURRENT_CDB_AUDIT_PASS')
           PY
       - name: Persist aggregate in private tbt-data and independently read back
         run: |
