@@ -264,3 +264,14 @@ def test_provider_header_guard_fails_closed_when_remaining_header_missing(monkey
         assert client.request_count == 1
     finally:
         client.close()
+
+
+def test_refresh_can_use_available_shared_pool_up_to_14500():
+    ledger = None
+    for amount in (3000, 3000, 3000, 3000, 2500):
+        ledger, result = shared_budget.calculate(ledger, "refresh", amount, now=NOW)
+    assert result["global_spent"] == 14500
+    assert result["remaining"]["refresh"] == 0
+    assert result["reserved_provider_headroom"] == 500
+    with pytest.raises(shared_budget.SharedBudgetExhausted):
+        shared_budget.calculate(ledger, "history", 1, now=NOW)
