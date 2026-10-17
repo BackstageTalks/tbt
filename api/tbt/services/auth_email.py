@@ -260,6 +260,7 @@ def send_blinq_transactional_email(
         button_url=button_url,
         footer_sk=footer_sk,
         footer_en=footer_en,
+        logo_url=_email_logo_url(cfg),
     )
     msg = _build_transactional_message(cfg, recipient, subject, plain, html)
 
