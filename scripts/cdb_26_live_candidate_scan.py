@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse,csv,datetime as dt,hashlib,json,re,unicodedata
 from collections import Counter,defaultdict
 from pathlib import Path
-REQUIRED={'match_id','tour','scheduled_at','player1_id','player2_id','player1_name','player2_name','tournament','round_name'}
+REQUIRED={'match_id','tour','scheduled_at','player1_id','player2_id','player1_name','player2_name','tournament','round_name','winner_id'}
 ROUNDS={'1/64-finals':'r128','1/32-finals':'r64','1/16-finals':'r32','1/8-finals':'r16','quarter-finals':'qf','semi-finals':'sf','final':'f','r128':'r128','r64':'r64','r32':'r32','r16':'r16','qf':'qf','sf':'sf','f':'f'}
 def norm(x):
  s=unicodedata.normalize('NFKD',str(x or '').casefold())
@@ -51,7 +51,9 @@ def candidates(source,canons):
   sc=score_compatible(source['set_games_home_away'],c.get('score') or c.get('result') or '',swapped)
   if sc is False:continue
   h=c['player2_id'] if swapped else c['player1_id'];a=c['player1_id'] if swapped else c['player2_id']
-  out.append({'canonical_match_id':str(c['match_id']),'canonical_home_player_id':str(h),'canonical_away_player_id':str(a),'orientation':'reversed' if swapped else 'same','score_checked':sc is True,'score_unavailable':sc is None,'source_native_ids_identical':str(source['home_native_id'])==str(h) and str(source['away_native_id'])==str(a)})
+  expected=h if source.get('source_winner_side')=='1' else a if source.get('source_winner_side')=='2' else None
+  if expected is None or str(c.get('winner_id') or '')!=str(expected):continue
+  out.append({'canonical_match_id':str(c['match_id']),'canonical_home_player_id':str(h),'canonical_away_player_id':str(a),'orientation':'reversed' if swapped else 'same','winner_checked':True,'score_checked':sc is True,'score_unavailable':sc is None,'source_native_ids_identical':str(source['home_native_id'])==str(h) and str(source['away_native_id'])==str(a)})
  return out
 def verify_files(folder,release):
  assets={a['name']:a for a in release['assets']}
