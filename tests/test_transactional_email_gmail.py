@@ -107,6 +107,33 @@ def test_lifecycle_email_uses_original_hosted_logo(monkeypatch):
     assert 'href="https://blinq.example/account"' in html
 
 
+
+def test_every_account_lifecycle_mail_uses_original_hosted_logo(monkeypatch):
+    from datetime import datetime, timezone
+    from tbt.services import account_inactivity
+
+    FakeSMTP.delivered = []
+    monkeypatch.setattr(auth_email.smtplib, "SMTP", FakeSMTP)
+    cfg = _config()
+    cfg.blinq_admin_emails = "admin@example.test"
+    cfg.blinq_admin_email = ""
+    user = {"email": "member@example.test"}
+    expiry = datetime(2026, 10, 24, tzinfo=timezone.utc)
+
+    assert account_inactivity._send_mail(cfg, user["email"], "BlinQ · Update", "Test")
+    assert account_inactivity._send_inactivity_warning(
+        cfg, user, days_inactive=23, expiry=expiry,
+    )
+    assert account_inactivity._send_inactivity_expired(cfg, user)
+    assert account_inactivity._send_subscription_expiry(
+        cfg, user, {"plan": "pro"}, days=7, expiry=expiry,
+    )
+    assert account_inactivity._send_admin_summary(cfg, "Test summary") == 1
+
+    assert len(FakeSMTP.delivered) == 5
+    for message in FakeSMTP.delivered:
+        _assert_gmail_safe(message, hosted_logo=True)
+
 def test_text_brand_remains_present_when_all_images_blocked():
     plain, html = auth_email.render_blinq_email(
         eyebrow="BLINQ INTELLIGENCE",
