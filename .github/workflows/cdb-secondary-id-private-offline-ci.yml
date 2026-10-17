@@ -1,0 +1,77 @@
+name: BlinQ secondary CDB ID pinned private offline QA
+
+'on':
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cdb-secondary-id-private-offline-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secondary-id-readonly-contract:
+    # Private read token is never available to PR code; only protected main.
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      SOURCE_COMMIT: 24a947cc7434dff90d210bae2b938f23a0900ba3
+    steps:
+      - name: Checkout only public test bridge contracts
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate main-only, read-only and token isolation contracts
+        run: python -m unittest discover -q -s tests -p 'test_cdb_secondary_id_private_offline_ci_contract.py'
+      - name: Fetch precisely five SHA-pinned private Python modules
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'BLOCKED_MISSING_PRIVATE_READ_TOKEN'; exit 1; }
+          mkdir -p private/scripts private/tests
+          gh api "repos/$PRIVATE_REPO/contents/scripts/reconcile_l2_cdb_identity.py?ref=$SOURCE_COMMIT" --jq .content | base64 --decode >private/scripts/reconcile_l2_cdb_identity.py
+          test "$(git hash-object private/scripts/reconcile_l2_cdb_identity.py)" = "cfa3fe13dc72543abf6c200d31ef9c1bbefd792e"
+          gh api "repos/$PRIVATE_REPO/contents/scripts/l2_metadata_candidates.py?ref=$SOURCE_COMMIT" --jq .content | base64 --decode >private/scripts/l2_metadata_candidates.py
+          test "$(git hash-object private/scripts/l2_metadata_candidates.py)" = "0b01a685a63c68f073ebd644fbf573b079153fc7"
+          gh api "repos/$PRIVATE_REPO/contents/scripts/secondary_id_map.py?ref=$SOURCE_COMMIT" --jq .content | base64 --decode >private/scripts/secondary_id_map.py
+          test "$(git hash-object private/scripts/secondary_id_map.py)" = "377282f2d06ffb88e1b14623c97f8019e054bfeb"
+          gh api "repos/$PRIVATE_REPO/contents/tests/test_reconcile_l2_cdb_identity.py?ref=$SOURCE_COMMIT" --jq .content | base64 --decode >private/tests/test_reconcile_l2_cdb_identity.py
+          test "$(git hash-object private/tests/test_reconcile_l2_cdb_identity.py)" = "71c4a7b2060c64cb12fe37767b6eabc577a9b173"
+          gh api "repos/$PRIVATE_REPO/contents/tests/test_secondary_id_map.py?ref=$SOURCE_COMMIT" --jq .content | base64 --decode >private/tests/test_secondary_id_map.py
+          test "$(git hash-object private/tests/test_secondary_id_map.py)" = "60afa4bd47e2f761dd55d9cad2756f86e4099289"
+          echo 'CDB_SECONDARY_ID_FIVE_PRIVATE_BLOB_SHAS_VERIFIED'
+      - name: Compile and execute both isolated synthetic suites without credentials
+        shell: bash
+        env:
+          GH_TOKEN: ''
+          GITHUB_TOKEN: ''
+        run: |
+          set -euo pipefail
+          if python -m py_compile private/scripts/reconcile_l2_cdb_identity.py private/scripts/l2_metadata_candidates.py private/scripts/secondary_id_map.py private/tests/test_reconcile_l2_cdb_identity.py private/tests/test_secondary_id_map.py >/tmp/cdb-secondary-compile.log 2>&1; then
+            echo 'CDB_SECONDARY_ID_FIVE_PRIVATE_FILES_COMPILED'
+          else
+            echo 'CDB_SECONDARY_ID_COMPILE_FAILED_REDACTED'
+            exit 1
+          fi
+          # Private source, test output, and exceptions must never enter public logs/artifacts.
+          if PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -q -s private/tests -p 'test_secondary_id_map.py' >/tmp/cdb-secondary-unit.log 2>&1; then
+            echo 'CDB_SECONDARY_ID_UNIT_SUITE_PASSED'
+          else
+            echo 'CDB_SECONDARY_ID_UNIT_SUITE_FAILED_REDACTED'
+            exit 1
+          fi
+          if PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -q -s private/tests -p 'test_reconcile_l2_cdb_identity.py' >/tmp/cdb-secondary-integration.log 2>&1; then
+            echo 'CDB_SECONDARY_ID_INTEGRATION_SUITE_PASSED'
+          else
+            echo 'CDB_SECONDARY_ID_INTEGRATION_SUITE_FAILED_REDACTED'
+            exit 1
+          fi
+          echo 'CDB_SECONDARY_ID_TWO_PRIVATE_SUITES_PASSED'
