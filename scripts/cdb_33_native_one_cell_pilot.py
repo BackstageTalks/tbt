@@ -44,7 +44,7 @@ def verified_links(path: Path) -> list[dict]:
             raise ValueError("Unrecognized private ID sidecar fields")
         if row["tour"] != "atp" or row["source_namespace"] != "drive-atp-main-sackmann":
             raise ValueError("Unexpected source namespace")
-        if not re.fullmatch(r"\d{4}-[A-Za-z0-9]+:\d+", row["source_event_id"]):
+        if not re.fullmatch(r"(?:2020|2021)-[A-Za-z0-9][A-Za-z0-9_.-]*:[0-9]+", row["source_event_id"]):
             raise ValueError("Unexpected tournament-match event identifier")
         if not re.fullmatch(r"hist-js:atp:[a-f0-9]{24}", row["canonical_match_id"]):
             raise ValueError("Unexpected native canonical match ID")
