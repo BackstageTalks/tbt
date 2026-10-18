@@ -8,7 +8,7 @@ from __future__ import annotations
 import argparse, collections, hashlib, json, os, re, sys, time
 from datetime import datetime, timezone
 from pathlib import Path
-import urllib.request, urllib.error
+
 
 MAX_EVENTS=50
 SHA=re.compile(r'^[a-f0-9]{64}$')
@@ -112,14 +112,6 @@ def assess(cdb,api):
     winner=sides[int(code)-1]
     if cdb['winner_id']!=winner:return 'DIFFERENT_WINNER_ID'
     return 'SAME_PROVIDER_EVENT_PARTICIPANTS_TIME_WINNER_RECHECK_ONLY'
-
-
-def response_json(url,headers,body=None,timeout=12):
-    req=urllib.request.Request(url,headers=headers,data=body)
-    with urllib.request.urlopen(req,timeout=timeout) as resp:
-        data=resp.read(2*1024*1024+1)
-        if len(data)>2*1024*1024:raise ValueError('Provider response too large')
-        return resp.status,resp.headers,json.loads(data)
 
 
 def probe(sample,budget_url,budget_token,api_key):
