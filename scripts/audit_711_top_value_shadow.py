@@ -17,6 +17,7 @@ from pathlib import Path
 CHAMPION = "v201-20260925T204608601094Z"
 CANDIDATE = "v201-20261014T183415325901Z"
 CUTOFF = "2026-10-18T00:00:00+00:00"
+MIN_EVALUABLE_MATCHED_PICKS = 30
 SECTIONS = {"top_daily", "value"}
 
 
@@ -183,10 +184,12 @@ def evaluate(issued, shadow, *, cutoff=stamp(CUTOFF)):
             },
         }
     return {
-        "schema": 1, "status": "MATCHED_OBSERVATIONAL_ONLY" if paired else "INSUFFICIENT_MATCHED_PUBLISHED_PICKS",
+        "schema": 1, "status": "MATCHED_OBSERVATIONAL_ONLY" if len(paired) >= MIN_EVALUABLE_MATCHED_PICKS else "INSUFFICIENT_MATCHED_PUBLISHED_PICKS",
         "scope": "Exact issued ATP/WTA TOP+VALUE match-winner priced >=1.50, candidates captured <= publication < start.",
         "source_issued": len(picks), "source_by_tour": dict(Counter(e["tour"] for e in picks)),
         "matched_unique": len(paired), "matched_by_tour": dict(Counter(e["tour"] for e in paired)),
+        "minimum_evaluable_matched_picks": MIN_EVALUABLE_MATCHED_PICKS,
+        "matched_fraction_of_issued": len(paired)/len(picks) if picks else None,
         "source_diagnostics": ignored, "unmatched_reasons": dict(rejected), "groups": groups,
         "limits": ["Matched published picks are not a replay of all unissued opportunities.",
                    "Fixed-offer ROI is conditional and post-hoc; changed probability cannot establish unissued offers.",
