@@ -131,12 +131,11 @@ def read_feed(path):
 
 
 def visible_feed(payload, now=None):
-    """Serve future event discovery plus the complete current-day published offer.
+    """Serve future discovery and the published 06:00-to-06:00 BlinQ offer.
 
-    `upcoming` remains strictly pre-match because it is used for discovery and
-    match lists. Named BlinQ market sections are different: once published they
-    are a daily record of what users were shown, so started rows remain visible
-    until the 06:00 Europe/Bratislava betting-day boundary.
+    `upcoming` remains pre-match. Published market sections retain started
+    matches until the next 06:00 Europe/Bratislava boundary. The half-open
+    interval [06:00, next 06:00) includes next-day matches through 05:59.
     """
     if not isinstance(payload, dict):
         raise ValueError("Invalid serving feed root")
@@ -146,9 +145,6 @@ def visible_feed(payload, now=None):
         raise ValueError("visible_feed requires timezone-aware now")
     now = now.astimezone(timezone.utc)
     day = _betting_day_key(now)
-    # The public "today" board uses the actual Bratislava calendar date,
-    # not the 06:00-to-06:00 betting-day key used for publication snapshots.
-    calendar_day = now.astimezone(ZoneInfo("Europe/Bratislava")).date()
 
     result = dict(payload)
     # Legacy releases may contain TOP200 rows; the public product is retired.
@@ -171,13 +167,12 @@ def visible_feed(payload, now=None):
             future.append(row)
     result["upcoming"] = future
 
-    # The published offer is retained for result/audit history, but the public
-    # daily tabs must show only matches scheduled for TODAY in Bratislava.
-    # A 06:00 betting-day snapshot can contain tomorrow's 00:00-05:59 matches,
-    # and legacy rows may carry a wrong explicit betting_day. Never trust either
-    # to determine which calendar day the customer sees. Keep started matches
-    # visible until local midnight; preserve all raw rows in the stored feed.
-    def scheduled_today(row):
+    # The current published offer uses a half-open 06:00-to-06:00 local window.
+    # Do not trust an explicit betting_day on a row: a legacy/mislabelled row
+    # for tomorrow AFTER 06:00 can otherwise leak into today's public board.
+    # Compute the window from the actual timezone-aware match start.
+    # Started matches remain visible until the next 06:00 boundary.
+    def scheduled_for_current_betting_day(row):
         if not isinstance(row, dict):
             return False
         raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time") or row.get("date")
@@ -185,13 +180,13 @@ def visible_feed(payload, now=None):
             scheduled = _parse_utc_timestamp(raw, "scheduled_at")
         except ValueError:
             return False
-        return scheduled.astimezone(ZoneInfo("Europe/Bratislava")).date() == calendar_day
+        return _betting_day_key(scheduled) == day
 
     for key in ("top_daily_picks", "prime_picks", "value_picks", "doubles_picks", "ace_picks", "sg_picks"):
         rows = payload.get(key, [])
         if not isinstance(rows, list):
             continue
-        result[key] = [row for row in rows if scheduled_today(row)]
+        result[key] = [row for row in rows if scheduled_for_current_betting_day(row)]
 
     stamp = payload.get("generated_at")
     if not stamp:
