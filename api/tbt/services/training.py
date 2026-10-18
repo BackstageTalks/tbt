@@ -25,7 +25,7 @@ from ..data.wta_season_stats import (
     coverage_summary as wta_coverage_summary,
 )
 from ..models.ensemble import TennisEnsemble
-from ..models.feature_builder import FEATURE_NAMES, RICH_CHARTING_FEATURE_NAMES, FeatureBuilder
+from ..models.feature_builder import FEATURE_NAMES, RICH_CHARTING_FEATURE_NAMES, INDEPENDENT_STATS_FEATURE_NAMES, FeatureBuilder
 from ..models.metrics import evaluate_probabilities
 from ..schemas import MatchRecord
 from .data_quality import audit_history
@@ -37,6 +37,7 @@ PRODUCTION_FEATURE_NAMES = [
     for name in FEATURE_NAMES
     if (
         name not in set(RICH_CHARTING_FEATURE_NAMES)
+        and name not in set(INDEPENDENT_STATS_FEATURE_NAMES)
         and name not in set(ATP_LEADERBOARD_FEATURE_NAMES)
         and name not in set(ATP_RANK_HISTORY_FEATURE_NAMES)
         and name not in set(WTA_RANK_HISTORY_FEATURE_NAMES)
