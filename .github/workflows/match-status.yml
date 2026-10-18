@@ -85,3 +85,22 @@ jobs:
           fi
           gh workflow run model-calibration-monitor.yml -R "$GITHUB_REPOSITORY" --ref main
           echo "Dispatched private model calibration snapshot updater."
+
+      - name: Dispatch hourly 7.1.1 TOP VALUE forward blind audit
+        # Research-only: neither the model nor production feed is modified.
+        # Reuse the existing externally scheduled match-status cadence.
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          minute="$(date -u +%M)"
+          if (( 10#$minute >= 30 )); then
+            echo "Blind trial not due on the half-hour pass."
+            exit 0
+          fi
+          gh workflow run model-711-forward-blind.yml \
+            --repo "$GITHUB_REPOSITORY" --ref main
+          echo "Queued research-only frozen 7.1.1 TOP/VALUE cohort."
