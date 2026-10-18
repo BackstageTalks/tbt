@@ -1,0 +1,17 @@
+const fs=require('fs');
+const vm=require('vm');
+const assert=require('assert');
+const source=fs.readFileSync('web/app.js','utf8');
+const render=source.slice(source.indexOf('  function renderAdminTraining(){'),source.indexOf('  async function loadAdminTraining('));
+const ctx={state:{},escapeHtml:s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;')};
+vm.createContext(ctx);vm.runInContext(render,ctx);
+assert.match(ctx.renderAdminTraining(),/data-admin-action="training-start" disabled/);
+ctx.state.adminTraining={can_start:true,runs:[],candidates:[]};
+assert.doesNotMatch(ctx.renderAdminTraining(),/data-admin-action="training-start" disabled/);
+ctx.state.adminTrainingBusy=true;
+assert.match(ctx.renderAdminTraining(),/data-admin-action="training-start" disabled/);
+ctx.state.adminTrainingBusy=false;
+ctx.state.adminTraining.candidates=[{tag:'<script>',url:'javascript:alert(1)',label:'Nedokončený tréning'}];
+const html=ctx.renderAdminTraining();
+assert(!html.includes('javascript:'));assert(!html.includes('<script>'));assert(html.includes('&lt;script>'));
+console.log('Admin training panel: unavailable, ready, busy and unsafe-link states passed');

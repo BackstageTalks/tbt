@@ -1,5 +1,15 @@
 # Protected training in one command
 
+## Administracia BlinQ (implementacia pripravena, vyzaduje nasadenie)
+
+V **Administracia → Kalibracia modelu → Trening kandidatov** vyber profil a klikni **Natrenovat kandidata**. Panel zobrazuje posledne behy, aktualny krok a ulozene modely. **Obnovit stav** nacita aktualny vysledok. Trening pouziva hlavnu vetvu `main`; zmenu logiky najprv otestuj a zluc do nej. Nove data musia byt importovane do CDB. Produkcny model sa neaktivuje.
+
+Server potrebuje nastavenie `BLINQ_TRAINING_GITHUB_TOKEN` v Azure aplikacii, nikdy vo web konfiguracii ani v repozitari. Pouzi samostatne obmedzene opravnenie: Actions read/write pre `BackstageTalks/tbt`, Contents read pre oba repozitare a pristup do sukromneho `tbt-data`. Overeny admin je kontrolovany existujucou serverovou autorizaciou. Bez tokenu API vracia 503 a tlacidlo zostane nedostupne.
+
+Durable admin storage musi byt dostupne. Atomicky zaznam v `BlinQAdminConfig`, partition `model-training-dispatch`, blokuje duplicitne odoslanie pre posledny run. Pri neurcitom vysledku odoslania sa zaznam nezmaze: operator najprv overi GitHub runy a az potom moze riesit konkretny zaznam. Tento zaznam nie je globalny CDB writer lock a ten nikdy nenahradza. Dvojklik ani timeout nesmu automaticky spustit druhy trening.
+
+Po nasadeni over GET ako admin, odmietnutie GET/POST bez admin identity, blokovanie pri obsadenom locku a jeden kontrolovany dispatch po vyrieseni locku. Skutocny end-to-end dispatch z produkcnej administracie zatial nebol overeny.
+
 ## Samostatne trenovanie kandidatov
 
 Potrebujes Python a prihlaseny GitHub CLI (`gh auth login`) s pristupom do `BackstageTalks/tbt` a sukromneho `BackstageTalks/tbt-data`.
