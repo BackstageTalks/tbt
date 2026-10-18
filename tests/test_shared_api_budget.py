@@ -394,6 +394,6 @@ def test_live_and_batch_workflows_enforce_identical_daily_limits():
     history = (root / ".github/workflows/player-enrichment.yml").read_text()
     assert "budget['global_spent'] <= 14250 == budget['global_limit']" in live
     assert "budget['reserved_provider_headroom'] == 750" in live
-    assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: true" in data
-    assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: true" in history
+    assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'" in data
+    assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'" in history
     assert "unset BLINQ_SHARED_API_BUDGET_URL" not in data
