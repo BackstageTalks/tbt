@@ -75,5 +75,51 @@ class NativeGapResearchSafety(unittest.TestCase):
             census.json_object("{", "provider context")
 
 
+    def test_strict_review_valid_match_and_correct_opposite_orientation(self):
+        source = {
+            "best_of": "3", "score": "6-4 6-4",
+            "w_ace": "5", "w_df": "2", "w_svpt": "60",
+            "w_1stIn": "40", "w_1stWon": "30", "w_2ndWon": "10",
+            "w_SvGms": "10", "w_bpFaced": "6", "w_bpSaved": "4",
+            "l_ace": "2", "l_df": "2", "l_svpt": "50",
+            "l_1stIn": "30", "l_1stWon": "20", "l_2ndWon": "10",
+            "l_SvGms": "10", "l_bpFaced": "8", "l_bpSaved": "5",
+        }
+        expected = "technically_consistent_rights_not_cleared"
+        self.assertEqual(census.strict_count_candidate_review(source, {}), expected)
+        self.assertEqual(census.strict_count_candidate_review(source, {
+            "p1_return_break_points_converted_count": 3,
+            "p2_return_break_points_converted_count": 2,
+            "p1_break_point_return_win": 3 / 8,
+            "p2_break_point_return_win": 2 / 6,
+            "p2_break_point_serve_win": 5 / 8,
+            "p1_break_point_serve_win": 4 / 6,
+        }), expected)
+        return source
+
+    def test_strict_review_rejects_partial_or_retired_match(self):
+        source = self.test_strict_review_valid_match_and_correct_opposite_orientation()
+        self.assertEqual(census.strict_count_candidate_review(
+            {**source, "score": "6-4 RET"}, {}), "incomplete_original_match")
+        self.assertEqual(census.strict_count_candidate_review(
+            {**source, "l_svpt": ""}, {}), "incomplete_original_match")
+        self.assertEqual(census.strict_count_candidate_review(
+            {**source, "l_bpSaved": "9"}, {}), "invalid_original_match_counts")
+
+    def test_strict_review_rejects_existing_conflicts_and_bad_types(self):
+        source = self.test_strict_review_valid_match_and_correct_opposite_orientation()
+        for previous in (
+            {"p1_return_break_points_converted_count": 2},
+            {"p2_return_break_points_converted_count": 3},
+            {"p1_break_point_return_win": 0.5},
+            {"p2_break_point_serve_win": 0.5},
+            {"p1_aces": 9},
+            {"p2_double_faults": True},
+            {"p1_service_points_won": "0.66"},
+        ):
+            self.assertEqual(census.strict_count_candidate_review(
+                source, previous), "existing_cdb_stat_conflict")
+
+
 if __name__ == "__main__":
     unittest.main()
