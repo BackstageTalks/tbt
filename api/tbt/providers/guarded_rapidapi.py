@@ -65,6 +65,9 @@ class GuardedRapidApiHttp:
             time.sleep(interval)
         self._last_request_at = time.monotonic()
         self.attempts += 1
+        options = {"params": params}
+        if timeout is not None:
+            options["timeout"] = timeout
         response = self.client.get(
             url,
             headers={
@@ -72,8 +75,7 @@ class GuardedRapidApiHttp:
                 "X-RapidAPI-Host": self.host,
                 "Accept": "application/json",
             },
-            params=params,
-            timeout=timeout,
+            **options,
         )
         remaining = response.headers.get("x-ratelimit-requests-remaining")
         try:
