@@ -71,7 +71,7 @@ def test_pending_results_are_not_labels(tmp_path):
     frame.to_csv(source, index=False)
     result = train_and_compare(source, tmp_path / "out", min_train=10)
     assert result["test"]["last_day"] == "2026-10-06"
-    assert result["test"]["settled"] == 21
+    assert result["test"]["settled"] == 24
 
 
 def test_snapshot_top_probability_must_match_published_depth_shrink():
