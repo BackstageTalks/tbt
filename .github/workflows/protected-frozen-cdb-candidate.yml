@@ -33,7 +33,7 @@ jobs:
       PYTHONPATH: api:scripts
       PYTHONDONTWRITEBYTECODE: '1'
       BLINQ_RAPIDAPI_MAX_RPS: '0'
-      BLINQ_TRAINING_PROFILE: ${{ inputs.training_profile || 'standard' }}
+      BLINQ_TRAINING_PROFILE: ${{ inputs.training_profile || 'top-7.2.1' }}
     steps:
       - uses: actions/checkout@v4
         with:
