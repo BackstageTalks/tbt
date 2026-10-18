@@ -82,8 +82,12 @@ def fixed_cohort(issued_rows, cutoff):
                          players=ids, correct=result["correct"], odds=price)
             if key in picked:
                 reasons["duplicate_issued_selection"] += 1
-                if (entry["correct"], entry["odds"]) != (picked[key]["correct"], picked[key]["odds"]):
-                    raise ValueError("Conflicting immutable publication data for same selection")
+                if entry["published"] == picked[key]["published"] and (
+                    (entry["correct"], entry["odds"]) != (picked[key]["correct"], picked[key]["odds"])
+                ):
+                    raise ValueError("Conflicting exact-time immutable publication data")
+                # A reissued section price can legitimately change later.
+                # Keep the earliest truly issued version, never closing odds.
                 if entry["published"] < picked[key]["published"]:
                     picked[key] = entry
             else:
