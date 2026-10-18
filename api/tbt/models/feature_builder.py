@@ -189,9 +189,11 @@ class FeatureBuilder:
     providers only expose date-level timestamps.
     """
 
-    def __init__(self, *, independent_serve_return: bool = False) -> None:
-        # Preserve legacy serving features; 7.2.1 explicitly opts into the fix.
+    def __init__(self, *, independent_serve_return: bool = False,
+                 independent_direct_rates: bool = False) -> None:
+        # Artifact-controlled semantics preserve legacy champions and existing 7.2.1 fits.
         self.independent_serve_return = bool(independent_serve_return)
+        self.independent_direct_rates = bool(independent_direct_rates)
         self.players: dict[
             str,
             PlayerState,
@@ -304,6 +306,7 @@ class FeatureBuilder:
         return {
             "schema_version": FEATURE_STATE_SCHEMA_VERSION,
             "independent_serve_return": self.independent_serve_return,
+            "independent_direct_rates": self.independent_direct_rates,
             "players": players,
             "h2h": h2h,
             "surface_h2h": surface_h2h,
@@ -313,7 +316,9 @@ class FeatureBuilder:
     def from_state(cls, payload: dict | None) -> "FeatureBuilder":
         builder = cls(
             independent_serve_return=bool(payload.get("independent_serve_return", False))
-            if isinstance(payload, dict) else False
+            if isinstance(payload, dict) else False,
+            independent_direct_rates=bool(payload.get("independent_direct_rates", False))
+            if isinstance(payload, dict) else False,
         )
         if not isinstance(payload, dict):
             return builder
@@ -1872,6 +1877,8 @@ class FeatureBuilder:
             float | None,
         ],
         prefix: str,
+        *,
+        independent_direct_rates: bool = False,
     ) -> tuple[
         float | None,
         float | None,
@@ -1944,6 +1951,14 @@ class FeatureBuilder:
             else None
         )
 
+        # Old artifacts must retain their exact historical feature semantics.
+        # For newly fitted candidates, an available point-weighted metric must
+        # not be discarded merely because its complementary metric is missing.
+        if independent_direct_rates:
+            return (
+                service if service is not None else serve,
+                returns if returns is not None else ret,
+            )
         return (
             serve,
             ret,
@@ -2079,6 +2094,7 @@ class FeatureBuilder:
         ) = self._extract_quality(
             match.stats,
             "p1",
+            independent_direct_rates=self.independent_direct_rates,
         )
 
         (
@@ -2087,6 +2103,7 @@ class FeatureBuilder:
         ) = self._extract_quality(
             match.stats,
             "p2",
+            independent_direct_rates=self.independent_direct_rates,
         )
 
         stats = match.stats if isinstance(match.stats, dict) else {}
