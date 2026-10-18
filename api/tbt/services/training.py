@@ -61,11 +61,8 @@ def _candidate_feature_names(
     atp_rank_history=None,
     wta_rank_history=None,
     wta_season_stats=None,
-    independent_stats=False,
 ):
     names = list(PRODUCTION_FEATURE_NAMES)
-    if independent_stats:
-        names += list(INDEPENDENT_STATS_FEATURE_NAMES)
     if atp_leaderboards is not None:
         names += list(ATP_LEADERBOARD_FEATURE_NAMES)
     if atp_rank_history is not None:
