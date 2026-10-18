@@ -39,8 +39,7 @@ def require_informative_inputs(report):
                 errors.append(f"{partition}/{tour}: no rows")
                 continue
             for names in (("rank_advantage", f"{tour}_hist_rank_advantage"),
-                          ("serve_independent_diff",),
-                          ("return_independent_diff",)):
+                          ("serve_quality_diff",), ("return_quality_diff",)):
                 if not any(features.get(n, {}).get("distinct", 0) > 1
                            and (features.get(n, {}).get("variance") or 0) > 0
                            for n in names):
