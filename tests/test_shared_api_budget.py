@@ -397,3 +397,52 @@ def test_live_and_batch_workflows_enforce_identical_daily_limits():
     assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'" in data
     assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'" in history
     assert "unset BLINQ_SHARED_API_BUDGET_URL" not in data
+
+
+@pytest.mark.parametrize("method", ["json", "image", "optional"])
+def test_malformed_provider_remaining_header_blocks_further_calls(monkeypatch, method):
+    monkeypatch.setenv("BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER", "true")
+    monkeypatch.delenv("RAPIDAPI_KEY", raising=False)
+    sent = []
+    def handler(request):
+        sent.append(str(request.url))
+        return httpx.Response(
+            200, headers={"x-ratelimit-requests-remaining": "not-a-number",
+                          "content-type": "image/png"},
+            content=b"image" if method == "image" else b'{"events":[],"player":{}}',
+        )
+    client = RapidTennisClient(Settings(rapidapi_key="test"))
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(handler))
+    client._throttle = lambda: None
+    try:
+        with pytest.raises(RequestBudgetExceeded, match="Invalid provider remaining header"):
+            if method == "image":
+                client.player_image("123")
+            elif method == "optional":
+                client.player_details("123")
+            else:
+                client.live_events()
+        assert len(sent) == 1
+        assert client.request_count == 1
+    finally:
+        client.close()
+
+
+def test_no_direct_rapidapi_key_header_outside_canonical_client():
+    """Prevent new unmetered HTTP clients from bypassing the single quota adapter."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    canonical = root / "api/tbt/providers/rapidapi.py"
+    unauthorized = []
+    for parent in ("api", "scripts"):
+        for path in (root / parent).rglob("*.py"):
+            if path == canonical:
+                continue
+            source = path.read_text(encoding="utf-8").lower()
+            if "x-rapidapi-key" in source or "x-rapidapi-host" in source:
+                unauthorized.append(str(path.relative_to(root)))
+    assert unauthorized == [], (
+        "Direct RapidAPI HTTP access bypasses the shared budget: "
+        + ", ".join(sorted(unauthorized))
+    )
