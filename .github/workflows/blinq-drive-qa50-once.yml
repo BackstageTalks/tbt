@@ -145,11 +145,18 @@ jobs:
           branch="audit50-run-$GITHUB_RUN_ID-shard-$SHARD"
           gh api --method POST repos/BackstageTalks/tbt-data/git/refs \
             -f ref="refs/heads/$branch" -f sha="$PRIVATE_REF" >/dev/null
-          encoded="$(base64 -w0 "work/content-qa50-shard-$SHARD.json")"
+          # A report may exceed Linux' single-argv cap. Post the complete
+          # private byte payload through stdin instead of a command argument.
+          python - <<'PY' >work/private-api-payload.json
+          import os,base64,json
+          p='work/content-qa50-shard-'+os.environ['SHARD']+'.json'
+          print(json.dumps({
+              'message':'audit: verified Drive content QA shard '+os.environ['SHARD']+' run '+os.environ['GITHUB_RUN_ID'],
+              'branch':'audit50-run-'+os.environ['GITHUB_RUN_ID']+'-shard-'+os.environ['SHARD'],
+              'content':base64.b64encode(open(p,'rb').read()).decode('ascii')}))
+          PY
           gh api --method PUT "repos/BackstageTalks/tbt-data/contents/$dest" \
-            -f branch="$branch" \
-            -f message="audit: verified Drive content QA shard $SHARD run $GITHUB_RUN_ID" \
-            -f content="$encoded" >/dev/null
+            --input work/private-api-payload.json >/dev/null
           gh api "repos/BackstageTalks/tbt-data/contents/$dest?ref=$branch" \
             --jq .content | base64 --decode >work/readback.json
           cmp "work/content-qa50-shard-$SHARD.json" work/readback.json
