@@ -23,7 +23,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  await-cdb-idle:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    # A separate read-only gate waits for prior owners; the full six-hour
+    # training budget starts only AFTER this job reports observed idle.
+    timeout-minutes: 230
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify fail-closed no-network lock gate contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -v -s tests -p 'test_wait_for_cdb_writer_idle.py'
+      - name: Observe global CDB writer idle without acquiring or deleting
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          python scripts/wait_for_cdb_writer_idle.py --max-seconds 13200 --interval-seconds 30
+
   frozen-candidate:
+    needs: await-cdb-idle
     if: github.repository == 'BackstageTalks/tbt'
     runs-on: ubuntu-latest
     # Almost one million point-in-time history rows require a full offline build.
