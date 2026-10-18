@@ -768,6 +768,7 @@ def main():
         help="Prepare the upcoming local betting day before 06:00 and wait until 06:01 to publish",
     )
     parser.add_argument("--promote", action="store_true")
+    parser.add_argument("--training-profile", choices=["standard", "top-7.2.1"], default="standard")
     args = parser.parse_args()
     # Issue #405: the metric flag alone is NOT operator approval or rollback proof.
     # Fail before any canonical/model release read or write, or provider request.
@@ -949,6 +950,7 @@ def main():
             atp_rank_history=atp_rank_history,
             wta_rank_history=wta_rank_history,
             wta_season_stats=wta_season_stats,
+            training_profile=args.training_profile,
         )
         report = clean(result.report)
         report["rank_feature_input_bundle"] = clean(rank_feature_input_report)
@@ -971,6 +973,10 @@ def main():
             elif _holdout_already_used(promotion_history, fingerprint):
                 eligible = False
                 gate_reasons.append("reused_holdout_fingerprint")
+
+        if args.training_profile == "top-7.2.1":
+            eligible = False
+            gate_reasons.append("top_market_validation_required")
 
         if not args.promote:
             decision_status = "not_requested"

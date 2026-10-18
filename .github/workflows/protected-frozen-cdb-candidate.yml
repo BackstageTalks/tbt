@@ -6,6 +6,12 @@ on:
     paths:
       - .github/workflows/protected-frozen-cdb-candidate.yml
   workflow_dispatch:
+    inputs:
+      training_profile:
+        description: Candidate probability optimization profile
+        type: choice
+        options: [standard, top-7.2.1]
+        default: top-7.2.1
 
 permissions:
   contents: read
@@ -27,6 +33,7 @@ jobs:
       PYTHONPATH: api:scripts
       PYTHONDONTWRITEBYTECODE: '1'
       BLINQ_RAPIDAPI_MAX_RPS: '0'
+      BLINQ_TRAINING_PROFILE: ${{ inputs.training_profile || 'standard' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,7 +51,8 @@ jobs:
           python -m pytest -q \
             tests/test_immutable_training_backup.py \
             tests/test_candidate_training_requires_backup.py \
-            tests/test_champion_rollback_rehearsal.py
+            tests/test_champion_rollback_rehearsal.py \
+            tests/test_training_inputs.py
       - name: Acquire global private canonical writer lock
         run: |
           set -euo pipefail
@@ -70,7 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           # No --promote. No current candidate tag rewrite. No app deployment.
-          python scripts/pipeline.py train --max-requests 1
+          python scripts/pipeline.py train --max-requests 1 --training-profile "$BLINQ_TRAINING_PROFILE"
           python scripts/guarded_candidate_backup.py verify
       - name: Independently persist champion-versus-candidate offline holdout
         if: success()
