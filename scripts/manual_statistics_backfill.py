@@ -4,8 +4,7 @@ import argparse
 import json
 import os
 import time
-import urllib.error
-import urllib.request
+import httpx
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,7 +14,8 @@ from audit_statistics_inventory import _quality_ready
 from release_store import ReleaseStore
 from tbt.data.history_snapshot import load_partitions
 from tbt.data.history_safety import sanitize_history_identities
-from tbt.providers.shared_budget import from_environment, SharedBudgetExhausted
+from tbt.providers.budget import RequestBudgetExceeded
+from tbt.providers.guarded_rapidapi import GuardedRapidApiHttp
 
 OUT = ROOT / ".cache/tbt/manual-statistics"
 API_HOST = "tennisapi1.p.rapidapi.com"
@@ -51,9 +51,7 @@ def main():
     gh_token = os.environ.get("GH_TOKEN", "").strip()
     if not token or not gh_token:
         raise SystemExit("RAPIDAPI_KEY and GH_TOKEN are required")
-    budget = from_environment()
-    if os.getenv("GITHUB_ACTIONS") == "true" and budget is None:
-        raise SystemExit("Shared Tennis API budget must be configured for paid Actions")
+    guard = GuardedRapidApiHttp(token, API_HOST, timeout=18)
     OUT.mkdir(parents=True, exist_ok=True)
     repo = os.environ.get("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data")
     history = OUT / "history"
@@ -101,34 +99,16 @@ def main():
                 if time.monotonic() >= deadline:
                     report["stop_reason"] = "runtime_cap"
                     break
-                request = urllib.request.Request(
-                    API_URL.format(event_id=eid),
-                    headers={"X-RapidAPI-Key": token, "X-RapidAPI-Host": API_HOST, "Accept": "application/json"},
-                )
-                # Atomically reserve every billable attempt before touching TennisAPI.
-                if budget is not None:
-                    try:
-                        budget()
-                    except SharedBudgetExhausted:
-                        report["stop_reason"] = "shared_budget_exhausted"
-                        break
-                # Count before making the HTTP request; retries are intentionally disabled.
-                report["requests_attempted"] += 1
+                # Each paid attempt, including a failed/ambiguous request, is
+                # reserved atomically and checked against the provider header.
                 try:
-                    with urllib.request.urlopen(request, timeout=18) as response:
-                        code = response.status
-                        payload = json.loads(response.read(3_000_000))
-                except urllib.error.HTTPError as exc:
-                    code = exc.code
-                    error_counts[str(code)] += 1
-                    if code in (401, 403, 429):
-                        report["stop_reason"] = "provider_auth_or_quota_error_" + str(code)
-                        break
-                    if error_counts[str(code)] >= 30:
-                        report["stop_reason"] = "repeated_http_" + str(code)
-                        break
-                    continue
-                except (urllib.error.URLError, TimeoutError) as exc:
+                    response = guard.get(API_URL.format(event_id=eid), timeout=18)
+                    code = response.status_code
+                    payload = response.json() if code == 200 else {}
+                except RequestBudgetExceeded:
+                    report["stop_reason"] = "shared_or_provider_budget_exhausted"
+                    break
+                except httpx.RequestError:
                     error_counts["network"] += 1
                     consecutive_network_errors += 1
                     if consecutive_network_errors >= 10:
@@ -141,8 +121,17 @@ def main():
                         report["stop_reason"] = "10_parse_errors"
                         break
                     continue
+                finally:
+                    report["requests_attempted"] = guard.attempts
+                if code in (401, 403, 429):
+                    error_counts[str(code)] += 1
+                    report["stop_reason"] = "provider_auth_or_quota_error_" + str(code)
+                    break
                 if code != 200:
                     error_counts[str(code)] += 1
+                    if error_counts[str(code)] >= 30:
+                        report["stop_reason"] = "repeated_http_" + str(code)
+                        break
                     continue
                 report["http_200"] += 1
                 consecutive_network_errors = 0
@@ -169,6 +158,7 @@ def main():
             else:
                 report["stop_reason"] = "candidate_list_exhausted"
     finally:
+        guard.close()
         report["http_errors"] = dict(error_counts)
         report["finished_at"] = datetime.now(timezone.utc).isoformat()
         (OUT / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
