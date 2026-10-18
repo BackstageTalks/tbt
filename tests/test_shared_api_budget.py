@@ -451,3 +451,33 @@ def test_no_direct_rapidapi_key_header_outside_canonical_client():
         "Unmetered direct RapidAPI headers outside approved adapters: "
         + ", ".join(sorted(unauthorized))
     )
+
+
+def test_guarded_research_http_stops_on_provider_reserve(monkeypatch):
+    from tbt.providers.guarded_rapidapi import GuardedRapidApiHttp
+    class Budget:
+        count = 0
+        def __call__(self):
+            self.count += 1
+        def close(self):
+            pass
+    quota = Budget()
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, headers={
+            "x-ratelimit-requests-remaining": "750"
+        }, json={})
+    monkeypatch.setattr(httpx, "Client", lambda *a, **k:
+                        RealClient(transport=httpx.MockTransport(handler)))
+    with GuardedRapidApiHttp("test", "tennisapi1.p.rapidapi.com",
+                             budget=quota) as client:
+        with pytest.raises(ValueError, match="outside configured"):
+            client.get("https://other.example.com/x")
+        assert quota.count == 0
+        with pytest.raises(RequestBudgetExceeded, match="reserve"):
+            client.get("https://tennisapi1.p.rapidapi.com/api/tennis/live")
+        with pytest.raises(RequestBudgetExceeded, match="reserve"):
+            client.get("https://tennisapi1.p.rapidapi.com/api/tennis/live")
+        assert quota.count == 1
+        assert client.attempts == len(calls) == 1
