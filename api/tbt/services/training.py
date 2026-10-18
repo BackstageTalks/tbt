@@ -363,6 +363,7 @@ def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
         "production_calibration_matches": int(len(serving_calibration)),
         "rank_provenance": selected_metadata.get("rank_provenance"),
         "independent_serve_return": bool(selected_metadata.get("independent_serve_return", False)),
+        "independent_direct_rates": bool(selected_metadata.get("independent_direct_rates", False)),
         "holdout_metrics": selected_metadata.get("holdout_metrics"),
         "elo_baseline_metrics": selected_metadata.get("elo_baseline_metrics"),
         "holdout_delta_vs_elo": selected_metadata.get("holdout_delta_vs_elo"),
@@ -760,7 +761,8 @@ def train_from_matches(
     # 7.2.1 uses independent serve and return availability. The champion
     # retains the original joint semantics via artifact metadata in serving.
     builder = FeatureBuilder(
-        independent_serve_return=(training_profile == "top-7.2.1")
+        independent_serve_return=(training_profile == "top-7.2.1"),
+        independent_direct_rates=(training_profile == "top-7.2.1"),
     )
 
     frame = (
@@ -1132,6 +1134,7 @@ def train_from_matches(
         "holdout_fingerprint": holdout_fingerprint,
         "rank_provenance": rank_provenance,
         "independent_serve_return": training_profile == "top-7.2.1",
+        "independent_direct_rates": training_profile == "top-7.2.1",
         "holdout_metrics": (
             holdout_metrics
         ),

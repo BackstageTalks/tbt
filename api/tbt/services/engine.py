@@ -258,12 +258,17 @@ def predict(
     replay_history, _ = _enforce_rank_provenance(replay_history)
     # Honor the exact semantics persisted in the trained model; legacy
     # champions default to the old joint serve/return availability.
-    independent = (getattr(model, "metadata", None) or {}).get(
-        "independent_serve_return", False
-    )
+    semantics = getattr(model, "metadata", None) or {}
+    independent = semantics.get("independent_serve_return", False)
+    direct_rates = semantics.get("independent_direct_rates", False)
     if type(independent) is not bool:
         raise ValueError("Unknown model feature semantics: independent_serve_return")
-    builder = FeatureBuilder(independent_serve_return=independent)
+    if type(direct_rates) is not bool:
+        raise ValueError("Unknown model feature semantics: independent_direct_rates")
+    builder = FeatureBuilder(
+        independent_serve_return=independent,
+        independent_direct_rates=direct_rates,
+    )
     builder.replay(replay_history, before=cutoff)
     future = sorted((m for m in upcoming if not m.is_completed and m.scheduled_at > now
                      and m.status in {"upcoming", "notstarted", "scheduled"}), key=lambda m: (m.scheduled_at, m.match_id))

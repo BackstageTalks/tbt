@@ -100,3 +100,84 @@ def test_engine_uses_candidate_feature_policy_and_legacy_defaults():
     with pytest.raises(ValueError, match="feature semantics"):
         engine.predict(MockModel({"independent_serve_return": "yes"}), [], [],
                        return_context=True)
+
+def test_partial_direct_service_is_retained_before_feature_snapshot(match_factory):
+    # Real provider payloads can have service points without a return rate.
+    before = match_factory("partial-service-prev", "A", "B", "A", day=1, surface="hard")
+    before.stats = {
+        "p1_service_points_won": 0.74,
+        "p2_service_points_won": 0.55,
+    }
+    upcoming = match_factory("partial-service-next", "A", "B", None, day=5, surface="hard")
+
+    current = FeatureBuilder(
+        independent_serve_return=True, independent_direct_rates=True,
+    )
+    current.update(before)
+    row = current.snapshot(upcoming)
+    assert abs(row["serve_quality_diff"] - 0.19) < 1e-9
+    assert row["return_quality_diff"] == 0.0
+    assert row["stats_known_both"] == 0.0
+
+    # Already trained 7.2.1 candidate artifacts lack this explicit flag:
+    # their replay and predictions must retain their original semantics.
+    previous_candidate = FeatureBuilder(independent_serve_return=True)
+    previous_candidate.update(before)
+    assert previous_candidate.snapshot(upcoming)["serve_quality_diff"] == 0.0
+    champion = FeatureBuilder()
+    champion.update(before)
+    assert champion.snapshot(upcoming)["serve_quality_diff"] == 0.0
+
+    restored = FeatureBuilder.from_state(current.export_state())
+    assert restored.independent_direct_rates is True
+    assert abs(restored.snapshot(upcoming)["serve_quality_diff"] - 0.19) < 1e-9
+
+
+def test_independent_direct_rate_overrides_partial_fallback_without_guessing():
+    stats = {
+        "p1_service_points_won": 0.74,
+        "p1_break_points_won": 0.31,
+    }
+    assert FeatureBuilder._extract_quality(stats, "p1") == (None, 0.31)
+    assert FeatureBuilder._extract_quality(
+        stats, "p1", independent_direct_rates=True,
+    ) == (0.74, 0.31)
+
+    return_only = {
+        "p1_return_points_won": 0.44,
+        "p1_first_serve_win": 0.61,
+        "p1_second_serve_win": 0.53,
+        "p1_break_points_won": 0.65,
+    }
+    serve, old_return = FeatureBuilder._extract_quality(return_only, "p1")
+    assert abs(serve - 0.57) < 1e-9
+    assert abs(old_return - 0.545) < 1e-9
+    assert FeatureBuilder._extract_quality(
+        return_only, "p1", independent_direct_rates=True,
+    ) == (serve, 0.44)
+
+    missing = FeatureBuilder._extract_quality(
+        {}, "p1", independent_direct_rates=True,
+    )
+    assert missing == (None, None)
+
+
+def test_model_metadata_controls_partial_direct_rate_replay_without_legacy_drift():
+    from tbt.services import engine
+
+    class MockModel:
+        def __init__(self, metadata):
+            self.metadata = metadata
+
+    for metadata, expected in [
+        ({}, False),
+        ({"independent_serve_return": True}, False),
+        ({"independent_serve_return": True, "independent_direct_rates": True}, True),
+    ]:
+        _, context = engine.predict(MockModel(metadata), [], [], return_context=True)
+        assert context["builder"].independent_direct_rates is expected
+
+    import pytest
+    with pytest.raises(ValueError, match="independent_direct_rates"):
+        engine.predict(MockModel({"independent_direct_rates": "yes"}), [], [],
+                       return_context=True)
