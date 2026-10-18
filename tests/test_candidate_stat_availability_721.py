@@ -10,9 +10,9 @@ def _snapshot(match_factory, monkeypatch, *, policy, a_serve=None, b_serve=None,
     right = builder._state(match, False)
 
     def stat(state, played_at, field, surface=None):
-        key = "serve" if field == "serve_quality" else "return"
-        if key not in ("serve", "return"):
+        if field not in ("serve_quality", "return_quality"):
             return None
+        key = "serve" if field == "serve_quality" else "return"
         if state is left:
             return a_serve if key == "serve" else a_return
         if state is right:
@@ -79,3 +79,24 @@ def test_missing_one_side_remains_missing_no_guessed_stats(match_factory, monkey
     assert row["serve_quality_diff"] == 0.0
     assert row["surface_serve_quality_diff"] == 0.0
     assert abs(row["return_quality_diff"] - .11) < 1e-9
+
+
+
+def test_engine_uses_candidate_feature_policy_and_legacy_defaults():
+    from tbt.services import engine
+
+    class MockModel:
+        def __init__(self, metadata):
+            self.metadata = metadata
+
+    _, context = engine.predict(MockModel({"independent_serve_return": True}), [], [],
+                                return_context=True)
+    assert context["builder"].independent_serve_return is True
+
+    _, context = engine.predict(MockModel({}), [], [], return_context=True)
+    assert context["builder"].independent_serve_return is False
+
+    import pytest
+    with pytest.raises(ValueError, match="feature semantics"):
+        engine.predict(MockModel({"independent_serve_return": "yes"}), [], [],
+                       return_context=True)
