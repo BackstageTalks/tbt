@@ -12,6 +12,7 @@ from hashlib import sha256
 import json
 import math
 import os
+import random
 from pathlib import Path
 
 from _bootstrap import ROOT  # noqa: F401
@@ -80,6 +81,92 @@ def _metrics(rows):
             "challenger": single("challenger_player1_probability")}
 
 
+
+def _paired_confidence(rows, *, samples=1200):
+    """Paired bootstrap on the original unchanged fixture pairs, never a new fit.
+
+    Confidence intervals are descriptive because fixtures within the four-day
+    shadow can be correlated; they are not independent release authorization.
+    """
+    if not rows:
+        return {"n": 0, "status": "INSUFFICIENT"}
+    differences = {"accuracy_pp": [], "log_loss": [], "brier_score": []}
+    challenger_only = champion_only = 0
+    for row in rows:
+        y = int(row["target_player1_win"])
+        p = float(row["production_player1_probability"])
+        q = float(row["challenger_player1_probability"])
+        a = int((p >= 0.5) == bool(y))
+        b = int((q >= 0.5) == bool(y))
+        challenger_only += int(b == 1 and a == 0)
+        champion_only += int(a == 1 and b == 0)
+        differences["accuracy_pp"].append(100.0 * (b - a))
+        differences["brier_score"].append((y - q) ** 2 - (y - p) ** 2)
+        differences["log_loss"].append(
+            -math.log(q if y else 1.0 - q) + math.log(p if y else 1.0 - p)
+        )
+    n = len(rows)
+    rng = random.Random(711)  # repeatable descriptive uncertainty
+    intervals = {}
+    for metric, values in differences.items():
+        draws = []
+        for _ in range(samples):
+            draws.append(sum(values[rng.randrange(n)] for _ in range(n)) / n)
+        draws.sort()
+        intervals[metric] = {
+            "delta": round(sum(values) / n, 6),
+            "ci95_paired_fixture_bootstrap": [
+                round(draws[int(samples * .025)], 6),
+                round(draws[min(samples-1, int(samples * .975))], 6),
+            ],
+        }
+    discordant = challenger_only + champion_only
+    p_exact = (
+        min(1.0, 2.0 * sum(math.comb(discordant, k) for k in range(min(challenger_only, champion_only) + 1))
+            / (2 ** discordant))
+        if discordant else 1.0
+    )
+    return {
+        "n": n,
+        "settled_utc_days": len({_datetime(r["scheduled_at"]).date().isoformat() for r in rows}),
+        "challenger_only_correct": challenger_only,
+        "champion_only_correct": champion_only,
+        "mcnemar_exact_two_sided_p": round(p_exact, 6),
+        "paired_deltas": intervals,
+        "inference_limit": "Fixture bootstrap assumes independence; few days and correlated tournaments widen real uncertainty.",
+    }
+
+
+def _segment_release_screen(cohort, overall_gate, segments):
+    """Explicit strict shadow screen, not the separate canonical/Elo promotion gate."""
+    reasons = []
+    if not overall_gate.get("ready_for_promotion_review", False):
+        reasons.append("aggregate_shadow_gate_not_met")
+    segment_results = {}
+    for tour in ("ATP", "WTA"):
+        group = (segments.get("tour") or {}).get(tour, {})
+        champion, candidate = group.get("champion") or {}, group.get("challenger") or {}
+        n = int(candidate.get("n") or 0)
+        failures = []
+        if n < 50 or n != int(champion.get("n") or 0):
+            failures.append("sample_below_50_or_unpaired")
+        else:
+            for metric in ("accuracy", "log_loss", "brier_score", "ece_10"):
+                old, new = champion.get(metric), candidate.get(metric)
+                if old is None or new is None:
+                    failures.append(metric + "_missing")
+                elif (new < old if metric == "accuracy" else new > old):
+                    failures.append(metric + "_regressed")
+        segment_results[tour] = {"n": n, "strict_gate_pass": not failures, "reasons": failures}
+        reasons.extend(tour.lower() + "_" + reason for reason in failures)
+    return {
+        "status": "SHADOW_SEGMENTS_PASS" if not reasons else "SHADOW_SEGMENT_REGRESSIONS",
+        "reasons": reasons, "segments": segment_results,
+        "official_promotion": "NOT_EVALUATED_REQUIRES_CANONICAL_ELO_GATE_AND_OPERATOR_APPROVAL",
+        "production_change_authorized": False,
+        "recommendation": "REVIEW_ONLY_NO_PRODUCTION_SWITCH" if reasons else "RUN_SEPARATE_PROMOTION_GOVERNANCE",
+    }
+
 def summarize(rows, production_version, challenger_version, source_ts=None):
     if production_version == challenger_version:
         raise ValueError("Challenger is identical to champion")
@@ -111,6 +198,14 @@ def summarize(rows, production_version, challenger_version, source_ts=None):
         "calibration_research": research_comparison(cohort, production_version, challenger_version),
         "gate": summary["gate"],
         "segments": segments,
+        "paired_uncertainty": {
+            label: _paired_confidence(
+                [r for r in settled if label == "all" or
+                 str(r.get("tour") or "").upper() == label]
+            )
+            for label in ("all", "ATP", "WTA")
+        },
+        "release_screen": _segment_release_screen(cohort, summary["gate"], segments),
         "roi_yield_status": "NOT_EVALUABLE_WITHOUT_VERIFIED_PREMATCH_ODDS",
         "limits": [
             "No retraining or modification of model artifacts, CDB or public predictions.",
