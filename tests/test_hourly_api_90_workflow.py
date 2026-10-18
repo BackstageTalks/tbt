@@ -1,4 +1,4 @@
-"""Contract regression for staged 90% and guarded 14,750-request provider-day closeout."""
+"""Contract regression for staged 90% and guarded 14,250-request provider-day closeout."""
 from pathlib import Path
 
 from tbt.providers import shared_budget
