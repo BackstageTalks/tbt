@@ -443,6 +443,10 @@ def test_no_direct_rapidapi_key_header_outside_canonical_client():
             source = path.read_text(encoding="utf-8").lower()
             if "x-rapidapi-key" in source or "x-rapidapi-host" in source:
                 unauthorized.append(str(path.relative_to(root)))
+    for path in (root / ".github/workflows").glob("*.yml"):
+        source = path.read_text(encoding="utf-8").lower()
+        if "x-rapidapi-key" in source or "x-rapidapi-host" in source:
+            unauthorized.append(str(path.relative_to(root)))
     assert unauthorized == [], (
         "Unmetered direct RapidAPI headers outside approved adapters: "
         + ", ".join(sorted(unauthorized))
