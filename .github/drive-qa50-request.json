@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "intent": "one-shot-content-qa-to-50percent-not-monitoring",
+  "total_inventory": 3736,
+  "audited_before_run": 1257,
+  "threshold_percent": 50,
+  "threshold_files": 1868,
+  "minimum_new_fully_profiled": 611,
+  "candidate_manifest": "private-tbt-data@b14281432c1ae2c204da14dbc41b4535b409ed6f/research/audit50-20261018/target-manifest.json",
+  "read_only": true,
+  "no_cdb_mutations": true,
+  "no_source_mutations": true,
+  "no_model_training": true,
+  "no_paid_api": true
+}
