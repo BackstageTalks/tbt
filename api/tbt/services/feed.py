@@ -131,11 +131,13 @@ def read_feed(path):
 
 
 def visible_feed(payload, now=None):
-    """Serve future discovery and the published 06:00-to-06:00 BlinQ offer.
+    """Serve future discovery and today's public 06:00-to-06:00 offer.
 
-    `upcoming` remains pre-match. Published market sections retain started
-    matches until the next 06:00 Europe/Bratislava boundary. The half-open
-    interval [06:00, next 06:00) includes next-day matches through 05:59.
+    The internal betting-day interval remains [06:00, next 06:00), with the
+    ending 06:00 excluded. Public TOP/ACCA/VALUE/other daily tabs additionally
+    show only fixtures dated on the *opening calendar day* in Bratislava.
+    After-midnight fixtures in the internal interval stay in the raw snapshot
+    but are not displayed as tomorrow's matches on today's page.
     """
     if not isinstance(payload, dict):
         raise ValueError("Invalid serving feed root")
@@ -167,12 +169,15 @@ def visible_feed(payload, now=None):
             future.append(row)
     result["upcoming"] = future
 
-    # The current published offer uses a half-open 06:00-to-06:00 local window.
-    # Do not trust an explicit betting_day on a row: a legacy/mislabelled row
-    # for tomorrow AFTER 06:00 can otherwise leak into today's public board.
-    # Compute the window from the actual timezone-aware match start.
-    # Started matches remain visible until the next 06:00 boundary.
-    def scheduled_for_current_betting_day(row):
+    # Internal settlement/publication remains 06:00 -> next-day 05:59:59.
+    # The public TODAY board must not show rows dated tomorrow, even when the
+    # internal betting-day window includes them (e.g. 19 Oct 04:30 and 05:00
+    # before the 19 Oct 06:00 rollover). Use actual scheduled_at, not a
+    # potentially wrong explicit betting_day, to enforce BOTH conditions.
+    # This is presentation filtering only; retain raw history unchanged.
+    local_zone = ZoneInfo("Europe/Bratislava")
+
+    def scheduled_for_public_offer_day(row):
         if not isinstance(row, dict):
             return False
         raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time") or row.get("date")
@@ -180,13 +185,14 @@ def visible_feed(payload, now=None):
             scheduled = _parse_utc_timestamp(raw, "scheduled_at")
         except ValueError:
             return False
-        return _betting_day_key(scheduled) == day
+        local_date = scheduled.astimezone(local_zone).date().isoformat()
+        return local_date == day and _betting_day_key(scheduled) == day
 
     for key in ("top_daily_picks", "prime_picks", "value_picks", "doubles_picks", "ace_picks", "sg_picks"):
         rows = payload.get(key, [])
         if not isinstance(rows, list):
             continue
-        result[key] = [row for row in rows if scheduled_for_current_betting_day(row)]
+        result[key] = [row for row in rows if scheduled_for_public_offer_day(row)]
 
     stamp = payload.get("generated_at")
     if not stamp:
