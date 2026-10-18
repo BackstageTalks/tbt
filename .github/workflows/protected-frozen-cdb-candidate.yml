@@ -26,7 +26,10 @@ jobs:
   frozen-candidate:
     if: github.repository == 'BackstageTalks/tbt'
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    # Almost one million point-in-time history rows require a full offline build.
+    # GitHub-hosted runner max is 360 minutes; never reduce the data cohort
+    # or bypass the backup/leakage gate to make an earlier timeout pass.
+    timeout-minutes: 360
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
