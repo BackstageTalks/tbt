@@ -55,6 +55,14 @@ FEATURE_NAMES = [
     "surface_return_quality_diff",
     "stats_known_both",
     "surface_stats_known_both",
+    "serve_independent_diff",
+    "return_independent_diff",
+    "surface_serve_independent_diff",
+    "surface_return_independent_diff",
+    "serve_independent_known_both",
+    "return_independent_known_both",
+    "surface_serve_independent_known_both",
+    "surface_return_independent_known_both",
     "first_strike_serve_diff",
     "return_in_play_diff",
     "return_depth_diff",
@@ -84,6 +92,17 @@ FEATURE_NAMES = [
     "tour_atp",
     "data_depth",
 ] + ATP_LEADERBOARD_FEATURE_NAMES + ATP_RANK_HISTORY_FEATURE_NAMES + WTA_RANK_HISTORY_FEATURE_NAMES + WTA_SEASON_FEATURE_NAMES
+
+# Opt-in 7.2.1 statistics never enter an existing production model's feature list.
+# Unlike legacy stats_known_both, individual serve/return signals survive if the
+# other statistic is missing. Separate availability flags protect null vs neutral.
+INDEPENDENT_STATS_FEATURE_NAMES = [
+    "serve_independent_diff", "return_independent_diff",
+    "surface_serve_independent_diff", "surface_return_independent_diff",
+    "serve_independent_known_both", "return_independent_known_both",
+    "surface_serve_independent_known_both",
+    "surface_return_independent_known_both",
+]
 
 # Match Charting specialist rates are retained in canonical history and in
 # FeatureBuilder state for research / future coverage growth. Current paired
@@ -1772,6 +1791,34 @@ class FeatureBuilder:
                 stats_known
             ),
             "surface_stats_known_both": surface_stats_known,
+            "serve_independent_diff": (
+                float(serve1) - float(serve2)
+                if serve1 is not None and serve2 is not None else 0.0
+            ),
+            "return_independent_diff": (
+                float(return1) - float(return2)
+                if return1 is not None and return2 is not None else 0.0
+            ),
+            "surface_serve_independent_diff": (
+                float(surface_serve1) - float(surface_serve2)
+                if surface_serve1 is not None and surface_serve2 is not None else 0.0
+            ),
+            "surface_return_independent_diff": (
+                float(surface_return1) - float(surface_return2)
+                if surface_return1 is not None and surface_return2 is not None else 0.0
+            ),
+            "serve_independent_known_both": float(
+                serve1 is not None and serve2 is not None
+            ),
+            "return_independent_known_both": float(
+                return1 is not None and return2 is not None
+            ),
+            "surface_serve_independent_known_both": float(
+                surface_serve1 is not None and surface_serve2 is not None
+            ),
+            "surface_return_independent_known_both": float(
+                surface_return1 is not None and surface_return2 is not None
+            ),
             "first_strike_serve_diff": (
                 float(rich_values["first_strike_serve_diff"][0])
                 - float(rich_values["first_strike_serve_diff"][1])
