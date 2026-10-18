@@ -68,13 +68,12 @@ jobs:
           assert r["changed_years"] == sorted(r["changed_years"])
           print(json.dumps(r, indent=2))
           PY
-      - name: Save read-only matched row IDs and audit counts
+      - name: Save aggregate-only audit counts (no private match IDs)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cdb-service-complement-stage-${{ github.run_id }}
           path: |
             .cache/tbt/cdb-complements/stage/report.json
-            .cache/tbt/cdb-complements/stage/stage.jsonl
           if-no-files-found: warn
           retention-days: 30
