@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
+      PYTHONPATH: api:scripts:scripts/research
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PRIVATE_REPO: BackstageTalks/tbt-data
       RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
