@@ -69,6 +69,8 @@ jobs:
             print(name, 'staging-byte-SHA-pass')
           print('Gross staged candidate fields (NOT live NULLs):',sum(x[2] for x in expected))
           PY
+      - name: Test one-shot orphan lock recovery is fail-closed
+        run: python -m unittest discover -s tests -p 'test_recover_exact_orphan_cdb_lock_once.py' -v
       - name: Run five exact importer unit test suites
         working-directory: source
         env:
@@ -117,6 +119,8 @@ jobs:
           assert req['model_training'] is False
           assert req['model_promotion'] is False
           PY
+      - name: Recover only verified abandoned lock from failed prior training
+        run: python ../scripts/recover_exact_orphan_cdb_lock_once.py
       - name: Wait for and acquire exclusive CDB writer
         run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 10800
       - name: Refresh R5 2026 and write only current missing native cells
