@@ -100,6 +100,65 @@ def make_payload(row):
     return payload, normalized
 
 
+def normalize_sackmann_row(raw):
+    """49-column Jeff Sackmann ATP/WTA matches -> verified *candidate* counts.
+
+    w_* and l_* are source winner/loser, never assumed TennisAPI IDs. Service
+    and return point totals are derived only from internally consistent direct
+    server point counts; missing evidence remains missing.
+    """
+    row = {
+        "winner_name": raw.get("winner_name"),
+        "loser_name": raw.get("loser_name"),
+        "winner_player_id": raw.get("winner_id"),
+        "loser_player_id": raw.get("loser_id"),
+        "tourney_name": raw.get("tourney_name"),
+        "tourney_dates": raw.get("tourney_date"),
+        "tourney_round_name": raw.get("round"),
+        "match_score": raw.get("score"),
+        "tourney_id": raw.get("tourney_id"),
+        "match_num": raw.get("match_num"),
+    }
+    for source, target in (("w", "winner"), ("l", "loser")):
+        for suffix, field in (("ace", "aces"), ("df", "double_faults")):
+            row[f"{target}_{field}"] = raw.get(f"{source}_{suffix}")
+        svpt = _nonnegative_int(raw.get(f"{source}_svpt"), f"{source}_svpt")
+        first_in = _nonnegative_int(raw.get(f"{source}_1stIn"), f"{source}_1stIn")
+        first_won = _nonnegative_int(raw.get(f"{source}_1stWon"), f"{source}_1stWon")
+        second_won = _nonnegative_int(raw.get(f"{source}_2ndWon"), f"{source}_2ndWon")
+        if svpt is not None and first_won is not None and second_won is not None:
+            if first_won + second_won > svpt:
+                raise ValueError(f"Impossible service points won for {source}")
+            row[f"{target}_service_points_won"] = first_won + second_won
+            row[f"{target}_service_points_total"] = svpt
+        if first_in is not None and svpt is not None and first_in > svpt:
+            raise ValueError(f"First-serve count exceeds service points for {source}")
+        if first_won is not None and first_in is not None:
+            if first_won > first_in:
+                raise ValueError(f"First-serve wins exceed first serves for {source}")
+            if first_in:
+                row[f"{target}_first_serve_points_won"] = first_won
+                row[f"{target}_first_serve_points_total"] = first_in
+        if (second_won is not None and first_in is not None
+                and svpt is not None):
+            attempts = svpt - first_in
+            if second_won > attempts:
+                raise ValueError(f"Second-serve wins exceed attempts for {source}")
+            if attempts:
+                row[f"{target}_second_serve_points_won"] = second_won
+                row[f"{target}_second_serve_points_total"] = attempts
+
+    # The actual server points are complementary to opponent return points.
+    # This is a point-count identity, not a guess based on player names.
+    for server, receiver in (("winner", "loser"), ("loser", "winner")):
+        won = row.get(f"{server}_service_points_won")
+        total = row.get(f"{server}_service_points_total")
+        if won is not None and total is not None:
+            row[f"{receiver}_return_points_won"] = total - won
+            row[f"{receiver}_return_points_total"] = total
+    return row
+
+
 def stage_row(row, *, file_sha256, source_file_id, line_number):
     payload, normalized = make_payload(row)
     source_ids = {
@@ -121,6 +180,8 @@ def stage_row(row, *, file_sha256, source_file_id, line_number):
             "sha256": file_sha256,
             "csv_line": line_number,
             "source_match_id": str(row.get("match_id") or "").strip() or None,
+            "source_tourney_id": str(row.get("tourney_id") or "").strip() or None,
+            "source_match_num": str(row.get("match_num") or "").strip() or None,
             "source_player_ids": source_ids,
             "match_url_suffix": str(row.get("match_stats_url_suffix") or "").strip() or None,
         },
@@ -153,11 +214,13 @@ def _read_headers(header_path):
     return lines
 
 
-def run(input_path, header_path, out_dir, source_file_id):
+def run(input_path, header_path, out_dir, source_file_id, source_format="atp_headerless"):
     src, output = Path(input_path), Path(out_dir)
     if not source_file_id or "/" in source_file_id or " " in source_file_id:
         raise ValueError("Use the original Google Drive file ID, not a URL/name")
-    headers = _read_headers(header_path)
+    if source_format not in ("atp_headerless", "sackmann"):
+        raise ValueError("Unknown statistics input format")
+    headers = _read_headers(header_path) if source_format == "atp_headerless" else None
     with src.open("rb") as file_handle:
         digest = hashlib.file_digest(file_handle, "sha256").hexdigest()
     output.mkdir(parents=True, exist_ok=True)
@@ -167,15 +230,22 @@ def run(input_path, header_path, out_dir, source_file_id):
     with src.open("r", encoding="utf-8-sig", newline="") as source, \
             accepted.open("w", encoding="utf-8") as good, \
             rejected.open("w", encoding="utf-8") as bad:
-        reader = csv.reader(source)
-        for number, values in enumerate(reader, 1):
+        reader = csv.reader(source) if source_format == "atp_headerless" else csv.DictReader(source)
+        for number, values in enumerate(reader, 1 if source_format == "atp_headerless" else 2):
             if not values or (len(values) == 1 and not values[0].strip()):
                 continue
             counts["rows_seen"] += 1
             try:
-                if len(values) != len(headers):
-                    raise ValueError(f"Column count {len(values)} != {len(headers)}")
-                record = stage_row(dict(zip(headers, values)), file_sha256=digest,
+                if source_format == "atp_headerless":
+                    if len(values) != len(headers):
+                        raise ValueError(f"Column count {len(values)} != {len(headers)}")
+                    source_row = dict(zip(headers, values))
+                else:
+                    if None in values or not {"winner_name", "loser_name", "w_ace", "l_ace",
+                                               "w_svpt", "l_svpt"}.issubset(values):
+                        raise ValueError("Missing or malformed Sackmann source columns")
+                    source_row = normalize_sackmann_row(values)
+                record = stage_row(source_row, file_sha256=digest,
                                    source_file_id=source_file_id, line_number=number)
                 good.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
                 counts["staged_not_import_ready"] += 1
@@ -185,7 +255,8 @@ def run(input_path, header_path, out_dir, source_file_id):
                                      sort_keys=True) + "\n")
                 counts["quarantined"] += 1
     report = {"schema": 1, "source_file_id": source_file_id, "source_sha256": digest,
-              "header_file": Path(header_path).name,
+              "header_file": Path(header_path).name if header_path else None,
+              "source_format": source_format,
               "counts": dict(counts), "api_requests": 0, "cdb_writes": 0,
               "status": "SOURCE_STAGE_ONLY_CDB_DIFF_PENDING",
               "output_files": ["stage.jsonl", "quarantine.jsonl"],
@@ -205,13 +276,18 @@ def run(input_path, header_path, out_dir, source_file_id):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, help="Downloaded original Drive CSV")
-    parser.add_argument("--header-file", required=True,
-                        help="One source column name per line; files are headerless")
+    parser.add_argument("--format", choices=["atp_headerless", "sackmann"],
+                        default="atp_headerless")
+    parser.add_argument("--header-file",
+                        help="For atp_headerless: one source column per line")
     parser.add_argument("--source-file-id", required=True)
     parser.add_argument("--out-dir", required=True)
     args = parser.parse_args()
+    if args.format == "atp_headerless" and not args.header_file:
+        parser.error("--header-file is required for atp_headerless")
     print(json.dumps(run(args.input, args.header_file, args.out_dir,
-                         args.source_file_id), indent=2, ensure_ascii=False))
+                         args.source_file_id, source_format=args.format),
+                     indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
