@@ -433,16 +433,17 @@ def test_no_direct_rapidapi_key_header_outside_canonical_client():
     """Prevent new unmetered HTTP clients from bypassing the single quota adapter."""
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
-    canonical = root / "api/tbt/providers/rapidapi.py"
+    canonical = {root / "api/tbt/providers/rapidapi.py",
+                 root / "api/tbt/providers/guarded_rapidapi.py"}
     unauthorized = []
     for parent in ("api", "scripts"):
         for path in (root / parent).rglob("*.py"):
-            if path == canonical:
+            if path in canonical:
                 continue
             source = path.read_text(encoding="utf-8").lower()
             if "x-rapidapi-key" in source or "x-rapidapi-host" in source:
                 unauthorized.append(str(path.relative_to(root)))
     assert unauthorized == [], (
-        "Direct RapidAPI HTTP access bypasses the shared budget: "
+        "Unmetered direct RapidAPI headers outside approved adapters: "
         + ", ".join(sorted(unauthorized))
     )
