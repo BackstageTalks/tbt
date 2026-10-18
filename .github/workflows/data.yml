@@ -111,7 +111,7 @@ jobs:
       LOOKBACK_DAYS: ${{ inputs.lookback_days || 1095 }}
       END_DATE: ${{ inputs.end }}
       MAX_REQUESTS: ${{ inputs.max_requests || 14500 }}
-      BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: true
+      BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'
       BLINQ_AUTOFILL_HIGH_YIELD: ${{ inputs.hourly_autofill && inputs.mode == 'statistics' && 'true' || 'false' }}
       BLINQ_API_AUTOFILL_STOP_AT_UTC: ${{ inputs.autofill_stop_at_utc || '' }}
       MARKET_ODDS_MAX_EVENTS: ${{ github.event_name == 'workflow_dispatch' && inputs.market_odds_max_events == 0 && '0' || inputs.market_odds_max_events || -1 }}
