@@ -89,7 +89,7 @@ def _picks(snapshot):
     return picks
 
 
-def _results(ledger):
+def _results(ledger, relevant_events):
     if not isinstance(ledger, list):
         raise ValueError("Expected canonical predictions ledger list")
     result = {}
@@ -99,6 +99,8 @@ def _results(ledger):
         if str(row.get("tour") or "").lower() not in {"atp", "wta"}:
             continue
         event = str(row["event_id"])
+        if event not in relevant_events:
+            continue
         players = _ids(row)
         resolved = set()
         is_void = False
@@ -159,7 +161,8 @@ def _summary(items, outcomes):
 
 
 def compare(snapshot_711, snapshot_721, ledger):
-    left, right, outcomes = _picks(snapshot_711), _picks(snapshot_721), _results(ledger)
+    left, right = _picks(snapshot_711), _picks(snapshot_721)
+    outcomes = _results(ledger, {key[0] for key in set(left) | set(right)})
     overlap = set(left) & set(right)
     only_left, only_right = set(left) - overlap, set(right) - overlap
     verified = 0
