@@ -9,14 +9,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
-import requests
+import httpx
 from _bootstrap import ROOT
 from audit_environment_release import download_committed_history
 from audit_statistics_inventory import _quality_ready
 from release_store import ReleaseStore
 from tbt.data.history_snapshot import load_partitions
 from tbt.data.history_safety import sanitize_history_identities
-from tbt.providers.shared_budget import from_environment, SharedBudgetExhausted
+from tbt.providers.budget import RequestBudgetExceeded
+from tbt.providers.guarded_rapidapi import GuardedRapidApiHttp
 
 def event_id(match):
     payload = match.provider_payload if isinstance(match.provider_payload, dict) else {}
@@ -87,14 +88,9 @@ def main():
     counts["reused_previous_responses"] = len(previous)
     candidates = [(m, eid) for m, eid in candidates if eid not in previous]
     calls = 0
-    budget = from_environment()
-    if os.getenv("GITHUB_ACTIONS") == "true" and budget is None:
-        raise SystemExit("Shared Tennis API budget must be configured for paid Actions")
-    session = requests.Session()
-    headers = {"X-RapidAPI-Key": token, "X-RapidAPI-Host": host, "Accept": "application/json"}
-    # Stay below the provider limit of 6 requests/second.
-    min_interval = 0.25  # 4 requests/second
-    last_request_at = 0.0
+    # The shared quota and provider's own remaining header are mandatory,
+    # including local/manual invocations and retries.
+    guard = GuardedRapidApiHttp(token, host, timeout=25)
     # Paid cap includes retries.
     try:
         with raw.open("w", encoding="utf-8") as stream:
@@ -110,20 +106,11 @@ def main():
                     for retry in range(3):
                         if calls >= args.limit:
                             break
-                        delay = min_interval - (time.monotonic() - last_request_at)
-                        if delay > 0:
-                            time.sleep(delay)
-                        if budget is not None:
-                            try:
-                                budget()
-                            except SharedBudgetExhausted:
-                                counts["shared_budget_exhausted"] += 1
-                                print("Shared Tennis API budget reached; no further requests", flush=True)
-                                return
-                        last_request_at = time.monotonic()
-                        calls += 1
-                        counts["paid_requests_attempted"] = calls
-                        response = session.get(url, headers=headers, timeout=25)
+                        try:
+                            response = guard.get(url, timeout=25)
+                        finally:
+                            calls = guard.attempts
+                            counts["paid_requests_attempted"] = calls
                         counts[f"http_{response.status_code}"] += 1
                         if response.status_code != 429:
                             break
@@ -160,12 +147,16 @@ def main():
                     }, ensure_ascii=False, default=str) + "\n")
                     stream.flush()
                     counts["staged_nonempty_responses"] += 1
-                except (requests.RequestException, ValueError) as exc:
+                except RequestBudgetExceeded:
+                    counts["provider_or_shared_budget_exhausted"] += 1
+                    break
+                except (httpx.RequestError, ValueError) as exc:
                     counts["request_or_json_error"] += 1
                     print(f"Event {eid}: {type(exc).__name__}", flush=True)
                 if calls % 100 == 0:
                     print(f"Attempted {calls}/{args.limit}; staged {counts['staged_nonempty_responses']}", flush=True)
     finally:
+        guard.close()
         report = {
             "schema": 1, "production_mutated": False, "import_ready": False,
             "hard_cap": args.limit, "paid_requests_attempted": calls,
