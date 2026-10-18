@@ -2,13 +2,13 @@
   "schema": 1,
   "mode": "dry-run",
   "workflow": "cdb-service-complement-audit.yml",
-  "reason": "Stage exact observed post-match service/return complements on verified current CDB; zero canonical/model changes",
+  "reason": "Fresh 2026-10-18 exact canonical-owned observed service/return NULL-only candidate preflight after Drive audit 5-20% results; read-only and no external source rights assumed",
   "approved_by_operator": true,
-  "purpose": "After verified October 14 Sackmann source-value readback: independently re-evaluate 253 raw algebraic complement candidates against current 995610-match CDB, completed winner, immutable evidence and strict no-overwrite; never write CDB",
+  "purpose": "Recheck strictly current checksum-verified CDB for mathematical first/second/total service-return opponent rate complements; stage no more than proven missing and report evidence before any separately guarded write. No external archive import.",
   "api_requests": 0,
   "cdb_write": false,
-  "request_id": "safe-cdb-complements-20261014-readonly-after-38614904775",
-  "prior_evidence_run_id": 38614904775,
-  "prior_expected_cdb_manifest_sha256": "cda502a84339d0eb101523f9e27fc727b7cbb9a0abff51822db36002b5168070",
-  "write_authorized": false
+  "request_id": "current-cdb-native-complements-20261018-preflight-after-drive-20pct",
+  "prior_evidence_run_id": 39086631839,
+  "write_authorized": false,
+  "expected_prior_reference_manifest_sha256": "0810387fab1629404c612b230a72ecc0d2eb0b67efa5f3283bc533cfa2a404f5"
 }
