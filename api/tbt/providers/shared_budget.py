@@ -278,8 +278,25 @@ class HttpReservation:
             )
             if response.status_code == 429:
                 raise SharedBudgetExhausted("Shared Tennis API budget exhausted")
-            if response.status_code != 200 or response.json().get("ok") is not True:
+            if response.status_code != 200:
                 raise SharedBudgetUnavailable("Shared API budget verification failed")
+            payload = response.json()
+            budget = payload.get("budget") if isinstance(payload, dict) else None
+            if (payload.get("ok") is not True or not isinstance(budget, dict)
+                    or budget.get("window") != "provider_day_19_10_europe_bratislava"
+                    or type(budget.get("provider_plan_limit")) is not int
+                    or budget["provider_plan_limit"] != PROVIDER_PLAN_LIMIT
+                    or type(budget.get("global_limit")) is not int
+                    or budget["global_limit"] != GLOBAL_CEILING
+                    or type(budget.get("reserved_provider_headroom")) is not int
+                    or budget["reserved_provider_headroom"] != PROVIDER_RESERVE
+                    or type(budget.get("global_spent")) is not int
+                    or not 1 <= budget["global_spent"] <= GLOBAL_CEILING
+                    or type(budget.get("global_remaining")) is not int
+                    or budget["global_remaining"] != GLOBAL_CEILING - budget["global_spent"]):
+                # A stale Azure runtime may still use an older, looser limit.
+                # Fail closed rather than trusting only a successful HTTP status.
+                raise SharedBudgetUnavailable("Shared API budget contract mismatch")
         except RequestBudgetExceeded:
             raise
         except Exception as exc:
