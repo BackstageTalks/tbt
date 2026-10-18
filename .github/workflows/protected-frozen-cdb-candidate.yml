@@ -35,6 +35,8 @@ jobs:
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       PYTHONPATH: api:scripts
       PYTHONDONTWRITEBYTECODE: '1'
+      # Stream long-running training logs rather than losing output on runner exit.
+      PYTHONUNBUFFERED: '1'
       BLINQ_RAPIDAPI_MAX_RPS: '0'
       BLINQ_TRAINING_PROFILE: ${{ inputs.training_profile || 'top-7.2.1' }}
     steps:
