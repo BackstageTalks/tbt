@@ -2,16 +2,15 @@
   "schema": 1,
   "mode": "statistics",
   "promote": false,
-  "source": "existing_subscribed_provider_native_event_history__atp_2022_2025_20261018",
-  "purpose": "One-shot protected ATP historical whole-match statistics NULL-only gapfill for 2022-2025. Provider-native event/player identity required; source rights are from existing subscribed API, not Sackmann/TML/Drive mirrors. Enforce shared 14500/day cap, provider 500-call reserve, maximum 500 attempts including retries, 6 requests/s, strict non-NULL preservation, single-writer lock, CAS, immutable prewrite backup, independent remote release readback. Do not train/promote models or schedule a cron. Exit without write if any gate fails.",
+  "source": "existing_subscribed_provider_native_history__atp_wta_2016_2026__prepared_20261018",
+  "purpose": "STAGED ONLY: broad protected provider-native ATP+WTA whole-match statistics NULL-only gapfill, 2016 through last completed UTC day 2026-10-17. Do not dispatch before daily data run has completed and the existing prematurely queued run #39105953426 has been cancelled. On eventual execution re-read current canonical release and derive fresh provider-event-ID-matched missing field queue. Spend up to actual shared provider-day available credits (configured per-run ceiling 14000, never bypass 14500 global shared budget or 500 provider reserve), max 6 requests/second; account for retries. Respect current single global writer lock, verified immutable prewrite backup and restore, CAS, quarantine identity conflicts and all non-NULL overwrites, independent remote readback. Do not use candidate QA totals as import-ready counts, do not promote or train models. Exit without write if any safety gate fails.",
   "requested_on": "2026-10-18",
-  "max_requests": 500,
-  "start": "2022-01-01",
-  "end": "2025-12-31",
+  "max_requests": 14000,
+  "start": "2016-01-01",
+  "end": "2026-10-17",
   "targeted_statistics": true,
   "historical_match_winner_odds_as_model_feature": false,
   "model_training": false,
   "pre_reset_provider_header_override": false,
-  "source_only_tml_write_authorized": false,
-  "target_tour": "atp"
+  "source_only_tml_write_authorized": false
 }
