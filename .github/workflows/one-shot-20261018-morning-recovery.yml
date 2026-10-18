@@ -50,22 +50,24 @@ jobs:
           manifest_digest="$(jq -er '[.assets[] | select(.name == "history_manifest.json") | .digest] | if length == 1 then .[0] else error("manifest ambiguous") end' <<< "$release")"
           test -n "$manifest_digest"
 
-          # Never reclaim a lock while any other app/data workflow may be active.
-          # Transient unrelated runs may finish during this bounded grace period.
+          # Public app-writer runs can be checked with this credential. The
+          # private data PAT deliberately lacks Actions-list scope (HTTP 403);
+          # a successful list read must not be inferred from that denial.
+          # The current annotated lock still belongs to the completed owner,
+          # and --force-with-lease below protects against deleting any newly
+          # acquired tag, including when a private writer is waiting.
           for attempt in $(seq 1 45); do
             busy=0
-            for repo in "$app_repo" "$data_repo"; do
-              for status in in_progress queued; do
-                runs="$(gh api "repos/$repo/actions/runs?status=$status&per_page=100")"
-                other="$(jq --argjson own "$GITHUB_RUN_ID" '[.workflow_runs[] | select(.id != $own)] | length' <<< "$runs")"
-                if (( other > 0 )); then
-                  echo "Other $repo workflows: $other ($status)"
-                  busy=1
-                fi
-              done
+            for status in in_progress queued; do
+              runs="$(gh api "repos/$app_repo/actions/runs?status=$status&per_page=100")"
+              other="$(jq --argjson own "$GITHUB_RUN_ID" '[.workflow_runs[] | select(.id != $own)] | length' <<< "$runs")"
+              if (( other > 0 )); then
+                echo "Other $app_repo workflows: $other ($status)"
+                busy=1
+              fi
             done
             (( busy == 0 )) && break
-            (( attempt < 45 )) || { echo "::error::Concurrent workflows still active; refusing lock reclaim"; exit 1; }
+            (( attempt < 45 )) || { echo "::error::Concurrent app workflows still active; refusing lock reclaim"; exit 1; }
             sleep 10
           done
 
