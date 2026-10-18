@@ -91,3 +91,29 @@ def test_no_future_unsettled_or_inplay_publish():
     b=sample();b["market_publications"][0]["result"]["correct"]=None
     c=sample();c["scheduled_at"]="2026-10-20T13:00:00Z";c["market_publications"][0]["result"]["scheduled_at"]=c["scheduled_at"]
     assert evaluate([a,b,c],[shadow()])["source_issued"]==0
+
+
+def test_insufficient_evidence_even_with_one_exact_match():
+    r=evaluate([sample()],[shadow()])
+    assert r["status"]=="INSUFFICIENT_MATCHED_PUBLISHED_PICKS"
+    assert r["minimum_evaluable_matched_picks"]==30
+    assert r["matched_fraction_of_issued"]==1.0
+
+
+def test_evaluation_evidence_threshold_is_thirty_distinct_published_matches():
+    published, frozen = [], []
+    for i in range(30):
+        pub=sample()
+        sh=shadow()
+        for row in (pub, sh):
+            row["event_id"]=f"event{i}"
+            row["match_id"]=f"match{i}"
+        published.append(pub)
+        frozen.append(sh)
+    short=evaluate(published[:-1],frozen)
+    complete=evaluate(published,frozen)
+    assert short["matched_unique"]==29
+    assert short["status"]=="INSUFFICIENT_MATCHED_PUBLISHED_PICKS"
+    assert complete["matched_unique"]==30
+    assert complete["status"]=="MATCHED_OBSERVATIONAL_ONLY"
+    assert complete["matched_fraction_of_issued"]==1.0
