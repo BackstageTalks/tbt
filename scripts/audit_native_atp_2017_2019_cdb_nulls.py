@@ -86,6 +86,101 @@ def classify(source: dict, canonical: dict, year: str) -> tuple[dict, dict]:
     }, stats
 
 
+
+def strict_count_candidate_review(source: dict, stats: dict) -> str:
+    """Stricter source/CDB consistency check. Research-only; never a write gate.
+
+    Requires a completed source score, all original winner/loser match counters,
+    source-internal arithmetic, and agreement with *every* pre-existing
+    overlapping canonical statistic. Source-derived values are never emitted.
+    """
+    import math
+    import re
+
+    try:
+        best_of = int(source.get("best_of") or "")
+        score = str(source.get("score") or "").strip()
+        if best_of not in (3, 5) or not score or re.search(
+            r"\b(RET|W/O|WO|DEF|ABD|SUSP|WALKOVER)\b", score, re.I
+        ):
+            return "incomplete_original_match"
+        sets = []
+        for token in score.split():
+            match = re.fullmatch(r"(\d{1,2})-(\d{1,2})(?:\(\d{1,2}\))?", token)
+            if not match:
+                return "incomplete_original_match"
+            a, b = int(match[1]), int(match[2])
+            hi, lo = max(a, b), min(a, b)
+            if not ((hi == 6 and lo <= 4) or (hi == 7 and lo in (5, 6))
+                    or (7 < hi <= 13 and hi - lo == 2)):
+                return "incomplete_original_match"
+            sets.append((a, b))
+        if (len(sets) > best_of or sum(a > b for a, b in sets) != (best_of + 1) // 2
+                or not sets or sets[-1][0] <= sets[-1][1]):
+            return "incomplete_original_match"
+        fields = ("ace", "df", "svpt", "1stIn", "1stWon", "2ndWon",
+                  "SvGms", "bpSaved", "bpFaced")
+        raw = {}
+        for side in ("w", "l"):
+            values = {}
+            for field in fields:
+                value = str(source.get(side + "_" + field) or "").strip()
+                if not value.isdecimal():
+                    return "incomplete_original_match"
+                values[field] = int(value)
+            if not (values["svpt"] > 0 and values["SvGms"] > 0
+                    and values["1stIn"] <= values["svpt"]
+                    and values["1stWon"] <= values["1stIn"]
+                    and values["2ndWon"] <= values["svpt"] - values["1stIn"]
+                    and values["ace"] <= values["1stWon"] + values["2ndWon"]
+                    and values["df"] <= values["svpt"] - values["1stIn"]
+                    and values["bpSaved"] <= values["bpFaced"] <= values["svpt"]
+                    and values["svpt"] >= 4 * values["SvGms"]):
+                return "invalid_original_match_counts"
+            raw[side] = values
+    except (ValueError, TypeError, KeyError, OverflowError):
+        return "incomplete_original_match"
+
+    expected = {}
+    for p, side, opponent in (("p1", "w", "l"), ("p2", "l", "w")):
+        v, o = raw[side], raw[opponent]
+        expected[p + "_aces"] = v["ace"]
+        expected[p + "_double_faults"] = v["df"]
+        if v["1stIn"]:
+            expected[p + "_first_serve_win"] = v["1stWon"] / v["1stIn"]
+        second_attempts = v["svpt"] - v["1stIn"]
+        if second_attempts:
+            expected[p + "_second_serve_win"] = v["2ndWon"] / second_attempts
+        expected[p + "_service_points_won"] = (
+            v["1stWon"] + v["2ndWon"]
+        ) / v["svpt"]
+        expected[p + "_return_points_won"] = 1 - (
+            o["1stWon"] + o["2ndWon"]
+        ) / o["svpt"]
+        if v["bpFaced"]:
+            expected[p + "_break_point_serve_win"] = (
+                v["bpSaved"] / v["bpFaced"]
+            )
+        expected[p + "_return_break_points_converted_count"] = (
+            o["bpFaced"] - o["bpSaved"]
+        )
+        if o["bpFaced"]:
+            expected[p + "_break_point_return_win"] = (
+                o["bpFaced"] - o["bpSaved"]
+            ) / o["bpFaced"]
+
+    for field, candidate in expected.items():
+        observed = stats.get(field)
+        if observed is not None and (
+            isinstance(observed, bool)
+            or not isinstance(observed, (int, float))
+            or not math.isfinite(observed)
+            or abs(float(observed) - candidate) > 1e-6
+        ):
+            return "existing_cdb_stat_conflict"
+    return "technically_consistent_rights_not_cleared"
+
+
 def read_source(directory: Path) -> dict:
     original = {}
     for year in YEARS:
@@ -137,6 +232,7 @@ def scan(report_file: Path, originals: Path, canonical_dir: Path) -> dict:
     totals = Counter()
     year_counts = defaultdict(Counter)
     fields = {field: Counter() for field in FIELDS}
+    strict_count_review = {field: Counter() for field in COUNT_FIELDS}
     observations = []
     for link in links:
         if (not isinstance(link, dict)
@@ -173,7 +269,19 @@ def scan(report_file: Path, originals: Path, canonical_dir: Path) -> dict:
         for name, status in classified["field_states"].items():
             fields[name][status] += 1
             year_counts[year][name + "_" + status] += 1
+        review_fields = {}
+        if any(classified["field_states"][field] ==
+               "research_gap_requires_full_candidate_and_rights_review"
+               for field in COUNT_FIELDS):
+            decision = strict_count_candidate_review(row, json_object(
+                canonical["stats_json"], "canonical stats"))
+            for field in COUNT_FIELDS:
+                if (classified["field_states"][field] ==
+                        "research_gap_requires_full_candidate_and_rights_review"):
+                    strict_count_review[field][decision] += 1
+                    review_fields[field] = decision
         observations.append({
+            "strict_count_candidate_review": review_fields,
             "year": year,
             "source_event_id": event,
             "canonical_match_id": mid,
@@ -188,6 +296,8 @@ def scan(report_file: Path, originals: Path, canonical_dir: Path) -> dict:
         "counts": dict(sorted(totals.items())),
         "years": {k: dict(sorted(v.items())) for k, v in sorted(year_counts.items())},
         "field_status": {k: dict(sorted(v.items())) for k, v in fields.items()},
+        "strict_count_review": {k: dict(sorted(v.items())) for k, v in strict_count_review.items()},
+        "strict_technical_review_executed": True,
         "per_event": observations,
         "rights_cleared_for_import": False,
         "exact_full_candidate_policy_executed": False,
@@ -214,6 +324,7 @@ def main() -> None:
             name: report["verified_link_count"] - states.get("present", 0)
             for name, states in report["field_status"].items()
         },
+        "strict_count_review": report["strict_count_review"],
         "per_field_research_only_gaps": {
             name: states.get("research_gap_requires_full_candidate_and_rights_review", 0)
             for name, states in report["field_status"].items()

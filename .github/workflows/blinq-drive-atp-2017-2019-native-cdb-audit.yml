@@ -6,6 +6,8 @@ name: BlinQ Drive ATP 2017-2019 native CDB identity pilot (private read-only)
       - .github/workflows/blinq-drive-atp-2017-2019-native-cdb-audit.yml
       - scripts/audit_drive_atp_2017_2019_current_cdb.py
       - tests/test_drive_atp_2017_2019_current_cdb.py
+      - scripts/audit_native_atp_2017_2019_cdb_nulls.py
+      - tests/test_native_atp_2017_2019_cdb_nulls.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -151,12 +153,15 @@ jobs:
           assert gaps["exact_full_candidate_policy_executed"] is False
           for name, states in gaps["field_status"].items():
               assert sum(states.values()) == original["verified_ids"], name
+          assert gaps["strict_technical_review_executed"] is True
           summary={}
           for name,states in gaps["field_status"].items():
               count=gaps["verified_link_count"]
               present=states.get("present",0)
               candidate=states.get("research_gap_requires_full_candidate_and_rights_review",0)
               assert 0<=present<=count and 0<=candidate<=count-present
+              if name in gaps["strict_count_review"]:
+                  assert sum(gaps["strict_count_review"][name].values()) == candidate
               summary[name]={"existing_values":present,
                              "null_values":count-present,
                              "source_attested_research_gaps":candidate}
@@ -164,6 +169,7 @@ jobs:
               "verified_native_links":gaps["verified_link_count"],
               "source_stats_lineage":gaps["counts"].get("original_match_stat_lineage",0),
               "field_counts":summary,
+              "strict_count_review":gaps["strict_count_review"],
               "production_writes":0,
               "import_authorized":False
           },sort_keys=True))
