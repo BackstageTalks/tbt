@@ -852,6 +852,7 @@ def train_from_matches(
                     atp_rank_history=atp_rank_history,
                     wta_rank_history=wta_rank_history,
                     wta_season_stats=wta_season_stats,
+                    independent_stats=(training_profile == 'top-7.2.1'),
                 ), objective=objective,
             )
             if (
