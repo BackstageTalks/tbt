@@ -207,7 +207,7 @@ def test_b03_handler_authorizes_before_cache_or_provider_use():
     block = source[start:end]
     guard = block.index('match_intelligence_row_authorized(')
     cache = block.index('_cached_match_intelligence(')
-    provider = block.index('RapidTennisClient(settings)')
+    provider = block.index('RapidTennisClient(')
     assert guard < cache < provider
 
 
