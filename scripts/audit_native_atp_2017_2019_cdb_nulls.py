@@ -100,24 +100,26 @@ def strict_count_candidate_review(source: dict, stats: dict) -> str:
     try:
         best_of = int(source.get("best_of") or "")
         score = str(source.get("score") or "").strip()
-        if best_of not in (3, 5) or not score or re.search(
+        if best_of not in (3, 5):
+            return "invalid_original_best_of"
+        if not score or re.search(
             r"\b(RET|W/O|WO|DEF|ABD|SUSP|WALKOVER)\b", score, re.I
         ):
-            return "incomplete_original_match"
+            return "missing_or_retired_original_score"
         sets = []
         for token in score.split():
             match = re.fullmatch(r"(\d{1,2})-(\d{1,2})(?:\(\d{1,2}\))?", token)
             if not match:
-                return "incomplete_original_match"
+                return "unsupported_original_score_token"
             a, b = int(match[1]), int(match[2])
             hi, lo = max(a, b), min(a, b)
             if not ((hi == 6 and lo <= 4) or (hi == 7 and lo in (5, 6))
                     or (7 < hi <= 13 and hi - lo == 2)):
-                return "incomplete_original_match"
+                return "invalid_original_set_score"
             sets.append((a, b))
         if (len(sets) > best_of or sum(a > b for a, b in sets) != (best_of + 1) // 2
                 or not sets or sets[-1][0] <= sets[-1][1]):
-            return "incomplete_original_match"
+            return "incomplete_or_invalid_original_match_score"
         fields = ("ace", "df", "svpt", "1stIn", "1stWon", "2ndWon",
                   "SvGms", "bpSaved", "bpFaced")
         raw = {}
@@ -126,7 +128,7 @@ def strict_count_candidate_review(source: dict, stats: dict) -> str:
             for field in fields:
                 value = str(source.get(side + "_" + field) or "").strip()
                 if not value.isdecimal():
-                    return "incomplete_original_match"
+                    return "missing_or_noninteger_original_" + side + "_" + field
                 values[field] = int(value)
             if not (values["svpt"] > 0 and values["SvGms"] > 0
                     and values["1stIn"] <= values["svpt"]
@@ -139,7 +141,7 @@ def strict_count_candidate_review(source: dict, stats: dict) -> str:
                 return "invalid_original_match_counts"
             raw[side] = values
     except (ValueError, TypeError, KeyError, OverflowError):
-        return "incomplete_original_match"
+        return "unreadable_original_match"
 
     expected = {}
     for p, side, opponent in (("p1", "w", "l"), ("p2", "l", "w")):
