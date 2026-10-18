@@ -189,7 +189,9 @@ class FeatureBuilder:
     providers only expose date-level timestamps.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, independent_serve_return: bool = False) -> None:
+        # Preserve legacy serving features; 7.2.1 explicitly opts into the fix.
+        self.independent_serve_return = bool(independent_serve_return)
         self.players: dict[
             str,
             PlayerState,
@@ -301,6 +303,7 @@ class FeatureBuilder:
 
         return {
             "schema_version": FEATURE_STATE_SCHEMA_VERSION,
+            "independent_serve_return": self.independent_serve_return,
             "players": players,
             "h2h": h2h,
             "surface_h2h": surface_h2h,
@@ -308,7 +311,10 @@ class FeatureBuilder:
 
     @classmethod
     def from_state(cls, payload: dict | None) -> "FeatureBuilder":
-        builder = cls()
+        builder = cls(
+            independent_serve_return=bool(payload.get("independent_serve_return", False))
+            if isinstance(payload, dict) else False
+        )
         if not isinstance(payload, dict):
             return builder
         version = int(payload.get("schema_version") or 0)
@@ -1414,12 +1420,11 @@ class FeatureBuilder:
             "return_quality",
         )
 
-        stats_known = float(
-            serve1 is not None
-            and serve2 is not None
-            and return1 is not None
-            and return2 is not None
-        )
+        serve_known = serve1 is not None and serve2 is not None
+        return_known = return1 is not None and return2 is not None
+        stats_known = float(serve_known and return_known)
+        serve_usable = serve_known if self.independent_serve_return else bool(stats_known)
+        return_usable = return_known if self.independent_serve_return else bool(stats_known)
 
         surface_key = stats_surface_key(match.surface)
         surface_serve1 = self._stat_quality(
@@ -1434,12 +1439,22 @@ class FeatureBuilder:
         surface_return2 = self._stat_quality(
             p2, match.scheduled_at, "return_quality", surface=surface_key
         )
-        surface_stats_known = float(
+        surface_serve_known = (
             surface_key != "unknown"
             and surface_serve1 is not None
             and surface_serve2 is not None
+        )
+        surface_return_known = (
+            surface_key != "unknown"
             and surface_return1 is not None
             and surface_return2 is not None
+        )
+        surface_stats_known = float(surface_serve_known and surface_return_known)
+        surface_serve_usable = (
+            surface_serve_known if self.independent_serve_return else bool(surface_stats_known)
+        )
+        surface_return_usable = (
+            surface_return_known if self.independent_serve_return else bool(surface_stats_known)
         )
 
         # Match Charting Project specialist rates are stored on historical
@@ -1595,9 +1610,7 @@ class FeatureBuilder:
         # The explicit *_known features below allow the model to
         # distinguish "neutral value" from "missing source data".
         serve_diff = (
-            serve1 - serve2
-            if stats_known
-            else 0.0
+            serve1 - serve2 if serve_usable else 0.0
         )
 
         weather_serve_interaction = (
@@ -1615,7 +1628,7 @@ class FeatureBuilder:
             )
             if (
                 weather_known
-                and stats_known
+                and serve_usable
             )
             else 0.0
         )
@@ -1634,7 +1647,7 @@ class FeatureBuilder:
             )
             if (
                 current_alt is not None
-                and stats_known
+                and serve_usable
             )
             else 0.0
         )
@@ -1751,22 +1764,18 @@ class FeatureBuilder:
             "surface_h2h_advantage": surface_h2h_advantage,
             "surface_h2h_known": surface_h2h_known,
             "serve_quality_diff": (
-                serve1 - serve2
-                if stats_known
-                else 0.0
+                serve_diff if serve_usable else 0.0
             ),
             "return_quality_diff": (
-                return1 - return2
-                if stats_known
-                else 0.0
+                return1 - return2 if return_usable else 0.0
             ),
             "surface_serve_quality_diff": (
                 float(surface_serve1) - float(surface_serve2)
-                if surface_stats_known else 0.0
+                if surface_serve_usable else 0.0
             ),
             "surface_return_quality_diff": (
                 float(surface_return1) - float(surface_return2)
-                if surface_stats_known else 0.0
+                if surface_return_usable else 0.0
             ),
             "stats_known_both": (
                 stats_known

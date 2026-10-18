@@ -74,9 +74,10 @@ def _candidate_feature_names(
     return names
 
 
-def _new_production_ensemble(feature_names=None) -> TennisEnsemble:
+def _new_production_ensemble(feature_names=None, objective="accuracy") -> TennisEnsemble:
     """Governed candidate model with only explicitly enabled feature groups."""
     model = TennisEnsemble()
+    model.objective = objective
     # Assign after construction so test doubles and legacy constructors that
     # accept no feature_names argument remain compatible.
     model.feature_names = list(
@@ -361,6 +362,7 @@ def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
         "production_train_matches": int(len(serving_train)),
         "production_calibration_matches": int(len(serving_calibration)),
         "rank_provenance": selected_metadata.get("rank_provenance"),
+        "independent_serve_return": bool(selected_metadata.get("independent_serve_return", False)),
         "holdout_metrics": selected_metadata.get("holdout_metrics"),
         "elo_baseline_metrics": selected_metadata.get("elo_baseline_metrics"),
         "holdout_delta_vs_elo": selected_metadata.get("holdout_delta_vs_elo"),
@@ -749,10 +751,17 @@ def train_from_matches(
     atp_rank_history=None,
     wta_rank_history=None,
     wta_season_stats=None,
+    training_profile="standard",
 ) -> TrainingResult:
+    if training_profile not in {"standard", "top-7.2.1"}:
+        raise ValueError("Unknown training profile")
     matches, quality = audit_history(matches)
     matches, rank_provenance = _enforce_rank_provenance(matches)
-    builder = FeatureBuilder()
+    # 7.2.1 uses independent serve and return availability. The champion
+    # retains the original joint semantics via artifact metadata in serving.
+    builder = FeatureBuilder(
+        independent_serve_return=(training_profile == "top-7.2.1")
+    )
 
     frame = (
         builder
@@ -819,6 +828,17 @@ def train_from_matches(
     test, eligibility_reason = _eligible_evaluation(test, production_model, promotion_history)
     holdout_fingerprint = _holdout_fingerprint(test) if len(test) else ""
 
+    diagnostics = None
+    objective = "log_loss" if training_profile == "top-7.2.1" else "accuracy"
+    if training_profile == "top-7.2.1":
+        from .training_inputs import input_diagnostics, require_informative_inputs
+        names = _candidate_feature_names(
+            atp_leaderboards=atp_leaderboards, atp_rank_history=atp_rank_history,
+            wta_rank_history=wta_rank_history, wta_season_stats=wta_season_stats,
+        )
+        diagnostics = input_diagnostics({"train": train, "calibration": calibration}, names)
+        require_informative_inputs(diagnostics)
+
     evaluation_model = (
         (
             _new_production_ensemble(
@@ -827,21 +847,25 @@ def train_from_matches(
                     atp_rank_history=atp_rank_history,
                     wta_rank_history=wta_rank_history,
                     wta_season_stats=wta_season_stats,
-                )
+                ), objective=objective,
             )
             if (
                 atp_leaderboards is not None
                 or atp_rank_history is not None
                 or wta_rank_history is not None
                 or wta_season_stats is not None
+                or training_profile == 'top-7.2.1'
             )
-            else _new_production_ensemble()
+            else _new_production_ensemble(objective=objective)
         )
         .fit(
             train,
             calibration,
         )
     )
+
+    if training_profile == "top-7.2.1":
+        evaluation_model.version = "v7.2.1-" + evaluation_model.version
 
     test_p = (
         evaluation_model
@@ -935,6 +959,14 @@ def train_from_matches(
         for key in ("accuracy", "roc_auc", "log_loss", "brier_score", "ece_10")
     }
     report = {
+        "training_profile": training_profile,
+        "optimization_objective": objective,
+        "input_diagnostics": diagnostics,
+        "top_market_validation": {
+            "status": "NOT_EVALUATED",
+            "required": "Independent pre-match odds >=1.50, at most 10 picks/day, no forced fill",
+            "promotion_ready_for_top": False,
+        },
         "production_holdout": production_metrics,
         "production_subgroups": production_subgroups,
         "delta_vs_production": delta_vs_production,
@@ -1099,6 +1131,7 @@ def train_from_matches(
         "evaluation_end": _period(test)["end"],
         "holdout_fingerprint": holdout_fingerprint,
         "rank_provenance": rank_provenance,
+        "independent_serve_return": training_profile == "top-7.2.1",
         "holdout_metrics": (
             holdout_metrics
         ),

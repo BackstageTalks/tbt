@@ -256,7 +256,14 @@ def predict(
     replay_history = [match for match in history if match.scheduled_at < cutoff]
     replay_history, _ = audit_history(replay_history, now=now)
     replay_history, _ = _enforce_rank_provenance(replay_history)
-    builder = FeatureBuilder()
+    # Honor the exact semantics persisted in the trained model; legacy
+    # champions default to the old joint serve/return availability.
+    independent = (getattr(model, "metadata", None) or {}).get(
+        "independent_serve_return", False
+    )
+    if type(independent) is not bool:
+        raise ValueError("Unknown model feature semantics: independent_serve_return")
+    builder = FeatureBuilder(independent_serve_return=independent)
     builder.replay(replay_history, before=cutoff)
     future = sorted((m for m in upcoming if not m.is_completed and m.scheduled_at > now
                      and m.status in {"upcoming", "notstarted", "scheduled"}), key=lambda m: (m.scheduled_at, m.match_id))
