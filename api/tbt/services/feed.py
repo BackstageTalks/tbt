@@ -146,6 +146,9 @@ def visible_feed(payload, now=None):
         raise ValueError("visible_feed requires timezone-aware now")
     now = now.astimezone(timezone.utc)
     day = _betting_day_key(now)
+    # The public "today" board uses the actual Bratislava calendar date,
+    # not the 06:00-to-06:00 betting-day key used for publication snapshots.
+    calendar_day = now.astimezone(ZoneInfo("Europe/Bratislava")).date()
 
     result = dict(payload)
     # Legacy releases may contain TOP200 rows; the public product is retired.
@@ -168,17 +171,27 @@ def visible_feed(payload, now=None):
             future.append(row)
     result["upcoming"] = future
 
-    # Daily offer sections are betting-day snapshots, not a second upcoming list.
-    # Hide an old day's rows after the boundary even when the last published feed
-    # is stale, but do not remove a row merely because its scheduled time passed.
+    # The published offer is retained for result/audit history, but the public
+    # daily tabs must show only matches scheduled for TODAY in Bratislava.
+    # A 06:00 betting-day snapshot can contain tomorrow's 00:00-05:59 matches,
+    # and legacy rows may carry a wrong explicit betting_day. Never trust either
+    # to determine which calendar day the customer sees. Keep started matches
+    # visible until local midnight; preserve all raw rows in the stored feed.
+    def scheduled_today(row):
+        if not isinstance(row, dict):
+            return False
+        raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time") or row.get("date")
+        try:
+            scheduled = _parse_utc_timestamp(raw, "scheduled_at")
+        except ValueError:
+            return False
+        return scheduled.astimezone(ZoneInfo("Europe/Bratislava")).date() == calendar_day
+
     for key in ("top_daily_picks", "prime_picks", "value_picks", "doubles_picks", "ace_picks", "sg_picks"):
         rows = payload.get(key, [])
         if not isinstance(rows, list):
             continue
-        result[key] = [
-            row for row in rows
-            if isinstance(row, dict) and _row_betting_day(row) == day
-        ]
+        result[key] = [row for row in rows if scheduled_today(row)]
 
     stamp = payload.get("generated_at")
     if not stamp:
