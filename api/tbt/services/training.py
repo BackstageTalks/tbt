@@ -860,6 +860,7 @@ def train_from_matches(
                 or atp_rank_history is not None
                 or wta_rank_history is not None
                 or wta_season_stats is not None
+                or training_profile == 'top-7.2.1'
             )
             else _new_production_ensemble(objective=objective)
         )
