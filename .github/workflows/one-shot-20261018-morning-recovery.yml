@@ -1,0 +1,99 @@
+name: One-shot stale CDB lock recovery and morning prediction refresh (2026-10-18)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-shot-20261018-morning-recovery.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: blinq-one-shot-20261018-lock-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      APP_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify completed lock owner and canonical release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$APP_TOKEN"
+          data_repo=BackstageTalks/tbt-data
+          app_repo=BackstageTalks/tbt
+          expected_sha=7291f1f942dea3a86b5c148d604667d602de16b1
+          expected_owner='owner=BackstageTalks/tbt/actions/runs/39086498489/attempts/1'
+          lock_path="repos/$data_repo/git/ref/tags/blinq-cdb-global-writer"
+
+          # Always fail closed on missing/mismatched owner or unavailable metadata.
+          owner="$(gh api "repos/$app_repo/actions/runs/39086498489")"
+          jq -e '.id == 39086498489 and .status == "completed" and .conclusion == "failure" and .run_attempt == 1' <<< "$owner" >/dev/null
+
+          lock="$(gh api "$lock_path")"
+          actual_sha="$(jq -er '.object.sha' <<< "$lock")"
+          test "$actual_sha" = "$expected_sha"
+          tag="$(gh api "repos/$data_repo/git/tags/$expected_sha")"
+          test "$(jq -er '.message' <<< "$tag")" = "$expected_owner"
+
+          release="$(gh api "repos/$data_repo/releases/tags/tbt-data-v1")"
+          manifest_digest="$(jq -er '[.assets[] | select(.name == "history_manifest.json") | .digest] | if length == 1 then .[0] else error("manifest ambiguous") end' <<< "$release")"
+          test -n "$manifest_digest"
+
+          # Never reclaim a lock while any other app/data workflow may be active.
+          # Transient unrelated runs may finish during this bounded grace period.
+          for attempt in $(seq 1 45); do
+            busy=0
+            for repo in "$app_repo" "$data_repo"; do
+              for status in in_progress queued; do
+                runs="$(gh api "repos/$repo/actions/runs?status=$status&per_page=100")"
+                other="$(jq --argjson own "$GITHUB_RUN_ID" '[.workflow_runs[] | select(.id != $own)] | length' <<< "$runs")"
+                if (( other > 0 )); then
+                  echo "Other $repo workflows: $other ($status)"
+                  busy=1
+                fi
+              done
+            done
+            (( busy == 0 )) && break
+            (( attempt < 45 )) || { echo "::error::Concurrent workflows still active; refusing lock reclaim"; exit 1; }
+            sleep 10
+          done
+
+          # Recheck both owner and release immediately before a leased deletion.
+          jq -e '.status == "completed" and .run_attempt == 1' <<< "$(gh api "repos/$app_repo/actions/runs/39086498489")" >/dev/null
+          test "$(gh api "$lock_path" --jq '.object.sha')" = "$expected_sha"
+          test "$(gh api "repos/$data_repo/git/tags/$expected_sha" --jq '.message')" = "$expected_owner"
+          new_release="$(gh api "repos/$data_repo/releases/tags/tbt-data-v1")"
+          test "$(jq -er '[.assets[] | select(.name == "history_manifest.json") | .digest] | if length == 1 then .[0] else error("manifest ambiguous") end' <<< "$new_release")" = "$manifest_digest"
+
+          # Unlike GitHub DELETE /git/refs, --force-with-lease compares the old
+          # remote tag object SHA atomically. A newly acquired lock cannot be deleted.
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            push --porcelain \
+            --force-with-lease="refs/tags/blinq-cdb-global-writer:$expected_sha" \
+            "https://github.com/$data_repo.git" \
+            ':refs/tags/blinq-cdb-global-writer'
+
+          # Verify absence; errors other than an explicit 404 are NOT success.
+          if gh api "$lock_path" >/tmp/blinq-lock-readback 2>/tmp/blinq-lock-error; then
+            echo "::error::CDB lock still exists after leased deletion"
+            exit 1
+          fi
+          grep -q 'HTTP 404' /tmp/blinq-lock-error
+          echo "Stale CDB lock reclaimed with exact SHA lease: $expected_sha" >> "$GITHUB_STEP_SUMMARY"
+      - name: Dispatch normal morning refresh under shared API budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          GH_TOKEN="$APP_TOKEN" gh workflow run morning-refresh.yml \
+            --repo BackstageTalks/tbt --ref main \
+            -f max_requests=14500 -f force=false
+          echo "Standard morning refresh dispatched with existing shared API budget guards." >> "$GITHUB_STEP_SUMMARY"
