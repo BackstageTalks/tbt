@@ -3,8 +3,8 @@
 ## Capacity and scope
 
 The provider plan is treated as **15,000 requests per provider billing day**.
-BlinQ enforces a fail-closed **14,500 request global ceiling** and permanently
-keeps **500 requests (3.33%)** as provider headroom.
+BlinQ enforces a fail-closed **14,250 request global ceiling** and permanently
+keeps **750 requests (5%)** as provider headroom.
 
 The durable ledger is aligned to the verified provider-day reset used by the
 runtime guard: **19:10 Europe/Bratislava**. ALL billable TennisAPI requests
@@ -16,17 +16,17 @@ current provider day, not a generic rolling 24-hour window.
 | Purpose | Provider-day allocation |
 | --- | ---: |
 | LIVE Radar | 3,000 |
-| Match Status | 2,500 |
-| Refresh (including presentation enrichment) | 14,500 |
-| History/backfill opportunistic ceiling | 14,500 |
-| **Combined, hard** | **14,500** |
-| **Provider reserve kept untouched** | **500** |
+| Match Status | 2,750 |
+| Refresh (including presentation enrichment) | 14,250 |
+| History/backfill opportunistic ceiling | 14,250 |
+| **Combined, hard** | **14,250** |
+| **Provider reserve kept untouched** | **750** |
 | **Provider plan** | **15,000** |
 
 LIVE and Match Status retain bounded purpose allocations. Refresh and
 history/backfill may each use remaining provider-day capacity up to the same
-14,500 global ceiling. The global ceiling is always authoritative, so the
-500 provider reserve remains untouched.
+14,250 global ceiling. The global ceiling is always authoritative, so the
+750 provider reserve remains untouched.
 
 An API request is reserved **before every billable upstream attempt, including
 retries**. Cancelled, timed-out or ambiguous requests are never refunded:
@@ -35,7 +35,7 @@ request.
 
 The ledger protects only callers instrumented through the BlinQ shared budget
 guard. Direct/manual use of the same RapidAPI key outside BlinQ is not visible to
-this ledger, which is why the 500-request provider reserve remains mandatory.
+this ledger, which is why the 750-request provider reserve remains mandatory.
 
 ## Runtime source of truth
 
@@ -43,11 +43,11 @@ The authoritative values live in
 `api/tbt/providers/shared_budget.py`:
 
 - `PROVIDER_PLAN_LIMIT = 15000`
-- `PROVIDER_RESERVE = 500`
-- `GLOBAL_CEILING = 14500`
+- `PROVIDER_RESERVE = 750`
+- `GLOBAL_CEILING = 14250`
 - reset: `19:10 Europe/Bratislava`
-- `PURPOSE_CAPS = {live: 3000, match: 2500, refresh: 14500, history: 14500}`
-  (`history` is opportunistic; the shared 14,500 global ceiling still applies)
+- `PURPOSE_CAPS = {live: 3000, match: 2500, refresh: 14250, history: 14250}`
+  (`history` is opportunistic; the shared 14,250 global ceiling still applies)
 
 CI contains a documentation contract test so future edits must keep this file
 synchronized with those runtime constants.
@@ -66,7 +66,7 @@ synchronized with those runtime constants.
    allocation.
 5. Refresh jobs use the **refresh** allocation. History/statistics/autofill jobs
    use the **history** class, which can consume otherwise-unused global headroom
-   but can never exceed the 14,500 global ceiling.
+   but can never exceed the 14,250 global ceiling.
 6. The Ops journal records 80% and 95% threshold crossings for both the global
    budget and the active purpose cap.
 
