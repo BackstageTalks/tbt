@@ -24,8 +24,8 @@ RATE_COLUMNS = (
     ("Return points won", "return_points_won", "return_points_total"),
     ("1st serve points won", "first_serve_points_won", "first_serve_points_total"),
     ("2nd serve points won", "second_serve_points_won", "second_serve_points_total"),
-    ("1st serve return won", "first_serve_return_won", "first_serve_return_total"),
-    ("2nd serve return won", "second_serve_return_won", "second_serve_return_total"),
+    ("first return points", "first_serve_return_won", "first_serve_return_total"),
+    ("second return points", "second_serve_return_won", "second_serve_return_total"),
     ("Break points converted", "break_points_converted", "break_points_return_total"),
 )
 COUNT_COLUMNS = (
@@ -158,7 +158,8 @@ def run(input_path, header_path, out_dir, source_file_id):
     if not source_file_id or "/" in source_file_id or " " in source_file_id:
         raise ValueError("Use the original Google Drive file ID, not a URL/name")
     headers = _read_headers(header_path)
-    digest = hashlib.file_digest(src.open("rb"), "sha256").hexdigest()
+    with src.open("rb") as file_handle:
+        digest = hashlib.file_digest(file_handle, "sha256").hexdigest()
     output.mkdir(parents=True, exist_ok=True)
     accepted = output / "stage.jsonl"
     rejected = output / "quarantine.jsonl"
