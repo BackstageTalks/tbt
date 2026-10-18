@@ -100,11 +100,17 @@ class NativeGapResearchSafety(unittest.TestCase):
     def test_strict_review_rejects_partial_or_retired_match(self):
         source = self.test_strict_review_valid_match_and_correct_opposite_orientation()
         self.assertEqual(census.strict_count_candidate_review(
-            {**source, "score": "6-4 RET"}, {}), "incomplete_original_match")
+            {**source, "score": "6-4 RET"}, {}), "missing_or_retired_original_score")
         self.assertEqual(census.strict_count_candidate_review(
-            {**source, "l_svpt": ""}, {}), "incomplete_original_match")
+            {**source, "l_svpt": ""}, {}), "missing_or_noninteger_original_l_svpt")
         self.assertEqual(census.strict_count_candidate_review(
             {**source, "l_bpSaved": "9"}, {}), "invalid_original_match_counts")
+        self.assertEqual(census.strict_count_candidate_review(
+            {**source, "best_of": "0"}, {}), "invalid_original_best_of")
+        self.assertEqual(census.strict_count_candidate_review(
+            {**source, "score": "6-4 10-6"}, {}), "invalid_original_set_score")
+        self.assertEqual(census.strict_count_candidate_review(
+            {**source, "score": "6-4 unknown"}, {}), "unsupported_original_score_token")
 
     def test_strict_review_rejects_existing_conflicts_and_bad_types(self):
         source = self.test_strict_review_valid_match_and_correct_opposite_orientation()
