@@ -29,7 +29,7 @@ from ..utils import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PROVIDER_REQUEST_RESERVE = 450
+DEFAULT_PROVIDER_REQUEST_RESERVE = 750
 
 
 def _enforce_provider_day_hard_stop() -> None:
