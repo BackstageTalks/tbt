@@ -84,11 +84,11 @@ def test_hourly_workflow_rechecks_budget_and_keeps_quota_and_writer_guards():
     delayed = WORKFLOW.split("          if waited:", 1)[1]
     assert "budget_response = get_json(BUDGET_URL, WORKER, worker=True)" in delayed
     assert 'budget.get("provider_plan_limit") != 15000' in delayed
-    assert 'budget.get("global_limit") != 14500' in delayed
-    assert 'budget.get("reserved_provider_headroom") != 500' in delayed
-    assert "remaining != max(0, 14500-spent)" in delayed
+    assert 'budget.get("global_limit") != 14250' in delayed
+    assert 'budget.get("reserved_provider_headroom") != 750' in delayed
+    assert "remaining != max(0, 14250-spent)" in delayed
     assert "reset.astimezone(ZONE).minute != 10" in delayed
-    assert "limit = 3000 if new_day_start else (14500 if final_topup else caps[local.hour])" in delayed
+    assert "limit = 3000 if new_day_start else (14250 if final_topup else caps[local.hour])" in delayed
     assert "min(3000, limit-spent, remaining, history_remaining)" in delayed
     assert "if proposed < 1:" in delayed
     assert '"hourly_autofill": "true"' in delayed
