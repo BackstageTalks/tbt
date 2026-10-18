@@ -20,6 +20,15 @@ at most ten daily picks and no mandatory fill. The report explicitly marks this
 NOT_EVALUATED and the pipeline blocks promotion for this profile. A probability
 candidate's general holdout gain must not be presented as proven TOP performance.
 
-No selector policy, feature computation, canonical data or serving model is changed
-by choosing this profile. The previously observed joint serve/return mask needs an
-independently tested schema experiment before altering training/serving semantics.
+No selector policy, canonical data or serving model is changed by choosing
+this profile. The profile uses artifact-persisted independent serve/return
+availability. A separate opt-in `independent_direct_rates` flag also preserves
+the original point-weighted service or return observation when the complementary
+field is missing (instead of silently falling back to an unrelated rate).
+Old champions and already fitted 7.2.1 candidate artifacts default this new flag
+to false, preserving their exact original inference/replay semantics.
+
+The additional feature availability is a code-level correction, not evidence of
+better real-market TOP results. Retrain and compare on untouched chronological
+data and forward-frozen pre-match odds before any promotion. Never reuse an old
+7.2.1 fitted model with newly changed feature semantics.
