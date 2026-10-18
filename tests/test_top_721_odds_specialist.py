@@ -25,11 +25,18 @@ def rows():
     return pd.DataFrame(result)
 
 
-def test_training_excludes_exact_boundary_and_keeps_days_disjoint(tmp_path):
+def test_training_includes_exact_top_odds_boundary_and_keeps_days_disjoint(tmp_path):
     source = tmp_path / "rows.csv"
     rows().to_csv(source, index=False)
     result = train_and_compare(source, tmp_path / "out", min_train=10)
-    assert result["counts"]["equal_150_excluded"] == 7
+    assert result["counts"]["equal_150_included"] == 7
+    assert result["counts"]["eligible_ge_150"] == len(rows())
+    assert result["counts"]["raw_model_ge_80_settled"] > result["counts"]["public_top_ge_80_settled"]
+    # Correct baseline is the probability TOP uses, not the model's raw score.
+    assert result["probability_metrics"]["blinq"] != result["probability_metrics"]["raw_model"]
+    assert result["top_80_reliability"]["blinq"]["settled"] == 0
+    assert result["top_80_reliability"]["raw_model"]["settled"] > 0
+    assert result["guardrails"]["odds"].startswith(">=1.50")
     assert result["train"]["last_day"] == "2026-10-04"
     assert result["test"]["first_day"] == "2026-10-05"
     assert result["top_three_metrics"]["specialist"]["selected"] == 9
@@ -65,3 +72,28 @@ def test_pending_results_are_not_labels(tmp_path):
     result = train_and_compare(source, tmp_path / "out", min_train=10)
     assert result["test"]["last_day"] == "2026-10-06"
     assert result["test"]["settled"] == 21
+
+
+def test_snapshot_top_probability_must_match_published_depth_shrink():
+    frame = rows()
+    frame["blinq_probability"] = .5 + (frame.model_probability - .5) * frame.data_depth
+    priced, counts = validated_candidates(frame)
+    assert len(priced) == 56
+    assert counts["equal_150_included"] == 7
+    frame.loc[0, "blinq_probability"] = .98
+    with pytest.raises(ValueError, match="disagrees"):
+        validated_candidates(frame)
+
+
+def test_infinite_odds_never_enter_specialist_training():
+    frame = rows()
+    frame.loc[0, "odds"] = float("inf")
+    with pytest.raises(ValueError, match="Nonfinite bookmaker odds"):
+        validated_candidates(frame)
+
+
+def test_no_80pct_reliability_claim_from_small_sample():
+    frame = rows()
+    priced, counts = validated_candidates(frame)
+    assert counts["raw_model_ge_80_settled"] > 0
+    assert counts["public_top_ge_80_settled"] == 0
