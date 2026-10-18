@@ -42,7 +42,9 @@ def validated_candidates(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     data = frame.copy()
     for col in FEATURES:
         data[col] = pd.to_numeric(data[col], errors="raise")
-    if not np.isfinite(data[FEATURES].to_numpy(dtype=float)).all():
+    if not np.isfinite(data.odds.to_numpy(dtype=float)).all():
+        raise ValueError("Nonfinite bookmaker odds")
+    if not np.isfinite(data[[col for col in FEATURES if col != "odds"]].to_numpy(dtype=float)).all():
         raise ValueError("Nonfinite input")
     if not (
         data.model_probability.between(0, 1, inclusive="neither")
@@ -60,9 +62,6 @@ def validated_candidates(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         raise ValueError("Unknown outcome")
     if data[["betting_day", "event_id", "selection_id"]].duplicated().any():
         raise ValueError("Duplicate event/selection")
-    if not np.isfinite(data.odds.to_numpy(dtype=float)).all():
-        raise ValueError("Nonfinite bookmaker odds")
-
     # The published TOP selector does NOT rank on raw model probability.
     # It shrinks confidence towards 50/50 using observed data depth. An
     # experiment claiming superiority to TOP must compare against the
