@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "mode": "exact-reconcile-null-only",
+  "source": "original_drive_cdb_audit_prepared_20261015_16",
+  "batches": [
+    "r5-source-exact-20261016",
+    "manual-leaderboard-20261015",
+    "drive-pbp-20261015",
+    "tml-zip-20261015",
+    "sackmann-bp-max-20261015"
+  ],
+  "no_nonnull_overwrite": true,
+  "single_writer": true,
+  "model_training": false,
+  "model_promotion": false
+}
