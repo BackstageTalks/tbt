@@ -303,6 +303,8 @@ class RapidTennisClient:
                 remaining = response.headers.get("x-ratelimit-requests-remaining")
                 if remaining is not None:
                     self.rate_limit_remaining = safe_int(remaining)
+                    if self.rate_limit_remaining is None and _require_provider_remaining_header():
+                        raise RequestBudgetExceeded("Invalid provider remaining header")
                 elif _require_provider_remaining_header():
                     raise RequestBudgetExceeded(
                         "Provider rate-limit remaining header missing"
@@ -406,6 +408,8 @@ class RapidTennisClient:
                 remaining = response.headers.get("x-ratelimit-requests-remaining")
                 if remaining is not None:
                     self.rate_limit_remaining = safe_int(remaining)
+                    if self.rate_limit_remaining is None and _require_provider_remaining_header():
+                        raise RequestBudgetExceeded("Invalid provider remaining header")
                 elif _require_provider_remaining_header():
                     raise RequestBudgetExceeded(
                         "Provider rate-limit remaining header missing"
@@ -503,6 +507,8 @@ class RapidTennisClient:
         remaining = response.headers.get("x-ratelimit-requests-remaining")
         if remaining is not None:
             self.rate_limit_remaining = safe_int(remaining)
+            if self.rate_limit_remaining is None and _require_provider_remaining_header():
+                raise RequestBudgetExceeded("Invalid provider remaining header")
         elif _require_provider_remaining_header():
             raise RequestBudgetExceeded(
                 "Provider rate-limit remaining header missing"
