@@ -139,3 +139,58 @@ def test_headerless_drive_csv_is_read_only_and_quarantines_bad_rows(tmp_path):
     assert staged[0]["source"]["csv_line"] == 1
     assert quarantine[0]["csv_line"] == 2
     assert not staged[0]["import_ready"]
+
+
+def test_sackmann_2024_wta_schema_49_columns_from_drive_can_stage(tmp_path):
+    from stage_drive_match_statistics import normalize_sackmann_row
+    example = {
+        "tourney_id": "2024-example", "match_num": "101", "tourney_name": "Example",
+        "tourney_date": "20240902", "round": "R16", "score": "6-4 6-3",
+        "winner_id": "source-wta-p1", "loser_id": "source-wta-p2",
+        "winner_name": "Player A", "loser_name": "Player B",
+        "w_ace": "5", "l_ace": "2", "w_df": "2", "l_df": "4",
+        "w_svpt": "60", "w_1stIn": "34", "w_1stWon": "28", "w_2ndWon": "14",
+        "l_svpt": "61", "l_1stIn": "34", "l_1stWon": "25", "l_2ndWon": "14",
+    }
+    normalized_source = normalize_sackmann_row(example)
+    payload, values = make_payload(normalized_source)
+    assert parse_statistics(payload, home_is_player1=True) == values
+    assert values["p1_service_points_won"] == pytest.approx(.7)
+    assert values["p2_return_points_won"] == pytest.approx(.3)
+    assert values["p2_service_points_won"] == pytest.approx(39/61)
+    assert values["p1_return_points_won"] == pytest.approx(22/61)
+    assert values["p1_aces"] == 5
+    assert values["p1_double_faults"] == 2
+    assert values["p2_aces"] == 2
+    staged = stage_row(normalized_source, file_sha256="d"*64,
+                       source_file_id="WTA_DRIVE_FILE", line_number=2)
+    assert staged["source"]["source_tourney_id"] == "2024-example"
+    assert staged["source"]["source_match_num"] == "101"
+    assert staged["import_ready"] is False
+
+    source_path = tmp_path / "wta_matches_2024.csv"
+    with source_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(example))
+        writer.writeheader()
+        writer.writerow(example)
+    summary = run(source_path, None, tmp_path/"out", "WTA_DRIVE_FILE",
+                  source_format="sackmann")
+    assert summary["counts"]["staged_not_import_ready"] == 1
+    assert summary["counts"].get("quarantined", 0) == 0
+    assert summary["api_requests"] == summary["cdb_writes"] == 0
+
+
+def test_sackmann_cannot_invent_missing_service_points():
+    from stage_drive_match_statistics import normalize_sackmann_row
+    source = {
+        "winner_name": "X", "loser_name": "Y",
+        "w_ace": "2", "l_ace": "3", "w_df": "0", "l_df": "1",
+        "w_svpt": "60", "w_1stIn": "35", "w_1stWon": "",
+        "w_2ndWon": "", "l_svpt": "", "l_1stIn": "",
+        "l_1stWon": "", "l_2ndWon": "",
+    }
+    row = normalize_sackmann_row(source)
+    _, result = make_payload(row)
+    assert "p1_service_points_won" not in result
+    assert "p2_return_points_won" not in result
+    assert result["p1_aces"] == 2 and result["p1_double_faults"] == 0
