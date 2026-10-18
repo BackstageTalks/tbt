@@ -275,3 +275,209 @@ def test_refresh_can_use_available_shared_pool_up_to_14250():
     assert result["reserved_provider_headroom"] == 750
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "history", 1, now=NOW)
+
+
+def test_real_environment_rapidapi_key_cannot_start_without_shared_ledger(monkeypatch):
+    monkeypatch.setenv("RAPIDAPI_KEY", "real-provider-key-for-test")
+    for name in ("BLINQ_SHARED_API_BUDGET_URL", "BLINQ_SHARED_API_BUDGET_TOKEN",
+                 "BLINQ_SHARED_API_BUDGET_PURPOSE"):
+        monkeypatch.delenv(name, raising=False)
+    with pytest.raises(shared_budget.SharedBudgetUnavailable, match="Unmetered"):
+        RapidTennisClient(Settings(rapidapi_key="real-provider-key-for-test"))
+    # A metered caller remains supported (as do offline synthetic test keys).
+    client = RapidTennisClient(
+        Settings(rapidapi_key="real-provider-key-for-test"),
+        request_budget=lambda *_args, **_kwargs: None,
+    )
+    client.close()
+
+
+@pytest.mark.parametrize("override", ["0", "450", "500", "749", "-1", "15000"])
+def test_provider_reserve_cannot_be_weakened_with_environment_override(monkeypatch, override):
+    from tbt.providers.rapidapi import _provider_request_reserve
+    monkeypatch.setenv("BLINQ_PROVIDER_REQUEST_RESERVE", override)
+    with pytest.raises(ConfigurationError, match="750"):
+        _provider_request_reserve()
+
+
+def test_provider_reserve_can_be_stricter_but_not_looser(monkeypatch):
+    from tbt.providers.rapidapi import _provider_request_reserve
+    monkeypatch.setenv("BLINQ_PROVIDER_REQUEST_RESERVE", "750")
+    assert _provider_request_reserve() == 750
+    monkeypatch.setenv("BLINQ_PROVIDER_REQUEST_RESERVE", "1500")
+    assert _provider_request_reserve() == 1500
+
+
+def test_provider_remaining_header_is_mandatory_for_paid_workers(monkeypatch):
+    from tbt.providers.rapidapi import _require_provider_remaining_header
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("RAPIDAPI_KEY", "fake-runner-secret")
+    monkeypatch.setenv("BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER", "false")
+    assert _require_provider_remaining_header() is True
+    monkeypatch.delenv("RAPIDAPI_KEY")
+    monkeypatch.setenv("GITHUB_ACTIONS", "false")
+    monkeypatch.setenv("FUNCTIONS_WORKER_RUNTIME", "python")
+    assert _require_provider_remaining_header() is True
+
+
+def test_binary_image_provider_request_requires_quota_header(monkeypatch):
+    monkeypatch.setenv("BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER", "true")
+    monkeypatch.delenv("RAPIDAPI_KEY", raising=False)
+    calls = []
+    client = RapidTennisClient(Settings(rapidapi_key="test"))
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(
+        lambda request: (
+            calls.append(str(request.url))
+            or httpx.Response(200, content=b"image-bytes",
+                              headers={"content-type": "image/png"})
+        )
+    ))
+    client._throttle = lambda: None
+    try:
+        with pytest.raises(RequestBudgetExceeded, match="remaining header missing"):
+            client.player_image("123")
+        assert client.request_count == 1
+        assert len(calls) == 1
+    finally:
+        client.close()
+
+
+def test_remote_budget_receipt_must_confirm_live_95_percent_contract(monkeypatch):
+    from tbt.providers.shared_budget import HttpReservation
+    current = {
+        "schema": 1,
+        "window": "provider_day_19_10_europe_bratislava",
+        "provider_plan_limit": 15000,
+        "global_limit": 14250,
+        "reserved_provider_headroom": 750,
+        "global_spent": 12835,
+        "global_remaining": 1415,
+    }
+    responses = [
+        {"ok": True},  # An old API that says only "ok" is not safe.
+        {"ok": True, "budget": {**current, "global_limit": 14500}},
+        {"ok": True, "budget": {**current, "reserved_provider_headroom": 500}},
+        {"ok": True, "budget": {**current, "global_remaining": 1450}},
+        {"ok": True, "budget": current},
+    ]
+    reply = {"value": responses[0]}
+    attempts = []
+    def handler(request):
+        attempts.append(str(request.url))
+        return httpx.Response(200, json=reply["value"])
+
+    monkeypatch.setattr(httpx, "Client", lambda *a, **k:
+                        RealClient(transport=httpx.MockTransport(handler)))
+    remote = HttpReservation(
+        "https://quota.example.test/api/v1/internal/api-budget/reserve",
+        "test-secret", "history",
+    )
+    try:
+        for candidate in responses[:4]:
+            reply["value"] = candidate
+            with pytest.raises(shared_budget.SharedBudgetUnavailable,
+                               match="contract mismatch"):
+                remote()
+        reply["value"] = responses[-1]
+        remote()
+        assert len(attempts) == len(responses)
+    finally:
+        remote.close()
+
+
+def test_live_and_batch_workflows_enforce_identical_daily_limits():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    live = (root / ".github/workflows/live-radar.yml").read_text()
+    data = (root / ".github/workflows/data.yml").read_text()
+    history = (root / ".github/workflows/player-enrichment.yml").read_text()
+    assert "budget['global_spent'] <= 14250 == budget['global_limit']" in live
+    assert "budget['reserved_provider_headroom'] == 750" in live
+    assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'" in data
+    assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'" in history
+    assert "unset BLINQ_SHARED_API_BUDGET_URL" not in data
+
+
+@pytest.mark.parametrize("method", ["json", "image", "optional"])
+def test_malformed_provider_remaining_header_blocks_further_calls(monkeypatch, method):
+    monkeypatch.setenv("BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER", "true")
+    monkeypatch.delenv("RAPIDAPI_KEY", raising=False)
+    sent = []
+    def handler(request):
+        sent.append(str(request.url))
+        return httpx.Response(
+            200, headers={"x-ratelimit-requests-remaining": "not-a-number",
+                          "content-type": "image/png"},
+            content=b"image" if method == "image" else b'{"events":[],"player":{}}',
+        )
+    client = RapidTennisClient(Settings(rapidapi_key="test"))
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(handler))
+    client._throttle = lambda: None
+    try:
+        with pytest.raises(RequestBudgetExceeded, match="Invalid provider remaining header"):
+            if method == "image":
+                client.player_image("123")
+            elif method == "optional":
+                client.player_details("123")
+            else:
+                client.live_events()
+        assert len(sent) == 1
+        assert client.request_count == 1
+    finally:
+        client.close()
+
+
+def test_no_direct_rapidapi_key_header_outside_canonical_client():
+    """Prevent new unmetered HTTP clients from bypassing the single quota adapter."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    canonical = {root / "api/tbt/providers/rapidapi.py",
+                 root / "api/tbt/providers/guarded_rapidapi.py"}
+    unauthorized = []
+    for parent in ("api", "scripts"):
+        for path in (root / parent).rglob("*.py"):
+            if path in canonical:
+                continue
+            source = path.read_text(encoding="utf-8").lower()
+            if "x-rapidapi-key" in source or "x-rapidapi-host" in source:
+                unauthorized.append(str(path.relative_to(root)))
+    for path in (root / ".github/workflows").glob("*.yml"):
+        source = path.read_text(encoding="utf-8").lower()
+        if "x-rapidapi-key" in source or "x-rapidapi-host" in source:
+            unauthorized.append(str(path.relative_to(root)))
+    assert unauthorized == [], (
+        "Unmetered direct RapidAPI headers outside approved adapters: "
+        + ", ".join(sorted(unauthorized))
+    )
+
+
+def test_guarded_research_http_stops_on_provider_reserve(monkeypatch):
+    from tbt.providers.guarded_rapidapi import GuardedRapidApiHttp
+    class Budget:
+        count = 0
+        def __call__(self):
+            self.count += 1
+        def close(self):
+            pass
+    quota = Budget()
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, headers={
+            "x-ratelimit-requests-remaining": "750"
+        }, json={})
+    monkeypatch.setattr(httpx, "Client", lambda *a, **k:
+                        RealClient(transport=httpx.MockTransport(handler)))
+    with GuardedRapidApiHttp("test", "tennisapi1.p.rapidapi.com",
+                             budget=quota) as client:
+        with pytest.raises(ValueError, match="outside configured"):
+            client.get("https://other.example.com/x")
+        assert quota.count == 0
+        with pytest.raises(RequestBudgetExceeded, match="reserve"):
+            client.get("https://tennisapi1.p.rapidapi.com/api/tennis/live")
+        with pytest.raises(RequestBudgetExceeded, match="reserve"):
+            client.get("https://tennisapi1.p.rapidapi.com/api/tennis/live")
+        assert quota.count == 1
+        assert client.attempts == len(calls) == 1

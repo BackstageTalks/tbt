@@ -111,7 +111,7 @@ jobs:
       LOOKBACK_DAYS: ${{ inputs.lookback_days || 1095 }}
       END_DATE: ${{ inputs.end }}
       MAX_REQUESTS: ${{ inputs.max_requests || 14500 }}
-      BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: ${{ inputs.hourly_autofill && 'true' || 'false' }}
+      BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'
       BLINQ_AUTOFILL_HIGH_YIELD: ${{ inputs.hourly_autofill && inputs.mode == 'statistics' && 'true' || 'false' }}
       BLINQ_API_AUTOFILL_STOP_AT_UTC: ${{ inputs.autofill_stop_at_utc || '' }}
       MARKET_ODDS_MAX_EVENTS: ${{ github.event_name == 'workflow_dispatch' && inputs.market_odds_max_events == 0 && '0' || inputs.market_odds_max_events || -1 }}
@@ -302,7 +302,7 @@ jobs:
               ;;
           esac
           if [[ "${BLINQ_PRE_RESET_PROVIDER_HEADER_OVERRIDE:-false}" == "true" ]]; then
-            unset BLINQ_SHARED_API_BUDGET_URL BLINQ_SHARED_API_BUDGET_TOKEN BLINQ_SHARED_API_BUDGET_PURPOSE
+            # Never unset shared-budget credentials, even for legacy manual overrides.
             export BLINQ_PROVIDER_REQUEST_RESERVE=1500
             export BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER=true
             echo "One-off pre-reset provider-header guard active: stop with 1500 provider requests remaining."

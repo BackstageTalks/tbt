@@ -8,7 +8,7 @@ from __future__ import annotations
 import argparse, collections, hashlib, json, os, re, sys, time
 from datetime import datetime, timezone
 from pathlib import Path
-import urllib.request, urllib.error
+
 
 MAX_EVENTS=50
 SHA=re.compile(r'^[a-f0-9]{64}$')
@@ -114,71 +114,64 @@ def assess(cdb,api):
     return 'SAME_PROVIDER_EVENT_PARTICIPANTS_TIME_WINNER_RECHECK_ONLY'
 
 
-def response_json(url,headers,body=None,timeout=12):
-    req=urllib.request.Request(url,headers=headers,data=body)
-    with urllib.request.urlopen(req,timeout=timeout) as resp:
-        data=resp.read(2*1024*1024+1)
-        if len(data)>2*1024*1024:raise ValueError('Provider response too large')
-        return resp.status,resp.headers,json.loads(data)
-
-
 def probe(sample,budget_url,budget_token,api_key):
     if (len(sample)!=50 or len({(r['tour'],r['event_id']) for r in sample})!=50
-        or not budget_url.startswith('https://') or '/api/v1/internal/api-budget/reserve' not in budget_url
-        or not budget_token or not api_key):raise ValueError('Incomplete 50-event sample/budget credentials')
-    counts=collections.Counter();rows=[];paid=0;reserved=0;consecutive_unavailable=0
-    for r in sample:
-        # No attempt WITHOUT shared ETag-ledger reservation; no retry; no bypass.
-        try:
-            status,_,ledger=response_json(budget_url,{'X-Blinq-Worker-Token':budget_token,
-                'Content-Type':'application/json'},json.dumps({'purpose':'history','requests':1}).encode(),timeout=9)
-            if status!=200 or ledger.get('ok') is not True or not isinstance(ledger.get('budget'),dict):
-                counts['BUDGET_UNAVAILABLE_STOP']+=1;break
-            b=ledger['budget']
-            if b.get('global_limit')!=14550 or b.get('reserved_provider_headroom')!=450:
-                counts['BUDGET_CONTRACT_MISMATCH_STOP']+=1;break
-            reserved+=1
-        except Exception:
-            counts['BUDGET_UNAVAILABLE_STOP']+=1;break
-        eid=r['event_id'];url=EXPECTED_PROVIDER+'/api/tennis/event/'+eid
-        missing_header=False
-        try:
-            status,header,payload=response_json(url,{'X-RapidAPI-Key':api_key,
-                  'X-RapidAPI-Host':'tennisapi1.p.rapidapi.com',
-                  'Accept':'application/json'},None,timeout=15)
-            paid+=1
-            result=assess(r,payload) if status==200 else 'PROVIDER_NOT_200'
-            remaining=header.get('x-ratelimit-requests-remaining')
-            if remaining is None:
-                counts['PROVIDER_RATE_HEADER_MISSING_STOP']+=1
-                # We may record this one attempt, but NEVER risk another unmetered billable request.
-                missing_header=True
-            else:
-                missing_header=False
-                if not str(remaining).isdigit() or int(remaining)<=450:
-                    counts['PROVIDER_HARD_RESERVE_STOP']+=1
-                    missing_header=True
-        except urllib.error.HTTPError as exc:
-            paid+=1
-            result='HTTP_'+str(exc.code)
-        except Exception as exc:
-            paid+=1
-            result='UNAVAILABLE_OR_PARSE_FAILURE'
-        counts[result]+=1
-        rows.append({'tour':r['tour'],'provider_event_id':eid,'canonical_match_id':r['canonical_match_id'],
-             'source_native_home_id':r['home_id'],'source_native_away_id':r['away_id'],
-             'result':result,'independently_verified_sofascore_ID':False,
-             'writes_authorized':False})
-        if result in ('HTTP_429','HTTP_401','HTTP_403'):
-            counts['PROVIDER_SECURITY_OR_QUOTA_STOP']+=1;break
-        if missing_header:break
-        consecutive_unavailable=consecutive_unavailable+1 if result in ('HTTP_404','PROVIDER_NOT_200','INVALID_OR_EMPTY_API_EVENT') else 0
-        if consecutive_unavailable>=5:
-            counts['FIVE_UNAVAILABLE_IN_A_ROW_STOP']+=1
-            break
-        time.sleep(0.16)
-    return counts,rows,reserved,paid
+        or not budget_url.startswith('https://')
+        or '/api/v1/internal/api-budget/reserve' not in budget_url
+        or not budget_token or not api_key):
+        raise ValueError('Incomplete 50-event sample/budget credentials')
+    # This research-only probe must share the same fail-closed 95% ledger as
+    # every other TennisAPI caller. Reject even a previously valid 96.7% budget
+    # server before sending a paid request.
+    from tbt.providers.guarded_rapidapi import GuardedRapidApiHttp
+    from tbt.providers.shared_budget import HttpReservation
+    from tbt.providers.budget import RequestBudgetExceeded
 
+    counts=collections.Counter()
+    rows=[]
+    paid=0
+    reserved=0
+    consecutive_unavailable=0
+    remote=HttpReservation(budget_url,budget_token,'history')
+    with GuardedRapidApiHttp(api_key,'tennisapi1.p.rapidapi.com',
+                             budget=remote,timeout=15) as provider:
+        for row in sample:
+            eid=row['event_id']
+            url=EXPECTED_PROVIDER+'/api/tennis/event/'+eid
+            try:
+                response=provider.get(url,timeout=15)
+                status=response.status_code
+                result=assess(row,response.json()) if status==200 else 'HTTP_'+str(status)
+            except RequestBudgetExceeded:
+                counts['BUDGET_OR_PROVIDER_RESERVE_STOP']+=1
+                break
+            except Exception:
+                result='UNAVAILABLE_OR_PARSE_FAILURE'
+            finally:
+                # Reservations made before ambiguous upstream failures are not
+                # refunded, nor retried; count their attempted upstream calls.
+                paid=provider.attempts
+                reserved=provider.attempts
+
+            counts[result]+=1
+            rows.append({
+                'tour':row['tour'],'provider_event_id':eid,
+                'canonical_match_id':row['canonical_match_id'],
+                'source_native_home_id':row['home_id'],
+                'source_native_away_id':row['away_id'],
+                'result':result,'independently_verified_sofascore_ID':False,
+                'writes_authorized':False,
+            })
+            if result in ('HTTP_429','HTTP_401','HTTP_403'):
+                counts['PROVIDER_SECURITY_OR_QUOTA_STOP']+=1
+                break
+            consecutive_unavailable = (consecutive_unavailable + 1
+                if result in ('HTTP_404','INVALID_OR_EMPTY_API_EVENT',
+                              'UNAVAILABLE_OR_PARSE_FAILURE') else 0)
+            if consecutive_unavailable>=5:
+                counts['FIVE_UNAVAILABLE_IN_A_ROW_STOP']+=1
+                break
+    return counts,rows,reserved,paid
 
 def main():
     p=argparse.ArgumentParser()

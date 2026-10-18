@@ -1080,13 +1080,20 @@ def match_intelligence(req):
             public_feed_result = redact_match_intelligence(feed_result, detail_access)
             return response({**public_feed_result, "cached": False, "live_provider": False})
         try:
-            client = RapidTennisClient(settings)
-            # Preserve a preconfigured remote ledger if one is present; Azure
-            # otherwise uses the same durable quota via its direct store.
-            if client.request_budget is None:
-                client.request_budget = (
+            # Meter BEFORE constructing the paid client: real API keys may
+            # never exist in an unguarded state. Prefer a configured remote
+            # ledger; otherwise reserve atomically in Azure Table storage.
+            remote_ledger_configured = any(os.getenv(key, "").strip() for key in (
+                "BLINQ_SHARED_API_BUDGET_URL",
+                "BLINQ_SHARED_API_BUDGET_TOKEN",
+                "BLINQ_SHARED_API_BUDGET_PURPOSE",
+            ))
+            client = RapidTennisClient(
+                settings,
+                request_budget=None if remote_ledger_configured else (
                     lambda *args, **kwargs: reserve_shared_api_budget("history")
-                )
+                ),
+            )
             # Explicit opt-in still has a strict per-request ceiling. The default
             # production path above consumes zero online Tennis RapidAPI calls.
             client.request_limit = min(getattr(client, "request_limit", 9) or 9, 9)

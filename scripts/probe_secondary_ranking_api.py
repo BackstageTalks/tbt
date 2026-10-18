@@ -5,10 +5,9 @@ import json
 import os
 from pathlib import Path
 
-import httpx
 
 from _bootstrap import ROOT  # noqa: F401
-from tbt.providers.shared_budget import from_environment
+from tbt.providers.guarded_rapidapi import GuardedRapidApiHttp
 
 HOST="tennis-api-atp-wta-itf.p.rapidapi.com"
 BASE=f"https://{HOST}"
@@ -27,31 +26,24 @@ def main():
     key=os.getenv("RAPIDAPI_KEY","").strip()
     if not key:
         raise SystemExit("RAPIDAPI_KEY missing")
-    reserve=from_environment()
-    if reserve is None:
-        raise SystemExit("Shared budget guard missing")
-    headers={"X-RapidAPI-Key":key,"X-RapidAPI-Host":HOST,"Accept":"application/json"}
+    # Mandatory shared-quota + provider-header verification on every probe.
     targets=[
         ("/tennis/v2/ranking/atp/player/68074/history",{"months":"24"}),
         ("/tennis/v2/ranking/atp",{"date":"14.09.2026","group":"singles","page":"1","limit":"10"}),
     ]
     results=[]
     remaining=None
-    try:
-        with httpx.Client(timeout=20.0) as client:
-            for path,params in targets:
-                reserve()
-                response=client.get(BASE+path,headers=headers,params=params)
-                remaining=response.headers.get("x-ratelimit-requests-remaining")
-                row={"path":path,"params":params,"status":response.status_code}
-                try:
-                    payload=response.json()
-                    row["shape"]=shape(payload)
-                except Exception:
-                    row["body_prefix"]=response.text[:300]
-                results.append(row)
-    finally:
-        reserve.close()
+    with GuardedRapidApiHttp(key, HOST) as client:
+        for path,params in targets:
+            response=client.get(BASE+path,params=params)
+            remaining=response.headers.get("x-ratelimit-requests-remaining")
+            row={"path":path,"params":params,"status":response.status_code}
+            try:
+                payload=response.json()
+                row["shape"]=shape(payload)
+            except Exception:
+                row["body_prefix"]=response.text[:300]
+            results.append(row)
     report={
         "schema":1,
         "host":HOST,

@@ -50,14 +50,25 @@ def _provider_request_reserve() -> int:
         raise ConfigurationError(
             "BLINQ_PROVIDER_REQUEST_RESERVE must be an integer"
         ) from exc
-    if reserve < 0 or reserve >= 15000:
+    # Never let a workflow variable weaken the production 95% safety margin.
+    if reserve < DEFAULT_PROVIDER_REQUEST_RESERVE or reserve >= 15000:
         raise ConfigurationError(
-            "BLINQ_PROVIDER_REQUEST_RESERVE must be in 0..14999"
+            f"BLINQ_PROVIDER_REQUEST_RESERVE must be in "
+            f"{DEFAULT_PROVIDER_REQUEST_RESERVE}..14999"
         )
     return reserve
 
 
 def _require_provider_remaining_header() -> bool:
+    # On production Azure and paid GitHub runners, absence of the provider's
+    # remaining-call header is a STOP, not permission to send more requests.
+    # Tests/local mocks may omit the header; their shared quota contracts
+    # are independently exercised with explicitly enabled header checks.
+    if os.getenv("FUNCTIONS_WORKER_RUNTIME", "").strip():
+        return True
+    if (os.getenv("GITHUB_ACTIONS", "").strip().lower() == "true"
+            and os.getenv("RAPIDAPI_KEY", "").strip()):
+        return True
     return os.getenv(
         "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER", ""
     ).strip().lower() in {"1", "true", "yes", "on"}
@@ -115,6 +126,17 @@ class RapidTennisClient:
             self.request_budget = combined_reservation
         else:
             self.request_budget = shared_reservation or request_budget
+        # No real environment-sourced RapidAPI credential may bypass the
+        # ETag-protected ledger, including ad-hoc and historical jobs.
+        # Explicit synthetic credentials used by offline unit tests are not
+        # treated as a paid provider credential.
+        real_key = os.getenv("RAPIDAPI_KEY", "").strip()
+        if (real_key and cfg.rapidapi_key == real_key
+                and self.request_budget is None):
+            from .shared_budget import SharedBudgetUnavailable
+            raise SharedBudgetUnavailable(
+                "Unmetered RapidAPI key use forbidden: shared budget required"
+            )
         self.client = httpx.Client(
             timeout=cfg.request_timeout_seconds
         )
@@ -281,6 +303,8 @@ class RapidTennisClient:
                 remaining = response.headers.get("x-ratelimit-requests-remaining")
                 if remaining is not None:
                     self.rate_limit_remaining = safe_int(remaining)
+                    if self.rate_limit_remaining is None and _require_provider_remaining_header():
+                        raise RequestBudgetExceeded("Invalid provider remaining header")
                 elif _require_provider_remaining_header():
                     raise RequestBudgetExceeded(
                         "Provider rate-limit remaining header missing"
@@ -384,6 +408,12 @@ class RapidTennisClient:
                 remaining = response.headers.get("x-ratelimit-requests-remaining")
                 if remaining is not None:
                     self.rate_limit_remaining = safe_int(remaining)
+                    if self.rate_limit_remaining is None and _require_provider_remaining_header():
+                        raise RequestBudgetExceeded("Invalid provider remaining header")
+                elif _require_provider_remaining_header():
+                    raise RequestBudgetExceeded(
+                        "Provider rate-limit remaining header missing"
+                    )
 
                 if response.status_code in {204, 404}:
                     return None
@@ -477,6 +507,8 @@ class RapidTennisClient:
         remaining = response.headers.get("x-ratelimit-requests-remaining")
         if remaining is not None:
             self.rate_limit_remaining = safe_int(remaining)
+            if self.rate_limit_remaining is None and _require_provider_remaining_header():
+                raise RequestBudgetExceeded("Invalid provider remaining header")
         elif _require_provider_remaining_header():
             raise RequestBudgetExceeded(
                 "Provider rate-limit remaining header missing"
