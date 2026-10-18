@@ -1,4 +1,4 @@
-"""7.2.1 read-only pre-match odds >1.50 specialist research.
+"""7.2.1 read-only pre-match odds >=1.50 TOP specialist research.
 
 Input must be a private point-in-time candidate replay CSV; do not commit rows.
 Fits only a separate research calibrator, never changes CDB/champion or publishes picks.
@@ -42,7 +42,9 @@ def validated_candidates(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     data = frame.copy()
     for col in FEATURES:
         data[col] = pd.to_numeric(data[col], errors="raise")
-    if not np.isfinite(data[FEATURES].to_numpy(dtype=float)).all():
+    if not np.isfinite(data.odds.to_numpy(dtype=float)).all():
+        raise ValueError("Nonfinite bookmaker odds")
+    if not np.isfinite(data[[col for col in FEATURES if col != "odds"]].to_numpy(dtype=float)).all():
         raise ValueError("Nonfinite input")
     if not (
         data.model_probability.between(0, 1, inclusive="neither")
@@ -60,14 +62,36 @@ def validated_candidates(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         raise ValueError("Unknown outcome")
     if data[["betting_day", "event_id", "selection_id"]].duplicated().any():
         raise ValueError("Duplicate event/selection")
-    priced = data.loc[data.odds > 1.50].copy()
+    # The published TOP selector does NOT rank on raw model probability.
+    # It shrinks confidence towards 50/50 using observed data depth. An
+    # experiment claiming superiority to TOP must compare against the
+    # probability actually used by production (without treating the ad-hoc
+    # shrinkage as empirically validated calibration).
+    data["public_top_probability"] = (
+        0.5 + (data.model_probability - 0.5) * data.data_depth
+    )
+    if "blinq_probability" in data:
+        public = pd.to_numeric(data["blinq_probability"], errors="raise")
+        if not np.isfinite(public.to_numpy(dtype=float)).all() or not np.allclose(
+            public.to_numpy(dtype=float),
+            data.public_top_probability.to_numpy(dtype=float),
+            atol=1e-8, rtol=0,
+        ):
+            raise ValueError("Snapshot TOP probability disagrees with production rule")
+
+    # Production TOP accepts exactly 1.50: excluding the boundary silently
+    # removes genuine offers and biases the price-conditioned experiment.
+    priced = data.loc[data.odds >= 1.50].copy()
     if priced.empty:
-        raise ValueError("No strictly >1.50 priced pre-match candidates")
+        raise ValueError("No >=1.50 priced pre-match candidates")
+    settled = priced.outcome.isin(("win", "loss"))
     return priced, {
         "source_rows": int(len(data)),
-        "equal_150_excluded": int((data.odds == 1.50).sum()),
-        "eligible_gt_150": int(len(priced)),
-        "settled_gt_150": int(priced.outcome.isin(("win", "loss")).sum()),
+        "equal_150_included": int((priced.odds == 1.50).sum()),
+        "eligible_ge_150": int(len(priced)),
+        "settled_ge_150": int(settled.sum()),
+        "raw_model_ge_80_settled": int((settled & (priced.model_probability >= 0.80)).sum()),
+        "public_top_ge_80_settled": int((settled & (priced.public_top_probability >= 0.80)).sum()),
     }
 
 
@@ -77,6 +101,23 @@ def _score(y, p):
         "n": int(len(y)), "accuracy": float(accuracy_score(y, p >= 0.5)),
         "brier": float(brier_score_loss(y, p)),
         "log_loss": float(log_loss(y, p, labels=[0, 1])),
+    }
+
+
+def _high_confidence_settled(frame, column):
+    # Count reliability in the actual priced TOP universe. A tiny number of
+    # apparent 80% bets is a research limitation, not an 80% product claim.
+    priced = frame.loc[
+        frame.outcome.isin(("win", "loss")) & (frame[column] >= 0.80)
+    ]
+    n = int(len(priced))
+    wins = int((priced.outcome == "win").sum())
+    return {
+        "settled": n,
+        "wins": wins,
+        "accuracy": wins / n if n else None,
+        "mean_probability": float(priced[column].mean()) if n else None,
+        "sample_sufficient_for_diagnostic": n >= 30,
     }
 
 
@@ -135,7 +176,7 @@ def train_and_compare(
         "version": VERSION, "status": "RESEARCH_ONLY_NOT_PROMOTED",
         "input_sha256": sha256,
         "guardrails": {
-            "odds": "strictly >1.50",
+            "odds": ">=1.50 including the exact TOP boundary",
             "time": "quote_at <= snapshot_at < scheduled_at",
             "max_daily_picks": 3,
             "production_writes": 0,
@@ -152,18 +193,27 @@ def train_and_compare(
             "pool_including_pending": int(len(offered)),
         },
         "probability_metrics": {
-            "blinq": _score(y, test.model_probability),
+            "blinq": _score(y, test.public_top_probability),
+            "raw_model": _score(y, test.model_probability),
             "market": _score(y, test.fair_market_probability),
             "specialist": _score(y, test.specialist_probability),
         },
         "top_three_metrics": {
-            "blinq": _top_three(offered, "model_probability"),
+            "blinq": _top_three(offered, "public_top_probability"),
+            "raw_model": _top_three(offered, "model_probability"),
             "market": _top_three(offered, "fair_market_probability"),
             "specialist": _top_three(offered, "specialist_probability"),
         },
+        "top_80_reliability": {
+            "blinq": _high_confidence_settled(test, "public_top_probability"),
+            "raw_model": _high_confidence_settled(test, "model_probability"),
+            "specialist": _high_confidence_settled(test, "specialist_probability"),
+        },
         "limitations": [
             "Small retrospective snapshot sample, previously explored",
-            "Sample is conditioned on published model candidates, not full board",
+            "Existing candidate data may be conditioned on the old selector; full-board coverage is not established",
+            "The public TOP baseline uses data-depth-shrunk probability, not raw model probability",
+            "80% reliability requires independently unseen, adequately sized priced holdout",
             "No independently unseen forward holdout or fresh market coverage",
             "Only price-conditioned calibration of existing model, not a new tennis model",
         ],
