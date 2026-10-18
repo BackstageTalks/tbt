@@ -77,6 +77,8 @@ def test_721_fit_preserves_probability_profile_and_separate_market_gate():
     assert result.model.version.startswith("v7.2.1-")
     assert result.model.objective == "log_loss"
     assert result.model.metadata["objective"] == "log_loss"
+    assert result.model.metadata["independent_serve_return"] is True
+    assert result.model.metadata["independent_direct_rates"] is True
     assert result.report["optimization_objective"] == "log_loss"
     assert result.report["top_market_validation"]["promotion_ready_for_top"] is False
     assert result.report["input_diagnostics"]["train"]["wta"]["features"]["rank_advantage"]["distinct"] > 1
