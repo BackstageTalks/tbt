@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "operation": "fresh-production-null-only-reconciliation",
+  "source": "25pct_drive_cdb_audit",
+  "batches": [
+    "r5-source-exact-20261016",
+    "manual-leaderboard-20261015",
+    "drive-pbp-20261015",
+    "tml-zip-20261015",
+    "sackmann-bp-max-20261015"
+  ],
+  "write": false,
+  "paid_api_requests": false,
+  "model_training": false,
+  "model_promotion": false
+}
