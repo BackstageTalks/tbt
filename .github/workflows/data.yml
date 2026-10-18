@@ -167,6 +167,12 @@ jobs:
           [[ "$max_requests" =~ ^[0-9]+$ ]] && (( 10#$max_requests >= 1 && 10#$max_requests <= 14500 )) || {
             echo "Invalid max_requests: $max_requests (expected 1..14500)"; exit 1;
           }
+          # The existing history/statistics downloader enforces a stricter
+          # per-run ceiling than the generic workflow input. Reject excess
+          # before loading the million-row CDB or acquiring the writer lease.
+          if [[ "$mode" == "statistics" || "$mode" == "extras" ]]; then
+            (( 10#$max_requests <= 12000 )) || { echo "History statistics import caps max_requests at 12000"; exit 1; }
+          fi
           if [[ "$mode" == "extras" ]]; then
             [[ "$promote" == "false" ]] || { echo "Extras smoke never promotes a model"; exit 1; }
             (( 10#$max_requests <= 30 )) || { echo "Extras smoke max_requests must be <=30"; exit 1; }
@@ -224,6 +230,18 @@ jobs:
           fi
           echo "BLINQ_TARGET_STATS_TOUR=$target_tour" >> "$GITHUB_ENV"
           echo "BLINQ_TARGETED_STATISTICS=$targeted" >> "$GITHUB_ENV"
+          high_yield="$(jq -r '.high_yield_statistics // false' "$request")"
+          [[ "$high_yield" == "true" || "$high_yield" == "false" ]] || { echo "Invalid high_yield_statistics flag"; exit 1; }
+          if [[ "$high_yield" == "true" && ( "$mode" != "statistics" || "$targeted" != "true" ) ]]; then
+            echo "High-yield requires targeted statistics mode"; exit 1
+          fi
+          echo "BLINQ_AUTOFILL_HIGH_YIELD=$high_yield" >> "$GITHUB_ENV"
+          if [[ "$mode" == "statistics" && "$targeted" == "true" ]]; then
+            # Keep a provider-side reserve even if calls outside the shared
+            # BlinQ ledger have consumed API credits.
+            echo "BLINQ_PROVIDER_REQUEST_RESERVE=500" >> "$GITHUB_ENV"
+            echo "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER=true" >> "$GITHUB_ENV"
+          fi
           echo "BLINQ_SHARED_API_BUDGET_PURPOSE=history" >> "$GITHUB_ENV"
           echo "Resolved controlled data request: mode=$mode targeted=$targeted max_requests=$max_requests start=$start_date end=$end_date promote=$promote"
 
