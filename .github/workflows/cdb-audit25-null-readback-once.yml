@@ -1,0 +1,131 @@
+name: Audit25 exact live CDB NULL-only readback (one shot)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/cdb-audit25-null-readback-once.yml'
+      - '.github/cdb-audit25-null-readback-request.json'
+  push:
+    branches: [main]
+    paths:
+      - '.github/cdb-audit25-null-readback-request.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cdb-audit25-null-readback-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  guard-and-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: a845e855ca7cfcb9ec48cd441e58250a1f1fd6e6
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install --disable-pip-version-check pandas pyarrow pytest
+      - name: Verify explicit read-only request and source SHA manifests
+        run: |
+          python - <<'PY'
+          import json, hashlib
+          from pathlib import Path
+          r=json.loads(Path('.github/cdb-audit25-null-readback-request.json').read_text())
+          expected=[
+            ('r5-source-exact-20261016',95,366),
+            ('manual-leaderboard-20261015',96,372),
+            ('drive-pbp-20261015',103,688),
+            ('tml-zip-20261015',276,4141),
+            ('sackmann-bp-max-20261015',88161,176257),
+          ]
+          assert r=={'schema':1,'operation':'fresh-production-null-only-reconciliation',
+          'source':'25pct_drive_cdb_audit','batches':[x[0] for x in expected],
+          'write':False,'paid_api_requests':False,'model_training':False,
+          'model_promotion':False}
+          for name,n,f in expected:
+            p=Path('source/research')/name
+            m=json.loads((p/'import-manifest.json').read_text())
+            assert (m['matches'],m['fields'])==(n,f)
+            assert hashlib.sha256((p/'stage.json.gz').read_bytes()).hexdigest()==m['stage_sha256']
+            assert len(m['source_archive_sha256'])==64
+            print('source PIN PASS:',name)
+          print('Reference gross staged fields ONLY:',sum(x[2] for x in expected))
+          PY
+      - name: Run all five existing strict importer regression suites
+        working-directory: source
+        env:
+          PYTHONPATH: scripts:../scripts
+        run: python -m pytest -q tests/test_import_*_exact.py
+
+  readback:
+    needs: guard-and-tests
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[cdb-null-audit]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: scripts:../scripts
+    defaults:
+      run:
+        working-directory: source
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: a845e855ca7cfcb9ec48cd441e58250a1f1fd6e6
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install --disable-pip-version-check pandas pyarrow
+      - name: Pin current live production CDB bundle before read-only reconciliation
+        run: |
+          mkdir -p work/audit25-null-readback/pre work/audit25-null-readback/post
+          gh release download tbt-data-v1 -R BackstageTalks/tbt-data -p _tbt_bundle_manifest.json -D work/audit25-null-readback/pre
+          sha256sum work/audit25-null-readback/pre/_tbt_bundle_manifest.json
+      - name: R5 - live exact NULL-only reconciliation without writing
+        run: python scripts/import_r5_source_exact.py
+      - name: Manual leaderboard - live exact NULL-only reconciliation without writing
+        run: python scripts/import_manual_leaderboard_exact.py
+      - name: Drive PBP - live exact NULL-only reconciliation without writing
+        run: python scripts/import_drive_pbp_exact.py
+      - name: TML - live exact NULL-only reconciliation without writing
+        run: python scripts/import_tml_zip_exact.py
+      - name: Historical BP - live exact NULL-only reconciliation without writing
+        run: python scripts/import_sackmann_bp_max_exact.py
+      - name: Check canonical release was unchanged for entire readback
+        run: |
+          gh release download tbt-data-v1 -R BackstageTalks/tbt-data -p _tbt_bundle_manifest.json -D work/audit25-null-readback/post
+          cmp work/audit25-null-readback/pre/_tbt_bundle_manifest.json work/audit25-null-readback/post/_tbt_bundle_manifest.json
+          echo 'PASS: stable canonical bundle; all counts are preflight-only, zero production writes'
+      - name: Store only aggregate counts; no source records or private snapshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit25-current-null-counts-${{ github.run_id }}
+          path: |
+            source/work/r5-source-exact-dry/report.json
+            source/work/manual-leaderboard-dry/report.json
+            source/work/drive-pbp-dry/report.json
+            source/work/tml-zip-dry/report.json
+            source/work/sackmann-bp-max-dry/report.json
+          if-no-files-found: warn
+          retention-days: 14
