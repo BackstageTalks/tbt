@@ -16,7 +16,7 @@ current provider day, not a generic rolling 24-hour window.
 | Purpose | Provider-day allocation |
 | --- | ---: |
 | LIVE Radar | 3,000 |
-| Match Status | 2,750 |
+| Match Status | 2,500 |
 | Refresh (including presentation enrichment) | 14,250 |
 | History/backfill opportunistic ceiling | 14,250 |
 | **Combined, hard** | **14,250** |
