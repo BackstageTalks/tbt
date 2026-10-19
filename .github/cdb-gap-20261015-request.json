@@ -11,7 +11,7 @@
   "mode": "read_only",
   "allow_cdb_writes": false,
   "allow_drive_writes": false,
-  "request_reason": "Current read-only native-identity and NULL gap check of 2025/26 P0 Drive files to identify safe next guarded file import",
-  "audit_cycle": "2026-10-19-afternoon-drive-p0-identify-new-null",
-  "rerun_counter": 3
+  "request_reason": "Recheck original four exact Drive CSV IDs under explicitly validated root/child ancestry against current CDB; readonly",
+  "audit_cycle": "2026-10-19-drive-parent-verification-fixed-p0",
+  "rerun_counter": 4
 }
