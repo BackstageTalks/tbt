@@ -1023,7 +1023,10 @@ def _second_set_outcome(row: dict[str, Any], event: dict[str, Any]) -> str:
 
 
 
-_SCHEDULE_FRESHNESS = timedelta(hours=2)
+# A confirmed fixture start-time correction is presentation evidence and can
+# outlive a single worker pass. A LIVE marker needs much fresher evidence.
+_SCHEDULE_FRESHNESS = timedelta(hours=24)
+_LIVE_FRESHNESS = timedelta(minutes=75)
 _SCHEDULE_MAX_MOVE = timedelta(days=14)
 
 
@@ -1074,10 +1077,14 @@ def verified_schedule_observation(
     # Only an explicit tennis-provider live/finished state proves kickoff.
     # In particular, time passing, 'notstarted' and 'postponed' do NOT.
     state = (
-        "live" if status_type in {"inprogress", "in progress", "live", "started"}
+        "live" if status_type.startswith(("inprogress", "in progress", "live", "started"))
         else "finished" if status_type in {"finished", "ended", "completed"}
         else "scheduled"
     )
+    # Contradictory provider data cannot claim kickoff hours before its own
+    # updated scheduled time. Prefer showing the reschedule, not false LIVE.
+    if state == "live" and scheduled > now + timedelta(minutes=5):
+        state = "scheduled"
     return {
         "scheduled_at": scheduled.isoformat(),
         "status": state,
@@ -1101,9 +1108,14 @@ def _fresh_verified_schedule(
         return None
     if value.get("status") not in {"scheduled", "live", "finished"}:
         return None
+    # Retain the verified rescheduled time for a day, but never keep calling
+    # a match LIVE just because a previous poll saw it in progress.
+    status = value["status"]
+    if status == "live" and now - checked > _LIVE_FRESHNESS:
+        status = "scheduled"
     return {
         "scheduled_at": scheduled.isoformat(),
-        "status": value["status"],
+        "status": status,
         "checked_at": checked.isoformat(),
         "source": "tennis_api_pro",
     }
@@ -1650,10 +1662,10 @@ def scan_match_statuses(
                 "checked_at": now.isoformat(),
             }
 
-    # The settlement scan already cached exact daily calendars. Reuse those
-    # results for future matches at zero additional provider cost. If none was
-    # fetched, spend a bounded existing-budget lookup on the current day so
-    # postponements become visible BEFORE the old kickoff time passes.
+    # Reuse settlement calendars for the public, issued prediction sections.
+    # This one shared, bounded pass also verifies fixture times BEFORE kickoff:
+    # never poll generic tournament-board events that are not on the site.
+    prestart_checked = prestart_verified = prestart_attempts = 0
     if callable(daily_method) and not budget_paused:
         candidates_by_day: dict[str, set[str]] = {}
         for eid, row in rows.items():
@@ -1661,10 +1673,13 @@ def scan_match_statuses(
                 continue
             original = _parse_time(row.get("scheduled_at") or row.get("date"))
             if original is not None:
-                candidates_by_day.setdefault(original.date().isoformat(), set()).add(eid)
+                # Calendar requests are date-scoped; group by the local match
+                # date to handle UTC/local midnight without losing fixtures.
+                match_day = original.astimezone(ZoneInfo("Europe/Bratislava")).date()
+                candidates_by_day.setdefault(match_day.isoformat(), set()).add(eid)
         day_order = sorted(candidates_by_day, key=lambda day: (-len(candidates_by_day[day]), day))
-        # Only one optional new day per worker tick; exact date scans already
-        # performed for settlement remain fully reusable.
+        # At most ONE optional new day per worker tick; due-event calendars
+        # already fetched above are reused at zero additional provider cost.
         optional_calls = 0
         for day in day_order:
             if day not in daily_cache:
@@ -1675,6 +1690,7 @@ def scan_match_statuses(
                 if isinstance(limit, int) and isinstance(count, int) and count + 7 >= limit:
                     break
                 optional_calls += 1
+                prestart_attempts += 1
                 try:
                     nominal_requests += 1
                     target_day = datetime.fromisoformat(day).date()
@@ -1686,17 +1702,23 @@ def scan_match_statuses(
                     except TypeError:
                         daily_cache[day] = daily_method(target_day)
                 except Exception as exc:
-                    if type(exc).__name__ == "SharedBudgetExhausted":
+                    if type(exc).__name__ in {"SharedBudgetExhausted", "SharedBudgetUnavailable"}:
                         budget_paused = True
                         break
                     code = _provider_error_code(exc)
                     daily_errors[code] = daily_errors.get(code, 0) + 1
                     daily_cache[day] = None
+            if daily_cache.get(day) is None:
+                continue
+            prestart_checked += len(candidates_by_day[day])
             for event in _provider_rows(daily_cache.get(day)):
                 eid = _provider_event_id(event)
                 row = rows.get(eid)
                 if row is not None and eid in candidates_by_day[day]:
+                    previously_observed = schedule_verified_this_run
                     observe(eid, row, event)
+                    if schedule_verified_this_run > previously_observed:
+                        prestart_verified += 1
 
     request_count_after = getattr(provider, "request_count", None)
     if isinstance(request_count_before, int) and isinstance(request_count_after, int):
@@ -1750,4 +1772,7 @@ def scan_match_statuses(
         "schedule_updates": schedule_updates,
         "schedule_verified": len(schedule_updates),
         "schedule_observations_this_run": schedule_verified_this_run,
+        "prestart_checked": prestart_checked,
+        "prestart_verified": prestart_verified,
+        "prestart_attempts": prestart_attempts,
     }

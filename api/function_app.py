@@ -1880,7 +1880,7 @@ def internal_live_radar_worker(req):
 
 @app.route(route="v1/internal/match-status-worker", methods=["POST"])
 def internal_match_status_worker(req):
-    """Hourly result overlay for already-started prediction rows."""
+    """Reconcile prestart fixture times and settle verified finished predictions."""
     if not str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip():
         return response({"error": "live_worker_not_configured"}, 503)
     if not _live_worker_token_ok(req):

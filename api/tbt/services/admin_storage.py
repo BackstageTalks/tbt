@@ -798,8 +798,8 @@ def save_match_status_snapshot(payload: object) -> dict:
                  for field in ("t", "s", "a", "b", "c", "p", "n")}
         if key and all(entry[field] for field in ("t", "s", "a", "b")):
             pending[key] = entry
-    # Only verified, fresh, identity-matched display schedule observations may
-    # survive this storage allowlist. No raw provider payload or odds are stored.
+    # Persist at most one day of identity-verified presentation schedule evidence.
+    # This does not mutate issued picks, odds, historical records or the CDB.
     schedule_updates = {}
     candidates = data.get("schedule_updates")
     candidates = candidates if isinstance(candidates, dict) else {}
@@ -819,7 +819,7 @@ def save_match_status_snapshot(payload: object) -> dict:
             checked = datetime.fromisoformat(str(item.get("checked_at") or "").replace("Z", "+00:00"))
             if scheduled.tzinfo is None or checked.tzinfo is None:
                 continue
-            if not (-120 <= (datetime.now(timezone.utc) - checked).total_seconds() <= 7200):
+            if not (-120 <= (datetime.now(timezone.utc) - checked).total_seconds() <= 86400):
                 continue
         except (ValueError, TypeError, OverflowError):
             continue
@@ -835,6 +835,9 @@ def save_match_status_snapshot(payload: object) -> dict:
         "statuses": statuses,
         "schedule_updates": schedule_updates,
         "schedule_verified": len(schedule_updates),
+        "prestart_checked": max(0, int(data.get("prestart_checked") or 0)),
+        "prestart_verified": max(0, int(data.get("prestart_verified") or 0)),
+        "prestart_attempts": max(0, int(data.get("prestart_attempts") or 0)),
         "pending": pending,
         "pending_count": len(pending),
         "tracked": max(0, int(data.get("tracked") or 0)),

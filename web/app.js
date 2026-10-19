@@ -9,13 +9,13 @@
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   const pct = value => `${(Number(value || 0) * (Number(value || 0) <= 1 ? 100 : 1)).toFixed(1)}%`;
   const number = (value, digits=3) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—';
-  const fmtTime = value => value ? new Intl.DateTimeFormat(localeTag,{hour:'2-digit',minute:'2-digit'}).format(new Date(value)) : publicText('TBA');
-  const fmtResultDate = value => value ? new Intl.DateTimeFormat(localeTag,{day:'2-digit',month:'2-digit',year:'2-digit'}).format(new Date(value)).replace(/\s/g,'') : '—';
-  const fmtDate = value => value ? new Intl.DateTimeFormat(localeTag,{day:'2-digit',month:'short',year:'numeric'}).format(new Date(value)) : '—';
+  const fmtTime = value => value ? new Intl.DateTimeFormat(localeTag,{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Bratislava'}).format(new Date(value)) : publicText('TBA');
+  const fmtResultDate = value => value ? new Intl.DateTimeFormat(localeTag,{day:'2-digit',month:'2-digit',year:'2-digit',timeZone:'Europe/Bratislava'}).format(new Date(value)).replace(/\s/g,'') : '—';
+  const fmtDate = value => value ? new Intl.DateTimeFormat(localeTag,{day:'2-digit',month:'short',year:'numeric',timeZone:'Europe/Bratislava'}).format(new Date(value)) : '—';
   const fmtCompactDate = value => {
     if(!value)return '—';
     const d=new Date(value);if(Number.isNaN(d.getTime()))return '—';
-    const parts=new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'2-digit',year:'2-digit'}).formatToParts(d);
+    const parts=new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'2-digit',year:'2-digit',timeZone:'Europe/Bratislava'}).formatToParts(d);
     const get=type=>parts.find(part=>part.type===type)?.value||'';
     return `${get('day')}.${get('month')}.${get('year')}`;
   };
