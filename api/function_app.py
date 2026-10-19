@@ -2041,6 +2041,15 @@ def internal_match_status_worker(req):
                     if value not in (None,""):
                         settled[key]=value
         saved = save_match_status_snapshot(snapshot)
+        # Independent durable Azure read-back: a successful upsert alone is not
+        # evidence that the provider-verified schedule overlay can be served.
+        persisted = load_match_status_snapshot()
+        if (
+            not isinstance(persisted, dict)
+            or persisted.get("schedule_updates") != saved.get("schedule_updates")
+        ):
+            raise AdminStorageUnavailable("Verified schedule read-back mismatch")
+        saved["schedule_readback_verified"] = True
         # Persist verified settled public offers before the 06:00 feed rollover.
         # Zero API calls: use only the provider-verified status snapshot and the
         # already deployed immutable offer. Readback is required to pass cron.
