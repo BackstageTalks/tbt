@@ -60,6 +60,10 @@ def run(normalized_report: Path, history_dir: Path, out_dir: Path):
                       and not {"round_conflict", "surface_conflict", "best_of_conflict"} & set(p["evidence"])
                       for p in proof
                   ))
+        year = str((candidate.get("canonical") or {}).get("scheduled_date_utc") or "")[:4]
+        if not year.isdigit() or int(year) not in range(2016, 2027):
+            result["filtered_year_matches"] = result.get("filtered_year_matches", 0) + 1
+            usable = False
         if candidate.get("match_id") in conflicted:
             result["conflict_matches"] += 1
             usable = False
