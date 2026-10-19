@@ -142,8 +142,17 @@ class TennisEnsemble:
             cal_start = pd.to_datetime(cal.scheduled_at, utc=True).min().normalize()
             if train_end >= cal_start or set(train.match_id) & set(cal.match_id):
                 raise ValueError("Training and calibration must be disjoint whole UTC days")
-        augmented = pd.concat([train, swap_frame(train)], ignore_index=True)
-        x, y = self._matrix(augmented), augmented.target.to_numpy(dtype=int)
+        # Preserve BOTH orientations of every original training match.
+        # Materialize only their numeric feature matrices: duplicating a full
+        # ~million-row pandas training frame (including metadata columns) used
+        # substantial extra RAM on the protected GitHub runner.
+        left = self._matrix(train)
+        x = np.empty((2 * len(train), left.shape[1]), dtype=left.dtype)
+        x[:len(train)] = left
+        del left
+        x[len(train):] = self._matrix(swap_frame(train))
+        target = train.target.to_numpy(dtype=int)
+        y = np.concatenate((target, 1 - target), axis=0)
         self.linear.fit(x, y)
         self.boost.fit(x, y)
         self.blend_weight, self.elo_weight = .5, 0.
@@ -233,8 +242,17 @@ class TennisEnsemble:
         if train_end >= cal_start or set(train.match_id) & set(cal.match_id):
             raise ValueError("Training and calibration must be disjoint whole UTC days")
 
-        augmented = pd.concat([train, swap_frame(train)], ignore_index=True)
-        x, y = self._matrix(augmented), augmented.target.to_numpy(dtype=int)
+        # Preserve BOTH orientations of every original training match.
+        # Materialize only their numeric feature matrices: duplicating a full
+        # ~million-row pandas training frame (including metadata columns) used
+        # substantial extra RAM on the protected GitHub runner.
+        left = self._matrix(train)
+        x = np.empty((2 * len(train), left.shape[1]), dtype=left.dtype)
+        x[:len(train)] = left
+        del left
+        x[len(train):] = self._matrix(swap_frame(train))
+        target = train.target.to_numpy(dtype=int)
+        y = np.concatenate((target, 1 - target), axis=0)
         self.linear.fit(x, y)
         self.boost.fit(x, y)
 

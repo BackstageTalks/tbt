@@ -1,0 +1,78 @@
+name: BlinQ one-shot post-morning 7.2.1 candidate
+
+# 2026-10-20 only. Complete the paid morning refresh BEFORE acquiring a
+# long-lived protected training lock. Never starts model training on push.
+on:
+  workflow_run:
+    workflows: [BlinQ morning prediction refresh]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: blinq-one-shot-calibration-after-morning-20261020
+  cancel-in-progress: false
+
+jobs:
+  dispatch-isolated-candidate:
+    if: >-
+      github.repository == 'BackstageTalks/tbt' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MORNING_CREATED_AT: ${{ github.event.workflow_run.created_at }}
+      APP_REPO: ${{ github.repository }}
+    steps:
+      - name: Check local morning date and existing protected runs
+        id: permit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from datetime import datetime
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+          import json, os, subprocess
+
+          event_time = datetime.fromisoformat(
+              os.environ['MORNING_CREATED_AT'].replace('Z', '+00:00')
+          ).astimezone(ZoneInfo('Europe/Bratislava'))
+          if event_time.date().isoformat() != '2026-10-20':
+              print('One-shot guard: only the 20 October successful morning run is eligible.')
+              raise SystemExit(0)
+
+          cmd = ['gh', 'api',
+                 f"repos/{os.environ['APP_REPO']}/actions/workflows/"
+                 "protected-frozen-cdb-candidate.yml/runs?per_page=100"]
+          payload = json.loads(subprocess.check_output(cmd, text=True))
+          runs = payload.get('workflow_runs', [])
+          if not isinstance(runs, list):
+              raise RuntimeError('Malformed protected-run inventory; refusing duplicate')
+          prior = [
+              run for run in runs
+              if run.get('event') == 'workflow_dispatch'
+              and str(run.get('created_at', ''))[:10] == '2026-10-20'
+          ]
+          if prior:
+              print(f"Protected candidate already requested 20 October: {prior[0].get('id')}")
+              raise SystemExit(0)
+          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as out:
+              out.write('dispatch=true\n')
+          print('Successful morning publication confirmed; protected fit may be dispatched.')
+          PY
+
+      - name: Dispatch full protected candidate, never promote
+        if: steps.permit.outputs.dispatch == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run protected-frozen-cdb-candidate.yml \
+            --repo "$APP_REPO" --ref main -f training_profile=top-7.2.1
+          echo 'PROTECTED_CANDIDATE_DISPATCHED_NOT_TRAINED_OR_PROMOTED'
