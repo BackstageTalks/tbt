@@ -4,11 +4,11 @@
 
 V **Administracia → Kalibracia modelu → Trening kandidatov** vyber profil a klikni **Natrenovat kandidata**. Panel zobrazuje posledne behy, aktualny krok a ulozene modely. **Obnovit stav** nacita aktualny vysledok. Trening pouziva hlavnu vetvu `main`; zmenu logiky najprv otestuj a zluc do nej. Nove data musia byt importovane do CDB. Produkcny model sa neaktivuje.
 
-Server potrebuje nastavenie `BLINQ_TRAINING_GITHUB_TOKEN` v Azure aplikacii, nikdy vo web konfiguracii ani v repozitari. Pouzi samostatne obmedzene opravnenie: Actions read/write pre `BackstageTalks/tbt`, Contents read pre oba repozitare a pristup do sukromneho `tbt-data`. Overeny admin je kontrolovany existujucou serverovou autorizaciou. Bez tokenu API vracia 503 a tlacidlo zostane nedostupne.
+Server nepotrebuje novy GitHub token. Existujuci `BLINQ_LIVE_WORKER_TOKEN` overuje internu synchronizaciu. GitHub workflow `admin-training-worker.yml` cita stav cez existujuci `TBT_DATA_GH_TOKEN`; na dispatch pouziva kratkodoby `github.token` s Actions write. Kontrola je naplanovana kazdych 5 minut; GitHub moze planovany beh oneskorit. Manualne **Run workflow** v admin-training-worker vynuti okamzitu synchronizaciu.
 
-Durable admin storage musi byt dostupne. Atomicky zaznam v `BlinQAdminConfig`, partition `model-training-dispatch`, blokuje duplicitne odoslanie pre posledny run. Pri neurcitom vysledku odoslania sa zaznam nezmaze: operator najprv overi GitHub runy a az potom moze riesit konkretny zaznam. Tento zaznam nie je globalny CDB writer lock a ten nikdy nenahradza. Dvojklik ani timeout nesmu automaticky spustit druhy trening.
+Admin POST vytvori atomicky trvaly zaznam vo fronte `model-training-queue` v existujucom admin ulozisku. Worker ho moze prevziat iba raz, znovu overi lock a aktivne treningy a az potom odosle dispatch. Pri vypadku po prevzati sa poziadavka automaticky neopakuje; operator overi runy a konkretny claim. Stav starsi ako 30 minut zakazuje nove spustenie. Treningove vstupy a produkcny model stale chrania existujuce workflow brany.
 
-Po nasadeni over GET ako admin, odmietnutie GET/POST bez admin identity, blokovanie pri obsadenom locku a jeden kontrolovany dispatch po vyrieseni locku. Skutocny end-to-end dispatch z produkcnej administracie zatial nebol overeny.
+Po nasadeni treba overit synchronizaciu s nezavislym readbackom, GET/POST autorizaciu a skutocny trening. Samotny stav QUEUED znamena ulozenu poziadavku, nie hotovy model.
 
 ## Samostatne trenovanie kandidatov
 

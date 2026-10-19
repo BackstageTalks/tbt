@@ -2636,6 +2636,21 @@ def admin_model_training(req):
         return response({"error": "Tréningová služba je dočasne nedostupná."}, 503)
 
 
+@app.route(route="v1/internal/model-training-sync", methods=["POST"])
+def internal_model_training_sync(req):
+    from tbt.services import model_training
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    if len(req.get_body()) > 64000:
+        return response({"error": "payload_too_large"}, 413)
+    try:
+        return response(model_training.sync(req.get_json()))
+    except (ValueError, TypeError, KeyError):
+        return response({"error": "invalid_snapshot"}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "storage_unavailable"}, 503)
+
+
 @app.route(route="v1/admin/model-calibration", methods=["GET"])
 def admin_model_calibration(req):
     """Only verified admins can see private model-pair evaluation progress."""

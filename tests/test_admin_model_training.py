@@ -9,36 +9,39 @@ from tbt.services import model_training as m
 
 
 class TrainingTests(unittest.TestCase):
-    def test_busy_blocks_before_claim_or_dispatch(self):
-        with patch.object(m, "inspect", return_value={"can_start": False, "reason": "busy"}), patch.object(m, "github") as gh, patch.object(m, "_table") as table:
-            with self.assertRaises(m.TrainingBlocked):
-                m.start({}, "admin")
-            gh.assert_not_called()
+    def test_busy_blocks_before_claim(self):
+        with patch.object(m, "status", return_value={"can_start": False, "reason": "busy"}), patch.object(m, "_table") as table:
+            with self.assertRaises(m.TrainingBlocked): m.start({}, "admin")
             table.assert_not_called()
 
-    def test_duplicate_or_unavailable_storage_never_dispatches(self):
-        with patch.object(m, "inspect", return_value={"can_start": True, "base": "7"}), patch.object(m, "github", return_value={"sha": "a"}) as gh, patch.object(m, "_table") as table:
-            table.return_value.create_entity.side_effect = RuntimeError("already exists")
-            with self.assertRaises(m.TrainingBlocked):
-                m.start({}, "admin")
-            self.assertEqual(gh.call_count, 1)
-
-    def test_unknown_dispatch_retains_claim(self):
-        with patch.object(m, "inspect", return_value={"can_start": True, "base": "7"}), patch.object(m, "github", side_effect=[{"sha": "a"}, m.TrainingUnavailable("timeout")]), patch.object(m, "_table") as table:
-            with self.assertRaises(m.TrainingUnavailable):
-                m.start({}, "admin")
-            table.return_value.create_entity.assert_called_once()
-            table.return_value.delete_entity.assert_not_called()
+    def test_duplicate_or_storage_failure_blocks(self):
+        with patch.object(m, "status", return_value={"can_start": True, "base": "7"}), patch.object(m, "_table") as table:
+            table.return_value.create_entity.side_effect = RuntimeError("exists")
+            with self.assertRaises(m.TrainingBlocked): m.start({}, "admin")
 
     def test_client_cannot_choose_repository_or_promote(self):
         for payload in ({"repository": "other"}, {"promote": True}, {"profile": "unknown"}):
-            with self.assertRaises(ValueError):
-                m.start(payload, "admin")
+            with self.assertRaises(ValueError): m.start(payload, "admin")
 
-    def test_start_uses_fixed_workflow_main_and_selected_profile(self):
-        with patch.object(m, "inspect", return_value={"can_start": True, "base": "7"}), patch.object(m, "github", return_value={"sha": "a"}) as gh, patch.object(m, "_table"):
-            self.assertEqual(m.start({"profile": "standard"}, "admin")["state"], "DISPATCHED_NOT_VERIFIED")
-            self.assertEqual(gh.call_args.args[1], {"ref": "main", "inputs": {"training_profile": "standard"}})
+    def test_start_only_queues_never_calls_github(self):
+        with patch.object(m, "status", return_value={"can_start": True, "base": "7"}), patch.object(m, "_table") as table, patch.object(m, "github") as gh:
+            self.assertEqual(m.start({"profile": "standard"}, "admin")["state"], "QUEUED")
+            self.assertEqual(table.return_value.create_entity.call_args.args[0]["profile"], "standard")
+            gh.assert_not_called()
+
+    def test_claim_is_returned_only_once(self):
+        import json
+        records = {"request-7": {"base": "7", "profile": "standard"}}
+        def save(key, payload): records[key] = {"payload": json.dumps(payload)}
+        def create(entity):
+            key = entity["RowKey"]
+            if key in records: raise RuntimeError("exists")
+            records[key] = entity
+        with patch.object(m, "save", side_effect=save), patch.object(m, "row", side_effect=records.get), patch.object(m, "_table") as table:
+            table.return_value.create_entity.side_effect = create
+            payload = {"snapshot": {"base": "7", "can_start": True}, "claim": True}
+            self.assertEqual(m.sync(payload)["pending"]["profile"], "standard")
+            self.assertIsNone(m.sync(payload)["pending"])
 
     def test_lock_change_cannot_look_free(self):
         refs = iter([None, {"object": {"sha": "a"}}])

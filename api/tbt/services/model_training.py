@@ -21,7 +21,7 @@ class TrainingBlocked(RuntimeError):
 
 
 def github(path, payload=None, missing_ok=False):
-    token = os.getenv("BLINQ_TRAINING_GITHUB_TOKEN", "").strip()
+    token = os.getenv("BLINQ_TRAINING_DISPATCH_TOKEN" if payload is not None else "BLINQ_TRAINING_GITHUB_TOKEN", "").strip()
     if not token:
         raise TrainingUnavailable("Tréning nie je nakonfigurovaný na serveri.")
     req = Request("https://api.github.com/repos/" + path,
@@ -59,7 +59,7 @@ def inspect(read=github):
             "reason": "Tréning už beží alebo čaká." if busy else "Dátový zámok je obsadený. Po zlyhaní vyžaduje overenie vlastníka." if locked else "Pripravené na nový tréning."}
 
 
-def status():
+def collect_status():
     result = inspect()
     if result["runs"]:
         run = result["runs"][0]
@@ -79,24 +79,83 @@ def status():
     return result
 
 
+PARTITION = "model-training-queue"
+
+
+def row(key):
+    try:
+        return _table(UI_TABLE).get_entity(partition_key=PARTITION, row_key=key)
+    except KeyError:
+        return None
+    except Exception as exc:
+        if getattr(exc, "status_code", None) == 404:
+            return None
+        raise AdminStorageUnavailable("Training storage unavailable") from exc
+
+
+def save(key, payload):
+    try:
+        _table(UI_TABLE).upsert_entity({"PartitionKey": PARTITION, "RowKey": key,
+            "payload": json.dumps(payload, ensure_ascii=False)}, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Training storage unavailable") from exc
+
+
+def status():
+    stored = row("snapshot")
+    if not stored:
+        raise TrainingUnavailable("Čaká sa na prvú synchronizáciu tréningu.")
+    result = json.loads(stored["payload"])
+    age = (datetime.now(timezone.utc) - datetime.fromisoformat(result["observed_at"])).total_seconds()
+    if age < -60 or age > 1800:
+        result.update(can_start=False, reason="Stav je neaktuálny. Čaká sa na synchronizáciu.")
+    if row("request-" + result["base"]):
+        result.update(can_start=False, reason="Požiadavka bola uložená. Čaká sa na potvrdenie behu; neposielaj ju znova.")
+        claim = row("claim-" + result["base"])
+        if claim and (datetime.now(timezone.utc) - datetime.fromisoformat(claim["created_at"])).total_seconds() > 600:
+            result["reason"] = "Worker prevzal požiadavku, ale beh ešte nie je potvrdený. Vyžaduje sa kontrola; ďalší tréning je blokovaný."
+    return result
+
+
 def start(payload, actor):
     if not isinstance(payload, dict) or set(payload) - {"profile"}:
         raise ValueError("Neplatná požiadavka na tréning.")
     profile = payload.get("profile", "top-7.2.1")
     if profile not in {"standard", "top-7.2.1"}:
         raise ValueError("Neplatný tréningový profil.")
-    current = inspect()
+    current = status()
     if not current["can_start"]:
         raise TrainingBlocked(current["reason"])
-    sha = github(f"{APP}/commits/main")["sha"]
-    # Atomic durable claim shared by all server workers. Retain on ambiguous
-    # dispatch: never duplicate a potentially accepted request after timeout.
     try:
-        _table(UI_TABLE).create_entity({"PartitionKey": "model-training-dispatch",
-            "RowKey": current["base"], "actor": str(actor), "profile": profile,
-            "observed_sha": sha, "created_at": datetime.now(timezone.utc).isoformat()})
+        _table(UI_TABLE).create_entity({"PartitionKey": PARTITION,
+            "RowKey": "request-" + current["base"], "actor": str(actor),
+            "profile": profile, "base": current["base"],
+            "created_at": datetime.now(timezone.utc).isoformat()})
     except Exception as exc:
-        raise TrainingBlocked("Požiadavku nemožno bezpečne rezervovať. Môže už byť odoslaná; obnov stav alebo skontroluj úložisko.") from exc
-    github(f"{APP}/actions/workflows/{WORKFLOW}/dispatches", {"ref": "main", "inputs": {"training_profile": profile}})
-    return {"state": "DISPATCHED_NOT_VERIFIED", "observed_sha": sha,
-            "message": "Požiadavka odoslaná. Obnov stav pre potvrdenie behu a jeho verzie."}
+        raise TrainingBlocked("Požiadavka už existuje alebo úložisko nie je dostupné. Obnov stav.") from exc
+    return {"state": "QUEUED", "message": "Požiadavka uložená. Worker ju prevezme pri najbližšej kontrole; obnov stav o niekoľko minút."}
+
+
+def sync(payload):
+    if not isinstance(payload, dict) or not isinstance(payload.get("snapshot"), dict):
+        raise ValueError("Invalid worker snapshot")
+    snapshot = payload["snapshot"]
+    if not isinstance(snapshot.get("can_start"), bool) or not str(snapshot.get("base", "")).isdigit() and snapshot.get("base") != "initial":
+        raise ValueError("Invalid snapshot state")
+    snapshot["observed_at"] = datetime.now(timezone.utc).isoformat()
+    save("snapshot", snapshot)
+    # Independent durable readback, not merely an acknowledged write.
+    if json.loads(row("snapshot")["payload"]) != snapshot:
+        raise AdminStorageUnavailable("Snapshot readback mismatch")
+    request = row("request-" + snapshot["base"])
+    pending = None
+    if request and snapshot["can_start"] and payload.get("claim") is True:
+        try:
+            _table(UI_TABLE).create_entity({"PartitionKey": PARTITION,
+                "RowKey": "claim-" + snapshot["base"],
+                "created_at": datetime.now(timezone.utc).isoformat()})
+        except Exception:
+            # A prior claim or unknown store result must never redispatch.
+            return {"stored": True, "pending": None, "claim_blocked": True}
+        pending = {"base": request["base"], "profile": request["profile"]}
+    return {"stored": True, "pending": pending}
