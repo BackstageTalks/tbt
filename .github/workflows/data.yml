@@ -485,6 +485,16 @@ jobs:
         if: ${{ success() && env.MODE == 'statistics' && (inputs.hourly_autofill || env.BLINQ_TARGETED_STATISTICS == 'true') }}
         run: python scripts/verify_targeted_statistics.py --data-repository "$TBT_DATA_REPOSITORY"
 
+      - name: Summarize independently verified adaptive hourly CDB value
+        if: ${{ success() && env.MODE == 'statistics' && inputs.hourly_autofill == true }}
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
+        run: |
+          set -euo pipefail
+          python scripts/summarize_hourly_adaptive_cdb.py \
+            --run-id "$GITHUB_RUN_ID" --github-step-summary "$GITHUB_STEP_SUMMARY"
+
       - name: Independently verify every event extras CDB publication
         if: ${{ success() && env.MODE == 'extras' }}
         run: python scripts/verify_tennisapi_extras.py --data-repository "$TBT_DATA_REPOSITORY"
@@ -678,6 +688,8 @@ jobs:
             .cache/tbt/history/download_progress.json
             .cache/tbt/history/statistics_gap_plan.json
             .cache/tbt/history/statistics_readback.json
+            .cache/tbt/history/adaptive_cdb_evidence.json
+            .cache/tbt/history/adaptive_cdb_evidence.md
             .cache/tbt/history/extras_expected.json
             .cache/tbt/history/extras_readback.json
           if-no-files-found: warn
