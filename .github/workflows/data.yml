@@ -489,7 +489,6 @@ jobs:
         if: ${{ success() && env.MODE == 'statistics' && inputs.hourly_autofill == true }}
         env:
           GITHUB_RUN_ID: ${{ github.run_id }}
-          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
         run: |
           set -euo pipefail
           python scripts/summarize_hourly_adaptive_cdb.py \
