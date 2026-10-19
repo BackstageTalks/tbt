@@ -147,9 +147,10 @@ class TennisEnsemble:
         # ~million-row pandas training frame (including metadata columns) used
         # substantial extra RAM on the protected GitHub runner.
         left = self._matrix(train)
-        right = self._matrix(swap_frame(train))
-        x = np.concatenate((left, right), axis=0)
-        del left, right
+        x = np.empty((2 * len(train), left.shape[1]), dtype=left.dtype)
+        x[:len(train)] = left
+        del left
+        x[len(train):] = self._matrix(swap_frame(train))
         target = train.target.to_numpy(dtype=int)
         y = np.concatenate((target, 1 - target), axis=0)
         self.linear.fit(x, y)
@@ -246,9 +247,10 @@ class TennisEnsemble:
         # ~million-row pandas training frame (including metadata columns) used
         # substantial extra RAM on the protected GitHub runner.
         left = self._matrix(train)
-        right = self._matrix(swap_frame(train))
-        x = np.concatenate((left, right), axis=0)
-        del left, right
+        x = np.empty((2 * len(train), left.shape[1]), dtype=left.dtype)
+        x[:len(train)] = left
+        del left
+        x[len(train):] = self._matrix(swap_frame(train))
         target = train.target.to_numpy(dtype=int)
         y = np.concatenate((target, 1 - target), axis=0)
         self.linear.fit(x, y)
