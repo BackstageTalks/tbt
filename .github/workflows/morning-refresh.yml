@@ -174,11 +174,18 @@ jobs:
         env:
           DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
           TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+          # Fail-safe: known 7.2.1 candidate fit failure must not block morning CDB.
+          MORNING_CANDIDATE_ENABLED: ${{ vars.BLINQ_MORNING_CANDIDATE_ENABLED || 'false' }}
         run: |
           set -euo pipefail
           # Candidate training is OPTIONAL and isolated from morning publication.
           # Do not turn missing/stale metadata or training dispatch errors into a
           # failed, already-successfully-published morning prediction refresh.
+          # Explicitly opt in only after isolated 7.2.1 training passes.
+          if [[ "$MORNING_CANDIDATE_ENABLED" != "true" ]]; then
+            echo "::notice::Morning model calibration held for separate verification; serving champion retained."
+            exit 0
+          fi
           if [[ -z "${DATA_GH_TOKEN:-}" ]]; then
             echo "::warning::Candidate training deferred: private data token unavailable."
             exit 0
