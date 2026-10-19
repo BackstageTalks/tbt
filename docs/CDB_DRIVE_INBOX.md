@@ -24,7 +24,7 @@ or train/publish a model.
 
 ## Pipeline
 
-1. Manually dispatched with `workflow_dispatch`; the repository contract requires recurring invocations to be configured in the existing external scheduler, not GitHub `schedule`. Automated cadence is not yet connected.
+1. Reuses the existing externally dispatched Drive audit bridge; only the 02:xx and 14:xx UTC slots dispatch this workflow once per slot. Manual `workflow_dispatch` remains available. No GitHub internal cron.
 2. Drive reader downloads bounded source content (100 files, max 64 MiB
    each and 256 MiB total) through `BLINQ_DRIVE_READER_JSON`. All input
    remains ephemeral on the runner. Its source manifests are not posted to
@@ -53,7 +53,7 @@ or train/publish a model.
 
 ## Tests and operational controls
 
-`pytest tests/test_cdb_inbox_adapter.py -q`
+`pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_scheduler_bridge.py -q`
 
 This tests normalization, duplicate handling, ZIP size limits, missing
 mandatory columns, strict metadata corroboration and conflict quarantine.
