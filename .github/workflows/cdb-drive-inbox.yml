@@ -6,6 +6,7 @@ name: CDB Drive Inbox - guarded external file import
     paths:
       - scripts/cdb_inbox_*.py
       - tests/test_cdb_inbox_adapter.py
+      - tests/test_cdb_inbox_drive.py
       - tests/test_cdb_inbox_scheduler_bridge.py
       - tests/test_cdb_inbox_integration.py
       - .github/workflows/cdb-drive-inbox.yml
@@ -39,7 +40,7 @@ jobs:
           PYTHONPATH: .:api:scripts
         run: |
           python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py
-          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_integration.py -q
+          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_integration.py -q
 
   guarded-import:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
@@ -51,7 +52,7 @@ jobs:
       BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
       CDB_REPO: BackstageTalks/tbt-data
       CDB_TAG: tbt-data-v1
-      INBOX_FOLDER_ID: 1A0qlX8vXjDwcZYP9fSb8aFHjd9aNcWPJ
+      INBOX_FOLDER_ID: 1jzdzztz8cXquO8VDswqE19PHupQau-xM
       PYTHONPATH: api:scripts
     steps:
       - uses: actions/checkout@v4
@@ -66,10 +67,36 @@ jobs:
           test -n "$GH_TOKEN" || { echo BLOCKED_PRIVATE_CDB_TOKEN_MISSING; exit 1; }
           test -n "$BLINQ_DRIVE_READER_JSON" || { echo BLOCKED_DRIVE_READER_MISSING; exit 1; }
           gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" --jq '.tag_name' > /dev/null
-      - name: Read bounded Drive Inbox with hashes
+      - name: Restore private Drive-wide import progress
+        shell: bash
         run: |
+          set -euo pipefail
+          mkdir -p work/private-state
+          python - <<'PY'
+          import base64, gzip, json, os, subprocess
+          from pathlib import Path
+          uri="repos/"+os.environ["CDB_REPO"]+"/contents/audit/cdb-inbox-progress.json.gz?ref=main"
+          result=subprocess.run(["gh","api",uri],capture_output=True,text=True)
+          if result.returncode:
+              if "HTTP 404" not in result.stderr:
+                  raise SystemExit("Private import progress unavailable; refusing silent reset")
+              print("CDB_INBOX_PROGRESS_BOOTSTRAP_FIRST_RUN")
+          else:
+              payload=json.loads(result.stdout)
+              raw=gzip.decompress(base64.b64decode(payload["content"]))
+              if not raw:
+                  raise SystemExit("Empty private import checkpoint")
+              Path("work/private-state/current.json").write_bytes(raw)
+              Path("work/private-state/original-sha").write_text(payload["sha"])
+              print("CDB_INBOX_PRIVATE_PROGRESS_RESTORED")
+          PY
+      - name: Read all BlinQ_data descendants; ingest bounded new/changed files
+        run: |
+          set -euo pipefail
           mkdir -p work/input
-          python scripts/cdb_inbox_drive.py --folder-id "$INBOX_FOLDER_ID" --output work/input
+          python scripts/cdb_inbox_drive.py --folder-id "$INBOX_FOLDER_ID" \
+            --output work/input --state-file work/private-state/current.json \
+            --next-state work/private-state/next.json --max-files 100
           python scripts/cdb_inbox_adapter.py --input-dir work/input --out-dir work/source --max-files 100
       - name: Avoid downloading CDB for empty or entirely unsupported sources
         id: source
@@ -263,6 +290,41 @@ jobs:
           if result["added_values"]!=local["added_values"] or result["enriched_matches"]!=local["enriched_matches"]:
               raise SystemExit("Remote CDB readback count mismatch")
           print("CDB_PRODUCTION_READBACK_VERIFIED",result["enriched_matches"],result["added_values"],"overwritten",result["existing_values_overwritten"])
+          PY
+      - name: Commit private ingestion progress only after successful guarded work
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64, gzip, json, os, subprocess
+          from pathlib import Path
+          current=Path("work/private-state/current.json")
+          next_file=Path("work/private-state/next.json")
+          if not next_file.is_file():
+              raise SystemExit("Missing full-tree intake progress")
+          previous=current.read_bytes() if current.is_file() else b""
+          updated=next_file.read_bytes()
+          if previous == updated:
+              print("CDB_INBOX_PROGRESS_UNCHANGED")
+              raise SystemExit(0)
+          resource="repos/"+os.environ["CDB_REPO"]+"/contents/audit/cdb-inbox-progress.json.gz"
+          body={"message":"chore(cdb): checkpoint BlinQ_data file intake",
+                "branch":"main",
+                "content":base64.b64encode(gzip.compress(updated,mtime=0)).decode("ascii")}
+          command=["gh","api","--method","PUT",resource,"--input","-"]
+          sha_path=Path("work/private-state/original-sha")
+          if sha_path.is_file():
+              body["sha"]=sha_path.read_text().strip()
+          result=subprocess.run(command,input=json.dumps(body),capture_output=True,text=True)
+          if result.returncode:
+              raise SystemExit("Private CDB inbox checkpoint CAS update failed")
+          readback=subprocess.run(["gh","api",resource+"?ref=main"],
+                                  capture_output=True,text=True,check=True)
+          remote=gzip.decompress(base64.b64decode(json.loads(readback.stdout)["content"]))
+          if remote != updated:
+              raise SystemExit("Private checkpoint readback mismatch")
+          print("CDB_INBOX_PROGRESS_PRIVATE_READBACK_VERIFIED")
           PY
       - name: Always release global writer if owned
         if: always()
