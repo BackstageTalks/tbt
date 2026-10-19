@@ -8,6 +8,7 @@ on:
       - api/tbt/services/training.py
       - tests/test_calibration_memory_bounded.py
       - .github/workflows/calibration-resource-checks.yml
+      - .github/workflows/one-shot-20261020-post-morning-calibration.yml
   push:
     branches: [main]
     paths:
@@ -16,6 +17,7 @@ on:
       - api/tbt/services/training.py
       - tests/test_calibration_memory_bounded.py
       - .github/workflows/calibration-resource-checks.yml
+      - .github/workflows/one-shot-20261020-post-morning-calibration.yml
 
 permissions:
   contents: read
@@ -52,6 +54,7 @@ jobs:
           for name in (
               ".github/workflows/calibration-resource-checks.yml",
               ".github/workflows/protected-frozen-cdb-candidate.yml",
+              ".github/workflows/one-shot-20261020-post-morning-calibration.yml",
           ):
               data = yaml.safe_load(Path(name).read_text(encoding="utf-8"))
               assert isinstance(data.get("jobs"), dict)
