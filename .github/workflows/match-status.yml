@@ -1,4 +1,4 @@
-name: Hourly prediction match status
+name: Prediction fixture schedule and match status
 
 on:
   workflow_dispatch:
