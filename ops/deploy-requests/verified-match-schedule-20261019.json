@@ -1,0 +1,8 @@
+{
+  "kind": "verified-match-schedule-production-release",
+  "date": "2026-10-19",
+  "source_pr": 867,
+  "source_commit": "d59b5201ae0008ea8283b1ad5ece28fa8fe8ab36",
+  "purpose": "Deploy presentation-only schedule correction and evidence-gated STARTED",
+  "guard": "normal CI and production lock; no provider or CDB bypass"
+}
