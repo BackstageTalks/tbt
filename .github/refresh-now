@@ -1,1 +1,1 @@
-[refresh-now] [current-refresh] 2026-10-11: explicit on-demand BlinQ prediction publication recovery. Preserve existing morning run and production writer locks.
+[refresh-now] 2026-10-19: retry production prediction generation after verified PropLine timeout isolation fix (PR #865, main 505e7952cd0424e81a8d436dd4671034982a68a5). Preserve API budget, canonical CDB lock, and publication validation.
