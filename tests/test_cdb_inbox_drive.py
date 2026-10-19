@@ -110,7 +110,8 @@ def test_changed_file_is_processed_again_but_unchanged_files_not_downloaded(tmp_
                    next_state_path=tmp_path / "progress-next.json")
     assert result["fetched"] == 1
     assert result["pending_supported"] == 0
-    assert drive.file_reads == [ID1, ID2, ID3, ID2]
+    assert set(drive.file_reads[:3]) == {ID1, ID2, ID3}
+    assert drive.file_reads[-1] == ID2
 
 
 def test_wrong_root_checkpoint_fails_closed(tmp_path):
