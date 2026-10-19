@@ -2633,13 +2633,17 @@
     const scheduled=row?.scheduled_at||row?.date;
     const tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
     const startsAt=Date.parse(String(scheduled||''));
-    const started=Number.isFinite(startsAt)&&startsAt<=Date.now();
-    // Daily offers keep only the yellow STARTED marker. Settlement is visible
-    // exclusively in Results, not on the homepage or SEE ALL.
+    // Passing the old scheduled time is NOT evidence of a real kickoff.
+    // The server only marks started after a fresh, identity-verified provider
+    // observation. A delayed match is never marked STARTED from the clock.
+    const started=row?.runtime_match_started===true;
+    const uncertain=Number.isFinite(startsAt)&&startsAt<=Date.now()&&!started;
     const classes=[active?'hub-row-active':'',started?'hub-row-started':''].filter(Boolean).join(' ');
     const rowClass=classes?` class="${classes}"`:'';
     const timeHtml=started
       ?`<span class="hub-time-stack"><strong>${escapeHtml(fmtTime(scheduled))}</strong><small>${escapeHtml(fmtCompactDate(scheduled))}</small><em class="hub-offer-status is-started">${escapeHtml(lcopy('STARTED','ZAČATÉ','ZAHÁJENO'))}</em></span>`
+      :uncertain
+      ?`<span class="hub-time-stack"><strong>${escapeHtml(fmtTime(scheduled))}</strong><small>${escapeHtml(fmtCompactDate(scheduled))}</small><em class="hub-offer-status">${escapeHtml(lcopy('TIME UNCONFIRMED','ČAS SA OVERUJE','ČAS SE OVĚŘUJE'))}</em></span>`
       :timeDateHtml(scheduled);
     const leading=`<td class="hub-rank">${index+1}</td><td class="hub-time">${timeHtml}</td><td class="hub-tournament-cell">${tournament}</td><td class="hub-match-cell">${dailyHubMatch(row)}</td>`;
     if(sourceTab==='games'||sourceTab==='sets'){
