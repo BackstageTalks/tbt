@@ -91,7 +91,7 @@ def test_stage_requires_exact_day_tournament_winner_and_extra_evidence(tmp_path,
             "api_requests": 0, "counts": {"identity_linked": 3}, "source_rows": 3}))
         def row(mid, proof):
             return {"schema": 1, "import_ready": True, "match_id": mid,
-                    "canonical": {"tour": "atp"},
+                    "canonical": {"tour": "atp", "scheduled_date_utc": "2026-10-17"},
                     "incoming_stats": {"p1_aces": 7},
                     "sources": [{"source": "sackmann:" + sample_file.name, "evidence": proof}]}
         rows = [
