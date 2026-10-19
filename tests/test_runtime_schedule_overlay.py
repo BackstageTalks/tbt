@@ -56,7 +56,9 @@ def test_mismatched_players_or_stale_evidence_fail_closed():
 
 def test_explicit_live_proof_is_required_for_started_marker():
     now = datetime(2026, 10, 19, 9, 30, tzinfo=timezone.utc)
-    live = verified_schedule_observation(row(now), event(now, "inprogress"), now)
+    live_event = event(now, "inprogress")
+    live_event["startTimestamp"] = int((now - timedelta(minutes=5)).timestamp())
+    live = verified_schedule_observation(row(now), live_event, now)
     assert live["status"] == "live"
     feed = {"top_daily_picks": [row(now)]}
     apply_verified_schedule_overlay(feed, {"faria-1": live}, now=now)
