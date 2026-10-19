@@ -108,7 +108,7 @@ def fetch(folder_id: str, output: Path) -> dict:
                 "production_mutated": False, "api_requests": 0,
                 "files_seen": len(files), "downloaded_bytes": total_bytes,
                 "files": entries}
-    (output / "drive_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (output.parent / "drive_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
 
 def main():
