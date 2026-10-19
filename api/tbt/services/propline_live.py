@@ -392,6 +392,11 @@ def discover_propline_fallback(
     # and the finite maximum provider-day allowance bound this sweep.
     candidates = matched if int(max_events) < 0 else matched[:max(0, int(max_events))]
     report["events_limited_out"] = len(matched) - len(candidates)
+    # PropLine is strictly optional. A sustained secondary-provider outage
+    # must not spend 20s * N on the entire fixture board and starve the
+    # authoritative RapidAPI prediction publication. One isolated timeout
+    # is tolerated; three consecutive transport failures open the breaker.
+    consecutive_transport_errors = 0
     for row, event in candidates:
         rapid_id, prop_id = str(row["event_id"]), str(event["id"])
         missing = set(("match_winner", "aces", "double_faults", "games", "sets")) - existing.get(rapid_id, set())
@@ -410,6 +415,7 @@ def discover_propline_fallback(
             wanted = [key for key in KEYS if key in available and METRIC[key] in missing]
             if not wanted:
                 report["events_skipped_no_target_market"] += 1
+                consecutive_transport_errors = 0
                 continue
             report["events_with_any_target_market"] += 1
             payload = client.get(f"/sports/tennis/events/{prop_id}/odds",
@@ -464,8 +470,16 @@ def discover_propline_fallback(
                                     "line": offer["line"], "over": offer["over"],
                                     "under": offer["under"],
                                 })
-        except (RuntimeError, ValueError):
+            consecutive_transport_errors = 0
+        except (RuntimeError, ValueError) as exc:
             report["errors"] += 1
+            if str(exc) == "PropLine request failed":
+                consecutive_transport_errors += 1
+                if consecutive_transport_errors >= 3:
+                    report["stopped_on_transport_outage"] = True
+                    break
+            else:
+                consecutive_transport_errors = 0
         if client.remaining is not None and client.remaining <= client.min_remaining:
             report["stopped_on_quota_reserve"] = True
             break

@@ -168,19 +168,40 @@ jobs:
 
           echo "Morning refresh completed successfully in child run $final_child."
 
-      - name: Dispatch guarded model promotion gate when enough unseen data exists
+      - name: Dispatch eligible protected candidate only (never promote)
         if: steps.daily_guard.outputs.dispatch == 'true'
         shell: bash
         env:
           DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
           TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+          # Fail-safe: known 7.2.1 candidate fit failure must not block morning CDB.
+          MORNING_CANDIDATE_ENABLED: ${{ vars.BLINQ_MORNING_CANDIDATE_ENABLED || 'false' }}
         run: |
           set -euo pipefail
-          test -n "$DATA_GH_TOKEN" || { echo "::error::Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          # Candidate training is OPTIONAL and isolated from morning publication.
+          # Do not turn missing/stale metadata or training dispatch errors into a
+          # failed, already-successfully-published morning prediction refresh.
+          # Explicitly opt in only after isolated 7.2.1 training passes.
+          if [[ "$MORNING_CANDIDATE_ENABLED" != "true" ]]; then
+            echo "::notice::Morning model calibration held for separate verification; serving champion retained."
+            exit 0
+          fi
+          if [[ -z "${DATA_GH_TOKEN:-}" ]]; then
+            echo "::warning::Candidate training deferred: private data token unavailable."
+            exit 0
+          fi
           mkdir -p .cache/tbt/morning
           readiness=".cache/tbt/morning/model-readiness.json"
-          GH_TOKEN="$DATA_GH_TOKEN" gh api "repos/$TBT_DATA_REPOSITORY/contents/audit/model-promotion-readiness-latest.json" \
-            --jq .content | base64 -d > "$readiness"
+          if ! GH_TOKEN="$DATA_GH_TOKEN" gh api \
+            "repos/$TBT_DATA_REPOSITORY/contents/audit/model-promotion-readiness-latest.json" \
+            --jq .content | base64 -d > "$readiness"; then
+            echo "::warning::Candidate training deferred: readiness evidence unavailable."
+            exit 0
+          fi
+          if ! jq -e 'type == "object"' "$readiness" >/dev/null; then
+            echo "::warning::Candidate training deferred: invalid readiness evidence."
+            exit 0
+          fi
 
           ready_metric="$(jq -r '.ready_for_metric_gate // false' "$readiness")"
           ready_retrain="$(jq -r '.ready_for_retrain // false' "$readiness")"
@@ -188,22 +209,25 @@ jobs:
           days="$(jq -r '.eligible_unseen_days // 0' "$readiness")"
           echo "Model gate readiness: metric=$ready_metric retrain=$ready_retrain unseen_rows=$rows unseen_days=$days"
 
-          if [[ "$ready_metric" != "true" || "$rows" -lt 200 || "$days" -lt 3 ]]; then
-            echo "::notice::Model promotion gate deferred; current champion remains unchanged."
+          if [[ "$ready_metric" != "true" || "$ready_retrain" != "true" ||
+                ! "$rows" =~ ^[0-9]+$ || ! "$days" =~ ^[0-9]+$ ]] ||
+             (( rows < 200 || days < 3 )); then
+            echo "::notice::Protected candidate training deferred; serving champion remains unchanged."
             exit 0
           fi
 
-          # 1000 rows remain the recommended retrain target, but the governed
-          # unseen validation gate opens at 200 rows spanning at least 3 UTC days.
-          # Training itself performs the fail-closed leakage audit and the strict
-          # candidate-vs-production + candidate-vs-Elo holdout gate, including
-          # separate ATP/WTA non-regression checks. No provider calls are needed.
-          gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f mode=train \
-            -f max_requests=1 \
-            -f promote=true
-
-          echo "::notice::Guarded model train/promotion evaluation dispatched."
+          # The generic data.yml train path rejects training and promote=true.
+          # Only the protected workflow establishes the immutable input backup,
+          # leakage audit and isolated champion restore before fitting a model.
+          # Never promote from the morning job. This is a separate run, not an
+          # assertion that model evaluation/promotion has succeeded.
+          if gh workflow run protected-frozen-cdb-candidate.yml \
+            --repo "$GITHUB_REPOSITORY" --ref main \
+            -f training_profile=top-7.2.1; then
+            echo "::notice::Isolated protected candidate dispatched; no model promoted."
+          else
+            echo "::warning::Protected candidate dispatch failed; morning predictions remain valid."
+          fi
 
       - name: Upload morning supervision evidence
         if: always() && steps.daily_guard.outputs.dispatch == 'true'
