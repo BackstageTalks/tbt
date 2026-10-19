@@ -63,7 +63,7 @@ def test_upcoming_observation_is_id_matched_and_does_not_touch_settlement():
                  "status": {"type": "notstarted"},
                  "startTimestamp": int((now + timedelta(hours=6)).timestamp())}
             ]}
-    result = scan_match_statuses({"top_daily_picks": [fixture]}, Provider(), now=now)
+    result = scan_match_statuses({"top_daily_picks": [fixture]}, Provider(), now=now, max_wall_seconds=22.0)
     assert result["prestart_checked"] == 1
     assert result["prestart_verified"] == 0
     assert result["schedule_updates"] == {}
@@ -87,12 +87,12 @@ def test_prestart_worker_rechecks_verified_shift_without_marking_started():
                 "startTimestamp": int((now + timedelta(hours=4)).timestamp())
             }]}
     client = Provider()
-    initial = scan_match_statuses({"top_daily_picks": [fixture]}, client, now=now)
+    initial = scan_match_statuses({"top_daily_picks": [fixture]}, client, now=now, max_wall_seconds=22.0)
     assert initial["prestart_verified"] == 1
     assert initial["due"] == 0
     assert initial["schedule_updates"]["faria-4"]["status"] == "scheduled"
     updated = scan_match_statuses({"top_daily_picks": [fixture]}, client, initial,
-                                   now=now + timedelta(hours=2))
+                                   now=now + timedelta(hours=2), max_wall_seconds=22.0)
     assert updated["due"] == 0
     assert updated["statuses"] == {}
     assert updated["prestart_verified"] == 1
