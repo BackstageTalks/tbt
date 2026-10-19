@@ -1023,7 +1023,10 @@ def _second_set_outcome(row: dict[str, Any], event: dict[str, Any]) -> str:
 
 
 
-_SCHEDULE_FRESHNESS = timedelta(hours=2)
+# A confirmed fixture start-time correction is presentation evidence and can
+# outlive a single worker pass. A LIVE marker needs much fresher evidence.
+_SCHEDULE_FRESHNESS = timedelta(hours=24)
+_LIVE_FRESHNESS = timedelta(minutes=75)
 _SCHEDULE_MAX_MOVE = timedelta(days=14)
 
 
@@ -1101,9 +1104,14 @@ def _fresh_verified_schedule(
         return None
     if value.get("status") not in {"scheduled", "live", "finished"}:
         return None
+    # Retain the verified rescheduled time for a day, but never keep calling
+    # a match LIVE just because a previous poll saw it in progress.
+    status = value["status"]
+    if status == "live" and now - checked > _LIVE_FRESHNESS:
+        status = "scheduled"
     return {
         "scheduled_at": scheduled.isoformat(),
-        "status": value["status"],
+        "status": status,
         "checked_at": checked.isoformat(),
         "source": "tennis_api_pro",
     }
@@ -1337,6 +1345,59 @@ def scan_match_statuses(
                 # the tennis provider. Preserve every pending fixture and exit
                 # cleanly instead of retrying the same exhausted reservation.
                 budget_paused = True
+
+    # The same 30-minute settlement worker also reconciles fixture times
+    # BEFORE their original start. Previously the daily provider route was
+    # queried only for overdue matches, so a 11:00 -> 15:00 delay could remain
+    # invisible through the morning. One bounded calendar pass is shared with
+    # this worker's existing RapidAPI budget; it never writes issued picks.
+    prestart_candidates = []
+    for eid, row in rows.items():
+        if eid in statuses or not _player_id(row, "player1") or not _player_id(row, "player2"):
+            continue
+        previous_time = schedule_updates.get(eid) or {}
+        starts = _parse_time(previous_time.get("scheduled_at") or row.get("scheduled_at") or row.get("date"))
+        if starts is not None and now <= starts <= now + timedelta(hours=8):
+            prestart_candidates.append((starts, eid, row))
+    prestart_candidates.sort(key=lambda item: (item[0], item[1]))
+    prestart_checked = prestart_verified = prestart_attempts = 0
+    if prestart_candidates and callable(daily_method) and not budget_paused:
+        first_day = prestart_candidates[0][0].date()
+        day_candidates = [(eid, row) for starts, eid, row in prestart_candidates
+                          if starts.date() == first_day]
+        # Leave time for results reconciliation and durable save/readback.
+        if deadline is None or time.monotonic() + 8.0 < deadline:
+            try:
+                prestart_attempts = 1
+                nominal_requests += 1
+                try:
+                    day_payload = daily_method(
+                        first_day,
+                        target_event_ids={eid for eid, _ in day_candidates},
+                        max_category_requests=3,
+                    )
+                except TypeError:
+                    # Legacy test/provider compatibility; the production
+                    # provider accepts both the target and the hard cap.
+                    day_payload = daily_method(first_day)
+                candidates_by_id = {eid: row for eid, row in day_candidates}
+                prestart_checked = len(day_candidates)
+                for event in _provider_rows(day_payload):
+                    eid = _provider_event_id(event)
+                    row = candidates_by_id.get(eid)
+                    if row is None:
+                        continue
+                    before = schedule_updates.get(eid)
+                    observe(eid, row, event)
+                    if schedule_updates.get(eid) is not before:
+                        prestart_verified += 1
+            except Exception as exc:
+                # A calendar outage must not block finished-match settlement.
+                # Shared quota exhaustion must always stop new provider calls.
+                code = _provider_error_code(exc)
+                provider_errors[code] = provider_errors.get(code, 0) + 1
+                if type(exc).__name__ in {"SharedBudgetExhausted", "SharedBudgetUnavailable"}:
+                    budget_paused = True
 
     checked = skipped_live = successful_history = matched_events = 0
     newly_resolved = consecutive_errors = near_attempts = unmatched = 0
@@ -1750,4 +1811,7 @@ def scan_match_statuses(
         "schedule_updates": schedule_updates,
         "schedule_verified": len(schedule_updates),
         "schedule_observations_this_run": schedule_verified_this_run,
+        "prestart_checked": prestart_checked,
+        "prestart_verified": prestart_verified,
+        "prestart_attempts": prestart_attempts,
     }
