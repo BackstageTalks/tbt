@@ -33,6 +33,8 @@ def test_optional_gate_error_does_not_invalidate_paid_refresh():
     assert "Protected candidate dispatch failed; morning predictions remain valid." in WORKFLOW
     assert "serving champion remains unchanged" in WORKFLOW
     assert "if: steps.daily_guard.outputs.dispatch == 'true'" in WORKFLOW
+    assert "vars.BLINQ_MORNING_CANDIDATE_ENABLED || 'false'" in WORKFLOW
+    assert 'MORNING_CANDIDATE_ENABLED" != "true"' in WORKFLOW
 
 
 def test_propline_timeout_recovery_is_present_before_morning_schedule():
