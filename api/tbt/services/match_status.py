@@ -1350,59 +1350,6 @@ def scan_match_statuses(
                 # cleanly instead of retrying the same exhausted reservation.
                 budget_paused = True
 
-    # The same 30-minute settlement worker also reconciles fixture times
-    # BEFORE their original start. Previously the daily provider route was
-    # queried only for overdue matches, so a 11:00 -> 15:00 delay could remain
-    # invisible through the morning. One bounded calendar pass is shared with
-    # this worker's existing RapidAPI budget; it never writes issued picks.
-    prestart_candidates = []
-    for eid, row in rows.items():
-        if eid in statuses or not _player_id(row, "player1") or not _player_id(row, "player2"):
-            continue
-        previous_time = schedule_updates.get(eid) or {}
-        starts = _parse_time(previous_time.get("scheduled_at") or row.get("scheduled_at") or row.get("date"))
-        if starts is not None and now <= starts <= now + timedelta(hours=8):
-            prestart_candidates.append((starts, eid, row))
-    prestart_candidates.sort(key=lambda item: (item[0], item[1]))
-    prestart_checked = prestart_verified = prestart_attempts = 0
-    if prestart_candidates and callable(daily_method) and not budget_paused:
-        first_day = prestart_candidates[0][0].date()
-        day_candidates = [(eid, row) for starts, eid, row in prestart_candidates
-                          if starts.date() == first_day]
-        # Leave time for results reconciliation and durable save/readback.
-        if deadline is None or time.monotonic() + 8.0 < deadline:
-            try:
-                prestart_attempts = 1
-                nominal_requests += 1
-                try:
-                    day_payload = daily_method(
-                        first_day,
-                        target_event_ids={eid for eid, _ in day_candidates},
-                        max_category_requests=3,
-                    )
-                except TypeError:
-                    # Legacy test/provider compatibility; the production
-                    # provider accepts both the target and the hard cap.
-                    day_payload = daily_method(first_day)
-                candidates_by_id = {eid: row for eid, row in day_candidates}
-                prestart_checked = len(day_candidates)
-                for event in _provider_rows(day_payload):
-                    eid = _provider_event_id(event)
-                    row = candidates_by_id.get(eid)
-                    if row is None:
-                        continue
-                    before = schedule_updates.get(eid)
-                    observe(eid, row, event)
-                    if schedule_updates.get(eid) is not before:
-                        prestart_verified += 1
-            except Exception as exc:
-                # A calendar outage must not block finished-match settlement.
-                # Shared quota exhaustion must always stop new provider calls.
-                code = _provider_error_code(exc)
-                provider_errors[code] = provider_errors.get(code, 0) + 1
-                if type(exc).__name__ in {"SharedBudgetExhausted", "SharedBudgetUnavailable"}:
-                    budget_paused = True
-
     checked = skipped_live = successful_history = matched_events = 0
     newly_resolved = consecutive_errors = near_attempts = unmatched = 0
     daily_attempts = daily_matches = 0
@@ -1715,10 +1662,10 @@ def scan_match_statuses(
                 "checked_at": now.isoformat(),
             }
 
-    # The settlement scan already cached exact daily calendars. Reuse those
-    # results for future matches at zero additional provider cost. If none was
-    # fetched, spend a bounded existing-budget lookup on the current day so
-    # postponements become visible BEFORE the old kickoff time passes.
+    # Reuse settlement calendars for the public, issued prediction sections.
+    # This one shared, bounded pass also verifies fixture times BEFORE kickoff:
+    # never poll generic tournament-board events that are not on the site.
+    prestart_checked = prestart_verified = prestart_attempts = 0
     if callable(daily_method) and not budget_paused:
         candidates_by_day: dict[str, set[str]] = {}
         for eid, row in rows.items():
@@ -1726,10 +1673,13 @@ def scan_match_statuses(
                 continue
             original = _parse_time(row.get("scheduled_at") or row.get("date"))
             if original is not None:
-                candidates_by_day.setdefault(original.date().isoformat(), set()).add(eid)
+                # Calendar requests are date-scoped; group by the local match
+                # date to handle UTC/local midnight without losing fixtures.
+                match_day = original.astimezone(ZoneInfo("Europe/Bratislava")).date()
+                candidates_by_day.setdefault(match_day.isoformat(), set()).add(eid)
         day_order = sorted(candidates_by_day, key=lambda day: (-len(candidates_by_day[day]), day))
-        # Only one optional new day per worker tick; exact date scans already
-        # performed for settlement remain fully reusable.
+        # At most ONE optional new day per worker tick; due-event calendars
+        # already fetched above are reused at zero additional provider cost.
         optional_calls = 0
         for day in day_order:
             if day not in daily_cache:
@@ -1740,6 +1690,7 @@ def scan_match_statuses(
                 if isinstance(limit, int) and isinstance(count, int) and count + 7 >= limit:
                     break
                 optional_calls += 1
+                prestart_attempts += 1
                 try:
                     nominal_requests += 1
                     target_day = datetime.fromisoformat(day).date()
@@ -1751,17 +1702,23 @@ def scan_match_statuses(
                     except TypeError:
                         daily_cache[day] = daily_method(target_day)
                 except Exception as exc:
-                    if type(exc).__name__ == "SharedBudgetExhausted":
+                    if type(exc).__name__ in {"SharedBudgetExhausted", "SharedBudgetUnavailable"}:
                         budget_paused = True
                         break
                     code = _provider_error_code(exc)
                     daily_errors[code] = daily_errors.get(code, 0) + 1
                     daily_cache[day] = None
+            if daily_cache.get(day) is None:
+                continue
+            prestart_checked += len(candidates_by_day[day])
             for event in _provider_rows(daily_cache.get(day)):
                 eid = _provider_event_id(event)
                 row = rows.get(eid)
                 if row is not None and eid in candidates_by_day[day]:
+                    previously_observed = schedule_verified_this_run
                     observe(eid, row, event)
+                    if schedule_verified_this_run > previously_observed:
+                        prestart_verified += 1
 
     request_count_after = getattr(provider, "request_count", None)
     if isinstance(request_count_before, int) and isinstance(request_count_after, int):
