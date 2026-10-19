@@ -1022,6 +1022,136 @@ def _second_set_outcome(row: dict[str, Any], event: dict[str, Any]) -> str:
     return "win" if predicted == set_winner else "loss"
 
 
+
+_SCHEDULE_FRESHNESS = timedelta(hours=2)
+_SCHEDULE_MAX_MOVE = timedelta(days=14)
+
+
+def verified_schedule_observation(
+    row: dict[str, Any], event: dict[str, Any], now: datetime
+) -> dict[str, str] | None:
+    """Display-only timing evidence, bound to exact provider event AND two player IDs.
+
+    Do not interpret a stale scheduled time or a winnerCode as proof of kickoff.
+    Published pick/odds/ledger timestamps remain immutable.
+    """
+    if _provider_event_id(event) != _event_id(row):
+        return None
+    home = event.get("homeTeam") if isinstance(event.get("homeTeam"), dict) else {}
+    away = event.get("awayTeam") if isinstance(event.get("awayTeam"), dict) else {}
+    identity = {_player_id(row, "player1"), _player_id(row, "player2")}
+    provider_identity = {str(home.get("id") or ""), str(away.get("id") or "")}
+    if "" in identity or "" in provider_identity or identity != provider_identity:
+        return None
+    original = _parse_time(row.get("scheduled_at") or row.get("date"))
+    if original is None:
+        return None
+    raw = next((
+        event[key] for key in ("startTimestamp", "startTime", "scheduledAt", "scheduled_at")
+        if event.get(key) not in (None, "")
+    ), None)
+    scheduled = None
+    try:
+        if isinstance(raw, (int, float)) or (
+            isinstance(raw, str) and raw.strip().isdigit()
+        ):
+            number = float(raw)
+            if number > 1e12:
+                number /= 1000
+            scheduled = datetime.fromtimestamp(number, tz=timezone.utc)
+        else:
+            scheduled = _parse_time(raw)
+    except (OverflowError, OSError, ValueError, TypeError):
+        return None
+    if scheduled is None or abs(scheduled - original) > _SCHEDULE_MAX_MOVE:
+        return None
+    raw_status = event.get("status")
+    status_type = (
+        str(raw_status.get("type") or "").strip().lower()
+        if isinstance(raw_status, dict)
+        else str(raw_status or "").strip().lower()
+    )
+    # Only an explicit tennis-provider live/finished state proves kickoff.
+    # In particular, time passing, 'notstarted' and 'postponed' do NOT.
+    state = (
+        "live" if status_type in {"inprogress", "in progress", "live", "started"}
+        else "finished" if status_type in {"finished", "ended", "completed"}
+        else "scheduled"
+    )
+    return {
+        "scheduled_at": scheduled.isoformat(),
+        "status": state,
+        "checked_at": now.isoformat(),
+        "source": "tennis_api_pro",
+    }
+
+
+def _fresh_verified_schedule(
+    value: Any, *, now: datetime
+) -> dict[str, str] | None:
+    if not isinstance(value, dict) or value.get("source") != "tennis_api_pro":
+        return None
+    checked = _parse_time(value.get("checked_at"))
+    scheduled = _parse_time(value.get("scheduled_at"))
+    if (
+        checked is None or scheduled is None
+        or checked > now + timedelta(minutes=2)
+        or now - checked > _SCHEDULE_FRESHNESS
+    ):
+        return None
+    if value.get("status") not in {"scheduled", "live", "finished"}:
+        return None
+    return {
+        "scheduled_at": scheduled.isoformat(),
+        "status": value["status"],
+        "checked_at": checked.isoformat(),
+        "source": "tennis_api_pro",
+    }
+
+
+def apply_verified_schedule_overlay(
+    feed: dict[str, Any],
+    observations: Any,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Patch only authorized RESPONSE presentation rows, never a release or ledger.
+
+    The caller supplies an already entitlement-filtered feed. Ignore arbitrary
+    generic/unpublished board events not in its published pick sections.
+    """
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    allowed = event_ids_from_feed(feed)
+    verified = {
+        str(eid): fresh for eid, value in (observations or {}).items()
+        if str(eid) in allowed
+        and (fresh := _fresh_verified_schedule(value, now=now)) is not None
+    } if isinstance(observations, dict) else {}
+    if not verified:
+        return feed
+    for key in (
+        "top200_picks", "prime_picks", "top_daily_picks", "daily_picks",
+        "value_picks", "doubles_picks", "ace_picks", "sg_picks", "upcoming",
+    ):
+        rows = feed.get(key)
+        if not isinstance(rows, list):
+            continue
+        updated = []
+        for row in rows:
+            entry = verified.get(_event_id(row))
+            if not isinstance(row, dict) or entry is None:
+                updated.append(row)
+                continue
+            updated.append({
+                **row,
+                "scheduled_at": entry["scheduled_at"],
+                "runtime_schedule_checked_at": entry["checked_at"],
+                "runtime_schedule_source": entry["source"],
+                "runtime_match_started": entry["status"] in {"live", "finished"},
+            })
+        feed[key] = updated
+    return feed
+
 def _provider_error_code(error: Exception) -> str:
     """Only report a safe exception class and HTTP status, never URLs or payloads."""
     kind = type(error).__name__[:48]
@@ -1081,6 +1211,21 @@ def scan_match_statuses(
     existing = prior.get("statuses")
     existing = existing if isinstance(existing, dict) else {}
     tracked_ids = set(rows)
+    prior_schedule = prior.get("schedule_updates")
+    prior_schedule = prior_schedule if isinstance(prior_schedule, dict) else {}
+    schedule_updates = {
+        str(eid): fresh for eid, value in prior_schedule.items()
+        if str(eid) in tracked_ids
+        and (fresh := _fresh_verified_schedule(value, now=now)) is not None
+    }
+    schedule_verified_this_run = 0
+    def observe(eid: str, row: dict[str, Any], event: dict[str, Any]) -> None:
+        nonlocal schedule_verified_this_run
+        observed = verified_schedule_observation(row, event, now)
+        if observed is not None:
+            schedule_updates[eid] = observed
+            schedule_verified_this_run += 1
+
     statuses: dict[str, dict[str, Any]] = {
         str(eid): dict(value)
         for eid, value in existing.items()
@@ -1097,7 +1242,10 @@ def scan_match_statuses(
     for eid, row in rows.items():
         if eid in statuses:
             continue
-        scheduled = _parse_time(row.get("scheduled_at") or row.get("date"))
+        # A recently verified postponement must supersede the old feed ETA
+        # when deciding which matches merit result lookups.
+        corrected = schedule_updates.get(eid)
+        scheduled = _parse_time((corrected or {}).get("scheduled_at") or row.get("scheduled_at") or row.get("date"))
         player1 = _player_id(row, "player1")
         player2 = _player_id(row, "player2")
         selection = _selection_id(row)
@@ -1225,6 +1373,7 @@ def scan_match_statuses(
         live_event = live_by_id.get(eid)
         if live_event is None:
             continue
+        observe(eid, row, live_event)
         result = classify_finished_event(row, live_event, checked_at=now)
         if result:
             statuses[eid] = result
@@ -1333,6 +1482,7 @@ def scan_match_statuses(
                 daily_cache[day_key] = None
 
         if event is not None:
+            observe(eid, row, event)
             consecutive_errors = 0
             matched_events += 1
             result = classify_finished_event(row, event, checked_at=now)
@@ -1487,6 +1637,7 @@ def scan_match_statuses(
             unmatched += 1
             continue
         matched_events += 1
+        observe(eid, row, event)
         result = classify_finished_event(row, event, checked_at=now)
         if result:
             statuses[eid] = result
@@ -1498,6 +1649,54 @@ def scan_match_statuses(
                 "second_set_status": _second_set_outcome(row, event),
                 "checked_at": now.isoformat(),
             }
+
+    # The settlement scan already cached exact daily calendars. Reuse those
+    # results for future matches at zero additional provider cost. If none was
+    # fetched, spend a bounded existing-budget lookup on the current day so
+    # postponements become visible BEFORE the old kickoff time passes.
+    if callable(daily_method) and not budget_paused:
+        candidates_by_day: dict[str, set[str]] = {}
+        for eid, row in rows.items():
+            if eid in statuses or not _scheduled_in_current_betting_day(row, now):
+                continue
+            original = _parse_time(row.get("scheduled_at") or row.get("date"))
+            if original is not None:
+                candidates_by_day.setdefault(original.date().isoformat(), set()).add(eid)
+        day_order = sorted(candidates_by_day, key=lambda day: (-len(candidates_by_day[day]), day))
+        # Only one optional new day per worker tick; exact date scans already
+        # performed for settlement remain fully reusable.
+        optional_calls = 0
+        for day in day_order:
+            if day not in daily_cache:
+                if optional_calls >= 1 or deadline is None or time.monotonic() + 7 >= deadline:
+                    continue
+                limit = getattr(provider, "request_limit", None)
+                count = getattr(provider, "request_count", 0)
+                if isinstance(limit, int) and isinstance(count, int) and count + 7 >= limit:
+                    break
+                optional_calls += 1
+                try:
+                    nominal_requests += 1
+                    target_day = datetime.fromisoformat(day).date()
+                    try:
+                        daily_cache[day] = daily_method(
+                            target_day, target_event_ids=candidates_by_day[day],
+                            max_category_requests=5,
+                        )
+                    except TypeError:
+                        daily_cache[day] = daily_method(target_day)
+                except Exception as exc:
+                    if type(exc).__name__ == "SharedBudgetExhausted":
+                        budget_paused = True
+                        break
+                    code = _provider_error_code(exc)
+                    daily_errors[code] = daily_errors.get(code, 0) + 1
+                    daily_cache[day] = None
+            for event in _provider_rows(daily_cache.get(day)):
+                eid = _provider_event_id(event)
+                row = rows.get(eid)
+                if row is not None and eid in candidates_by_day[day]:
+                    observe(eid, row, event)
 
     request_count_after = getattr(provider, "request_count", None)
     if isinstance(request_count_before, int) and isinstance(request_count_after, int):
@@ -1548,4 +1747,7 @@ def scan_match_statuses(
         "next_due_id": next_due_id if len(due) > 1 else "",
         "runtime_limited": runtime_limited,
         "settled_events": list(settled_events.values()),
+        "schedule_updates": schedule_updates,
+        "schedule_verified": len(schedule_updates),
+        "schedule_observations_this_run": schedule_verified_this_run,
     }
