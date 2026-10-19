@@ -40,8 +40,8 @@ def build(download: dict, readback: dict, *, run_id: str = "") -> dict:
         raise ValueError("Adaptive choice accounting inconsistent")
     if adapted > 0 and adaptive.get("online_adaptation_used") is not True:
         raise ValueError("Adaptive choices not acknowledged")
-    if selected and baseline * int(adaptive.get("min_paid_requests", 80)) < 0:
-        raise ValueError("Invalid queue policy")
+    if baseline < (selected + 3) // 4:
+        raise ValueError("Original exploration fell below its guaranteed 25% share")
     cohorts = adaptive.get("cohorts")
     if not isinstance(cohorts, dict):
         raise ValueError("Missing actual cohort evidence")
