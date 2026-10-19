@@ -16,6 +16,8 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
+import time
 
 from _bootstrap import ROOT
 from release_store import ReleaseStore
@@ -45,7 +47,13 @@ def sha(path):
 
 
 def run(*argv):
-    p = subprocess.run(argv, check=True, capture_output=True, text=True)
+    p = subprocess.run(argv, capture_output=True, text=True)
+    if p.returncode:
+        detail = (p.stderr or p.stdout or "no diagnostic output").strip()
+        raise RuntimeError(
+            f"Command failed (exit {p.returncode}) "
+            f"{' '.join(map(str, argv[:3]))}: {detail[:1200]}"
+        )
     return p.stdout.strip()
 
 
@@ -172,6 +180,115 @@ def ensure_unchanged(rows):
             raise RuntimeError("Canonical/prior/champion input changed: " + row["path"])
 
 
+
+_TRANSIENT_UPLOAD = re.compile(
+    r"(?:HTTP\s+(?:408|429|500|502|503|504)\b|connection reset|"
+    r"timed?\s*out|timeout|temporary failure|TLS handshake|"
+    r"unexpected EOF|EOF|rate limit)",
+    re.IGNORECASE,
+)
+
+
+def _remote_backup_assets(tag):
+    """Inspect actual release assets; a successful process exit is not proof."""
+    payload = json.loads(run("gh", "release", "view", tag, "-R", REPO,
+                             "--json", "assets"))
+    assets = payload.get("assets")
+    if not isinstance(assets, list):
+        raise RuntimeError("Invalid remote training backup inventory")
+    found = {}
+    for asset in assets:
+        if not isinstance(asset, dict):
+            raise RuntimeError("Invalid remote training backup asset")
+        name, size = asset.get("name"), asset.get("size")
+        if (not isinstance(name, str) or not name
+                or isinstance(size, bool) or not isinstance(size, int)
+                or size <= 0 or name in found):
+            raise RuntimeError("Duplicate or invalid remote training backup asset")
+        found[name] = size
+    return found
+
+
+def _check_remote_backup_assets(tag, expected, *, complete=False):
+    found = _remote_backup_assets(tag)
+    unexpected = set(found) - set(expected)
+    mismatched = {
+        name: (actual, expected[name])
+        for name, actual in found.items()
+        if name in expected and actual != expected[name]
+    }
+    if unexpected or mismatched:
+        raise RuntimeError(
+            "Immutable backup asset mismatch; refusing overwrite: "
+            f"unexpected={sorted(unexpected)}, sizes={mismatched}"
+        )
+    if complete and found != expected:
+        raise RuntimeError(
+            "Incomplete remote immutable backup; missing assets: "
+            + repr(sorted(set(expected) - set(found)))
+        )
+    return found
+
+
+def _upload_one_immutable(tag, path, expected):
+    """Recover uncertain uploads only after checking the remote asset by name/size.
+
+    Never use --clobber. Equal remote size is provisional: the independent
+    download and SHA-256 verification in prepare() is the definitive proof.
+    """
+    for attempt in range(5):
+        if path.name in _check_remote_backup_assets(tag, expected):
+            return
+        try:
+            run("gh", "release", "upload", tag, str(path), "-R", REPO)
+            return
+        except RuntimeError as exc:
+            # The CLI can return nonzero after GitHub already stored the asset.
+            if path.name in _check_remote_backup_assets(tag, expected):
+                return
+            if attempt == 4 or not _TRANSIENT_UPLOAD.search(str(exc)):
+                raise
+            delay = min(2 ** (attempt + 1), 16)
+            print(
+                f"Transient immutable backup upload failure "
+                f"({path.name}, retry {attempt+2}/5 in {delay}s): {exc}",
+                file=sys.stderr, flush=True,
+            )
+            time.sleep(delay)
+    raise RuntimeError("Immutable backup upload attempts exhausted")
+
+
+def upload_immutable_backup(tag, rows, stage):
+    """Upload chunks, reconcile partial success, then commit the manifest last."""
+    expected = {row["asset"]: int(row["bytes"]) for row in rows}
+    if len(expected) != len(rows) or ASSET_MANIFEST in expected:
+        raise RuntimeError("Duplicate/unsafe immutable backup asset names")
+    manifest = stage / ASSET_MANIFEST
+    if not manifest.is_file() or not manifest.stat().st_size:
+        raise RuntimeError("Frozen backup manifest is missing/empty")
+    paths = [stage / row["asset"] for row in rows]
+    for offset in range(0, len(paths), 8):
+        chunk = paths[offset:offset+8]
+        remote = _check_remote_backup_assets(tag, expected)
+        missing = [path for path in chunk if path.name not in remote]
+        if not missing:
+            continue
+        try:
+            run("gh", "release", "upload", tag, *map(str, missing), "-R", REPO)
+        except RuntimeError as exc:
+            # Multi-asset CLI uploads are not atomic. A subset can succeed even
+            # when gh returns exit 1, so never blindly replay the batch.
+            print(f"Immutable backup chunk partially failed; reconciling "
+                  f"remote inventory: {exc}", file=sys.stderr, flush=True)
+            for path in missing:
+                _upload_one_immutable(tag, path, expected)
+    _check_remote_backup_assets(tag, expected, complete=True)
+
+    # Manifest is published only after all data files are present and sized.
+    committed = {**expected, ASSET_MANIFEST: manifest.stat().st_size}
+    _upload_one_immutable(tag, manifest, committed)
+    _check_remote_backup_assets(tag, committed, complete=True)
+
 def prepare():
     verify_job_identity()
     if CERT.exists():
@@ -216,16 +333,7 @@ def prepare():
     run("gh", "release", "create", tag, "-R", REPO, "--latest=false",
         "--title", "BlinQ immutable complete per-run training backup",
         "--notes", "Verified independent remote input readback required before any candidate fit.")
-    assets = [str(stage / item["asset"]) for item in rows] + [str(stage / ASSET_MANIFEST)]
-    # GitHub release upload is always WITHOUT --clobber; fail if any asset exists.
-    for offset in range(0, len(assets), 16):
-        run("gh", "release", "upload", tag, *assets[offset:offset+16], "-R", REPO)
-
-    actual_assets = json.loads(run("gh", "release", "view", tag, "-R", REPO,
-                                   "--json", "assets"))["assets"]
-    present = {x.get("name") for x in actual_assets}
-    if present != {x["asset"] for x in rows} | {ASSET_MANIFEST}:
-        raise RuntimeError("Remote immutable backup asset inventory mismatch")
+    upload_immutable_backup(tag, rows, stage)
 
     run("gh", "release", "download", tag, "-R", REPO, "-D", str(restore))
     if sha(restore / ASSET_MANIFEST) != sha(stage / ASSET_MANIFEST):
