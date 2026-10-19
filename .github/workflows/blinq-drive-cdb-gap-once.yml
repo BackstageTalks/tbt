@@ -84,10 +84,16 @@ jobs:
            "wta_matches_2026.csv":"1SYb44DPQrXBjecBHXuwQySuxus-gAJSy",
           }
           root="1jzdzztz8cXquO8VDswqE19PHupQau-xM"
+          source_child="1jhajCs48tWsED2BeeLyD892BcG-0fEhp"
           auth=Credentials.from_service_account_info(json.loads(os.environ["BLINQ_DRIVE_READER_JSON"]),
                  scopes=["https://www.googleapis.com/auth/drive.readonly"])
           session=AuthorizedSession(auth)
           endpoint="https://www.googleapis.com/drive/v3/files/"
+          folder_response=session.get(endpoint+source_child,params={"fields":"id,name,mimeType,parents,trashed","supportsAllDrives":"true"},timeout=40)
+          folder_response.raise_for_status()
+          folder=folder_response.json()
+          assert folder["id"]==source_child and folder["name"]=="12_NA_KONTROLU"
+          assert folder.get("parents")==[root] and folder["mimeType"]=="application/vnd.google-apps.folder" and not folder.get("trashed")
           saved={}
           for name,fid in src.items():
             def metadata():
@@ -95,7 +101,7 @@ jobs:
               res.raise_for_status()
               return res.json()
             before=metadata()
-            assert before["id"]==fid and before["name"]==name and before.get("parents")==[root]
+            assert before["id"]==fid and before["name"]==name and before.get("parents")==[source_child]
             assert before["mimeType"]=="text/csv" and not before.get("trashed") and 0<int(before["size"])<8_000_000
             md5,sha=hashlib.md5(),hashlib.sha256()
             local=Path("work/source-gap")/name
