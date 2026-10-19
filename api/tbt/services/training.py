@@ -56,6 +56,25 @@ WTA_CANDIDATE_FEATURE_NAMES = (
 )
 
 
+def _training_progress(phase: str, rows: int) -> None:
+    """Stream low-cardinality fit progress and peak RSS to private Actions logs."""
+    from time import monotonic
+    if not hasattr(_training_progress, "_started"):
+        _training_progress._started = monotonic()
+    peak_mb = None
+    try:
+        import resource
+        # GitHub training runners are Linux; ru_maxrss is KiB.
+        peak_mb = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)
+    except (ImportError, OSError):
+        pass
+    print(json.dumps({
+        "calibration_phase": phase, "rows": rows,
+        "elapsed_s": round(monotonic() - _training_progress._started, 1),
+        "peak_rss_mb": peak_mb,
+    }), flush=True)
+
+
 def _candidate_feature_names(
     *,
     atp_leaderboards=None,
@@ -768,6 +787,7 @@ def train_from_matches(
         raise ValueError("Unknown training profile")
     matches, quality = audit_history(matches)
     matches, rank_provenance = _enforce_rank_provenance(matches)
+    _training_progress("validated_history", len(matches))
     # 7.2.1 uses independent serve and return availability. The champion
     # retains the original joint semantics via artifact metadata in serving.
     builder = FeatureBuilder(
@@ -781,6 +801,7 @@ def train_from_matches(
             matches
         )
     )
+    _training_progress("point_in_time_feature_replay", len(frame))
     frame, atp_leaderboard_coverage = _augment_atp_leaderboard_features(
         frame, matches, atp_leaderboards, inplace=True
     )
@@ -794,6 +815,7 @@ def train_from_matches(
         frame, matches, wta_season_stats, inplace=True
     )
 
+    _training_progress("auxiliary_features_complete", len(frame))
     if (
         len(frame)
         < min_matches
@@ -851,6 +873,7 @@ def train_from_matches(
         diagnostics = input_diagnostics({"train": train, "calibration": calibration}, names)
         require_informative_inputs(diagnostics)
 
+    _training_progress("fit_estimators_start", len(train))
     evaluation_model = (
         (
             _new_production_ensemble(
@@ -876,6 +899,7 @@ def train_from_matches(
         )
     )
 
+    _training_progress("fit_estimators_complete", len(train))
     if training_profile == "top-7.2.1":
         evaluation_model.version = "v7.2.1-" + evaluation_model.version
 
