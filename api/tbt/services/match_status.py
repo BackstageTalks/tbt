@@ -1077,10 +1077,14 @@ def verified_schedule_observation(
     # Only an explicit tennis-provider live/finished state proves kickoff.
     # In particular, time passing, 'notstarted' and 'postponed' do NOT.
     state = (
-        "live" if status_type in {"inprogress", "in progress", "live", "started"}
+        "live" if status_type.startswith(("inprogress", "in progress", "live", "started"))
         else "finished" if status_type in {"finished", "ended", "completed"}
         else "scheduled"
     )
+    # Contradictory provider data cannot claim kickoff hours before its own
+    # updated scheduled time. Prefer showing the reschedule, not false LIVE.
+    if state == "live" and scheduled > now + timedelta(minutes=5):
+        state = "scheduled"
     return {
         "scheduled_at": scheduled.isoformat(),
         "status": state,
