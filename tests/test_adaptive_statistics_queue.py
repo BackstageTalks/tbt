@@ -105,3 +105,56 @@ def test_nonselected_feedback_and_duplicate_queue_rows_fail_closed():
     next(queue)
     with pytest.raises(ValueError, match="Negative"):
         queue.record(row, -1, _gain())
+
+
+def test_priority_switches_after_a_previously_productive_cohort_drains():
+    # A historical hot spot can be extremely productive early in a run and
+    # then return empty provider responses. The algorithm must prefer the
+    # consistently productive cohort instead of trusting lifetime averages.
+    rows = []
+    for i in range(650):
+        rows.extend((_match(f"hot-{i}"), _match(f"stable-{i}", "WTA", 2026)))
+    queue = AdaptiveStatisticsQueue(rows)
+    selection = []
+    hot_attempts = 0
+    for _ in range(540):
+        row = next(queue)
+        if row.tour.lower() == "atp":
+            hot_attempts += 1
+            queue.record(row, 1, _gain(12, 1, 4) if hot_attempts <= 100 else _gain())
+            selection.append("hot")
+        else:
+            queue.record(row, 1, _gain(4))
+            selection.append("stable")
+
+    assert selection[110:190].count("hot") >= 45
+    assert selection[-120:].count("stable") >= 75
+    report = queue.summary()
+    hot = report["cohorts"]["atp:2025:serve_return"]
+    stable = report["cohorts"]["wta:2026:serve_return"]
+    assert report["selection_value_policy"] == "quality_ready_and_new_fields_recent_paid_window"
+    assert report["recent_paid_match_window"] == 96
+    assert hot["paid_requests"] > hot["recent_paid_requests"]
+    assert hot["recent_paid_matches"] == 96
+    assert stable["recent_paid_matches"] <= 96
+    assert hot["recent_new_statistic_values"] < stable["recent_new_statistic_values"]
+    assert report["baseline_choices"] >= 135  # >= one in every four
+    assert report["observed_paid_requests"] == 540
+
+
+def test_recent_score_uses_actual_provider_requests_including_retries():
+    a = _match("one")
+    b = _match("retry")
+    queue = AdaptiveStatisticsQueue([a, b])
+    assert next(queue) is a
+    queue.record(a, 1, _gain(8, 1, 2))
+    assert next(queue) is b
+    queue.record(b, 4, _gain())
+    report = queue.summary()
+    row = report["cohorts"]["atp:2025:serve_return"]
+    assert row["paid_requests"] == 5
+    assert row["recent_paid_requests"] == 5
+    assert row["recent_new_statistic_values"] == 8
+    assert row["recent_new_quality_ready_rows"] == 1
+    assert row["recent_paid_matches"] == 2
+    assert report["adaptive_choices"] == 0  # normal warm-up
