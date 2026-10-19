@@ -6,6 +6,7 @@ name: CDB Drive Inbox - guarded external file import
     paths:
       - scripts/cdb_inbox_*.py
       - tests/test_cdb_inbox_adapter.py
+      - tests/test_cdb_inbox_scheduler_bridge.py
       - .github/workflows/cdb-drive-inbox.yml
   push:
     branches: [main]
@@ -37,7 +38,7 @@ jobs:
           PYTHONPATH: .:api:scripts
         run: |
           python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py
-          python -m pytest tests/test_cdb_inbox_adapter.py -q
+          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_scheduler_bridge.py -q
 
   guarded-import:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
