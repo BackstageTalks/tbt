@@ -1,0 +1,269 @@
+name: CDB Drive Inbox - guarded external file import
+
+'on':
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/cdb_inbox_*.py
+      - tests/test_cdb_inbox_adapter.py
+      - tests/test_cdb_inbox_scheduler_bridge.py
+      - tests/test_cdb_inbox_integration.py
+      - .github/workflows/cdb-drive-inbox.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/cdb_inbox_*.py
+      - tests/test_cdb_inbox_adapter.py
+      - .github/workflows/cdb-drive-inbox.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-cdb-drive-inbox-${{ github.event_name == 'pull_request' && 'ci' || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  synthetic-contract-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install parser test dependencies
+        run: python -m pip install --disable-pip-version-check pytest openpyxl pandas pyarrow pydantic
+      - name: Run source and evidence safety tests
+        env:
+          PYTHONPATH: .:api:scripts
+        run: |
+          python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py
+          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_integration.py -q
+
+  guarded-import:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: synthetic-contract-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      CDB_REPO: BackstageTalks/tbt-data
+      CDB_TAG: tbt-data-v1
+      INBOX_FOLDER_ID: 1A0qlX8vXjDwcZYP9fSb8aFHjd9aNcWPJ
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install exact linker and Drive reader dependencies
+        run: |
+          python -m pip install --disable-pip-version-check google-auth requests pandas pyarrow pydantic openpyxl numpy
+      - name: Verify private connectivity prerequisites
+        run: |
+          test -n "$GH_TOKEN" || { echo BLOCKED_PRIVATE_CDB_TOKEN_MISSING; exit 1; }
+          test -n "$BLINQ_DRIVE_READER_JSON" || { echo BLOCKED_DRIVE_READER_MISSING; exit 1; }
+          gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" --jq '.tag_name' > /dev/null
+      - name: Read bounded Drive Inbox with hashes
+        run: |
+          mkdir -p work/input
+          python scripts/cdb_inbox_drive.py --folder-id "$INBOX_FOLDER_ID" --output work/input
+          python scripts/cdb_inbox_adapter.py --input-dir work/input --out-dir work/source --max-files 100
+      - name: Avoid downloading CDB for empty or entirely unsupported sources
+        id: source
+        run: |
+          python - <<'PY'
+          import json,os
+          a=json.load(open("work/source/report.json"))
+          has=bool(a["normalized"])
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f:
+              f.write("eligible="+("true" if has else "false")+"\n")
+          print("INBOX_FILES_NORMALIZED",len(a["normalized"]),a["counts"].get("normalized_rows",0))
+          PY
+      - name: Download entire manifest-required canonical snapshot; target only 2016-2026
+        if: steps.source.outputs.eligible == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/before
+          patterns=(-p history_manifest.json -p _tbt_bundle_manifest.json -p "history-*.parquet")
+          gh release download "$CDB_TAG" -R "$CDB_REPO" "${patterns[@]}" -D work/before --clobber
+          gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" > work/before/release-metadata.json
+          python - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          folder=Path("work/before")
+          bundle=json.loads((folder/"_tbt_bundle_manifest.json").read_text())["files"]
+          years=json.loads((folder/"history_manifest.json").read_text())["years"]
+          assets={x["name"]:x for x in json.loads((folder/"release-metadata.json").read_text())["assets"]}
+          for name in ["history_manifest.json",*(f"history-{y}.parquet" for y in sorted(map(int,years)))]:
+              file=folder/name
+              sha=hashlib.sha256(file.read_bytes()).hexdigest()
+              if bundle[name]["sha256"] != sha or assets[name].get("digest") != "sha256:"+sha:
+                  raise SystemExit("Canonical release content/manifest mismatch: "+name)
+              if name.endswith(".parquet") and years[name[8:12]]["sha256"] != sha:
+                  raise SystemExit("Canonical year SHA inconsistent: "+name)
+          print("CANONICAL_PARTITIONS_SHA_VERIFIED",len(years))
+          PY
+      - name: Exact link, quarantine conflict, and filter to strongest match evidence
+        if: steps.source.outputs.eligible == 'true'
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_inbox_stage.py --normalized-report work/source/report.json \
+            --history-dir work/before --out-dir work/stage
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/stage/eligible.jsonl --history-dir work/before --out-dir work/dry-run
+          python - <<'PY'
+          import json,os
+          a=json.load(open("work/stage/report.json"))
+          dry=json.load(open("work/dry-run/report.json"))
+          counts=dry["counts"]
+          if dry.get("production_mutated") is not False or dry.get("local_partitions_written") is not False:
+              raise SystemExit("Dry-run caused an unexpected write")
+          if counts.get("updated",0) != a["eligible_matches"]:
+              raise SystemExit("Candidate count differs from exact import preflight")
+          additions=counts.get("stat_fields_added",0)
+          if additions != a["eligible_new_values"]:
+              raise SystemExit("Candidate field count differs from dry-run")
+          with open(os.environ["GITHUB_OUTPUT"],"a") as out:
+              out.write("additions="+("true" if additions else "false")+"\n")
+          print("CDB_INBOX_STRICT_DRYRUN",a["eligible_matches"],additions,
+                "filtered",a["filtered_matches"],"conflicts",a["conflict_matches"])
+          PY
+      - name: Acquire global single writer ONLY for a positive, validated delta
+        if: steps.stage.outputs.additions == 'true'
+        run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+      - name: Atomic CAS verification and select immutable backup years
+        if: steps.stage.outputs.additions == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p work/backup work/after
+          python - <<'PY'
+          import hashlib,json,shutil,os
+          from pathlib import Path
+          from cdb_global_writer_lock import verify
+          from release_store import ReleaseStore
+          before=Path("work/before")
+          current=json.loads((before/"_tbt_bundle_manifest.json").read_text())["files"]
+          verify(os.environ["CDB_REPO"],Path(".cdb-global-writer-lock.json"))
+          store=ReleaseStore(os.environ["CDB_REPO"],os.environ["CDB_TAG"],before)
+          if store._remote_bundle_files() != current:
+              raise SystemExit("Canonical bundle changed between stage and global lock")
+          staged=[json.loads(s) for s in Path("work/stage/eligible.jsonl").read_text().splitlines() if s.strip()]
+          years=sorted({int(x["canonical"]["scheduled_date_utc"][:4]) for x in staged})
+          if not years or any(y not in range(2016,2027) for y in years):
+              raise SystemExit("Invalid staged year")
+          for name in ["history_manifest.json","_tbt_bundle_manifest.json",*(p.name for p in before.glob("history-*.parquet"))]:
+              shutil.copy2(before/name,Path("work/after")/name)
+          for name in ["history_manifest.json","_tbt_bundle_manifest.json",*(f"history-{y}.parquet" for y in years)]:
+              shutil.copy2(before/name,Path("work/backup")/name)
+          hashes=[]
+          for p in sorted(Path("work/backup").iterdir()):
+              hashes.append(hashlib.sha256(p.read_bytes()).hexdigest()+"  "+p.name)
+          (Path("work/backup")/"SHA256SUMS").write_text("\n".join(hashes)+"\n")
+          Path("work/backup-years.json").write_text(json.dumps(years))
+          print("PREWRITE_BACKUP_PREPARED",len(years),"years")
+          PY
+          (cd work/backup && sha256sum -c SHA256SUMS)
+      - name: Persist immutable backup in PRIVATE repository and independently download
+        if: steps.stage.outputs.additions == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="blinq-inbox-prewrite-${{ github.run_id }}-${{ github.run_attempt }}"
+          gh release create "$tag" work/backup/* -R "$CDB_REPO" \
+            --title "CDB Inbox original partitions $tag" \
+            --notes "Private immutable rollback of original CDB and two manifests."
+          mkdir -p work/backup-readback
+          gh release download "$tag" -R "$CDB_REPO" -D work/backup-readback
+          (cd work/backup-readback && sha256sum -c SHA256SUMS)
+      - name: Run existing additive-only importer and exhaustive local readback
+        if: steps.stage.outputs.additions == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/stage/eligible.jsonl --history-dir work/after \
+            --out-dir work/local-import --write-partitions --write-history-dir work/after --exact-stats-only
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from offline_exact_cdb_write import verify_persisted
+          report=json.load(open("work/local-import/report.json"))
+          stage=[json.loads(s) for s in Path("work/stage/eligible.jsonl").read_text().splitlines() if s.strip()]
+          verified=verify_persisted(Path("work/before"),Path("work/after"),stage,report["changed_years"])
+          if (verified["added_values"]!=sum(len(x["incoming_stats"]) for x in stage)
+                  or verified["enriched_matches"]!=len(stage)):
+              raise SystemExit("Local exact readback count mismatch")
+          Path("work/local-verification.json").write_text(json.dumps(verified,indent=2))
+          print("LOCAL_EXACT_READBACK_PASS",verified["enriched_matches"],verified["added_values"])
+          PY
+      - name: Publish through existing manifest CAS and global writer lock
+        if: steps.stage.outputs.additions == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,json
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from cdb_global_writer_lock import verify
+          repo=os.environ["CDB_REPO"]
+          verify(repo,Path(".cdb-global-writer-lock.json"))
+          before=Path("work/before")
+          after=Path("work/after")
+          initial=json.loads((before/"_tbt_bundle_manifest.json").read_text())["files"]
+          years=json.loads(Path("work/local-import/report.json").read_text())["changed_years"]
+          if not years:
+              raise SystemExit("No changed year for expected positive delta")
+          store=ReleaseStore(repo,os.environ["CDB_TAG"],after)
+          def cas():
+              verify(repo,Path(".cdb-global-writer-lock.json"))
+              if store._remote_bundle_files()!=initial:
+                  raise ValueError("Canonical release changed: CAS fail-closed")
+          store.upload_bundle([*(after/f"history-{y}.parquet" for y in years),
+                               after/"history_manifest.json"],before_upload=cas)
+          print("CANONICAL_PUBLICATION_ATTEMPT",years)
+          PY
+      - name: Independent PRIVATE release readback of every changed value
+        if: steps.stage.outputs.additions == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/readback
+          patterns=(-p history_manifest.json -p _tbt_bundle_manifest.json)
+          for year in $(cat work/backup-years.json | python -c 'import json,sys; print(" ".join(str(y) for y in json.load(sys.stdin)))'); do
+            patterns+=(-p "history-$year.parquet")
+          done
+          gh release download "$CDB_TAG" -R "$CDB_REPO" "${patterns[@]}" -D work/readback --clobber
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from offline_exact_cdb_write import verify_persisted
+          after,before,remote=Path("work/after"),Path("work/before"),Path("work/readback")
+          changes=json.load(open("work/local-import/report.json"))["changed_years"]
+          bundle=json.loads((remote/"_tbt_bundle_manifest.json").read_text())["files"]
+          manifest=json.loads((remote/"history_manifest.json").read_text())["years"]
+          for name in ["history_manifest.json",*(f"history-{y}.parquet" for y in changes)]:
+              if (after/name).read_bytes()!=(remote/name).read_bytes():
+                  raise SystemExit("Remote readback changed: "+name)
+              sha=hashlib.sha256((remote/name).read_bytes()).hexdigest()
+              if bundle[name]["sha256"]!=sha:
+                  raise SystemExit("Remote bundle digest mismatch")
+              if name.endswith(".parquet") and manifest[name[8:12]]["sha256"]!=sha:
+                  raise SystemExit("Remote history digest mismatch")
+          staged=[json.loads(s) for s in Path("work/stage/eligible.jsonl").read_text().splitlines() if s.strip()]
+          result=verify_persisted(before,remote,staged,changes)
+          local=json.load(open("work/local-verification.json"))
+          if result["added_values"]!=local["added_values"] or result["enriched_matches"]!=local["enriched_matches"]:
+              raise SystemExit("Remote CDB readback count mismatch")
+          print("CDB_PRODUCTION_READBACK_VERIFIED",result["enriched_matches"],result["added_values"],"overwritten",result["existing_values_overwritten"])
+          PY
+      - name: Always release global writer if owned
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held

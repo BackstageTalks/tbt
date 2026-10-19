@@ -36,6 +36,7 @@ name: BlinQ private Drive CDB audit - bounded free public runner
       - scripts/drive_sort_prefolders.py
       - tests/test_drive_sort_prefolders.py
       - tests/test_drive_cron_bridge.py
+      - tests/test_cdb_inbox_scheduler_bridge.py
       - .github/workflows/blinq-drive-content-audit.yml
 
 permissions:
@@ -612,6 +613,37 @@ jobs:
             fi
             echo 'Full manifest stays in the paired PRIVATE tbt-data release.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  cdb-inbox-cron-dispatch:
+    # Reuse the existing externally invoked Drive audit cron. This job only
+    # dispatches a dedicated workflow at 02:xx/14:xx UTC and never reads data.
+    # GitHub's internal schedule is intentionally prohibited by repo contract.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Dispatch inbox once per UTC half-day window
+        shell: bash
+        run: |
+          set -euo pipefail
+          now="$(date -u +%Y-%m-%dT%H)"
+          hour="${now:11:2}"
+          if [[ "$hour" != "02" && "$hour" != "14" ]]; then
+            echo 'INBOX_CRON_OUTSIDE_SLOTS'
+            exit 0
+          fi
+          runs="$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/cdb-drive-inbox.yml/runs" -f event=workflow_dispatch -f per_page=50)"
+          if printf '%s' "$runs" | jq -e --arg slot "$now:" '.workflow_runs | any(.created_at | startswith($slot))' >/dev/null; then
+            echo 'INBOX_CRON_SLOT_ALREADY_DISPATCHED'
+            exit 0
+          fi
+          gh workflow run cdb-drive-inbox.yml -R "$GITHUB_REPOSITORY" --ref main
+          echo 'INBOX_CRON_WORKFLOW_DISPATCH_SUBMITTED_NOT_COMPLETED'
 
   drive-content-readonly:
     # Explicit opt-in: the caller should request this at most once per day.

@@ -1,0 +1,86 @@
+"""Synthetic end-to-end CDB Inbox -> strict native linker -> exact write -> readback."""
+from __future__ import annotations
+
+import csv
+import json
+import os
+import shutil
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+from scripts.cdb_inbox_adapter import run as normalize
+from scripts.cdb_inbox_stage import run as stage
+from scripts.offline_exact_cdb_write import verify_persisted
+from tbt.data.history_snapshot import write_year_partition, load_snapshot
+from tbt.schemas import MatchRecord
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_real_native_linker_exact_writer_and_readback(tmp_path):
+    before, after, source = (tmp_path / n for n in ("before", "after", "source"))
+    before.mkdir()
+    source.mkdir()
+    original = MatchRecord(
+        match_id="inbox-example-2026", tour="atp",
+        scheduled_at=datetime(2026, 10, 17, 12, tzinfo=timezone.utc),
+        player1_id="canonical-alpha", player1_name="Alpha One",
+        player2_id="canonical-beta", player2_name="Beta Two",
+        surface="hard", tournament="Vienna", tournament_id="vienna-2026",
+        tournament_level="A", round_name="QF",
+        winner_id="canonical-alpha", status="completed",
+        best_of=3, stats={}, provider_payload={}
+    )
+    write_year_partition([original], before, 2026)
+    with (source / "atp_test.csv").open("w", encoding="utf-8", newline="") as handle:
+        row = {
+            "tour": "ATP", "match_date": "2026-10-17", "tournament": "Vienna",
+            "winner": "Alpha One", "loser": "Beta Two", "round": "QF",
+            "surface": "hard", "best_of": 3,
+            "w_svpt": 70, "w_1stIn": 40, "w_1stWon": 30, "w_2ndWon": 14,
+            "w_ace": 5, "w_df": 2, "w_bpSaved": 4, "w_bpFaced": 6,
+            "l_svpt": 60, "l_1stIn": 35, "l_1stWon": 25, "l_2ndWon": 11,
+            "l_ace": 3, "l_df": 1, "l_bpSaved": 2, "l_bpFaced": 5,
+        }
+        writer = csv.DictWriter(handle, fieldnames=row)
+        writer.writeheader()
+        writer.writerow(row)
+    report = normalize(source, tmp_path / "normalized")
+    assert report["counts"]["normalized_rows"] == 1
+
+    linked = stage(tmp_path / "normalized/report.json", before, tmp_path / "link")
+    assert linked["eligible_matches"] == 1, linked
+    assert linked["eligible_new_values"] >= 8
+
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = os.pathsep.join(
+        [str(ROOT / "api"), str(ROOT / "scripts"), str(ROOT), environment.get("PYTHONPATH", "")]
+    )
+    importer = ROOT / "scripts/import_offline_linked_serve_return.py"
+    subprocess.run(
+        [sys.executable, str(importer), "--stage", str(tmp_path / "link/eligible.jsonl"),
+         "--history-dir", str(before), "--out-dir", str(tmp_path / "dryrun")],
+        check=True, capture_output=True, text=True, env=environment, timeout=60
+    )
+    dry = json.loads((tmp_path / "dryrun/report.json").read_text())
+    assert dry["production_mutated"] is False
+    assert dry["counts"]["updated"] == 1
+
+    shutil.copytree(before, after)
+    subprocess.run(
+        [sys.executable, str(importer), "--stage", str(tmp_path / "link/eligible.jsonl"),
+         "--history-dir", str(after), "--out-dir", str(tmp_path / "local"),
+         "--write-partitions", "--write-history-dir", str(after), "--exact-stats-only"],
+        check=True, capture_output=True, text=True, env=environment, timeout=60
+    )
+    staged = [json.loads(x) for x in (tmp_path / "link/eligible.jsonl").read_text().splitlines()]
+    proof = verify_persisted(before, after, staged, [2026])
+    assert proof["enriched_matches"] == 1
+    assert proof["added_values"] == linked["eligible_new_values"]
+    assert proof["existing_values_overwritten"] == 0
+    original_stored = load_snapshot(before / "history-2026.parquet")[0]
+    after_stored = load_snapshot(after / "history-2026.parquet")[0]
+    assert original_stored.stats == {}
+    assert len(after_stored.stats) == linked["eligible_new_values"]
