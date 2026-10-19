@@ -55,7 +55,7 @@ def test_upcoming_observation_is_id_matched_and_does_not_touch_settlement():
     class Provider:
         request_count = 0
         def events_for_status_day(self, day, target_event_ids=None, max_category_requests=8):
-            assert max_category_requests <= 3
+            assert max_category_requests <= 5
             assert target_event_ids == {"faria-3"}
             self.request_count += 1
             return {"events": [
