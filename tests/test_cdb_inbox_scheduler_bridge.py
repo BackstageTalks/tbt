@@ -48,12 +48,16 @@ def test_entire_blinq_data_root_is_recursive_and_progress_is_private():
     assert "CDB_INBOX_PROGRESS_PRIVATE_READBACK_VERIFIED" in IMPORT
     assert "tests/test_cdb_inbox_drive.py" in IMPORT
 
-def test_cdb_writer_busy_is_detected_before_drive_scan():
-    gate = "python scripts/wait_for_cdb_writer_idle.py --max-seconds 0"
+def test_cdb_writer_busy_is_queued_before_drive_scan():
+    gate = "python scripts/cdb_inbox_wait_and_resume.py --max-seconds 12600 --interval-seconds 60"
     assert gate in IMPORT
     assert IMPORT.index(gate) < IMPORT.index("Restore private Drive-wide import progress")
     assert IMPORT.index(gate) < IMPORT.index("scripts/cdb_inbox_drive.py --folder-id")
     assert IMPORT.index(gate) < IMPORT.index("scripts/cdb_global_writer_lock.py acquire")
+    assert "await-cdb-writer-idle:" in IMPORT
+    assert "needs: [synthetic-contract-tests, await-cdb-writer-idle]" in IMPORT
+    assert "needs.await-cdb-writer-idle.outputs.ready == 'true'" in IMPORT
+    assert "steps.writer.outputs.locked == 'true'" in IMPORT
 
 def test_protected_training_completion_triggers_safe_import_retry():
     hook = (ROOT / ".github/workflows/cdb-drive-inbox-after-training.yml").read_text()
