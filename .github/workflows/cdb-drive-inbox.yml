@@ -82,14 +82,13 @@ jobs:
               f.write("eligible="+("true" if has else "false")+"\n")
           print("INBOX_FILES_NORMALIZED",len(a["normalized"]),a["counts"].get("normalized_rows",0))
           PY
-      - name: Download pinned 2016-2026 canonical source partitions
+      - name: Download entire manifest-required canonical snapshot; target only 2016-2026
         if: steps.source.outputs.eligible == 'true'
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p work/before
-          patterns=(-p history_manifest.json -p _tbt_bundle_manifest.json)
-          for year in $(seq 2016 2026); do patterns+=(-p "history-$year.parquet"); done
+          patterns=(-p history_manifest.json -p _tbt_bundle_manifest.json -p "history-*.parquet")
           gh release download "$CDB_TAG" -R "$CDB_REPO" "${patterns[@]}" -D work/before --clobber
           gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" > work/before/release-metadata.json
           python - <<'PY'
@@ -99,14 +98,14 @@ jobs:
           bundle=json.loads((folder/"_tbt_bundle_manifest.json").read_text())["files"]
           years=json.loads((folder/"history_manifest.json").read_text())["years"]
           assets={x["name"]:x for x in json.loads((folder/"release-metadata.json").read_text())["assets"]}
-          for name in ["history_manifest.json",*(f"history-{y}.parquet" for y in range(2016,2027))]:
+          for name in ["history_manifest.json",*(f"history-{y}.parquet" for y in sorted(map(int,years)))]:
               file=folder/name
               sha=hashlib.sha256(file.read_bytes()).hexdigest()
               if bundle[name]["sha256"] != sha or assets[name].get("digest") != "sha256:"+sha:
                   raise SystemExit("Canonical release content/manifest mismatch: "+name)
               if name.endswith(".parquet") and years[name[8:12]]["sha256"] != sha:
                   raise SystemExit("Canonical year SHA inconsistent: "+name)
-          print("CANONICAL_PARTITIONS_SHA_VERIFIED",11)
+          print("CANONICAL_PARTITIONS_SHA_VERIFIED",len(years))
           PY
       - name: Exact link, quarantine conflict, and filter to strongest match evidence
         if: steps.source.outputs.eligible == 'true'
@@ -158,7 +157,7 @@ jobs:
           years=sorted({int(x["canonical"]["scheduled_date_utc"][:4]) for x in staged})
           if not years or any(y not in range(2016,2027) for y in years):
               raise SystemExit("Invalid staged year")
-          for name in ["history_manifest.json","_tbt_bundle_manifest.json",*(f"history-{y}.parquet" for y in range(2016,2027))]:
+          for name in ["history_manifest.json","_tbt_bundle_manifest.json",*(p.name for p in before.glob("history-*.parquet"))]:
               shutil.copy2(before/name,Path("work/after")/name)
           for name in ["history_manifest.json","_tbt_bundle_manifest.json",*(f"history-{y}.parquet" for y in years)]:
               shutil.copy2(before/name,Path("work/backup")/name)
