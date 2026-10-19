@@ -11,7 +11,7 @@
   "mode": "read_only",
   "allow_cdb_writes": false,
   "allow_drive_writes": false,
-  "request_reason": "Verify full source demographics, published 2025/26 CDB schema, 78-year exact-linked field deltas, and independently corroborated 139 research links against CURRENT immutable SHA-pinned release",
-  "audit_cycle": "2026-10-15-latest-release-identity-and-field-readback",
-  "rerun_counter": 2
+  "request_reason": "Current read-only native-identity and NULL gap check of 2025/26 P0 Drive files to identify safe next guarded file import",
+  "audit_cycle": "2026-10-19-afternoon-drive-p0-identify-new-null",
+  "rerun_counter": 3
 }
