@@ -1,0 +1,143 @@
+name: BlinQ CONT01 exact original Drive CSV versus live canonical CDB
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/cdb-cont01-exact-readonly.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-cont01-readonly-diff
+  cancel-in-progress: false
+
+jobs:
+  read-only-diff:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts:source/scripts
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: f3192827e3a96a1e71c0653b0a43e8299bdf5b00
+          path: source
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install reviewed current canonical read dependencies
+        run: python -m pip install --disable-pip-version-check pandas pyarrow numpy pydantic pydantic-settings pytest
+      - name: Require private source and verify current release metadata
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = true
+          mkdir -p work/cont01/current work/cont01/report
+          gh api repos/BackstageTalks/tbt-data/releases/tags/tbt-data-v1 > work/cont01/release-before.json
+          # load_partitions checks the complete source manifest even when the
+          # requested source scope is only ATP 2007–2016.
+          gh release download tbt-data-v1 -R BackstageTalks/tbt-data -p 'history-*.parquet' -D work/cont01/current
+          gh release download tbt-data-v1 -R BackstageTalks/tbt-data -p history_manifest.json -p _tbt_bundle_manifest.json -D work/cont01/current
+          gh api repos/BackstageTalks/tbt-data/releases/tags/tbt-data-v1 > work/cont01/release-after.json
+      - name: Test existing canonical research matching safety contracts
+        run: |
+          python -m pytest -q source/tests/test_drive_cdb_audit.py source/tests/test_sackmann_boxscore_rates.py
+      - name: Independently diff SHA-pinned ten original sources against verified current CDB
+        run: |
+          python - <<'PY'
+          import collections,csv,gzip,hashlib,json,sqlite3
+          from pathlib import Path
+          from drive_cdb_audit import open_cache,profile,canonical_index,compare,sha
+          root=Path('work/cont01'); src=Path('source/research/cont01-drive-20261018')
+          manifest=json.loads((src/'manifest.json').read_text())
+          assert len(manifest['files'])==10 and {e['year'] for e in manifest['files']}==set(range(2007,2017))
+          initial=json.loads((root/'release-before.json').read_text()); current=json.loads((root/'release-after.json').read_text())
+          assert initial['id']==current['id'] and initial['updated_at']==current['updated_at'], 'release changed during copy'
+          remote={a['name']:a for a in current['assets']}
+          bundle=json.loads((root/'current/_tbt_bundle_manifest.json').read_text())
+          cdb_sha={}
+          manifest_file=json.loads((root/'current/history_manifest.json').read_text())
+          expected={f"history-{int(year):04d}.parquet" for year in manifest_file['years']}
+          actual={p.name for p in (root/'current').glob('history-*.parquet')}
+          assert len(expected)==78 and expected==actual, 'incomplete current CDB partition inventory'
+          for name in sorted(expected)+['history_manifest.json','_tbt_bundle_manifest.json']:
+            digest=sha(root/'current'/name)
+            assert remote[name]['digest']=='sha256:'+digest, 'remote SHA mismatch '+name
+            if name!='_tbt_bundle_manifest.json':
+              assert bundle['files'][name]['sha256']==digest, 'bundle SHA mismatch '+name
+            if name.startswith('history-'):cdb_sha[name]=digest
+          db=open_cache(root/'source-observations.sqlite')
+          sources=[]; raw_cells=0; nonempty=0; empty=0; source_rows=0
+          verdict=collections.Counter()
+          out=root/'report';out.mkdir(exist_ok=True)
+          allowed_direct={'winner_rank','loser_rank','w_ace','l_ace','w_df','l_df'}
+          used_for_derived={p+'_'+k for p in ('w','l') for k in ('svpt','1stIn','1stWon','2ndWon','bpSaved','bpFaced','ace','df')}
+          with gzip.open(out/'source-cell-verdicts.csv.gz','wt',newline='',encoding='utf-8') as dst:
+            writer=csv.writer(dst)
+            writer.writerow(['Drive_ID','Source_SHA256','Row_1based','Col_1based','Header','Verdict','Note'])
+            for entry in manifest['files']:
+              p=src/f"atp_matches_{entry['year']}.csv"
+              assert p.stat().st_size==entry['bytes'] and sha(p)==entry['sha256'], 'original Drive bytes mismatch'
+              digest=entry['sha256']
+              with p.open(newline='',encoding='utf-8-sig') as f:
+                reader=csv.DictReader(f)
+                assert len(reader.fieldnames)==49 and len(set(reader.fieldnames))==49
+                rows=0; yes=0; no=0
+                for line,record in enumerate(reader,2):
+                  assert None not in record and len(record)==49
+                  rows+=1
+                  for col,k in enumerate(reader.fieldnames,1):
+                    value=record[k]
+                    if value=='':status='SOURCE_NULL';no+=1
+                    elif k in allowed_direct:status='NO_VERIFIED_CANONICAL_ID';yes+=1
+                    elif k in used_for_derived:status='DERIVED_FIELD_REVIEW_NO_EXACT_ID';yes+=1
+                    else:status='NO_VERIFIED_DIRECT_SCHEMA';yes+=1
+                    verdict[status]+=1
+                    writer.writerow([entry['drive_id'],digest,line,col,k,status,'No implicit canonical ID from tourney_id/match_num'])
+                assert rows==entry['rows'] and yes==entry['nonempty_cells'] and no==entry['empty_cells'], 'original profile mismatch'
+                raw_cells+=49*rows;nonempty+=yes;empty+=no;source_rows+=rows
+              pstats=profile(db,p,'.csv',digest,100000000,p.name)
+              assert pstats['rows']==entry['rows'],'profile row mismatch'
+              sources.append({'year':entry['year'],'drive_id':entry['drive_id'],'sha256':digest,'rows':rows,'profile':pstats})
+          assert (source_rows,raw_cells,nonempty,empty)==(30184,1479016,1320264,158752)
+          db.commit()
+          baseline,total=canonical_index(root/'current',root/'canonical-index.sqlite')
+          digests={e['sha256'] for e in manifest['files']}
+          research=compare(db,baseline,digests,out)
+          assert sum(verdict.values())==raw_cells
+          final=json.loads(__import__('subprocess').check_output(['gh','api','repos/BackstageTalks/tbt-data/releases/tags/tbt-data-v1']))
+          assert final['id']==current['id'] and final['updated_at']==current['updated_at'], 'release changed during comparison'
+          assert all(sha(root/'current'/p)==digest for p,digest in cdb_sha.items()),'partition changed during comparison'
+          report={'schema':1,'state':'READ_ONLY_NO_APPROVED_IMPORT','sources':10,'rows':source_rows,'source_cells':raw_cells,'source_nonempty':nonempty,'source_empty':empty,'verdicts':dict(verdict),'canonical_years':len(cdb_sha),'canonical_rows':total,'canonical_partition_sha256':cdb_sha,'canonical_release_id':current['id'],'research_only_matching':research,'production_writes':0,'write_authorized':False,'model_trained':False,'operator_drive_source_sha256s':{x['year']:x['sha256'] for x in sources},'warning':'Sackmann-source winner/loser IDs and tourney_id/match_num are not independently verified canonical IDs. Research name-pair comparisons cannot authorize writes.'}
+          (out/'report.json').write_text(json.dumps(report,sort_keys=True,indent=2)+'\n')
+          (out/'source-file-profiles.json').write_text(json.dumps(sources,sort_keys=True,indent=2)+'\n')
+          public={k:v for k,v in report.items() if k not in ('canonical_partition_sha256','operator_drive_source_sha256s')}
+          (out/'public-summary.json').write_text(json.dumps(public,sort_keys=True,indent=2)+'\n')
+          print('CONT01_READONLY_EXACT_BYTE_REPORT',json.dumps(public,sort_keys=True))
+          PY
+      - name: Write detailed, immutable cell evidence to PRIVATE research release
+        run: |
+          set -euo pipefail
+          tag="blinq-cont01-exact-readonly-${GITHUB_RUN_ID}"
+          gh release create "$tag" work/cont01/report/report.json work/cont01/report/source-file-profiles.json work/cont01/report/source-cell-verdicts.csv.gz work/cont01/report/candidate-fields.jsonl \
+            --repo BackstageTalks/tbt-data --title "$tag" --notes "Private source-cell and current CDB research-only comparison, no production mutation" --latest=false
+          gh release view "$tag" --repo BackstageTalks/tbt-data --json assets --jq '.assets[].name' > work/cont01/report/remote-names.txt
+          test "$(wc -l < work/cont01/report/remote-names.txt)" -eq 4
+      - name: Preserve counts only in public CI (no canonical data leak)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-cont01-public-aggregate-${{ github.run_id }}
+          path: work/cont01/report/public-summary.json
+          if-no-files-found: warn
+          retention-days: 30
