@@ -34,6 +34,7 @@ jobs:
           set -euo pipefail
           python -m pip install -q --disable-pip-version-check google-auth requests pyarrow
           python -m compileall -q scripts/drive_source_cdb_gap.py
+          python -m unittest discover -s tests -p test_drive_source_cdb_gap.py -v
           test -n "$GH_TOKEN" && test -n "$BLINQ_DRIVE_READER_JSON"
           test "$(gh api repos/$PRIVATE_REPO --jq .private)" = true
       - name: Pin current CDB release assets and fetch exact canonical years
@@ -148,7 +149,8 @@ jobs:
           set -euo pipefail
           mkdir -p work/private-evidence work/readback
           cp work/private-gap-report.json work/private-counts.json work/source-fingerprints.json work/asset-pins.json work/private-evidence/
-          (cd work/private-evidence && sha256sum ./*.json > SHA256SUMS)
+          cp work/private-null-cells/*.jsonl.gz work/private-evidence/
+          (cd work/private-evidence && sha256sum ./*.json ./*.jsonl.gz > SHA256SUMS)
           tar -czf work/drive-cdb-gap-evidence.tar.gz -C work/private-evidence .
           tag="blinq-drive-cdb-gap-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           gh release create "$tag" -R "$PRIVATE_REPO" --target main --title "Private Drive CSV to CDB gap $GITHUB_RUN_ID" --notes 'Read-only; no imports, no identity mapping, no source or canonical writes.' work/drive-cdb-gap-evidence.tar.gz >/dev/null
@@ -156,3 +158,4 @@ jobs:
           cmp work/drive-cdb-gap-evidence.tar.gz work/readback/drive-cdb-gap-evidence.tar.gz
           (cd work/readback && tar -xzf drive-cdb-gap-evidence.tar.gz && sha256sum -c SHA256SUMS)
           echo PRIVATE_CDB_GAP_EVIDENCE_READBACK_PASS
+

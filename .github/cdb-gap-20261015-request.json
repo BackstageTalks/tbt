@@ -11,7 +11,7 @@
   "mode": "read_only",
   "allow_cdb_writes": false,
   "allow_drive_writes": false,
-  "request_reason": "Recheck original four exact Drive CSV IDs under explicitly validated root/child ancestry against current CDB; readonly",
-  "audit_cycle": "2026-10-19-drive-parent-verification-fixed-p0",
-  "rerun_counter": 4
+  "request_reason": "Enumerate current ATP/WTA 2025-2026 canonical NULL statistics and private match IDs; count original Drive source field coverage without identity inference or writes",
+  "audit_cycle": "2026-10-19-exact-stat-null-census",
+  "rerun_counter": 5
 }
