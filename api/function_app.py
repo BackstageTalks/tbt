@@ -129,7 +129,7 @@ from tbt.services.live_comeback import (
 )
 from tbt.services.match_status import (
     event_ids_from_feed, runtime_settled_results, scan_match_statuses,
-    verified_terminal_statuses,
+    verified_terminal_statuses, apply_verified_schedule_overlay,
 )
 from tbt.services.results_archive import (
     settled_archive_candidates, save_settled_results_archive,
@@ -1385,6 +1385,11 @@ def feed(req):
                 if not exclusions_available:
                     data["results"] = []
                     data["results_exclusions_unavailable"] = True
+            # Response-only schedule corrections for rows this member can already
+            # see; the published feed/ledger and betting odds remain untouched.
+            data = apply_verified_schedule_overlay(
+                data, status_snapshot.get("schedule_updates"),
+            )
             data["match_status_updated_at"] = status_snapshot.get("updated_at")
         except AdminStorageUnavailable:
             data["match_statuses"] = {}
