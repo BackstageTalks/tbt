@@ -1121,7 +1121,7 @@ def apply_verified_schedule_overlay(
     generic/unpublished board events not in its published pick sections.
     """
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    allowed = event_ids_from_feed(feed)
+    allowed = set(prediction_rows(feed, now=now))
     verified = {
         str(eid): fresh for eid, value in (observations or {}).items()
         if str(eid) in allowed
