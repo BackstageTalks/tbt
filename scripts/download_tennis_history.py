@@ -31,6 +31,7 @@ from tbt.services.tennisapi_extras_enrichment import needs_extras, enrich_event_
 from release_store import ReleaseStore
 from date_window import history_window
 from audit_statistics_inventory import _quality_ready, statistics_value_change
+from adaptive_statistics_queue import AdaptiveStatisticsQueue
 
 
 def read_json(path, default):
@@ -602,6 +603,7 @@ def main():
     report = Counter()
     statistics_value = Counter()
     statistics_segments = {}
+    statistics_adaptive_queue = None
     statistics_unavailable_reasons = Counter()
     expected_statistics = {}
     expected_per_set = {}
@@ -676,9 +678,16 @@ def main():
             write_json(directory / "statistics_gap_plan.json", statistics_plan)
             report["statistics_candidate_rows"] = int(statistics_plan["candidate_rows"])
             report["statistics_already_quality_ready"] = int(statistics_plan["already_quality_ready"])
+            # Only the scheduled hourly high-yield mode self-tunes; manual
+            # statistics requests retain their existing deterministic order.
+            if args.targeted_statistics and high_yield_setting == "true":
+                statistics_adaptive_queue = AdaptiveStatisticsQueue(
+                    statistics_candidates, statistics_plan["bucket_coverage"])
+                statistics_plan["online_adaptive_priority"] = True
             print(json.dumps({"statistics_gap_plan": statistics_plan}, ensure_ascii=False), flush=True)
             processed = 0
-            for match in statistics_candidates:
+            for match in (statistics_adaptive_queue if statistics_adaptive_queue is not None
+                          else statistics_candidates):
                 processed += 1
                 stats_before = dict(match.stats or {})
                 per_set_before = (match.provider_payload or {}).get("_tbt_statistics_by_set")
@@ -702,6 +711,9 @@ def main():
                         statistics_segments, statistics_unavailable_reasons,
                         match, status, provider.request_count - requests_before, value_change,
                     )
+                    if statistics_adaptive_queue is not None:
+                        statistics_adaptive_queue.record(
+                            match, provider.request_count - requests_before, value_change)
                 report[status] += 1
                 if status in {"enriched", "unavailable", "conflict"}:
                     statistics_changed_years.add(match.scheduled_at.year)
@@ -757,6 +769,8 @@ def main():
                     "PBP is structural, not model features."
                 )
             if args.targeted_statistics:
+                if statistics_adaptive_queue is not None:
+                    output_report["statistics_adaptive_priority"] = statistics_adaptive_queue.summary()
                 output_report["statistics_segment_yield"] = _statistics_segment_yield(statistics_segments)
                 output_report["statistics_unavailable_reasons"] = dict(statistics_unavailable_reasons)
                 output_report["statistics_segment_yield_policy"] = (
