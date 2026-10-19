@@ -1,0 +1,38 @@
+name: CDB import retry after protected frozen training
+
+# Training has an actual global lock across private/public repositories.
+# Once the owner's workflow is completed, request a new guarded import.
+# The import itself independently checks the tag, CAS, and canonical readback.
+'on':
+  workflow_run:
+    workflows:
+      - BlinQ protected frozen-CDB candidate training
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: blinq-cdb-inbox-post-training-dispatch
+  cancel-in-progress: false
+
+jobs:
+  retry-cdb-inbox:
+    if: >-
+      github.event.workflow_run.head_repository.full_name == 'BackstageTalks/tbt' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Retry guarded Drive-wide CDB import after training owner exits
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Never steal or forcibly expire the CDB lock. If its owner failed
+          # to release it, the target import fails closed in read-only preflight.
+          gh workflow run cdb-drive-inbox.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo 'CDB_IMPORT_RETRY_DISPATCH_SUBMITTED_NOT_CDB_MUTATION_VERIFIED'

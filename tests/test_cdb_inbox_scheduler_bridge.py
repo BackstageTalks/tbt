@@ -47,3 +47,23 @@ def test_entire_blinq_data_root_is_recursive_and_progress_is_private():
     assert "audit/cdb-inbox-progress.json.gz" in IMPORT
     assert "CDB_INBOX_PROGRESS_PRIVATE_READBACK_VERIFIED" in IMPORT
     assert "tests/test_cdb_inbox_drive.py" in IMPORT
+
+def test_cdb_writer_busy_is_detected_before_drive_scan():
+    gate = "python scripts/wait_for_cdb_writer_idle.py --max-seconds 0"
+    assert gate in IMPORT
+    assert IMPORT.index(gate) < IMPORT.index("Restore private Drive-wide import progress")
+    assert IMPORT.index(gate) < IMPORT.index("scripts/cdb_inbox_drive.py --folder-id")
+    assert IMPORT.index(gate) < IMPORT.index("scripts/cdb_global_writer_lock.py acquire")
+
+def test_protected_training_completion_triggers_safe_import_retry():
+    hook = (ROOT / ".github/workflows/cdb-drive-inbox-after-training.yml").read_text()
+    assert "workflow_run:" in hook
+    assert "BlinQ protected frozen-CDB candidate training" in hook
+    assert "completed" in hook
+    assert "head_branch == 'main'" in hook
+    assert "head_repository.full_name == 'BackstageTalks/tbt'" in hook
+    assert "actions: write" in hook
+    assert "gh workflow run cdb-drive-inbox.yml" in hook
+    assert "git/refs/tags" not in hook
+    assert "release delete" not in hook
+    assert "\\n  schedule:" not in hook

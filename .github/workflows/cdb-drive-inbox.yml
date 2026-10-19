@@ -67,6 +67,15 @@ jobs:
           test -n "$GH_TOKEN" || { echo BLOCKED_PRIVATE_CDB_TOKEN_MISSING; exit 1; }
           test -n "$BLINQ_DRIVE_READER_JSON" || { echo BLOCKED_DRIVE_READER_MISSING; exit 1; }
           gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" --jq '.tag_name' > /dev/null
+      - name: Fail fast if another canonical CDB writer is active
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Immutable frozen-candidate training legitimately owns the same lock.
+          # Do not spend ~15 minutes downloading/linking data merely to wait
+          # 20 more minutes for the atomic CAS lock; next trigger will retry.
+          # Read-only observation does not replace the later atomic acquire.
+          python scripts/wait_for_cdb_writer_idle.py --max-seconds 0
       - name: Restore private Drive-wide import progress
         shell: bash
         run: |
