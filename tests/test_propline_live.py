@@ -435,3 +435,50 @@ def test_event_timeout_skips_only_that_fixture_and_preserves_other_prices():
     assert audit["errors"] == 1
     assert audit["priced_by_market"]["match_winner"] == 1
     assert audit["calls"] == client.calls == 4
+
+
+def test_repeated_propline_timeouts_open_circuit_without_losing_prior_prices():
+    """After 3 consecutive transport failures, skip the optional provider."""
+    fixtures, board = [], []
+    for i in range(5):
+        fixtures.append({
+            "event_id": f"rapid-new-{i}", "scheduled_at": START, "tour": "ATP",
+            "player1": {"name": f"Player Alpha{i}"},
+            "player2": {"name": f"Player Beta{i}"},
+        })
+        board.append({
+            "id": str(2000 + i), "home_team": f"Player Alpha{i}",
+            "away_team": f"Player Beta{i}", "commence_time": START,
+        })
+
+    class Outage:
+        calls = 0
+        max_calls = 100
+        min_remaining = 150
+        remaining = 800
+
+        def get(self, path, params=None):
+            self.calls += 1
+            if path == "/sports/tennis/events":
+                return board
+            if path.endswith("/markets") and "/2000/" in path:
+                return [{"key": "h2h"}]
+            if path.endswith("/odds") and "/2000/" in path:
+                return {"bookmakers": [{"key": "book", "markets": [{
+                    "key": "h2h", "outcomes": [
+                        {"name": "Player Alpha0", "price": -120},
+                        {"name": "Player Beta0", "price": 110},
+                    ],
+                }]}]}
+            raise RuntimeError("PropLine request failed")
+
+    client = Outage()
+    priced, report = discover_propline_fallback(
+        client, fixtures, {}, now=NOW, max_events=-1,
+    )
+    assert report["stopped_on_transport_outage"] is True
+    assert report["errors"] == 3
+    assert report["events_queried"] == 4  # successful first + 3 timeouts
+    assert client.calls == 6  # board + markets + odds + 3 failing markets
+    assert "match_winner" in priced["rapid-new-0"]
+    assert "rapid-new-4" not in priced
