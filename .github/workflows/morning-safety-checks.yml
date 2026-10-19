@@ -1,0 +1,59 @@
+name: BlinQ morning refresh safety checks
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/morning-refresh.yml
+      - .github/workflows/morning-safety-checks.yml
+      - api/tbt/services/propline_live.py
+      - tests/test_propline_live.py
+      - tests/test_morning_model_gate_workflow.py
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/morning-refresh.yml
+      - .github/workflows/morning-safety-checks.yml
+      - api/tbt/services/propline_live.py
+      - tests/test_propline_live.py
+      - tests/test_morning_model_gate_workflow.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-morning-safety-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  offline-morning-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: api:scripts
+      PYTHONDONTWRITEBYTECODE: '1'
+      BLINQ_RAPIDAPI_MAX_RPS: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install test dependencies (no live provider use)
+        run: python -m pip install -r api/requirements-train.txt pytest PyYAML
+      - name: Validate morning workflow YAML parses
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+          for name in (".github/workflows/morning-refresh.yml",
+                       ".github/workflows/morning-safety-checks.yml"):
+              doc = yaml.safe_load(Path(name).read_text(encoding="utf-8"))
+              assert isinstance(doc, dict) and isinstance(doc.get("jobs"), dict)
+          print("Both morning GitHub Actions workflows parse.")
+          PY
+      - name: Verify PropLine outage and safe morning model gate
+        run: |
+          python -m pytest -q             tests/test_propline_live.py             tests/test_morning_model_gate_workflow.py
