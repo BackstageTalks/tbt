@@ -24,6 +24,7 @@ class AdaptiveStatisticsQueue:
     MIN_TOTAL_REQUESTS = 80
     MIN_COHORT_REQUESTS = 12
     EXPLORE_EVERY = 4
+    RECENT_MATCH_WINDOW = 96
 
     def __init__(self, candidates, bucket_coverage=None):
         self._baseline = deque()
@@ -49,6 +50,14 @@ class AdaptiveStatisticsQueue:
         self._total_paid = 0
         self._paid = Counter()
         self._reward = Counter()
+        # A lifetime average can keep favoring a cohort long after its
+        # high-yield backlog is exhausted. Score only the latest paid matches
+        # while retaining lifetime counters for independent CDB audit.
+        self._recent = defaultdict(deque)
+        self._recent_requests = Counter()
+        self._recent_reward = Counter()
+        self._recent_values = Counter()
+        self._recent_quality = Counter()
         self._values = Counter()
         self._quality = Counter()
         self._ace_df = Counter()
@@ -83,8 +92,8 @@ class AdaptiveStatisticsQueue:
         # Six virtual neutral requests damp early noise. Serve/return readiness
         # transitions are more valuable than raw counts. Incomplete seasons
         # receive a small bonus, not an overriding priority.
-        reward = self._reward[group]
-        per_call = (18.0 + reward) / (6.0 + self._paid[group])
+        reward = self._recent_reward[group]
+        per_call = (18.0 + reward) / (6.0 + self._recent_requests[group])
         return per_call * (1.0 + 0.25 * (1.0 - self._coverage[group]))
 
     def __next__(self):
@@ -128,7 +137,23 @@ class AdaptiveStatisticsQueue:
         self._values[group] += values
         self._quality[group] += quality
         self._ace_df[group] += ace_df
-        self._reward[group] += 16 * quality + 0.75 * values + 0.25 * ace_df
+        gain = 16 * quality + 0.75 * values + 0.25 * ace_df
+        self._reward[group] += gain
+        # Keep a bounded sample of paid attempts. Weight by actual provider
+        # requests (including retries) so low-yield and retry-heavy cohorts
+        # lose selection priority promptly rather than consuming the day.
+        window = self._recent[group]
+        window.append((requests, gain, values, quality))
+        self._recent_requests[group] += requests
+        self._recent_reward[group] += gain
+        self._recent_values[group] += values
+        self._recent_quality[group] += quality
+        if len(window) > self.RECENT_MATCH_WINDOW:
+            prev_requests, prev_gain, prev_values, prev_quality = window.popleft()
+            self._recent_requests[group] -= prev_requests
+            self._recent_reward[group] -= prev_gain
+            self._recent_values[group] -= prev_values
+            self._recent_quality[group] -= prev_quality
 
     def summary(self):
         groups = sorted(self._pending)
@@ -138,6 +163,8 @@ class AdaptiveStatisticsQueue:
             "min_paid_requests": self.MIN_TOTAL_REQUESTS,
             "min_cohort_paid_requests": self.MIN_COHORT_REQUESTS,
             "minimum_baseline_exploration_fraction": 1 / self.EXPLORE_EVERY,
+            "selection_value_policy": "quality_ready_and_new_fields_recent_paid_window",
+            "recent_paid_match_window": self.RECENT_MATCH_WINDOW,
             "candidate_rows": self._served + self._remaining,
             "selected_rows": self._served,
             "remaining_rows": self._remaining,
@@ -151,6 +178,10 @@ class AdaptiveStatisticsQueue:
                     "new_statistic_values": self._values[group],
                     "new_quality_ready_rows": self._quality[group],
                     "new_ace_df_values": self._ace_df[group],
+                    "recent_paid_matches": len(self._recent[group]),
+                    "recent_paid_requests": self._recent_requests[group],
+                    "recent_new_statistic_values": self._recent_values[group],
+                    "recent_new_quality_ready_rows": self._recent_quality[group],
                     "baseline_choices": self._baseline_choices[group],
                     "adaptive_choices": self._adaptive_choices[group],
                 }
