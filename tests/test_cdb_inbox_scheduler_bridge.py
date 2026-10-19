@@ -37,3 +37,13 @@ def test_active_half_hour_match_status_scheduler_is_primary_trigger():
     assert "CDB_INBOX_ALREADY_DISPATCHED_IN_SLOT" in workflow
     assert 'gh workflow run cdb-drive-inbox.yml --repo "$GITHUB_REPOSITORY" --ref main' in workflow
     assert "\\n  schedule:" not in workflow
+
+
+def test_entire_blinq_data_root_is_recursive_and_progress_is_private():
+    assert "INBOX_FOLDER_ID: 1jzdzztz8cXquO8VDswqE19PHupQau-xM" in IMPORT
+    assert "scripts/cdb_inbox_drive.py --folder-id" in IMPORT
+    assert "--state-file work/private-state/current.json" in IMPORT
+    assert "--next-state work/private-state/next.json" in IMPORT
+    assert "audit/cdb-inbox-progress.json.gz" in IMPORT
+    assert "CDB_INBOX_PROGRESS_PRIVATE_READBACK_VERIFIED" in IMPORT
+    assert "tests/test_cdb_inbox_drive.py" in IMPORT
