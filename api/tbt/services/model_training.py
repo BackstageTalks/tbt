@@ -107,7 +107,7 @@ def status():
         raise TrainingUnavailable("Čaká sa na prvú synchronizáciu tréningu.")
     result = json.loads(stored["payload"])
     age = (datetime.now(timezone.utc) - datetime.fromisoformat(result["observed_at"])).total_seconds()
-    if age < -60 or age > 1800:
+    if age < -60 or age > 5400:
         result.update(can_start=False, reason="Stav je neaktuálny. Čaká sa na synchronizáciu.")
     if row("request-" + result["base"]):
         result.update(can_start=False, reason="Požiadavka bola uložená. Čaká sa na potvrdenie behu; neposielaj ju znova.")
@@ -133,7 +133,7 @@ def start(payload, actor):
             "created_at": datetime.now(timezone.utc).isoformat()})
     except Exception as exc:
         raise TrainingBlocked("Požiadavka už existuje alebo úložisko nie je dostupné. Obnov stav.") from exc
-    return {"state": "QUEUED", "message": "Požiadavka uložená. Worker ju prevezme pri najbližšej kontrole; obnov stav o niekoľko minút."}
+    return {"state": "QUEUED", "message": "Požiadavka uložená. Worker ju prevezme pri najbližšej kontrole (bežne do 30 minút). Obnov stav pre potvrdenie behu."}
 
 
 def sync(payload):

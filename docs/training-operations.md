@@ -4,9 +4,9 @@
 
 V **Administracia → Kalibracia modelu → Trening kandidatov** vyber profil a klikni **Natrenovat kandidata**. Panel zobrazuje posledne behy, aktualny krok a ulozene modely. **Obnovit stav** nacita aktualny vysledok. Trening pouziva hlavnu vetvu `main`; zmenu logiky najprv otestuj a zluc do nej. Nove data musia byt importovane do CDB. Produkcny model sa neaktivuje.
 
-Server nepotrebuje novy GitHub token. Existujuci `BLINQ_LIVE_WORKER_TOKEN` overuje internu synchronizaciu. GitHub workflow `admin-training-worker.yml` cita stav cez existujuci `TBT_DATA_GH_TOKEN`; na dispatch pouziva kratkodoby `github.token` s Actions write. Kontrola je naplanovana kazdych 5 minut; GitHub moze planovany beh oneskorit. Manualne **Run workflow** v admin-training-worker vynuti okamzitu synchronizaciu.
+Server nepotrebuje novy GitHub token. Existujuci `BLINQ_LIVE_WORKER_TOKEN` overuje internu synchronizaciu. GitHub workflow `admin-training-worker.yml` cita stav cez existujuci `TBT_DATA_GH_TOKEN`; na dispatch pouziva kratkodoby `github.token` s Actions write. Kontrola nadvazuje na existujuci externe spustany Match Status worker (pozorovana kadencia 30 minut) a na dokoncenie treningu. Novy GitHub cron sa nepridava. Manualne **Run workflow** v admin-training-worker vynuti okamzitu synchronizaciu.
 
-Admin POST vytvori atomicky trvaly zaznam vo fronte `model-training-queue` v existujucom admin ulozisku. Worker ho moze prevziat iba raz, znovu overi lock a aktivne treningy a az potom odosle dispatch. Pri vypadku po prevzati sa poziadavka automaticky neopakuje; operator overi runy a konkretny claim. Stav starsi ako 30 minut zakazuje nove spustenie. Treningove vstupy a produkcny model stale chrania existujuce workflow brany.
+Admin POST vytvori atomicky trvaly zaznam vo fronte `model-training-queue` v existujucom admin ulozisku. Worker ho moze prevziat iba raz, znovu overi lock a aktivne treningy a az potom odosle dispatch. Pri vypadku po prevzati sa poziadavka automaticky neopakuje; operator overi runy a konkretny claim. Stav starsi ako 90 minut zakazuje nove spustenie. Treningove vstupy a produkcny model stale chrania existujuce workflow brany.
 
 Po nasadeni treba overit synchronizaciu s nezavislym readbackom, GET/POST autorizaciu a skutocny trening. Samotny stav QUEUED znamena ulozenu poziadavku, nie hotovy model.
 

@@ -1,8 +1,10 @@
 name: BlinQ admin training worker
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '*/5 * * * *'
+  workflow_run:
+    workflows: [Hourly prediction match status, BlinQ protected frozen-CDB candidate training]
+    types: [completed]
+    branches: [main]
 permissions:
   contents: read
   actions: write
@@ -11,6 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sync:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
