@@ -4922,6 +4922,36 @@
   }
 
 
+  function renderAdminTraining(){
+    const d=state.adminTraining, busy=state.adminTrainingBusy;
+    const link=(url,label)=>/^https:\/\/github\.com\/BackstageTalks\/(tbt|tbt-data)\//.test(String(url||''))?`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`:escapeHtml(label);
+    const rows=(d?.runs||[]).slice(0,5).map(r=>`<li>${link(r.html_url,`Tréning #${r.id}`)} · ${escapeHtml(r.conclusion||r.status)} · ${escapeHtml(String(r.head_sha||'').slice(0,8))}</li>`).join('');
+    const candidates=(d?.candidates||[]).slice(0,10).map(c=>`<li>${link(c.url,c.tag)} · ${escapeHtml(c.label)}</li>`).join('');
+    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>MODEL LAB</small><h2>Tréning kandidátov</h2><p>Nový kandidát použije aktuálne dáta CDB a poslednú schválenú logiku. Produkčný model sa tréningom nemení.</p></div><button type="button" class="btn btn-ghost" data-admin-action="training-refresh" ${busy?'disabled':''}>Obnoviť stav</button></div>
+      <p role="status">${escapeHtml(state.adminTrainingMessage||d?.reason||'Načítavam stav tréningu…')}</p>
+      <label>Profil <select id="admin-training-profile" ${busy?'disabled':''}><option value="top-7.2.1">BlinQ 7.2.1</option><option value="standard">Štandardný</option></select></label>
+      <button type="button" class="btn btn-primary" data-admin-action="training-start" ${busy||!d?.can_start?'disabled':''}>${busy?'Spracúvam…':'Natrénovať kandidáta'}</button>
+      <p>Po doplnení dát dokonči ich import. Zmeny logiky musia byť uložené v hlavnej verzii aplikácie.</p>
+      <h3>Posledné tréningy</h3><p>${escapeHtml((d?.active_steps||[]).join(' · '))}</p><ul>${rows||'<li>Zatiaľ bez dostupného behu.</li>'}</ul>
+      <h3>Uložené kandidáty</h3><p>Uložený model ešte neznamená schválenie na produkciu. Odkazy na súbory vyžadujú prístup do súkromného úložiska.</p><ul>${candidates||'<li>Zatiaľ bez dostupného kandidáta.</li>'}</ul></section>`;
+  }
+  async function loadAdminTraining(start=false){
+    if(state.adminTrainingBusy)return;
+    const generation=feedGeneration;
+    const profile=document.getElementById('admin-training-profile')?.value||'top-7.2.1';
+    state.adminTrainingBusy=true;state.adminTrainingMessage='';rerenderAdmin();
+    try{
+      const result=await BlinqAuth.adminModelTraining(start?{profile}:undefined);
+      if(generation!==feedGeneration)return;
+      if(start){state.adminTrainingMessage=result.message;state.adminTraining=null;}
+      else state.adminTraining=result;
+    }catch(error){
+      if(generation!==feedGeneration)return;
+      state.adminTraining=null;state.adminTrainingMessage=error?.message||'Stav tréningu nie je dostupný.';
+    }finally{
+      if(generation===feedGeneration){state.adminTrainingBusy=false;rerenderAdmin();}
+    }
+  }
   function renderAdminCalibration(){
     const d=state.adminCalibration||{},shadow=d.shadow||{},unseen=d.unseen||{},gate=shadow.gate||{};
     const active=Boolean(d.candidate_active);
@@ -5134,7 +5164,7 @@
   function renderAdminRoute(){
     const tabs=[['accounts','Účty','Prístup · platnosť'],['projects','Projektové skupiny','Skupiny · INFO · výsledky'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard setting','3 karty · KPI'],['testresults','Výsledky','Testovacie tipy · výber'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram','Skupiny · odkazy'],['insights','Info & LIVE','Správy · radar'],['calibration','Kalibrácia','Model · 1 000 zápasov'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
-    const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,testresults:renderAdminTestList,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,calibration:renderAdminCalibration,system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
+    const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,testresults:renderAdminTestList,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,calibration:()=>renderAdminTraining()+renderAdminCalibration(),system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
     const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],projects:['Projektové skupiny','Samostatné skupiny bez ohľadu na level, ich INFO kanál a vyhodnotenia.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard setting','Nastavenie troch hlavných metrík bez zmeny grafiky.'],testresults:['Výsledky','Manuálne vylúčenie testovacích predikcií.'],layout:['Zobrazenie','SHOW / BLUR / HIDE pre panely a jednotlivé riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],calibration:['Kalibrácia modelu','Shadow výsledky, chýbajúce zápasy a porovnanie s produkciou.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
     let contextual='';
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov sa aplikujú okamžite</div>';
@@ -5192,6 +5222,7 @@
   }
   function exportUiConfig(){ const blob=new Blob([JSON.stringify(state.ui,null,2)+'\n'],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');a.href=url;a.download='ui-config.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),0); }
   async function loadAdminCalibration(force=false){
+    if(force||!state.adminTraining)loadAdminTraining();
     const generation=feedGeneration;
     if(state.adminCalibrationLoading||(!force&&state.adminCalibration))return;
     state.adminCalibrationLoading=true;state.adminCalibrationError='';rerenderAdmin();
@@ -5484,6 +5515,8 @@
       }
       if(action==='live-radar-scan'){if(state.adminLiveRadarLoading)return;state.adminLiveRadarLoading=true;state.adminLiveRadarStatus=null;rerenderAdmin();try{const result=await BlinqAuth.adminLiveRadar(true,true);state.adminLiveRadarStatus={...result,ok:true,new_alerts:Number(result?.created)||0};state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);showStatus(`LIVE Radar: ${Number(result?.signals?.length??result?.signals)||0} signálov · ${Number(result?.created)||0} nových upozornení.`);}catch(error){state.adminLiveRadarStatus={error:error.message||'LIVE Radar sa nepodarilo spustiť.'};showStatus(state.adminLiveRadarStatus.error);}finally{state.adminLiveRadarLoading=false;rerenderAdmin();}return;}
       if(action==='calibration-refresh'){loadAdminCalibration(true);return;}
+      if(action==='training-refresh'){loadAdminTraining();return;}
+      if(action==='training-start'){loadAdminTraining(true);return;}
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
       if(action==='copy-diagnostics'){
         const d=state.adminDiagnostics||{};
@@ -6435,7 +6468,7 @@
     state.insights=[];state.insightsUnread=0;state.insightsLoading=false;state.insightsStorageUnavailable=false;
     state.userLiveRadarStatus=null;state.userLiveRadarLoading=false;state.liveRadarHeartbeat=null;state.privateUpdatesBusy=false;state.privateUpdatesLastPoll=0;
     state.adminUsers=null;state.adminUsersLoading=false;state.adminUsersError='';state.adminUsersWarning='';state.adminSelectedUser=null;
-    state.adminDiagnostics=null;state.adminDiagnosticsLoading=false;state.adminCalibration=null;state.adminCalibrationLoading=false;state.adminCalibrationError='';state.adminInsights=null;state.adminInsightsLoading=false;state.adminInsightsError='';state.adminInsightEditingId='';state.adminLiveRadarStatus=null;state.adminLiveRadarLoading=false;
+    state.adminTraining=null;state.adminTrainingBusy=false;state.adminTrainingMessage="";state.adminDiagnostics=null;state.adminDiagnosticsLoading=false;state.adminCalibration=null;state.adminCalibrationLoading=false;state.adminCalibrationError='';state.adminInsights=null;state.adminInsightsLoading=false;state.adminInsightsError='';state.adminInsightEditingId='';state.adminLiveRadarStatus=null;state.adminLiveRadarLoading=false;
     state.railMatch=null;state.previewPlan=null;state.demoFeedBackup=null;state.demoMode=false;state.dashboardVisibility=null;state.pushConfig=null;state.pushBusy=false;
     state.projectGroups=[];state.projectGroupsLoading=false;state.projectGroupsError='';state.activeProjectGroupId='';
     state.adminProjectGroups=null;state.adminProjectGroupsLoading=false;state.adminProjectGroupsError='';state.adminProjectGroupId='';

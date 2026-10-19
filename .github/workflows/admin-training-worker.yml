@@ -1,0 +1,32 @@
+name: BlinQ admin training worker
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Hourly prediction match status, BlinQ protected frozen-CDB candidate training]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: blinq-admin-training-worker
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: api:scripts
+      BLINQ_TRAINING_GITHUB_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_TRAINING_DISPATCH_TOKEN: ${{ github.token }}
+      BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_BASE_URL: https://agreeable-sky-011a7fe10.7.azurestaticapps.net
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python scripts/admin_training_worker.py
