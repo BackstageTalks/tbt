@@ -376,3 +376,62 @@ def test_doubles_fallback_requires_full_team_identity_and_complete_h2h():
     assert enriched["betting"]["market"] == "match_winner"
     assert enriched["betting"]["provider_id"] == 2
     assert enriched["betting"]["odds"] > 1.5
+
+
+def test_socket_timeout_is_a_recoverable_optional_provider_failure(monkeypatch):
+    """Raw socket timeouts are not URLError and must not kill refresh."""
+    import pytest
+    from tbt.services import propline_live
+
+    client = PropLineClient("test-key", max_calls=8)
+    def timeout_response(*_args, **_kwargs):
+        raise TimeoutError("socket read timed out")
+
+    monkeypatch.setattr(propline_live.urllib.request, "urlopen", timeout_response)
+    with pytest.raises(RuntimeError, match="PropLine request failed"):
+        client.get("/sports/tennis/events/42/markets")
+    assert client.calls == 1
+
+
+def test_event_timeout_skips_only_that_fixture_and_preserves_other_prices():
+    """One PropLine failure cannot discard another independently priced event."""
+    second = {
+        "event_id": "rapid-999", "scheduled_at": START, "tour": "ATP",
+        "player1": {"id": "9", "name": "Carlos Alcaraz"},
+        "player2": {"id": "10", "name": "Jannik Sinner"},
+    }
+    second_prop = {
+        "id": "5678", "home_team": "Carlos Alcaraz",
+        "away_team": "Jannik Sinner", "commence_time": START,
+    }
+
+    class TimedOutEvent(FakeProp):
+        max_calls = 10
+
+        def get(self, path, params=None):
+            self.calls += 1
+            if path == "/sports/tennis/events":
+                return [PROP, second_prop]
+            if path == "/sports/tennis/events/1234/markets":
+                raise RuntimeError("PropLine request failed")
+            if path == "/sports/tennis/events/5678/markets":
+                return [{"key": "h2h"}]
+            if path == "/sports/tennis/events/5678/odds":
+                return {"bookmakers": [{"key": "test-book", "markets": [{
+                    "key": "h2h",
+                    "outcomes": [
+                        {"name": "Carlos Alcaraz", "price": -120},
+                        {"name": "Jannik Sinner", "price": 110},
+                    ],
+                }]}]}
+            raise AssertionError(path)
+
+    client = TimedOutEvent()
+    payloads, audit = discover_propline_fallback(
+        client, [MATCH, second], {}, now=NOW, max_events=-1
+    )
+    assert "rapid-133" not in payloads
+    assert "match_winner" in payloads["rapid-999"]
+    assert audit["errors"] == 1
+    assert audit["priced_by_market"]["match_winner"] == 1
+    assert audit["calls"] == client.calls == 4
