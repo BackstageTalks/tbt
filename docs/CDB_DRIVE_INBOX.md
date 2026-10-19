@@ -24,7 +24,7 @@ or train/publish a model.
 
 ## Pipeline
 
-1. Reuses the existing externally dispatched Drive audit bridge; only the 02:xx and 14:xx UTC slots dispatch this workflow once per slot. Manual `workflow_dispatch` remains available. No GitHub internal cron.
+1. Reuses the demonstrably active 30-minute external Match Status dispatcher as the primary clock. At 02:00–02:29 and 14:00–14:29 UTC it dispatches the inbox once per slot (duplicate checked); the Drive audit bridge is a fallback. Manual `workflow_dispatch` remains available. There is no GitHub internal cron.
 2. Drive reader downloads bounded source content (100 files, max 64 MiB
    each and 256 MiB total) through `BLINQ_DRIVE_READER_JSON`. All input
    remains ephemeral on the runner. Its source manifests are not posted to
