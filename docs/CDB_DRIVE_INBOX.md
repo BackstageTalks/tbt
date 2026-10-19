@@ -24,7 +24,7 @@ or train/publish a model.
 
 ## Pipeline
 
-1. Scheduled 02:23 and 14:23 UTC and manual `workflow_dispatch`.
+1. Manually dispatched with `workflow_dispatch`; the repository contract requires recurring invocations to be configured in the existing external scheduler, not GitHub `schedule`. Automated cadence is not yet connected.
 2. Drive reader downloads bounded source content (100 files, max 64 MiB
    each and 256 MiB total) through `BLINQ_DRIVE_READER_JSON`. All input
    remains ephemeral on the runner. Its source manifests are not posted to
@@ -37,7 +37,8 @@ or train/publish a model.
    match, exact date, exact tournament, verified winner, and round/surface
    evidence; any conflict prevents unattended promotion.
 5. Existing `import_offline_linked_serve_return.py` runs dry-run against a
-   checksum-verified current 2016-2026 snapshot. Zero additions => no lock
+   checksum-verified full CDB snapshot (all manifest-listed years), with the
+   automatic write scope restricted to 2016-2026. Zero additions => no lock
    acquisition, no backup, no publication.
 6. With a strictly positive delta, acquire private cross-repository global
    writer lock and verify release manifest compare-and-swap.
