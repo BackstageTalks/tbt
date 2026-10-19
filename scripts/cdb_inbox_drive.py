@@ -200,8 +200,8 @@ def fetch(folder_id: str, output: Path, *, state_path: Path | None = None,
             entries.append({"id": file_id, "status": "fetched", "sha256": sha,
                             "bytes": len(blob), "local_file": str(destination)})
         updated[file_id] = fingerprint
-    pending = sum(known.get(info["id"]) != _fingerprint(info)
-                  and info["id"] not in updated for info in inventory)
+    pending = sum(updated.get(info["id"]) != _fingerprint(info)
+                  for info in inventory if Path(info["name"]).suffix.lower() in SUPPORTED)
     state = {"schema": 1, "folder_id": folder_id, "processed": updated}
     state_dest = next_state_path or output.parent / "cdb_inbox_next_state.json"
     state_dest.parent.mkdir(parents=True, exist_ok=True)
@@ -211,7 +211,8 @@ def fetch(folder_id: str, output: Path, *, state_path: Path | None = None,
               "production_mutated": False, "api_requests": 0,
               "folder_id": folder_id, "recursive": True,
               "folders_seen": folder_count, "inventory_files": len(inventory),
-              "previously_seen": previously_seen, "reviewed": len(entries) - downloaded,
+              "previously_seen": previously_seen, "reviewed": sum(x["status"].startswith("review_") for x in entries),
+              "duplicate_bytes": sum(x["status"] == "duplicate_bytes" for x in entries),
               "pending_supported": pending, "fetched": sum(x["status"] == "fetched" for x in entries),
               "downloaded_bytes": total_bytes, "files": entries}
     (output.parent / "drive_manifest.json").write_text(
