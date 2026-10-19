@@ -132,7 +132,10 @@ class PropLineClient:
             if remaining is not None:
                 self.remaining = int(remaining)
             raise RuntimeError(f"PropLine HTTP {exc.code}") from None
-        except urllib.error.URLError:
+        except (urllib.error.URLError, OSError):
+            # urlopen can raise a raw TimeoutError / socket error rather than
+            # URLError. An optional fallback outage must not abort the primary
+            # API Pro refresh; the per-event caller records this as an error.
             raise RuntimeError("PropLine request failed") from None
 
 
