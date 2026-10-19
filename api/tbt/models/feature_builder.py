@@ -18,6 +18,10 @@ from .elo import dynamic_k, elo_expected, update_elo
 
 FEATURE_STATE_SCHEMA_VERSION = 4
 
+# Bound temporary Python dictionary allocations while retaining every historical
+# training row. This is a memory batch size, NOT a training sample limit.
+_TRAIN_FRAME_CHUNK_ROWS = 2048
+
 
 FEATURE_NAMES = [
     "elo_diff",
@@ -2332,6 +2336,15 @@ class FeatureBuilder:
         # lightweight Azure Functions environment.
         import pandas as pd
 
+        # The old implementation held ~1,000,000 feature dictionaries in RAM
+        # alongside the history, replay state and resulting DataFrame. That
+        # can OOM a GitHub-hosted training runner before the candidate fit.
+        # Materialize bounded chunks, keeping the full chronology intact.
+        columns = FEATURE_NAMES + [
+            "surface_history_count", "target", "match_id",
+            "scheduled_at", "tour", "surface",
+        ]
+        frames: list[pd.DataFrame] = []
         completed = sorted(
             (
                 match
@@ -2401,6 +2414,14 @@ class FeatureBuilder:
                         ),
                     }
                 )
+                if len(rows) >= _TRAIN_FRAME_CHUNK_ROWS:
+                    frames.append(pd.DataFrame.from_records(rows, columns=columns))
+                    rows.clear()
+                    if len(frames) % 25 == 0:
+                        print(
+                            f"training_feature_snapshot: {len(frames) * _TRAIN_FRAME_CHUNK_ROWS} rows",
+                            flush=True,
+                        )
 
             for original in day_matches:
                 self.update(
@@ -2438,21 +2459,15 @@ class FeatureBuilder:
                 batch
             )
 
-        columns = (
-            FEATURE_NAMES
-            + [
-                "surface_history_count",
-                "target",
-                "match_id",
-                "scheduled_at",
-                "tour",
-                "surface",
-            ]
-        )
-
-        return pd.DataFrame(
-            rows,
-            columns=columns,
+        if rows:
+            frames.append(pd.DataFrame.from_records(rows, columns=columns))
+            rows.clear()
+        # concat once; unlike a giant dictionary list, the intermediate
+        # chunks have already released all row dictionaries.
+        return (
+            pd.concat(frames, ignore_index=True)
+            if frames
+            else pd.DataFrame(columns=columns)
         )
 
     def replay(
