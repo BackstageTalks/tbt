@@ -1,77 +1,34 @@
-# BlinQ CDB Drive Inbox
+# BlinQ CDB Drive-wide Import
 
-State: implementation in app repository, first production tick not yet evidenced.
-The canonical private CDB is authoritative. This workflow does not call a sports API
-or train/publish a model.
+**Scope:** entire owner-selected [BlinQ_data Drive root](https://drive.google.com/drive/folders/1jzdzztz8cXquO8VDswqE19PHupQau-xM), recursively including CDB_INBOX, source collections, audits and archives. All descendant files are inventoried and assessed; there is no folder allowlist for discovery.
 
-## Put external files here
+**Root folder ID:** \`1jzdzztz8cXquO8VDswqE19PHupQau-xM\` (Google Drive, read-only).
 
-[Google Drive CDB_INBOX](https://drive.google.com/drive/folders/1A0qlX8vXjDwcZYP9fSb8aFHjd9aNcWPJ)
+**Status:** workflow implementation; a production import is verified only when a real dispatch has completed remote canonical read-back. An empty or read-only run is not a CDB increment. No sports API calls or model training occur.
 
-- Folder ID: `1A0qlX8vXjDwcZYP9fSb8aFHjd9aNcWPJ`
-- Parent: `BlinQ_data` (`1jzdzztz8cXquO8VDswqE19PHupQau-xM`)
-- Existing private Drive reader inherits Viewer permission on this folder.
-- Supported sources: .csv, .tsv, .json, .jsonl, single-sheet .xlsx,
-  .parquet, .zip (bounded, nonrecursive inner files). Native Google Sheets
-  and unrecognized formats are held for review, never quietly coerced.
-- Current automatic import is **serve/return enrichment only**. Odds, ranks,
-  candidate-only matches and PBP require their existing dedicated pipelines.
-- Source rows must contain ATP/WTA, tournament, winner, loser, date and
-  count-backed service statistics. Source native `tourney_date` is accepted
-  for audit, but automatic writes require an **exact** canonical match date.
-  This intentionally excludes many safe-yet-unproven tournament-start rows.
-- No generated canonical player IDs, never silently use doubles or infer sides.
+## What "every file" means
 
-## Pipeline
+1. List and paginate every reachable descendant folder, within explicit 10,000-folder, 100,000-file and depth 30 safety guards; fail rather than silently claiming a complete inventory if limits or access fail.
+2. Record format classification for **every file**, including files in archives, audit folders and nested directories. Unsupported formats, native Sheets, ZIPs beyond validated limits and non-match data are review-only, never coerced into match statistics. Drive originals are never moved, deleted or overwritten.
+3. Download up to **100 new or changed supported files** and **256 MiB per successful run**, max 64 MiB each, with SHA-256 and Drive MD5/size verification. Additional eligible sources remain pending across subsequent runs; no arbitrary first-100 hard stop.
+4. Persist compressed progress metadata only into **private** \`BackstageTalks/tbt-data/audit/cdb-inbox-progress.json.gz\` using a GitHub Contents SHA/CAS guard. The runner commits progress **only after** the guarded stage/import and any required canonical remote readback have succeeded. A failed run does not advance the persisted checkpoint. Deleted/moved files are removed from the active fingerprint catalog and updates are reprocessed when Drive metadata changes.
+5. Current unattended promotion remains **ATP/WTA match-level serve/return only**, when exact tour, date, tournament, winner, orientation, round/surface evidence and positive canonical NULL deltas are proved. Aggregate rolling/career stats, provider-only raw responses, odds, rankings, PBP, biomechanics and other domain-specific files are discovered/reviewed for their dedicated source pipelines; **not** force-fit into per-match stats or silently promoted.
+6. Existing global single-writer lock, manifest compare-and-swap, immutable prewrite private backup, exact-stats-only patch and private post-publication readback remain mandatory for canonical mutation. Every row with insufficient identity or contradictory statistics stays review/quarantine.
 
-1. Reuses the demonstrably active 30-minute external Match Status dispatcher as the primary clock. At 02:00–02:29 and 14:00–14:29 UTC it dispatches the inbox once per slot (duplicate checked); the Drive audit bridge is a fallback. Manual `workflow_dispatch` remains available. There is no GitHub internal cron.
-2. Drive reader downloads bounded source content (100 files, max 64 MiB
-   each and 256 MiB total) through `BLINQ_DRIVE_READER_JSON`. All input
-   remains ephemeral on the runner. Its source manifests are not posted to
-   public artifacts or Google Drive.
-3. Adapter computes SHA-256, ignores byte-identical duplicates and
-   normalizes valid rows to the existing Sackmann-style offline linker
-   format. Bad rows/rejected formats go to local review counters.
-4. Existing `link_offline_serve_return.py` performs canonical match
-   reconciliation. Inbox stage filter additionally requires unique linked
-   match, exact date, exact tournament, verified winner, and round/surface
-   evidence; any conflict prevents unattended promotion.
-5. Existing `import_offline_linked_serve_return.py` runs dry-run against a
-   checksum-verified full CDB snapshot (all manifest-listed years), with the
-   automatic write scope restricted to 2016-2026. Zero additions => no lock
-   acquisition, no backup, no publication.
-6. With a strictly positive delta, acquire private cross-repository global
-   writer lock and verify release manifest compare-and-swap.
-7. Back up only affected original partitions and both manifests in a private
-   immutable prewrite release; download and hash-verify that backup.
-8. Existing exact stats-only Parquet writer modifies only missing canonical
-   stats, and local partition integrity is read back exhaustively.
-9. Publish through existing `ReleaseStore.upload_bundle(..., before_upload=CAS)`.
-10. Re-download changed private canonical assets and verify every staged
-    record and changed cell against the original CDB, not merely HTTP/CI status.
-    Always release writer lock if owned.
+## Workflow
 
-## Tests and operational controls
+- Scheduler: existing externally driven \`match-status.yml\` dispatch at 02:00 and 14:00 UTC (plus manual workflow_dispatch), no second GitHub cron.
+- Entry: \`.github/workflows/cdb-drive-inbox.yml\`, with \`INBOX_FOLDER_ID\` set to the *BlinQ_data root*.
+- Recursive intake: \`scripts/cdb_inbox_drive.py\`; schema normalization: \`scripts/cdb_inbox_adapter.py\`; exact candidate gate: \`scripts/cdb_inbox_stage.py\`.
+- Canonical writer: existing \`scripts/import_offline_linked_serve_return.py --exact-stats-only\` and \`ReleaseStore.upload_bundle\`, not a new SQL/Parquet writer.
+- Source report: inventory files/folders, previous fingerprints, downloaded files/bytes, unsupported/reviewed, pending supported. Report is ephemeral on the private-secrets runner; source identifiers are never sent to public CI artifacts.
+- Real success = CDB field count, affected years, **net-new/enriched** counts and independent remote readback; \`stage\` or green synthetic CI never counts as an import.
 
-`pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_scheduler_bridge.py -q`
+## Verification
 
-This tests normalization, duplicate handling, ZIP size limits, missing
-mandatory columns, strict metadata corroboration and conflict quarantine.
-PR workflows run only synthetic tests; production secrets are never present.
+\`\`\`bash
+PYTHONPATH=.:api:scripts pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_integration.py -q
+\`\`\`
 
-To inspect live results open the `CDB Drive Inbox - guarded external file import`
-GitHub Actions workflow in `BackstageTalks/tbt`. The word VERIFIED may
-be used for a data import only after the independent private remote readback
-step succeeds. Creating a Drive folder, merging a PR or a successful empty
-inbox tick does **not** establish a canonical CDB increase.
+**Failure handling:** invalid cursor, changed Drive bytes, source identity conflict, invalid canonical bundle, checkpoint CAS mismatch or failed remote CDB readback halt the applicable write. The private checkpoint is advanced only after success; re-running is idempotent against canonical NULL-only checks.
 
-## Deliberate boundaries
-
-There is no generic new writer, no direct Drive-to-CDB SQL endpoint,
-no overwrite of non-NULL cells, no name-only weak matching promoted,
-no automatic trust for user-supplied `import_ready` flags, and no
-attempted import of unknown odds timing. Source files stay where the
-owner placed them; no deletions or moves are performed.
-
-The initial inbox is empty, so a production import will only happen when
-supported, confidently matched, genuinely missing observations arrive.
