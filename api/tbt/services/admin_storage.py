@@ -798,10 +798,43 @@ def save_match_status_snapshot(payload: object) -> dict:
                  for field in ("t", "s", "a", "b", "c", "p", "n")}
         if key and all(entry[field] for field in ("t", "s", "a", "b")):
             pending[key] = entry
+    # Only verified, fresh, identity-matched display schedule observations may
+    # survive this storage allowlist. No raw provider payload or odds are stored.
+    schedule_updates = {}
+    candidates = data.get("schedule_updates")
+    candidates = candidates if isinstance(candidates, dict) else {}
+    for eid, item in candidates.items():
+        if not isinstance(item, dict):
+            continue
+        key = str(eid or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", key):
+            continue
+        if item.get("source") != "tennis_api_pro":
+            continue
+        state = str(item.get("status") or "").strip()
+        if state not in {"scheduled", "live", "finished"}:
+            continue
+        try:
+            scheduled = datetime.fromisoformat(str(item.get("scheduled_at") or "").replace("Z", "+00:00"))
+            checked = datetime.fromisoformat(str(item.get("checked_at") or "").replace("Z", "+00:00"))
+            if scheduled.tzinfo is None or checked.tzinfo is None:
+                continue
+            if not (-120 <= (datetime.now(timezone.utc) - checked).total_seconds() <= 7200):
+                continue
+        except (ValueError, TypeError, OverflowError):
+            continue
+        schedule_updates[key] = {
+            "scheduled_at": scheduled.astimezone(timezone.utc).isoformat(),
+            "checked_at": checked.astimezone(timezone.utc).isoformat(),
+            "status": state,
+            "source": "tennis_api_pro",
+        }
     safe = {
         "schema": 1,
         "updated_at": str(data.get("updated_at") or now)[:64],
         "statuses": statuses,
+        "schedule_updates": schedule_updates,
+        "schedule_verified": len(schedule_updates),
         "pending": pending,
         "pending_count": len(pending),
         "tracked": max(0, int(data.get("tracked") or 0)),
