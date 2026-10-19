@@ -28,3 +28,12 @@ def test_secrets_never_present_on_pr_and_writer_is_reused():
     assert 'store.upload_bundle(' in IMPORT
     assert 'verify_persisted(' in IMPORT
     assert 'if: always()' in IMPORT
+
+def test_active_half_hour_match_status_scheduler_is_primary_trigger():
+    workflow = (ROOT / ".github/workflows/match-status.yml").read_text()
+    assert "Dispatch CDB Drive Inbox at UTC 02 and 14 from active external clock" in workflow
+    assert "github.event_name == 'workflow_dispatch'" in workflow
+    assert "10#$minute >= 30" in workflow
+    assert "CDB_INBOX_ALREADY_DISPATCHED_IN_SLOT" in workflow
+    assert 'gh workflow run cdb-drive-inbox.yml --repo "$GITHUB_REPOSITORY" --ref main' in workflow
+    assert "\\n  schedule:" not in workflow

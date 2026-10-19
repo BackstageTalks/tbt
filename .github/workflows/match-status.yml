@@ -104,3 +104,28 @@ jobs:
           gh workflow run model-711-forward-blind.yml \
             --repo "$GITHUB_REPOSITORY" --ref main
           echo "Queued research-only frozen 7.1.1 TOP/VALUE cohort."
+
+      - name: Dispatch CDB Drive Inbox at UTC 02 and 14 from active external clock
+        # Reuse the verified 30-minute external Match Status scheduler.
+        # No internal GitHub cron, sports API calls or canonical CDB writes here.
+        if: always() && github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          now="$(date -u +%Y-%m-%dT%H)"
+          hour="${now:11:2}"
+          minute="$(date -u +%M)"
+          if [[ "$hour" != "02" && "$hour" != "14" ]] || (( 10#$minute >= 30 )); then
+            echo 'CDB_INBOX_NOT_DUE'
+            exit 0
+          fi
+          runs="$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/cdb-drive-inbox.yml/runs" -f event=workflow_dispatch -f per_page=50)"
+          if printf '%s' "$runs" | jq -e --arg slot "$now:" '.workflow_runs | any(.created_at | startswith($slot))' >/dev/null; then
+            echo 'CDB_INBOX_ALREADY_DISPATCHED_IN_SLOT'
+            exit 0
+          fi
+          gh workflow run cdb-drive-inbox.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo 'CDB_INBOX_DISPATCH_SUBMITTED_NOT_IMPORT_VERIFIED'
