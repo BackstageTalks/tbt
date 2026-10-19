@@ -48,7 +48,7 @@ def test_mismatched_players_or_stale_evidence_fail_closed():
     mismatch["awayTeam"] = {"id": "another"}
     assert verified_schedule_observation(row(now), mismatch, now) is None
     valid = verified_schedule_observation(row(now), event(now), now)
-    valid["checked_at"] = (now - timedelta(hours=3)).isoformat()
+    valid["checked_at"] = (now - timedelta(hours=25)).isoformat()
     feed = {"top_daily_picks": [row(now)]}
     apply_verified_schedule_overlay(feed, {"faria-1": valid}, now=now)
     assert "runtime_match_started" not in feed["top_daily_picks"][0]
@@ -61,3 +61,25 @@ def test_explicit_live_proof_is_required_for_started_marker():
     feed = {"top_daily_picks": [row(now)]}
     apply_verified_schedule_overlay(feed, {"faria-1": live}, now=now)
     assert feed["top_daily_picks"][0]["runtime_match_started"] is True
+
+
+def test_older_verified_time_remains_visible_without_stale_live_marker():
+    now = datetime(2026, 10, 19, 9, 30, tzinfo=timezone.utc)
+    observation = verified_schedule_observation(row(now), event(now, "inprogress"), now)
+    # Provider LIVE evidence is stale, but the verified revised kickoff
+    # is still a useful display-time correction within the betting day.
+    observation["checked_at"] = (now - timedelta(hours=3)).isoformat()
+    feed = {"top_daily_picks": [row(now)]}
+    apply_verified_schedule_overlay(feed, {"faria-1": observation}, now=now)
+    displayed = feed["top_daily_picks"][0]
+    assert displayed["scheduled_at"] == (now + timedelta(hours=4)).isoformat()
+    assert displayed["runtime_match_started"] is False
+
+
+def test_future_provider_kickoff_overrides_conflicting_live_flag():
+    now = datetime(2026, 10, 19, 9, 30, tzinfo=timezone.utc)
+    observation = verified_schedule_observation(row(now), event(now, "inprogress"), now)
+    assert observation["status"] == "scheduled"
+    feed = {"top_daily_picks": [row(now)]}
+    apply_verified_schedule_overlay(feed, {"faria-1": observation}, now=now)
+    assert feed["top_daily_picks"][0]["runtime_match_started"] is False
