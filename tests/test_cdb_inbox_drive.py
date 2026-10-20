@@ -147,6 +147,8 @@ def test_match_source_prioritized_without_dropping_other_folders(tmp_path):
             self.blobs = {
                 odds_id: b"odds", match_id: b"matches", career_id: b"career"
             }
+            self.modified = {file_id: "2026-10-20T00:00:00Z"
+                             for file_id in self.blobs}
 
         def get(self, url, params=None, timeout=None):
             if url != BASE:
