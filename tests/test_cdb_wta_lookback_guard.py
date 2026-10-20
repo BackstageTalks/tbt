@@ -44,7 +44,7 @@ def test_refuses_unpinned_or_unsupported_source(tmp_path):
     path=fixture(tmp_path)
     with pytest.raises(ValueError,match='SHA'):
         inspect(path,'0'*64)
-    path.write_text('match_id,aces\\n1,3\\n')
+    path.write_text('match_id,aces\n1,3\n')
     with pytest.raises(ValueError,match='schema'):
         inspect(path,sha(path))
 
@@ -52,6 +52,6 @@ def test_refuses_unpinned_or_unsupported_source(tmp_path):
 def test_malformed_rows_fail_closed(tmp_path):
     path=fixture(tmp_path)
     with path.open('a') as stream:
-        stream.write('one,two,three,extra\\n')
+        stream.write('one,two,three,extra\n')
     with pytest.raises(ValueError,match='Malformed'):
         inspect(path,sha(path))
