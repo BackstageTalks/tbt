@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 240
     env:
       GH_TOKEN: ${{ github.token }}
-      MORNING_MAX_REQUESTS: ${{ inputs.max_requests || vars.TBT_MORNING_REFRESH_MAX_REQUESTS || '14500' }}
+      MORNING_MAX_REQUESTS: ${{ inputs.max_requests || '14500' }}
     steps:
       - name: Validate daily request cap
         shell: bash
