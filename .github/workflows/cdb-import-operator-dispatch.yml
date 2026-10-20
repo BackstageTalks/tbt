@@ -4,6 +4,7 @@ name: CDB Import - operator one-shot dispatcher
 # One-shot operator request: process up to 5 safe 100-file batches, starting 2026-10-20.
 # This changes no global cron; future operator dispatch remains bounded.
 # Production data may only be changed by the separate guarded CDB importer.
+# Operator request 2026-10-20 19:55 Europe/Bratislava: guarded pending Drive CDB retry; no gate bypass.
 # Operator request 2026-10-20: retry SHA-pinned pending Drive batch through guarded importer; no safety gate bypass.
 'on':
   workflow_dispatch:
