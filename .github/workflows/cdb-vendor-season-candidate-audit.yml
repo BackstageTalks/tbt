@@ -55,7 +55,7 @@ jobs:
           python-version: '3.12'
       - name: Install private readonly source/snapshot readers
         run: python -m pip install --disable-pip-version-check google-auth requests pandas pyarrow pydantic numpy
-      - name: Fetch 2023/2024 WTA and 2024 ATP seasonal match sources with pinned bytes
+      - name: Fetch 2023-2026 WTA and ATP seasonal match sources with pinned bytes
         run: |
           test -n "$GH_TOKEN" || { echo PRIVATE_TOKEN_UNAVAILABLE; exit 1; }
           test -n "$BLINQ_DRIVE_READER_JSON" || { echo DRIVE_READER_UNAVAILABLE; exit 1; }
@@ -69,6 +69,14 @@ jobs:
                "70f5b7e26c0ff5d88d1492bdbaa1ae5c362bf0ff91d7b14f1f8a9e1adc3b198a",1413144),
               ("season-atp-2024.csv","1Q_Mo1kJezi5ViOudFgns9Pa_pLq9VOyK",
                "d2bafc5d528029b8e207e63e2ccf9421525fc0bda1489ef3a8a0a6acf86291ab",3815737),
+              ("season-atp-2025.csv","1vPORpaKwQQ-ieXfUlKDxy1tdw7tVVh2T",
+               "de4c7466a2425d85e62e454ae9a0ccc084eb9b02a234ba5b729e675c30a7c1f6",3896834),
+              ("season-wta-2025.csv","1i9CXB16lHFu9pP6vVWORoelaJyqbqQsR",
+               "bfccceaa8d8e17f1656d6009f02f58199b0be061898495ecd36ab35f670f194d",1595550),
+              ("season-atp-2026.csv","16aGgh-uttkbF7VermkuDJwYEoDsRlmFs",
+               "0f0737b8e9f5c369b22de81697d5a9524ffeca99a6528ea2c878a976fa9f1109",3954647),
+              ("season-wta-2026.csv","1-bVW6bb3rdFQw2nScTzcMcrxoph_6TY4",
+               "76265fa86d58fa9ee23f9a07325eb78fb963eeda15e7b24eab89dea01a5ac300",1701601),
           )
           for name,file_id,digest,size in files:
               amount=fetch_pinned(Path("work/season")/name,file_id=file_id,expected_sha256=digest)
@@ -76,20 +84,21 @@ jobs:
                   raise SystemExit("Pinned seasonal file size mismatch: "+name)
           print("SEASON_SOURCE_SHA_VERIFIED",len(files))
           PY
-      - name: SHA-verify private canonical 2022–2024 CDB snapshot
+      - name: SHA-verify private canonical 2022–2026 CDB snapshot
         run: |
           mkdir -p work/release
           gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" > work/release-metadata.json
           gh release download "$CDB_TAG" -R "$CDB_REPO" \
             -p history_manifest.json -p _tbt_bundle_manifest.json \
             -p 'history-2022.parquet' -p 'history-2023.parquet' \
-            -p 'history-2024.parquet' -D work/release
+            -p 'history-2024.parquet' -p 'history-2025.parquet' \
+            -p 'history-2026.parquet' -D work/release
           python - <<'PY'
           from pathlib import Path
           from cdb_wta_verified_window import verified_window
           info=verified_window(Path("work/release"),Path("work/release-metadata.json"),
-                               Path("work/local-view"),years=(2022,2023,2024))
-          if info["production_mutated"] is not False or len(info["partitions"])!=3:
+                               Path("work/local-view"),years=(2022,2023,2024,2025,2026))
+          if info["production_mutated"] is not False or len(info["partitions"])!=5:
               raise SystemExit("Private canonical snapshot failed immutable verification")
           print("SEASON_CDB_PARTITIONS_SHA_VERIFIED",len(info["partitions"]))
           PY
@@ -100,6 +109,10 @@ jobs:
             --source work/season/season-wta-2023.csv wta 6025591c5c1a5a1fbbfa0b9bbbf3bf4cb5d7e86a8da47c115c0a795b866c4859 \
             --source work/season/season-wta-2024.csv wta 70f5b7e26c0ff5d88d1492bdbaa1ae5c362bf0ff91d7b14f1f8a9e1adc3b198a \
             --source work/season/season-atp-2024.csv atp d2bafc5d528029b8e207e63e2ccf9421525fc0bda1489ef3a8a0a6acf86291ab \
+            --source work/season/season-atp-2025.csv atp de4c7466a2425d85e62e454ae9a0ccc084eb9b02a234ba5b729e675c30a7c1f6 \
+            --source work/season/season-wta-2025.csv wta bfccceaa8d8e17f1656d6009f02f58199b0be061898495ecd36ab35f670f194d \
+            --source work/season/season-atp-2026.csv atp 0f0737b8e9f5c369b22de81697d5a9524ffeca99a6528ea2c878a976fa9f1109 \
+            --source work/season/season-wta-2026.csv wta 76265fa86d58fa9ee23f9a07325eb78fb963eeda15e7b24eab89dea01a5ac300 \
             --output season-alias-candidate-summary.json
       - name: Enforce non-importable report contract
         run: |
