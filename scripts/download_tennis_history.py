@@ -33,6 +33,12 @@ from date_window import history_window
 from audit_statistics_inventory import _quality_ready, statistics_value_change
 from adaptive_statistics_queue import AdaptiveStatisticsQueue
 
+# Priorities from five independently read-back VERIFIED CDB statistics runs on
+# 2026-10-19 (9,358 paid calls). The online queue still re-learns within every
+# run and retains at least 25% baseline exploration. ATP 2025 is deliberately
+# absent: its latest 85 attempted requests yielded no new statistics.
+VERIFIED_HIGH_YIELD_COHORTS = (("wta", 2024), ("wta", 2022), ("atp", 2024))
+
 
 def read_json(path, default):
     return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else default
@@ -235,7 +241,8 @@ def _record_targeted_statistics_outcome(segments, unavailable_reasons, match, st
         reason = marker.get("reason") if isinstance(marker, dict) else None
         # Bound categories to the provider adapter's known coverage states;
         # never emit raw provider payloads or player identities in this report.
-        if reason not in {"no_supported_fields", "missing_unambiguous_all_period"}:
+        if reason not in {"no_supported_fields", "missing_unambiguous_all_period",
+                          "empty_whole_match_statistics", "provider_event_not_finished"}:
             reason = "unspecified"
         counts[f"unavailable_{reason}"] += 1
         unavailable_reasons[reason] += 1
@@ -262,9 +269,10 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
     """Mix proven high-yield work with underserved ATP/WTA years (no extra API calls).
 
     Every candidate has already passed canonical event-ID and retry checks.
-    The 6:2:1:1 schedule avoids starving low-coverage cohorts when ATP 2025
-    has hundreds of thousands of gaps. Within each tour/year, a previously
-    verified *two-player* provider identity is attempted first.
+    The 6:2:1:1 schedule reserves exploration outside historically productive
+    cohorts. The previous fixed ATP-2025 hot spot is now depleted; prioritize
+    verified WTA-2024, WTA-2022 and ATP-2024 yield without new API calls.
+    Within each tour/year, verified *two-player* identity is attempted first.
     """
     from collections import defaultdict, deque
 
@@ -281,7 +289,7 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
         )
         coverage = bucket_ready[bucket] / max(1, bucket_total[bucket])
         if candidate[0] == 0:
-            family = "high_yield"  # ATP 2025, missing serve/return
+            family = "high_yield"  # verified October 19 cohort yield
         elif (incomplete_rates and 2022 <= year <= 2025 and coverage < 0.55
               and tour == "wta"):
             family = "wta_gap"
@@ -290,7 +298,7 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
             family = "atp_gap"
         else:
             family = "other"
-        grouped[family][year].append(candidate)
+        grouped[family][bucket].append(candidate)
 
     pending = {}
     years = {}
@@ -298,13 +306,20 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
         # Stable within-year ordering: exact verified pair identity; incomplete
         # whole-match service/return; partial reusable statistics; newer dates.
         pending[family] = {
-            year: deque(sorted(rows, key=lambda r: (
+            bucket: deque(sorted(rows, key=lambda r: (
                 r[4], r[2], r[3], r[5], r[6], r[7]
             )))
-            for year, rows in grouped[family].items()
+            for bucket, rows in grouped[family].items()
         }
-        # Rotate years so WTA 2022/2023/2024/2025 all receive opportunities.
-        years[family] = deque(sorted(pending[family], reverse=True))
+        # Rotate distinct tour/year cohorts, not only years (ATP and WTA
+        # from the same year must both get slots). Verified ordering is a
+        # deterministic initial prior, not a substitute for paid online yield.
+        years[family] = deque(sorted(pending[family], key=lambda bucket: (
+            VERIFIED_HIGH_YIELD_COHORTS.index(bucket)
+            if family == "high_yield" and bucket in VERIFIED_HIGH_YIELD_COHORTS
+            else len(VERIFIED_HIGH_YIELD_COHORTS),
+            -bucket[1], bucket[0],
+        )))
 
     schedule = ("high_yield",) * 6 + ("wta_gap",) * 2 + ("atp_gap", "other")
     result = []
@@ -378,10 +393,12 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
                 == {match.player1_id, match.player2_id}
             and identity.get("home") != identity.get("away")
         ) if targeted else False
-        # Opt-in hourly only: ATP 2025 yielded 13,829 new fields per 1,000
-        # calls in run 38229127240 versus ~6,750 for 2026 in 38259786928.
-        # Prefer only missing serve/return quality, not ace-only ready rows.
-        high_yield = bool(historical_high_yield and key == ("atp", 2025)
+        # Opt-in hourly only: use currently evidenced productive cohorts,
+        # not the historic ATP-2025 preference after repeated zero-yield calls.
+        # Prefer incomplete serve/return quality; ace/DF-only rows are explored
+        # by the baseline and adaptively if empirical value warrants it.
+        high_yield = bool(historical_high_yield
+                          and key in VERIFIED_HIGH_YIELD_COHORTS
                           and not (p1_ready and p2_ready))
         candidates.append((
             0 if high_yield else 1,
@@ -408,7 +425,8 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
         "candidate_rows": len(candidates),
         "targeted": targeted,
         "historical_high_yield": historical_high_yield,
-        "preferred_verified_cohort": "atp:2025:serve_return_incomplete" if historical_high_yield else None,
+        "preferred_verified_cohort": "wta:2024:serve_return_incomplete" if historical_high_yield else None,
+        "verified_high_yield_cohorts": [f"{tour}:{year}" for tour, year in VERIFIED_HIGH_YIELD_COHORTS] if historical_high_yield else [],
         "priority_policy": "6_high_yield_2_undercovered_wta_1_undercovered_atp_1_other" if historical_high_yield else None,
         "first_1000_by_tour_year": priority_preview,
         "skipped": dict(skipped),

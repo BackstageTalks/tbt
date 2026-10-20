@@ -71,6 +71,8 @@ RATE_ALIASES = {
     "servicepointswon": "service_points_won", "servicepoints": "service_points_won",
     "returnpointswon": "return_points_won", "returnpoints": "return_points_won",
     "breakpointsconverted": "break_points_won",
+    # Direct saved/faced ratio; not inferred from generic service points.
+    "breakpointssaved": "break_point_serve_win",
     # TennisApi names verified in provider-probe 2026-09-23. Serve placement
     # (firstServeAccuracy) is NOT the same as points won on first serve.
     "firstservepointsaccuracy": "first_serve_win",
@@ -155,6 +157,13 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
                 if field in values and abs(values[field] - value) > 1e-6:
                     raise ProviderError(f"Conflicting whole-match statistic: {field}")
                 values[field] = value
+                if rate_name == "break_points_won":
+                    # A converted break point is an observed return-side point.
+                    # Retain the existing break_points_won model alias too.
+                    bp_field = f"{prefix}_break_point_return_win"
+                    if bp_field in values and abs(values[bp_field] - value) > 1e-6:
+                        raise ProviderError(f"Conflicting whole-match statistic: {bp_field}")
+                    values[bp_field] = value
                 if total is not None:
                     rate_counts[field] = (won, total)
 
