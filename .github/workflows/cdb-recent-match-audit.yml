@@ -1,0 +1,172 @@
+name: Recent ATP/WTA match-level Drive source vs CDB - read-only
+
+'on':
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/cdb_recent_pinned_sources.py
+      - scripts/cdb_recent_strict_stage.py
+      - tests/test_cdb_recent_official_match_audit.py
+      - .github/workflows/cdb-recent-match-audit.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/cdb_recent_pinned_sources.py
+      - scripts/cdb_recent_strict_stage.py
+      - .github/workflows/cdb-recent-match-audit.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-cdb-recent-source-${{ github.event_name == 'pull_request' && 'ci' || 'source-audit' }}
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check new source and strict identity gates
+        env:
+          PYTHONPATH: .:api:scripts
+        run: |
+          python -m pip install --disable-pip-version-check pytest openpyxl pandas pyarrow pydantic numpy
+          python -m compileall -q scripts/cdb_recent_pinned_sources.py scripts/cdb_recent_strict_stage.py
+          python -m pytest tests/test_cdb_recent_official_match_audit.py tests/test_cdb_inbox_adapter.py -q
+
+  private-canonical-readonly-match:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      CDB_REPO: BackstageTalks/tbt-data
+      CDB_TAG: tbt-data-v1
+      PYTHONPATH: .:api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing private importer runtime
+        run: python -m pip install --disable-pip-version-check google-auth requests pandas pyarrow pydantic openpyxl numpy
+      - name: Fail closed if private source access not authorized
+        run: |
+          test -n "$GH_TOKEN" || { echo PRIVATE_CDB_TOKEN_MISSING; exit 1; }
+          test -n "$BLINQ_DRIVE_READER_JSON" || { echo DRIVE_READER_MISSING; exit 1; }
+      - name: Download and SHA-pin six original match-level CSVs
+        run: |
+          python scripts/cdb_recent_pinned_sources.py --out-dir work/input
+          mv work/input/source-manifest.json work/source-pins.json
+      - name: Normalize only supported raw per-match stats with existing adapter
+        run: |
+          python scripts/cdb_inbox_adapter.py \
+            --input-dir work/input --out-dir work/source --max-files 6
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          source=json.loads(Path("work/source/report.json").read_text())
+          pins=json.loads(Path("work/source-pins.json").read_text())
+          expected={x["source_sha256"] for x in pins["sources"]}
+          normalized=source["normalized"]
+          if (source.get("production_mutated") is not False
+                  or source.get("api_requests") != 0
+                  or len(normalized) != len(expected)
+                  or {x["source_sha256"] for x in normalized} != expected):
+              raise SystemExit("Unverified recent match-level source inventory")
+          if not {x["tour"] for x in normalized}.issubset({"atp","wta"}):
+              raise SystemExit("Unexpected recent source tour")
+          print("PINNED_RECENT_MATCH_ROWS",source["counts"].get("normalized_rows",0))
+          PY
+      - name: Download private canonical 2023-2026 CDB and SHA-verify
+        run: |
+          mkdir -p work/release
+          gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" > work/release-metadata.json
+          gh release download "$CDB_TAG" -R "$CDB_REPO" \
+            -p history_manifest.json -p _tbt_bundle_manifest.json \
+            -p 'history-2023.parquet' -p 'history-2024.parquet' \
+            -p 'history-2025.parquet' -p 'history-2026.parquet' -D work/release
+          python - <<'PY'
+          from pathlib import Path
+          from cdb_wta_verified_window import verified_window
+          a=verified_window(Path("work/release"),Path("work/release-metadata.json"),
+                            Path("work/local-view"),years=(2023,2024,2025,2026))
+          if a["production_mutated"] is not False or len(a["partitions"])!=4:
+              raise SystemExit("Private canonical release failed SHA preflight")
+          print("CANONICAL_SHA_VERIFIED",len(a["partitions"]))
+          PY
+      - name: Existing conservative linker; no source IDs treated as canonical
+        run: |
+          python - <<'PY'
+          import json,os,subprocess,sys
+          from pathlib import Path
+          source=json.loads(Path("work/source/report.json").read_text())
+          command=[sys.executable,"scripts/link_offline_serve_return.py",
+                   "--history-dir","work/local-view","--out-dir","work/link"]
+          for item in source["normalized"]:
+              command+=["--source-csv",item["path"]]
+          subprocess.run(command,check=True,timeout=3600,env=os.environ.copy())
+          PY
+      - name: Require exact tournament, winner, surface, round, no conflict
+        run: |
+          python scripts/cdb_recent_strict_stage.py \
+            --link-dir work/link --normalized-report work/source/report.json \
+            --out-dir work/stage
+      - name: Existing canonical importer DRY-RUN without writing a partition
+        run: |
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/stage/eligible.jsonl --history-dir work/local-view \
+            --out-dir work/dry-run
+      - name: Verify NULL-only results and publish aggregate report
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          pins=json.loads(Path("work/source-pins.json").read_text())
+          source=json.loads(Path("work/source/report.json").read_text())
+          stage=json.loads(Path("work/stage/report.json").read_text())
+          dry=json.loads(Path("work/dry-run/report.json").read_text())
+          counts=dry["counts"]
+          if (dry.get("production_mutated") is not False
+                  or dry.get("local_partitions_written") is not False
+                  or dry.get("api_requests") != 0):
+              raise SystemExit("CDB dry-run invariant violated")
+          if (counts.get("updated",0)!=stage["eligible_matches"]
+                  or counts.get("stat_fields_added",0)!=stage["eligible_new_stat_fields"]):
+              raise SystemExit("Recent match delta failed CDB strict preflight")
+          report={
+              "schema":1,"state":"RECENT_MATCHES_READ_ONLY_CONFIRMED",
+              "production_mutated":False,"api_requests":0,
+              "sources":[{"year":x["year"],"tour":x["tour"],
+                          "sha256":x["source_sha256"],"bytes":x["source_bytes"]}
+                          for x in pins["sources"]],
+              "normalized_source_rows":source["counts"].get("normalized_rows",0),
+              "link_counts":stage["link_counts"],
+              "canonical_stat_conflict_matches":stage["conflict_matches"],
+              "filter_reasons":stage["reasons"],
+              "confirmed_matched_missing_matches":stage["eligible_matches"],
+              "confirmed_null_only_stat_fields":counts.get("stat_fields_added",0),
+              "by_year_tour":stage["eligible_by_year_tour"],
+              "fields":stage["eligible_field_counts"],
+              "quality_ready_added":dry["quality_ready_added"],
+              "years_changed_if_approved_later":dry["changed_years"],
+              "license_review_required":True,
+              "note":"Read-only report. NO CDB production write, paid API call or checkpoint movement."
+          }
+          Path("recent-cdb-readonly.json").write_text(json.dumps(report,sort_keys=True,indent=2)+"\n")
+          print(json.dumps(report,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recent-cdb-missing-values-aggregate-only
+          path: recent-cdb-readonly.json
+          if-no-files-found: ignore
+          retention-days: 14
