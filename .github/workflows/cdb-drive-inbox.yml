@@ -10,6 +10,8 @@ name: CDB Drive Inbox - guarded external file import
         default: 0
   pull_request:
     paths:
+      - scripts/cdb_large_source_stage.py
+      - tests/test_cdb_large_source_stage.py
       - scripts/cdb_inbox_*.py
       - tests/test_cdb_inbox_adapter.py
       - tests/test_cdb_inbox_drive.py
@@ -22,6 +24,8 @@ name: CDB Drive Inbox - guarded external file import
   push:
     branches: [main]
     paths:
+      - scripts/cdb_large_source_stage.py
+      - tests/test_cdb_large_source_stage.py
       - scripts/cdb_inbox_*.py
       - tests/test_cdb_inbox_adapter.py
       - tests/test_cdb_inbox_wait_resume.py
@@ -51,8 +55,8 @@ jobs:
         env:
           PYTHONPATH: .:api:scripts
         run: |
-          python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py
-          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py -q
+          python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py scripts/cdb_large_source_stage.py
+          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_large_source_stage.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py -q
 
   guarded-import:
     # Source preparation may proceed while immutable candidate training owns CDB.

@@ -8,6 +8,7 @@ additional round/surface evidence are required for unattended canonical import.
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
 import os
 import subprocess
@@ -44,6 +45,7 @@ def run(normalized_report: Path, history_dir: Path, out_dir: Path):
         for line in (link_dir / "quarantine.jsonl").read_text().splitlines() if line.strip()
     }
     staged = []
+    rejection_reasons = Counter()
     for line in (link_dir / "auto_linked.jsonl").read_text().splitlines():
         if not line.strip():
             continue
@@ -68,7 +70,30 @@ def run(normalized_report: Path, history_dir: Path, out_dir: Path):
             result["conflict_matches"] += 1
             usable = False
         if not usable:
+            # Audit only; never rescue a candidate or weaken the gate here.
             result["filtered_matches"] += 1
+            if candidate.get("schema") != 1 or candidate.get("import_ready") is not True:
+                rejection_reasons["invalid_stage_contract"] += 1
+            if not isinstance(candidate.get("incoming_stats"), dict) or not candidate.get("incoming_stats"):
+                rejection_reasons["no_candidate_stat_values"] += 1
+            if not proof:
+                rejection_reasons["missing_provenance"] += 1
+            for source in proof:
+                evidence = set(source.get("evidence") or []) if isinstance(source, dict) else set()
+                if "date_exact" not in evidence:
+                    rejection_reasons["date_not_exact"] += 1
+                if "tournament_exact" not in evidence:
+                    rejection_reasons["tournament_not_exact"] += 1
+                if not {"round", "surface"} & evidence:
+                    rejection_reasons["round_or_surface_unconfirmed"] += 1
+                if "winner" not in evidence:
+                    rejection_reasons["winner_unconfirmed"] += 1
+                if {"round_conflict", "surface_conflict", "best_of_conflict"} & evidence:
+                    rejection_reasons["metadata_conflict"] += 1
+            if candidate.get("match_id") in conflicted:
+                rejection_reasons["canonical_stat_conflict"] += 1
+            if not year.isdigit() or int(year) not in range(2016, 2027):
+                rejection_reasons["outside_supported_years"] += 1
             continue
         staged.append(candidate)
         result["eligible_matches"] += 1
@@ -77,6 +102,7 @@ def run(normalized_report: Path, history_dir: Path, out_dir: Path):
         for row in staged:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
     result["link_counts"] = linked.get("counts", {})
+    result["filter_reasons"] = dict(sorted(rejection_reasons.items()))
     result["source_rows"] = linked.get("source_rows", 0)
     result["read_only_linked"] = linked.get("counts", {}).get("identity_linked", 0)
     (out_dir / "report.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
