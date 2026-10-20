@@ -175,3 +175,52 @@ def test_history_download_is_bound_to_both_private_release_hashes(tmp_path, monk
     digest["history-2026.parquet"]["digest"] = "sha256:" + "a"*64
     with pytest.raises(ValueError, match="release asset checksum mismatch"):
         service.download_verified_years(service.DATA_REPO, tmp_path, {2026})
+
+
+def test_pending_diagnostics_distinguishes_future_overdue_and_canonical_identity_drift():
+    now, payload, match = fixture()
+    # One fixture is already scheduled, and an otherwise identical canonically
+    # completed match has a DIFFERENT ID: never treat that as a settled pair.
+    altered = MatchRecord(
+        match_id="canonical-foreign-id", tour=match.tour,
+        scheduled_at=match.scheduled_at, player1_id=match.player1_id,
+        player1_name=match.player1_name, player2_id=match.player2_id,
+        player2_name=match.player2_name, winner_id=match.winner_id, status="finished",
+    )
+    future = dict(payload["rows"][0])
+    future["match_id"] = "future-unknown"
+    future["scheduled_at"] = (now + timedelta(hours=9)).isoformat()
+    future["captured_at"] = (now - timedelta(hours=1)).isoformat()
+    future["player1_id"] = "x"
+    future["player2_id"] = "y"
+    older = dict(payload["rows"][0])
+    older["match_id"] = "very-old"
+    older["scheduled_at"] = (now - timedelta(days=2)).isoformat()
+    older["captured_at"] = (now - timedelta(days=3)).isoformat()
+    older["player1_id"] = "z"
+    older["player2_id"] = "w"
+    rows = [payload["rows"][0], future, older]
+    audit = service.pending_schedule_diagnostics(rows, [altered], now)
+    assert audit["pending"] == 3
+    assert audit["scheduled_not_started"] == 1
+    assert audit["scheduled_at_or_before_now"] == 2
+    assert audit["starts_next_24h"] == 1
+    assert audit["at_least_24h_after_schedule"] == 1
+    assert audit["exact_id_in_canonical"] == 0
+    assert audit["alternate_id_same_players_day_diagnostic_only"] == 1
+    assert audit["alternate_id_canonically_completed_diagnostic_only"] == 1
+    assert audit["alternate_id_join_used_for_settlement"] is False
+    assert audit["provider_requests"] == 0
+    accepted, strict_audit = service.completed_matches_for_pending(rows, [altered], now)
+    assert accepted == []
+    assert strict_audit["matched_canonical_rows"] == 0
+
+
+def test_pending_diagnostics_exact_identity_not_inflated_by_fuzzy_lookup():
+    now, payload, match = fixture()
+    actual = service.pending_schedule_diagnostics(payload["rows"], [match], now)
+    assert actual["exact_id_in_canonical"] == 1
+    assert actual["exact_id_canonically_completed"] == 1
+    assert actual["alternate_id_same_players_day_diagnostic_only"] == 0
+    assert actual["scheduled_at_or_before_now"] == 1
+    assert actual["provider_requests"] == 0
