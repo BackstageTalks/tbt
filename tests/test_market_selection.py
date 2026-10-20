@@ -120,7 +120,7 @@ def test_retired_top200_cannot_claim_ranked_picks_from_active_sections():
     assert [item['event_id'] for item in sections['value_picks']] == ['ranked-value']
     assert [item['event_id'] for item in sections['top_daily_picks']] == ['ranked-top']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'active_value_top_prime_v16'
+    assert meta['selection_policy'] == 'active_value_top_prime_v17'
     assert meta['exclusive_assignment']['priority'] == ['value', 'top_daily', 'prime']
     assert 'top200_rule' not in meta
 
@@ -149,7 +149,7 @@ def test_probability_first_odds_buckets_match_product_policy():
     assert [x['event_id'] for x in sections['value_picks']] == ['value']
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['top', 'top-not-value']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'active_value_top_prime_v16'
+    assert meta['selection_policy'] == 'active_value_top_prime_v17'
     assert meta['value_rule']['assignment_priority'] == 1
     assert meta['value_rule']['max_two_way_odds_difference'] == .15
     assert meta['top_daily_rule']['value_priority_exclusion'] is True
@@ -401,3 +401,31 @@ def test_uncapped_odds_enrichment_attempts_every_eligible_match_before_budget():
     assert report["limited_out"] == 0
     assert report["odds_available"] == 5
     assert all(item.get("betting") for item in enriched)
+
+
+def test_top_rejects_negative_and_break_even_published_ev_even_with_inflated_cached_ev():
+    negative = row('negative', .65, 1.50, 3.0, depth=1.0)
+    even = row('even', 2 / 3, 1.50, 3.0, depth=1.0)
+    for item in (negative, even):
+        item['betting']['expected_value'] = .99
+    sections = select_market_sections([negative, even])
+    assert sections['top_daily_picks'] == []
+    assert sections['market_selection']['selection_counts']['top_nonpositive_published_ev_rejected'] == 2
+
+
+def test_top_guard_uses_shrunk_probability_and_does_not_fill_with_negative_ev():
+    # Raw EV is positive, but displayed p=.662 makes EV negative at 1.50.
+    shrunk = row('shrunk', .68, 1.50, 3.0, depth=.9)
+    assert shrunk['betting']['expected_value'] > 0
+    positive = row('positive', .67, 1.60, 3.0, depth=1.0)
+    sections = select_market_sections([shrunk, positive])
+    assert [x['event_id'] for x in sections['top_daily_picks']] == ['positive']
+    assert abs(sections['top_daily_picks'][0]['selection_expected_value'] - .072) < 1e-12
+    assert sections['market_selection']['selection_counts']['minimum_shortfall']['top_daily'] == 2
+    assert sections['market_selection']['top_daily_rule']['min_expected_value_exclusive'] == 0.0
+
+
+def test_top_positive_ev_guard_is_symmetric_for_player_two():
+    item = row('player-two', .35, 1.50, 3.0, depth=1.0)
+    assert item['winner_id'] == 'p2'
+    assert select_market_sections([item])['top_daily_picks'] == []
