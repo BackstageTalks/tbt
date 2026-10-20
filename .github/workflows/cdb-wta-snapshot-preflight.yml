@@ -1,0 +1,72 @@
+name: CDB WTA canonical snapshot preflight (read only)
+
+'on':
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-wta-canonical-preflight
+  cancel-in-progress: false
+
+jobs:
+  verify-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      CDB_REPO: BackstageTalks/tbt-data
+      CDB_TAG: tbt-data-v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check private access
+        run: |
+          test -n "$GH_TOKEN" || { echo "BLOCKED_PRIVATE_CDB_TOKEN_MISSING"; exit 1; }
+          gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" > release.json
+      - name: Download canonical manifests and 2016-2020 history
+        run: |
+          mkdir -p canonical
+          gh release download "$CDB_TAG" -R "$CDB_REPO" \
+            -p history_manifest.json -p _tbt_bundle_manifest.json \
+            -p 'history-2016.parquet' -p 'history-2017.parquet' \
+            -p 'history-2018.parquet' -p 'history-2019.parquet' \
+            -p 'history-2020.parquet' -D canonical
+      - name: Verify every downloaded byte against private release and manifests
+        run: |
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          folder=Path("canonical")
+          release=json.loads(Path("release.json").read_text())
+          assets={a["name"]:a for a in release["assets"]}
+          bundle=json.loads((folder/"_tbt_bundle_manifest.json").read_text())["files"]
+          history=json.loads((folder/"history_manifest.json").read_text())["years"]
+          report={"schema":1,"production_mutated":False,"api_requests":0,
+                  "state":"CANONICAL_SNAPSHOT_SHA_VERIFIED","years":{}}
+          for year in range(2016,2021):
+              name=f"history-{year}.parquet"
+              path=folder/name
+              sha=hashlib.file_digest(path.open("rb"),"sha256").hexdigest()
+              if bundle[name]["sha256"]!=sha or history[str(year)]["sha256"]!=sha:
+                  raise SystemExit(f"MANIFEST_SHA_MISMATCH {name}")
+              if assets[name].get("digest")!="sha256:"+sha:
+                  raise SystemExit(f"RELEASE_SHA_MISMATCH {name}")
+              report["years"][str(year)]={"bytes":path.stat().st_size,"sha256":sha}
+          for name in ("history_manifest.json","_tbt_bundle_manifest.json"):
+              sha=hashlib.file_digest((folder/name).open("rb"),"sha256").hexdigest()
+              if name in bundle and bundle[name]["sha256"]!=sha:
+                  raise SystemExit(f"MANIFEST_SHA_MISMATCH {name}")
+              if assets[name].get("digest")!="sha256:"+sha:
+                  raise SystemExit(f"RELEASE_SHA_MISMATCH {name}")
+          Path("snapshot-preflight.json").write_text(json.dumps(report,indent=2)+"\n")
+          print(json.dumps(report))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cdb-wta-canonical-snapshot-preflight
+          path: snapshot-preflight.json
+          retention-days: 14
