@@ -86,6 +86,31 @@ jobs:
           gh workflow run model-calibration-monitor.yml -R "$GITHUB_REPOSITORY" --ref main
           echo "Dispatched private model calibration snapshot updater."
 
+      - name: Dispatch prospective frozen 7.2.1 settlement every two UTC hours
+        # Reuse the existing external match-status clock. No paid provider
+        # requests or duplicate CDB writers; settlement uses the same lock.
+        if: always() && github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          hour="$(date -u +%H)"
+          minute="$(date -u +%M)"
+          if (( 10#$hour % 2 != 0 || 10#$minute >= 30 )); then
+            echo 'FROZEN_721_SETTLEMENT_NOT_DUE'
+            exit 0
+          fi
+          slot="$(date -u +%Y-%m-%dT%H):"
+          runs="$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/frozen-721-settlement.yml/runs" -f event=workflow_dispatch -f per_page=50)"
+          if printf '%s' "$runs" | jq -e --arg slot "$slot" '.workflow_runs | any(.created_at | startswith($slot))' >/dev/null; then
+            echo 'FROZEN_721_SETTLEMENT_ALREADY_DISPATCHED'
+            exit 0
+          fi
+          gh workflow run frozen-721-settlement.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo 'FROZEN_721_SETTLEMENT_DISPATCH_SUBMITTED_NOT_VERIFIED'
+
       - name: Dispatch hourly 7.1.1 TOP VALUE forward blind audit
         # Research-only: neither the model nor production feed is modified.
         # Reuse the existing externally scheduled match-status cadence.
