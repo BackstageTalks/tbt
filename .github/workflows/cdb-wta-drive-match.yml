@@ -1,0 +1,140 @@
+name: WTA Drive → Canonical CDB strict read-only matching
+
+'on':
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/cdb_wta_pinned_preflight.py
+      - scripts/cdb_wta_verified_window.py
+      - scripts/cdb_wta_strict_stage.py
+      - tests/test_cdb_wta_drive_matching.py
+      - .github/workflows/cdb-wta-drive-match.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/cdb_wta_pinned_preflight.py
+      - scripts/cdb_wta_verified_window.py
+      - scripts/cdb_wta_strict_stage.py
+      - .github/workflows/cdb-wta-drive-match.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-wta-readonly-match-${{ github.event_name == 'pull_request' && 'ci' || 'canonical' }}
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit tests of safety gates; no private secrets
+        env:
+          PYTHONPATH: .:api:scripts
+        run: |
+          python -m pip install --disable-pip-version-check pytest
+          python -m compileall -q scripts/cdb_wta_pinned_preflight.py scripts/cdb_wta_verified_window.py scripts/cdb_wta_strict_stage.py
+          python -m pytest tests/test_cdb_wta_drive_matching.py -q
+
+  private-canonical-link:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      CDB_REPO: BackstageTalks/tbt-data
+      CDB_TAG: tbt-data-v1
+      PYTHONPATH: .:api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing linker runtime
+        run: python -m pip install --disable-pip-version-check google-auth requests pandas pyarrow pydantic openpyxl numpy
+      - name: Fail closed on missing private credentials
+        run: |
+          test -n "$GH_TOKEN" || { echo MISSING_PRIVATE_CDB_TOKEN; exit 1; }
+          test -n "$BLINQ_DRIVE_READER_JSON" || { echo MISSING_READONLY_DRIVE_READER; exit 1; }
+      - name: Download and SHA-verify pinned original WTA CSV
+        run: |
+          python scripts/cdb_wta_pinned_preflight.py --out-dir work/source
+      - name: Download private immutable CDB 2016-2020 history
+        run: |
+          mkdir -p work/private-release
+          gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" > work/private-release-metadata.json
+          gh release download "$CDB_TAG" -R "$CDB_REPO" \
+            -p history_manifest.json -p _tbt_bundle_manifest.json \
+            -p 'history-2016.parquet' -p 'history-2017.parquet' \
+            -p 'history-2018.parquet' -p 'history-2019.parquet' \
+            -p 'history-2020.parquet' -D work/private-release
+          python scripts/cdb_wta_verified_window.py \
+            --source work/private-release \
+            --release-metadata work/private-release-metadata.json \
+            --output work/private-canonical-window
+      - name: Independent exact match linker (read only)
+        run: |
+          python scripts/link_offline_serve_return.py \
+            --history-dir work/private-canonical-window \
+            --kaggle-hwaitt-csv work/source/wta_matches_verified.csv \
+            --out-dir work/link
+      - name: Strong evidence only; quarantine canonical conflicts
+        run: |
+          python scripts/cdb_wta_strict_stage.py \
+            --link-dir work/link --out-dir work/stage
+      - name: Existing CDB importer dry-run ONLY; no partitions written
+        run: |
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/stage/eligible.jsonl \
+            --history-dir work/private-canonical-window \
+            --out-dir work/dry-run
+      - name: Verify exact NULL-only delta and publish only aggregate metrics
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          source=json.loads(Path("work/source/report.json").read_text())
+          stage=json.loads(Path("work/stage/report.json").read_text())
+          dry=json.loads(Path("work/dry-run/report.json").read_text())
+          if (dry.get("production_mutated") is not False
+                  or dry.get("local_partitions_written") is not False
+                  or dry.get("api_requests") != 0
+                  or stage.get("production_mutated") is not False):
+              raise SystemExit("Read-only contract violated")
+          counts=dry.get("counts", {})
+          if counts.get("updated", 0) != stage["eligible_matches"]:
+              raise SystemExit("Canonical matches failed strict CDB dry-run")
+          if counts.get("stat_fields_added", 0) != stage["eligible_new_stat_fields"]:
+              raise SystemExit("NULL-only fields failed strict CDB dry-run")
+          summary={
+              "schema": 1, "state": "CANONICAL_MATCHED_READ_ONLY",
+              "production_mutated": False, "api_requests": 0,
+              "license": source["license"],
+              "source_sha256": source["source_sha256"],
+              "source_counts": source["counts"],
+              "link_counts": stage["link_counts"],
+              "conflict_matches": stage["quarantine_matches"],
+              "filter_reasons": stage["reasons"],
+              "canonical_matched_matches": stage["eligible_matches"],
+              "confirmed_null_only_stat_fields": counts.get("stat_fields_added", 0),
+              "quality_ready_added": dry["quality_ready_added"],
+              "changed_years_if_written_later": dry["changed_years"],
+              "note": "No production import; source is CC BY-NC 4.0 and deployment licensing must be reviewed independently."
+          }
+          Path("wta-readonly-summary.json").write_text(json.dumps(summary,indent=2,sort_keys=True)+"\n")
+          print(json.dumps(summary,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wta-canonical-match-aggregate-only
+          path: wta-readonly-summary.json
+          if-no-files-found: ignore
+          retention-days: 14
