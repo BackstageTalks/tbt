@@ -130,8 +130,34 @@ def capture_frozen_721_shadow(
     report_file.write_text(json.dumps(report, sort_keys=True, allow_nan=False) + "\n",
                            encoding="utf-8")
     ledger_store.upload_bundle([ledger_file, report_file])
+
+    # Never report a successful capture based on a local upload command alone.
+    # A separate directory forces a remote download and verifies the committed
+    # manifest/checksums, then we byte-compare both assets with the submitted
+    # generation. No provider calls or public-feed mutations are involved.
+    remote = ReleaseStore(
+        data_repository, SHADOW_TAG, root / "frozen-721-shadow-readback"
+    )
+    remote.download(
+        extra_names=(LEDGER_ASSET, REPORT_ASSET),
+        required_names=(LEDGER_ASSET, REPORT_ASSET),
+        require_bundle_manifest=True,
+    )
+    for asset, local in ((LEDGER_ASSET, ledger_file), (REPORT_ASSET, report_file)):
+        if (remote.directory / asset).read_bytes() != local.read_bytes():
+            raise RuntimeError("Frozen 7.2.1 remote shadow read-back mismatch: " + asset)
+    verified = json.loads(
+        (remote.directory / LEDGER_ASSET).read_text(encoding="utf-8")
+    )
+    verified_rows, verified_counts = validate_frozen_evidence(
+        verified, production_version=prod_version
+    )
+    if len(verified_rows) != len(updated) or verified_counts != report["cohort_counts"]:
+        raise RuntimeError("Frozen 7.2.1 shadow cohort failed remote read-back")
+
     return {
         "status": report["status"],
+        "remote_readback": "VERIFIED",
         "candidate_version": FROZEN_721_VERSION,
         "champion_version": prod_version,
         "captured": len(updated),
