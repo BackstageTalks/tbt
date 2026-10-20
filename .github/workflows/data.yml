@@ -125,6 +125,9 @@ jobs:
       SG_LOOKBACK_DAYS: ${{ inputs.sg_lookback_days || 730 }}
       PROMOTE: ${{ inputs.promote }}
       TBT_WEATHER_RESEARCH: ${{ vars.TBT_WEATHER_RESEARCH }}
+      # Passive research piggybacks only on an already-authorized paid refresh.
+      # Never dispatch another provider job just to score the frozen 7.2.1 model.
+      BLINQ_FROZEN_721_SHADOW_ENABLED: ${{ (github.event_name == 'workflow_dispatch' && (inputs.mode == 'refresh' || inputs.mode == 'current-refresh')) && 'true' || 'false' }}
       PYTHONPATH: api:scripts
     steps:
       - uses: actions/checkout@v4

@@ -1463,6 +1463,37 @@ def main():
                     }
                 }, ensure_ascii=False), flush=True)
 
+        # Optional v7.2.1 shadow is isolated from the existing challenger.
+        # Scores already-discovered fixtures using local model/history only:
+        # no second provider sweep, no effect on the public feed or LIVE radar.
+        if os.getenv("BLINQ_FROZEN_721_SHADOW_ENABLED", "").strip().lower() == "true":
+            try:
+                from frozen_721_shadow_capture import capture_frozen_721_shadow
+                frozen_shadow_result = capture_frozen_721_shadow(
+                    data_repository=args.data_repository,
+                    cache=cache,
+                    champion_model=model,
+                    production_predictions=predictions,
+                    matches=matches,
+                    upcoming=upcoming,
+                    prediction_now=prediction_now,
+                    atp_leaderboards=atp_leaderboards,
+                    atp_rank_history=atp_rank_history,
+                    wta_rank_history=wta_rank_history,
+                    wta_season_stats=wta_season_stats,
+                )
+                print(json.dumps({"frozen_721_shadow": frozen_shadow_result},
+                                 ensure_ascii=False), flush=True)
+            except Exception as exc:
+                # Research failure must NEVER cancel a valid market refresh or
+                # cause another paid provider request.
+                print(json.dumps({
+                    "warning": "frozen_721_private_shadow_unavailable",
+                    "detail": str(exc)[:500],
+                    "public_feed_unchanged": True,
+                    "additional_provider_calls": 0,
+                }, ensure_ascii=False), flush=True)
+
         projection_odds_cap = (
             max(0, int(provider.request_limit) - int(provider.request_count))
             if args.market_odds_max_events == -1
