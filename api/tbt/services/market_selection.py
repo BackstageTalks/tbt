@@ -29,8 +29,7 @@ MATCH_WINNER_MARKET_NAMES = {
 # Match Winner publication policy v8 (BlinQ probability-first, 2026-09-11).
 #
 # Product rule: model probability and evidence quality decide whether a pick is
-# publishable. Odds decide the public section. TOP additionally requires positive
-# EV at the displayed, reliability-adjusted probability, including fallback picks.
+# publishable. Odds decide the public section. Edge/EV are diagnostics only.
 # PRIME keeps its current short-price fallback. TOP uses a staged daily probability fallback: start at 68% and relax only until at least three TOP picks exist, never below 65%. The TOP odds boundary is fixed at >=1.50 and never moves. Value keeps a 65% floor.
 #
 # VALUE has assignment priority because close-odds candidates are intentionally
@@ -1029,8 +1028,7 @@ def select_market_sections(
     Retired TOP200 is never evaluated or allowed to reserve candidates.
     Active VALUE -> TOP/PRIME selection uses the normal quality gates.
     TOP starts at 68% / 1.50 and may relax to a 65% hard floor only when its own
-    inventory is thin. Every TOP tier requires positive EV at the published
-    probability; a target count never overrides this guard.
+    inventory is thin. EV/edge remain diagnostics only.
     """
     cards = [
         card for row in predictions
@@ -1058,7 +1056,6 @@ def select_market_sections(
     prime_fallback: list[dict[str, Any]] = []
     top_core: list[dict[str, Any]] = []
     top_fallback: list[dict[str, Any]] = []
-    top_nonpositive_ev_rejected = 0
 
     for card in cards:
         odds = _number(card.get("odds"))
@@ -1090,15 +1087,7 @@ def select_market_sections(
             min_data_depth=top_min_data_depth,
             min_surface_matches=top_min_surface_matches,
         ):
-            # Use the same shrunk probability shown to the user, not cached EV
-            # computed from the more optimistic raw model probability. Reject
-            # break-even too (with tolerance for floating-point roundoff).
-            selection_ev = probability * odds - 1.0
-            if selection_ev <= 1e-12:
-                top_nonpositive_ev_rejected += 1
-                continue
             tagged = deepcopy(card)
-            tagged["selection_expected_value"] = selection_ev
             if odds >= top_core_odds and probability >= top_core_floor:
                 tagged["selection_tier"] = "core"
                 top_core.append(tagged)
@@ -1162,15 +1151,14 @@ def select_market_sections(
         "sg_picks": deepcopy(sg_picks or []),
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
-            "schema": 17,
-            "selection_policy": "active_value_top_prime_v17",
+            "schema": 16,
+            "selection_policy": "active_value_top_prime_v16",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "prime_core_68_plus": len(prime_core),
                 "top_core_68_plus_after_value_priority": len(top_core),
                 "prime_fallback_65_679_added": prime_fallback_added,
                 "top_fallback_added": top_fallback_added,
-                "top_nonpositive_published_ev_rejected": top_nonpositive_ev_rejected,
                 "top_fallback_applied": top_fallback_applied,
                 "value_qualified_before_exclusivity": len(value_qualified),
                 "prime": len(prime), "top_daily": len(top), "value": len(value),
@@ -1244,9 +1232,7 @@ def select_market_sections(
                 "fallback_min_odds": TOP_FALLBACK_MIN_ODDS,
                 "min_odds": TOP_FALLBACK_MIN_ODDS,
                 "value_priority_exclusion": True,
-                "edge_ev_role": "positive_published_probability_ev_required",
-                "ev_probability_basis": "blinq_probability",
-                "min_expected_value_exclusive": 0.0,
+                "edge_ev_role": "diagnostic_only",
                 "limit": top_limit,
                 "sort": "probability_desc_then_data_depth_then_sample_depth",
             },
