@@ -22,7 +22,7 @@ def test_all_purposes_share_provider_day_pool_with_500_call_reserve():
         ("refresh", 2500),
         ("match", 2500),
         ("history", 2500),
-        ("history", 500),
+        ("history", 1000),
     ):
         ledger, result = shared_budget.calculate(ledger, purpose, amount, now=NOW)
 
@@ -38,7 +38,7 @@ def test_all_purposes_share_provider_day_pool_with_500_call_reserve():
 def test_history_can_use_global_headroom_but_never_cross_provider_ceiling():
     ledger = None
     result = None
-    for amount in (3000, 3000, 3000, 3000, 1500, 500):
+    for amount in (3000, 3000, 3000, 3000, 1500, 1000):
         ledger, result = shared_budget.calculate(ledger, "history", amount, now=NOW)
     assert result["spent"]["history"] == 14500
     assert result["global_spent"] == 14500
@@ -268,7 +268,7 @@ def test_provider_header_guard_fails_closed_when_remaining_header_missing(monkey
 
 def test_refresh_can_use_available_shared_pool_up_to_14500():
     ledger = None
-    for amount in (3000, 3000, 3000, 3000, 2250):
+    for amount in (3000, 3000, 3000, 3000, 2500):
         ledger, result = shared_budget.calculate(ledger, "refresh", amount, now=NOW)
     assert result["global_spent"] == 14500
     assert result["remaining"]["refresh"] == 0
