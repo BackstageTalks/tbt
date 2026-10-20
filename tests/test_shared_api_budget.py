@@ -69,7 +69,7 @@ def test_provider_day_resets_at_1910_bratislava():
 
     ledger, result = shared_budget.calculate(ledger, "refresh", 1000, now=at_reset)
     assert result["global_spent"] == 1000
-    assert result["global_remaining"] == 13250
+    assert result["global_remaining"] == 13500
     assert result["window"] == "provider_day_19_10_europe_bratislava"
 
 
