@@ -24,7 +24,7 @@ def match(mid="private-id", **kwargs):
 
 def csv_source(path: Path, **overrides):
     row=dict(match_id="vendor-987",date_timestamp=str(int(datetime(2024,1,4,tzinfo=timezone.utc).timestamp())),
-             tour_type="WTA", home_name="Keys M.",away_name="Bouzkova M.",
+             tour_type="2", tour_type_human="WTA Tour", home_name="Keys M.",away_name="Bouzkova M.",
              home_id="vendor-keys",away_id="vendor-bouzkova",winner_code="1",
              surface="hard",tournament="United Cup WTA",
              home_aces="4",away_aces="2",home_double_faults="1",away_double_faults="3",
@@ -72,3 +72,17 @@ def test_bad_sha_fails_no_output(tmp_path):
     csv_source(src)
     with pytest.raises(ValueError,match="SHA-256"):
         audit([match()],[(src,"wta","0"*64)])
+
+
+def test_challenger_tour_code_pair_checked_not_guessed(tmp_path):
+    from scripts.cdb_vendor_season_candidate_audit import TOUR_CODE_LABELS
+    assert TOUR_CODE_LABELS[("3", "atp chall")] == "atp"
+    assert TOUR_CODE_LABELS[("4", "wta chall")] == "wta"
+    assert ("5", "atp exhib") not in TOUR_CODE_LABELS
+    src=tmp_path/"season.csv"
+    digest=csv_source(src,tour_type="4",tour_type_human="WTA Chall")
+    result=audit([match()],[(src,"wta",digest)])
+    assert result["counts"]["research_candidates_same_day_pair_winner_surface_tournament"]==1
+    digest=csv_source(src,tour_type="5",tour_type_human="ATP Exhib")
+    result=audit([match()],[(src,"wta",digest)])
+    assert result["counts"]["tour_type_unverified"]==1
