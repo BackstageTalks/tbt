@@ -26,7 +26,7 @@ FIELDS = (
     "league", "tourney_date", "tourney_id", "match_num", "tourney_name",
     "winner_name", "loser_name", "surface", "round", "best_of",
     # Retain source identifiers as unverified provenance, never authoritative IDs.
-    "winner_id", "loser_id",
+    "source_winner_id", "source_loser_id",
     "w_ace", "w_df", "w_svpt", "w_1stIn", "w_1stWon", "w_2ndWon",
     "w_bpSaved", "w_bpFaced", "l_ace", "l_df", "l_svpt",
     "l_1stIn", "l_1stWon", "l_2ndWon", "l_bpSaved", "l_bpFaced",
@@ -42,8 +42,8 @@ ALIASES = {
     "surface": ("surface", "court_surface"),
     "round": ("round", "round_name"),
     "best_of": ("best_of", "bestof"),
-    "winner_id": ("winner_id", "winner_player_id", "winning_player_id"),
-    "loser_id": ("loser_id", "loser_player_id", "losing_player_id"),
+    "source_winner_id": ("winner_id", "winner_player_id", "winning_player_id"),
+    "source_loser_id": ("loser_id", "loser_player_id", "losing_player_id"),
 }
 STAT_FIELDS = FIELDS[12:]
 for field in STAT_FIELDS:
