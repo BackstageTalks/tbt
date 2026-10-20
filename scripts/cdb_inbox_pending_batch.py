@@ -72,7 +72,7 @@ def _files() -> dict[str, bytes]:
             raise PendingInvalid("Unexpected source normalization path")
         paths[relative] = ROOT / relative
     normalized_dir = source / "normalized"
-    existing = {p.as_posix().removeprefix("work/") for p in normalized_dir.glob("*.csv")}
+    existing = {p.relative_to(ROOT).as_posix() for p in normalized_dir.glob("*.csv")}
     if existing != (set(paths) - {"source/report.json", "private-state/next.json"}):
         raise PendingInvalid("Normalized source file enumeration mismatch")
     contents = {name: path.read_bytes() for name, path in paths.items()}
