@@ -1,0 +1,36 @@
+name: CDB Import - operator one-shot dispatcher
+
+# Operator entrypoint. Changes to unrelated files never trigger this workflow.
+# Production data may only be changed by the separate guarded CDB importer.
+'on':
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/cdb-import-operator-dispatch.yml
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch-cdb:
+    if: >-
+      github.repository == 'BackstageTalks/tbt' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'push' &&
+        contains(github.event.head_commit.message, '[cdb-import-now]')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Submit guarded CDB Drive import on current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'BackstageTalks/tbt'
+          test "$GITHUB_REF" = 'refs/heads/main'
+          gh workflow run cdb-drive-inbox.yml -R "$GITHUB_REPOSITORY" --ref main
+          echo 'CDB_OPERATOR_DISPATCH_SUBMITTED_NOT_IMPORT_VERIFIED'
