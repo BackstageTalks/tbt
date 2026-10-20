@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import re
+import time
 from pathlib import Path
 
 MAX_FILES = 100
@@ -26,6 +27,28 @@ SUPPORTED = {".csv", ".tsv", ".json", ".jsonl", ".xlsx", ".parquet", ".zip"}
 SHEET_MIME = "application/vnd.google-apps.spreadsheet"
 FOLDER_MIME = "application/vnd.google-apps.folder"
 BASE = "https://www.googleapis.com/drive/v3/files"
+RETRYABLE_HTTP = frozenset((429, 500, 502, 503, 504))
+MAX_HTTP_ATTEMPTS = 4
+
+
+def _get_with_retry(session, url, *, params, timeout):
+    """Retry bounded transient Drive HTTP statuses; fail closed on other errors.
+
+    Never guess a truncated inventory or advance its private checkpoint.
+    Network exceptions, authorization errors and malformed JSON still fail.
+    """
+    for attempt in range(MAX_HTTP_ATTEMPTS):
+        response = session.get(url, params=params, timeout=timeout)
+        try:
+            response.raise_for_status()
+        except Exception:
+            status = getattr(response, "status_code", None)
+            if status not in RETRYABLE_HTTP or attempt + 1 == MAX_HTTP_ATTEMPTS:
+                raise
+            time.sleep(2 ** attempt)
+            continue
+        return response
+    raise RuntimeError("Unexpected exhausted Drive retry state")
 
 
 def credentials():
@@ -65,8 +88,7 @@ def _inventory(session, root):
             }
             if page_token:
                 params["pageToken"] = page_token
-            response = session.get(BASE, params=params, timeout=90)
-            response.raise_for_status()
+            response = _get_with_retry(session, BASE, params=params, timeout=90)
             page = response.json()
             if not isinstance(page, dict) or not isinstance(page.get("files"), list):
                 raise ValueError("Drive returned incomplete folder listing")
@@ -209,8 +231,8 @@ def fetch(folder_id: str, output: Path, *, state_path: Path | None = None,
             # Keep pending for a later run; other smaller files can fit now.
             continue
         file_id = info["id"]
-        response = session.get(BASE + "/" + file_id, params={"alt": "media"}, timeout=120)
-        response.raise_for_status()
+        response = _get_with_retry(session, BASE + "/" + file_id,
+                                   params={"alt": "media"}, timeout=120)
         blob = response.content
         if len(blob) > MAX_SINGLE or total_bytes + len(blob) > MAX_BYTES:
             raise ValueError("Source bytes exceed download bounds")
