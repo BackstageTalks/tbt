@@ -141,7 +141,7 @@ jobs:
               raise SystemExit('Unsafe writer gate state')
           ready='true' if status == 'FREE' else 'false'
           with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
-              stream.write('ready='+ready+'\\n')
+              stream.write('ready='+ready+'\n')
           print('CDB_INBOX_WRITER_'+status+'_AFTER_SOURCE_PREP',flush=True)
           PY
       - name: Persist prepared batch privately and free runner when writer busy
