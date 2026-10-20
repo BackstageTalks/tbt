@@ -25,6 +25,8 @@ EXTENSIONS = {".csv", ".tsv", ".json", ".jsonl", ".xlsx", ".parquet", ".zip"}
 FIELDS = (
     "league", "tourney_date", "tourney_id", "match_num", "tourney_name",
     "winner_name", "loser_name", "surface", "round", "best_of",
+    # Retain source identifiers as unverified provenance, never authoritative IDs.
+    "winner_id", "loser_id",
     "w_ace", "w_df", "w_svpt", "w_1stIn", "w_1stWon", "w_2ndWon",
     "w_bpSaved", "w_bpFaced", "l_ace", "l_df", "l_svpt",
     "l_1stIn", "l_1stWon", "l_2ndWon", "l_bpSaved", "l_bpFaced",
@@ -40,8 +42,10 @@ ALIASES = {
     "surface": ("surface", "court_surface"),
     "round": ("round", "round_name"),
     "best_of": ("best_of", "bestof"),
+    "winner_id": ("winner_id", "winner_player_id", "winning_player_id"),
+    "loser_id": ("loser_id", "loser_player_id", "losing_player_id"),
 }
-STAT_FIELDS = FIELDS[10:]
+STAT_FIELDS = FIELDS[12:]
 for field in STAT_FIELDS:
     ALIASES[field] = (field,)
     if field.endswith("_ace"):
@@ -56,6 +60,10 @@ def iso_date(value):
     if isinstance(value, (datetime, date)):
         return value.strftime("%Y%m%d")
     raw = str(value or "").strip()
+    # Only known unambiguous calendar representations. Do not guess US/UK
+    # slash dates or treat numeric Unix timestamps/Excel serials as match dates.
+    if re.fullmatch(r"[0-9]{8}\.0+", raw):
+        raw = raw.split(".", 1)[0]
     for fmt in ("%Y%m%d", "%Y-%m-%d", "%Y/%m/%d", "%d.%m.%Y"):
         try:
             return datetime.strptime(raw[:10], fmt).strftime("%Y%m%d")
@@ -150,6 +158,7 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100):
     counts = Counter()
     review = []
     outputs = []
+    source_diagnostics = []
     hashes = set()
     for path in files:
         blob = path.read_bytes()
@@ -176,14 +185,18 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100):
             try:
                 rows = read_rows(part, member_name)
                 tables = {"atp": [], "wta": []}
+                table_rejections = Counter()
+                table_seen = 0
                 for index, raw in enumerate(rows, 1):
                     if index > MAX_ROWS:
                         raise ValueError("Table exceeds row limit")
                     counts["raw_rows"] += 1
+                    table_seen += 1
                     row, reason = normalize(raw, member_name, index)
                     if reason:
                         counts["rejected_rows"] += 1
                         counts["reason_" + reason] += 1
+                        table_rejections[reason] += 1
                         continue
                     tables[row["league"]].append(row)
                 for tour, accepted in tables.items():
@@ -197,13 +210,21 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100):
                     outputs.append({"path": str(dest), "tour": tour, "rows": len(accepted),
                                     "source_sha256": sha, "member_sha256": digest(part)})
                     counts["normalized_rows"] += len(accepted)
+                source_diagnostics.append({
+                    "source_sha256": sha, "member_sha256": digest(part),
+                    "raw_rows": table_seen,
+                    "normalized_rows": table_seen - sum(table_rejections.values()),
+                    "rejected_by_reason": dict(sorted(table_rejections.items())),
+                    "state": "SOURCE_ONLY", "production_mutated": False,
+                })
             except (ValueError, KeyError, UnicodeError, csv.Error, ImportError, TypeError) as exc:
                 counts["review_tables"] += 1
                 review.append({"sha256": sha, "member_sha256": digest(part),
                                "reason": type(exc).__name__})
     report = {"schema": 1, "state": "SOURCE_ONLY", "production_mutated": False,
               "api_requests": 0, "counts": dict(counts),
-              "normalized": outputs, "review": review}
+              "normalized": outputs, "review": review,
+        "source_diagnostics": source_diagnostics}
     (out_dir / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     return report
 def main():
