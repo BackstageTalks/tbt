@@ -2,11 +2,13 @@ name: CDB import retry after protected frozen training
 
 # Training has an actual global lock across private/public repositories.
 # Once the owner's workflow is completed, request a new guarded import.
+# Main pipeline also owns CDB; resume privately prepared batches after it exits.
 # The import itself independently checks the tag, CAS, and canonical readback.
 'on':
   workflow_run:
     workflows:
       - BlinQ protected frozen-CDB candidate training
+      - Tennis data and predictions
     types:
       - completed
 
@@ -30,9 +32,34 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PRIVATE_CDB_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          FINISHED_WRITER: ${{ github.event.workflow_run.name }}
         run: |
           set -euo pipefail
-          # Never steal or forcibly expire the CDB lock. If its owner failed
-          # to release it, the target import fails closed in read-only preflight.
+          # A completed morning pipeline only triggers inbox on preexisting
+          # private staged Drive data. No extra unsupported source download.
+          if [[ "$FINISHED_WRITER" == "Tennis data and predictions" ]]; then
+            test -n "$PRIVATE_CDB_TOKEN" || { echo 'PRIVATE_CDB_TOKEN_MISSING'; exit 1; }
+            result="$(GH_TOKEN="$PRIVATE_CDB_TOKEN" gh api -X GET \
+              'repos/BackstageTalks/tbt-data/releases/tags/blinq-cdb-inbox-pending-v1' \
+              --jq '.tag_name' 2> pending-error.txt)" || {
+              if grep -Fq 'HTTP 404' pending-error.txt; then
+                echo 'CDB_INBOX_NO_PREPARED_BATCH_AFTER_MAIN_WRITER'
+                exit 0
+              fi
+              cat pending-error.txt
+              exit 1
+            }
+            test "$result" = 'blinq-cdb-inbox-pending-v1'
+            active="$(gh api -X GET \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/cdb-drive-inbox.yml/runs" \
+              -f event=workflow_dispatch -f per_page=50)"
+            if printf '%s' "$active" | jq -e '.workflow_runs | any(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "pending" or .status == "requested")' >/dev/null; then
+              echo 'CDB_INBOX_ALREADY_RUNNING_NO_DUPLICATE_RETRY'
+              exit 0
+            fi
+          fi
+          # Never steal/expire the CDB lock. The importer re-verifies CAS,
+          # original checkpoint, immutable backup and NULL-only write.
           gh workflow run cdb-drive-inbox.yml --repo "$GITHUB_REPOSITORY" --ref main
           echo 'CDB_IMPORT_RETRY_DISPATCH_SUBMITTED_NOT_CDB_MUTATION_VERIFIED'

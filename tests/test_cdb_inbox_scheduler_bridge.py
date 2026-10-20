@@ -72,3 +72,9 @@ def test_protected_training_completion_triggers_safe_import_retry():
     assert "git/refs/tags" not in hook
     assert "release delete" not in hook
     assert "\\n  schedule:" not in hook
+    assert "Tennis data and predictions" in hook
+    assert "blinq-cdb-inbox-pending-v1" in hook
+    assert "PRIVATE_CDB_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}" in hook
+    assert "CDB_INBOX_NO_PREPARED_BATCH_AFTER_MAIN_WRITER" in hook
+    assert "CDB_INBOX_ALREADY_RUNNING_NO_DUPLICATE_RETRY" in hook
+    assert 'gh api -X GET' in hook
