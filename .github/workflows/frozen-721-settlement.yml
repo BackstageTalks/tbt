@@ -53,6 +53,9 @@ jobs:
             tests/test_settle_frozen_721_shadow.py \
             tests/test_frozen_721_research.py \
             tests/test_frozen_721_shadow_capture.py
+      # Also report which pre-match fixtures have not started yet versus
+      # overdue outcomes / strictly mismatched canonical IDs. The classifier
+      # is read-only and never joins by player names or fuzzy identities.
       - name: Settle original 7.2.1 predictions from independently verified canonical results
         run: |
           set -euo pipefail
