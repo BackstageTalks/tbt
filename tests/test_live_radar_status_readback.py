@@ -18,8 +18,8 @@ def payload(reply):
 def budget():
     return {
         "provider_plan_limit": 15000,
-        "reserved_provider_headroom": 450,
-        "global_limit": 14550,
+        "reserved_provider_headroom": 500,
+        "global_limit": 15000,
         "global_spent": 2100,
         "spent": {"live": 300, "match": 0, "refresh": 0, "history": 1800},
         "purpose_limits": {"live": 3000},
@@ -45,7 +45,7 @@ def test_authorized_readback_is_fresh_and_makes_no_scan(monkeypatch):
     value = payload(response)
     assert response.status_code == 200 and value["ok"] is True
     assert value["heartbeat"]["fresh"] is True
-    assert value["budget"]["global_limit"] == 14550
+    assert value["budget"]["global_limit"] == 15000
     assert value["budget"]["live_spent"] == 300
 
 
@@ -61,7 +61,7 @@ def test_stale_heartbeat_and_budget_corruption_fail_closed(monkeypatch):
     age = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
     setup(monkeypatch, {"last_success_at": age, "scanned_at": age})
     assert function_app.internal_live_radar_status(Request()).status_code == 503
-    setup(monkeypatch, shared={**budget(), "global_spent": 14551})
+    setup(monkeypatch, shared={**budget(), "global_spent": 15001})
     assert payload(function_app.internal_live_radar_status(Request()))["error"] == "api_budget_invalid"
 
 
