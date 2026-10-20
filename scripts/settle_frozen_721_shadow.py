@@ -112,6 +112,88 @@ def completed_matches_for_pending(rows, matches, now):
     return accepted, {"matched_canonical_rows": checked, **declined}
 
 
+
+def pending_schedule_diagnostics(rows, matches, now):
+    """Read-only cohort timing and linkage diagnostics; never settle by fuzzy join.
+
+    Same-player and date similarities are aggregated for investigation only.
+    A different match ID is NEVER substituted for the recorded pre-match ID.
+    """
+    pending = [row for row in rows if row.get("status") == "pending"]
+    schedule_dates = {}
+    tour_counts = {"ATP": 0, "WTA": 0}
+    earliest = latest = None
+    starts_next_24h = scheduled_not_started = started = overdue_6h = overdue_24h = 0
+    by_exact_id = {str(m.match_id): m for m in matches}
+    # Potential identity drift is a diagnostic, not a trusted join.
+    by_players_day = {}
+    for match in matches:
+        if not match.player1_id or not match.player2_id:
+            continue
+        key = (
+            str(match.tour or "").upper(),
+            match.scheduled_at.astimezone(timezone.utc).date().isoformat(),
+            frozenset((str(match.player1_id), str(match.player2_id))),
+        )
+        by_players_day.setdefault(key, []).append(match)
+
+    exact_id = exact_completed = alternate_id_same_players_day = 0
+    alternate_id_completed = 0
+    for row in pending:
+        scheduled = _utc(row["scheduled_at"])
+        day = scheduled.date().isoformat()
+        schedule_dates[day] = schedule_dates.get(day, 0) + 1
+        tour = str(row.get("tour") or "").upper()
+        if tour in tour_counts:
+            tour_counts[tour] += 1
+        if earliest is None or scheduled < earliest:
+            earliest = scheduled
+        if latest is None or scheduled > latest:
+            latest = scheduled
+        if scheduled > now:
+            scheduled_not_started += 1
+            if (scheduled - now).total_seconds() <= 86400:
+                starts_next_24h += 1
+        else:
+            started += 1
+            hours = (now - scheduled).total_seconds() / 3600
+            overdue_6h += int(hours >= 6)
+            overdue_24h += int(hours >= 24)
+        if (matching := by_exact_id.get(str(row["match_id"]))) is not None:
+            exact_id += 1
+            exact_completed += int(matching.is_completed)
+        else:
+            key = (
+                tour, day, frozenset((
+                    str(row["player1_id"]), str(row["player2_id"])
+                ))
+            )
+            others = [
+                match for match in by_players_day.get(key, [])
+                if abs((match.scheduled_at - scheduled).total_seconds()) <= 12 * 3600
+            ]
+            if len(others) == 1:
+                alternate_id_same_players_day += 1
+                alternate_id_completed += int(others[0].is_completed)
+    return {
+        "pending": len(pending),
+        "by_tour": tour_counts,
+        "scheduled_utc_days": dict(sorted(schedule_dates.items())),
+        "earliest_scheduled_utc": earliest.isoformat() if earliest else None,
+        "latest_scheduled_utc": latest.isoformat() if latest else None,
+        "scheduled_not_started": scheduled_not_started,
+        "starts_next_24h": starts_next_24h,
+        "scheduled_at_or_before_now": started,
+        "at_least_6h_after_schedule": overdue_6h,
+        "at_least_24h_after_schedule": overdue_24h,
+        "exact_id_in_canonical": exact_id,
+        "exact_id_canonically_completed": exact_completed,
+        "alternate_id_same_players_day_diagnostic_only": alternate_id_same_players_day,
+        "alternate_id_canonically_completed_diagnostic_only": alternate_id_completed,
+        "alternate_id_join_used_for_settlement": False,
+        "provider_requests": 0,
+    }
+
 def download_verified_years(repo, directory, years):
     """Only download year partitions containing issued shadow fixtures.
 
@@ -200,11 +282,13 @@ def settle(*, repo=DATA_REPO, workdir=None, now=None):
     years = {_utc(r["scheduled_at"]).year for r in pending}
     history, history_evidence = download_verified_years(repo, base / "canonical", years)
     accepted, matching = completed_matches_for_pending(rows, history, now)
+    diagnostics = pending_schedule_diagnostics(rows, history, now)
 
     if not accepted:
         return {
             "status": "WAITING_FOR_VERIFIED_CANONICAL_RESULTS",
             "counts": before, "canonical_matching": matching,
+            "pending_diagnostics": diagnostics,
             "canonical_provenance": history_evidence,
             "provider_requests": 0, "production_mutated": False,
         }
@@ -248,12 +332,14 @@ def settle(*, repo=DATA_REPO, workdir=None, now=None):
             return {
                 "status": "NO_NEW_VERIFIED_SETTLEMENTS",
                 "counts": after, "canonical_matching": matching,
+                "pending_diagnostics": diagnostics,
                 "provider_requests": 0, "production_mutated": False,
             }
         report = research_frozen_721(payload, production_version=prod_version)
         report["preliminary"] = preliminary_scoreboard(updated)
         report["canonical_provenance"] = history_evidence
         report["canonical_matching"] = matching
+        report["pending_diagnostics_before_settlement"] = diagnostics
         report["new_settled"] = newly
         report["new_void"] = new_void
         report["new_excluded"] = new_excluded
@@ -291,6 +377,7 @@ def settle(*, repo=DATA_REPO, workdir=None, now=None):
             "new_excluded": new_excluded,
             "candidate_minus_champion": report["preliminary"]["groups"]["overall"]["candidate_minus_champion"],
             "canonical_matching": matching,
+            "pending_diagnostics_before_settlement": diagnostics,
             "provider_requests": 0, "production_mutated": False,
             "automatic_promotion": False,
         }
