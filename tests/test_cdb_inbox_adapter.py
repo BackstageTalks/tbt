@@ -109,4 +109,43 @@ def test_stage_requires_exact_day_tournament_winner_and_extra_evidence(tmp_path,
     assert result["eligible_new_values"] == 1
     assert result["filtered_matches"] == 2
     assert result["conflict_matches"] == 1
+    assert result["filter_reasons"]["date_not_exact"] == 1
+    assert result["filter_reasons"]["canonical_stat_conflict"] == 1
     assert json.loads((tmp_path / "stage/eligible.jsonl").read_text())["match_id"] == "good"
+
+
+def test_preserve_untrusted_player_ids_without_claiming_verified_identity(tmp_path):
+    src, out = tmp_path / "src", tmp_path / "out"
+    src.mkdir()
+    row = sample(winner_id="atp-100", loser_id="atp-200")
+    with (src / "atp_matches.csv").open("w", newline="") as h:
+        writer = csv.DictWriter(h, fieldnames=row)
+        writer.writeheader()
+        writer.writerow(row)
+    report = normalize(src, out)
+    normalized = list(csv.DictReader(Path(report["normalized"][0]["path"]).open()))
+    assert normalized[0]["winner_id"] == "atp-100"
+    assert normalized[0]["loser_id"] == "atp-200"
+    assert report["state"] == "SOURCE_ONLY"
+    assert report["production_mutated"] is False
+
+
+def test_unambiguous_pandas_date_literal_and_per_file_audit(tmp_path):
+    src, out = tmp_path / "src", tmp_path / "out"
+    src.mkdir()
+    good = sample(match_date="20261017.0")
+    bad = sample(match_date="10/17/2026")
+    with (src / "atp_test.csv").open("w", newline="") as h:
+        writer = csv.DictWriter(h, fieldnames=good)
+        writer.writeheader()
+        writer.writerow(good)
+        writer.writerow(bad)
+    report = normalize(src, out)
+    assert report["counts"]["normalized_rows"] == 1
+    assert report["counts"]["reason_date_missing_or_invalid"] == 1
+    assert report["source_diagnostics"][0]["raw_rows"] == 2
+    assert report["source_diagnostics"][0]["rejected_by_reason"] == {
+        "date_missing_or_invalid": 1
+    }
+    row = next(csv.DictReader(Path(report["normalized"][0]["path"]).open()))
+    assert row["tourney_date"] == "20261017"
