@@ -184,3 +184,96 @@ def test_match_source_prioritized_without_dropping_other_folders(tmp_path):
         assert report["pending_supported"] == 3 - count
         previous = state
     assert drive.file_reads == [match_id, odds_id, career_id]
+
+
+
+class FailedHTTPResponse:
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        raise RuntimeError(f"HTTP {self.status_code}")
+
+
+def test_transient_folder_http_500_retries_then_recovers_without_skipping(tmp_path, monkeypatch):
+    delays = []
+    monkeypatch.setattr("scripts.cdb_inbox_drive.time.sleep", delays.append)
+
+    class OnceFailedDrive(Drive):
+        calls = 0
+        def get(self, url, params=None, timeout=None):
+            if url == BASE and CHILD in params["q"]:
+                self.calls += 1
+                if self.calls == 1:
+                    return FailedHTTPResponse(500)
+            return super().get(url, params=params, timeout=timeout)
+
+    drive = OnceFailedDrive()
+    report = fetch(ROOT, tmp_path / "input", session=drive,
+                   next_state_path=tmp_path / "next.json")
+    assert report["fetched"] == 3
+    assert drive.calls == 2
+    assert delays == [1]
+    assert (tmp_path / "next.json").exists()
+
+
+def test_repeated_http_503_never_writes_checkpoint(tmp_path, monkeypatch):
+    delays = []
+    monkeypatch.setattr("scripts.cdb_inbox_drive.time.sleep", delays.append)
+
+    class BrokenDrive(Drive):
+        calls = 0
+        def get(self, url, params=None, timeout=None):
+            if url == BASE:
+                self.calls += 1
+                return FailedHTTPResponse(503)
+            return super().get(url, params=params, timeout=timeout)
+
+    drive = BrokenDrive()
+    with pytest.raises(RuntimeError, match="HTTP 503"):
+        fetch(ROOT, tmp_path / "raw", session=drive,
+              next_state_path=tmp_path / "next.json")
+    assert drive.calls == 4
+    assert delays == [1, 2, 4]
+    assert not (tmp_path / "next.json").exists()
+
+
+def test_http_403_is_not_retried_or_checkpointed(tmp_path, monkeypatch):
+    delays = []
+    monkeypatch.setattr("scripts.cdb_inbox_drive.time.sleep", delays.append)
+
+    class ForbiddenDrive(Drive):
+        calls = 0
+        def get(self, url, params=None, timeout=None):
+            if url == BASE:
+                self.calls += 1
+                return FailedHTTPResponse(403)
+            return super().get(url, params=params, timeout=timeout)
+
+    drive = ForbiddenDrive()
+    with pytest.raises(RuntimeError, match="HTTP 403"):
+        fetch(ROOT, tmp_path / "raw", session=drive,
+              next_state_path=tmp_path / "next.json")
+    assert drive.calls == 1
+    assert not delays
+    assert not (tmp_path / "next.json").exists()
+
+
+def test_transient_media_http_502_resumes_bounded_file_intake(tmp_path, monkeypatch):
+    delays = []
+    monkeypatch.setattr("scripts.cdb_inbox_drive.time.sleep", delays.append)
+
+    class OnceFailedMedia(Drive):
+        failed = False
+        def get(self, url, params=None, timeout=None):
+            if url.endswith("/" + ID1) and not self.failed:
+                self.failed = True
+                return FailedHTTPResponse(502)
+            return super().get(url, params=params, timeout=timeout)
+
+    drive = OnceFailedMedia()
+    report = fetch(ROOT, tmp_path / "raw", session=drive,
+                   next_state_path=tmp_path / "next.json")
+    assert report["fetched"] == 3
+    assert delays == [1]
+    assert (tmp_path / "next.json").exists()
