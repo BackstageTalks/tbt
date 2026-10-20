@@ -109,17 +109,17 @@ def test_queue_output_is_a_boolean_and_requires_runner_output(tmp_path, monkeypa
         queue.write_output(ready=False)
 
 
-def test_writer_queue_is_read_only_and_gates_all_mutations():
-    src = (ROOT / ".github/workflows/cdb-drive-inbox.yml").read_text()
-    assert "await-cdb-writer-idle:" in src
-    assert "timeout-minutes: 230" in src
-    assert "--max-seconds 12600 --interval-seconds 60" in src
-    assert "steps.queue.outputs.ready" in src
-    assert "needs.await-cdb-writer-idle.outputs.ready == 'true'" in src
-    assert "python scripts/cdb_inbox_wait_and_resume.py --requeue-only" in src
-    assert "steps.writer.outputs.locked == 'true'" in src
-    assert "if: success() && (steps.stage.outputs.additions != 'true' || steps.writer.outputs.locked == 'true')" in src
-    assert "Always release global writer if owned" in src
+def test_legacy_dispatch_helper_remains_read_only_but_new_import_does_not_wait():
+    workflow = (ROOT / ".github/workflows/cdb-drive-inbox.yml").read_text()
+    assert "await-cdb-writer-idle:" not in workflow
+    assert "Observe CDB writer only AFTER normalized data preparation" in workflow
+    assert "steps.writer_gate.outputs.ready == 'true'" in workflow
+    assert "steps.writer.outputs.locked == 'true'" in workflow
+    assert "if: always()" in workflow
+    assert "Always release global writer if owned" in workflow
+    # The former long-duration waiter is retained solely for old training
+    # flows and must not be called by the CDB inbox importer.
+    assert "python scripts/cdb_inbox_wait_and_resume.py --max-seconds" not in workflow
     source = (ROOT / "scripts/cdb_inbox_wait_and_resume.py").read_text()
     assert '["gh", "workflow", "run", WORKFLOW' in source
     assert "git/refs/tags" not in source

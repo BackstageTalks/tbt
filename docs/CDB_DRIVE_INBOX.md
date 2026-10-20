@@ -17,9 +17,12 @@
 
 ## Workflow
 
-- Scheduler: existing externally driven `match-status.yml` dispatch at 02:00 and 14:00 UTC (plus manual workflow_dispatch), no second GitHub cron.
+- Scheduler: existing external CRON dispatches the guarded workflow (configured hourly where deployed), while the legacy `match-status.yml` bridge still dispatches at 02:00 and 14:00 UTC. No additional GitHub cron. The workflow's production concurrency key prevents overlapping writers.
 - Entry: `.github/workflows/cdb-drive-inbox.yml`, with `INBOX_FOLDER_ID` set to the *BlinQ_data root*.
 - Recursive intake: `scripts/cdb_inbox_drive.py`; schema normalization: `scripts/cdb_inbox_adapter.py`; exact candidate gate: `scripts/cdb_inbox_stage.py`.
+- **Prepare without lock:** restore an existing SHA-verified pending source bundle from PRIVATE `BackstageTalks/tbt-data` release `blinq-cdb-inbox-pending-v1`, or download/normalize one new bounded source batch. Only after preparation, perform a read-only global-lock check. When a legitimate writer is busy, upload/checksum and read back the normalized source bundle PRIVATE, then **end the runner immediately**. The next dispatch resumes from that bundle, no repeated Drive downloads or idle runner hours.
+- **Revalidate after waiting:** the saved batch is source-only, never an authorization to write. Before any canonical mutation the importer reloads current CDB and reruns the exact linker/dry-run, atomic writer acquisition, bundle CAS, immutable backup, NULL-only update and independent remote readback. A new writer race stores the same pending bundle and ends the job.
+- **Checkpoint discipline:** the private progress checkpoint is advanced only after no-update validation or independently verified successful publication. Only after that checkpoint is read back is the matching pending release cleared. Checkpoint changes, corrupt/stale archives, unsafe paths or unauthorized access fail closed.
 - Canonical writer: existing `scripts/import_offline_linked_serve_return.py --exact-stats-only` and `ReleaseStore.upload_bundle`, not a new SQL/Parquet writer.
 - Source report: inventory files/folders, previous fingerprints, downloaded files/bytes, unsupported/reviewed, pending supported. Report is ephemeral on the private-secrets runner; source identifiers are never sent to public CI artifacts.
 - Real success = CDB field count, affected years, **net-new/enriched** counts and independent remote readback; `stage` or green synthetic CI never counts as an import.
@@ -27,7 +30,7 @@
 ## Verification
 
 ```bash
-PYTHONPATH=.:api:scripts pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_integration.py -q
+PYTHONPATH=.:api:scripts pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_integration.py -q
 ```
 
 **Failure handling:** invalid cursor, changed Drive bytes, source identity conflict, invalid canonical bundle, checkpoint CAS mismatch or failed remote CDB readback halt the applicable write. The private checkpoint is advanced only after success; re-running is idempotent against canonical NULL-only checks.
