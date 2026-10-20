@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "scope": "one_shot_existing_drive_inbox_batch",
+  "date": "2026-10-20",
+  "source_wta_csv_sha256": "1467b2efd02288502f518662fe3ad3e1c9121e7e59a0e65f690f6ec779591548",
+  "source_wta_csv_status": "QUARANTINED_LOOKBACK_NOT_MATCH_STATS",
+  "wta_current_match_statistics_import_allowed": false,
+  "allow_other_vetted_sources_via_existing_importer": true,
+  "max_source_files_per_batch": 100,
+  "minimum_requirements": [
+    "independent_exact_match_identity",
+    "date_exact",
+    "winner",
+    "tournament_exact",
+    "round_or_surface",
+    "NULL_only",
+    "global_writer_lock",
+    "prewrite_backup",
+    "manifest_CAS",
+    "remote_readback"
+  ],
+  "api_budget_requests_for_this_import": 0,
+  "note": "One-shot main push trigger. Batch is allowed only through existing guarded import workflow; no WTA historical _1/_2 stats mapped as current match."
+}

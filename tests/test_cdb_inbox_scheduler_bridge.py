@@ -22,7 +22,15 @@ def test_duplicate_window_and_utc_slot_guard():
 
 def test_secrets_never_present_on_pr_and_writer_is_reused():
     assert "github.event_name == 'workflow_dispatch'" in BRIDGE
-    assert "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'" in IMPORT
+    # Production secrets are usable only on main: manual dispatch or pinned
+    # one-shot push. Pull requests must never reach guarded-import.
+    assert "github.ref == 'refs/heads/main' &&" in IMPORT
+    assert "(github.event_name == 'workflow_dispatch' ||" in IMPORT
+    assert "(github.event_name == 'push' &&" in IMPORT
+    assert "startsWith(github.event.head_commit.message, 'chore(cdb): authorized one-shot Drive import 2026-10-20')" in IMPORT
+    assert "Enforce explicit one-shot source authorization (push only)" in IMPORT
+    assert 'data.get("wta_current_match_statistics_import_allowed") is not False' in IMPORT
+    assert "api_budget_requests_for_this_import" in IMPORT
     assert 'python scripts/cdb_global_writer_lock.py acquire' in IMPORT
     assert 'python scripts/import_offline_linked_serve_return.py' in IMPORT
     assert 'store.upload_bundle(' in IMPORT
