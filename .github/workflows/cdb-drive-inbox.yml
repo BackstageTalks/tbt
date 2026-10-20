@@ -2,6 +2,12 @@ name: CDB Drive Inbox - guarded external file import
 
 'on':
   workflow_dispatch:
+    inputs:
+      catchup_remaining:
+        description: 'Remaining extra 100-file batches (0-6); bounded and checkpoint-gated'
+        required: false
+        type: number
+        default: 0
   pull_request:
     paths:
       - scripts/cdb_inbox_*.py
@@ -11,6 +17,7 @@ name: CDB Drive Inbox - guarded external file import
       - tests/test_cdb_inbox_wait_resume.py
       - tests/test_cdb_inbox_integration.py
       - tests/test_cdb_inbox_pending_batch.py
+      - tests/test_cdb_inbox_catchup.py
       - .github/workflows/cdb-drive-inbox.yml
   push:
     branches: [main]
@@ -19,6 +26,7 @@ name: CDB Drive Inbox - guarded external file import
       - tests/test_cdb_inbox_adapter.py
       - tests/test_cdb_inbox_wait_resume.py
       - tests/test_cdb_inbox_pending_batch.py
+      - tests/test_cdb_inbox_catchup.py
       - .github/workflows/cdb-drive-inbox.yml
 
 permissions:
@@ -44,7 +52,7 @@ jobs:
           PYTHONPATH: .:api:scripts
         run: |
           python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py
-          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_integration.py -q
+          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py -q
 
   guarded-import:
     # Source preparation may proceed while immutable candidate training owns CDB.
@@ -392,3 +400,20 @@ jobs:
       - name: Always release global writer if owned
         if: always()
         run: python scripts/cdb_global_writer_lock.py release --if-held
+      - name: Chain a bounded next 100-file batch after private checkpoint readback
+        # Only after verified successful completion, private progress CAS,
+        # cleared pending batch and owner-scoped writer release.
+        # No chained dispatch if another CDB writer deferred this batch.
+        if: >-
+          success() &&
+          github.event_name == 'workflow_dispatch' &&
+          steps.prepared.outputs.restored != 'true' &&
+          (steps.source.outputs.eligible != 'true' ||
+           (steps.writer_gate.outputs.ready == 'true' &&
+            (steps.stage.outputs.additions != 'true' || steps.writer.outputs.locked == 'true')))
+        env:
+          CATCHUP_REMAINING: ${{ inputs.catchup_remaining || 0 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_inbox_catchup.py --remaining "$CATCHUP_REMAINING"
