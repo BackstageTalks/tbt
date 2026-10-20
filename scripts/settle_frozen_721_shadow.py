@@ -143,7 +143,10 @@ def download_verified_years(repo, directory, years):
     inventory = bundle.get("files")
     if not isinstance(inventory, dict):
         raise ValueError("Invalid canonical history bundle manifest")
-    for name in names:
+    # The bundle manifest cannot contain its own SHA-256 (self-reference).
+    # Its digest is independently checked against GitHub release metadata
+    # above. All DATA assets must be checksum-covered by the manifest.
+    for name in sorted(names - {"_tbt_bundle_manifest.json"}):
         if (inventory.get(name) or {}).get("sha256") != _sha(directory / name):
             raise ValueError(f"Committed canonical history checksum mismatch: {name}")
     history_manifest = json.loads((directory / "history_manifest.json").read_text())
