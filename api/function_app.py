@@ -1787,10 +1787,10 @@ def internal_live_radar_status(req):
         valid_budget = (
             isinstance(budget, dict)
             and budget.get("provider_plan_limit") == 15000
-            and budget.get("reserved_provider_headroom") == 450
-            and budget.get("global_limit") == 14550
+            and budget.get("reserved_provider_headroom") == 500
+            and budget.get("global_limit") == 14500
             and isinstance(budget.get("global_spent"), int)
-            and 0 <= budget["global_spent"] <= 14550
+            and 0 <= budget["global_spent"] <= 14500
             and isinstance(budget.get("spent"), dict)
             and isinstance(budget.get("purpose_limits"), dict)
             and budget["purpose_limits"].get("live") == 3000
