@@ -14,7 +14,7 @@ from tbt.providers.rapidapi import RapidTennisClient
 NOW = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
 
 
-def test_all_purposes_share_provider_day_pool_with_750_call_reserve():
+def test_all_purposes_share_provider_day_pool_with_500_call_reserve():
     ledger = None
     for purpose, amount in (
         ("live", 3000),
@@ -22,28 +22,28 @@ def test_all_purposes_share_provider_day_pool_with_750_call_reserve():
         ("refresh", 2500),
         ("match", 2500),
         ("history", 2500),
-        ("history", 750),
+        ("history", 500),
     ):
         ledger, result = shared_budget.calculate(ledger, purpose, amount, now=NOW)
 
     assert result["provider_plan_limit"] == 15000
-    assert result["global_limit"] == 14250
-    assert result["global_spent"] == 14250
+    assert result["global_limit"] == 14500
+    assert result["global_spent"] == 14500
     assert result["global_remaining"] == 0
-    assert result["reserved_provider_headroom"] == 750
+    assert result["reserved_provider_headroom"] == 500
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "refresh", 1, now=NOW)
 
 
-def test_history_can_use_global_headroom_but_never_cross_ninety_five_percent():
+def test_history_can_use_global_headroom_but_never_cross_provider_ceiling():
     ledger = None
     result = None
-    for amount in (3000, 3000, 3000, 3000, 1500, 750):
+    for amount in (3000, 3000, 3000, 3000, 1500, 500):
         ledger, result = shared_budget.calculate(ledger, "history", amount, now=NOW)
-    assert result["spent"]["history"] == 14250
-    assert result["global_spent"] == 14250
+    assert result["spent"]["history"] == 14500
+    assert result["global_spent"] == 14500
     assert result["global_remaining"] == 0
-    assert result["reserved_provider_headroom"] == 750
+    assert result["reserved_provider_headroom"] == 500
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "history", 1, now=NOW)
 
@@ -56,7 +56,7 @@ def test_absolute_provider_hard_stop_between_1908_and_1910():
     _, result = shared_budget.calculate(None, "live", 1,
                                         now=datetime(2026, 9, 27, 17, 10, tzinfo=timezone.utc))
     assert result["global_spent"] == 1
-    assert result["global_remaining"] == 14249
+    assert result["global_remaining"] == 14499
 
 
 def test_provider_day_resets_at_1910_bratislava():
@@ -266,13 +266,13 @@ def test_provider_header_guard_fails_closed_when_remaining_header_missing(monkey
         client.close()
 
 
-def test_refresh_can_use_available_shared_pool_up_to_14250():
+def test_refresh_can_use_available_shared_pool_up_to_14500():
     ledger = None
     for amount in (3000, 3000, 3000, 3000, 2250):
         ledger, result = shared_budget.calculate(ledger, "refresh", amount, now=NOW)
-    assert result["global_spent"] == 14250
+    assert result["global_spent"] == 14500
     assert result["remaining"]["refresh"] == 0
-    assert result["reserved_provider_headroom"] == 750
+    assert result["reserved_provider_headroom"] == 500
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "history", 1, now=NOW)
 
@@ -292,18 +292,18 @@ def test_real_environment_rapidapi_key_cannot_start_without_shared_ledger(monkey
     client.close()
 
 
-@pytest.mark.parametrize("override", ["0", "450", "500", "749", "-1", "15000"])
+@pytest.mark.parametrize("override", ["0", "450", "499", "-1", "15000"])
 def test_provider_reserve_cannot_be_weakened_with_environment_override(monkeypatch, override):
     from tbt.providers.rapidapi import _provider_request_reserve
     monkeypatch.setenv("BLINQ_PROVIDER_REQUEST_RESERVE", override)
-    with pytest.raises(ConfigurationError, match="750"):
+    with pytest.raises(ConfigurationError, match="500"):
         _provider_request_reserve()
 
 
 def test_provider_reserve_can_be_stricter_but_not_looser(monkeypatch):
     from tbt.providers.rapidapi import _provider_request_reserve
-    monkeypatch.setenv("BLINQ_PROVIDER_REQUEST_RESERVE", "750")
-    assert _provider_request_reserve() == 750
+    monkeypatch.setenv("BLINQ_PROVIDER_REQUEST_RESERVE", "500")
+    assert _provider_request_reserve() == 500
     monkeypatch.setenv("BLINQ_PROVIDER_REQUEST_RESERVE", "1500")
     assert _provider_request_reserve() == 1500
 
@@ -343,22 +343,22 @@ def test_binary_image_provider_request_requires_quota_header(monkeypatch):
         client.close()
 
 
-def test_remote_budget_receipt_must_confirm_live_95_percent_contract(monkeypatch):
+def test_remote_budget_receipt_must_confirm_live_500_reserve_contract(monkeypatch):
     from tbt.providers.shared_budget import HttpReservation
     current = {
         "schema": 1,
         "window": "provider_day_19_10_europe_bratislava",
         "provider_plan_limit": 15000,
-        "global_limit": 14250,
-        "reserved_provider_headroom": 750,
+        "global_limit": 14500,
+        "reserved_provider_headroom": 500,
         "global_spent": 12835,
-        "global_remaining": 1415,
+        "global_remaining": 1665,
     }
     responses = [
         {"ok": True},  # An old API that says only "ok" is not safe.
-        {"ok": True, "budget": {**current, "global_limit": 14500}},
-        {"ok": True, "budget": {**current, "reserved_provider_headroom": 500}},
-        {"ok": True, "budget": {**current, "global_remaining": 1450}},
+        {"ok": True, "budget": {**current, "global_limit": 14250}},
+        {"ok": True, "budget": {**current, "reserved_provider_headroom": 750}},
+        {"ok": True, "budget": {**current, "global_remaining": 1700}},
         {"ok": True, "budget": current},
     ]
     reply = {"value": responses[0]}
@@ -392,8 +392,8 @@ def test_live_and_batch_workflows_enforce_identical_daily_limits():
     live = (root / ".github/workflows/live-radar.yml").read_text()
     data = (root / ".github/workflows/data.yml").read_text()
     history = (root / ".github/workflows/player-enrichment.yml").read_text()
-    assert "budget['global_spent'] <= 14250 == budget['global_limit']" in live
-    assert "budget['reserved_provider_headroom'] == 750" in live
+    assert "budget['global_spent'] <= 14500 == budget['global_limit']" in live
+    assert "budget['reserved_provider_headroom'] == 500" in live
     assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'" in data
     assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'" in history
     assert "unset BLINQ_SHARED_API_BUDGET_URL" not in data
@@ -466,7 +466,7 @@ def test_guarded_research_http_stops_on_provider_reserve(monkeypatch):
     def handler(request):
         calls.append(request)
         return httpx.Response(200, headers={
-            "x-ratelimit-requests-remaining": "750"
+            "x-ratelimit-requests-remaining": "500"
         }, json={})
     monkeypatch.setattr(httpx, "Client", lambda *a, **k:
                         RealClient(transport=httpx.MockTransport(handler)))
