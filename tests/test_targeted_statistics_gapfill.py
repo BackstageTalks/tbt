@@ -209,46 +209,44 @@ def test_targeted_outcome_unknown_coverage_reason_and_zero_request_denominator(m
     assert data['api_new_quality_ready_rows_per_1000_requests'] is None
 
 
-def test_hourly_priority_moves_high_yield_2025_atp_quality_gaps_before_2026(match_factory):
+def test_hourly_priority_favors_verified_yield_over_depleted_atp_2025(match_factory):
     from datetime import date
     from download_tennis_history import _statistics_candidates
-    atp2025 = match_factory('atp-2025', 'A', 'B', 'A')
-    atp2025.tour = 'ATP'
-    atp2025.scheduled_at = datetime(2025, 8, 17, tzinfo=timezone.utc)
-    atp2025.stats = {'p1_service_points_won': 0.6}
-    atp2025.provider_payload = {'id': '500'}
 
-    wta2026 = match_factory('wta-2026', 'A', 'B', 'A')
-    wta2026.tour = 'WTA'
-    wta2026.scheduled_at = datetime(2026, 7, 17, tzinfo=timezone.utc)
-    wta2026.stats = {}
-    wta2026.provider_payload = {'id': '600'}
+    def match(mid, tour, year, stats):
+        m = match_factory(mid, 'A', 'B', 'A')
+        m.tour = tour
+        m.scheduled_at = datetime(year, 8, 17, tzinfo=timezone.utc)
+        m.stats = stats
+        m.provider_payload = {'id': str(500 + len(mid))}
+        return m
 
-    atp2025_ace_only = match_factory('atp-2025-ace', 'A', 'B', 'A')
-    atp2025_ace_only.tour = 'ATP'
-    atp2025_ace_only.scheduled_at = datetime(2025, 9, 17, tzinfo=timezone.utc)
-    atp2025_ace_only.stats = {
-        f'{p}_{k}': 0.6 for p in ('p1', 'p2')
+    atp2025 = match('atp-2025', 'ATP', 2025, {'p1_service_points_won': .6})
+    wta2024 = match('wta-2024', 'WTA', 2024, {'p1_service_points_won': .6})
+    wta2026 = match('wta-2026', 'WTA', 2026, {})
+    atp2025_ace = match('atp-2025-ace', 'ATP', 2025, {
+        f'{p}_{k}': .6 for p in ('p1', 'p2')
         for k in ('service_points_won', 'return_points_won')
-    }
-    atp2025_ace_only.provider_payload = {'id': '501'}
-    all_rows = [atp2025, wta2026, atp2025_ace_only]
-    default, _ = _statistics_candidates(all_rows, date(2025, 1, 1),
+    })
+    rows = [atp2025, wta2026, wta2024, atp2025_ace]
+    default, _ = _statistics_candidates(rows, date(2024, 1, 1),
                                          date(2026, 12, 31), targeted=True)
     preferred, report = _statistics_candidates(
-        all_rows, date(2025, 1, 1), date(2026, 12, 31),
+        rows, date(2024, 1, 1), date(2026, 12, 31),
         targeted=True, historical_high_yield=True,
     )
     assert default[0].match_id == 'wta-2026'
-    assert preferred[0].match_id == 'atp-2025'
+    assert preferred[0].match_id == 'wta-2024'
     assert preferred[-1].match_id == 'atp-2025-ace'
-    assert report['preferred_verified_cohort'] == 'atp:2025:serve_return_incomplete'
+    assert report['preferred_verified_cohort'] == 'wta:2024:serve_return_incomplete'
+    assert report['verified_high_yield_cohorts'] == [
+        'wta:2024', 'wta:2022', 'atp:2024',
+    ]
     assert report['historical_high_yield'] is True
     import pytest
     with pytest.raises(ValueError, match='requires identity-checked'):
-        _statistics_candidates(all_rows, date(2025, 1, 1), date(2026, 12, 31),
+        _statistics_candidates(rows, date(2024, 1, 1), date(2026, 12, 31),
                                historical_high_yield=True)
-
 
 
 def test_hourly_97_percent_queue_gives_undercovered_atp_wta_years_a_budget_share(match_factory):
@@ -257,8 +255,8 @@ def test_hourly_97_percent_queue_gives_undercovered_atp_wta_years_a_budget_share
     from download_tennis_history import _statistics_candidates
 
     rows = []
-    cohorts = (("atp", 2025, 30), ("wta", 2024, 15),
-               ("atp", 2022, 15), ("wta", 2026, 15))
+    cohorts = (("wta", 2024, 30), ("wta", 2023, 15),
+               ("atp", 2022, 15), ("atp", 2025, 15))
     for tour, year, count in cohorts:
         for index in range(count):
             m = match_factory(f"{tour}-{year}-{index}", "A", "B", "A")
@@ -276,10 +274,10 @@ def test_hourly_97_percent_queue_gives_undercovered_atp_wta_years_a_budget_share
     assert len({m.match_id for m in selected}) == len(rows)
     first_ten = Counter((m.tour.lower(), m.scheduled_at.year) for m in selected[:10])
     assert first_ten == {
-        ("atp", 2025): 6,
-        ("wta", 2024): 2,
+        ("wta", 2024): 6,
+        ("wta", 2023): 2,
         ("atp", 2022): 1,
-        ("wta", 2026): 1,
+        ("atp", 2025): 1,
     }
     assert report["priority_policy"] == (
         "6_high_yield_2_undercovered_wta_1_undercovered_atp_1_other"
@@ -325,8 +323,28 @@ def test_wta_older_underserved_years_rotate_instead_of_starving(match_factory):
         matches, date(2022, 1, 1), date(2025, 12, 31),
         targeted=True, historical_high_yield=True,
     )
-    assert [m.scheduled_at.year for m in ordered[:6]] == [2025, 2024, 2023, 2025, 2024, 2023]
+    assert [m.scheduled_at.year for m in ordered[:6]] == [2024] * 5 + [2025]
+    assert {m.scheduled_at.year for m in ordered[:12]} == {2023, 2024, 2025}
 
+
+
+def test_high_yield_rotates_distinct_atp_wta_buckets_in_same_year(match_factory):
+    from datetime import date
+    from download_tennis_history import _statistics_candidates
+    matches = []
+    for tour in ('WTA', 'ATP'):
+        for n in range(4):
+            m = match_factory(f'{tour}-{n}', 'A', 'B', 'A')
+            m.tour = tour
+            m.scheduled_at = datetime(2024, 8, 1 + n, tzinfo=timezone.utc)
+            m.stats = {}
+            m.provider_payload = {'id': str(1000 + len(matches))}
+            matches.append(m)
+    ordered, _ = _statistics_candidates(
+        matches, date(2024, 1, 1), date(2024, 12, 31),
+        targeted=True, historical_high_yield=True,
+    )
+    assert [m.tour for m in ordered] == ['WTA', 'ATP'] * 4
 
 
 def test_hourly_high_yield_flag_is_not_enabled_for_manual_operator_request():
@@ -365,3 +383,49 @@ def test_empty_provider_statistics_has_reason_and_cooldown(match_factory, tmp_pa
         assert match.stats == {}
     finally:
         enricher.close()
+
+
+def test_provider_not_finished_is_reasoned_cooldown_not_repeated_detail(match_factory, tmp_path):
+    class Provider:
+        calls = 0
+
+        def _get(self, path, **kwargs):
+            self.calls += 1
+            assert path == '/api/tennis/event/123'
+            return {'event': {'status': {'type': 'inprogress'},
+                              'homeTeam': {'id': 'A'}, 'awayTeam': {'id': 'B'}}}
+
+    m = match_factory('provider-lag', 'A', 'B', 'A')
+    m.provider_payload = {'id': '123'}
+    m.stats = {}
+    before = m.is_completed
+    provider = Provider()
+    enricher = StatisticsEnricher(provider, tmp_path / 'lag.sqlite', targeted=True)
+    try:
+        assert enricher.enrich(m) == 'unavailable'
+        marker = m.provider_payload['_tbt_statistics']
+        assert marker['status'] == 'unavailable'
+        assert marker['reason'] == 'provider_event_not_finished'
+        assert m.is_completed is before
+        assert m.stats == {}
+        assert retry_due(m, STATISTICS_SCHEMA_VERSION) is False
+        assert enricher.enrich(m) == 'cached'
+        assert provider.calls == 1
+        assert '_tbt_event_identity' not in m.provider_payload
+    finally:
+        enricher.close()
+
+
+def test_provider_coverage_reason_is_visible_in_segment_report(match_factory):
+    from collections import Counter
+    from download_tennis_history import _record_targeted_statistics_outcome
+    reasons, segments = Counter(), {}
+    m = match_factory('coverage', 'A', 'B', 'A')
+    m.tour = 'WTA'
+    m.provider_payload = {'_tbt_statistics': {
+        'status': 'unavailable', 'reason': 'empty_whole_match_statistics'}}
+    _record_targeted_statistics_outcome(segments, reasons, m, 'unavailable', 1, {})
+    m.provider_payload['_tbt_statistics']['reason'] = 'provider_event_not_finished'
+    _record_targeted_statistics_outcome(segments, reasons, m, 'unavailable', 1, {})
+    assert reasons == {'empty_whole_match_statistics': 1, 'provider_event_not_finished': 1}
+    assert segments[f'wta:{m.scheduled_at.year}']['unavailable_provider_event_not_finished'] == 1
