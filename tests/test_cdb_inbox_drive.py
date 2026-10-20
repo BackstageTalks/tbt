@@ -130,3 +130,57 @@ def test_repeated_cursor_refuses_partial_inventory(tmp_path):
             return super().get(url, params=params, timeout=timeout)
     with pytest.raises(ValueError, match="repeated Drive page cursor"):
         fetch(ROOT, tmp_path / "raw", session=BadDrive())
+
+
+def test_match_source_prioritized_without_dropping_other_folders(tmp_path):
+    """A small per-run budget must reach exact ATP/WTA match sources first."""
+    odds_id = "ffffffffffffffff"
+    match_id = "gggggggggggggggg"
+    career_id = "hhhhhhhhhhhhhhhh"
+    odds_folder = "iiiiiiiiiiiiiiii"
+    match_folder = "jjjjjjjjjjjjjjjj"
+    service_folder = "kkkkkkkkkkkkkkkk"
+
+    class MixedSources(Drive):
+        def __init__(self):
+            super().__init__()
+            self.blobs = {
+                odds_id: b"odds", match_id: b"matches", career_id: b"career"
+            }
+            self.modified = {file_id: "2026-10-20T00:00:00Z"
+                             for file_id in self.blobs}
+
+        def get(self, url, params=None, timeout=None):
+            if url != BASE:
+                return super().get(url, params=params, timeout=timeout)
+            parent = params["q"]
+            if ROOT in parent:
+                return Response(data={"files": [
+                    {"id": odds_folder, "name": "02_KURZY_A_ODDS",
+                     "mimeType": "application/vnd.google-apps.folder"},
+                    {"id": service_folder, "name": "04_SERVIS_RETURN_STATISTIKY",
+                     "mimeType": "application/vnd.google-apps.folder"},
+                    {"id": match_folder, "name": "01_ZAPASY_A_VYSLEDKY",
+                     "mimeType": "application/vnd.google-apps.folder"},
+                ]})
+            if odds_folder in parent:
+                return Response(data={"files": [self.item(odds_id, "odds.csv")]})
+            if service_folder in parent:
+                return Response(data={"files": [
+                    self.item(career_id, "atp_serve_1991_2026_52week_career.csv")]})
+            if match_folder in parent:
+                return Response(data={"files": [self.item(match_id, "atp_matches_2026.csv")]})
+            raise AssertionError(parent)
+
+    drive = MixedSources()
+    previous = None
+    for count, expected in enumerate((match_id, odds_id, career_id), 1):
+        kwargs = {"state_path": previous} if previous else {}
+        state = tmp_path / f"state-{count}.json"
+        report = fetch(ROOT, tmp_path / f"raw-{count}", session=drive,
+                       next_state_path=state, max_files=1, **kwargs)
+        assert drive.file_reads[-1] == expected
+        assert report["fetched"] == 1
+        assert report["pending_supported"] == 3 - count
+        previous = state
+    assert drive.file_reads == [match_id, odds_id, career_id]

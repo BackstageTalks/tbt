@@ -10,7 +10,7 @@
 
 1. List and paginate every reachable descendant folder, within explicit 10,000-folder, 100,000-file and depth 30 safety guards; fail rather than silently claiming a complete inventory if limits or access fail.
 2. Record format classification for **every file**, including files in archives, audit folders and nested directories. Unsupported formats, native Sheets, ZIPs beyond validated limits and non-match data are review-only, never coerced into match statistics. Drive originals are never moved, deleted or overwritten.
-3. Download up to **100 new or changed supported files** and **256 MiB per successful run**, max 64 MiB each, with SHA-256 and Drive MD5/size verification. Additional eligible sources remain pending across subsequent runs; no arbitrary first-100 hard stop.
+3. Download up to **100 new or changed supported files** and **256 MiB per successful run**, max 64 MiB each, with SHA-256 and Drive MD5/size verification. **Prioritize ATP/WTA match-named files, the CDB inbox, then match-results and serve/return collections** before odds, rankings, historical archives and aggregate career/52-week files. This is only a scheduling hint: no file is dropped or considered canonical merely because of its name. Remaining supported sources stay checkpoint-pending for subsequent runs; no arbitrary first-100 hard stop.
 4. Persist compressed progress metadata only into **private** `BackstageTalks/tbt-data/audit/cdb-inbox-progress.json.gz` using a GitHub Contents SHA/CAS guard. The runner commits progress **only after** the guarded stage/import and any required canonical remote readback have succeeded. A failed run does not advance the persisted checkpoint. Deleted/moved files are removed from the active fingerprint catalog and updates are reprocessed when Drive metadata changes.
 5. Current unattended promotion remains **ATP/WTA match-level serve/return only**, when exact tour, date, tournament, winner, orientation, round/surface evidence and positive canonical NULL deltas are proved. Aggregate rolling/career stats, provider-only raw responses, odds, rankings, PBP, biomechanics and other domain-specific files are discovered/reviewed for their dedicated source pipelines; **not** force-fit into per-match stats or silently promoted.
 6. Existing global single-writer lock, manifest compare-and-swap, immutable prewrite private backup, exact-stats-only patch and private post-publication readback remain mandatory for canonical mutation. Every row with insufficient identity or contradictory statistics stays review/quarantine.
@@ -27,7 +27,7 @@
 ## Verification
 
 ```bash
-PYTHONPATH=.:api:scripts pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_integration.py -q
+PYTHONPATH=.:api:scripts pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_integration.py -q
 ```
 
 **Failure handling:** invalid cursor, changed Drive bytes, source identity conflict, invalid canonical bundle, checkpoint CAS mismatch or failed remote CDB readback halt the applicable write. The private checkpoint is advanced only after success; re-running is idempotent against canonical NULL-only checks.

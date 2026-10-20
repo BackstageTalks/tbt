@@ -109,6 +109,37 @@ def _fingerprint(info):
     return hashlib.sha256(encoded).hexdigest()
 
 
+
+def _candidate_priority(info):
+    """Process exact match-level sources first, without excluding any file.
+
+    All remaining formats/paths retain deterministic ordering and stay
+    checkpoint-pending until selected by a later batch. This is ordering, not
+    an eligibility or identity shortcut.
+    """
+    path = str(info["path"]).casefold()
+    name = str(info["name"]).casefold()
+    parts = [part for part in path.split("/") if part]
+    root = parts[0] if parts else ""
+    if re.search(r"(?:^|[_-])(?:atp|wta)[_-]?matches(?:[_-]|$)", name) or "matchlevel" in name:
+        tier = 0
+    elif root == "cdb_inbox":
+        tier = 1
+    elif root == "01_zapasy_a_vysledky":
+        tier = 2
+    elif root == "04_servis_return_statistiky":
+        tier = 3
+    elif root == "10_povodne_zdroje_archivy":
+        tier = 4
+    else:
+        tier = 5
+    # Per-player 52-week/career aggregates cannot be treated as one-match
+    # observations; leave them for a later source-specific pipeline.
+    if "52week" in name or "career" in name:
+        tier = 6
+    return tier, path, str(info["id"])
+
+
 def _state(folder_id, path):
     if path is None or not Path(path).is_file():
         return {}
@@ -166,6 +197,7 @@ def fetch(folder_id: str, output: Path, *, state_path: Path | None = None,
         entries.append({"id": file_id, "status": reason})
         updated[file_id] = fingerprint
 
+    candidates.sort(key=lambda item: _candidate_priority(item[0]))
     total_bytes = 0
     downloaded = 0
     seen_sha = set()
