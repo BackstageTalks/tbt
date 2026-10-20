@@ -1,7 +1,8 @@
 name: CDB Import - operator one-shot dispatcher
 
 # Operator entrypoint. Changes to unrelated files never trigger this workflow.
-# One-shot operator request: continue guarded CDB source intake on 2026-10-20.
+# One-shot operator request: process up to 5 safe 100-file batches, starting 2026-10-20.
+# This changes no global cron; future operator dispatch remains bounded.
 # Production data may only be changed by the separate guarded CDB importer.
 'on':
   workflow_dispatch:
@@ -33,5 +34,5 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = 'BackstageTalks/tbt'
           test "$GITHUB_REF" = 'refs/heads/main'
-          gh workflow run cdb-drive-inbox.yml -R "$GITHUB_REPOSITORY" --ref main
+          gh workflow run cdb-drive-inbox.yml -R "$GITHUB_REPOSITORY" --ref main -f catchup_remaining=4
           echo 'CDB_OPERATOR_DISPATCH_SUBMITTED_NOT_IMPORT_VERIFIED'
