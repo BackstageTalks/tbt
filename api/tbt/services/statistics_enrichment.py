@@ -69,12 +69,27 @@ class StatisticsEnricher:
         if identity.get("event_id") == str(event_id) and identity.get("status") == "finished":
             home, away = identity.get("home"), identity.get("away")
         else:
-            detail = self._get(f"/api/tennis/event/{event_id}")
+            # Detail responses can initially report an incomplete event even
+            # for a canonical completed match. Do not retain that stale status
+            # in the local HTTP cache for an entire week.
+            detail = self._get(f"/api/tennis/event/{event_id}", max_age=86400)
             event = detail.get("event", detail)
             home = str(event.get("homeTeam", {}).get("id", ""))
             away = str(event.get("awayTeam", {}).get("id", ""))
             if event.get("status", {}).get("type") != "finished":
-                return "not_finished"
+                # Preserve the authoritative match status and all its values;
+                # this is a provider detail coverage mismatch, not evidence
+                # to mutate match identity or classify the match as ongoing.
+                # Persist a reasoned cooldown so the next hourly tick cannot
+                # repay the same detail request. retry_due handles recent
+                # events (1 day) and older events (30 days) conservatively.
+                match.provider_payload = {**raw, "_tbt_statistics": {
+                    "schema": STATISTICS_SCHEMA_VERSION,
+                    "event_id": str(event_id), "source": "tennisapi1",
+                    "fetched_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "unavailable", "reason": "provider_event_not_finished",
+                }}
+                return "unavailable"
         if {home, away} != {match.player1_id, match.player2_id} or home == away:
             raise ProviderError("Event player identity mismatch; refusing statistics attachment")
         # Retain verified detail identity so later missing-field retries need
