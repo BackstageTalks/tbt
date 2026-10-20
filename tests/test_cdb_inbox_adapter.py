@@ -124,8 +124,10 @@ def test_preserve_untrusted_player_ids_without_claiming_verified_identity(tmp_pa
         writer.writerow(row)
     report = normalize(src, out)
     normalized = list(csv.DictReader(Path(report["normalized"][0]["path"]).open()))
-    assert normalized[0]["winner_id"] == "atp-100"
-    assert normalized[0]["loser_id"] == "atp-200"
+    assert normalized[0]["source_winner_id"] == "atp-100"
+    assert normalized[0]["source_loser_id"] == "atp-200"
+    assert "winner_id" not in normalized[0]
+    assert "loser_id" not in normalized[0]
     assert report["state"] == "SOURCE_ONLY"
     assert report["production_mutated"] is False
 
