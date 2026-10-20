@@ -20,6 +20,8 @@ name: CDB Drive Inbox - guarded external file import
       - tests/test_cdb_inbox_integration.py
       - tests/test_cdb_inbox_pending_batch.py
       - tests/test_cdb_inbox_catchup.py
+      - scripts/cdb_wta_lookback_guard.py
+      - tests/test_cdb_wta_lookback_guard.py
       - .github/workflows/cdb-drive-inbox.yml
   push:
     branches: [main]
@@ -31,6 +33,9 @@ name: CDB Drive Inbox - guarded external file import
       - tests/test_cdb_inbox_wait_resume.py
       - tests/test_cdb_inbox_pending_batch.py
       - tests/test_cdb_inbox_catchup.py
+      - scripts/cdb_wta_lookback_guard.py
+      - tests/test_cdb_wta_lookback_guard.py
+      - ops/cdb-import-requests/wta-safe-batch-20261020.json
       - .github/workflows/cdb-drive-inbox.yml
 
 permissions:
@@ -55,14 +60,18 @@ jobs:
         env:
           PYTHONPATH: .:api:scripts
         run: |
-          python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py scripts/cdb_large_source_stage.py
-          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_large_source_stage.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py -q
+          python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py scripts/cdb_large_source_stage.py scripts/cdb_wta_lookback_guard.py
+          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_large_source_stage.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py tests/test_cdb_wta_lookback_guard.py -q
 
   guarded-import:
     # Source preparation may proceed while immutable candidate training owns CDB.
     # A busy writer is a deferred success with verified PRIVATE staging, not
     # hours of paid idle runner time.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'push' &&
+        startsWith(github.event.head_commit.message, 'chore(cdb): authorized one-shot Drive import 2026-10-20')))
     needs: synthetic-contract-tests
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -82,6 +91,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Enforce explicit one-shot source authorization (push only)
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path=Path("ops/cdb-import-requests/wta-safe-batch-20261020.json")
+          data=json.loads(path.read_text(encoding="utf-8"))
+          if (data.get("schema") != 1 or
+              data.get("scope") != "one_shot_existing_drive_inbox_batch" or
+              data.get("wta_current_match_statistics_import_allowed") is not False or
+              data.get("allow_other_vetted_sources_via_existing_importer") is not True or
+              data.get("max_source_files_per_batch") != 100 or
+              data.get("api_budget_requests_for_this_import") != 0 or
+              data.get("source_wta_csv_sha256") !=
+                  "1467b2efd02288502f518662fe3ad3e1c9121e7e59a0e65f690f6ec779591548"):
+              raise SystemExit("ONE_SHOT_IMPORT_AUTHORIZATION_INVALID")
+          print("AUTHORIZED_SAFE_SOURCE_INBOX_ONE_BATCH_NO_WTA_LOOKBACK")
+          PY
       - name: Install exact linker and Drive reader dependencies
         run: |
           python -m pip install --disable-pip-version-check google-auth requests pandas pyarrow pydantic openpyxl numpy
