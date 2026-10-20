@@ -64,11 +64,13 @@ def _files() -> dict[str, bytes]:
         raise PendingInvalid("Untrusted source normalization schema")
     paths = {"source/report.json": report, "private-state/next.json": next_state}
     for entry in raw_report.get("normalized", []):
-        source_path = Path(str(entry.get("path", "")))
-        if (not source_path.is_relative_to(source)
-                or not SAFE_NAME.fullmatch(source_path.as_posix().removeprefix("work/"))):
+        reported = str(entry.get("path", ""))
+        if not reported.startswith("work/"):
             raise PendingInvalid("Unexpected source normalization path")
-        paths[source_path.as_posix().removeprefix("work/")] = source_path
+        relative = reported.removeprefix("work/")
+        if not SAFE_NAME.fullmatch(relative):
+            raise PendingInvalid("Unexpected source normalization path")
+        paths[relative] = ROOT / relative
     normalized_dir = source / "normalized"
     existing = {p.as_posix().removeprefix("work/") for p in normalized_dir.glob("*.csv")}
     if existing != (set(paths) - {"source/report.json", "private-state/next.json"}):
