@@ -365,3 +365,35 @@ def test_existing_return_only_schema_three_repairs_without_api_calls(match_facto
     assert match.stats["p2_service_points_won"] == 36 / 67
     assert enricher.enrich(match) == "cached"
     enricher.close()
+
+
+def test_break_point_converted_and_saved_ratios_fill_canonical_fields():
+    raw = {'statistics': [{'period': 'ALL', 'groups': [{
+        'statisticsItems': [
+            {'name': 'Break points converted', 'home': '3/8', 'away': '5/9'},
+            {'name': 'Break points saved', 'home': '4/7', 'away': '2/5'},
+        ]
+    }]}]}
+    direct = parse_statistics(raw, home_is_player1=True)
+    assert direct['p1_break_points_won'] == 3 / 8  # legacy model input
+    assert direct['p1_break_point_return_win'] == 3 / 8
+    assert direct['p1_break_point_serve_win'] == 4 / 7
+    assert direct['p2_break_point_return_win'] == 5 / 9
+    assert direct['p2_break_point_serve_win'] == 2 / 5
+    reversed_sides = parse_statistics(raw, home_is_player1=False)
+    assert reversed_sides['p2_break_point_return_win'] == 3 / 8
+    assert reversed_sides['p1_break_point_serve_win'] == 2 / 5
+
+
+def test_break_point_counts_without_denominators_cannot_fake_rates():
+    raw = {'statistics': [{'period': 'ALL', 'groups': [{
+        'statisticsItems': [
+            {'name': 'Break points converted', 'home': '3', 'away': '5'},
+            {'name': 'Break points saved', 'home': '4', 'away': '2'},
+            {'name': 'Aces', 'home': '2', 'away': '0'},
+        ]
+    }]}]}
+    stats = parse_statistics(raw, home_is_player1=True)
+    assert stats['p1_aces'] == 2
+    assert stats['p2_aces'] == 0
+    assert not any('break_point' in field for field in stats)
