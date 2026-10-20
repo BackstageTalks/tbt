@@ -1,6 +1,7 @@
 name: CDB Import - operator one-shot dispatcher
 
 # Operator entrypoint. Changes to unrelated files never trigger this workflow.
+# One-shot operator request: continue guarded CDB source intake on 2026-10-20.
 # Production data may only be changed by the separate guarded CDB importer.
 'on':
   workflow_dispatch:
