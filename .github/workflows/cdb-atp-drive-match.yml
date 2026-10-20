@@ -1,0 +1,160 @@
+name: ATP Drive 2016–2017 → CDB read-only exact-match audit
+
+'on':
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/cdb_atp_drive_pinned.py
+      - scripts/cdb_atp_drive_strict_stage.py
+      - tests/test_cdb_atp_drive_readonly.py
+      - .github/workflows/cdb-atp-drive-match.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/cdb_atp_drive_pinned.py
+      - scripts/cdb_atp_drive_strict_stage.py
+      - .github/workflows/cdb-atp-drive-match.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-atp-readonly-${{ github.event_name == 'pull_request' && 'ci' || 'canonical' }}
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify ATP source contracts and adapters without private secrets
+        env:
+          PYTHONPATH: .:api:scripts
+        run: |
+          python -m pip install --disable-pip-version-check pytest pandas pyarrow openpyxl pydantic numpy
+          python -m compileall -q scripts/cdb_atp_drive_pinned.py scripts/cdb_atp_drive_strict_stage.py
+          python -m pytest tests/test_cdb_atp_drive_readonly.py tests/test_cdb_inbox_adapter.py -q
+
+  private-canonical-atp-link:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      CDB_REPO: BackstageTalks/tbt-data
+      CDB_TAG: tbt-data-v1
+      PYTHONPATH: .:api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing official offline linker dependencies
+        run: python -m pip install --disable-pip-version-check google-auth requests pandas pyarrow pydantic openpyxl numpy
+      - name: Fail closed without restricted private credentials
+        run: |
+          test -n "$GH_TOKEN" || { echo MISSING_PRIVATE_CDB_TOKEN; exit 1; }
+          test -n "$BLINQ_DRIVE_READER_JSON" || { echo MISSING_DRIVE_READER; exit 1; }
+      - name: Download and SHA-pin ATP 2016 and partial ATP 2017 workbooks
+        run: |
+          python scripts/cdb_atp_drive_pinned.py --out-dir work/input
+          mv work/input/source-manifest.json work/pinned-sources.json
+      - name: Adapt original ATP match tables with existing bounded adapter
+        run: |
+          python scripts/cdb_inbox_adapter.py --input-dir work/input \
+            --out-dir work/source --max-files 2
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          source=json.loads(Path("work/source/report.json").read_text())
+          pins=json.loads(Path("work/pinned-sources.json").read_text())
+          observed={x["source_sha256"] for x in source["normalized"]}
+          expected={x["source_sha256"] for x in pins["sources"]}
+          if source.get("production_mutated") is not False or observed != expected:
+              raise SystemExit("ATP source normalization incomplete or unexpected")
+          if any(x.get("tour")!="atp" for x in source["normalized"]):
+              raise SystemExit("ATP source tour mismatch")
+          print("ATP_PINNED_SOURCES_NORMALIZED",source["counts"].get("normalized_rows",0))
+          PY
+      - name: Download and hash-verify private CDB history 2016–2020
+        run: |
+          mkdir -p work/private-release
+          gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" > work/private-release-metadata.json
+          gh release download "$CDB_TAG" -R "$CDB_REPO" \
+            -p history_manifest.json -p _tbt_bundle_manifest.json \
+            -p 'history-2016.parquet' -p 'history-2017.parquet' \
+            -p 'history-2018.parquet' -p 'history-2019.parquet' \
+            -p 'history-2020.parquet' -D work/private-release
+          python scripts/cdb_wta_verified_window.py --source work/private-release \
+            --release-metadata work/private-release-metadata.json \
+            --output work/private-canonical-window
+      - name: Match using existing conservative ATP tournament-window linker
+        run: |
+          python - <<'PY'
+          import json,os,subprocess,sys
+          from pathlib import Path
+          src=json.loads(Path("work/source/report.json").read_text())
+          cmd=[sys.executable,"scripts/link_offline_serve_return.py",
+               "--history-dir","work/private-canonical-window","--out-dir","work/link"]
+          for row in src["normalized"]:
+              cmd+=["--source-csv",row["path"]]
+          subprocess.run(cmd,check=True,timeout=3600,env=os.environ.copy())
+          PY
+      - name: Quarantine all weak identities or conflicting canonical stats
+        run: |
+          python scripts/cdb_atp_drive_strict_stage.py --link-dir work/link \
+            --normalized-report work/source/report.json --out-dir work/stage
+      - name: Run existing NULL-only canonical importer in DRY-RUN mode
+        run: |
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/stage/eligible.jsonl \
+            --history-dir work/private-canonical-window \
+            --out-dir work/dry-run
+      - name: Publish only summary; never original data, identities or stages
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          pins=json.loads(Path("work/pinned-sources.json").read_text())
+          sources=json.loads(Path("work/source/report.json").read_text())
+          stage=json.loads(Path("work/stage/report.json").read_text())
+          dry=json.loads(Path("work/dry-run/report.json").read_text())
+          counts=dry["counts"]
+          if dry.get("production_mutated") is not False or dry.get("local_partitions_written") is not False:
+              raise SystemExit("Read-only import contract breached")
+          if counts.get("updated",0)!=stage["eligible_matches"]:
+              raise SystemExit("ATP canonical identity failed dry-run")
+          if counts.get("stat_fields_added",0)!=stage["eligible_new_stat_fields"]:
+              raise SystemExit("ATP NULL-only field count failed dry-run")
+          summary={
+              "schema": 1, "state": "ATP_CANONICAL_MATCH_READ_ONLY",
+              "production_mutated": False,"api_requests":0,
+              "sources":[{"year":x["year"],"sha256":x["source_sha256"],
+                          "bytes":x["source_bytes"]} for x in pins["sources"]],
+              "normalized_rows":sources["counts"].get("normalized_rows",0),
+              "link_counts":stage["link_counts"],
+              "rejection_reasons":stage["reasons"],
+              "conflict_matches":stage["quarantined_matches"],
+              "canonical_matched_matches":stage["eligible_matches"],
+              "confirmed_null_only_stat_fields":counts.get("stat_fields_added",0),
+              "quality_ready_added":dry["quality_ready_added"],
+              "changed_years_if_written_later":dry["changed_years"],
+              "license_review_required":True,
+              "note":"SOURCE_ONLY and dry-run; publication requires independent license and lock/backup/CAS/readback review."
+          }
+          Path("atp-readonly-summary.json").write_text(json.dumps(summary,indent=2,sort_keys=True)+"\n")
+          print(json.dumps(summary,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: atp-canonical-match-summary-only
+          path: atp-readonly-summary.json
+          if-no-files-found: ignore
+          retention-days: 14
