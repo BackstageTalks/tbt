@@ -434,6 +434,39 @@ jobs:
       - name: Always release global writer if owned
         if: always()
         run: python scripts/cdb_global_writer_lock.py release --if-held
+      - name: Queue bounded continuation after authorized one-shot push
+        if: >-
+          success() &&
+          github.event_name == 'push' &&
+          steps.prepared.outputs.restored != 'true' &&
+          (steps.source.outputs.eligible != 'true' ||
+           (steps.writer_gate.outputs.ready == 'true' &&
+            (steps.stage.outputs.additions != 'true' || steps.writer.outputs.locked == 'true')))
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          from cdb_inbox_catchup import next_budget
+          manifest_path=Path("work/drive_manifest.json")
+          if not manifest_path.is_file():
+              print("CDB_WTA_ONE_SHOT_NO_FRESH_MANIFEST")
+              raise SystemExit(0)
+          manifest=json.loads(manifest_path.read_text(encoding="utf-8"))
+          following=next_budget(6,manifest)
+          if following is None:
+              print("CDB_WTA_ONE_SHOT_NO_PENDING_SOURCES")
+              raise SystemExit(0)
+          token=os.environ.get("ACTIONS_DISPATCH_TOKEN")
+          if not token:
+              raise SystemExit("Missing Actions write token for bounded continuation")
+          env={**os.environ, "GH_TOKEN": token}
+          subprocess.run(["gh", "workflow", "run", "cdb-drive-inbox.yml",
+              "--repo", "BackstageTalks/tbt", "--ref", "main",
+              "-f", "catchup_remaining="+str(following)], env=env, check=True)
+          print("CDB_WTA_ONE_SHOT_CHAINED_SAFE_BATCH remaining="+str(following))
+          PY
       - name: Chain a bounded next 100-file batch after private checkpoint readback
         # Only after verified successful completion, private progress CAS,
         # cleared pending batch and owner-scoped writer release.
