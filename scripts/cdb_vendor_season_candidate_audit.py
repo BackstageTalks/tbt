@@ -24,12 +24,18 @@ ALLOWED_STATS = (
 )
 RATE_STATS = ("service_points_won", "return_points_won")
 SOURCE_COLUMNS = (
-    "match_id", "date_timestamp", "tour_type", "home_name", "away_name",
+    "match_id", "date_timestamp", "tour_type", "tour_type_human", "home_name", "away_name",
     "home_id", "away_id", "winner_code", "surface", "tournament",
     *(f"{side}_{field}" for side in ("home", "away")
       for field in ("aces", "double_faults", "service_points_won_perc",
                     "return_points_won_perc")),
 )
+TOUR_CODE_LABELS = {
+    ("1", "atp tour"): "atp",
+    ("3", "atp chall"): "atp",
+    ("2", "wta tour"): "wta",
+    ("4", "wta chall"): "wta",
+}
 MAX_ROWS = 100_000
 MAX_BYTES = 32 * 1024 * 1024
 
@@ -137,7 +143,9 @@ def audit(matches, sources: list[tuple[Path, str, str]]) -> dict:
                     counts["no_unique_source_match_id"] += 1
                     continue
                 seen_source_ids.add(mid)
-                if row.get("tour_type", "").casefold() not in {tour, "0", "1", "2", "atp men", "wta women"}:
+                designation = (str(row.get("tour_type") or "").strip(),
+                               _norm(row.get("tour_type_human")))
+                if TOUR_CODE_LABELS.get(designation) != tour:
                     counts["tour_type_unverified"] += 1
                     continue
                 a = _alias(row.get("home_name"), source=True)
