@@ -18,16 +18,16 @@ def test_real_manual_trigger_not_dry_run_by_default():
     assert '"promote": "false"' in HOURLY
 
 
-def test_14250_shared_budget_and_provider_headroom():
+def test_14500_shared_budget_and_provider_headroom():
     assert shared_budget.PROVIDER_PLAN_LIMIT == 15000
-    assert shared_budget.PROVIDER_RESERVE == 750
-    assert shared_budget.GLOBAL_CEILING == 14250
-    assert shared_budget.PURPOSE_CAPS["history"] == 14250
-    # The shared budget is the hard 750-request reserve; provider-header fallback is legacy.
-    assert DEFAULT_PROVIDER_REQUEST_RESERVE == 750
-    assert 'budget.get("global_limit") != 14250' in HOURLY
-    assert 'budget.get("reserved_provider_headroom") != 750' in HOURLY
-    assert 'remaining != max(0, 14250-spent)' in HOURLY
+    assert shared_budget.PROVIDER_RESERVE == 500
+    assert shared_budget.GLOBAL_CEILING == 14500
+    assert shared_budget.PURPOSE_CAPS["history"] == 14500
+    # The shared budget is the hard 500-request reserve; provider-header fallback is legacy.
+    assert DEFAULT_PROVIDER_REQUEST_RESERVE == 500
+    assert 'budget.get("global_limit") != 14500' in HOURLY
+    assert 'budget.get("reserved_provider_headroom") != 500' in HOURLY
+    assert 'remaining != max(0, 14500-spent)' in HOURLY
     assert 'caps = {12: 5700, 13: 6900, 14: 8100, 15: 9300,' in HOURLY
     assert '16: 10500, 17: 12000, 18: 13500}' in HOURLY
 
@@ -37,7 +37,7 @@ def test_delayed_closeout_window_and_new_day_reset_are_bounded():
     assert "18 * 60 + 35 <= minute_of_day <= 19 * 60 + 3" in HOURLY
     assert "local.hour == 19 and not (final_topup or new_day_start)" in HOURLY
     assert "local.hour == 19 and local.minute == 11" in HOURLY
-    assert "limit = 3000 if new_day_start else (14250 if final_topup else caps[local.hour])" in HOURLY
+    assert "limit = 3000 if new_day_start else (14500 if final_topup else caps[local.hour])" in HOURLY
     assert "expected_reset_date = local.date() + timedelta(days=1) if new_day_start else local.date()" in HOURLY
     assert "time(19, 8)" in HOURLY
     assert "cutoff_date = local.date() + timedelta(days=1) if new_day_start else local.date()" in HOURLY
@@ -53,7 +53,7 @@ def test_writer_and_two_independent_quota_guards():
     assert 'check_writers()' in HOURLY
     assert 'min(3000, limit-spent, remaining, history_remaining)' in HOURLY
     assert 'group: tbt-crossrepo-writer-${{ github.run_id }}' in DATA
-    assert 'BLINQ_PROVIDER_REQUEST_RESERVE=750' in DATA
+    assert 'BLINQ_PROVIDER_REQUEST_RESERVE=500' in DATA
     assert 'BLINQ_RAPIDAPI_MAX_RPS=6' in DATA
     assert '"hourly_autofill": "true"' in HOURLY
     assert 'BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER' in DATA
