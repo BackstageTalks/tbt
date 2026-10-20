@@ -1,0 +1,314 @@
+"""Settle genuine frozen 7.2.1 pre-match pairs from verified canonical outcomes.
+
+Offline; no betting/tennis provider requests, no training, no champion mutation.
+Only the original exact model-pair release is updated, under the CDB writer lock.
+"""
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import math
+from pathlib import Path
+
+from _bootstrap import ROOT  # noqa: F401; safe api:scripts imports
+from release_store import ReleaseStore, gh
+from cdb_global_writer_lock import acquire, release
+from frozen_721_shadow_capture import SHADOW_TAG, LEDGER_ASSET, REPORT_ASSET
+from tbt.data.history_snapshot import load_snapshot
+from tbt.models.metrics import evaluate_probabilities, wilson_interval
+from tbt.services.frozen_721_research import validate_frozen_evidence, research_frozen_721
+from tbt.services.shadow_evaluation import update_shadow_ledger
+
+DATA_REPO = "BackstageTalks/tbt-data"
+HISTORY_TAG = "tbt-data-v1"
+
+
+def _sha(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _utc(value):
+    dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        raise ValueError("Naive settlement schedule")
+    return dt.astimezone(timezone.utc)
+
+
+def _clean_metrics(rows, field):
+    if not rows:
+        return {"n": 0}
+    probs = [float(row[field]) for row in rows]
+    truths = [int(row["target_player1_win"]) for row in rows]
+    result = evaluate_probabilities(truths, probs)
+    correct = sum((p >= 0.5) == bool(y) for p, y in zip(probs, truths))
+    return {
+        "n": len(rows),
+        "correct": int(correct),
+        "accuracy": result["accuracy"],
+        "accuracy_ci95_wilson": wilson_interval(correct, len(rows)),
+        "brier_score": result["brier_score"],
+        "log_loss": result["log_loss"],
+        "ece_10": result["ece_10"],
+        "roc_auc": result["roc_auc"] if math.isfinite(result["roc_auc"]) else None,
+    }
+
+
+def preliminary_scoreboard(rows):
+    """Descriptive only, never a promotion or TOP-odds decision."""
+    result = {}
+    for name, tour in (("overall", None), ("ATP", "ATP"), ("WTA", "WTA")):
+        sample = [
+            row for row in rows if row.get("status") == "settled"
+            and (tour is None or str(row.get("tour") or "").upper() == tour)
+        ]
+        champion = _clean_metrics(sample, "production_player1_probability")
+        challenger = _clean_metrics(sample, "challenger_player1_probability")
+        result[name] = {
+            "n": len(sample), "champion": champion, "candidate": challenger,
+            "candidate_minus_champion": {
+                key: (round(challenger[key] - champion[key], 9) if sample else None)
+                for key in ("accuracy", "brier_score", "log_loss", "ece_10")
+            },
+        }
+    return {
+        "status": "PRELIMINARY_SCORES_ONLY_NOT_PROMOTION",
+        "note": "Post-issued results only; small cohorts have wide uncertainty. No odds-based TOP ROI validation.",
+        "groups": result,
+        "automatic_promotion": False,
+    }
+
+
+def completed_matches_for_pending(rows, matches, now):
+    """Prevent reoriented, foreign or future fixtures from silently settling."""
+    pending = {str(r["match_id"]): r for r in rows if r.get("status") == "pending"}
+    accepted = []
+    declined = {"identity_mismatch": 0, "not_yet_played": 0, "not_canonically_completed": 0}
+    checked = 0
+    for match in matches:
+        source = pending.get(str(match.match_id))
+        if source is None:
+            continue
+        checked += 1
+        if (
+            str(match.tour or "").upper() != str(source["tour"]).upper()
+            or {str(match.player1_id), str(match.player2_id)}
+               != {str(source["player1_id"]), str(source["player2_id"])}
+        ):
+            declined["identity_mismatch"] += 1
+            continue
+        if (
+            match.scheduled_at >= now or _utc(source["scheduled_at"]) >= now
+        ):
+            declined["not_yet_played"] += 1
+            continue
+        if not match.is_completed:
+            declined["not_canonically_completed"] += 1
+            continue
+        accepted.append(match)
+    if len({m.match_id for m in accepted}) != len(accepted):
+        raise ValueError("Duplicated canonical match identities in settlement window")
+    return accepted, {"matched_canonical_rows": checked, **declined}
+
+
+def download_verified_years(repo, directory, years):
+    """Only download year partitions containing issued shadow fixtures.
+
+    Verify BOTH GitHub release asset checksums and the committed private
+    release bundle manifest, avoiding the entire million-row training corpus.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    if not years:
+        return [], {}
+    meta = json.loads(gh("api", f"repos/{repo}/releases/tags/{HISTORY_TAG}"))
+    assets = {a["name"]: a for a in meta.get("assets", []) if isinstance(a, dict)}
+    names = {"history_manifest.json", "_tbt_bundle_manifest.json"} | {
+        f"history-{year}.parquet" for year in years
+    }
+    if not names <= set(assets):
+        raise FileNotFoundError("Canonical year partition/manifest missing from private release")
+    args = ["release", "download", HISTORY_TAG, "--repo", repo, "--dir", str(directory)]
+    for name in sorted(names):
+        args.extend(["--pattern", name])
+    gh(*args)
+    for name in names:
+        path = directory / name
+        if not path.is_file() or not path.stat().st_size:
+            raise FileNotFoundError(f"Missing canonical history download: {name}")
+        expected = str(assets[name].get("digest") or "")
+        if not expected.startswith("sha256:") or _sha(path) != expected[7:]:
+            raise ValueError(f"Canonical release asset checksum mismatch: {name}")
+    bundle = json.loads((directory / "_tbt_bundle_manifest.json").read_text())
+    inventory = bundle.get("files")
+    if not isinstance(inventory, dict):
+        raise ValueError("Invalid canonical history bundle manifest")
+    for name in names:
+        if (inventory.get(name) or {}).get("sha256") != _sha(directory / name):
+            raise ValueError(f"Committed canonical history checksum mismatch: {name}")
+    history_manifest = json.loads((directory / "history_manifest.json").read_text())
+    history_years = history_manifest.get("years")
+    if not isinstance(history_years, dict):
+        raise ValueError("Missing authoritative canonical history year map")
+    for year in years:
+        if (history_years.get(str(year)) or {}).get("asset", f"history-{year}.parquet") != f"history-{year}.parquet":
+            raise ValueError(f"Invalid year partition identity for {year}")
+    matches = []
+    for year in sorted(years):
+        matches.extend(load_snapshot(directory / f"history-{year}.parquet"))
+    return matches, {
+        "source_release": HISTORY_TAG,
+        "verified_partition_sha256": {
+            str(year): _sha(directory / f"history-{year}.parquet") for year in sorted(years)
+        },
+        "provider_requests": 0,
+    }
+
+
+def settle(*, repo=DATA_REPO, workdir=None, now=None):
+    if repo != DATA_REPO:
+        raise ValueError("Unexpected CDB repository")
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        raise ValueError("Timezone-aware settlement time required")
+    now = now.astimezone(timezone.utc)
+    base = Path(workdir or ROOT / ".cache/tbt/frozen-721-settlement")
+    base.mkdir(parents=True, exist_ok=True)
+
+    # A nonexistent private release is NOT a zero-row cohort. Fail closed.
+    # Constructing a ReleaseStore can create a missing tag: probe it first.
+    gh("api", f"repos/{repo}/releases/tags/{SHADOW_TAG}")
+    store = ReleaseStore(repo, SHADOW_TAG, base / "ledger-preflight")
+    store.download(
+        extra_names=(LEDGER_ASSET, REPORT_ASSET),
+        required_names=(LEDGER_ASSET, REPORT_ASSET),
+        require_bundle_manifest=True,
+    )
+    source = json.loads((store.directory / LEDGER_ASSET).read_text())
+    prod_version = (source.get("source") or {}).get("production_version")
+    rows, before = validate_frozen_evidence(source, production_version=prod_version)
+    pending = [r for r in rows if r.get("status") == "pending"]
+    if not pending:
+        return {
+            "status": "NO_PENDING_SHADOW_MATCHES", "counts": before,
+            "provider_requests": 0, "production_mutated": False,
+        }
+
+    years = {_utc(r["scheduled_at"]).year for r in pending}
+    history, history_evidence = download_verified_years(repo, base / "canonical", years)
+    accepted, matching = completed_matches_for_pending(rows, history, now)
+
+    if not accepted:
+        return {
+            "status": "WAITING_FOR_VERIFIED_CANONICAL_RESULTS",
+            "counts": before, "canonical_matching": matching,
+            "canonical_provenance": history_evidence,
+            "provider_requests": 0, "production_mutated": False,
+        }
+
+    lock_path = base / "research-global-lock.json"
+    acquire(repo, lock_path, wait_seconds=1200, interval_seconds=20)
+    try:
+        # Re-read AFTER taking the cross-repo lock so an intervening normal
+        # refresh cannot be accidentally overwritten.
+        current = ReleaseStore(repo, SHADOW_TAG, base / "ledger-current")
+        current.download(
+            extra_names=(LEDGER_ASSET, REPORT_ASSET),
+            required_names=(LEDGER_ASSET, REPORT_ASSET),
+            require_bundle_manifest=True,
+        )
+        payload = json.loads((current.directory / LEDGER_ASSET).read_text())
+        current_rows, current_counts = validate_frozen_evidence(
+            payload, production_version=prod_version
+        )
+        updated = update_shadow_ledger(
+            current_rows, completed_matches=accepted, now=now
+        )
+        if len(updated) != len(current_rows):
+            raise RuntimeError("Settlement may never append/remove paired predictions")
+        for old, row in zip(current_rows, updated):
+            for key in (
+                "match_id", "player1_id", "player2_id", "scheduled_at",
+                "production_player1_probability", "challenger_player1_probability",
+                "production_model_version", "challenger_model_version", "captured_at",
+            ):
+                if old[key] != row[key]:
+                    raise RuntimeError(f"Settlement mutated immutable pre-match field: {key}")
+        payload["rows"] = updated
+        _, after = validate_frozen_evidence(payload, production_version=prod_version)
+        newly = after["settled"] - current_counts["settled"]
+        new_void = after["void"] - current_counts["void"]
+        new_excluded = after["excluded"] - current_counts["excluded"]
+        if min(newly, new_void, new_excluded) < 0:
+            raise RuntimeError("Previously evaluated frozen shadow rows were changed")
+        if not (newly or new_void or new_excluded):
+            return {
+                "status": "NO_NEW_VERIFIED_SETTLEMENTS",
+                "counts": after, "canonical_matching": matching,
+                "provider_requests": 0, "production_mutated": False,
+            }
+        report = research_frozen_721(payload, production_version=prod_version)
+        report["preliminary"] = preliminary_scoreboard(updated)
+        report["canonical_provenance"] = history_evidence
+        report["canonical_matching"] = matching
+        report["new_settled"] = newly
+        report["new_void"] = new_void
+        report["new_excluded"] = new_excluded
+        report["provider_requests"] = 0
+        report["automatic_promotion"] = False
+        files = [
+            (LEDGER_ASSET, json.dumps(payload, sort_keys=True, allow_nan=False)+"\n"),
+            (REPORT_ASSET, json.dumps(report, sort_keys=True, allow_nan=False)+"\n"),
+        ]
+        for filename, contents in files:
+            (current.directory / filename).write_text(contents, encoding="utf-8")
+        current.upload_bundle([current.directory / filename for filename, _ in files])
+
+        # Independent post-upload download; never treat a local write as a
+        # successful settlement if the remote release is missing/corrupted.
+        remote = ReleaseStore(repo, SHADOW_TAG, base / "ledger-readback")
+        remote.download(
+            extra_names=(LEDGER_ASSET, REPORT_ASSET),
+            required_names=(LEDGER_ASSET, REPORT_ASSET),
+            require_bundle_manifest=True,
+        )
+        for filename, _ in files:
+            if (remote.directory / filename).read_bytes() != (current.directory / filename).read_bytes():
+                raise RuntimeError(f"Frozen shadow settlement remote readback mismatch: {filename}")
+        readback = json.loads((remote.directory / LEDGER_ASSET).read_text())
+        _, remote_counts = validate_frozen_evidence(readback, production_version=prod_version)
+        if remote_counts != after:
+            raise RuntimeError("Frozen shadow readback counts differ")
+        return {
+            "status": "VERIFIED_SETTLEMENT_PUBLISHED",
+            "remote_readback": "VERIFIED",
+            "counts": remote_counts,
+            "new_settled": newly,
+            "new_void": new_void,
+            "new_excluded": new_excluded,
+            "candidate_minus_champion": report["preliminary"]["groups"]["overall"]["candidate_minus_champion"],
+            "canonical_matching": matching,
+            "provider_requests": 0, "production_mutated": False,
+            "automatic_promotion": False,
+        }
+    finally:
+        release(repo, lock_path, if_held=True)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data-repository", default=DATA_REPO)
+    parser.add_argument("--out", default=".cache/tbt/frozen-721-settlement-status.json")
+    args = parser.parse_args()
+    result = settle(repo=args.data_repository)
+    output = Path(args.out)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        json.dumps(result, indent=2, sort_keys=True, allow_nan=False)+"\n",
+        encoding="utf-8"
+    )
+    print(json.dumps(result, sort_keys=True, ensure_ascii=False), flush=True)
+
+
+if __name__ == "__main__":
+    main()
