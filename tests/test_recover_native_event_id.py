@@ -162,3 +162,14 @@ def test_inventory_rejects_corrupt_persisted_identity_cooldown():
             attempts={"2025-04-10": {"at": "not-date", "recovered": "x"}},
             today=date(2026, 10, 21),
         )
+
+
+def test_production_identity_mode_keeps_provider_reserve_and_header_attestation():
+    from pathlib import Path
+    workflow = (Path(__file__).resolve().parents[1] /
+                ".github/workflows/data.yml").read_text(encoding="utf-8")
+    clause = workflow.split('if [[ "$mode" == "identity" ]]; then', 1)[1]
+    clause = clause.split("          fi", 1)[0]
+    assert 'BLINQ_PROVIDER_REQUEST_RESERVE=500' in clause
+    assert 'BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER=true' in clause
+    assert 'python scripts/verify_native_event_ids.py' in workflow
