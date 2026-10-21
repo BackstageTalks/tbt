@@ -104,6 +104,8 @@ jobs:
           set -euo pipefail
           python scripts/guarded_candidate_backup.py prepare
           python scripts/guarded_candidate_backup.py verify
+      - name: Release canonical writer immediately after complete immutable snapshot
+        run: python scripts/cdb_global_writer_lock.py release
       - name: Audit frozen training history for identity and point-in-time leakage
         run: |
           set -euo pipefail
@@ -114,14 +116,15 @@ jobs:
             --training-profile "$BLINQ_TRAINING_PROFILE" \
             --feature-cache .cache/tbt/verified-training-features.parquet \
             --report .cache/tbt/production/leakage_audit_report.json
-          python scripts/guarded_candidate_backup.py verify
+          python scripts/guarded_candidate_backup.py verify --read-only-snapshot
 
       - name: Fit separate candidate only if immutable backup gate passed
         run: |
           set -euo pipefail
           # No --promote. No current candidate tag rewrite. No app deployment.
           python scripts/pipeline.py train --max-requests 1 --training-profile "$BLINQ_TRAINING_PROFILE" \
-            --verified-feature-cache .cache/tbt/verified-training-features.parquet
+            --verified-feature-cache .cache/tbt/verified-training-features.parquet \
+            --frozen-backed-compute
           python scripts/guarded_candidate_backup.py verify
       - name: Independently persist champion-versus-candidate offline holdout
         if: success()
@@ -182,6 +185,6 @@ jobs:
             .cache/tbt/production/leakage_audit_report.json
           if-no-files-found: warn
           retention-days: 30
-      - name: Release CDB global writer lock
+      - name: Release re-acquired CDB global writer lock (if held)
         if: always()
         run: python scripts/cdb_global_writer_lock.py release --if-held
