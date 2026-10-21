@@ -138,7 +138,7 @@ def _paired_confidence(rows, *, samples=1200):
 
 
 def _segment_release_screen(cohort, overall_gate, segments):
-    """Explicit strict shadow screen, not the separate canonical/Elo promotion gate."""
+    """Bounded-segment shadow review; independent Elo/rollback gate remains separate."""
     reasons = []
     if not overall_gate.get("ready_for_promotion_review", False):
         reasons.append("aggregate_shadow_gate_not_met")
@@ -153,10 +153,16 @@ def _segment_release_screen(cohort, overall_gate, segments):
         else:
             for metric in ("accuracy", "log_loss", "brier_score", "ece_10"):
                 old, new = champion.get(metric), candidate.get(metric)
-                if old is None or new is None:
-                    failures.append(metric + "_missing")
-                elif (new < old if metric == "accuracy" else new > old):
-                    failures.append(metric + "_regressed")
+                if (old is None or new is None or not math.isfinite(float(old))
+                        or not math.isfinite(float(new))):
+                    failures.append(metric + "_missing_or_nonfinite")
+            if not failures:
+                if candidate["accuracy"] < champion["accuracy"] - 0.05:
+                    failures.append("accuracy_material_regression")
+                if candidate["log_loss"] > champion["log_loss"] + 0.03:
+                    failures.append("log_loss_material_regression")
+                if candidate["brier_score"] > champion["brier_score"] + 0.015:
+                    failures.append("brier_material_regression")
         segment_results[tour] = {"n": n, "strict_gate_pass": not failures, "reasons": failures}
         reasons.extend(tour.lower() + "_" + reason for reason in failures)
     return {

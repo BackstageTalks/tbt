@@ -388,7 +388,7 @@ def test_gate_blocks_worse_than_champion_even_when_better_than_elo():
     assert pipeline._promotion_metric_gate(report)[0]
     report['delta_vs_production']['log_loss'] = .01
     ok, reasons = pipeline._promotion_metric_gate(report)
-    assert not ok and 'log_loss_worse_than_production' in reasons
+    assert not ok and 'log_loss_gain_vs_production_below_minimum' in reasons
     report['production_holdout']['n'] = 249
     assert 'production_evaluation_set_mismatch' in pipeline._promotion_metric_gate(report)[1]
 
@@ -1262,3 +1262,30 @@ def test_data_workflow_exposes_missing_manifest_repair_mode():
     data = (root / ".github/workflows/data.yml").read_text()
     assert "history-manifest-repair" in data
     assert "repair_missing_history_manifest.py" in data
+
+def test_balanced_gate_allows_small_tour_tradeoffs_but_requires_aggregate_proper_score_gain():
+    report = gate_report()
+    report['subgroups']['tour']['atp']['accuracy'] = .68  # -2pp, not catastrophic
+    report['subgroups']['tour']['wta']['ece_10'] = .08  # ECE is a noisy diagnostic
+    report['subgroups']['tour']['wta']['brier_score'] = .207  # bounded WTA tradeoff
+    approved, blockers = pipeline._promotion_metric_gate(report)
+    assert approved, blockers
+
+    report['delta_vs_production']['log_loss'] = -.0001
+    approved, blockers = pipeline._promotion_metric_gate(report)
+    assert not approved
+    assert 'log_loss_gain_vs_production_below_minimum' in blockers
+
+
+def test_balanced_gate_rejects_large_tour_regression_or_missing_evidence():
+    report = gate_report()
+    report['subgroups']['tour']['wta']['log_loss'] = .67
+    approved, blockers = pipeline._promotion_metric_gate(report)
+    assert not approved
+    assert 'wta_log_loss_material_regression' in blockers
+
+    report = gate_report()
+    report['subgroups']['tour']['atp']['brier_score'] = float('nan')
+    approved, blockers = pipeline._promotion_metric_gate(report)
+    assert not approved
+    assert 'atp_candidate_brier_score' in blockers

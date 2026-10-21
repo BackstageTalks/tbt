@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/protected-frozen-cdb-candidate.yml
       - api/tbt/models/ensemble.py
+      - scripts/pipeline.py  # gated one-shot candidate-only study; no other push can train
   workflow_dispatch:
     inputs:
       training_profile:

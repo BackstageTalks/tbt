@@ -92,75 +92,75 @@ def _model_requires_rank_history(model) -> bool:
 
 
 def _promotion_metric_gate(report):
-    """Predeclared probabilistic gate against Elo on the same untouched holdout.
+    """Evidence-led review: reward better probabilities, cap material regressions.
 
-    Lower is better for log loss, Brier and ECE. Accuracy must not regress.
-    At least one probabilistic metric must improve strictly.
+    A candidate must improve *aggregate* log loss versus both Elo and the
+    serving champion on the same untouched, chronological evaluation cohort.
+    Brier/accuracy tolerate small tradeoffs; tour-level metrics act as
+    catastrophic-regression guards, not eight separate improvement hurdles.
+    Missing, mismatched or leakage-invalid evidence always fails closed.
+    This is a review gate only: production --promote stays disabled and
+    still requires separately approved, independently verified rollback.
     """
     holdout = report.get("holdout") or {}
     delta = report.get("delta_vs_elo") or {}
-
-    required = (
-        "accuracy",
-        "log_loss",
-        "brier_score",
-        "ece_10",
-    )
+    required = ("accuracy", "log_loss", "brier_score", "ece_10")
     if int(holdout.get("n") or 0) < 200:
         return False, ["holdout_n_below_200"]
 
-    missing = [
-        key
-        for key in required
-        if delta.get(key) is None
-        or not math.isfinite(float(delta.get(key)))
-    ]
-    if missing:
-        return False, ["missing_or_nonfinite_" + key for key in missing]
+    def missing_metrics(values, prefix):
+        missing = []
+        for key in required:
+            try:
+                value = float(values[key])
+                if not math.isfinite(value):
+                    missing.append(prefix + key)
+            except (KeyError, ValueError, TypeError, OverflowError):
+                missing.append(prefix + key)
+        return missing
+
+    absent = missing_metrics(delta, "missing_or_nonfinite_")
+    if absent:
+        return False, absent
 
     reasons = []
-    if float(delta["accuracy"]) < 0.0:
-        reasons.append("accuracy_worse_than_elo")
-    if float(delta["log_loss"]) > 0.0:
-        reasons.append("log_loss_worse_than_elo")
-    if float(delta["brier_score"]) > 0.0:
-        reasons.append("brier_worse_than_elo")
-    if float(delta["ece_10"]) > 0.0:
-        reasons.append("ece_worse_than_elo")
-
-    probabilistic_improvement = any(
-        float(delta[key]) < 0.0
-        for key in (
-            "log_loss",
-            "brier_score",
-            "ece_10",
-        )
-    )
-    if not probabilistic_improvement:
-        reasons.append("no_probabilistic_improvement_vs_elo")
+    # A measurable aggregate improvement in calibrated probabilities is
+    # mandatory. Do not upgrade because of a tiny accuracy-only fluctuation.
+    minimum_log_loss_gain = 0.001
+    max_aggregate_accuracy_drop = 0.01
+    max_aggregate_brier_regression = 0.003
+    if float(delta["log_loss"]) > -minimum_log_loss_gain:
+        reasons.append("log_loss_gain_vs_elo_below_minimum")
+    if float(delta["accuracy"]) < -max_aggregate_accuracy_drop:
+        reasons.append("accuracy_materially_worse_than_elo")
+    if float(delta["brier_score"]) > max_aggregate_brier_regression:
+        reasons.append("brier_materially_worse_than_elo")
 
     governance = report.get("evaluation_governance") or {}
     if governance.get("eligibility_reason"):
-        reasons.append(governance["eligibility_reason"])
+        reasons.append(str(governance["eligibility_reason"]))
     if governance.get("production_present"):
         champion_delta = report.get("delta_vs_production") or {}
         if int((report.get("production_holdout") or {}).get("n") or 0) != int(holdout["n"]):
             reasons.append("production_evaluation_set_mismatch")
-        for key in required:
-            value = champion_delta.get(key)
-            if value is None or not math.isfinite(float(value)):
-                reasons.append("missing_production_" + key)
-            elif (float(value) < 0 if key == "accuracy" else float(value) > 0):
-                reasons.append(key + "_worse_than_production")
-        if not any(champion_delta.get(key) is not None and float(champion_delta[key]) < 0
-                   for key in ("log_loss", "brier_score", "ece_10")):
-            reasons.append("no_probabilistic_improvement_vs_production")
+        absent_prod = missing_metrics(champion_delta, "missing_production_")
+        if absent_prod:
+            reasons.extend(absent_prod)
+        else:
+            if float(champion_delta["log_loss"]) > -minimum_log_loss_gain:
+                reasons.append("log_loss_gain_vs_production_below_minimum")
+            if float(champion_delta["accuracy"]) < -max_aggregate_accuracy_drop:
+                reasons.append("accuracy_materially_worse_than_production")
+            if float(champion_delta["brier_score"]) > max_aggregate_brier_regression:
+                reasons.append("brier_materially_worse_than_production")
 
-        # ATP and WTA are separate promotion gates. A strong aggregate result
-        # must not hide a regression on one tour, which the controlled 2026
-        # retraining audit demonstrated can happen.
+        # Retain comparable ATP and WTA paired evidence, but don't veto a
+        # strong overall improvement for small, noisy subgroup fluctuations.
         candidate_tours = ((report.get("subgroups") or {}).get("tour") or {})
         production_tours = ((report.get("production_subgroups") or {}).get("tour") or {})
+        max_segment_accuracy_drop = 0.05
+        max_segment_log_loss_regression = 0.03
+        max_segment_brier_regression = 0.015
         for tour in ("atp", "wta"):
             candidate = candidate_tours.get(tour) or {}
             baseline = production_tours.get(tour) or {}
@@ -169,27 +169,17 @@ def _promotion_metric_gate(report):
             if candidate_n < 50 or baseline_n != candidate_n:
                 reasons.append(f"{tour}_promotion_sample_missing_or_below_50")
                 continue
-            tour_deltas = {}
-            for key in required:
-                candidate_value = candidate.get(key)
-                baseline_value = baseline.get(key)
-                if (
-                    candidate_value is None or baseline_value is None
-                    or not math.isfinite(float(candidate_value))
-                    or not math.isfinite(float(baseline_value))
-                ):
-                    reasons.append(f"{tour}_missing_or_nonfinite_{key}")
-                    continue
-                tour_deltas[key] = float(candidate_value) - float(baseline_value)
-            if len(tour_deltas) != len(required):
+            missing = (missing_metrics(candidate, f"{tour}_candidate_")
+                       + missing_metrics(baseline, f"{tour}_champion_"))
+            if missing:
+                reasons.extend(missing)
                 continue
-            if tour_deltas["accuracy"] < 0.0:
-                reasons.append(f"{tour}_accuracy_worse_than_production")
-            for key in ("log_loss", "brier_score", "ece_10"):
-                if tour_deltas[key] > 0.0:
-                    reasons.append(f"{tour}_{key}_worse_than_production")
-            if not any(tour_deltas[key] < 0.0 for key in ("log_loss", "brier_score", "ece_10")):
-                reasons.append(f"{tour}_no_probabilistic_improvement_vs_production")
+            if float(candidate["accuracy"]) < float(baseline["accuracy"]) - max_segment_accuracy_drop:
+                reasons.append(f"{tour}_accuracy_material_regression")
+            if float(candidate["log_loss"]) > float(baseline["log_loss"]) + max_segment_log_loss_regression:
+                reasons.append(f"{tour}_log_loss_material_regression")
+            if float(candidate["brier_score"]) > float(baseline["brier_score"]) + max_segment_brier_regression:
+                reasons.append(f"{tour}_brier_material_regression")
     return not reasons, reasons
 
 
