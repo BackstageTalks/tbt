@@ -4941,6 +4941,7 @@
     const finalText=last?('<strong>'+escapeHtml(stateLabels[last.state]||last.state)+'</strong> · '+escapeHtml(last.action||'')+fmtRun(confirmed)):'Zatiaľ bez ukončeného behu.';
     const disabled=busy||!d?.can_start;
     const failed=operation&&last&&last.id===operation.id&&last.state==='FAILED_NEEDS_REVIEW';
+    const unsafeFailure=failed&&operation.action!=='refresh_tests';
     const hint=d?.reason||'Načítavam stav bezpečných operácií…';
     return '<section class="admin-ux-section admin-model-lab" aria-label="Model Lab – operácie">'+
       '<div class="admin-ux-heading"><div><small>MODEL LAB · OPERÁCIE</small><h2>Dáta, testy a shadow</h2>'+
@@ -4957,7 +4958,8 @@
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="activate_shadow" '+(disabled||!candidates.length?'disabled':'')+'>Aktivovať shadow kandidáta</button></article></div>'+
       '<p class="admin-calibration-foot">Tréning nového modelu je hneď v sekcii nižšie. Najprv importuj dáta, potom trénuj, vyhodnoť a až potom aktivuj shadow. Produkčné povýšenie sa odtiaľto nedá spustiť.</p>'+
       '<div class="admin-calibration-bottom"><div><strong>Aktuálna operácia</strong><span>'+activeText+'</span></div><div><strong>Posledný overený stav</strong><span>'+finalText+'</span></div></div>'+
-      (failed?'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-acknowledge" '+(busy?'disabled':'')+'>Potvrdiť kontrolu neúspešného behu</button>':'')+
+      (failed&&!unsafeFailure?'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-acknowledge" '+(busy?'disabled':'')+'>Potvrdiť neúspešný read-only test</button>':'')+
+      (unsafeFailure?'<p role="alert">Zápis mohol byť čiastočný. Tento import alebo aktiváciu nemožno odblokovať z Adminu bez nezávislého overenia súborov a CDB.</p>':'')+
       '</section>';
   }
   async function loadAdminModelLab(startOperation='', acknowledge=false){
