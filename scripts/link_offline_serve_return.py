@@ -248,6 +248,8 @@ class OfflineMatch:
     source_player_a_id: str = ""
     source_player_b_id: str = ""
     source_id_namespace: str = ""
+    # Match-day evidence is not the same as tournament-start evidence.
+    source_date_kind: str = "match_exact"
 
     @property
     def pair_key(self) -> tuple[str, str]:
@@ -358,6 +360,14 @@ def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                     source_player_a_id=winner_source_id,
                     source_player_b_id=loser_source_id,
                     source_id_namespace="drive-unverified" if drive_normalized else "sackmann",
+                    # Only the SHA-bound Drive adapter can attest an actual
+                    # match_date/UTC start. Original Sackmann CSVs contain
+                    # tournament starts even when the day happens to match.
+                    source_date_kind=(
+                        "match_exact" if drive_normalized
+                        and row.get("source_date_kind") == "match_exact"
+                        else "tournament_start"
+                    ),
                 )
 
 
@@ -425,6 +435,7 @@ def _all_matches_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                     source_player_a_id=str(row.get("player_id") or "").strip(),
                     source_player_b_id=str(row.get("opponent_id") or "").strip(),
                     source_id_namespace="all-matches",
+                    source_date_kind="tournament_start",
                 )
 
 
@@ -1008,20 +1019,25 @@ def _candidate_score(source: OfflineMatch, match,
 
     signed_delta = (match.scheduled_at.astimezone(timezone.utc).date() - source.event_date).days
     delta = abs(signed_delta)
-    if delta == 0:
-        score += 4
-        evidence.append("date_exact")
-    elif delta == 1:
-        score += 1
-        evidence.append("date_plusminus_1")
-    elif source.source.startswith(("sackmann:", "all-matches:")) and 0 <= signed_delta <= 16:
-        # Converted Library match-level exports intentionally use the same\n        # tournament-start-date semantics as archived Sackmann-style rows.\n        # TML/Sackmann-style yearly files store tournament start date rather
-        # than the actual match date. A bounded forward-only tournament window
-        # is accepted only with the strong metadata gates below.
+    if source.source_date_kind == "tournament_start":
+        # Tourney start is NOT a match date, including zero/one-day deltas.
+        # The 16-day forward-only window is permitted solely for supported
+        # tournament-start sources and requires stronger metadata below.
+        if not source.source.startswith(("sackmann:", "all-matches:")) or not 0 <= signed_delta <= 16:
+            return -100, ["date_mismatch"], False
         score += 1
         evidence.append("date_tournament_window")
+    elif source.source_date_kind == "match_exact":
+        if delta == 0:
+            score += 4
+            evidence.append("date_exact")
+        elif delta == 1:
+            score += 1
+            evidence.append("date_plusminus_1")
+        else:
+            return -100, ["date_mismatch"], False
     else:
-        return -100, ["date_mismatch"], False
+        return -100, ["date_kind_unverified"], False
 
     canonical_surface = _norm_surface(match.surface)
     if source.surface not in ("", "unknown") and canonical_surface not in ("", "unknown"):
@@ -1103,6 +1119,15 @@ def _candidate_score(source: OfflineMatch, match,
         accepted = "date_exact" in evidence and "winner" in evidence and score >= 8
     else:
         accepted = "winner" in evidence and score >= 8
+    # Tournament-start dates need explicit complete corroboration even for
+    # matches played on day zero or day one. This also protects direct users
+    # of the linker that do not pass through cdb_inbox_stage.
+    if "date_tournament_window" in evidence:
+        accepted = accepted and {
+            "winner", "tournament_exact", "round", "surface", "best_of"
+        }.issubset(evidence) and not {
+            "round_conflict", "surface_conflict", "best_of_conflict"
+        }.intersection(evidence)
     # Verified player IDs resolve identity, not the match. Never accept a
     # conflicting event, round or venue by virtue of the crosswalk alone.
     if verified_ids and any(reason in evidence for reason in (
@@ -1307,7 +1332,8 @@ def main() -> None:
             })
             continue
         candidates = []
-        deltas = range(-1, 17) if source.source.startswith(("sackmann:", "all-matches:")) else (-1, 0, 1)
+        deltas = (range(0, 17) if source.source_date_kind == "tournament_start"
+                  else (-1, 0, 1))
         for delta in deltas:
             day = source.event_date + timedelta(days=delta)
             if verified_ids:
