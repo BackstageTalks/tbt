@@ -199,6 +199,54 @@ class TestLab(unittest.TestCase):
         self.assertEqual(result["operation"]["state"], "QUEUED")
 
 
+class TestDeployReadiness(unittest.TestCase):
+    def test_waits_for_exact_deployed_revision(self):
+        from admin_model_lab_worker import published_main_revision
+        commit = "a" * 40
+        wrong = "b" * 40
+        jobs_path = f"{m.APP}/actions/runs/71/jobs?per_page=100"
+        runs = {"workflow_runs": [
+            {"id": 75, "head_sha": wrong, "status": "completed", "conclusion": "success"},
+            {"id": 71, "head_sha": commit, "status": "completed", "conclusion": "success"},
+        ]}
+        calls = []
+        def read(path):
+            calls.append(path)
+            if path == jobs_path:
+                return {"jobs": [{"name": "checks", "status": "completed", "conclusion": "success"},
+                                 {"name": "deploy", "status": "completed", "conclusion": "success"}]}
+            return runs
+        self.assertTrue(published_main_revision(read=read, checkout_sha=commit))
+        self.assertIn(jobs_path, calls)
+        self.assertFalse(published_main_revision(read=lambda path: {"workflow_runs": [
+            {"id": 71, "head_sha": wrong, "status": "completed", "conclusion": "success"}
+        ]}, checkout_sha=commit))
+
+    def test_check_success_without_actual_deploy_is_not_ready(self):
+        from admin_model_lab_worker import published_main_revision
+        commit = "a" * 40
+        runs = {"workflow_runs": [{"id": 71, "head_sha": commit,
+                                   "status": "completed", "conclusion": "success"}]}
+        def read(path):
+            if path.endswith("/jobs?per_page=100"):
+                return {"jobs": [{"name": "checks", "status": "completed", "conclusion": "success"},
+                                 {"name": "deploy", "status": "completed", "conclusion": "skipped"}]}
+            return runs
+        self.assertFalse(published_main_revision(read=read, checkout_sha=commit))
+        pending = {"workflow_runs": [{"id": 71, "head_sha": commit,
+                                      "status": "in_progress", "conclusion": None}]}
+        self.assertFalse(published_main_revision(read=lambda path: pending, checkout_sha=commit))
+
+    def test_no_sync_until_deployed(self):
+        from admin_model_lab_worker import main
+        with patch("admin_model_lab_worker.published_main_revision", return_value=False), \
+             patch("admin_model_lab_worker.collect_status") as collect, \
+             patch("admin_model_lab_worker.sync") as sync:
+            main()
+            collect.assert_not_called()
+            sync.assert_not_called()
+
+
 class TestWorker(unittest.TestCase):
     def test_import_has_hard_one_batch_cap_and_no_training_promotion(self):
         from admin_model_lab_worker import dispatch
