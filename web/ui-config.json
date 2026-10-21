@@ -998,7 +998,7 @@
       ],
       "requires_odds": true,
       "objective": "confidence_first",
-      "min_probability": 0.68,
+      "min_probability": 0.70,
       "min_data_depth": 0.8,
       "min_surface_matches": 5,
       "min_odds": 1.5,
@@ -1011,34 +1011,31 @@
       "preferred_probability": 0.8,
       "edge_ev_role": "diagnostic_only",
       "secondary_probability": 0.78,
-      "standard_probability": 0.76,
-      "target_count": 10,
+      "standard_probability": 0.75,
+      "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "68% / 1.50 core; if fewer than 5 after Value priority, relax probability only to 67% / 66% / 65%; odds always stay >=1.50",
+      "cascade": "80% core; 78%, 75%, 70% fallback only until >=3 eligible after Value priority; all above current tier retained, no three-pick cap; never below 70%, real odds >=1.50",
       "confidence_tiers": [
         0.8,
         0.78,
-        0.76,
-        0.74,
-        0.72,
-        0.7,
-        0.68
+        0.75,
+        0.7
       ],
-      "minimum_dashboard_count": 5,
-      "fallback_min_probability": 0.65,
-      "fallback_only_if_core_count_below": 5,
+      "minimum_dashboard_count": 3,
+      "fallback_min_probability": 0.70,
+      "fallback_only_if_core_count_below": 3,
       "fallback_min_odds": 1.5,
       "dynamic_fallback_tiers": [
         {
-          "min_probability": 0.67,
+          "min_probability": 0.78,
           "min_odds": 1.5
         },
         {
-          "min_probability": 0.66,
+          "min_probability": 0.75,
           "min_odds": 1.5
         },
         {
-          "min_probability": 0.65,
+          "min_probability": 0.70,
           "min_odds": 1.5
         }
       ]
