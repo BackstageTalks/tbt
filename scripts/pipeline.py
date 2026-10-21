@@ -791,7 +791,8 @@ def main():
     training_certificate = None
     if args.mode == "train":
         try:
-            training_certificate = _require_training_backup_gate(read_only_frozen=frozen)
+            training_certificate = (_require_training_backup_gate(read_only_frozen=True) if frozen
+                                    else _require_training_backup_gate())
         except RuntimeError as exc:
             parser.error(str(exc))
     if not 1 <= args.max_requests <= 14500:
@@ -958,7 +959,8 @@ def main():
         # Remote source lookups and prior loading may race concurrent metadata
         # changes; compare every locally consumed raw input to the immutable
         # remotely verified backup immediately before any model fitting.
-        _require_training_backup_gate(read_only_frozen=frozen)
+        (_require_training_backup_gate(read_only_frozen=True) if frozen
+                                    else _require_training_backup_gate())
         verified_frame = None
         if args.verified_feature_cache is not None:
             from verified_training_frame import load as load_verified_frame
@@ -1066,7 +1068,8 @@ def main():
             "candidate_tag": training_certificate["candidate_tag"],
         }
         # The canonical/prior inputs must not drift during the fit.
-        _require_training_backup_gate(read_only_frozen=frozen)
+        (_require_training_backup_gate(read_only_frozen=True) if frozen
+                                    else _require_training_backup_gate())
         save_model(model_to_save, str(model_dir / "model.joblib"))
         write_json(model_dir / "training_report.json", report)
         write_json(promotion_history_path, promotion_history)
