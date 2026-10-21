@@ -100,4 +100,11 @@ def export_portable_model(model) -> dict[str, Any]:
             },
         },
     }
+    atp_boost = getattr(model, "atp_blend_weight", None)
+    atp_elo = getattr(model, "atp_elo_weight", None)
+    if (atp_boost is None) != (atp_elo is None):
+        raise ValueError("Incomplete ATP blend")
+    if atp_boost is not None:
+        artifact["atp_blend_weight_boost"] = float(atp_boost)
+        artifact["atp_elo_weight"] = float(atp_elo)
     return artifact
