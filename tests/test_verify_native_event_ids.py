@@ -11,7 +11,7 @@ from scripts.verify_native_event_ids import verify_rows
 def expected():
     return {"target": {
         "tour": "wta", "year": 2025, "event_id": "900",
-        "home": "111", "away": "222", "stats_before": {},
+        "home": "111", "away": "222", "category_id": "456", "stats_before": {},
     }}
 
 
@@ -21,6 +21,7 @@ def persisted():
         player1_id="111", player2_id="222", winner_id="111", stats={},
         scheduled_at=datetime(2025, 4, 10, tzinfo=timezone.utc),
         provider_payload={
+            "_tbt_source_category_id": "456",
             "_tbt_provider_event_id": "900",
             "_tbt_event_identity": {
                 "event_id": "900", "home": "111", "away": "222",
