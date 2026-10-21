@@ -1430,14 +1430,20 @@ def main():
                 )
                 if shadow_enabled else []
             )
-            shadow_ledger = update_shadow_ledger(
+            from active_shadow_capture import update_active_shadow
+            # Do not backdate a captured prediction to inference start: the
+            # challenger and comparator may have taken minutes to finish.
+            # A fixture which began during inference must fail the pre-match
+            # guard in update_shadow_ledger instead of entering the cohort.
+            shadow_capture_now = datetime.now(timezone.utc)
+            shadow_ledger = update_active_shadow(
                 shadow_ledger,
                 production_predictions=predictions,
                 challenger_predictions=challenger_predictions,
                 completed_matches=matches,
                 production_model_version=str(getattr(model, "version", "") or ""),
                 challenger_model_version=challenger_version if shadow_enabled else "",
-                now=prediction_now,
+                now=shadow_capture_now,
             )
             if shadow_enabled:
                 shadow_report = build_shadow_report(
@@ -1445,7 +1451,7 @@ def main():
                     production_model_version=str(getattr(model, "version", "") or ""),
                     challenger_model_version=challenger_version,
                 )
-                shadow_report["generated_at_utc"] = prediction_now.isoformat()
+                shadow_report["generated_at_utc"] = shadow_capture_now.isoformat()
                 write_json(shadow_dir / "shadow_ledger.json", shadow_ledger)
                 write_json(shadow_dir / "shadow_report.json", clean(shadow_report))
                 shadow_store.upload_bundle([
