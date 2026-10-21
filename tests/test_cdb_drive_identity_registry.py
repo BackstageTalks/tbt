@@ -114,3 +114,24 @@ def test_namespace_mismatch_and_raw_source_tampering_fail_closed(tmp_path):
     raw.write_bytes(b"Tampered raw bytes")
     with pytest.raises(ValueError, match="raw Drive provenance"):
         build(report, stage, manifest, tmp_path / "out.json")
+
+
+def test_duplicate_source_match_key_never_guesses_tournament_metadata(tmp_path):
+    _, _, normalized, report, stage, manifest = fixture(tmp_path)
+    with normalized.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        columns, rows = reader.fieldnames, list(reader)
+    rows[1]["match_num"] = rows[0]["match_num"]
+    with normalized.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns)
+        writer.writeheader()
+        writer.writerows(rows)
+    ref = "sackmann:" + normalized.name
+    (stage / "link" / "auto_linked.jsonl").write_text(json.dumps(linked(ref)) + "\n")
+    result = build(report, stage, manifest, tmp_path / "review.json")
+    proof = result["candidate_match_reviews"][0]["source_proofs"][0]
+    assert result["duplicate_source_match_keys_count"] == 1
+    assert proof["metadata_status"] == "AMBIGUOUS_SOURCE_KEY"
+    assert proof["source_metadata"] is None
+    assert result["canonical_write_authorized"] is False
+    assert result["candidate_match_reviews"][0]["write_authorized"] is False
