@@ -146,9 +146,22 @@ def predict_probability(artifact: Mapping, features: Mapping[str, float]) -> flo
         boost = 0.5 * (boost + 1.0 - reverse_boost)
 
     blend_weight = float(artifact.get("blend_weight_boost", 0.5))
-    probability = blend_weight * boost + (1.0 - blend_weight) * linear
-
     elo_weight = float(artifact.get("elo_weight", 0.0))
+    atp_boost = artifact.get("atp_blend_weight_boost")
+    atp_elo = artifact.get("atp_elo_weight")
+    if (atp_boost is None) != (atp_elo is None):
+        raise ValueError("Incomplete portable ATP blend")
+    if atp_boost is not None:
+        if "tour_atp" not in features:
+            raise ValueError("ATP blend requires tour_atp")
+        tour = float(features["tour_atp"])
+        if not math.isfinite(tour) or tour not in (0., 1.):
+            raise ValueError("Invalid tour_atp")
+        if tour == 1.:
+            blend_weight, elo_weight = float(atp_boost), float(atp_elo)
+    if not all(math.isfinite(v) and 0 <= v <= 1 for v in (blend_weight, elo_weight)):
+        raise ValueError("Invalid portable blend weights")
+    probability = blend_weight * boost + (1.0 - blend_weight) * linear
     if elo_weight:
         elo_probability = float(features.get("elo_probability", 0.5) or 0.5)
         probability = (1.0 - elo_weight) * probability + elo_weight * elo_probability
