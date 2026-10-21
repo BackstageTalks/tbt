@@ -237,3 +237,24 @@ def test_vip_raw_confidence_synthetic_100pct_does_not_certify_80_from_small_n():
     assert result["all_selected"]["settled"] == 10
     assert result["all_selected"]["target_80_evidenced"] is False
     assert result["all_selected"]["target_87_evidenced"] is False
+
+
+def test_excluded_duplicate_shadow_does_not_fake_three_daily_80pct_candidates():
+    p = sample(count=2)
+    for row in p["rows"]:
+        row["challenger_player1_probability"] = .90
+    duplicate = deepcopy(p["rows"][0])
+    duplicate["match_id"] = "later-schedule-hash"
+    duplicate["captured_at"] = (START - timedelta(hours=1)).isoformat()
+    duplicate["challenger_player1_probability"] = .99
+    duplicate["status"] = "pending"
+    duplicate["target_player1_win"] = None
+    duplicate["result_winner_id"] = None
+    duplicate.pop("settled_at")
+    p["rows"].append(duplicate)
+    report = build_segment_report(p)
+    score = report["candidate_vip_raw_confidence_scorecard"]
+    assert report["cohort_status_counts"]["excluded"] == 1
+    assert score["all_selected"]["offered_before_settlement"] == 2
+    assert score["days_with_3plus_raw_qualifiers"] == 0
+    assert next(iter(score["daily"].values()))["below_three"] is True
