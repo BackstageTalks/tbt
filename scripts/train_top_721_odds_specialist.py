@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 
 import joblib
@@ -104,6 +105,18 @@ def _score(y, p):
     }
 
 
+def _wilson_95(wins: int, n: int):
+    """Binomial 95% interval; descriptive, not a post-selection guarantee."""
+    if n < 1:
+        return None
+    z = 1.959963984540054
+    p = wins / n
+    denominator = 1 + z * z / n
+    center = (p + z * z / (2 * n)) / denominator
+    radius = z * math.sqrt((p * (1 - p) + z * z / (4 * n)) / n) / denominator
+    return [max(0.0, center - radius), min(1.0, center + radius)]
+
+
 def _high_confidence_settled(frame, column):
     # Count reliability in the actual priced TOP universe. A tiny number of
     # apparent 80% bets is a research limitation, not an 80% product claim.
@@ -112,12 +125,20 @@ def _high_confidence_settled(frame, column):
     ]
     n = int(len(priced))
     wins = int((priced.outcome == "win").sum())
+    interval = _wilson_95(wins, n)
+    offered_n = int(len(frame))
+    selected_n = int((frame[column] >= 0.80).sum())
     return {
         "settled": n,
         "wins": wins,
         "accuracy": wins / n if n else None,
         "mean_probability": float(priced[column].mean()) if n else None,
         "sample_sufficient_for_diagnostic": n >= 30,
+        "selected_including_pending": selected_n,
+        "offered": offered_n,
+        "selection_coverage": selected_n / offered_n if offered_n else None,
+        "accuracy_ci95_wilson": interval,
+        "target_87_supported": n >= 100 and interval is not None and interval[0] >= 0.87,
     }
 
 
@@ -130,9 +151,15 @@ def _top_three(frame, column):
     settled = ranked.loc[ranked.outcome.isin(("win", "loss"))]
     n, wins = len(settled), int((settled.outcome == "win").sum())
     net = float(np.where(settled.outcome == "win", settled.odds - 1, -1).sum())
+    interval = _wilson_95(wins, n)
     return {
         "selected": int(len(ranked)), "settled": n, "wins": wins,
         "hit_rate": wins / n if n else None,
+        "hit_rate_ci95_wilson": interval,
+        "target_87_supported": n >= 100 and interval is not None and interval[0] >= 0.87,
+        "unsettled_selected": int(len(ranked) - n),
+        "offered": int(len(frame)),
+        "selection_coverage": len(ranked) / len(frame) if len(frame) else None,
         "roi": net / n if n else None, "net_units": net,
         "days": int(frame.betting_day.nunique()),
     }
@@ -208,6 +235,13 @@ def train_and_compare(
             "blinq": _high_confidence_settled(test, "public_top_probability"),
             "raw_model": _high_confidence_settled(test, "model_probability"),
             "specialist": _high_confidence_settled(test, "specialist_probability"),
+        },
+        "vip_accuracy_goal": {
+            "target": 0.87,
+            "minimum_settled_for_claim": 100,
+            "criterion": "95% Wilson lower bound >= 0.87 on disjoint settled priced picks",
+            "status": "RESEARCH_ONLY_NOT_PROMOTED",
+            "coverage_must_be_reported": True,
         },
         "limitations": [
             "Small retrospective snapshot sample, previously explored",
