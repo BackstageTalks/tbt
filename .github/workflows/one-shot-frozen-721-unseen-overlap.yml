@@ -1,0 +1,85 @@
+name: One-shot frozen 7.2.1 versus champion unseen cohort audit
+
+# A scoped, read-only check of Oct 9–20 candidate overlap, not recalibration.
+# The first successful merge including THIS workflow triggers one main run.
+# No cron (Match Status external scheduler owns recurring cadence).
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-shot-frozen-721-unseen-overlap.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-frozen-721-unseen-overlap-readonly
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: github.repository == 'BackstageTalks/tbt' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      BLINQ_RAPIDAPI_MAX_RPS: '0'
+      PYTHONUNBUFFERED: '1'
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Verify read-only scope and private repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$TBT_DATA_REPOSITORY" = BackstageTalks/tbt-data
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+          test -z "${RAPIDAPI_KEY:-}"
+          test -z "${PROPLINE_API_KEY:-}"
+      - name: Install local analysis runtime
+        run: python -m pip install -r api/requirements-train.txt pytest
+      - name: Test temporal provenance and duplicate rejection
+        run: |
+          set -euo pipefail
+          python -m pytest -q tests/test_audit_frozen_721_unseen_overlap.py tests/test_model_promotion_readiness.py
+      - name: Partition real champion-unseen matches by frozen 721 provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/audit_frozen_721_unseen_overlap.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --out .cache/tbt/frozen-721-unseen-overlap.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          a=json.loads(Path('.cache/tbt/frozen-721-unseen-overlap.json').read_text())
+          assert a["provider_requests"] == 0 and a["production_mutated"] is False
+          assert a["row_count_verified"] is True
+          assert a["can_fit_721_calibration_from_champion_unseen_rows"] is False
+          assert a["production_promotion_approved"] is False
+          assert a["top_odds_roi_proven"] is False
+          assert a["candidate_fresh_rows_are_not_prospective_predictions"] is True
+          print("FROZEN_721_STRICT_OVERLAP_AUDIT_VERIFIED",
+                "champion_unseen", a["champion_unseen_reported"],
+                "overlap", a["overlap_with_frozen_721_consumption_or_evaluation"]["rows"],
+                "candidate_fresh_calendar_days", a["strictly_after_all_frozen_721_consumption"]["utc_days"],
+                "candidate_fresh_matches", a["strictly_after_all_frozen_721_consumption"]["rows"])
+          PY
+      - name: Preserve private aggregate audit for Codex and operator review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frozen-721-candidate-unseen-overlap-${{ github.run_id }}
+          path: .cache/tbt/frozen-721-unseen-overlap.json
+          if-no-files-found: warn
+          retention-days: 14
