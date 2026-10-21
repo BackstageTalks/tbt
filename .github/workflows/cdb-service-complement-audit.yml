@@ -37,17 +37,14 @@ jobs:
           test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
           python -m pip install -r api/requirements-train.txt pytest
           python -m pytest tests/test_recover_cdb_opponent_service_rates.py -q
-      - name: Download complete checksum-verified CDB snapshot
+      - name: Download stable canonical CDB with pre/post SHA manifest verification
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import os
-          from pathlib import Path
-          from release_store import ReleaseStore
-          root=Path(".cache/tbt/cdb-complements/history")
-          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", root).download(require_bundle_manifest=True)
-          PY
+          python scripts/download_stable_cdb.py \
+            --repository "$TBT_DATA_REPOSITORY" \
+            --out .cache/tbt/cdb-complements/history \
+            --report .cache/tbt/cdb-complements/source-snapshot.json
       - name: Stage exact observed opponent complement only
         shell: bash
         run: |
@@ -68,6 +65,50 @@ jobs:
           assert r["changed_years"] == sorted(r["changed_years"])
           print(json.dumps(r, indent=2))
           PY
+      - name: Audit per-independent-pair recovery and bind evidence to exact manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/recover_cdb_opponent_service_rates.py \
+            --mode stage --pairwise \
+            --history-dir .cache/tbt/cdb-complements/history \
+            --out-dir .cache/tbt/cdb-complements/pairwise
+          python - <<'PY'
+          import json, re
+          from pathlib import Path
+          root=Path(".cache/tbt/cdb-complements")
+          snapshot=json.loads((root/"source-snapshot.json").read_text())
+          strict=json.loads((root/"stage/report.json").read_text())
+          pairwise=json.loads((root/"pairwise/report.json").read_text())
+          sha=snapshot.get("manifest_sha256")
+          assert snapshot.get("schema")==1 and snapshot.get("status")=="verified"
+          assert snapshot.get("provider_api_requests")==0
+          assert isinstance(sha,str) and re.fullmatch("[a-f0-9]{64}",sha)
+          for result in (strict,pairwise):
+            assert result["schema"]==1 and result["production_mutated"] is False
+            assert result["provider_requests"]==0
+            counts=result["counts"]
+            assert counts["examined"]>=993759
+            assert 0<=counts.get("staged_matches",0)<counts["examined"]
+            assert counts.get("new_stat_values",0)>=counts.get("staged_matches",0)
+            assert result["changed_years"]==sorted(set(result["changed_years"]))
+          assert pairwise["counts"]["examined"]==strict["counts"]["examined"]
+          assert pairwise["counts"]["new_stat_values"]>=strict["counts"]["new_stat_values"]
+          receipt={
+            "schema":1,"status":"READ_ONLY_NOT_IMPORT_READY",
+            "production_mutated":False,"provider_requests":0,
+            "write_authorized":False,"canonical_manifest_sha256":sha,
+            "canonical_matches":strict["counts"]["examined"],
+            "strict_counts":strict["counts"],
+            "strict_years":strict["changed_years"],
+            "pairwise_counts":pairwise["counts"],
+            "pairwise_years":pairwise["changed_years"],
+          }
+          (root/"preflight-receipt.json").write_text(
+            json.dumps(receipt,indent=2,sort_keys=True)+"\n")
+          print("CDB_COMPLEMENT_FRESH_SHA_PREFLIGHT",
+                json.dumps(receipt,sort_keys=True),flush=True)
+          PY
       - name: Save aggregate-only audit counts (no private match IDs)
         if: always()
         uses: actions/upload-artifact@v4
@@ -75,5 +116,7 @@ jobs:
           name: cdb-service-complement-stage-${{ github.run_id }}
           path: |
             .cache/tbt/cdb-complements/stage/report.json
+            .cache/tbt/cdb-complements/pairwise/report.json
+            .cache/tbt/cdb-complements/preflight-receipt.json
           if-no-files-found: warn
           retention-days: 30
