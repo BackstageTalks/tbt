@@ -326,13 +326,15 @@ class TestWorker(unittest.TestCase):
 
 
 class TestWorkerHeartbeat(unittest.TestCase):
-    def test_existing_worker_has_safe_twice_hourly_polling(self):
+    def test_existing_worker_follows_external_match_clock_without_git_cron(self):
         from pathlib import Path
         path = Path(__file__).resolve().parents[1] / ".github/workflows/admin-training-worker.yml"
         source = path.read_text(encoding="utf-8")
-        self.assertIn("schedule:", source)
-        self.assertIn("cron: '7,37 * * * *'", source)
-        self.assertIn("github.event_name == 'schedule'", source)
+        self.assertNotIn("\\n  schedule:", source)
+        self.assertIn("workflow_run:", source)
+        self.assertIn("Prediction fixture schedule and match status", source)
+        self.assertIn("Tennis data and predictions", source)
+        self.assertIn("github.event.workflow_run.conclusion != 'skipped'", source)
         self.assertIn("cancel-in-progress: false", source)
         self.assertIn("python scripts/admin_training_worker.py", source)
         self.assertIn("python scripts/admin_model_lab_worker.py", source)
