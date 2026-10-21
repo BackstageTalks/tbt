@@ -120,3 +120,26 @@ def test_refuses_public_overwrite_and_invalid_statistics(tmp_path):
     report = build(link, source, stage, tmp_path / "invalid-stats")
     assert report["queued_unique_canonical_candidates"] == 0
     assert report["reason_counts"]["missing_or_invalid_candidate_stats"] == 1
+
+
+def test_many_quarantined_rows_do_not_consume_small_api_candidate_limit(tmp_path):
+    link, source, stage, private = _case(tmp_path)
+    with (link / "quarantine.jsonl").open("w") as handle:
+        for i in range(867):
+            handle.write(json.dumps({"match_id": f"quarantined-{i}"}) + "\n")
+    result = build(link, source, stage, private)
+    assert result["queued_unique_canonical_candidates"] == 1
+    assert result["candidate_stat_fields_to_verify"] == 2
+    assert result["reason_counts"]["pending_independent_provider_identity"] == 1
+
+
+def test_more_than_bounded_linked_candidates_fail_without_private_output(tmp_path):
+    link, source, stage, private = _case(tmp_path)
+    row = json.loads((link / "auto_linked.jsonl").read_text())
+    with (link / "auto_linked.jsonl").open("w") as handle:
+        for i in range(501):
+            item = {**row, "match_id": f"candidate-{i}"}
+            handle.write(json.dumps(item) + "\n")
+    with pytest.raises(ValueError, match="Unbounded candidate queue"):
+        build(link, source, stage, private)
+    assert not private.exists()
