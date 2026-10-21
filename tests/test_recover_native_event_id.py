@@ -178,7 +178,7 @@ def test_production_identity_mode_keeps_provider_reserve_and_header_attestation(
 def test_claim_diagnostics_do_not_promote_or_hide_metadata_gaps():
     rows = [
         Match("unscoped", provider_payload={"event_id": "foreign-alpha"}),
-        Match("native-claim", provider_payload={"_tbt_provider_event_id": "900",
+        Match("native-claim", provider_payload={"_tbt_provider_event_id": "native-alpha",
                                                "_tbt_source_category_id": "456"},
               player2_id="111"),
         Match("conflict", provider_payload={"event_id": "901", "provider_event_id": "902",
@@ -192,7 +192,7 @@ def test_claim_diagnostics_do_not_promote_or_hide_metadata_gaps():
     assert report["existing_claim_diagnostics"]["unscoped_event_claim"] == 2
     assert report["existing_claim_diagnostics"]["explicit_native_provider_claim"] == 1
     assert report["existing_claim_diagnostics"]["multiple_distinct_claim_values"] == 1
-    assert report["existing_claim_diagnostics"]["non_positive_or_nonnumeric_claim"] == 1
+    assert report["existing_claim_diagnostics"]["non_positive_or_nonnumeric_claim"] == 2
     assert report["existing_claim_secondary_blockers"]["missing_first_party_category"] == 1
     assert report["existing_claim_secondary_blockers"]["missing_or_colliding_player_ids"] == 1
     assert report["existing_claim_secondary_blockers"]["missing_round"] == 1
