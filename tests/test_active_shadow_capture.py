@@ -74,3 +74,37 @@ def test_active_shadow_preserves_exact_capture_clock_on_valid_fixture():
     assert len(captured) == 1
     assert captured[0]["captured_at"] == after_inference.isoformat()
     assert captured[0]["status"] == "pending"
+
+
+def test_pipeline_passes_wall_clock_after_challenger_inference():
+    """Wiring regression: the capture guard must never receive prediction_now."""
+    import ast
+    from pathlib import Path
+
+    pipeline = ast.parse(
+        (Path(__file__).resolve().parents[1] / "scripts" / "pipeline.py")
+        .read_text(encoding="utf-8")
+    )
+    assignments = [
+        node for node in ast.walk(pipeline)
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "shadow_capture_now"
+            for target in node.targets
+        )
+    ]
+    updates = [
+        node for node in ast.walk(pipeline)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "update_active_shadow"
+    ]
+    assert len(assignments) == len(updates) == 1
+    assign = assignments[0]
+    assert isinstance(assign.value, ast.Call)
+    assert isinstance(assign.value.func, ast.Attribute)
+    assert assign.value.func.attr == "now"
+    assert isinstance(assign.value.func.value, ast.Name)
+    assert assign.value.func.value.id == "datetime"
+    assert assign.lineno < updates[0].lineno
+    now = next(keyword.value for keyword in updates[0].keywords if keyword.arg == "now")
+    assert isinstance(now, ast.Name) and now.id == "shadow_capture_now"
