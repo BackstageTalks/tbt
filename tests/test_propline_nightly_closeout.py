@@ -324,9 +324,9 @@ class CloseoutContractTests(unittest.TestCase):
                                  "stat_value": 1},
                             ]}
                 raise AssertionError(endpoint)
-            with mock.patch.dict(mod.os.environ, {"CLOSEOUT_GAP_TARGETS": str(path)}), \\
-                 mock.patch.object(mod, "now", return_value=utc), \\
-                 mock.patch.object(mod, "request", side_effect=fake_request), \\
+            with mock.patch.dict(mod.os.environ, {"CLOSEOUT_GAP_TARGETS": str(path)}), \
+                 mock.patch.object(mod, "now", return_value=utc), \
+                 mock.patch.object(mod, "request", side_effect=fake_request), \
                  mock.patch.object(mod, "flush_if_needed"):
                 mod.probe_recent_event_stats("2026-10-21", "123")
         self.assertEqual(len(seen), 2)
@@ -346,7 +346,7 @@ class CloseoutContractTests(unittest.TestCase):
                 "recent_event_targets": [{"date_utc": "2026-10-20",
                                           "players": ["Carlos Alcaraz", "Jannik Sinner"]}],
             }))
-            with mock.patch.dict(mod.os.environ, {"CLOSEOUT_GAP_TARGETS": str(path)}), \\
+            with mock.patch.dict(mod.os.environ, {"CLOSEOUT_GAP_TARGETS": str(path)}), \
                  mock.patch.object(mod, "request", side_effect=AssertionError("spent reserve")):
                 mod.probe_recent_event_stats("2026-10-21", "123")
         self.assertEqual(mod.STATE["calls"], 0)
@@ -360,9 +360,9 @@ class CloseoutContractTests(unittest.TestCase):
             return {"games": [{"status": "final", "stats": {"total_games": 21,
                       "sets_won": 2, "set_1_games": 10}}]}
         with mock.patch.object(mod, "_targeted_player_names",
-                               return_value=[f"Player{i} Name" for i in range(40)]), \\
-             mock.patch.object(mod, "now", return_value=utc), \\
-             mock.patch.object(mod, "request", side_effect=respond), \\
+                               return_value=[f"Player{i} Name" for i in range(40)]), \
+             mock.patch.object(mod, "now", return_value=utc), \
+             mock.patch.object(mod, "request", side_effect=respond), \
              mock.patch.object(mod, "flush_if_needed"):
             mod.probe_player_games([], "2026-10-21", "test")
         self.assertEqual(len(requested), 40)
@@ -372,8 +372,8 @@ class CloseoutContractTests(unittest.TestCase):
     def test_optional_stats_network_errors_do_not_block_later_odds(self):
         utc = datetime(2026, 10, 21, 21, 0, tzinfo=timezone.utc)
         error = TimeoutError("upstream socket")
-        with mock.patch.object(mod, "now", return_value=utc), \\
-             mock.patch.object(mod.urllib.request, "urlopen", side_effect=error), \\
+        with mock.patch.object(mod, "now", return_value=utc), \
+             mock.patch.object(mod.urllib.request, "urlopen", side_effect=error), \
              mock.patch.object(mod.time, "sleep", return_value=None):
             self.assertIsNone(mod.request("/sports/tennis/scores", optional_stats=True))
         self.assertEqual(mod.STATE["reason"], "")
