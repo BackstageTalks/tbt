@@ -769,6 +769,8 @@ def main():
     )
     parser.add_argument("--promote", action="store_true")
     parser.add_argument("--training-profile", choices=["standard", "top-7.2.1"], default="standard")
+    parser.add_argument("--verified-feature-cache", default=None,
+                        help="Same-run SHA-sealed frame produced by the protected leakage audit")
     args = parser.parse_args()
     # Issue #405: the metric flag alone is NOT operator approval or rollback proof.
     # Fail before any canonical/model release read or write, or provider request.
@@ -942,6 +944,11 @@ def main():
         # changes; compare every locally consumed raw input to the immutable
         # remotely verified backup immediately before any model fitting.
         _require_training_backup_gate()
+        verified_frame = None
+        if args.verified_feature_cache is not None:
+            from verified_training_frame import load as load_verified_frame
+            verified_frame = load_verified_frame(
+                args.verified_feature_cache, args.training_profile, matches)
         result = train_from_matches(
             matches,
             production_model=champion,
@@ -951,6 +958,7 @@ def main():
             wta_rank_history=wta_rank_history,
             wta_season_stats=wta_season_stats,
             training_profile=args.training_profile,
+            verified_frame=verified_frame,
         )
         report = clean(result.report)
         report["rank_feature_input_bundle"] = clean(rank_feature_input_report)
