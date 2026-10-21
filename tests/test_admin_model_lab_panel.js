@@ -13,9 +13,11 @@ const ctx={state,escapeHtml};
 vm.createContext(ctx);
 vm.runInContext(render,ctx);
 let html=ctx.renderAdminModelLab();
-assert.match(html,/Model Lab/);
+assert.match(html,/BlinQ Model Factory/);
+assert.match(html,/data-admin-action="training-start" disabled/);
 assert.match(html,/data-model-lab-operation="import_drive" disabled/);
 assert.match(html,/data-model-lab-operation="activate_shadow" disabled/);
+state.adminTraining={can_start:true,runs:[],candidates:[{tag:'blinq-candidate-frozen-123-1'}]};
 state.adminModelLab={
   can_start:true,reason:'Pripravené',
   active_sha256:'a'.repeat(64),
@@ -25,6 +27,12 @@ state.adminModelLab={
 };
 html=ctx.renderAdminModelLab();
 assert.match(html,/data-model-lab-operation="import_drive"/);
+assert.match(html,/data-admin-action="training-start"/);
+assert.doesNotMatch(html,/data-admin-action="training-start" disabled/);
+assert.match(html,/data-model-lab-operation="activate_shadow"/);
+assert.doesNotMatch(html,/data-model-lab-operation="activate_shadow" disabled/);
+assert.match(html,/Pokročilé operácie a história/);
+assert.match(src,/calibration:\(\)=>renderAdminModelLab\(\)\+renderAdminCalibration\(\)/);
 assert.doesNotMatch(html,/data-model-lab-operation="import_drive" disabled/);
 assert.match(html,/blinq-candidate-frozen-123-1/);
 assert(!html.includes('<script>'));
@@ -38,6 +46,7 @@ state.adminModelLab.operation=null;
 state.adminModelLab.can_start=false;
 html=ctx.renderAdminModelLab();
 assert.match(html,/data-model-lab-operation="import_drive" disabled/);
+assert.match(html,/data-admin-action="training-start" disabled/);
 assert.match(src,/if\(action==='model-lab-start'\)/);
 assert.match(src,/if\(action==='model-lab-acknowledge'\)/);
 
@@ -55,6 +64,14 @@ state.adminModelLab.operation.action='activate_shadow';
 state.adminModelLab.last_operation.action='activate_shadow';
 html=ctx.renderAdminModelLab();
 assert.doesNotMatch(html,/data-admin-action="model-lab-acknowledge"/);
-assert.match(html,/Zápis mohol byť čiastočný/);
+assert.match(html,/Zápis sa mohol vykonať čiastočne/);
 assert.match(src,/state\.adminModelLab=await BlinqAuth\.adminModelLab\(\);/);
-console.log('Model Lab UI: disabled, ready, unsafe-input, ongoing and confirm-path states passed');
+state.adminModelLab.can_start=true;
+state.adminModelLab.operation=null;
+state.adminTraining.can_start=false;
+html=ctx.renderAdminModelLab();
+assert.match(html,/data-admin-action="training-start" disabled/);
+assert.match(html,/data-model-lab-operation="activate_shadow" disabled/);
+assert.match(src,/state\.adminTraining=await BlinqAuth\.adminModelTraining\(\);/);
+assert.match(src,/Vytvoriť nový nemenný model 7\.2\.1/);
+console.log('Model Factory UI: two-step build/test and shadow, safe concurrency, advanced diagnostics passed');

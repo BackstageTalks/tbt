@@ -4927,41 +4927,50 @@
 
 
   function renderAdminModelLab(){
-    const d=state.adminModelLab, busy=!!state.adminModelLabBusy;
+    const d=state.adminModelLab, training=state.adminTraining;
+    const busy=!!state.adminModelLabBusy||!!state.adminTrainingBusy;
     const safeLink=(url,label)=>/^https:\/\/github\.com\/BackstageTalks\/tbt\/actions\/runs\/[0-9]+$/.test(String(url||''))?
       '<a href="'+escapeHtml(url)+'" rel="noopener noreferrer" target="_blank">'+escapeHtml(label)+'</a>':escapeHtml(label);
     const operation=d?.operation, last=d?.last_operation;
+    const trainRun=training?.runs?.[0], trainBusy=!!trainRun&&['queued','in_progress','waiting','pending','requested'].includes(trainRun.status);
+    const canBuild=!busy&&d?.can_start===true&&training?.can_start===true&&!trainBusy;
+    const canActivate=!busy&&d?.can_start===true&&training?.can_start===true&&!trainBusy;
     const candidates=(d?.candidates||[]).filter(c=>c.sha256!==d?.active_sha256);
     const options=candidates.slice(0,30).map(c=>'<option value="'+escapeHtml(c.tag)+'">'+escapeHtml(c.tag)+'</option>').join('');
-    const run=operation?.run, confirmed=last?.run;
-    const stateLabels={QUEUED:'Čaká na bezpečné spustenie',DISPATCH_UNCONFIRMED:'Spustenie nepotvrdené – neposielaj znova',RUNNING:'Prebieha',COMPLETED_PENDING_VERIFICATION:'Dokončené – čaká na nezávislú kontrolu',WORKFLOW_VERIFIED:'Overené',FAILED_NEEDS_REVIEW:'Zlyhanie – vyžaduje kontrolu'};
+    const stateLabels={QUEUED:'Čaká na bezpečné spustenie',DISPATCH_UNCONFIRMED:'Spustenie nepotvrdené – nespúšťaj znova',RUNNING:'Prebieha',COMPLETED_PENDING_VERIFICATION:'Dokončené – čaká na kontrolu',WORKFLOW_VERIFIED:'Overené',FAILED_NEEDS_REVIEW:'Zlyhanie – vyžaduje kontrolu'};
     const fmtRun=record=>record?(' '+safeLink(record.html_url,'GitHub beh #'+record.id)+' · '+escapeHtml(String(record.conclusion||record.status||''))):'';
-    const activeText=operation?('<strong>'+escapeHtml(stateLabels[operation.state]||operation.state)+'</strong> · '+escapeHtml(operation.action)+' · '+escapeHtml(operation.id)+fmtRun(run)):
-      'Žiadna rozpracovaná operácia.';
-    const finalText=last?('<strong>'+escapeHtml(stateLabels[last.state]||last.state)+'</strong> · '+escapeHtml(last.action||'')+fmtRun(confirmed)):'Zatiaľ bez ukončeného behu.';
-    const disabled=busy||!d?.can_start;
+    const activeText=operation?('<strong>'+escapeHtml(stateLabels[operation.state]||operation.state)+'</strong> · '+escapeHtml(operation.action)+' · '+escapeHtml(operation.id)+fmtRun(operation.run)):'Bez rozpracovanej Model Factory operácie.';
+    const lastText=last?('<strong>'+escapeHtml(stateLabels[last.state]||last.state)+'</strong> · '+escapeHtml(last.action||'')+fmtRun(last.run)):'Zatiaľ bez ukončenej operácie.';
+    const trainingText=trainRun?(safeLink(trainRun.html_url,'Tréning #'+trainRun.id)+' · '+escapeHtml(String(trainRun.conclusion||trainRun.status||''))):'Bez dostupného tréningového behu.';
     const failed=operation&&last&&last.id===operation.id&&last.state==='FAILED_NEEDS_REVIEW';
     const unsafeFailure=failed&&!['refresh_tests','audit_shadow'].includes(operation.action);
-    const hint=d?.reason||'Načítavam stav bezpečných operácií…';
-    return '<section class="admin-ux-section admin-model-lab" aria-label="Model Lab – operácie">'+
-      '<div class="admin-ux-heading"><div><small>MODEL LAB · OPERÁCIE</small><h2>Dáta, testy a shadow</h2>'+
-      '<p>Jedno miesto na riadenie overených modelov. Každý krok má samostatný stav, audit a ochranu pred duplicitou. Champion zostáva nezmenený.</p></div>'+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-refresh" '+(busy?'disabled':'')+'>Obnoviť operácie</button></div>'+
-      '<p role="status">'+escapeHtml(state.adminModelLabMessage||hint)+'</p>'+
+    const hint=state.adminTrainingMessage||state.adminModelLabMessage||training?.reason||d?.reason||'Načítavam aktuálny stav…';
+    const latestCandidate=training?.candidates?.[0]?.tag||'—';
+    return '<section class="admin-ux-section admin-model-lab" aria-label="BlinQ Model Factory">'+
+      '<div class="admin-ux-heading"><div><small>MODEL FACTORY · 2 KROKY</small><h2>Kandidát bez ručných workflowov</h2>'+
+      '<p>Z existujúcej CDB vytvoríme nový nemenný model, nezávisle ho otestujeme a uložíme. Aktivácia shadow je samostatné rozhodnutie. Produkčný champion sa nemení.</p></div>'+
+      '<button type="button" class="btn btn-ghost" data-admin-action="calibration-refresh" '+(busy?'disabled':'')+'>Obnoviť celý stav</button></div>'+
+      '<p role="status">'+escapeHtml(hint)+'</p>'+
       '<div class="admin-calibration-grid">'+
-      '<article class="admin-calibration-panel"><h3>1 · Načítať nové dáta</h3><p>Jedna kontrolovaná dávka maximálne 100 súborov z existujúceho Drive inboxu; 0 nových volaní Tennis API.</p>'+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="import_drive" '+(disabled?'disabled':'')+'>Spustiť Drive import</button></article>'+
-      '<article class="admin-calibration-panel"><h3>2 · Testovať a vyhodnotiť</h3><p>Nezávislý párový audit aktuálneho championa a shadow kandidáta. Oddelený prehľad následne obnoví Admin snapshot; bez nových predikcií a API volaní.</p>'+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(disabled?'disabled':'')+'>Spustiť shadow audit</button> '+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="refresh_tests" '+(disabled?'disabled':'')+'>Obnoviť Admin výsledky</button></article>'+
-      '<article class="admin-calibration-panel"><h3>3 · Aktivovať shadow</h3><p>Vyber hotový zmrazený model. Zápis musí potvrdiť checksum a spätné načítanie; produkcia sa neprepína.</p>'+
-      '<label>Overený model <select id="admin-model-lab-candidate" '+(disabled?'disabled':'')+'>'+options+'</select></label>'+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="activate_shadow" '+(disabled||!candidates.length?'disabled':'')+'>Aktivovať shadow kandidáta</button></article></div>'+
-      '<p class="admin-calibration-foot">Tréning nového modelu je hneď v sekcii nižšie. Najprv importuj dáta, potom trénuj, vyhodnoť a až potom aktivuj shadow. Produkčné povýšenie sa odtiaľto nedá spustiť.</p>'+
-      '<div class="admin-calibration-bottom"><div><strong>Aktuálna operácia</strong><span>'+activeText+'</span></div><div><strong>Posledný overený stav</strong><span>'+finalText+'</span></div></div>'+
-      (failed&&!unsafeFailure?'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-acknowledge" '+(busy?'disabled':'')+'>Potvrdiť neúspešný read-only test</button>':'')+
-      (unsafeFailure?'<p role="alert">Zápis mohol byť čiastočný. Tento import alebo aktiváciu nemožno odblokovať z Adminu bez nezávislého overenia súborov a CDB.</p>':'')+
-      '</section>';
+      '<article class="admin-calibration-panel"><h3>1 · Vytvoriť a otestovať</h3>'+
+      '<p>Jeden klik: existujúca overená CDB → nemenná záloha → ochrana proti leakage → tréning → offline ATP/WTA testy a porovnanie s championom → uložený kandidát. Žiadne nové platené API volania.</p>'+
+      '<button type="button" class="btn btn-primary" data-admin-action="training-start" '+(canBuild?'':'disabled')+'>Vytvoriť a otestovať kandidáta 7.2.1</button>'+
+      '<p><strong>Tréning:</strong> '+trainingText+'</p></article>'+
+      '<article class="admin-calibration-panel"><h3>2 · Aktivovať shadow</h3>'+
+      '<p>Až po kontrole offline reportu vyber nemenný kandidát. Aktivácia overí release SHA a spätné načítanie. Champion zostáva v produkcii.</p>'+
+      '<label>Overený uložený model <select id="admin-model-lab-candidate" '+(canActivate?'':'disabled')+'>'+options+'</select></label>'+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="activate_shadow" '+(canActivate&&candidates.length?'':'disabled')+'>Aktivovať iba shadow</button>'+
+      '<p><strong>Naposledy uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article></div>'+
+      '<div class="admin-calibration-bottom"><div><strong>Rozpracovaná operácia</strong><span>'+activeText+'</span></div><div><strong>Posledná kontrola</strong><span>'+lastText+'</span></div></div>'+
+      (failed&&!unsafeFailure?'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-acknowledge" '+(busy?'disabled':'')+'>Potvrdiť zlyhanie read-only auditu</button>':'')+
+      (unsafeFailure?'<p role="alert">Zápis sa mohol vykonať čiastočne. Pred ďalším krokom je nutná nezávislá ručná kontrola CDB/release.</p>':'')+
+      '<details class="admin-model-factory-advanced"><summary>Pokročilé operácie a história</summary>'+
+      '<p>Voliteľný Drive import a read-only audit sú oddelené úkony; nie sú podmienkou na nový tréning z aktuálnej CDB.</p>'+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="import_drive" '+(canActivate?'':'disabled')+'>Importovať 100 Drive súborov</button> '+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(canActivate?'':'disabled')+'>Nezávislý shadow audit</button> '+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="refresh_tests" '+(canActivate?'':'disabled')+'>Synchronizovať výsledky</button>'+
+      '<p>Úplný priebeh tréningu a uložené kandidáty možno overiť v GitHub Actions a súkromnom dátovom repozitári. Produkcia sa pri tréningu ani pri shadow aktivácii nepovyšuje.</p>'+
+      '</details></section>';
   }
   async function loadAdminModelLab(startOperation='', acknowledge=false){
     if(state.adminModelLabBusy)return;
@@ -5010,7 +5019,13 @@
     try{
       const result=await BlinqAuth.adminModelTraining(start?{profile}:undefined);
       if(generation!==feedGeneration)return;
-      if(start){state.adminTrainingMessage=result.message;state.adminTraining=null;}
+      if(start){
+        state.adminTrainingMessage=result.message||'Tréning bol uložený do ochrannej fronty.';
+        // Render the server's durable queued request without requiring
+        // another manual refresh while this loader is still busy.
+        state.adminTraining=await BlinqAuth.adminModelTraining();
+        if(generation!==feedGeneration)return;
+      }
       else state.adminTraining=result;
     }catch(error){
       if(generation!==feedGeneration)return;
@@ -5231,7 +5246,7 @@
   function renderAdminRoute(){
     const tabs=[['accounts','Účty','Prístup · platnosť'],['projects','Projektové skupiny','Skupiny · INFO · výsledky'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard setting','3 karty · KPI'],['testresults','Výsledky','Testovacie tipy · výber'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram','Skupiny · odkazy'],['insights','Info & LIVE','Správy · radar'],['calibration','Kalibrácia','Model · 1 000 zápasov'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
-    const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,testresults:renderAdminTestList,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,calibration:()=>renderAdminModelLab()+renderAdminTraining()+renderAdminCalibration(),system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
+    const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,testresults:renderAdminTestList,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,calibration:()=>renderAdminModelLab()+renderAdminCalibration(),system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
     const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],projects:['Projektové skupiny','Samostatné skupiny bez ohľadu na level, ich INFO kanál a vyhodnotenia.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard setting','Nastavenie troch hlavných metrík bez zmeny grafiky.'],testresults:['Výsledky','Manuálne vylúčenie testovacích predikcií.'],layout:['Zobrazenie','SHOW / BLUR / HIDE pre panely a jednotlivé riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],calibration:['Kalibrácia modelu','Shadow výsledky, chýbajúce zápasy a porovnanie s produkciou.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
     let contextual='';
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov sa aplikujú okamžite</div>';
@@ -5596,7 +5611,10 @@
         loadAdminModelLab('',true);return;
       }
       if(action==='training-refresh'){loadAdminTraining();return;}
-      if(action==='training-start'){loadAdminTraining(true);return;}
+      if(action==='training-start'){
+        if(!window.confirm('Vytvoriť nový nemenný model 7.2.1 z overenej CDB, vrátane záloh a offline testov? Žiadne platené API ani aktivácia shadow či produkcie.'))return;
+        loadAdminTraining(true);return;
+      }
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
       if(action==='copy-diagnostics'){
         const d=state.adminDiagnostics||{};

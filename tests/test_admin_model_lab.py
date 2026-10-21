@@ -66,6 +66,28 @@ class TestLab(unittest.TestCase):
                 m.start({"action": "import_drive"}, "admin")
             gh.assert_not_called()
 
+    def test_factory_training_cannot_overlap_a_queued_shadow_or_import(self):
+        # Both Admin entrypoints use the same durable Azure queue guard.
+        m.start({"action": "import_drive"}, "admin")
+        with patch.object(model_training, "_table", return_value=self.fake), \
+             patch.object(model_training, "status",
+                          return_value={"can_start": True, "base": "initial"}):
+            with self.assertRaises(model_training.TrainingBlocked):
+                model_training.start({"profile": "top-7.2.1"}, "admin")
+        self.assertNotIn(
+            (model_training.PARTITION, "request-initial"), self.fake.data
+        )
+
+    def test_factory_training_still_uses_original_protected_queue(self):
+        with patch.object(model_training, "_table", return_value=self.fake), \
+             patch.object(model_training, "status",
+                          return_value={"can_start": True, "base": "initial"}):
+            result = model_training.start({"profile": "top-7.2.1"}, "admin")
+        self.assertEqual(result["state"], "QUEUED")
+        row = self.fake.data[(model_training.PARTITION, "request-initial")]
+        self.assertEqual(row["profile"], "top-7.2.1")
+        self.assertIsNone(m._json("active"))
+
     def test_unknown_operations_and_fields_rejected(self):
         for data in (
             {"action": "promote"}, {"action": "refresh_tests", "max_requests": 100},
