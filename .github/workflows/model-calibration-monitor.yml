@@ -1,8 +1,15 @@
 name: BlinQ private model calibration monitor
+run-name: "Model Lab tests ${{ inputs.request_id || github.run_id }}"
 
 # Read-only GitHub evidence, signed durable Admin status. Never train/promote.
 on:
   workflow_dispatch:
+    inputs:
+      request_id:
+        description: Admin Model Lab correlation (optional)
+        type: string
+        required: false
+        default: ''
 
 # External scheduler owns the Match Status cadence. The existing status job
 # dispatches this read-only monitor every six hours; repository cron is banned.
