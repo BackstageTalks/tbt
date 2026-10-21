@@ -2,13 +2,14 @@
   "schema": 1,
   "mode": "dry-run",
   "workflow": "cdb-service-complement-audit.yml",
-  "reason": "Fresh 2026-10-18 exact canonical-owned observed service/return NULL-only candidate preflight after Drive audit 5-20% results; read-only and no external source rights assumed",
+  "reason": "2026-10-21 after independently verified CDB Drive +876 and API +36807; fresh canonical rates audit; no old SHA/count reuse",
   "approved_by_operator": true,
-  "purpose": "Recheck strictly current checksum-verified CDB for mathematical first/second/total service-return opponent rate complements; stage no more than proven missing and report evidence before any separately guarded write. No external archive import.",
+  "purpose": "Read-only current canonical 2016-2026 and historical CDB exact already-observed opposing service/return complement NULL candidates; do not mutate CDB, no provider calls, zero overwrite, require new SHA/count/years pin before any guarded import.",
   "api_requests": 0,
   "cdb_write": false,
-  "request_id": "current-cdb-native-complements-20261018-preflight-after-drive-20pct",
-  "prior_evidence_run_id": 39086631839,
   "write_authorized": false,
-  "expected_prior_reference_manifest_sha256": "0810387fab1629404c612b230a72ecc0d2eb0b67efa5f3283bc533cfa2a404f5"
+  "request_id": "current-cdb-rate-complements-readonly-20261021-after-verified-writes",
+  "previous_request_id": "current-cdb-native-complements-20261018-preflight-after-drive-20pct",
+  "prior_evidence_run_id": 39581393303,
+  "expected_prior_reference_manifest_sha256": null
 }
