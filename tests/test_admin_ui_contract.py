@@ -190,12 +190,12 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["top_daily"]["label"] == "TOP Predictions"
     assert rules["top_daily"]["limit"] is None
     assert rules["top_daily"]["presentation_preview_limit"] == 10
-    assert rules["top_daily"]["target_count"] == 10
+    assert rules["top_daily"]["target_count"] == 3
     assert rules["top_daily"]["preferred_probability"] == 0.80
     assert rules["top_daily"]["secondary_probability"] == 0.78
-    assert rules["top_daily"]["standard_probability"] == 0.76
-    assert rules["top_daily"]["confidence_tiers"] == [0.80, 0.78, 0.76, 0.74, 0.72, 0.70, 0.68]
-    assert rules["top_daily"]["min_probability"] == 0.68
+    assert rules["top_daily"]["standard_probability"] == 0.75
+    assert rules["top_daily"]["confidence_tiers"] == [0.80, 0.78, 0.75, 0.70]
+    assert rules["top_daily"]["min_probability"] == 0.70
     assert rules["top_daily"]["min_odds"] == 1.50
     assert rules["top_daily"]["max_odds"] is None
     assert rules["top_daily"]["min_edge"] is None

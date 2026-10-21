@@ -129,14 +129,14 @@ class TennisEnsemble:
     @staticmethod
     def _tour_calibration_approved(tour, kind, global_kind, loss, baseline_loss,
                                    brier, baseline_brier, margin=0.008):
-        """Approve WTA only when both proper scoring rules do not regress.
+        """Protect ATP and WTA proper scores on disjoint calibration days.
 
-        Selection uses disjoint calibration days, NEVER the future holdout.
-        ATP retains the original loss-only choice contract.
+        Calibration selection never uses the final chronological holdout.
+        Existing serialized champion inference is unaffected by this gate.
         """
         if kind == global_kind or loss + margin >= baseline_loss:
             return False
-        return tour != "wta" or brier <= baseline_brier + 1e-12
+        return tour in {"atp", "wta"} and brier <= baseline_brier + 1e-12
 
     @classmethod
     def _choose_tour_calibrators(cls, raw, labels, tour_atp, split, global_selected):
@@ -176,8 +176,8 @@ class TennisEnsemble:
                 score = float(log_loss(labels[select_idx], p, labels=[0, 1]))
                 brier = float(np.mean((p - labels[select_idx]) ** 2))
                 alternatives.append((score, brier, kind))
-            # Never pick a WTA calibrator which improves log loss but worsens
-            # Brier on the disjoint selection slice. Retain global otherwise.
+            # Never pick an ATP or WTA calibrator which improves log loss but
+            # worsens Brier on the disjoint selection slice.
             margin = 0.008
             approved = [entry for entry in alternatives
                         if cls._tour_calibration_approved(
@@ -198,6 +198,7 @@ class TennisEnsemble:
                 "best_selection_brier_score": best_brier,
                 "selected_kind": best_kind if accepted else global_selected.kind,
                 "wta_brier_non_regression_required": tour == "wta",
+                "brier_non_regression_required": True,
                 "minimum_improvement": margin,
             }
         return selected, evidence
