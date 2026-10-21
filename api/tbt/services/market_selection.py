@@ -30,7 +30,7 @@ MATCH_WINNER_MARKET_NAMES = {
 #
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
-# PRIME keeps its current short-price fallback. TOP uses a staged daily probability fallback: start at 68% and relax only until at least three TOP picks exist, never below 65%. The TOP odds boundary is fixed at >=1.50 and never moves. Value keeps a 65% floor.
+# PRIME keeps its current short-price fallback. TOP prioritizes >=80% and stages 78%, 75%, then 70% only until at least three picks qualify. Keep all above active tier without bypassing the odds/data-quality gates. Value keeps a 65% floor.
 #
 # VALUE has assignment priority because close-odds candidates are intentionally
 # scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
@@ -41,9 +41,9 @@ PUBLICATION_MIN_PROBABILITY = 0.65
 
 PRIME_TOP_CORE_PROBABILITY = 0.68
 PRIME_TOP_FALLBACK_PROBABILITY = 0.65
-TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.65
+TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.70
 TOP_DYNAMIC_FALLBACK_TIERS = (
-    (0.67, 1.50), (0.66, 1.50), (0.65, 1.50),
+    (0.78, 1.50), (0.75, 1.50), (0.70, 1.50),
 )
 
 # PRIME: any decimal price below 1.50 (no lower odds bound).
@@ -64,10 +64,10 @@ PRIME_LIMIT = 30
 # TOP BETS: >=1.50, excluding selections already claimed by Value.
 TOP_PREFERRED_PROBABILITY = 0.80
 TOP_SECONDARY_PROBABILITY = 0.78
-TOP_STANDARD_PROBABILITY = 0.76
-TOP_FALLBACK_PROBABILITIES = (0.74, 0.72, 0.70, 0.68)
-TOP_MIN_PROBABILITY = PRIME_TOP_CORE_PROBABILITY
-TOP_TARGET_COUNT = 10
+TOP_STANDARD_PROBABILITY = 0.75
+TOP_FALLBACK_PROBABILITIES = (0.70,)
+TOP_MIN_PROBABILITY = TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY
+TOP_TARGET_COUNT = 3
 TOP_MIN_COUNT = 3
 TOP_MIN_DATA_DEPTH = 0.80
 TOP_MIN_SURFACE_MATCHES = 5
@@ -964,18 +964,21 @@ def _fill_top_dynamic(
     *,
     minimum_count: int,
     rank_key,
+    minimum_probability: float = TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY,
 ) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
-    """Relax TOP probability only; the public odds boundary stays fixed at >=1.50."""
+    """Publish ALL above the first qualifying 80/78/75/70 tier; odds >=1.50."""
     selected = list(core)
     selected.sort(key=rank_key, reverse=True)
     if len(selected) >= int(minimum_count):
-        return selected, 0, {"step": 0, "min_probability": PRIME_TOP_CORE_PROBABILITY, "min_odds": TOP_MIN_ODDS}
+        return selected, 0, {"step": 0, "min_probability": TOP_PREFERRED_PROBABILITY, "min_odds": TOP_MIN_ODDS}
 
     used = {_selection_identity(card) for card in selected}
     added = 0
-    applied = {"step": 0, "min_probability": PRIME_TOP_CORE_PROBABILITY, "min_odds": TOP_MIN_ODDS}
+    applied = {"step": 0, "min_probability": TOP_PREFERRED_PROBABILITY, "min_odds": TOP_MIN_ODDS}
     pool = sorted(fallback_pool, key=rank_key, reverse=True)
     for step, (prob_floor, odds_floor) in enumerate(TOP_DYNAMIC_FALLBACK_TIERS, start=1):
+        if prob_floor + 1e-12 < minimum_probability:
+            continue
         eligible = [card for card in pool if (_number(card.get("probability")) or 0.0) + 1e-12 >= prob_floor and (_number(card.get("odds")) or 0.0) + 1e-12 >= odds_floor]
         for card in eligible:
             identity = _selection_identity(card)
@@ -1027,8 +1030,10 @@ def select_market_sections(
 
     Retired TOP200 is never evaluated or allowed to reserve candidates.
     Active VALUE -> TOP/PRIME selection uses the normal quality gates.
-    TOP starts at 68% / 1.50 and may relax to a 65% hard floor only when its own
-    inventory is thin. EV/edge remain diagnostics only.
+    TOP starts at 80% / 1.50 and relaxes through 78%, 75%, 70% ONLY until
+    three eligible, independently priced picks exist. All picks above the
+    applied tier are kept, even when their number exceeds three; the minimum
+    is a target, not permission to invent probabilities. EV is diagnostic.
     """
     cards = [
         card for row in predictions
@@ -1038,9 +1043,9 @@ def select_market_sections(
     ]
 
     prime_core_floor = max(PRIME_TOP_CORE_PROBABILITY, float(prime_min_probability))
-    top_core_floor = max(PRIME_TOP_CORE_PROBABILITY, float(top_min_probability))
+    top_core_floor = max(TOP_PREFERRED_PROBABILITY, float(top_min_probability))
     fallback_floor = PRIME_TOP_FALLBACK_PROBABILITY
-    top_fallback_floor = TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY
+    top_fallback_floor = max(TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY, float(top_min_probability))
     value_floor = max(PUBLICATION_MIN_PROBABILITY, float(value_min_probability))
     value_audit = _value_qualification_audit(
         predictions,
@@ -1105,8 +1110,8 @@ def select_market_sections(
 
     # Value claims overlap with Top before the Top minimum-fill decision.
     # TOP fallback inventory is considered only after Value priority. The
-    # probability threshold is relaxed stepwise from 68% to 65%; the
-    # odds threshold never moves below 1.50. Stop once the daily minimum is met.
+    # probability threshold is relaxed 80 -> 78 -> 75 -> 70%; the
+    # odds threshold never moves below 1.50. No cap above the selected floor.
     value_ids = {_selection_identity(card) for card in value_qualified}
     top_core = [card for card in top_core if _selection_identity(card) not in value_ids]
     top_fallback = [card for card in top_fallback if _selection_identity(card) not in value_ids]
@@ -1115,7 +1120,8 @@ def select_market_sections(
         prime_core, prime_fallback, minimum_count=PRIME_MIN_COUNT, rank_key=rank
     )
     top_qualified, top_fallback_added, top_fallback_applied = _fill_top_dynamic(
-        top_core, top_fallback, minimum_count=TOP_MIN_COUNT, rank_key=rank
+        top_core, top_fallback, minimum_count=TOP_MIN_COUNT,
+        rank_key=rank, minimum_probability=top_fallback_floor,
     )
 
     selected, duplicate_removed, limited_out = _exclusive_section_assignment(
@@ -1156,7 +1162,8 @@ def select_market_sections(
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "prime_core_68_plus": len(prime_core),
-                "top_core_68_plus_after_value_priority": len(top_core),
+                "top_core_80_plus_after_value_priority": len(top_core),
+                "top_core_68_plus_after_value_priority": len(top_core),  # legacy metadata key
                 "prime_fallback_65_679_added": prime_fallback_added,
                 "top_fallback_added": top_fallback_added,
                 "top_fallback_applied": top_fallback_applied,
@@ -1165,7 +1172,10 @@ def select_market_sections(
                 "duplicates_removed": sum(duplicate_removed.values()),
                 "limited_out": sum(limited_out.values()),
                 "daily_minimum_target": TOP_MIN_COUNT,
-                "daily_preferred_target": 10,
+                "daily_preferred_target": TOP_MIN_COUNT,
+                "all_qualifying_above_active_tier": True,
+                "active_top_probability_floor": top_fallback_applied["min_probability"],
+                "top_below_three_after_70": len(top) < TOP_MIN_COUNT,
                 "minimum_shortfall": {
                     "prime": max(0, PRIME_MIN_COUNT-len(prime)),
                     "top_daily": max(0, TOP_MIN_COUNT-len(top)),
@@ -1189,6 +1199,7 @@ def select_market_sections(
                 "core_probability": PRIME_TOP_CORE_PROBABILITY,
                 "prime_fallback_probability": PRIME_TOP_FALLBACK_PROBABILITY,
                 "top_fallback_probability_floor": TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY,
+                "top_probability_tiers": [0.80, 0.78, 0.75, 0.70],
                 "top_dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
                 ],
@@ -1219,6 +1230,11 @@ def select_market_sections(
                 "probability_basis": "blinq_probability",
                 "core_min_probability": top_core_floor,
                 "fallback_min_probability": top_fallback_floor,
+                "probability_tiers": [0.80, 0.78, 0.75, 0.70],
+                "daily_minimum_target": TOP_MIN_COUNT,
+                "all_qualifying_above_active_tier": True,
+                "no_forced_fill": True,
+                "observed_pick_count": len(top),
                 "fallback_only_if_core_count_below": TOP_MIN_COUNT,
                 "dynamic_fallback": True,
                 "dynamic_fallback_tiers": [
