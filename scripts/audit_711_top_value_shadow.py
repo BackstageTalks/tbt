@@ -39,10 +39,11 @@ def positive_odds(value):
     return x if math.isfinite(x) and x >= 1.5 else None
 
 
-def fixed_cohort(issued_rows, cutoff):
+def fixed_cohort(issued_rows, cutoff, *, sections=None):
     """Deduplicate recorded, settled, real-price ATP/WTA singles winner bets."""
     picked = {}
     reasons = Counter()
+    sections = SECTIONS if sections is None else set(sections)
     for row in issued_rows:
         if not isinstance(row, dict):
             reasons["malformed_ledger_row"] += 1
@@ -50,7 +51,7 @@ def fixed_cohort(issued_rows, cutoff):
         event = str(row.get("event_id") or row.get("id") or row.get("match_id") or "").strip()
         tour = str(row.get("tour") or "").lower()
         for pub in (row.get("market_publications") or []):
-            if not isinstance(pub, dict) or pub.get("section") not in SECTIONS or pub.get("market") != "match_winner":
+            if not isinstance(pub, dict) or pub.get("section") not in sections or pub.get("market") != "match_winner":
                 continue
             result = pub.get("result") if isinstance(pub.get("result"), dict) else {}
             published = stamp(pub.get("issued_at"))
@@ -96,12 +97,12 @@ def fixed_cohort(issued_rows, cutoff):
     return list(picked.values()), dict(reasons)
 
 
-def shadow_index(rows):
+def shadow_index(rows, *, champion=CHAMPION, candidate=CANDIDATE):
     index = defaultdict(list)
     for row in rows:
         if not isinstance(row, dict):
             continue
-        if row.get("production_model_version") != CHAMPION or row.get("challenger_model_version") != CANDIDATE:
+        if row.get("production_model_version") != champion or row.get("challenger_model_version") != candidate:
             continue
         for key in [("event", row.get("event_id")), ("match", row.get("match_id"))]:
             if key[1]:
@@ -119,11 +120,12 @@ def summary(entries):
                 profit_units=profit, avg_odds=sum(x["odds"] for x in entries)/n)
 
 
-def evaluate(issued, shadow, *, cutoff=stamp(CUTOFF)):
+def evaluate(issued, shadow, *, cutoff=stamp(CUTOFF),
+             champion=CHAMPION, candidate=CANDIDATE, sections=None):
     if cutoff is None:
         raise ValueError("Invalid evaluation cutoff")
-    picks, ignored = fixed_cohort(issued, cutoff)
-    index = shadow_index(shadow)
+    picks, ignored = fixed_cohort(issued, cutoff, sections=sections)
+    index = shadow_index(shadow, champion=champion, candidate=candidate)
     rejected = Counter()
     paired, seen = [], set()
     for x in picks:
@@ -175,6 +177,7 @@ def evaluate(issued, shadow, *, cutoff=stamp(CUTOFF)):
             "probability": {
                 model: {"mean_probability": (sum(e[model+"_probability"] for e in subset)/len(subset) if subset else None),
                         "brier": (sum((float(e["correct"])-e[model+"_probability"])**2 for e in subset)/len(subset) if subset else None),
+                        "mean_expected_value": (sum(e[model+"_probability"]*e["odds"]-1 for e in subset)/len(subset) if subset else None),
                         "log_loss": (sum(-math.log(e[model+"_probability"] if e["correct"] else (1-e[model+"_probability"])) for e in subset)/len(subset) if subset else None)}
                 for model in ["champion", "candidate"]
             },

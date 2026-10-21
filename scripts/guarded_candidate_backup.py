@@ -57,7 +57,7 @@ def run(*argv):
     return p.stdout.strip()
 
 
-def verify_job_identity():
+def verify_job_identity(*, require_writer_lock: bool = True):
     if (os.environ.get("GITHUB_REPOSITORY") != "BackstageTalks/tbt"
             or os.environ.get("GITHUB_ACTIONS") != "true"
             or not os.environ.get("GH_TOKEN")
@@ -67,8 +67,9 @@ def verify_job_identity():
         raise RuntimeError("Private GitHub Actions run identity/permission required")
     if os.environ.get("TBT_DATA_REPOSITORY", REPO) != REPO:
         raise RuntimeError("Unexpected private CDB repository")
-    from cdb_global_writer_lock import verify
-    verify(REPO, ROOT / ".cdb-global-writer-lock.json")
+    if require_writer_lock:
+        from cdb_global_writer_lock import verify
+        verify(REPO, ROOT / ".cdb-global-writer-lock.json")
     if run("gh", "repo", "view", REPO, "--json", "visibility", "--jq", ".visibility") != "PRIVATE":
         raise RuntimeError("Immutable backups require a PRIVATE data repository")
 
@@ -370,16 +371,36 @@ def prepare():
     CERT.parent.mkdir(parents=True, exist_ok=True)
     CERT.write_text(json.dumps(cert, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     validate_certificate()
+    # The per-run release is reserved under the same global writer lock.
+    # It must be empty until the fitter has independently reacquired that
+    # lock for publication; no release may be created during lock-free fit.
+    candidate_tag = cert["candidate_tag"]
+    candidate_probe = subprocess.run(
+        ["gh", "release", "view", candidate_tag, "-R", REPO],
+        capture_output=True, text=True)
+    if candidate_probe.returncode == 0 or (
+        "404" not in candidate_probe.stderr and
+        "not found" not in candidate_probe.stderr.lower()
+    ):
+        raise RuntimeError("Candidate immutable release already exists or state unknown")
+    run("gh", "release", "create", candidate_tag, "-R", REPO,
+        "--latest=false", "--title", "BlinQ frozen candidate pending verified fit",
+        "--notes", "Empty reservation; never publish without re-acquiring CDB global writer lock.")
+    if _remote_backup_assets(candidate_tag):
+        raise RuntimeError("Reserved candidate release must be empty")
     print(json.dumps({"status": cert["status"], "backup_tag": tag,
                       "asset_count": len(rows)+1, "canonical_matches": matches,
                       "candidate_tag": cert["candidate_tag"]}), flush=True)
     return cert
 
 
-def validate_certificate():
+def validate_certificate(*, require_writer_lock: bool = True):
     if not CERT.is_file():
         raise RuntimeError("Missing independently verified immutable backup certificate")
-    verify_job_identity()
+    if require_writer_lock:
+        verify_job_identity()
+    else:
+        verify_job_identity(require_writer_lock=False)
     cert = json.loads(CERT.read_text(encoding="utf-8"))
     if (cert.get("schema") != 1
             or cert.get("status") != "VERIFIED_FULL_INPUTS_AND_ISOLATED_RESTORE"
@@ -419,11 +440,15 @@ def validate_certificate():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("action", choices=("prepare", "verify"))
+    ap.add_argument("--read-only-snapshot", action="store_true",
+                    help="Verify frozen bytes and same-run certificate without holding CDB writer lock")
     args = ap.parse_args()
+    if args.read_only_snapshot and args.action != "verify":
+        ap.error("Snapshot inspection may not prepare or publish releases")
     if args.action == "prepare":
         prepare()
     else:
-        cert = validate_certificate()
+        cert = validate_certificate(require_writer_lock=not args.read_only_snapshot)
         print(json.dumps({"status": "VERIFIED", "backup_tag": cert["backup_tag"],
                           "candidate_tag": cert["candidate_tag"]}))
 

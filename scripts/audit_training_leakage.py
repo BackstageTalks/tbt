@@ -43,7 +43,8 @@ def _posthoc_weather_training_violation(match) -> bool:
     return eligible and provenance in POSTHOC_WEATHER_MARKERS
 
 
-def audit(history_dir: Path) -> dict[str, Any]:
+def audit(history_dir: Path, *, training_profile: str = "standard",
+          feature_cache_path: Path | None = None) -> dict[str, Any]:
     raw, identity_safety = sanitize_history_identities(load_partitions(history_dir))
     accepted, quality = audit_history(raw)
     cleaned, rank = _enforce_rank_provenance(accepted)
@@ -52,7 +53,13 @@ def audit(history_dir: Path) -> dict[str, Any]:
         if (m.player1_rank is not None or m.player2_rank is not None)
         and not _verified_rank_provenance(m)
     ]
-    frame = FeatureBuilder().build_training_frame(cleaned).sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
+    if training_profile not in {"standard", "top-7.2.1"}:
+        raise ValueError("Unknown training profile")
+    builder = FeatureBuilder(
+        independent_serve_return=training_profile == "top-7.2.1",
+        independent_direct_rates=training_profile == "top-7.2.1",
+    )
+    frame = builder.build_training_frame(cleaned).sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
 
     forbidden = sorted(set(FEATURE_NAMES) & FORBIDDEN_MODEL_FEATURES)
     posthoc_violations = [m.match_id for m in accepted if _posthoc_weather_training_violation(m)]
@@ -119,6 +126,11 @@ def audit(history_dir: Path) -> dict[str, Any]:
             "event_statistics": "current_match_statistics_update_state_only_after_snapshot",
         },
     }
+    # Only a fully passing audit may publish a reusable, SHA-sealed frame.
+    if report["status"] == "pass" and feature_cache_path is not None:
+        from verified_training_frame import persist
+        report["verified_feature_cache"] = persist(
+            frame, feature_cache_path, training_profile)
     return report
 
 
@@ -126,9 +138,14 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--history-dir", default=".cache/tbt/history")
     parser.add_argument("--report", default=".cache/tbt/production/leakage_audit_report.json")
+    parser.add_argument("--training-profile", choices=("standard", "top-7.2.1"),
+                        default="standard")
+    parser.add_argument("--feature-cache", type=Path)
     args = parser.parse_args()
 
-    report = audit(Path(args.history_dir))
+    report = audit(Path(args.history_dir),
+                   training_profile=args.training_profile,
+                   feature_cache_path=args.feature_cache)
     path = Path(args.report); path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2, default=str))

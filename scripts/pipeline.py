@@ -719,7 +719,7 @@ def _publish_predictions(
     return feed
 
 
-def _require_training_backup_gate() -> dict:
+def _require_training_backup_gate(*, read_only_frozen: bool = False) -> dict:
     """Only one run-bound, independently read-back immutable full-input backup permits fit.
 
     No flag-only escape hatch: validate SHA-256 of the exact local frozen inputs,
@@ -727,6 +727,8 @@ def _require_training_backup_gate() -> dict:
     """
     try:
         from guarded_candidate_backup import validate_certificate
+        if read_only_frozen:
+            return validate_certificate(require_writer_lock=False)
         return validate_certificate()
     except Exception as exc:
         raise RuntimeError(
@@ -769,6 +771,10 @@ def main():
     )
     parser.add_argument("--promote", action="store_true")
     parser.add_argument("--training-profile", choices=["standard", "top-7.2.1"], default="standard")
+    parser.add_argument("--verified-feature-cache", default=None,
+                        help="Same-run SHA-sealed frame produced by the protected leakage audit")
+    parser.add_argument("--frozen-backed-compute", action="store_true",
+                        help="Protected training only: fit from immutable local snapshot without writer lock")
     args = parser.parse_args()
     # Issue #405: the metric flag alone is NOT operator approval or rollback proof.
     # Fail before any canonical/model release read or write, or provider request.
@@ -779,10 +785,14 @@ def main():
         )
     # Without an independently restored immutable complete input backup, every
     # real candidate fit must fail before any model/CDB/network access.
+    frozen = bool(args.frozen_backed_compute)
+    if frozen and (args.mode != "train" or not args.verified_feature_cache or args.promote):
+        parser.error("Frozen lock-free fitting requires protected nonpromoting training and audited feature cache")
     training_certificate = None
     if args.mode == "train":
         try:
-            training_certificate = _require_training_backup_gate()
+            training_certificate = (_require_training_backup_gate(read_only_frozen=True) if frozen
+                                    else _require_training_backup_gate())
         except RuntimeError as exc:
             parser.error(str(exc))
     if not 1 <= args.max_requests <= 14500:
@@ -798,7 +808,10 @@ def main():
     cache = ROOT / ".cache/tbt"
     history_dir = cache / "history"
     history_store = ReleaseStore(args.data_repository, "tbt-data-v1", history_dir)
-    history_store.download()
+    # Immutable local snapshot was already downloaded and remotely read back
+    # under the writer lock. Do not overwrite it with a newer mutable CDB tag.
+    if not frozen:
+        history_store.download()
     matches = load_partitions(history_dir)
     matches, history_safety = sanitize_history_identities(matches)
     if history_safety.get("changed"):
@@ -814,13 +827,14 @@ def main():
                 "tbt-atp-leaderboards-v1",
                 atp_dir,
             )
-            assets = atp_store._asset_names()
+            assets = ({atp_asset} if (atp_dir / atp_asset).is_file() else set()) if frozen else atp_store._asset_names()
             if atp_asset in assets:
-                atp_store.download(
-                    extra_names=(atp_asset,),
-                    required_names=(atp_asset,),
-                    require_bundle_manifest=True,
-                )
+                if not frozen:
+                    atp_store.download(
+                        extra_names=(atp_asset,),
+                        required_names=(atp_asset,),
+                        require_bundle_manifest=True,
+                    )
                 atp_leaderboards = ATPLeaderboardPriors.from_csv(
                     atp_dir / atp_asset
                 )
@@ -852,13 +866,14 @@ def main():
                 "tbt-wta-season-stats-v1",
                 wta_dir,
             )
-            wta_assets = wta_store._asset_names()
+            wta_assets = ({wta_asset} if (wta_dir / wta_asset).is_file() else set()) if frozen else wta_store._asset_names()
             if wta_asset in wta_assets:
-                wta_store.download(
-                    extra_names=(wta_asset,),
-                    required_names=(wta_asset,),
-                    require_bundle_manifest=True,
-                )
+                if not frozen:
+                    wta_store.download(
+                        extra_names=(wta_asset,),
+                        required_names=(wta_asset,),
+                        require_bundle_manifest=True,
+                    )
                 wta_season_stats = WTASeasonPriors.from_csv(wta_dir / wta_asset)
                 print(json.dumps({
                     "wta_season_stats": {
@@ -916,6 +931,8 @@ def main():
         # under an immutable per-run tag until separately reviewed.
         candidate = ReleaseStore(args.data_repository, training_certificate["candidate_tag"], model_dir)
         candidate_assets = candidate._asset_names()
+        if frozen and candidate_assets:
+            parser.error("Reserved immutable per-run candidate already contains assets; refusing overwrite")
         candidate.download(
             extra_names=("promotion_history.json",),
             required_names=("promotion_history.json",) if "promotion_history.json" in candidate_assets else (),
@@ -928,11 +945,12 @@ def main():
         production_assets = production._asset_names()
         champion = None
         if production_assets:
-            production.download(
-                extra_names=("model.joblib", "training_report.json", "promotion_history.json"),
-                required_names=("model.joblib", "training_report.json") +
-                    (("promotion_history.json",) if "promotion_history.json" in production_assets else ()),
-            )
+            if not frozen:
+                production.download(
+                    extra_names=("model.joblib", "training_report.json", "promotion_history.json"),
+                    required_names=("model.joblib", "training_report.json") +
+                        (("promotion_history.json",) if "promotion_history.json" in production_assets else ()),
+                )
             champion = load_model(str(production_dir / "model.joblib"))
             for decision in (_promotion_history(production_dir / "promotion_history.json")
                              if "promotion_history.json" in production_assets else []):
@@ -941,7 +959,13 @@ def main():
         # Remote source lookups and prior loading may race concurrent metadata
         # changes; compare every locally consumed raw input to the immutable
         # remotely verified backup immediately before any model fitting.
-        _require_training_backup_gate()
+        (_require_training_backup_gate(read_only_frozen=True) if frozen
+                                    else _require_training_backup_gate())
+        verified_frame = None
+        if args.verified_feature_cache is not None:
+            from verified_training_frame import load as load_verified_frame
+            verified_frame = load_verified_frame(
+                args.verified_feature_cache, args.training_profile, matches)
         result = train_from_matches(
             matches,
             production_model=champion,
@@ -951,6 +975,7 @@ def main():
             wta_rank_history=wta_rank_history,
             wta_season_stats=wta_season_stats,
             training_profile=args.training_profile,
+            verified_frame=verified_frame,
         )
         report = clean(result.report)
         report["rank_feature_input_bundle"] = clean(rank_feature_input_report)
@@ -1043,10 +1068,28 @@ def main():
             "candidate_tag": training_certificate["candidate_tag"],
         }
         # The canonical/prior inputs must not drift during the fit.
-        _require_training_backup_gate()
+        (_require_training_backup_gate(read_only_frozen=True) if frozen
+                                    else _require_training_backup_gate())
         save_model(model_to_save, str(model_dir / "model.joblib"))
         write_json(model_dir / "training_report.json", report)
         write_json(promotion_history_path, promotion_history)
+        if frozen:
+            # EXISTING canonical single-writer primitive, re-acquired only for
+            # remote model publication. The protected workflow finally step
+            # releases it after independent evidence/readback.
+            from cdb_global_writer_lock import acquire
+            from guarded_candidate_backup import sha as file_sha
+            acquire(args.data_repository, ROOT / ".cdb-global-writer-lock.json",
+                    wait_seconds=1200)
+            _require_training_backup_gate()  # prove exact writer ownership
+            latest_dir = cache / "current-champion-publication-check"
+            latest = ReleaseStore(args.data_repository, "tbt-model-production-v1", latest_dir)
+            latest.download(extra_names=("model.joblib",),
+                            required_names=("model.joblib",), require_bundle_manifest=True)
+            if file_sha(latest_dir / "model.joblib") != training_certificate["champion_sha256"]:
+                raise RuntimeError("Serving champion changed during frozen fit; refusing candidate publication")
+            if candidate._asset_names():
+                raise RuntimeError("Frozen candidate release already contains assets; refusing overwrite")
         candidate.upload_bundle([model_dir / "model.joblib", model_dir / "training_report.json",
                                  promotion_history_path])
         print(json.dumps(decision, indent=2))
