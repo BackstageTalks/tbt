@@ -1,17 +1,17 @@
 {
   "schema": 1,
-  "mode": "statistics",
+  "mode": "identity",
   "promote": false,
-  "source": "existing_subscribed_provider_native_history__atp_wta_2016_2026__run_20261018",
-  "purpose": "One-shot safe retry after run #39107584007 failed before API calls on downloader per-run max-requests=12000. Provider-native ATP+WTA verified-history statistics NULL-only from 2016-01-01 to 2026-10-17; strict script max 12000 including retries, shared 14500/day budget + 500 provider header reserve, 6 requests/s. Use existing 6:2:1:1 high-yield balanced provider-native identity-verified targeted queue; fresh canonical CDB NULL gap and retry gates; no overwrites, quarantine conflicts, immutable backup, CAS, independent remote release readback. Fail closed when budget/identity/backup/lock gate cannot be proved. No external archive ingest. No training or model promotion.",
-  "requested_on": "2026-10-18",
-  "max_requests": 12000,
+  "source": "tennisapi1_native_calendar_existing_cdb_identity_provenance",
+  "purpose": "Guarded ATP/WTA 2016-2026 canonical native match-event ID recovery. Prioritize 2024-2026 with same-provider category, both original native player IDs, round, completed status, day, winner, global uniqueness. Exclude conflicting IDs and cross-provider guesses. Modify only previously absent provider identity metadata, preserve canonical stats and history. Publish solely via global writer lock, CAS, immutable release, independent private SHA+exact readback. No training or model promotion.",
+  "requested_on": "2026-10-21",
+  "max_requests": 2500,
   "start": "2016-01-01",
-  "end": "2026-10-17",
-  "targeted_statistics": true,
-  "historical_match_winner_odds_as_model_feature": false,
+  "end": "2026-10-20",
+  "targeted_statistics": false,
+  "high_yield_statistics": false,
   "model_training": false,
   "pre_reset_provider_header_override": false,
-  "source_only_tml_write_authorized": false,
-  "high_yield_statistics": true
+  "historical_match_winner_odds_as_model_feature": false,
+  "source_only_tml_write_authorized": false
 }
