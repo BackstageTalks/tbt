@@ -107,4 +107,11 @@ def export_portable_model(model) -> dict[str, Any]:
     if atp_boost is not None:
         artifact["atp_blend_weight_boost"] = float(atp_boost)
         artifact["atp_elo_weight"] = float(atp_elo)
+    tour_calibrators = getattr(model, "tour_calibrators", {}) or {}
+    if set(tour_calibrators) - {"atp", "wta"}:
+        raise ValueError("Unsupported tour calibration key")
+    if tour_calibrators:
+        artifact["tour_calibrators"] = {
+            tour: _export_calibrator(cal) for tour, cal in tour_calibrators.items()
+        }
     return artifact
