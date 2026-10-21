@@ -184,6 +184,42 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
     # A verified opponent's whole-match return rate also tells us the fraction
     # of own service points won, even when serve-specific fields are absent.
     complete_opponent_service_rates(values)
+    
+    # Preserve verified point denominators; percentage-only inputs stay count-less.
+    for prefix in ("p1", "p2"):
+        for rate, parts in (
+            ("service_points_won", ("first_serve_win", "second_serve_win")),
+            ("return_points_won", ("first_return_win", "second_return_win")),
+        ):
+            field = f"{prefix}_{rate}"
+            observed = rate_counts.get(field)
+            if observed is None:
+                first = rate_counts.get(f"{prefix}_{parts[0]}")
+                second = rate_counts.get(f"{prefix}_{parts[1]}")
+                if first is not None and second is not None:
+                    observed = (first[0] + second[0], first[1] + second[1])
+            if observed is None or values.get(field) is None:
+                continue
+            won, total = observed
+            if total > 0 and won <= total and abs(won / total - values[field]) < 1e-8:
+                name = "service_points_total" if rate == "service_points_won" else "return_points_total"
+                values[f"{prefix}_{name}"] = float(total)
+
+    # Complementary service/return denominators describe the same points.
+    for prefix, opponent in (("p1", "p2"), ("p2", "p1")):
+        for own_rate, own_total, other_rate, other_total in (
+            ("service_points_won", "service_points_total",
+             "return_points_won", "return_points_total"),
+            ("return_points_won", "return_points_total",
+             "service_points_won", "service_points_total"),
+        ):
+            rate = values.get(f"{prefix}_{own_rate}")
+            complementary = values.get(f"{opponent}_{other_rate}")
+            points = values.get(f"{prefix}_{own_total}")
+            if (rate is not None and complementary is not None and points is not None
+                    and abs(rate + complementary - 1.) < 1e-8):
+                values.setdefault(f"{opponent}_{other_total}", points)
+
 
     if not values:
         raise NoSupportedStatisticsError("Statistics contain no supported rate/count fields; no imputation performed")

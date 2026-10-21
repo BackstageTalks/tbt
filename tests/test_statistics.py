@@ -397,3 +397,19 @@ def test_break_point_counts_without_denominators_cannot_fake_rates():
     assert stats['p1_aces'] == 2
     assert stats['p2_aces'] == 0
     assert not any('break_point' in field for field in stats)
+
+
+def test_verified_service_and_return_denominators_are_preserved_without_guessing():
+    stats = parse_statistics(_tennisapi_rate_sample(), home_is_player1=True)
+    assert stats["p1_service_points_total"] == 64
+    assert stats["p1_return_points_total"] == 67
+    assert stats["p2_service_points_total"] == 67
+    assert stats["p2_return_points_total"] == 64
+
+    percent_only = {"statistics": [{"period": "ALL", "groups": [{"statisticsItems": [
+        {"key": "servicePointsWon", "home": "65%", "away": "58%"},
+    ]}]}]}
+    observed = parse_statistics(percent_only, home_is_player1=True)
+    assert observed["p1_service_points_won"] == .65
+    assert "p1_service_points_total" not in observed
+    assert "p2_return_points_total" not in observed

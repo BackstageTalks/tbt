@@ -114,4 +114,7 @@ def export_portable_model(model) -> dict[str, Any]:
         artifact["tour_calibrators"] = {
             tour: _export_calibrator(cal) for tour, cal in tour_calibrators.items()
         }
+    # Portable callers must know point-weighted feature semantics.
+    if (getattr(model, "metadata", {}) or {}).get("point_weighted_quality", False):
+        artifact["point_weighted_quality"] = True
     return artifact

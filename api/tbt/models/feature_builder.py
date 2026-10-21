@@ -133,6 +133,8 @@ class RecentPerformance:
     break_point_return: float | None = None
     net_efficiency: float | None = None
     aggression_balance: float | None = None
+    serve_points_total: float | None = None
+    return_points_total: float | None = None
 
 
 @dataclass
@@ -194,10 +196,14 @@ class FeatureBuilder:
     """
 
     def __init__(self, *, independent_serve_return: bool = False,
-                 independent_direct_rates: bool = False) -> None:
-        # Artifact-controlled semantics preserve legacy champions and existing 7.2.1 fits.
+                 independent_direct_rates: bool = False,
+                 point_weighted_quality: bool = False) -> None:
+        # Artifact-controlled semantics preserve legacy and already-fitted candidates.
         self.independent_serve_return = bool(independent_serve_return)
         self.independent_direct_rates = bool(independent_direct_rates)
+        self.point_weighted_quality = bool(point_weighted_quality)
+        # Sequential, pre-match tour priors. [won points, total points].
+        self.quality_baselines = defaultdict(lambda: [0., 0.])
         self.players: dict[
             str,
             PlayerState,
@@ -281,6 +287,8 @@ class FeatureBuilder:
                         "break_point_return": item.break_point_return,
                         "net_efficiency": item.net_efficiency,
                         "aggression_balance": item.aggression_balance,
+                        "serve_points_total": item.serve_points_total,
+                        "return_points_total": item.return_points_total,
                     }
                     for item in state.recent
                 ],
@@ -311,6 +319,12 @@ class FeatureBuilder:
             "schema_version": FEATURE_STATE_SCHEMA_VERSION,
             "independent_serve_return": self.independent_serve_return,
             "independent_direct_rates": self.independent_direct_rates,
+            "point_weighted_quality": self.point_weighted_quality,
+            "quality_baselines": [
+                {"tour": tour, "surface": surface, "field": field,
+                 "won": float(values[0]), "points": float(values[1])}
+                for (tour, surface, field), values in sorted(self.quality_baselines.items())
+            ],
             "players": players,
             "h2h": h2h,
             "surface_h2h": surface_h2h,
@@ -323,6 +337,8 @@ class FeatureBuilder:
             if isinstance(payload, dict) else False,
             independent_direct_rates=bool(payload.get("independent_direct_rates", False))
             if isinstance(payload, dict) else False,
+            point_weighted_quality=bool(payload.get("point_weighted_quality", False))
+            if isinstance(payload, dict) else False,
         )
         if not isinstance(payload, dict):
             return builder
@@ -332,6 +348,18 @@ class FeatureBuilder:
                 f"Unsupported FeatureBuilder state schema {version}; "
                 f"expected 1, 2, 3 or {FEATURE_STATE_SCHEMA_VERSION}"
             )
+
+        for raw in payload.get("quality_baselines") or []:
+            if not isinstance(raw, dict):
+                continue
+            key = (str(raw.get("tour") or ""), str(raw.get("surface") or ""),
+                   str(raw.get("field") or ""))
+            won, points = float(raw.get("won") or 0), float(raw.get("points") or 0)
+            if (key[0] in {"atp", "wta"} and key[1]
+                    and key[2] in {"serve_quality", "return_quality"}
+                    and math.isfinite(won) and math.isfinite(points)
+                    and 0 <= won <= points):
+                builder.quality_baselines[key] = [won, points]
 
         raw_players = payload.get("players")
         if isinstance(raw_players, dict):
@@ -387,6 +415,8 @@ class FeatureBuilder:
                                 break_point_return=item.get("break_point_return"),
                                 net_efficiency=item.get("net_efficiency"),
                                 aggression_balance=item.get("aggression_balance"),
+                                serve_points_total=item.get("serve_points_total"),
+                                return_points_total=item.get("return_points_total"),
                             )
                         )
                 builder.players[str(key)] = state
@@ -618,6 +648,51 @@ class FeatureBuilder:
             ),
             prior_weight=5.0,
         )
+
+    def _quality_estimate(
+        self, state: PlayerState, now: datetime, field_name: str, *,
+        tour: str, surface: str | None = None,
+    ) -> float | None:
+        """Research-only point-weighted rate with point-in-time tour prior.
+
+        Old artifacts and observations without verified denominators retain the
+        existing recency-weighted estimator. Never infer a denominator from a
+        percentage or use current/future matches as the prior.
+        """
+        fallback = self._stat_quality(state, now, field_name, surface=surface)
+        if not self.point_weighted_quality or field_name not in {
+                "serve_quality", "return_quality"}:
+            return fallback
+        key = stats_surface_key(surface) if surface else "all"
+        baseline = self.quality_baselines.get((str(tour).lower(), key, field_name))
+        if baseline is None or baseline[1] < 1000:
+            baseline = self.quality_baselines.get((str(tour).lower(), "all", field_name))
+        if baseline is None or baseline[1] < 1000:
+            return fallback
+        prior = baseline[0] / baseline[1]
+        points_field = ("serve_points_total" if field_name == "serve_quality"
+                        else "return_points_total")
+        numerator, denominator = 200. * prior, 200.
+        with_rates, with_counts = 0, 0
+        for item in state.recent:
+            if surface and key != "unknown" and stats_surface_key(item.surface) != key:
+                continue
+            value = getattr(item, field_name)
+            if value is None:
+                continue
+            with_rates += 1
+            count = getattr(item, points_field, None)
+            if (count is None or not math.isfinite(float(count))
+                    or not 0 < float(count) <= 3000 or not 0 <= float(value) <= 1):
+                continue
+            with_counts += 1
+            age = max((now - item.played_at).total_seconds() / 86400., 0.)
+            weight = min(float(count), 250.) * (0.5 ** (age / 120.))
+            numerator += weight * float(value)
+            denominator += weight
+        if not with_counts or 2 * with_counts < with_rates:
+            return fallback
+        return numerator / denominator
 
     def _h2h_advantage(
         self,
@@ -1405,28 +1480,20 @@ class FeatureBuilder:
             else 0.0
         )
 
-        serve1 = self._stat_quality(
-            p1,
-            match.scheduled_at,
-            "serve_quality",
+        serve1 = self._quality_estimate(
+            p1, match.scheduled_at, "serve_quality", tour=match.tour,
         )
 
-        serve2 = self._stat_quality(
-            p2,
-            match.scheduled_at,
-            "serve_quality",
+        serve2 = self._quality_estimate(
+            p2, match.scheduled_at, "serve_quality", tour=match.tour,
         )
 
-        return1 = self._stat_quality(
-            p1,
-            match.scheduled_at,
-            "return_quality",
+        return1 = self._quality_estimate(
+            p1, match.scheduled_at, "return_quality", tour=match.tour,
         )
 
-        return2 = self._stat_quality(
-            p2,
-            match.scheduled_at,
-            "return_quality",
+        return2 = self._quality_estimate(
+            p2, match.scheduled_at, "return_quality", tour=match.tour,
         )
 
         serve_known = serve1 is not None and serve2 is not None
@@ -1436,17 +1503,21 @@ class FeatureBuilder:
         return_usable = return_known if self.independent_serve_return else bool(stats_known)
 
         surface_key = stats_surface_key(match.surface)
-        surface_serve1 = self._stat_quality(
-            p1, match.scheduled_at, "serve_quality", surface=surface_key
+        surface_serve1 = self._quality_estimate(
+            p1, match.scheduled_at, "serve_quality", tour=match.tour,
+            surface=surface_key
         )
-        surface_serve2 = self._stat_quality(
-            p2, match.scheduled_at, "serve_quality", surface=surface_key
+        surface_serve2 = self._quality_estimate(
+            p2, match.scheduled_at, "serve_quality", tour=match.tour,
+            surface=surface_key
         )
-        surface_return1 = self._stat_quality(
-            p1, match.scheduled_at, "return_quality", surface=surface_key
+        surface_return1 = self._quality_estimate(
+            p1, match.scheduled_at, "return_quality", tour=match.tour,
+            surface=surface_key
         )
-        surface_return2 = self._stat_quality(
-            p2, match.scheduled_at, "return_quality", surface=surface_key
+        surface_return2 = self._quality_estimate(
+            p2, match.scheduled_at, "return_quality", tour=match.tour,
+            surface=surface_key
         )
         surface_serve_known = (
             surface_key != "unknown"
@@ -2138,6 +2209,15 @@ class FeatureBuilder:
             if p2_attack is not None and p2_unforced is not None else None
         )
 
+        def verified_points(prefix: str, metric: str) -> float | None:
+            value = self._num(stats.get(f"{prefix}_{metric}_points_total"))
+            return float(value) if value is not None and 0 < value <= 3000 else None
+
+        p1_serve_n = verified_points("p1", "service")
+        p1_return_n = verified_points("p1", "return")
+        p2_serve_n = verified_points("p2", "service")
+        p2_return_n = verified_points("p2", "return")
+
         p1.recent.append(
             RecentPerformance(
                 match.scheduled_at,
@@ -2160,6 +2240,8 @@ class FeatureBuilder:
                 break_point_return=rich_rate("p1", "break_point_return_win"),
                 net_efficiency=rich_rate("p1", "net_points_win"),
                 aggression_balance=p1_aggression,
+                serve_points_total=p1_serve_n,
+                return_points_total=p1_return_n,
             )
         )
 
@@ -2185,8 +2267,26 @@ class FeatureBuilder:
                 break_point_return=rich_rate("p2", "break_point_return_win"),
                 net_efficiency=rich_rate("p2", "net_points_win"),
                 aggression_balance=p2_aggression,
+                serve_points_total=p2_serve_n,
+                return_points_total=p2_return_n,
             )
         )
+
+        # Update aggregate priors only *after* the current match's features
+        # have been snapshotted; batch replay snapshots entire UTC days first.
+        if self.point_weighted_quality:
+            for quality, count, field in (
+                (p1_serve, p1_serve_n, "serve_quality"),
+                (p2_serve, p2_serve_n, "serve_quality"),
+                (p1_return, p1_return_n, "return_quality"),
+                (p2_return, p2_return_n, "return_quality"),
+            ):
+                if quality is None or count is None or not 0 <= quality <= 1:
+                    continue
+                for bucket in {"all", surface_key}:
+                    totals = self.quality_baselines[(match.tour.lower(), bucket, field)]
+                    totals[0] += float(quality) * count
+                    totals[1] += count
 
         (
             p1.overall_elo,
