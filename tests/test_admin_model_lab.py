@@ -330,7 +330,7 @@ class TestWorkerHeartbeat(unittest.TestCase):
         from pathlib import Path
         path = Path(__file__).resolve().parents[1] / ".github/workflows/admin-training-worker.yml"
         source = path.read_text(encoding="utf-8")
-        self.assertNotIn("\\n  schedule:", source)
+        self.assertNotIn("\n  schedule:", source)
         self.assertIn("workflow_run:", source)
         self.assertIn("Prediction fixture schedule and match status", source)
         self.assertIn("Tennis data and predictions", source)
