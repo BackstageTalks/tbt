@@ -245,7 +245,7 @@ def test_folder_tour_conflict_and_ambiguous_parent_are_quarantined(tmp_path):
         tmp_path, source, "/10_POVODNE_ZDROJE_ARCHIVY/ATP/X (99).csv"
     )
     result = normalize(incoming, tmp_path / "conflict", drive_manifest_path=manifest)
-    assert result["counts"]["normalized_rows"] == 0
+    assert result["counts"].get("normalized_rows", 0) == 0
     assert result["counts"]["reason_tour_provenance_conflict"] == 1
 
     row["tour"] = ""
