@@ -1,5 +1,9 @@
 name: BlinQ admin training worker
 on:
+  # Poll the existing signed Admin queues even when no other workflow finishes.
+  # Avoid the crowded top of the hour; no new workflow or provider requests.
+  schedule:
+    - cron: '7,37 * * * *'
   workflow_dispatch:
   workflow_run:
     workflows: [Test and deploy, Hourly prediction match status, BlinQ protected frozen-CDB candidate training, CDB Drive Inbox - guarded external file import, BlinQ read-only champion vs challenger shadow audit, BlinQ private model calibration monitor, Activate verified 7.2.1 shadow candidate]
@@ -13,9 +17,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sync:
-    # Deployment workflow completion guarantees the new signed API routes
-    # exist before the first Model Lab status is synchronized.
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'skipped'
+    # Scheduled heartbeat also processes queued Admin requests if upstream
+    # Actions are quiet. The workers are at-most-once and fail closed.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
