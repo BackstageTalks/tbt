@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Night-only PropLine history gap targeting and guarded 2026 CDB import.
 
-Only truly missing aces/double faults are eligible for additive canonical writes.
+Only genuinely absent aces, double faults and *converted break-point counts*
+are eligible for additive canonical writes. Other raw box-score stats remain
+available in SHA-pinned research archives until separately schema-approved.
 No CLV code, model training, score guessing, or rate-field inference.
 """
 from __future__ import annotations
@@ -32,7 +34,10 @@ YEAR = 2026
 ASSET = "history-2026.parquet"
 MANIFEST = "history_manifest.json"
 BUNDLE = "_tbt_bundle_manifest.json"
-STAT_FIELDS = ("aces", "double_faults")
+STAT_FIELDS = ("aces", "double_faults", "return_break_points_converted_count")
+APPROVED_COUNT_FIELDS = frozenset({"p1_return_break_points_converted_count",
+                                    "p2_return_break_points_converted_count"})
+PROVIDER_COUNT_FIELDS = ("aces", "dblfaults", "breakpts_w")
 PLAYER_LOG_LIMIT = 600
 
 
@@ -180,6 +185,20 @@ def plan_targets(matches, now, *, max_names=PLAYER_LOG_LIMIT):
 
 
 
+def recent_event_targets(matches, now):
+    """Recent exact CDB gaps which can be fetched by an already-final event ID."""
+    grouped = defaultdict(list)
+    for m in matches:
+        if m.is_completed and str(m.tour or "").lower() in {"atp", "wta"}:
+            pair = tuple(sorted((norm_text(m.player1_name), norm_text(m.player2_name))))
+            grouped[(m.scheduled_at.date().isoformat(), pair)].append(m)
+    earliest = now.date().toordinal() - 3
+    return [{"date_utc": day, "players": list(pair)}
+            for (day, pair), rows in sorted(grouped.items(), reverse=True)
+            if len(rows) == 1 and _is_target(rows[0], now)
+            and datetime.fromisoformat(day).date().toordinal() >= earliest][:500]
+
+
 def gap_inventory(matches, now):
     """Read-only, identity-safe API PRO gap counts on the current 2026 CDB."""
     by_day_pair = Counter()
@@ -209,6 +228,8 @@ def gap_inventory(matches, now):
         counts["missing_cells"] += len(missing)
         counts["missing_ace_cells"] += sum(field.endswith("_aces") for field in missing)
         counts["missing_df_cells"] += sum(field.endswith("_double_faults") for field in missing)
+        counts["missing_break_points_won_cells"] += sum(
+            field.endswith("_return_break_points_converted_count") for field in missing)
         by_reason[reason] += 1
         cells_by_reason[reason] += len(missing)
     return {
@@ -227,6 +248,12 @@ def _number(value):
 
 
 def _games(reports: Path):
+    """Yield original player logs and validated per-player views of raw event stats.
+
+    Event-stage payloads stay untouched in the SHA-verified raw archive. Only
+    documented flat (player_name, stat_type, stat_value) final observations
+    are projected into the existing strict player-log linker.
+    """
     for path in sorted(reports.glob("*.json.gz")):
         with gzip.open(path, "rt", encoding="utf-8") as stream:
             bundle = json.load(stream)
@@ -235,6 +262,47 @@ def _games(reports: Path):
         for record in bundle.get("records") or []:
             if record.get("stage") == "player_game_stats_probe":
                 yield path.name, record
+            if record.get("stage") != "event_stats_probe":
+                continue
+            event = record.get("payload")
+            if not isinstance(event, dict) or event.get("status") != "final":
+                continue
+            rows = event.get("stats")
+            home = norm_text(event.get("home_team"))
+            away = norm_text(event.get("away_team"))
+            if (not isinstance(rows, list) or not home or not away
+                    or home == away or not str(event.get("id") or "").isdigit()):
+                continue
+            players = {}
+            conflict = False
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                player = norm_text(row.get("player_name"))
+                stat = row.get("stat_type")
+                if player not in {home, away} or stat not in PROVIDER_COUNT_FIELDS:
+                    continue
+                value = _number(row.get("stat_value"))
+                if value is None:
+                    continue
+                vals = players.setdefault(player, {})
+                if stat in vals and vals[stat] != value:
+                    conflict = True
+                    break
+                vals[stat] = value
+            if conflict:
+                continue
+            for player, stats in players.items():
+                yield path.name, {
+                    "stage": "player_game_stats_probe", "player_name": player,
+                    "payload": {"games": [{
+                        "status": "final", "event_id": str(event["id"]),
+                        "commence_time": event.get("commence_time"),
+                        "home_team": event.get("home_team"),
+                        "away_team": event.get("away_team"),
+                        "stats": stats,
+                    }]},
+                }
 
 
 def stage_additions(matches, reports: Path, now):
@@ -260,7 +328,7 @@ def stage_additions(matches, reports: Path, now):
             if not isinstance(game, dict) or game.get("status") != "final":
                 continue
             stats = game.get("stats")
-            if not isinstance(stats, dict) or not any(key in stats for key in ("aces", "dblfaults")):
+            if not isinstance(stats, dict) or not any(key in stats for key in PROVIDER_COUNT_FIELDS):
                 continue
             try:
                 observed = datetime.fromisoformat(str(game.get("commence_time") or "").replace("Z", "+00:00"))
@@ -302,10 +370,20 @@ def stage_additions(matches, reports: Path, now):
                 counters["source_pair_disagree"] += 1
                 continue
             own, other = name_to_side[player], name_to_side[away if player == home else home]
+            # A converted count must never exceed supplied opportunity count.
+            attempts = _number(stats.get("breakpts"))
+            converted = _number(stats.get("breakpts_w"))
+            if attempts is not None and converted is not None and converted > attempts:
+                rejected.add(mid)
+                counters["impossible_break_point_counts"] += 1
+                continue
             candidates = (
                 (f"{own}_aces", _number(stats.get("aces"))),
                 (f"{own}_double_faults", _number(stats.get("dblfaults"))),
                 (f"{other}_aces", _number(stats.get("opp_aces"))),
+                (f"{own}_return_break_points_converted_count", converted),
+                (f"{other}_return_break_points_converted_count",
+                 _number(stats.get("opp_breakpts_w"))),
             )
             for key, val in candidates:
                 if val is None:
@@ -343,6 +421,8 @@ def stage_additions(matches, reports: Path, now):
                                                     "nonconflicting_stat_counts"]}]})
         counters["matches_staged"] += 1
         counters["new_stat_cells_staged"] += len(additions)
+        for key in additions:
+            counters["new_" + key.split("_", 1)[1] + "_staged"] += 1
     stage.sort(key=lambda v: v["match_id"])
     return stage, dict(counters)
 
@@ -374,6 +454,7 @@ def main():
             "api_pro_gap_inventory": inventory,
             "generated_at_utc": now.isoformat(), "targets": targets,
             "candidate_players": len(targets),
+            "recent_event_targets": recent_event_targets(matches, now),
             "explicit_api_pro_skipped_players": sum(
                 any(reason.startswith("api_pro_unavailable_")
                     or reason == "api_pro_skipped_no_event_id"
@@ -418,7 +499,8 @@ def main():
                 raise RuntimeError("Canonical match changed during staging")
             m.stats = {**dict(m.stats or {}), **row["incoming_stats"]}
         written = write_exact_stats_partition(work, YEAR, before,
-                                              {r["match_id"] for r in staged})
+                                              {r["match_id"] for r in staged},
+                                              approved_count_fields=APPROVED_COUNT_FIELDS)
         expected = sum(len(row["incoming_stats"]) for row in staged)
         if written["added_values"] != expected or written["existing_values_overwritten"]:
             raise RuntimeError("Canonical additions count differs from staged input")
@@ -426,7 +508,8 @@ def main():
             [work / ASSET, work / MANIFEST])
         remote = args.history_dir.parent / "readback"
         persisted, readback_sha = fetch_current(remote)
-        verified = verify_persisted(recent, remote, staged, [YEAR])
+        verified = verify_persisted(recent, remote, staged, [YEAR],
+                                    approved_count_fields=APPROVED_COUNT_FIELDS)
         if (verified["status"] != "verified" or verified["added_values"] != expected
                 or verified["existing_values_overwritten"] != 0
                 or len(persisted) != len(before)):
