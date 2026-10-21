@@ -144,3 +144,67 @@ def test_wta_tour_calibrator_requires_both_proper_scores_on_calibration_only():
     assert not approved("wta", "platt", "identity", .515, .520, .230, .240)
     assert not approved("atp", "platt", "identity", .515, .520, .230, .240)
     assert not approved("atp", "identity", "identity", .480, .520, .220, .240)
+
+
+def test_atp_blend_changes_only_atp_rows_and_legacy_ignores_optional_fields():
+    model = TennisEnsemble()
+    model._symmetric_pair = lambda frame: (np.array([.8, .8, .2, .2]),
+                                            np.array([.6, .6, .4, .4]))
+    model.blend_weight = .5
+    model.elo_weight = 0.
+    frame = pd.DataFrame({"tour_atp": [1., 0., 1., 0.],
+                          "elo_probability": [.9, .9, .1, .1]})
+    pooled = model._raw(frame)
+    np.testing.assert_allclose(pooled, [.7, .7, .3, .3])
+    model.atp_blend_weight, model.atp_elo_weight = 0., 1.
+    np.testing.assert_allclose(model._raw(frame), [.9, .7, .1, .3])
+    del model.atp_blend_weight
+    del model.atp_elo_weight
+    np.testing.assert_allclose(model._raw(frame), pooled)
+
+
+def test_atp_blend_calibration_rejects_small_or_invalid_segments():
+    n = 400
+    linear = np.full(n, .55)
+    boost = np.full(n, .6)
+    elo = np.full(n, .7)
+    targets = (np.arange(n) % 2).astype(int)
+    selected, evidence = TennisEnsemble._choose_atp_blend(
+        linear, boost, elo, targets, np.ones(n), 260, .5, 0.)
+    assert selected is None
+    assert evidence["status"] == "INSUFFICIENT_DISJOINT_ATP"
+    with pytest.raises(ValueError):
+        TennisEnsemble._choose_atp_blend(
+            linear, boost, elo, targets, np.full(n, np.nan), 260, .5, 0.)
+
+
+def test_atp_blend_selects_only_when_disjoint_scores_and_accuracy_improve():
+    rng = np.random.default_rng(91021)
+    n, split = 2000, 1100
+    # Elo has signal for ATP; linear/boost have none.
+    target_prob = rng.uniform(.05, .95, n)
+    labels = rng.binomial(1, target_prob)
+    linear = np.full(n, .5)
+    boost = np.full(n, .5)
+    tours = np.ones(n)
+    chosen, evidence = TennisEnsemble._choose_atp_blend(
+        linear, boost, target_prob, labels, tours, split, .5, 0.)
+    assert chosen is not None
+    assert chosen[1] == 1.
+    assert evidence["status"] == "SELECTED"
+    assert evidence["candidate_selection_log_loss"] < evidence["pooled_selection_log_loss"]
+    assert evidence["candidate_selection_brier"] <= evidence["pooled_selection_brier"]
+    # Neutral alternatives must not force an ATP weight change.
+    held, rejected = TennisEnsemble._choose_atp_blend(
+        np.full(n, .5), np.full(n, .5), np.full(n, .5),
+        labels, tours, split, .5, 0.)
+    assert held is None
+    assert rejected["status"] == "GLOBAL_RETAINED"
+
+
+def test_frozen_atp_blend_rejects_half_configurations_before_fit():
+    model = TennisEnsemble()
+    with pytest.raises(ValueError, match="requires both"):
+        model.fit_frozen(pd.DataFrame(), pd.DataFrame(), blend_weight=.5,
+                         elo_weight=0., calibrator_kind="identity",
+                         atp_blend_weight=.6)
