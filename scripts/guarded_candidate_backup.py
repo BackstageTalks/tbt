@@ -371,6 +371,23 @@ def prepare():
     CERT.parent.mkdir(parents=True, exist_ok=True)
     CERT.write_text(json.dumps(cert, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     validate_certificate()
+    # The per-run release is reserved under the same global writer lock.
+    # It must be empty until the fitter has independently reacquired that
+    # lock for publication; no release may be created during lock-free fit.
+    candidate_tag = cert["candidate_tag"]
+    candidate_probe = subprocess.run(
+        ["gh", "release", "view", candidate_tag, "-R", REPO],
+        capture_output=True, text=True)
+    if candidate_probe.returncode == 0 or (
+        "404" not in candidate_probe.stderr and
+        "not found" not in candidate_probe.stderr.lower()
+    ):
+        raise RuntimeError("Candidate immutable release already exists or state unknown")
+    run("gh", "release", "create", candidate_tag, "-R", REPO,
+        "--latest=false", "--title", "BlinQ frozen candidate pending verified fit",
+        "--notes", "Empty reservation; never publish without re-acquiring CDB global writer lock.")
+    if _remote_backup_assets(candidate_tag):
+        raise RuntimeError("Reserved candidate release must be empty")
     print(json.dumps({"status": cert["status"], "backup_tag": tag,
                       "asset_count": len(rows)+1, "canonical_matches": matches,
                       "candidate_tag": cert["candidate_tag"]}), flush=True)
