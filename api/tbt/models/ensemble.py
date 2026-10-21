@@ -126,6 +126,18 @@ class TennisEnsemble:
             return ProbabilityCalibrator()
         return ProbabilityCalibrator(kind, model)
 
+    @staticmethod
+    def _tour_calibration_approved(tour, kind, global_kind, loss, baseline_loss,
+                                   brier, baseline_brier, margin=0.008):
+        """Approve WTA only when both proper scoring rules do not regress.
+
+        Selection uses disjoint calibration days, NEVER the future holdout.
+        ATP retains the original loss-only choice contract.
+        """
+        if kind == global_kind or loss + margin >= baseline_loss:
+            return False
+        return tour != "wta" or brier <= baseline_brier + 1e-12
+
     @classmethod
     def _choose_tour_calibrators(cls, raw, labels, tour_atp, split, global_selected):
         """Select tour calibration using ONLY held-out calibration days.
@@ -153,6 +165,7 @@ class TennisEnsemble:
                 continue
             baseline = cls._calibrated(global_selected, raw[select_idx])
             baseline_loss = float(log_loss(labels[select_idx], baseline, labels=[0, 1]))
+            baseline_brier = float(np.mean((baseline - labels[select_idx]) ** 2))
             alternatives = []
             for kind in ("identity", "platt", "isotonic"):
                 if kind == "isotonic" and (len(fit_idx) < 450 or
@@ -161,12 +174,18 @@ class TennisEnsemble:
                 alternative = cls._fit_calibrator(kind, raw[fit_idx], labels[fit_idx])
                 p = cls._calibrated(alternative, raw[select_idx])
                 score = float(log_loss(labels[select_idx], p, labels=[0, 1]))
-                alternatives.append((score, kind))
-            best_loss, best_kind = min(alternatives)
-            # A deliberate margin prevents per-tour overfit on a small
-            # calibration selection slice. The global default always remains.
+                brier = float(np.mean((p - labels[select_idx]) ** 2))
+                alternatives.append((score, brier, kind))
+            # Never pick a WTA calibrator which improves log loss but worsens
+            # Brier on the disjoint selection slice. Retain global otherwise.
             margin = 0.008
-            accepted = best_loss + margin < baseline_loss and best_kind != global_selected.kind
+            approved = [entry for entry in alternatives
+                        if cls._tour_calibration_approved(
+                            tour, entry[2], global_selected.kind,
+                            entry[0], baseline_loss, entry[1], baseline_brier, margin)]
+            best_loss, best_brier, best_kind = min(
+                approved if approved else alternatives, key=lambda row: row[0])
+            accepted = bool(approved)
             if accepted:
                 all_idx = np.flatnonzero(mask)
                 selected[tour] = cls._fit_calibrator(best_kind, raw[all_idx], labels[all_idx])
@@ -175,7 +194,10 @@ class TennisEnsemble:
                 "fit_n": len(fit_idx), "selection_n": len(select_idx),
                 "global_selection_log_loss": baseline_loss,
                 "best_selection_log_loss": best_loss,
+                "global_selection_brier_score": baseline_brier,
+                "best_selection_brier_score": best_brier,
                 "selected_kind": best_kind if accepted else global_selected.kind,
+                "wta_brier_non_regression_required": tour == "wta",
                 "minimum_improvement": margin,
             }
         return selected, evidence
