@@ -18,6 +18,7 @@ PARTITION = "model-lab-queue"
 WORKFLOWS = {
     "import_drive": "cdb-drive-inbox.yml",
     "refresh_tests": "model-calibration-monitor.yml",
+    "audit_shadow": "model-shadow-evaluation-readonly.yml",
     "activate_shadow": "activate-shadow-candidate.yml",
 }
 REQUIRED_ASSETS = {"model.joblib", "training_report.json", "_tbt_bundle_manifest.json"}
