@@ -8,7 +8,9 @@ import pytest
 from tbt.services.frozen_721_research import (
     FROZEN_721_TAG, FROZEN_721_VERSION, FROZEN_721_MODEL_SHA256
 )
-from audit_frozen_721_segments import build_segment_report, MIN_CAPTURE_LEAD_SECONDS
+from audit_frozen_721_segments import (
+    build_segment_report, MIN_CAPTURE_LEAD_SECONDS, VIP_PROBABILITY_TIERS,
+)
 
 PROD = "v201-20260925T204608601094Z"
 START = datetime(2026, 10, 21, 15, tzinfo=timezone.utc)
@@ -139,3 +141,99 @@ def test_accuracy_interval_only_with_thirty_deduplicated_rows():
     assert report["overall"]["paired_diagnostics"]["paired_accuracy_difference_ci95"] is not None
     assert all(-1 <= x <= 1 for x in
                report["overall"]["paired_diagnostics"]["paired_accuracy_difference_ci95"])
+
+
+def test_vip_raw_confidence_cascade_keeps_all_above_first_sufficient_tier():
+    p = sample(count=6)
+    for row, probability in zip(p["rows"], (.95, .84, .79, .77, .72, .69)):
+        row["challenger_player1_probability"] = probability
+    result = build_segment_report(p)["candidate_vip_raw_confidence_scorecard"]
+    assert result["fixed_tiers"] == [.80, .78, .75, .70]
+    assert result["days_with_captured_cohort"] == 1
+    assert result["days_with_3plus_raw_qualifiers"] == 1
+    day = next(iter(result["daily"].values()))
+    assert day["applied_raw_confidence_floor"] == .78
+    assert day["selected"] == 3
+    assert result["all_selected"]["settled"] == 3
+    assert result["core_80_plus"]["settled"] == 2
+    assert result["fallback_below_80"]["settled"] == 1
+    assert result["all_selected"]["target_80_evidenced"] is False
+    assert result["by_tour"]["ATP"]["selected"]["settled"] == 2
+    assert result["by_tour"]["WTA"]["selected"]["settled"] == 1
+    assert result["model_promoted"] is False
+    assert result["provider_requests"] == 0
+    assert "odds" in str(result["limitations"]).lower()
+
+
+def test_vip_raw_confidence_above_three_is_uncapped():
+    p = sample(count=6)
+    for row in p["rows"]:
+        row["challenger_player1_probability"] = .85
+    data = build_segment_report(p)["candidate_vip_raw_confidence_scorecard"]
+    assert data["all_selected"]["offered_before_settlement"] == 6
+    assert data["core_80_plus"]["settled"] == 6
+    assert data["fallback_below_80"]["settled"] == 0
+    assert next(iter(data["daily"].values()))["applied_raw_confidence_floor"] == .80
+
+
+def test_vip_raw_confidence_daily_shortfall_stops_at_70_and_no_post_selection_labels():
+    p = sample(count=3)
+    for row, probability in zip(p["rows"], (.81, .77, .69)):
+        row["challenger_player1_probability"] = probability
+    result = build_segment_report(p)["candidate_vip_raw_confidence_scorecard"]
+    day = next(iter(result["daily"].values()))
+    assert day["applied_raw_confidence_floor"] == .70
+    assert day["selected"] == 2
+    assert day["below_three"] is True
+    assert result["all_selected"]["offered_before_settlement"] == 2
+    assert result["fixed_cumulative_thresholds"]["0.7"]["offered_before_settlement"] == 2
+
+
+def test_vip_raw_confidence_pending_consumes_capacity_but_not_hit_rate():
+    p = sample(count=5)
+    for row in p["rows"]:
+        row["challenger_player1_probability"] = .86
+    pending = p["rows"][0]
+    pending["status"] = "pending"
+    pending["target_player1_win"] = None
+    pending["result_winner_id"] = None
+    pending.pop("settled_at")
+    result = build_segment_report(p)["candidate_vip_raw_confidence_scorecard"]
+    assert result["all_selected"]["offered_before_settlement"] == 5
+    assert result["all_selected"]["settled"] == 4
+    assert result["all_selected"]["pending_or_void"] == 1
+    assert result["all_selected"]["hit_rate"] == .5
+    assert result["all_selected"]["hit_rate_ci95_wilson"] is not None
+    assert result["all_selected"]["target_80_evidenced"] is False
+
+
+def test_vip_raw_confidence_does_not_score_near_start_and_uses_slovak_local_day():
+    p = sample(count=2)
+    # October 21st 03:00 UTC = 05:00 Bratislava, on previous betting day.
+    # 05:00 UTC = 07:00 Bratislava, on new betting day.
+    p["rows"][0]["scheduled_at"] = "2026-10-21T03:00:00+00:00"
+    p["rows"][0]["captured_at"] = "2026-10-21T01:00:00+00:00"
+    p["rows"][0]["settled_at"] = "2026-10-21T09:00:00+00:00"
+    p["rows"][1]["scheduled_at"] = "2026-10-21T05:00:00+00:00"
+    p["rows"][1]["captured_at"] = "2026-10-21T03:00:00+00:00"
+    p["rows"][1]["settled_at"] = "2026-10-21T11:00:00+00:00"
+    p["rows"][0]["challenger_player1_probability"] = .82
+    p["rows"][1]["challenger_player1_probability"] = .78
+    daily = build_segment_report(p)["candidate_vip_raw_confidence_scorecard"]
+    assert set(daily["daily"]) == {"2026-10-20", "2026-10-21"}
+    # Quarantine the second prediction, do not infer an outcome from its confidence.
+    p["rows"][1]["captured_at"] = "2026-10-21T04:50:01+00:00"
+    result = build_segment_report(p)
+    assert result["quarantined_capture_less_than_15m_before_start"] == 1
+    assert result["candidate_vip_raw_confidence_scorecard"]["days_with_captured_cohort"] == 1
+
+
+def test_vip_raw_confidence_synthetic_100pct_does_not_certify_80_from_small_n():
+    p = sample(count=10)
+    for row in p["rows"]:
+        row["challenger_player1_probability"] = .87 if row["target_player1_win"] else .13
+    result = build_segment_report(p)["candidate_vip_raw_confidence_scorecard"]
+    assert result["all_selected"]["hit_rate"] == 1.0
+    assert result["all_selected"]["settled"] == 10
+    assert result["all_selected"]["target_80_evidenced"] is False
+    assert result["all_selected"]["target_87_evidenced"] is False
