@@ -168,6 +168,14 @@ def predict_probability(artifact: Mapping, features: Mapping[str, float]) -> flo
 
     probability = _clip(probability, 0.01, 0.99)
     calibrator = artifact.get("calibrator") or {"kind": "identity"}
+    tour_calibrators = artifact.get("tour_calibrators") or {}
+    if tour_calibrators:
+        if "tour_atp" not in features:
+            raise ValueError("Tour calibration requires tour_atp")
+        tour = float(features["tour_atp"])
+        if not math.isfinite(tour) or tour not in (0., 1.):
+            raise ValueError("Invalid tour_atp")
+        calibrator = tour_calibrators.get("atp" if tour == 1. else "wta", calibrator)
     if symmetric:
         calibrated = 0.5 * (
             _calibrate(calibrator, probability)
