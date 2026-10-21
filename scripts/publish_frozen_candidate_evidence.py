@@ -95,10 +95,26 @@ def persist_verified(payload):
         body["sha"]=json.loads(existing.stdout)["sha"]
     elif "HTTP 404" not in existing.stderr:
         raise RuntimeError("Cannot safely inspect existing private candidate evidence")
-    run("gh","api","--method","PUT",f"repos/{DATA_REPO}/contents/{PRIVATE_PATH}",
-        "--input","-",input=json.dumps(body))
-    remote=json.loads(run("gh","api",f"repos/{DATA_REPO}/contents/{PRIVATE_PATH}"))
-    saved=base64.b64decode(remote["content"])
+    written=json.loads(run("gh","api","--method","PUT",
+                           f"repos/{DATA_REPO}/contents/{PRIVATE_PATH}",
+                           "--input","-",input=json.dumps(body)))
+    # Read back the exact immutable commit returned by the write, not an
+    # eventually consistent default-branch view of the mutable 'latest' path.
+    # This also prevents a concurrent newer run from being mistaken for ours.
+    commit_sha=(written.get("commit") or {}).get("sha")
+    content_sha=(written.get("content") or {}).get("sha")
+    if not all(isinstance(v,str) and len(v)==40
+               and all(c in "0123456789abcdefABCDEF" for c in v)
+               for v in (commit_sha,content_sha)):
+        raise RuntimeError("Private candidate evidence write has no immutable readback reference")
+    remote=json.loads(run("gh","api",
+                          f"repos/{DATA_REPO}/contents/{PRIVATE_PATH}?ref={commit_sha}"))
+    if remote.get("sha")!=content_sha or remote.get("encoding")!="base64":
+        raise RuntimeError("Independent persisted candidate evidence blob identity mismatch")
+    try:
+        saved=base64.b64decode(remote["content"])
+    except (KeyError,TypeError,ValueError) as exc:
+        raise RuntimeError("Independent persisted candidate evidence is unreadable") from exc
     if saved!=raw:
         raise RuntimeError("Independent persisted candidate comparison readback mismatch")
     return hashlib.sha256(raw).hexdigest()
