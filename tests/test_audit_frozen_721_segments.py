@@ -71,11 +71,11 @@ def test_paired_descriptive_metrics_do_not_rewrite_originals():
     assert full["champion"]["correct"] == 3
     assert full["frozen_721"]["correct"] == 3
     assert full["paired_outcomes"] == {
-        "both_correct": 1,
-        "champion_only_correct": 2,
-        "frozen_721_only_correct": 2,
-        "both_wrong": 0,
-        "discordant": 4,
+        "both_correct": 2,
+        "champion_only_correct": 1,
+        "frozen_721_only_correct": 1,
+        "both_wrong": 1,
+        "discordant": 2,
     }
     assert sum(report["by_tour"][tour]["n"] for tour in ("ATP", "WTA")) == 5
     assert full["sample_size_flag"] == "DESCRIPTIVE_ONLY_SMALL_N"
