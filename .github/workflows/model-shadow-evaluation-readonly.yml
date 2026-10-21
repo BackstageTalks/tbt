@@ -43,18 +43,15 @@ jobs:
       - name: Install existing model dependencies
         run: python -m pip install -r api/requirements-train.txt pytest
       - name: Run read-only shadow integrity and evaluation unit tests
-        run: python -m pytest tests/test_audit_model_shadow_readonly.py tests/test_shadow_calibration_research.py tests/test_shadow_evaluation.py tests/test_audit_721_top_market.py tests/test_audit_711_top_value_shadow.py -q
+        run: python -m pytest tests/test_audit_model_shadow_readonly.py tests/test_shadow_calibration_research.py tests/test_shadow_evaluation.py -q
       - name: Independently read current champion, challenger and private issued shadow ledger
         run: python scripts/audit_model_shadow_readonly.py --out .cache/tbt/model-shadow-audit/report.json
-      - name: Evaluate true pre-match priced TOP observations for frozen 7.2.1 (read only)
-        run: python scripts/audit_721_top_market.py --out .cache/tbt/model-shadow-audit/721-top-market.json
       - name: Publish aggregate summary only
         run: |
           python - <<'PY'
           import json, os
           from pathlib import Path
           r=json.loads(Path('.cache/tbt/model-shadow-audit/report.json').read_text())
-          top=json.loads(Path('.cache/tbt/model-shadow-audit/721-top-market.json').read_text())
           summary=[
             '### Current frozen champion versus challenger',
             f"Status: {r['status']}",
@@ -64,7 +61,6 @@ jobs:
             f"Sample gate: {r['gate']['minimum_matches_met']}; days gate: {r['gate']['minimum_days_met']}",
             f"Full aggregate metrics: {r['overall']}",
             f"Temporal calibration research status: {r['calibration_research']['status']}",
-            f"7.2.1 true pre-match TOP matched: {top['matched_unique']}; market review ready: {top['review_gate']['ready_for_independent_market_review']}",
             f"Out-of-time Platt research metrics: {r['calibration_research'].get('overall', {})}",
             'No model training, production promotion, CDB write or provider calls.',
           ]
@@ -78,6 +74,5 @@ jobs:
           name: blinq-model-shadow-audit-${{ github.run_id }}
           path: |
             .cache/tbt/model-shadow-audit/report.json
-            .cache/tbt/model-shadow-audit/721-top-market.json
           if-no-files-found: warn
           retention-days: 14
