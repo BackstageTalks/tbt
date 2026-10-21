@@ -2,7 +2,7 @@ name: BlinQ admin training worker
 on:
   workflow_dispatch:
   workflow_run:
-    workflows: [Hourly prediction match status, BlinQ protected frozen-CDB candidate training, CDB Drive Inbox - guarded external file import, BlinQ private model calibration monitor, Activate verified 7.2.1 shadow candidate]
+    workflows: [Hourly prediction match status, BlinQ protected frozen-CDB candidate training, CDB Drive Inbox - guarded external file import, BlinQ read-only champion vs challenger shadow audit, BlinQ private model calibration monitor, Activate verified 7.2.1 shadow candidate]
     types: [completed]
     branches: [main]
 permissions:
