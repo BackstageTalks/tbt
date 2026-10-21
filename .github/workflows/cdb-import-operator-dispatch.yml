@@ -1,4 +1,5 @@
 name: CDB Import - operator one-shot dispatcher
+# Operator request 2026-10-21: SHA-verified ATP/WTA Drive folder provenance salvage; existing guarded importer only; 0 paid API calls.
 
 # Operator entrypoint. Changes to unrelated files never trigger this workflow.
 # Operator request 2026-10-21: owner-authorized checkpointed Drive CDB import; 5 bounded batches, no gate bypass, zero paid provider calls.
