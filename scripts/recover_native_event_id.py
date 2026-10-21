@@ -100,6 +100,96 @@ def candidate_days(canonical, *, start: date, end: date, attempts=None,
              sum(counts[(d, t)] for t in groups[d])) for d in keys[:max_days]]
 
 
+
+def identity_gap_inventory(canonical, *, start: date, end: date,
+                           attempts=None, today: date | None = None,
+                           max_days=40):
+    """Explain why missing TennisApi IDs cannot enter the guarded API queue.
+
+    Counts are aggregate-only, with no player/event IDs or raw matches. This
+    distinguishes an unresolved canonical source-scope from provider calendar
+    cooldowns. It does not generate new identity evidence or authorize writes.
+    """
+    today = today or datetime.now(timezone.utc).date()
+    attempts = attempts or {}
+    reasons = Counter()
+    by_cohort = defaultdict(Counter)
+    eligible_days = defaultdict(int)
+    eligible_tours_by_day = defaultdict(set)
+    counted = 0
+    for match in canonical:
+        day = _day(match)
+        if (str(match.tour or "").lower() not in {"atp", "wta"}
+                or day is None or not start <= day <= end
+                or not getattr(match, "is_completed", False)
+                or not missing_fields(match) or event_id(match) is not None):
+            continue
+        counted += 1
+        claims = _id_claims(match)
+        pair = _pair(match)
+        if claims:
+            reason = "existing_unusable_or_conflicting_event_claims"
+        elif not _category(match):
+            reason = "missing_first_party_category"
+        elif not pair:
+            reason = "missing_or_colliding_player_ids"
+        elif str(match.winner_id or "") not in pair:
+            reason = "winner_outside_pair"
+        elif not _round(match.round_name):
+            reason = "missing_round"
+        else:
+            reason = "eligible_native_calendar"
+            eligible_days[day.isoformat()] += 1
+            eligible_tours_by_day[day.isoformat()].add(str(match.tour).lower())
+        reasons[reason] += 1
+        by_cohort[f"{str(match.tour).lower()}:{day.year}"][reason] += 1
+
+    pending = candidate_days(canonical, start=start, end=end,
+                             attempts=attempts, today=today, max_days=max_days)
+    pending_dates = {day.isoformat() for day, _, _ in pending}
+    cooldown_rows = 0
+    cooldown_days = 0
+    unselected_rows = 0
+    for day, count in eligible_days.items():
+        if day in pending_dates:
+            continue
+        prior = attempts.get(day)
+        if isinstance(prior, dict) and prior.get("at"):
+            try:
+                last = date.fromisoformat(str(prior["at"])[:10])
+                cooldown = 7 if int(prior.get("recovered", 0)) > 0 else 30
+                blocked = (today - last).days < cooldown
+            except (ValueError, TypeError) as exc:
+                raise ValueError("Invalid persisted identity cooldown") from exc
+            if blocked:
+                cooldown_rows += count
+                cooldown_days += 1
+                continue
+        unselected_rows += count
+    if sum(reasons.values()) != counted:
+        raise AssertionError("Identity gap accounting differs from candidate rows")
+    return {
+        "schema": 1,
+        "status": "IDENTITY_GAP_READ_ONLY_INVENTORY",
+        "canonical_missing_or_conflicting_id_rows": counted,
+        "primary_blockers": dict(sorted(reasons.items())),
+        "by_tour_year": {
+            name: dict(sorted(value.items()))
+            for name, value in sorted(by_cohort.items())
+        },
+        "eligible_unique_calendar_days": len(eligible_days),
+        "eligible_native_calendar_rows": reasons["eligible_native_calendar"],
+        "cooldown_blocked_days": cooldown_days,
+        "cooldown_blocked_rows": cooldown_rows,
+        "eligible_rows_outside_top_day_limit": unselected_rows,
+        "scheduled_days": len(pending),
+        "scheduled_eligible_rows": sum(item[2] for item in pending),
+        "native_provider_requests": 0,
+        "cdb_writes": 0,
+        "identity_attested_by_audit": False,
+    }
+
+
 def recover_day(canonical, provider_events, *, day: date):
     """Promote only unique same-provider events to native metadata, in memory.
 

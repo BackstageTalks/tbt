@@ -3,15 +3,18 @@
   "mode": "identity",
   "promote": false,
   "source": "tennisapi1_native_calendar_existing_cdb_identity_provenance",
-  "purpose": "Guarded ATP/WTA 2016-2026 canonical native match-event ID recovery. Prioritize 2024-2026 with same-provider category, both original native player IDs, round, completed status, day, winner, global uniqueness. Exclude conflicting IDs and cross-provider guesses. Modify only previously absent provider identity metadata, preserve canonical stats and history. Publish solely via global writer lock, CAS, immutable release, independent private SHA+exact readback. No training or model promotion.",
+  "purpose": "First controlled native-ID recovery with full 2022-2026 blocker census and explicitly bounded same-provider calendar calls. Zero guesses, preserve conflicting claims for manual independent evidence, no external provider namespace equivalence; current CDB and independent readback mandatory.",
   "requested_on": "2026-10-21",
-  "max_requests": 2500,
-  "start": "2016-01-01",
+  "max_requests": 1200,
+  "start": "2022-01-01",
   "end": "2026-10-20",
   "targeted_statistics": false,
   "high_yield_statistics": false,
   "model_training": false,
   "pre_reset_provider_header_override": false,
   "historical_match_winner_odds_as_model_feature": false,
-  "source_only_tml_write_authorized": false
+  "source_only_tml_write_authorized": false,
+  "audit_only_unmatched_identity_summary": true,
+  "run_scope": "follow_up_after_verified_zero_gain_39645757308",
+  "status": "OPERATOR_APPROVED_CONTROLLED_IDENTITY_RECOVERY"
 }

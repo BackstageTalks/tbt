@@ -245,6 +245,13 @@ jobs:
             echo "BLINQ_PROVIDER_REQUEST_RESERVE=500" >> "$GITHUB_ENV"
             echo "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER=true" >> "$GITHUB_ENV"
           fi
+          if [[ "$mode" == "identity" ]]; then
+            # Identity calendar recovery can make paid native API calls too.
+            # Preserve the same hard provider-side reserve and require provider
+            # quota evidence before any call (also when triggered by push).
+            echo "BLINQ_PROVIDER_REQUEST_RESERVE=500" >> "$GITHUB_ENV"
+            echo "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER=true" >> "$GITHUB_ENV"
+          fi
           echo "BLINQ_SHARED_API_BUDGET_PURPOSE=history" >> "$GITHUB_ENV"
           echo "Resolved controlled data request: mode=$mode targeted=$targeted max_requests=$max_requests start=$start_date end=$end_date promote=$promote"
 
