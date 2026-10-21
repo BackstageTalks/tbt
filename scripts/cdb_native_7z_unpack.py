@@ -129,6 +129,11 @@ def unpack(archives: list[Path], output_dir: Path,
                 if not name_ptr:
                     raise ValueError("Archive entry lacks name")
                 raw_path = name_ptr.decode("utf-8")
+                # Original 7z archives include a root directory entry (for
+                # example "atp/"). Skip that directory, never extract it.
+                if raw_path in {"atp/", "wta/", "slam_pointbypoint/"}:
+                    lib.archive_read_data_skip(ar)
+                    continue
                 chosen = source_path(raw_path, start_year, end_year)
                 if chosen is None:
                     lib.archive_read_data_skip(ar)
