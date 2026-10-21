@@ -41,7 +41,11 @@ jobs:
       - run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1800
       - name: Replace candidate and verify both remote bundles
         run: python scripts/activate_shadow_candidate.py --source-tag "$SOURCE_TAG" --expected-candidate-sha256 "$EXPECTED_SHA"
-      - name: Update Admin comparison
+      # Admin visibility is best-effort; failure does not undo a fully
+      # read-back verified candidate activation. The failed step remains
+      # visible in Actions, without falsely marking model activation failed.
+      - name: Update Admin comparison (best effort)
+        continue-on-error: true
         env:
           BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
           BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
