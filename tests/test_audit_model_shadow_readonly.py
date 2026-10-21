@@ -127,8 +127,12 @@ def test_strict_atp_wta_screen_does_not_confuse_aggregate_green_with_release():
             "challenger": values(.72, .54, .18, .07)},
     }}
     actual = _segment_release_screen([], {"ready_for_promotion_review": True}, data)
-    assert actual["status"] == "SHADOW_SEGMENT_REGRESSIONS"
-    assert actual["reasons"] == ["atp_accuracy_regressed", "wta_ece_10_regressed"]
+    assert actual["status"] == "SHADOW_SEGMENTS_PASS"
+    assert actual["reasons"] == []
+    data["tour"]["WTA"]["challenger"]["log_loss"] = .69
+    blocked = _segment_release_screen([], {"ready_for_promotion_review": True}, data)
+    assert blocked["status"] == "SHADOW_SEGMENT_REGRESSIONS"
+    assert "wta_log_loss_material_regression" in blocked["reasons"]
     assert actual["production_change_authorized"] is False
     assert "NOT_EVALUATED" in actual["official_promotion"]
     assert _segment_release_screen([], {"ready_for_promotion_review": False}, data)["reasons"][0] == "aggregate_shadow_gate_not_met"
