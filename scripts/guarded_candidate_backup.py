@@ -380,7 +380,10 @@ def prepare():
 def validate_certificate(*, require_writer_lock: bool = True):
     if not CERT.is_file():
         raise RuntimeError("Missing independently verified immutable backup certificate")
-    verify_job_identity(require_writer_lock=require_writer_lock)
+    if require_writer_lock:
+        verify_job_identity()
+    else:
+        verify_job_identity(require_writer_lock=False)
     cert = json.loads(CERT.read_text(encoding="utf-8"))
     if (cert.get("schema") != 1
             or cert.get("status") != "VERIFIED_FULL_INPUTS_AND_ISOLATED_RESTORE"
