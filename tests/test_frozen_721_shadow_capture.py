@@ -92,6 +92,20 @@ def test_opt_in_frozen_capture_writes_only_distinct_shadow_and_keeps_first_snaps
     assert unchanged["rows"][0]["challenger_player1_probability"] == 0.75
     assert len(calls) == 2 and len(uploaded) == 2
 
+    # A refreshed fixture hash must not become a second independent outcome.
+    prod["id"] = "future-match-rescheduled"
+    duplicate_prediction = prediction(.99, FROZEN_721_VERSION, scheduled)
+    duplicate_prediction["id"] = prod["id"]
+    monkeypatch.setattr(capture, "predict", lambda *a, **kw: [duplicate_prediction])
+    third = capture.capture_frozen_721_shadow(**args)
+    assert third["remote_readback"] == "VERIFIED"
+    persisted = json.loads(private.read_text())
+    assert len(persisted["rows"]) == 2
+    by_id = {r["match_id"]: r for r in persisted["rows"]}
+    assert by_id["future-match-1"]["challenger_player1_probability"] == .75
+    assert by_id["future-match-rescheduled"]["status"] == "excluded"
+    assert by_id["future-match-rescheduled"]["primary_match_id"] == "future-match-1"
+
 
 def test_wrong_model_sha_aborts_before_shadow_release_or_prediction(tmp_path, monkeypatch):
     class CandidateOnly:

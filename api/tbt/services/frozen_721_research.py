@@ -97,10 +97,41 @@ def validate_frozen_evidence(payload, *, production_version):
     return rows, counts
 
 
+def exclude_repeated_events(rows):
+    """Keep the earliest snapshot per provider event, retaining all audit rows.
+
+    Schedule changes can generate new internal match hashes for the same event.
+    Never select a later prediction by its probability or eventual result.
+    """
+    result = [dict(row) for row in rows]
+    groups = {}
+    for row in result:
+        event = str(row.get("event_id") or "").strip()
+        if event:
+            groups.setdefault(event, []).append(row)
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        identities = {(str(r["tour"]).upper(), frozenset((r["player1_id"], r["player2_id"])),
+                       r["production_model_version"], r["challenger_model_version"]) for r in group}
+        if len(identities) != 1:
+            raise ValueError("Conflicting provider event identities in frozen cohort")
+        ordered = sorted(group, key=lambda r: (_utc(r["captured_at"], "captured_at"), r["match_id"]))
+        for duplicate in ordered[1:]:
+            if duplicate.get("status") == "settled":
+                raise ValueError("Previously settled duplicate provider event requires review")
+            if duplicate.get("status") == "pending":
+                duplicate.update(status="excluded", excluded_reason="duplicate_provider_event_snapshot",
+                                 primary_match_id=ordered[0]["match_id"])
+    return result
+
+
 def research_frozen_721(payload, *, production_version, minimum_fit=200,
                         minimum_eval=100, minimum_tour_fit=100):
     """Diagnostic only: no production decision, writes, or provider requests."""
     rows, counts = validate_frozen_evidence(payload, production_version=production_version)
+    rows = exclude_repeated_events(rows)
+    _, counts = validate_frozen_evidence({**payload, "rows": rows}, production_version=production_version)
     result = research_comparison(
         rows, production_version, FROZEN_721_VERSION,
         minimum_fit=minimum_fit, minimum_eval=minimum_eval,
