@@ -863,7 +863,7 @@ def train_from_matches(
     else:
         # The protected runner has verified this cache against the exact run,
         # profile, immutable full-input backup and complete match identities.
-        frame = verified_frame.copy()
+        frame = verified_frame  # already owned and SHA-read-back verified; avoid ~1m-row duplicate
         if (len(frame) != len(matches)
                 or not frame["match_id"].is_unique
                 or set(frame["match_id"].astype(str)) !=
