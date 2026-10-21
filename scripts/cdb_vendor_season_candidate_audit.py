@@ -96,6 +96,15 @@ def _stats(row: dict[str, str]) -> dict[str, float] | None:
             elif number < 0 or not number.is_integer():
                 return None
             vals[key] = number
+    # Service points won and the opposing return points won share the same
+    # total. A reported 0%+0% is an absent-data sentinel, not two valid rates.
+    # Permit only a single percentage point of independent integer rounding.
+    for side, opposite in (("home", "away"), ("away", "home")):
+        serve = vals.get(f"{side}_service_points_won")
+        returned = vals.get(f"{opposite}_return_points_won")
+        if serve is not None and returned is not None:
+            if abs(serve + returned - 1.0) > 0.01000001:
+                return None
     return vals
 
 
