@@ -28,6 +28,8 @@ FIELDS = (
     "winner_name", "loser_name", "surface", "round", "best_of",
     # Retain source identifiers as unverified provenance, never authoritative IDs.
     "source_winner_id", "source_loser_id",
+    # The adapter, not an arbitrary input row, attests this date semantic.
+    "source_date_kind",
     "w_ace", "w_df", "w_svpt", "w_1stIn", "w_1stWon", "w_2ndWon",
     "w_bpSaved", "w_bpFaced", "l_ace", "l_df", "l_svpt",
     "l_1stIn", "l_1stWon", "l_2ndWon", "l_bpSaved", "l_bpFaced",
@@ -51,7 +53,7 @@ ALIASES = {
     "source_winner_id": ("winner_id", "winner_player_id", "winning_player_id"),
     "source_loser_id": ("loser_id", "loser_player_id", "losing_player_id"),
 }
-STAT_FIELDS = FIELDS[12:]
+STAT_FIELDS = FIELDS[13:]
 for field in STAT_FIELDS:
     ALIASES[field] = (field,)
     if field.endswith("_ace"):
@@ -180,6 +182,7 @@ def _season_match(lookup):
     row = {field: "" for field in FIELDS}
     row.update({
         "league": tour, "tourney_date": day.strftime("%Y%m%d"),
+        "source_date_kind": "match_exact",
         "tourney_name": tournament,
         "match_num": str(lookup.get("matchid") or "").strip(),
         "winner_name": home if code == "1" else away,
@@ -280,6 +283,14 @@ def normalize(raw, filename, index, *, source_tour=""):
     row["tourney_date"], date_error = _resolved_match_date(lookup)
     if date_error:
         return None, date_error
+    # A native tournament start is not an observed match date. The exact
+    # provenance is derived only from validated UTC start/match_date input.
+    # Never trust a caller-supplied source_date_kind field.
+    row["source_date_kind"] = (
+        "match_exact" if (str(lookup.get("starttimeutc") or "").strip()
+                          or str(lookup.get("matchdate") or "").strip())
+        else "tournament_start"
+    )
     named_tour = tour_from_filename(filename)
     explicit_tour = row["league"].lower()
     if source_tour and (explicit_tour and explicit_tour != source_tour
