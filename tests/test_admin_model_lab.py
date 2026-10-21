@@ -160,6 +160,43 @@ class TestLab(unittest.TestCase):
                          "FAILED_ACKNOWLEDGED")
         self.assertIsNone(m._json("active"))
 
+    def test_failed_shadow_audit_is_readonly_and_can_be_acknowledged(self):
+        m.start({"action": "audit_shadow"}, "admin")
+        m.sync(snapshot())
+        request = m._json("active")
+        complete = snapshot()
+        complete["can_start"] = False
+        complete["runs"]["audit_shadow"] = [{
+            "id": 79, "status": "completed", "conclusion": "failure",
+            "display_title": "Model Lab audit " + request["id"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }]
+        m.sync(complete)
+        self.assertEqual(m._json("last")["state"], "FAILED_NEEDS_REVIEW")
+        with self.assertRaises(model_training.TrainingBlocked):
+            m.acknowledge_failed({"action": "acknowledge_failed", "id": "invalid"})
+        result = m.acknowledge_failed({"action": "acknowledge_failed",
+                                       "id": request["id"]})
+        self.assertEqual(result["state"], "FAILED_ACKNOWLEDGED")
+        self.assertIsNone(m._json("active"))
+
+    def test_failed_shadow_activation_stays_locked(self):
+        m.start({"action": "activate_shadow",
+                 "source_tag": "blinq-candidate-frozen-123-1"}, "admin")
+        m.sync(snapshot())
+        request = m._json("active")
+        complete = snapshot()
+        complete["can_start"] = False
+        complete["runs"]["activate_shadow"] = [{
+            "id": 80, "status": "completed", "conclusion": "failure",
+            "display_title": "Model Lab activate shadow " + request["id"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }]
+        m.sync(complete)
+        with self.assertRaises(model_training.TrainingBlocked):
+            m.acknowledge_failed({"action": "acknowledge_failed", "id": request["id"]})
+        self.assertIsNotNone(m._json("active"))
+
     def test_failed_import_cannot_be_unblocked_from_admin(self):
         m.start({"action": "import_drive"}, "admin")
         m.sync(snapshot())
@@ -286,6 +323,20 @@ class TestWorker(unittest.TestCase):
             with self.assertRaises(model_training.TrainingBlocked):
                 dispatch(pending)
             gh.assert_not_called()
+
+
+class TestWorkerHeartbeat(unittest.TestCase):
+    def test_existing_worker_has_safe_twice_hourly_polling(self):
+        from pathlib import Path
+        path = Path(__file__).resolve().parents[1] / ".github/workflows/admin-training-worker.yml"
+        source = path.read_text(encoding="utf-8")
+        self.assertIn("schedule:", source)
+        self.assertIn("cron: '7,37 * * * *'", source)
+        self.assertIn("github.event_name == 'schedule'", source)
+        self.assertIn("cancel-in-progress: false", source)
+        self.assertIn("python scripts/admin_training_worker.py", source)
+        self.assertIn("python scripts/admin_model_lab_worker.py", source)
+        self.assertNotIn("RAPIDAPI_KEY", source)
 
 
 if __name__ == "__main__":
