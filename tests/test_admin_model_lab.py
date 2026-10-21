@@ -202,6 +202,12 @@ class TestLab(unittest.TestCase):
 
 
 class TestLiveAdminProbe(unittest.TestCase):
+    def setUp(self):
+        import os
+        p = patch.dict(os.environ, {"BLINQ_BASE_URL": "https://agreeable-sky-011a7fe10.7.azurestaticapps.net"})
+        p.start()
+        self.addCleanup(p.stop)
+
     @staticmethod
     def endpoint_status(code, body=b''):
         def fake(request, timeout):
