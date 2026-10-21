@@ -1,5 +1,10 @@
 name: Activate verified 7.2.1 shadow candidate
 on:
+  # One-shot bootstrap on the exact reviewed merge commit only.
+  # Subsequent workflow edits do not activate models automatically.
+  push:
+    branches: [main]
+    paths: [".github/workflows/activate-shadow-candidate.yml"]
   workflow_dispatch:
     inputs:
       source_tag:
@@ -18,15 +23,20 @@ concurrency:
   cancel-in-progress: false
 jobs:
   activate:
-    if: github.repository == 'BackstageTalks/tbt' && github.ref == 'refs/heads/main'
+    if: >-
+      github.repository == 'BackstageTalks/tbt' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'push' &&
+        startsWith(github.event.head_commit.message, 'chore(721): one-shot verified shadow activation')))
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PYTHONPATH: api:scripts
       PYTHONUNBUFFERED: '1'
-      SOURCE_TAG: ${{ inputs.source_tag }}
-      EXPECTED_SHA: ${{ inputs.expected_candidate_sha256 }}
+      SOURCE_TAG: ${{ inputs.source_tag || 'blinq-candidate-frozen-39368300257-1' }}
+      EXPECTED_SHA: ${{ inputs.expected_candidate_sha256 || '7ac60b0b671091a7f620cca80a7c558b417e20c9448f577878625447e565c141' }}
     steps:
       - uses: actions/checkout@v4
         with:
