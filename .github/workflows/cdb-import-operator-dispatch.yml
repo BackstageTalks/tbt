@@ -39,5 +39,15 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = 'BackstageTalks/tbt'
           test "$GITHUB_REF" = 'refs/heads/main'
-          gh workflow run cdb-drive-inbox.yml -R "$GITHUB_REPOSITORY" --ref main -f catchup_remaining=4
-          echo 'CDB_OPERATOR_DISPATCH_SUBMITTED_NOT_IMPORT_VERIFIED'
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            # One-shot, exact-ID replay of 2025/26 ATP match rows and WTA season
+            # serve/return rows. Do not reset the private 2047-file checkpoint.
+            # Only a push containing [cdb-import-now] can take this path.
+            gh workflow run cdb-drive-inbox.yml -R "$GITHUB_REPOSITORY" --ref main \
+              -f catchup_remaining=0 \
+              -f replay_drive_ids="109Be-erkHMKxCA8wRoU_wl63luE9Yrhw,1jrOw7Rza4H1JOaZUyCz29Kd9rZNNhTj2,1-bVW6bb3rdFQw2nScTzcMcrxoph_6TY4,1i9CXB16lHFu9pP6vVWORoelaJyqbqQsR"
+            echo 'CDB_OPERATOR_TARGETED_REPLAY_DISPATCH_SUBMITTED_NOT_IMPORT_VERIFIED'
+          else
+            gh workflow run cdb-drive-inbox.yml -R "$GITHUB_REPOSITORY" --ref main -f catchup_remaining=4
+            echo 'CDB_OPERATOR_DISPATCH_SUBMITTED_NOT_IMPORT_VERIFIED'
+          fi
