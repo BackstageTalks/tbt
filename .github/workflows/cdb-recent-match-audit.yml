@@ -6,6 +6,8 @@ name: Recent ATP/WTA match-level Drive source vs CDB - read-only
     paths:
       - scripts/cdb_recent_pinned_sources.py
       - scripts/cdb_recent_strict_stage.py
+      - scripts/cdb_recent_api_identity_queue.py
+      - tests/test_cdb_recent_api_identity_queue.py
       - scripts/cdb_inbox_adapter.py
       - tests/test_cdb_inbox_adapter.py
       - tests/test_cdb_recent_official_match_audit.py
@@ -15,6 +17,8 @@ name: Recent ATP/WTA match-level Drive source vs CDB - read-only
     paths:
       - scripts/cdb_recent_pinned_sources.py
       - scripts/cdb_recent_strict_stage.py
+      - scripts/cdb_recent_api_identity_queue.py
+      - tests/test_cdb_recent_api_identity_queue.py
       - scripts/cdb_inbox_adapter.py
       - tests/test_cdb_inbox_adapter.py
       - .github/workflows/cdb-recent-match-audit.yml
@@ -40,8 +44,8 @@ jobs:
           PYTHONPATH: .:api:scripts
         run: |
           python -m pip install --disable-pip-version-check pytest openpyxl pandas pyarrow pydantic numpy
-          python -m compileall -q scripts/cdb_recent_pinned_sources.py scripts/cdb_recent_strict_stage.py
-          python -m pytest tests/test_cdb_recent_official_match_audit.py tests/test_cdb_inbox_adapter.py -q
+          python -m compileall -q scripts/cdb_recent_pinned_sources.py scripts/cdb_recent_strict_stage.py scripts/cdb_recent_api_identity_queue.py
+          python -m pytest tests/test_cdb_recent_official_match_audit.py tests/test_cdb_recent_api_identity_queue.py tests/test_cdb_inbox_adapter.py -q
 
   private-canonical-readonly-match:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -167,6 +171,45 @@ jobs:
           Path("recent-cdb-readonly.json").write_text(json.dumps(report,sort_keys=True,indent=2)+"\n")
           print(json.dumps(report,sort_keys=True))
           PY
+      - name: Private ONLY provider-native identity review queue (zero API calls)
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_recent_api_identity_queue.py \
+            --link-dir work/link --normalized-report work/source/report.json \
+            --stage-dir work/stage --private-dir work/private-api-review
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=Path("recent-cdb-readonly.json")
+          result=json.loads(report.read_text())
+          summary=json.loads(Path("work/private-api-review/aggregate-only.json").read_text())
+          assert summary["api_requests"]==0 and summary["write_authorized"] is False
+          assert summary["source_reuse_rights_verified"] is False
+          result["api_identity_review_aggregate_only"]={
+              key: summary[key] for key in (
+                  "state", "queued_unique_canonical_candidates",
+                  "candidate_stat_fields_to_verify", "by_year_tour",
+                  "reason_counts", "private_queue_sha256")
+          }
+          report.write_text(json.dumps(result,sort_keys=True,indent=2)+"\n")
+          print("PRIVATE_API_IDENTITY_REVIEW_CANDIDATES",
+                summary["queued_unique_canonical_candidates"],flush=True)
+          PY
+          # Candidate match IDs are never put into PUBLIC Actions artifacts.
+          tag="blinq-cdb-api-identity-review-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" -R "$CDB_REPO" --target main --latest=false \
+            --title "Private Drive-to-provider identity review candidates" \
+            --notes "Read-only; source rights and player/event identities unverified. No API requests or CDB writes." \
+            work/private-api-review/api-identity-review.jsonl \
+            work/private-api-review/aggregate-only.json
+          mkdir -p work/private-api-verify
+          gh release download "$tag" -R "$CDB_REPO" \
+            -D work/private-api-verify -p 'api-identity-review.jsonl' -p 'aggregate-only.json'
+          cmp work/private-api-review/api-identity-review.jsonl work/private-api-verify/api-identity-review.jsonl
+          cmp work/private-api-review/aggregate-only.json work/private-api-verify/aggregate-only.json
+          echo "PRIVATE_API_IDENTITY_REVIEW_REMOTE_READBACK_PASS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
