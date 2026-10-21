@@ -366,6 +366,8 @@ def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
             tour: cal.kind for tour, cal in
             (getattr(selected, "tour_calibrators", {}) or {}).items()
         },
+        atp_blend_weight=getattr(selected, "atp_blend_weight", None),
+        atp_elo_weight=getattr(selected, "atp_elo_weight", None),
     )
 
     selected_metadata = dict(getattr(selected, "metadata", {}) or {})
@@ -961,11 +963,10 @@ def train_from_matches(
             )
             else _new_production_ensemble(objective=objective)
         )
-        .fit(
-            train,
-            calibration,
-        )
     )
+    # Enabled only for new 7.2.1 research; standard and legacy fits are unchanged.
+    evaluation_model.atp_blend_specialization = training_profile == "top-7.2.1"
+    evaluation_model.fit(train, calibration)
 
     _training_progress("fit_estimators_complete", len(train))
     if training_profile == "top-7.2.1":

@@ -72,3 +72,52 @@ def test_portable_runtime_has_no_training_stack_imports():
     assert "import numpy" not in source
     assert "sklearn" not in source
     assert "joblib" not in source
+
+
+def test_portable_atp_blend_matches_sklearn_without_changing_wta():
+    train = _frame(320, start=0)
+    calibration = _frame(140, start=400)
+    model = TennisEnsemble(feature_names=FEATURES)
+    model.boost.set_params(max_iter=16)
+    model.fit(train, calibration)
+    probe = _frame(24, start=700)
+    probe["tour_atp"] = np.arange(len(probe)) % 2
+    pooled = model.predict_proba(probe)
+    model.atp_blend_weight = 0.
+    model.atp_elo_weight = 1.
+    native = model.predict_proba(probe)
+    artifact = export_portable_model(model)
+    assert artifact["atp_blend_weight_boost"] == 0.
+    assert artifact["atp_elo_weight"] == 1.
+    portable = np.asarray([
+        predict_probability(artifact, row)
+        for row in probe.to_dict("records")
+    ])
+    assert np.max(np.abs(portable - native)) < 1e-10
+    wta = probe["tour_atp"].to_numpy() == 0
+    np.testing.assert_allclose(native[wta], pooled[wta], atol=1e-12)
+
+
+def test_portable_tour_calibration_and_atp_weights_match_native():
+    train = _frame(320, start=0)
+    calibration = _frame(140, start=400)
+    model = TennisEnsemble(feature_names=FEATURES)
+    model.boost.set_params(max_iter=12)
+    model.fit(train, calibration)
+    model.atp_blend_weight, model.atp_elo_weight = .25, .5
+
+    grid = np.linspace(.1, .9, 600)
+    rng = np.random.default_rng(72001)
+    targets = rng.binomial(1, .5 + .2 * (grid - .5))
+    model.tour_calibrators = {
+        "atp": TennisEnsemble._fit_calibrator("platt", grid, targets),
+        "wta": TennisEnsemble._fit_calibrator("isotonic", grid, targets),
+    }
+    artifact = export_portable_model(model)
+    assert set(artifact["tour_calibrators"]) == {"atp", "wta"}
+    probe = _frame(30, start=700)
+    probe["tour_atp"] = (np.arange(len(probe)) % 2).astype(float)
+    native = model.predict_proba(probe)
+    portable = np.array([predict_probability(artifact, row)
+                         for row in probe.to_dict("records")])
+    assert np.max(np.abs(native - portable)) < 1e-10
