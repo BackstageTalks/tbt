@@ -13,6 +13,8 @@ name: CDB Drive Inbox - guarded external file import
       - scripts/cdb_large_source_stage.py
       - tests/test_cdb_large_source_stage.py
       - scripts/cdb_inbox_*.py
+      - scripts/link_offline_serve_return.py
+      - tests/test_cdb_drive_multischema.py
       - tests/test_cdb_inbox_adapter.py
       - tests/test_cdb_inbox_drive.py
       - tests/test_cdb_inbox_scheduler_bridge.py
@@ -29,6 +31,8 @@ name: CDB Drive Inbox - guarded external file import
       - scripts/cdb_large_source_stage.py
       - tests/test_cdb_large_source_stage.py
       - scripts/cdb_inbox_*.py
+      - scripts/link_offline_serve_return.py
+      - tests/test_cdb_drive_multischema.py
       - tests/test_cdb_inbox_adapter.py
       - tests/test_cdb_inbox_wait_resume.py
       - tests/test_cdb_inbox_pending_batch.py
@@ -60,8 +64,8 @@ jobs:
         env:
           PYTHONPATH: .:api:scripts
         run: |
-          python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py scripts/cdb_large_source_stage.py scripts/cdb_wta_lookback_guard.py
-          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_large_source_stage.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py tests/test_cdb_wta_lookback_guard.py -q
+          python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py scripts/cdb_large_source_stage.py scripts/cdb_wta_lookback_guard.py scripts/link_offline_serve_return.py
+          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_drive_multischema.py tests/test_cdb_large_source_stage.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py tests/test_cdb_wta_lookback_guard.py -q
 
   guarded-import:
     # Source preparation may proceed while immutable candidate training owns CDB.
