@@ -1,6 +1,7 @@
 name: CDB Import - operator one-shot dispatcher
 
 # Operator entrypoint. Changes to unrelated files never trigger this workflow.
+# Operator request 2026-10-21: owner-authorized checkpointed Drive CDB import; 5 bounded batches, no gate bypass, zero paid provider calls.
 # One-shot operator request: process up to 5 safe 100-file batches, starting 2026-10-20.
 # This changes no global cron; future operator dispatch remains bounded.
 # Production data may only be changed by the separate guarded CDB importer.
