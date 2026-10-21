@@ -24,6 +24,7 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
       - scripts/cdb_large_source_stage.py
       - tests/test_cdb_large_source_stage.py
       - scripts/cdb_inbox_*.py
+      - scripts/cdb_drive_identity_registry.py
       - scripts/link_offline_serve_return.py
       - tests/test_cdb_drive_multischema.py
       - tests/test_cdb_inbox_adapter.py
@@ -32,6 +33,7 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
       - tests/test_cdb_inbox_wait_resume.py
       - tests/test_cdb_inbox_integration.py
       - tests/test_cdb_inbox_pending_batch.py
+      - tests/test_cdb_drive_identity_registry.py
       - tests/test_cdb_inbox_catchup.py
       - scripts/cdb_wta_lookback_guard.py
       - tests/test_cdb_wta_lookback_guard.py
@@ -42,11 +44,13 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
       - scripts/cdb_large_source_stage.py
       - tests/test_cdb_large_source_stage.py
       - scripts/cdb_inbox_*.py
+      - scripts/cdb_drive_identity_registry.py
       - scripts/link_offline_serve_return.py
       - tests/test_cdb_drive_multischema.py
       - tests/test_cdb_inbox_adapter.py
       - tests/test_cdb_inbox_wait_resume.py
       - tests/test_cdb_inbox_pending_batch.py
+      - tests/test_cdb_drive_identity_registry.py
       - tests/test_cdb_inbox_catchup.py
       - scripts/cdb_wta_lookback_guard.py
       - tests/test_cdb_wta_lookback_guard.py
@@ -75,8 +79,8 @@ jobs:
         env:
           PYTHONPATH: .:api:scripts
         run: |
-          python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py scripts/cdb_large_source_stage.py scripts/cdb_wta_lookback_guard.py scripts/link_offline_serve_return.py
-          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_drive_multischema.py tests/test_cdb_large_source_stage.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py tests/test_cdb_wta_lookback_guard.py -q
+          python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py scripts/cdb_drive_identity_registry.py scripts/cdb_large_source_stage.py scripts/cdb_wta_lookback_guard.py scripts/link_offline_serve_return.py
+          python -m pytest tests/test_cdb_inbox_adapter.py tests/test_cdb_drive_identity_registry.py tests/test_cdb_drive_multischema.py tests/test_cdb_large_source_stage.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py tests/test_cdb_wta_lookback_guard.py -q
 
   guarded-import:
     # Source preparation may proceed while immutable candidate training owns CDB.
@@ -267,6 +271,41 @@ jobs:
               out.write("additions="+("true" if additions else "false")+"\n")
           print("CDB_INBOX_STRICT_DRYRUN",a["eligible_matches"],additions,
                 "filtered",a["filtered_matches"],"conflicts",a["conflict_matches"])
+          PY
+      - name: Preserve exact-source private player ID review without identity promotion
+        if: steps.source.outputs.eligible == 'true' && steps.stage.conclusion == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Source IDs are not canonical IDs. This private release is an
+          # immutable QA registry, including blocked metadata candidates.
+          python scripts/cdb_drive_identity_registry.py \
+            --normalized-report work/source/report.json \
+            --stage-dir work/stage \
+            --drive-manifest work/drive_manifest.json \
+            --output work/cdb-drive-identity-review.json
+          tag="blinq-cdb-drive-id-review-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" work/cdb-drive-identity-review.json \
+            -R "$CDB_REPO" --target main \
+            --title "PRIVATE unverified Drive-to-CDB ID candidate review $GITHUB_RUN_ID" \
+            --notes "Non-authoritative, SHA-bound source player IDs and metadata candidates. Not an independently verified crosswalk. No write authorization."
+          mkdir -p work/private-identity-readback
+          gh release download "$tag" -R "$CDB_REPO" \
+            -p cdb-drive-identity-review.json -D work/private-identity-readback --clobber
+          cmp work/cdb-drive-identity-review.json \
+            work/private-identity-readback/cdb-drive-identity-review.json
+          echo "CDB_DRIVE_IDENTITY_PRIVATE_SHA_READBACK_PASS $(sha256sum work/cdb-drive-identity-review.json | cut -d ' ' -f1)"
+          python - <<'PY'
+          import json
+          record=json.load(open("work/private-identity-readback/cdb-drive-identity-review.json"))
+          if (record["canonical_write_authorized"] is not False or
+              record["crosswalk_promotion_authorized"] is not False or
+              any(x["independently_verified"] is not False or x["write_authorized"] is not False
+                  for x in record["players"])):
+              raise SystemExit("Unverified Drive evidence was wrongly promoted")
+          print("CDB_DRIVE_PRIVATE_REVIEW",record["source_ids_count"],
+                "candidate_matches",record["candidate_match_count"],
+                "strict_eligible",record["strict_eligible_match_count"])
           PY
       - name: Acquire global single writer ONLY for a positive, validated delta
         if: steps.stage.outputs.additions == 'true'
