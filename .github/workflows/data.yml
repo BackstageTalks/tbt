@@ -9,7 +9,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, extras, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, production-audit, top-audit, market-audit, results-rebuild, comparator-build, deploy-current, current-refresh, train, backtest, refresh]
+        options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, extras, identity, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, production-audit, top-audit, market-audit, results-rebuild, comparator-build, deploy-current, current-refresh, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -299,7 +299,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$MODE" in
-            mega-data|history|statistics|extras|doubles-data|ace-statistics|sg-scores)
+            mega-data|history|statistics|extras|identity|doubles-data|ace-statistics|sg-scores)
               export BLINQ_RAPIDAPI_MAX_RPS=6
               echo "Batch provider throttle enabled: max 6 requests/second."
               ;;
@@ -315,7 +315,7 @@ jobs:
           fi
           # Writer runs start from a physically clean canonical release. The repair
           # is a no-op when history is already clean and rewrites only affected years.
-          if [[ "$MODE" == history || "$MODE" == statistics || "$MODE" == extras ]]; then
+          if [[ "$MODE" == history || "$MODE" == statistics || "$MODE" == extras || "$MODE" == identity ]]; then
             python scripts/repair_history_data.py --data-repository "$TBT_DATA_REPOSITORY"
           fi
           if [[ "$MODE" == mega-data ]]; then
@@ -331,7 +331,7 @@ jobs:
             if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
             if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
             python scripts/run_mega_data.py "${args[@]}"
-          elif [[ "$MODE" == history || "$MODE" == statistics || "$MODE" == extras ]]; then
+          elif [[ "$MODE" == history || "$MODE" == statistics || "$MODE" == extras || "$MODE" == identity ]]; then
             args=(--publish --data-repository "$TBT_DATA_REPOSITORY" --mode "$MODE" --lookback-days "$LOOKBACK_DAYS" --max-requests "$MAX_REQUESTS")
             if [[ "$MODE" == statistics && ( "${{ inputs.hourly_autofill || 'false' }}" == "true" || "${BLINQ_TARGETED_STATISTICS:-false}" == "true" ) ]]; then args+=(--targeted-statistics); fi
             if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
@@ -496,6 +496,10 @@ jobs:
           set -euo pipefail
           python scripts/summarize_hourly_adaptive_cdb.py \
             --run-id "$GITHUB_RUN_ID" --github-step-summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Independently verify recovered provider IDs in private CDB
+        if: ${{ success() && env.MODE == 'identity' }}
+        run: python scripts/verify_native_event_ids.py --data-repository "$TBT_DATA_REPOSITORY"
 
       - name: Independently verify every event extras CDB publication
         if: ${{ success() && env.MODE == 'extras' }}
@@ -681,7 +685,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload history/statistics run report
-        if: ${{ always() && (env.MODE == 'history' || env.MODE == 'statistics' || env.MODE == 'extras') }}
+        if: ${{ always() && (env.MODE == 'history' || env.MODE == 'statistics' || env.MODE == 'extras' || env.MODE == 'identity') }}
         uses: actions/upload-artifact@v4
         with:
           name: blinq-${{ env.MODE }}-${{ github.run_id }}
@@ -694,6 +698,7 @@ jobs:
             .cache/tbt/history/adaptive_cdb_evidence.md
             .cache/tbt/history/extras_expected.json
             .cache/tbt/history/extras_readback.json
+            .cache/tbt/history/identity_readback.json
           if-no-files-found: warn
 
       - name: Upload production prediction audit
