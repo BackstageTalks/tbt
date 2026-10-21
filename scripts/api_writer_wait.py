@@ -6,6 +6,8 @@ The caller must revalidate the provider-day budget and dispatch window after wai
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from urllib.error import HTTPError
+import re
 from time import sleep
 from typing import Callable
 
@@ -44,3 +46,45 @@ def wait_for_writer(
         print("Canonical writer busy; retrying after 45s: " + "; ".join(active), flush=True)
         pause(min(poll_seconds, max(1.0, (deadline_utc - current).total_seconds())))
         waited = True
+
+
+def read_cdb_writer_lock(get_json, token: str) -> list[str]:
+    """Read the authoritative cross-repository tag without modifying it.
+
+    An Actions workflow inventory cannot see writers running in tbt-data.
+    Verify private-repository access first, otherwise a 404 on the lock could
+    be mistaken for an absent lock. Unknown/corrupt lock state fails closed.
+    """
+    if not token:
+        raise RuntimeError("CDB private read token unavailable; refuse API dispatch")
+    base = "https://api.github.com/repos/BackstageTalks/tbt-data/"
+    head = get_json(base + "git/ref/heads/main", token)
+    if (not isinstance(head, dict) or head.get("ref") != "refs/heads/main"
+            or head.get("object", {}).get("type") != "commit"):
+        raise RuntimeError("Cannot attest private CDB repository access")
+    try:
+        ref = get_json(base + "git/ref/tags/blinq-cdb-global-writer", token)
+    except HTTPError as exc:
+        if exc.code == 404:
+            return []
+        raise
+    if (not isinstance(ref, dict)
+            or ref.get("ref") != "refs/tags/blinq-cdb-global-writer"
+            or ref.get("object", {}).get("type") != "tag"):
+        raise RuntimeError("Unexpected global CDB writer tag ref; refuse dispatch")
+    sha = str(ref["object"].get("sha", ""))
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise RuntimeError("Invalid global CDB writer tag SHA")
+    tag = get_json(base + "git/tags/" + sha, token)
+    if not isinstance(tag, dict):
+        raise RuntimeError("Global CDB writer annotation not readable")
+    message = str(tag.get("message", "")).strip()
+    if (not re.fullmatch(
+            r"owner=[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+/attempts/[0-9]+",
+            message)
+            or tag.get("sha") != sha
+            or tag.get("object", {}).get("type") != "commit"):
+        raise RuntimeError("Invalid global CDB writer ownership evidence")
+    return ["CDB global writer tag " + message]
+
+

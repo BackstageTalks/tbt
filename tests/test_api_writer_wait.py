@@ -1,10 +1,11 @@
 """Regression tests for safe hourly API writer contention retries."""
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.error import HTTPError
 
 import pytest
 
-from scripts.api_writer_wait import wait_for_writer
+from scripts.api_writer_wait import wait_for_writer, read_cdb_writer_lock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -95,3 +96,98 @@ def test_hourly_workflow_rechecks_budget_and_keeps_quota_and_writer_guards():
     # Lock acquisition remains with the existing governed data.yml pipeline.
     assert "git/refs" not in delayed
     assert "git/tags" not in delayed
+
+
+def _private_cdb_responses(*, locked=False, bad_tag=False):
+    urls = []
+    prefix = "https://api.github.com/repos/BackstageTalks/tbt-data/"
+    tag_sha = "a" * 40
+
+    def get(url, token):
+        assert token == "private-data-token"
+        assert url.startswith(prefix)
+        endpoint = url.removeprefix(prefix)
+        urls.append(endpoint)
+        if endpoint == "git/ref/heads/main":
+            return {"ref": "refs/heads/main",
+                    "object": {"type": "commit", "sha": "b" * 40}}
+        if endpoint == "git/ref/tags/blinq-cdb-global-writer":
+            if not locked:
+                raise HTTPError(url, 404, "Not Found", {}, None)
+            return {"ref": "refs/tags/blinq-cdb-global-writer",
+                    "object": {"type": "tag", "sha": tag_sha}}
+        if endpoint == "git/tags/" + tag_sha:
+            return {"sha": tag_sha, "object": {"type": "commit"},
+                    "message": ("owner=invalid"
+                                if bad_tag else
+                                "owner=BackstageTalks/tbt/actions/runs/123/attempts/1")}
+        raise AssertionError(endpoint)
+
+    return get, urls
+
+
+def test_private_global_writer_tag_is_visible_before_hourly_dispatch():
+    get, urls = _private_cdb_responses(locked=True)
+    owner = read_cdb_writer_lock(get, "private-data-token")
+    assert owner == [
+        "CDB global writer tag owner=BackstageTalks/tbt/actions/runs/123/attempts/1"
+    ]
+    assert urls == [
+        "git/ref/heads/main", "git/ref/tags/blinq-cdb-global-writer",
+        "git/tags/" + "a" * 40,
+    ]
+
+
+def test_absent_lock_is_valid_only_after_private_repo_authentication():
+    get, urls = _private_cdb_responses()
+    assert read_cdb_writer_lock(get, "private-data-token") == []
+    assert urls == ["git/ref/heads/main", "git/ref/tags/blinq-cdb-global-writer"]
+
+
+def test_private_data_repo_inaccessible_or_lock_unknown_fails_closed():
+    get, _ = _private_cdb_responses()
+    with pytest.raises(RuntimeError, match="token unavailable"):
+        read_cdb_writer_lock(get, "")
+    def denied(url, token):
+        raise HTTPError(url, 404, "Not Found", {}, None)
+    with pytest.raises(HTTPError) as err:
+        read_cdb_writer_lock(denied, "private-data-token")
+    assert err.value.code == 404
+
+    def forbidden(url, token):
+        if url.endswith("git/ref/heads/main"):
+            return {"ref": "refs/heads/main", "object": {"type": "commit"}}
+        raise HTTPError(url, 403, "Forbidden", {}, None)
+    with pytest.raises(HTTPError) as err:
+        read_cdb_writer_lock(forbidden, "private-data-token")
+    assert err.value.code == 403
+
+
+def test_invalid_lock_owner_never_counts_as_unlocked():
+    get, _ = _private_cdb_responses(locked=True, bad_tag=True)
+    with pytest.raises(RuntimeError, match="ownership evidence"):
+        read_cdb_writer_lock(get, "private-data-token")
+
+
+def test_busy_authoritative_tag_is_polled_until_the_real_owner_releases():
+    get, _ = _private_cdb_responses(locked=True)
+    available, _ = _private_cdb_responses(locked=False)
+    states = [get, get, available]
+    now = [datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)]
+    waited = wait_for_writer(
+        lambda: read_cdb_writer_lock(states.pop(0), "private-data-token"),
+        now[0] + timedelta(minutes=3),
+        clock=lambda: now[0],
+        pause=lambda seconds: now.__setitem__(0, now[0] + timedelta(seconds=seconds)),
+    )
+    assert waited and not states
+
+
+def test_hourly_workflow_consults_private_global_lock_before_dispatch():
+    assert "CDB_READ_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}" in WORKFLOW
+    assert "from scripts.api_writer_wait import read_cdb_writer_lock" in WORKFLOW
+    assert "active = read_cdb_writer_lock(get_json, CDB_READ_TOKEN)" in WORKFLOW
+    assert WORKFLOW.index("active = read_cdb_writer_lock(") < WORKFLOW.index(
+        'for status in ("queued", "pending", "in_progress", "waiting", "requested")'
+    )
+    assert "wait_for_writer(check_writers, retry_deadline)" in WORKFLOW
