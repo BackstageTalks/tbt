@@ -2,7 +2,9 @@
 import pandas as pd
 import pytest
 
-from train_top_721_odds_specialist import train_and_compare, validated_candidates
+from train_top_721_odds_specialist import (
+    _high_confidence_settled, _top_three, train_and_compare, validated_candidates,
+)
 
 
 def rows():
@@ -41,6 +43,14 @@ def test_training_includes_exact_top_odds_boundary_and_keeps_days_disjoint(tmp_p
     assert result["test"]["first_day"] == "2026-10-05"
     assert result["top_three_metrics"]["specialist"]["selected"] == 9
     assert result["guardrails"]["production_writes"] == 0
+    top = result["top_three_metrics"]["specialist"]
+    assert top["offered"] == 24
+    assert top["selected"] == 9
+    assert top["selection_coverage"] == 9 / 24
+    assert top["unsettled_selected"] == 0
+    assert top["hit_rate_ci95_wilson"] is not None
+    assert top["target_87_supported"] is False
+    assert result["vip_accuracy_goal"]["target"] == .87
     assert (tmp_path / "out" / "research_model.joblib").exists()
 
 
@@ -97,3 +107,23 @@ def test_no_80pct_reliability_claim_from_small_sample():
     priced, counts = validated_candidates(frame)
     assert counts["raw_model_ge_80_settled"] > 0
     assert counts["public_top_ge_80_settled"] == 0
+
+
+def test_perfect_small_vip_sample_does_not_certify_87_percent():
+    priced, _ = validated_candidates(rows())
+    priced["outcome"] = "win"
+    confidence = _high_confidence_settled(priced, "model_probability")
+    assert confidence["settled"] > 0
+    assert confidence["accuracy"] == 1.0
+    assert confidence["accuracy_ci95_wilson"][0] < 0.87
+    assert confidence["target_87_supported"] is False
+
+
+def test_vip_report_counts_pending_selection_against_capacity():
+    frame, _ = validated_candidates(rows())
+    frame.loc[frame.betting_day == "2026-10-07", "outcome"] = "pending"
+    top = _top_three(frame, "model_probability")
+    assert top["selected"] == 21
+    assert top["settled"] == 18
+    assert top["unsettled_selected"] == 3
+    assert top["selection_coverage"] == 21 / 56
