@@ -121,3 +121,14 @@ def test_portable_tour_calibration_and_atp_weights_match_native():
     portable = np.array([predict_probability(artifact, row)
                          for row in probe.to_dict("records")])
     assert np.max(np.abs(native - portable)) < 1e-10
+
+
+def test_portable_declares_point_weighted_feature_semantics():
+    train = _frame(320, start=0)
+    calibration = _frame(140, start=400)
+    model = TennisEnsemble(feature_names=FEATURES)
+    model.boost.set_params(max_iter=12)
+    model.fit(train, calibration)
+    assert "point_weighted_quality" not in export_portable_model(model)
+    model.metadata["point_weighted_quality"] = True
+    assert export_portable_model(model)["point_weighted_quality"] is True

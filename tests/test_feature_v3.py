@@ -117,3 +117,39 @@ def test_serving_respects_legacy_artifact_feature_schema(match_factory):
     rows = engine.predict(model, history, [future], now=future.scheduled_at.replace(day=4))
     assert rows
     assert model.columns == model.feature_names
+
+
+def test_point_weighted_quality_shrinks_small_samples_and_preserves_old_semantics(match_factory):
+    from datetime import timedelta
+    from tbt.models.feature_builder import RecentPerformance
+
+    upcoming = match_factory("future-quality", "A", "B", None, day=12, surface="hard")
+    weighted = FeatureBuilder(point_weighted_quality=True)
+    old = FeatureBuilder()
+    for builder in (weighted, old):
+        first = builder._state(upcoming, True)
+        second = builder._state(upcoming, False)
+        first.recent.append(RecentPerformance(
+            played_at=upcoming.scheduled_at - timedelta(days=1),
+            won=1., expected=.5, surface="hard",
+            serve_quality=.95, serve_points_total=5))
+        second.recent.append(RecentPerformance(
+            played_at=upcoming.scheduled_at - timedelta(days=1),
+            won=0., expected=.5, surface="hard",
+            serve_quality=.50, serve_points_total=200))
+
+    weighted.quality_baselines[("atp", "all", "serve_quality")] = [600., 1000.]
+    first = weighted._state(upcoming, True)
+    a = weighted._quality_estimate(first, upcoming.scheduled_at, "serve_quality",
+                                   tour="atp", surface="hard")
+    old_a = old._quality_estimate(old._state(upcoming, True), upcoming.scheduled_at,
+                                  "serve_quality", tour="atp", surface="hard")
+    assert .60 < a < .62
+    assert old_a == .95
+    assert a < old_a
+
+    restored = FeatureBuilder.from_state(weighted.export_state())
+    assert restored.point_weighted_quality is True
+    assert restored.quality_baselines[("atp", "all", "serve_quality")] == [600., 1000.]
+    assert restored._quality_estimate(restored._state(upcoming, True),
+            upcoming.scheduled_at, "serve_quality", tour="atp", surface="hard") == a
