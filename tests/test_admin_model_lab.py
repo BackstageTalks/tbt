@@ -50,6 +50,9 @@ class TestLab(unittest.TestCase):
         self.patcher = patch.object(m, "_table", return_value=self.fake)
         self.patcher.start()
         self.addCleanup(self.patcher.stop)
+        self.training_patcher = patch.object(m, "training_status", return_value={"can_start": True})
+        self.training_patcher.start()
+        self.addCleanup(self.training_patcher.stop)
         m._put("snapshot", snapshot())
 
     def test_import_queues_once_without_dispatching_from_admin(self):
@@ -189,6 +192,7 @@ class TestWorker(unittest.TestCase):
         good = snapshot()
         with patch("admin_model_lab_worker.collect_status", return_value=good), \
              patch("admin_model_lab_worker.inspect", return_value={"can_start": True}), \
+             patch("admin_model_lab_worker.training_status", return_value={"can_start": True}), \
              patch("admin_model_lab_worker.github") as gh:
             dispatch(pending)
             arguments = gh.call_args.args[1]
