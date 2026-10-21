@@ -440,11 +440,15 @@ def validate_certificate(*, require_writer_lock: bool = True):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("action", choices=("prepare", "verify"))
+    ap.add_argument("--read-only-snapshot", action="store_true",
+                    help="Verify frozen bytes and same-run certificate without holding CDB writer lock")
     args = ap.parse_args()
+    if args.read_only_snapshot and args.action != "verify":
+        ap.error("Snapshot inspection may not prepare or publish releases")
     if args.action == "prepare":
         prepare()
     else:
-        cert = validate_certificate()
+        cert = validate_certificate(require_writer_lock=not args.read_only_snapshot)
         print(json.dumps({"status": "VERIFIED", "backup_tag": cert["backup_tag"],
                           "candidate_tag": cert["candidate_tag"]}))
 
