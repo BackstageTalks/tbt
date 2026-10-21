@@ -1430,7 +1430,8 @@ def main():
                 )
                 if shadow_enabled else []
             )
-            shadow_ledger = update_shadow_ledger(
+            from active_shadow_capture import update_active_shadow
+            shadow_ledger = update_active_shadow(
                 shadow_ledger,
                 production_predictions=predictions,
                 challenger_predictions=challenger_predictions,
