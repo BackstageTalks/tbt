@@ -76,6 +76,9 @@ def test_recursive_bounded_batches_and_recoverable_checkpoint(tmp_path):
     assert first["inventory_files"] == 4
     assert first["reviewed"] == 1
     assert first["fetched"] == 1
+    fetched = [item for item in first["files"] if item["status"] == "fetched"]
+    assert len(fetched) == 1
+    assert fetched[0]["source_path"] == "/atp_matches_2026.csv"
     assert first["pending_supported"] == 2
     assert len(drive.file_reads) == 1
 
