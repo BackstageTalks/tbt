@@ -70,6 +70,10 @@ class TennisEnsemble:
         )
         self.blend_weight = .5
         self.elo_weight = 0.
+        # Only newly fitted 7.2.1 research candidates may select ATP weights.
+        self.atp_blend_specialization = False
+        self.atp_blend_weight = None
+        self.atp_elo_weight = None
         self.calibrator = ProbabilityCalibrator()
         # New v7.2.1 experiment only; old models load through getattr fallback.
         self.tour_calibrators: dict[str, ProbabilityCalibrator] = {}
@@ -107,7 +111,86 @@ class TennisEnsemble:
         weight = getattr(self, "elo_weight", 0.)
         if weight:
             p = (1 - weight) * p + weight * frame["elo_probability"].to_numpy(dtype=float)
+        atp_weight = getattr(self, "atp_blend_weight", None)
+        if atp_weight is not None:
+            if "tour_atp" not in frame or getattr(self, "atp_elo_weight", None) is None:
+                raise ValueError("ATP blend requires tour and both frozen weights")
+            tours = frame["tour_atp"].to_numpy(dtype=float)
+            if not np.isfinite(tours).all() or not np.isin(tours, [0., 1.]).all():
+                raise ValueError("ATP blend requires valid tour_atp")
+            mask = tours == 1.
+            if mask.any():
+                elo = frame["elo_probability"].to_numpy(dtype=float)
+                atp_elo = float(self.atp_elo_weight)
+                p[mask] = ((1 - atp_elo) *
+                           (float(atp_weight) * boost[mask] +
+                            (1 - float(atp_weight)) * linear[mask]) +
+                           atp_elo * elo[mask])
         return np.clip(p, .01, .99)
+
+    @staticmethod
+    def _choose_atp_blend(linear, boost, elo, labels, tours, split,
+                          pooled_weight, pooled_elo_weight):
+        """Tune on early ATP calibration days, approve on later ATP days only."""
+        arrays = [np.asarray(v, dtype=float) for v in
+                  (linear, boost, elo, labels, tours)]
+        if (len({len(v) for v in arrays}) != 1
+                or not 0 < split < len(arrays[0])
+                or any(not np.isfinite(v).all() for v in arrays)
+                or not np.isin(arrays[4], [0., 1.]).all()):
+            raise ValueError("Invalid ATP blend calibration inputs")
+        linear, boost, elo, labels, tours = arrays
+        fit_idx = np.flatnonzero(tours[:split] == 1.)
+        select_idx = np.flatnonzero(tours[split:] == 1.) + split
+        evidence = {"fit_n": len(fit_idx), "selection_n": len(select_idx),
+                    "minimum_log_loss_improvement": .002,
+                    "brier_non_regression_required": True,
+                    "accuracy_non_regression_required": True}
+        if (len(fit_idx) < 250 or len(select_idx) < 120
+                or len(np.unique(labels[fit_idx])) < 2
+                or len(np.unique(labels[select_idx])) < 2):
+            return None, {**evidence, "status": "INSUFFICIENT_DISJOINT_ATP"}
+
+        def raw(indices, boost_weight, elo_weight):
+            return np.clip(
+                (1. - elo_weight) *
+                (boost_weight * boost[indices] + (1. - boost_weight) * linear[indices])
+                + elo_weight * elo[indices], .01, .99)
+
+        choices = []
+        for boost_weight in np.linspace(0., 1., 6):
+            for elo_weight in (0., .25, .5, 1.):
+                p = raw(fit_idx, float(boost_weight), float(elo_weight))
+                choices.append((float(log_loss(labels[fit_idx], p, labels=[0, 1])),
+                                -float(accuracy_score(labels[fit_idx], p >= .5)),
+                                float(boost_weight), float(elo_weight)))
+        _, _, selected_boost, selected_elo = min(choices)
+        baseline = raw(select_idx, pooled_weight, pooled_elo_weight)
+        candidate = raw(select_idx, selected_boost, selected_elo)
+        y = labels[select_idx]
+        base_loss = float(log_loss(y, baseline, labels=[0, 1]))
+        candidate_loss = float(log_loss(y, candidate, labels=[0, 1]))
+        base_brier = float(np.mean((baseline - y) ** 2))
+        candidate_brier = float(np.mean((candidate - y) ** 2))
+        base_accuracy = float(accuracy_score(y, baseline >= .5))
+        candidate_accuracy = float(accuracy_score(y, candidate >= .5))
+        approved = (candidate_loss + .002 < base_loss
+                    and candidate_brier <= base_brier + 1e-12
+                    and candidate_accuracy + 1e-12 >= base_accuracy)
+        evidence.update({
+            "status": "SELECTED" if approved else "GLOBAL_RETAINED",
+            "pooled_boost_weight": float(pooled_weight),
+            "pooled_elo_weight": float(pooled_elo_weight),
+            "candidate_boost_weight": selected_boost,
+            "candidate_elo_weight": selected_elo,
+            "pooled_selection_log_loss": base_loss,
+            "candidate_selection_log_loss": candidate_loss,
+            "pooled_selection_brier": base_brier,
+            "candidate_selection_brier": candidate_brier,
+            "pooled_selection_accuracy": base_accuracy,
+            "candidate_selection_accuracy": candidate_accuracy,
+        })
+        return ((selected_boost, selected_elo) if approved else None), evidence
 
     @staticmethod
     def _calibrated(calibrator, p):
@@ -266,6 +349,7 @@ class TennisEnsemble:
         self.linear.fit(x, y)
         self.boost.fit(x, y)
         self.blend_weight, self.elo_weight = .5, 0.
+        self.atp_blend_weight, self.atp_elo_weight = None, None
         self.calibrator = ProbabilityCalibrator()
         self.tour_calibrators = {}
         split = calibration_split(cal) if len(cal) >= 120 else None
@@ -286,12 +370,26 @@ class TennisEnsemble:
                     score = (-accuracy, loss) if self.objective == "accuracy" else (loss, -accuracy)
                     choices.append((score, float(weight), elo_weight))
             _, self.blend_weight, self.elo_weight = min(choices, key=lambda item: item[0])
-            if self.objective == "log_loss" and "tour_atp" in cal.columns:
+            # Nonpromoting ATP/WTA research report on disjoint calibration days.
+            # Never changes blended probabilities, the accepted ATP weights,
+            # calibration choice, final holdout, or frozen serving parameters.
+            if (self.objective == "log_loss"
+                    and getattr(self, "atp_blend_specialization", False)
+                    and "tour_atp" in cal.columns):
                 from .tour_blend_experiment import compare_tour_blends
                 self.metadata["tour_blend_experiment"] = compare_tour_blends(
-                    linear, boost, elo, y_cal, cal.tour_atp.to_numpy(dtype=float),
+                    linear, boost, elo, y_cal, cal["tour_atp"].to_numpy(dtype=float),
                     split, (self.blend_weight, self.elo_weight),
                 )
+            if (self.objective == "log_loss"
+                    and getattr(self, "atp_blend_specialization", False)
+                    and "tour_atp" in cal.columns):
+                selected, evidence = self._choose_atp_blend(
+                    linear, boost, elo, y_cal, cal["tour_atp"].to_numpy(dtype=float),
+                    split, self.blend_weight, self.elo_weight)
+                if selected is not None:
+                    self.atp_blend_weight, self.atp_elo_weight = selected
+                self.metadata["atp_blend_validation"] = evidence
             raw = self._raw(cal)
             kinds = ["identity", "platt"]
             if split >= 350 and len(np.unique(np.round(raw[:split], 3))) >= 20:
@@ -320,6 +418,8 @@ class TennisEnsemble:
             self.metadata["calibration_fallback"] = "insufficient disjoint calendar days"
         self.metadata.update({"blend_weight_boost": self.blend_weight,
                               "elo_weight": self.elo_weight,
+                              "atp_blend_weight_boost": self.atp_blend_weight,
+                              "atp_elo_weight": self.atp_elo_weight,
                               "calibration_method": self.calibrator.kind,
                               "tour_calibration_methods": {
                                   k: v.kind for k, v in self.tour_calibrators.items()
@@ -336,6 +436,8 @@ class TennisEnsemble:
         elo_weight: float,
         calibrator_kind: str,
         tour_calibrator_kinds: dict[str, str] | None = None,
+        atp_blend_weight: float | None = None,
+        atp_elo_weight: float | None = None,
     ):
         """Refit a serving artifact without re-selecting model choices.
 
@@ -355,6 +457,16 @@ class TennisEnsemble:
             raise ValueError("blend_weight must be 0..1")
         if not 0.0 <= float(elo_weight) <= 1.0:
             raise ValueError("elo_weight must be 0..1")
+        if (atp_blend_weight is None) != (atp_elo_weight is None):
+            raise ValueError("Frozen ATP blend requires both weights")
+        if atp_blend_weight is not None and (
+                not 0 <= float(atp_blend_weight) <= 1
+                or not 0 <= float(atp_elo_weight) <= 1
+                or not np.isfinite([atp_blend_weight, atp_elo_weight]).all()):
+            raise ValueError("Invalid frozen ATP blend weights")
+        if atp_blend_weight is not None and (
+                "tour_atp" not in train_frame or "tour_atp" not in calibration_frame):
+            raise ValueError("Frozen ATP blend requires tour_atp")
 
         train = train_frame.sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
         cal = calibration_frame.sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
@@ -389,6 +501,8 @@ class TennisEnsemble:
 
         self.blend_weight = float(blend_weight)
         self.elo_weight = float(elo_weight)
+        self.atp_blend_weight = (None if atp_blend_weight is None else float(atp_blend_weight))
+        self.atp_elo_weight = (None if atp_elo_weight is None else float(atp_elo_weight))
         self.calibrator = ProbabilityCalibrator()
         self.tour_calibrators = {}
         if calibrator_kind != "identity":
@@ -429,6 +543,8 @@ class TennisEnsemble:
             "training_matches": len(train),
             "blend_weight_boost": self.blend_weight,
             "elo_weight": self.elo_weight,
+            "atp_blend_weight_boost": self.atp_blend_weight,
+            "atp_elo_weight": self.atp_elo_weight,
             "calibration_method": self.calibrator.kind,
             "tour_calibration_methods": {
                 k: v.kind for k, v in self.tour_calibrators.items()

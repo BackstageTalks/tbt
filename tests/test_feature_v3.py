@@ -117,3 +117,74 @@ def test_serving_respects_legacy_artifact_feature_schema(match_factory):
     rows = engine.predict(model, history, [future], now=future.scheduled_at.replace(day=4))
     assert rows
     assert model.columns == model.feature_names
+
+
+def test_point_weighted_quality_shrinks_small_samples_and_preserves_old_semantics(match_factory):
+    from datetime import timedelta
+    from tbt.models.feature_builder import RecentPerformance
+
+    upcoming = match_factory("future-quality", "A", "B", None, day=12, surface="hard")
+    weighted = FeatureBuilder(point_weighted_quality=True)
+    old = FeatureBuilder()
+    for builder in (weighted, old):
+        first = builder._state(upcoming, True)
+        second = builder._state(upcoming, False)
+        first.recent.append(RecentPerformance(
+            played_at=upcoming.scheduled_at - timedelta(days=1),
+            won=1., expected=.5, surface="hard",
+            serve_quality=.95, serve_points_total=5))
+        second.recent.append(RecentPerformance(
+            played_at=upcoming.scheduled_at - timedelta(days=1),
+            won=0., expected=.5, surface="hard",
+            serve_quality=.50, serve_points_total=200))
+
+    weighted.quality_baselines[("atp", "all", "serve_quality")] = [600., 1000.]
+    first = weighted._state(upcoming, True)
+    a = weighted._quality_estimate(first, upcoming.scheduled_at, "serve_quality",
+                                   tour="atp", surface="hard")
+    old_a = old._quality_estimate(old._state(upcoming, True), upcoming.scheduled_at,
+                                  "serve_quality", tour="atp", surface="hard")
+    assert .60 < a < .62
+    assert old_a == .95
+    assert a < old_a
+
+    restored = FeatureBuilder.from_state(weighted.export_state())
+    assert restored.point_weighted_quality is True
+    assert restored.quality_baselines[("atp", "all", "serve_quality")] == [600., 1000.]
+    assert restored._quality_estimate(restored._state(upcoming, True),
+            upcoming.scheduled_at, "serve_quality", tour="atp", surface="hard") == a
+
+
+def test_atp_surface_opponent_form_is_prematch_surface_only_and_symmetric(match_factory):
+    import pytest
+    from tbt.services.training import PRODUCTION_FEATURE_NAMES, _candidate_feature_names
+
+    feature = "atp_surface_opponent_form_diff"
+    assert feature not in PRODUCTION_FEATURE_NAMES
+    assert feature not in _candidate_feature_names()
+    assert feature in _candidate_feature_names(atp_surface_opponent_form=True)
+
+    builder = FeatureBuilder()
+    builder.update(match_factory("hard-win", "A", "X", "A", day=1, surface="hard"))
+    builder.update(match_factory("hard-loss", "B", "Y", "Y", day=1, surface="hard"))
+    hard = match_factory("upcoming-hard", "A", "B", None, day=3, surface="hard")
+    p = builder.snapshot(hard)[feature]
+    assert p > 0.
+    assert builder.snapshot(hard.swapped())[feature] == pytest.approx(-p)
+    assert builder.snapshot(match_factory(
+        "upcoming-clay", "A", "B", None, day=3, surface="clay"))[feature] == 0.
+    assert builder.snapshot(match_factory(
+        "upcoming-wta", "A", "B", None, day=3, surface="hard", tour="wta"))[feature] == 0.
+
+    state = FeatureBuilder.from_state(builder.export_state())
+    assert state.snapshot(hard)[feature] == pytest.approx(p)
+
+
+def test_atp_surface_opponent_form_does_not_use_same_day_results(match_factory):
+    played = match_factory("played", "A", "X", "A", day=1, surface="hard")
+    same_day = match_factory("same-day", "A", "B", "B", day=1, surface="hard")
+    next_day = match_factory("next-day", "A", "B", "A", day=2, surface="hard")
+    frame = FeatureBuilder().build_training_frame([played, same_day, next_day])
+    assert frame.iloc[0]["atp_surface_opponent_form_diff"] == 0.
+    assert frame.iloc[1]["atp_surface_opponent_form_diff"] == 0.
+    assert frame.iloc[2]["atp_surface_opponent_form_diff"] != 0.

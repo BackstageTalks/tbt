@@ -117,6 +117,8 @@ def identity_gap_inventory(canonical, *, start: date, end: date,
     eligible_days = defaultdict(int)
     eligible_tours_by_day = defaultdict(set)
     counted = 0
+    claim_details = Counter()
+    secondary_blockers = Counter()
     for match in canonical:
         day = _day(match)
         if (str(match.tour or "").lower() not in {"atp", "wta"}
@@ -129,6 +131,30 @@ def identity_gap_inventory(canonical, *, start: date, end: date,
         pair = _pair(match)
         if claims:
             reason = "existing_unusable_or_conflicting_event_claims"
+            raw = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+            keys = ("_tbt_provider_event_id", "provider_event_id", "event_id", "eventId", "id")
+            native_claim = raw.get("_tbt_provider_event_id")
+            if native_claim not in (None, ""):
+                claim_details["explicit_native_provider_claim"] += 1
+            elif raw.get("_tbt_event_identity"):
+                claim_details["identity_witness_without_explicit_native_claim"] += 1
+            elif any(raw.get(k) not in (None, "") for k in keys[1:]):
+                claim_details["unscoped_event_claim"] += 1
+            else:
+                claim_details["other_claim"] += 1
+            if len(claims) > 1:
+                claim_details["multiple_distinct_claim_values"] += 1
+            if not all(c.isascii() and c.isdigit() and int(c) > 0 for c in claims):
+                claim_details["non_positive_or_nonnumeric_claim"] += 1
+            # Independent, overlapping blockers: claims must not hide metadata gaps.
+            if not _category(match):
+                secondary_blockers["missing_first_party_category"] += 1
+            if not pair:
+                secondary_blockers["missing_or_colliding_player_ids"] += 1
+            if str(match.winner_id or "") not in pair:
+                secondary_blockers["winner_outside_pair"] += 1
+            if not _round(match.round_name):
+                secondary_blockers["missing_round"] += 1
         elif not _category(match):
             reason = "missing_first_party_category"
         elif not pair:
@@ -173,6 +199,8 @@ def identity_gap_inventory(canonical, *, start: date, end: date,
         "status": "IDENTITY_GAP_READ_ONLY_INVENTORY",
         "canonical_missing_or_conflicting_id_rows": counted,
         "primary_blockers": dict(sorted(reasons.items())),
+        "existing_claim_diagnostics": dict(sorted(claim_details.items())),
+        "existing_claim_secondary_blockers": dict(sorted(secondary_blockers.items())),
         "by_tour_year": {
             name: dict(sorted(value.items()))
             for name, value in sorted(by_cohort.items())

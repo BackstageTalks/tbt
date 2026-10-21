@@ -38,6 +38,7 @@ PRODUCTION_FEATURE_NAMES = [
     for name in FEATURE_NAMES
     if (
         name not in set(RICH_CHARTING_FEATURE_NAMES)
+        and name != "atp_surface_opponent_form_diff"
         and name not in set(ATP_LEADERBOARD_FEATURE_NAMES)
         and name not in set(ATP_RANK_HISTORY_FEATURE_NAMES)
         and name not in set(WTA_RANK_HISTORY_FEATURE_NAMES)
@@ -81,8 +82,11 @@ def _candidate_feature_names(
     atp_rank_history=None,
     wta_rank_history=None,
     wta_season_stats=None,
+    atp_surface_opponent_form=False,
 ):
     names = list(PRODUCTION_FEATURE_NAMES)
+    if atp_surface_opponent_form:
+        names.append("atp_surface_opponent_form_diff")
     if atp_leaderboards is not None:
         names += list(ATP_LEADERBOARD_FEATURE_NAMES)
     if atp_rank_history is not None:
@@ -366,6 +370,8 @@ def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
             tour: cal.kind for tour, cal in
             (getattr(selected, "tour_calibrators", {}) or {}).items()
         },
+        atp_blend_weight=getattr(selected, "atp_blend_weight", None),
+        atp_elo_weight=getattr(selected, "atp_elo_weight", None),
     )
 
     selected_metadata = dict(getattr(selected, "metadata", {}) or {})
@@ -388,6 +394,7 @@ def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
         "rank_provenance": selected_metadata.get("rank_provenance"),
         "independent_serve_return": bool(selected_metadata.get("independent_serve_return", False)),
         "independent_direct_rates": bool(selected_metadata.get("independent_direct_rates", False)),
+        "point_weighted_quality": bool(selected_metadata.get("point_weighted_quality", False)),
         "holdout_metrics": selected_metadata.get("holdout_metrics"),
         "elo_baseline_metrics": selected_metadata.get("elo_baseline_metrics"),
         "holdout_delta_vs_elo": selected_metadata.get("holdout_delta_vs_elo"),
@@ -856,6 +863,7 @@ def train_from_matches(
     builder = FeatureBuilder(
         independent_serve_return=(training_profile == "top-7.2.1"),
         independent_direct_rates=(training_profile == "top-7.2.1"),
+        point_weighted_quality=(training_profile == "top-7.2.1"),
     )
 
     if verified_frame is None:
@@ -937,6 +945,7 @@ def train_from_matches(
         names = _candidate_feature_names(
             atp_leaderboards=atp_leaderboards, atp_rank_history=atp_rank_history,
             wta_rank_history=wta_rank_history, wta_season_stats=wta_season_stats,
+            atp_surface_opponent_form=True,
         )
         diagnostics = input_diagnostics({"train": train, "calibration": calibration}, names)
         require_informative_inputs(diagnostics)
@@ -950,6 +959,7 @@ def train_from_matches(
                     atp_rank_history=atp_rank_history,
                     wta_rank_history=wta_rank_history,
                     wta_season_stats=wta_season_stats,
+                    atp_surface_opponent_form=(training_profile == "top-7.2.1"),
                 ), objective=objective,
             )
             if (
@@ -961,11 +971,10 @@ def train_from_matches(
             )
             else _new_production_ensemble(objective=objective)
         )
-        .fit(
-            train,
-            calibration,
-        )
     )
+    # Enabled only for new 7.2.1 research; standard and legacy fits are unchanged.
+    evaluation_model.atp_blend_specialization = training_profile == "top-7.2.1"
+    evaluation_model.fit(train, calibration)
 
     _training_progress("fit_estimators_complete", len(train))
     if training_profile == "top-7.2.1":
@@ -1189,7 +1198,9 @@ def train_from_matches(
         ),
         "subgroups": subgroup_report(test, test_p),
         "evaluation_model": {
-            "tour_blend_experiment": (evaluation_model.metadata or {}).get("tour_blend_experiment"),
+            "tour_blend_experiment": (
+                (evaluation_model.metadata or {}).get("tour_blend_experiment")
+            ),
             "blend_weight_boost": (
                 evaluation_model
                 .blend_weight
@@ -1246,6 +1257,7 @@ def train_from_matches(
         "rank_provenance": rank_provenance,
         "independent_serve_return": training_profile == "top-7.2.1",
         "independent_direct_rates": training_profile == "top-7.2.1",
+        "point_weighted_quality": training_profile == "top-7.2.1",
         "holdout_metrics": (
             holdout_metrics
         ),

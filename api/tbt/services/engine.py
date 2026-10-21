@@ -261,13 +261,17 @@ def predict(
     semantics = getattr(model, "metadata", None) or {}
     independent = semantics.get("independent_serve_return", False)
     direct_rates = semantics.get("independent_direct_rates", False)
+    point_weighted_quality = semantics.get("point_weighted_quality", False)
     if type(independent) is not bool:
         raise ValueError("Unknown model feature semantics: independent_serve_return")
     if type(direct_rates) is not bool:
         raise ValueError("Unknown model feature semantics: independent_direct_rates")
+    if type(point_weighted_quality) is not bool:
+        raise ValueError("Unknown model feature semantics: point_weighted_quality")
     builder = FeatureBuilder(
         independent_serve_return=independent,
         independent_direct_rates=direct_rates,
+        point_weighted_quality=point_weighted_quality,
     )
     builder.replay(replay_history, before=cutoff)
     future = sorted((m for m in upcoming if not m.is_completed and m.scheduled_at > now
