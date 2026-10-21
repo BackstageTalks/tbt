@@ -773,6 +773,64 @@ def _augment_wta_season_features(
     )
 
 
+def paired_wta_holdout_diagnostics(test, candidate_p, champion_p):
+    """Descriptive only: untouched WTA holdout, never used for model selection.
+
+    Distinguish missing features from zero-valued feature differences. A zero
+    break-point difference is not proof that both break-point priors exist.
+    """
+    if champion_p is None or "tour_atp" not in test:
+        return {"status": "NO_COMPARABLE_CHAMPION"}
+    candidate_p = np.asarray(candidate_p, dtype=float)
+    champion_p = np.asarray(champion_p, dtype=float)
+    if len(test) != len(candidate_p) or len(test) != len(champion_p):
+        raise ValueError("Paired WTA probabilities must share exact holdout rows")
+    wta = np.isclose(test["tour_atp"].to_numpy(dtype=float), 0.)
+    if not wta.any():
+        return {"status": "NO_WTA_HOLDOUT", "n": 0}
+    target = test["target"].to_numpy(dtype=int)
+    metrics = ("accuracy", "log_loss", "brier_score", "ece_10")
+    def scored(mask):
+        n = int(mask.sum())
+        if n < 30:
+            return {"n": n, "status": "INSUFFICIENT_SUBGROUP"}
+        left = evaluate_probabilities(target[mask], candidate_p[mask])
+        right = evaluate_probabilities(target[mask], champion_p[mask])
+        return {"n": n, "status": "DESCRIPTIVE_HOLDOUT_ONLY",
+                "candidate": {k: left.get(k) for k in metrics},
+                "champion": {k: right.get(k) for k in metrics},
+                "delta": {k: _metric_delta(left, right, k) for k in metrics}}
+    fields = (
+        "stats_known_both", "surface_stats_known_both",
+        "wta_hist_known_both", "wta_season_stats_known_both",
+    )
+    cohorts = {}
+    for field in fields:
+        if field not in test:
+            cohorts[field] = {"status": "FEATURE_NOT_AVAILABLE"}
+            continue
+        valid = pd.to_numeric(test[field], errors="coerce").to_numpy(dtype=float)
+        if not np.isfinite(valid[wta]).all():
+            raise ValueError("Nonfinite WTA feature availability in audited holdout")
+        cohorts[field] = {
+            "known": scored(wta & (valid >= .5)),
+            "missing": scored(wta & (valid < .5)),
+        }
+    # Break point values describe nonzero differential signal, not coverage.
+    bp = {}
+    for field in ("break_point_serve_diff", "break_point_return_diff"):
+        if field in test:
+            values = pd.to_numeric(test[field], errors="coerce").to_numpy(dtype=float)
+            bp[field] = {
+                "nonzero_signal_rows": int((wta & np.isfinite(values) & (np.abs(values) > 1e-12)).sum()),
+                "status": "NONZERO_SIGNAL_NOT_COVERAGE",
+            }
+    return {"status": "DESCRIPTIVE_HOLDOUT_ONLY", "n": int(wta.sum()),
+            "full_wta": scored(wta), "availability_cohorts": cohorts,
+            "break_point_signal": bp,
+            "never_select_model_on_this_holdout": True}
+
+
 def train_from_matches(
     matches: Iterable[
         MatchRecord
@@ -1016,6 +1074,8 @@ def train_from_matches(
         "production_holdout": production_metrics,
         "production_subgroups": production_subgroups,
         "delta_vs_production": delta_vs_production,
+        "wta_regression_diagnostics": paired_wta_holdout_diagnostics(
+            test, test_p, production_probabilities),
         "data_quality": quality,
         "rank_provenance": rank_provenance,
         "atp_leaderboards": {
