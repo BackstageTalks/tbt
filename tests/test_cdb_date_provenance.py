@@ -10,7 +10,7 @@ import pytest
 
 from scripts.cdb_inbox_adapter import normalize
 from scripts.cdb_inbox_stage import _strict_source_evidence
-from scripts.link_offline_serve_return import OfflineMatch, _candidate_score, _sackmann_rows
+from scripts.link_offline_serve_return import OfflineMatch, _candidate_score, _sackmann_rows, _norm_round
 
 
 def candidate(day: int, *, tournament="Vienna", round_name="QF", surface="hard"):
@@ -29,7 +29,7 @@ def source(*, day=17, kind="tournament_start", tournament="Vienna",
         source="sackmann:atp_native_2026.csv", source_match_id="raw:1",
         tour="atp", event_date=date(2026, 10, day),
         player_a="Alpha One", player_b="Beta Two", winner="Alpha One",
-        tournament=tournament, round_name=round_name, surface=surface,
+        tournament=tournament, round_name=_norm_round(round_name), surface=surface,
         best_of=best_of, stats_a={"aces": 5.0}, stats_b={"aces": 2.0},
         source_player_a_id="100", source_player_b_id="200",
         source_id_namespace="sackmann", source_date_kind=kind,
