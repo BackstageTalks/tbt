@@ -4926,6 +4926,63 @@
   }
 
 
+  function renderAdminModelLab(){
+    const d=state.adminModelLab, busy=!!state.adminModelLabBusy;
+    const safeLink=(url,label)=>/^https:\/\/github\.com\/BackstageTalks\/tbt\/actions\/runs\/[0-9]+$/.test(String(url||''))?
+      '<a href="'+escapeHtml(url)+'" rel="noopener noreferrer" target="_blank">'+escapeHtml(label)+'</a>':escapeHtml(label);
+    const operation=d?.operation, last=d?.last_operation;
+    const candidates=(d?.candidates||[]).filter(c=>c.sha256!==d?.active_sha256);
+    const options=candidates.slice(0,30).map(c=>'<option value="'+escapeHtml(c.tag)+'">'+escapeHtml(c.tag)+'</option>').join('');
+    const run=operation?.run, confirmed=last?.run;
+    const stateLabels={QUEUED:'Čaká na bezpečné spustenie',DISPATCH_UNCONFIRMED:'Spustenie nepotvrdené – neposielaj znova',RUNNING:'Prebieha',COMPLETED_PENDING_VERIFICATION:'Dokončené – čaká na nezávislú kontrolu',WORKFLOW_VERIFIED:'Overené',FAILED_NEEDS_REVIEW:'Zlyhanie – vyžaduje kontrolu'};
+    const fmtRun=record=>record?(' '+safeLink(record.html_url,'GitHub beh #'+record.id)+' · '+escapeHtml(String(record.conclusion||record.status||''))):'';
+    const activeText=operation?('<strong>'+escapeHtml(stateLabels[operation.state]||operation.state)+'</strong> · '+escapeHtml(operation.action)+' · '+escapeHtml(operation.id)+fmtRun(run)):
+      'Žiadna rozpracovaná operácia.';
+    const finalText=last?('<strong>'+escapeHtml(stateLabels[last.state]||last.state)+'</strong> · '+escapeHtml(last.action||'')+fmtRun(confirmed)):'Zatiaľ bez ukončeného behu.';
+    const disabled=busy||!d?.can_start;
+    const failed=operation&&last&&last.id===operation.id&&last.state==='FAILED_NEEDS_REVIEW';
+    const hint=d?.reason||'Načítavam stav bezpečných operácií…';
+    return '<section class="admin-ux-section admin-model-lab" aria-label="Model Lab – operácie">'+
+      '<div class="admin-ux-heading"><div><small>MODEL LAB · OPERÁCIE</small><h2>Dáta, testy a shadow</h2>'+
+      '<p>Jedno miesto na riadenie overených modelov. Každý krok má samostatný stav, audit a ochranu pred duplicitou. Champion zostáva nezmenený.</p></div>'+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-refresh" '+(busy?'disabled':'')+'>Obnoviť operácie</button></div>'+
+      '<p role="status">'+escapeHtml(state.adminModelLabMessage||hint)+'</p>'+
+      '<div class="admin-calibration-grid">'+
+      '<article class="admin-calibration-panel"><h3>1 · Načítať nové dáta</h3><p>Jedna kontrolovaná dávka maximálne 100 súborov z existujúceho Drive inboxu; 0 nových volaní Tennis API.</p>'+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="import_drive" '+(disabled?'disabled':'')+'>Spustiť Drive import</button></article>'+
+      '<article class="admin-calibration-panel"><h3>2 · Prepočítať testy</h3><p>Obnoviť nezávislý prehľad champion/kandidát, výsledky zápasov a kalibráciu. Žiadny nový tréning.</p>'+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="refresh_tests" '+(disabled?'disabled':'')+'>Spustiť testy</button></article>'+
+      '<article class="admin-calibration-panel"><h3>3 · Aktivovať shadow</h3><p>Vyber hotový zmrazený model. Zápis musí potvrdiť checksum a spätné načítanie; produkcia sa neprepína.</p>'+
+      '<label>Overený model <select id="admin-model-lab-candidate" '+(disabled?'disabled':'')+'>'+options+'</select></label>'+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="activate_shadow" '+(disabled||!candidates.length?'disabled':'')+'>Aktivovať shadow kandidáta</button></article></div>'+
+      '<p class="admin-calibration-foot">Tréning nového modelu je hneď v sekcii nižšie. Najprv importuj dáta, potom trénuj, vyhodnoť a až potom aktivuj shadow. Produkčné povýšenie sa odtiaľto nedá spustiť.</p>'+
+      '<div class="admin-calibration-bottom"><div><strong>Aktuálna operácia</strong><span>'+activeText+'</span></div><div><strong>Posledný overený stav</strong><span>'+finalText+'</span></div></div>'+
+      (failed?'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-acknowledge" '+(busy?'disabled':'')+'>Potvrdiť kontrolu neúspešného behu</button>':'')+
+      '</section>';
+  }
+  async function loadAdminModelLab(startOperation='', acknowledge=false){
+    if(state.adminModelLabBusy)return;
+    const generation=feedGeneration;
+    const tag=document.getElementById('admin-model-lab-candidate')?.value||'';
+    state.adminModelLabBusy=true;state.adminModelLabMessage='';rerenderAdmin();
+    try{
+      let payload;
+      if(acknowledge)payload={action:'acknowledge_failed',id:state.adminModelLab?.operation?.id||''};
+      else if(startOperation)payload={action:startOperation,...(startOperation==='activate_shadow'?{source_tag:tag}:{})};
+      const result=await BlinqAuth.adminModelLab(payload);
+      if(generation!==feedGeneration)return;
+      if(startOperation||acknowledge){
+        state.adminModelLabMessage=result.message||result.state||'Požiadavka zaznamenaná.';
+        state.adminModelLab=null;
+        await loadAdminCalibration(true);
+      }else state.adminModelLab=result;
+    }catch(error){
+      if(generation!==feedGeneration)return;
+      state.adminModelLabMessage=error?.message||'Model Lab nie je dostupný.';
+    }finally{
+      if(generation===feedGeneration){state.adminModelLabBusy=false;rerenderAdmin();}
+    }
+  }
   function renderAdminTraining(){
     const d=state.adminTraining, busy=state.adminTrainingBusy;
     const link=(url,label)=>/^https:\/\/github\.com\/BackstageTalks\/(tbt|tbt-data)\//.test(String(url||''))?`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`:escapeHtml(label);
@@ -5168,14 +5225,14 @@
   function renderAdminRoute(){
     const tabs=[['accounts','Účty','Prístup · platnosť'],['projects','Projektové skupiny','Skupiny · INFO · výsledky'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard setting','3 karty · KPI'],['testresults','Výsledky','Testovacie tipy · výber'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram','Skupiny · odkazy'],['insights','Info & LIVE','Správy · radar'],['calibration','Kalibrácia','Model · 1 000 zápasov'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
-    const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,testresults:renderAdminTestList,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,calibration:()=>renderAdminTraining()+renderAdminCalibration(),system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
+    const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,testresults:renderAdminTestList,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,calibration:()=>renderAdminModelLab()+renderAdminTraining()+renderAdminCalibration(),system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
     const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],projects:['Projektové skupiny','Samostatné skupiny bez ohľadu na level, ich INFO kanál a vyhodnotenia.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard setting','Nastavenie troch hlavných metrík bez zmeny grafiky.'],testresults:['Výsledky','Manuálne vylúčenie testovacích predikcií.'],layout:['Zobrazenie','SHOW / BLUR / HIDE pre panely a jednotlivé riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],calibration:['Kalibrácia modelu','Shadow výsledky, chýbajúce zápasy a porovnanie s produkciou.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
     let contextual='';
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov sa aplikujú okamžite</div>';
     else if(state.adminTab==='projects')contextual='<div class="admin-account-direct-note"><span></span>Skupiny a správy sa ukladajú okamžite</div>';
     else if(state.adminTab==='insights')contextual='<div class="admin-account-direct-note"><span></span>Správy sa publikujú okamžite</div>';
     else if(state.adminTab==='testresults')contextual='<div class="admin-account-direct-note"><span></span>Výber sa ukladá po potvrdení</div>';
-    else if(state.adminTab==='calibration')contextual='<div class="admin-account-direct-note"><span></span>Súkromný read-only modelový audit</div>';
+    else if(state.adminTab==='calibration')contextual='<div class="admin-account-direct-note"><span></span>Model Lab · riadené operácie a súkromný audit bez automatickej produkčnej aktivácie</div>';
     else if(state.adminTab==='system')contextual='<div class="admin-account-direct-note"><span></span>Kontrola je len čítacia diagnostika</div>';
     else contextual='<div class="admin-publish-hint"><span>Koncept</span><i></i><b>Live po publikovaní</b></div><button class="btn btn-ghost" type="button" data-admin-action="load-draft">Načítať koncept</button><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Uložiť koncept</button><button class="btn btn-primary" type="button" data-admin-action="publish-config" '+(state.uiStorageAvailable===true?'':'disabled title="Publikovanie je pozastavené, kým sa neoverí Azure konfigurácia"')+'>Publikovať</button>';
     const uiWarning=state.uiStorageAvailable===false
@@ -5227,6 +5284,7 @@
   function exportUiConfig(){ const blob=new Blob([JSON.stringify(state.ui,null,2)+'\n'],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');a.href=url;a.download='ui-config.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),0); }
   async function loadAdminCalibration(force=false){
     if(force||!state.adminTraining)loadAdminTraining();
+    if(force||!state.adminModelLab)loadAdminModelLab();
     const generation=feedGeneration;
     if(state.adminCalibrationLoading||(!force&&state.adminCalibration))return;
     state.adminCalibrationLoading=true;state.adminCalibrationError='';rerenderAdmin();
@@ -5519,6 +5577,18 @@
       }
       if(action==='live-radar-scan'){if(state.adminLiveRadarLoading)return;state.adminLiveRadarLoading=true;state.adminLiveRadarStatus=null;rerenderAdmin();try{const result=await BlinqAuth.adminLiveRadar(true,true);state.adminLiveRadarStatus={...result,ok:true,new_alerts:Number(result?.created)||0};state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);showStatus(`LIVE Radar: ${Number(result?.signals?.length??result?.signals)||0} signálov · ${Number(result?.created)||0} nových upozornení.`);}catch(error){state.adminLiveRadarStatus={error:error.message||'LIVE Radar sa nepodarilo spustiť.'};showStatus(state.adminLiveRadarStatus.error);}finally{state.adminLiveRadarLoading=false;rerenderAdmin();}return;}
       if(action==='calibration-refresh'){loadAdminCalibration(true);return;}
+      if(action==='model-lab-refresh'){loadAdminModelLab();return;}
+      if(action==='model-lab-start'){
+        const operation=String(actionNode.dataset.modelLabOperation||'');
+        if(!['import_drive','refresh_tests','activate_shadow'].includes(operation))return;
+        if(operation==='activate_shadow'&&!window.confirm('Aktivovať vybraný model iba v shadow režime? Produkčný champion zostane nezmenený.'))return;
+        if(operation==='import_drive'&&!window.confirm('Spustiť jednu ohraničenú dávku existujúceho Drive importu do CDB?'))return;
+        loadAdminModelLab(operation);return;
+      }
+      if(action==='model-lab-acknowledge'){
+        if(!window.confirm('Potvrdzuješ, že si preveril neúspešný workflow? Následné opakovanie môže znovu spustiť import alebo zmenu shadow kandidáta.'))return;
+        loadAdminModelLab('',true);return;
+      }
       if(action==='training-refresh'){loadAdminTraining();return;}
       if(action==='training-start'){loadAdminTraining(true);return;}
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
@@ -6472,7 +6542,7 @@
     state.insights=[];state.insightsUnread=0;state.insightsLoading=false;state.insightsStorageUnavailable=false;
     state.userLiveRadarStatus=null;state.userLiveRadarLoading=false;state.liveRadarHeartbeat=null;state.privateUpdatesBusy=false;state.privateUpdatesLastPoll=0;
     state.adminUsers=null;state.adminUsersLoading=false;state.adminUsersError='';state.adminUsersWarning='';state.adminSelectedUser=null;
-    state.adminTraining=null;state.adminTrainingBusy=false;state.adminTrainingMessage="";state.adminDiagnostics=null;state.adminDiagnosticsLoading=false;state.adminCalibration=null;state.adminCalibrationLoading=false;state.adminCalibrationError='';state.adminInsights=null;state.adminInsightsLoading=false;state.adminInsightsError='';state.adminInsightEditingId='';state.adminLiveRadarStatus=null;state.adminLiveRadarLoading=false;
+    state.adminTraining=null;state.adminTrainingBusy=false;state.adminTrainingMessage="";state.adminModelLab=null;state.adminModelLabBusy=false;state.adminModelLabMessage='';state.adminDiagnostics=null;state.adminDiagnosticsLoading=false;state.adminCalibration=null;state.adminCalibrationLoading=false;state.adminCalibrationError='';state.adminInsights=null;state.adminInsightsLoading=false;state.adminInsightsError='';state.adminInsightEditingId='';state.adminLiveRadarStatus=null;state.adminLiveRadarLoading=false;
     state.railMatch=null;state.previewPlan=null;state.demoFeedBackup=null;state.demoMode=false;state.dashboardVisibility=null;state.pushConfig=null;state.pushBusy=false;
     state.projectGroups=[];state.projectGroupsLoading=false;state.projectGroupsError='';state.activeProjectGroupId='';
     state.adminProjectGroups=null;state.adminProjectGroupsLoading=false;state.adminProjectGroupsError='';state.adminProjectGroupId='';
