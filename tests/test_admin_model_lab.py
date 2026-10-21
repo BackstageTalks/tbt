@@ -138,15 +138,15 @@ class TestLab(unittest.TestCase):
         self.assertIsNotNone(m._json("active"))
         self.assertIsNone(m._json("last"))
 
-    def test_failed_job_needs_explicit_acknowledgement(self):
-        m.start({"action": "import_drive"}, "admin")
+    def test_failed_readonly_job_needs_explicit_acknowledgement(self):
+        m.start({"action": "refresh_tests"}, "admin")
         m.sync(snapshot())
         request = m._json("active")
         complete = snapshot()
         complete["can_start"] = False
-        complete["runs"]["import_drive"] = [{
+        complete["runs"]["refresh_tests"] = [{
             "id": 53, "status": "completed", "conclusion": "failure",
-            "display_title": "CDB guarded import " + request["id"],
+            "display_title": "Model Lab tests " + request["id"],
             "created_at": datetime.now(timezone.utc).isoformat(),
         }]
         m.sync(complete)
@@ -157,6 +157,22 @@ class TestLab(unittest.TestCase):
         self.assertEqual(m.acknowledge_failed({"action": "acknowledge_failed", "id": request["id"]})["state"],
                          "FAILED_ACKNOWLEDGED")
         self.assertIsNone(m._json("active"))
+
+    def test_failed_import_cannot_be_unblocked_from_admin(self):
+        m.start({"action": "import_drive"}, "admin")
+        m.sync(snapshot())
+        request = m._json("active")
+        complete = snapshot()
+        complete["can_start"] = False
+        complete["runs"]["import_drive"] = [{
+            "id": 77, "status": "completed", "conclusion": "failure",
+            "display_title": "CDB guarded import " + request["id"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }]
+        m.sync(complete)
+        with self.assertRaises(model_training.TrainingBlocked):
+            m.acknowledge_failed({"action": "acknowledge_failed", "id": request["id"]})
+        self.assertIsNotNone(m._json("active"))
 
     def test_wrong_champion_never_unblocks_shadow(self):
         m.start({"action": "activate_shadow",
