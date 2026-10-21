@@ -76,6 +76,67 @@ def test_bad_frozen_evidence_fails_closed(mutate, expected):
         validate_frozen_evidence(payload, production_version=PROD)
 
 
+def test_prospective_scorecard_reports_actual_pair_and_surface_gaps():
+    original = evidence(days=1, per_day=4)
+    rows = original["rows"]
+    # Expected: candidate loses two separate paired orientations vs champion.
+    scores = [(0.8, 0.1, 1), (0.7, 0.2, 1),
+              (0.2, 0.9, 0), (0.2, 0.1, 0)]
+    for r, (p, q, truth) in zip(rows, scores):
+        r.update({
+            "production_player1_probability": p,
+            "challenger_player1_probability": q,
+            "target_player1_win": truth,
+            "result_winner_id": "a" if truth else "b",
+        })
+    rows[0]["surface"] = "hard"
+    rows[1]["surface"] = "unknown"
+    rows[2]["surface"] = ""
+    rows[3]["surface"] = "future-looking-surface-label"
+    untouched = deepcopy(original)
+    report = research_frozen_721(original, production_version=PROD)
+    score = report["prospective_diagnostics"]
+    assert original == untouched
+    assert score["status"] == "PROSPECTIVE_DIAGNOSTIC_NOT_MODEL_SELECTION"
+    assert score["overall"]["n"] == 4
+    assert score["overall"]["champion"]["correct"] == 4
+    assert score["overall"]["candidate"]["correct"] == 2
+    assert score["overall"]["champion_only_correct"] == 2
+    assert score["overall"]["candidate_only_correct"] == 0
+    assert score["tour"]["ATP"]["n"] == 2
+    assert score["tour"]["WTA"]["n"] == 2
+    assert score["coverage"]["by_surface"]["hard"] == 1
+    assert score["coverage"]["by_surface"]["unknown"] == 3
+    assert score["coverage"]["known_surface_rate"] == .25
+    assert "candidate_accuracy_below_champion" in score["review_blockers"]
+    assert "prematch_surface_coverage_below_80_percent" in score["review_blockers"]
+    assert score["automatic_promotion"] is False
+    assert score["retraining_or_recalibration_performed"] is False
+    assert score["next_model_requires_independent_chronological_holdout"] is True
+
+
+def test_unsettled_rows_are_counted_for_coverage_never_model_accuracy():
+    original = evidence(days=1, per_day=2)
+    settled, pending = original["rows"]
+    pending["status"] = "pending"
+    pending.pop("settled_at")
+    pending.pop("result_winner_id")
+    pending.pop("target_player1_win")
+    pending["surface"] = "clay"
+    settled["surface"] = "unknown"
+    report = research_frozen_721(original, production_version=PROD)
+    scores = report["prospective_diagnostics"]
+    assert scores["overall"]["n"] == 1
+    assert scores["coverage"]["total_excluding_repeated_snapshots"] == 2
+    assert scores["coverage"]["by_surface"]["clay"] == 1
+    assert scores["coverage"]["unknown_surface_settled"] == 1
+    assert scores["coverage"]["unknown_surface_pending"] == 0
+    assert scores["surface"]["clay"]["n"] == 0
+    assert scores["surface"]["unknown"]["n"] == 1
+    assert scores["review_blockers"]
+    assert report["automatic_promotion"] is False
+
+
 def test_not_enough_days_does_not_claim_calibration_pass():
     report = research_frozen_721(evidence(days=2), production_version=PROD)
     assert report["status"] == "INSUFFICIENT_TEMPORAL_EVIDENCE"
