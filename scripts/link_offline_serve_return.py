@@ -284,14 +284,12 @@ def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                 # IDs in source_* fields; they MUST NOT be promoted to
                 # Sackmann IDs or used for name inference.
                 drive_normalized = "source_winner_id" in row or "source_loser_id" in row
-                winner_source_id = str(
+                winner_source_id = str((
                     row.get("source_winner_id") if drive_normalized else row.get("winner_id")
-                    or ""
-                ).strip()
-                loser_source_id = str(
+                ) or "").strip()
+                loser_source_id = str((
                     row.get("source_loser_id") if drive_normalized else row.get("loser_id")
-                    or ""
-                ).strip()
+                ) or "").strip()
                 if not drive_normalized:
                     winner = identity_name(winner, row.get("winner_id"))
                     loser = identity_name(loser, row.get("loser_id"))
