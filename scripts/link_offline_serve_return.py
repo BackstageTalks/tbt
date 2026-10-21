@@ -341,7 +341,9 @@ def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                 bo = _num(row.get("best_of"))
                 yield OfflineMatch(
                     source=f"sackmann:{path.name}",
-                    source_match_id=str(row.get("tourney_id") or "") + ":" + str(row.get("match_num") or idx),
+                    source_match_id=str(row.get("source_record_id") or "").strip() or (
+                        str(row.get("tourney_id") or "") + ":" + str(row.get("match_num") or idx)
+                    ),
                     tour=tour,
                     event_date=day,
                     player_a=winner,
