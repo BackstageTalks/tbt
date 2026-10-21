@@ -18,7 +18,7 @@ def _stub(monkeypatch, *, changed=False, wrong_blob=False, missing_ref=False):
     stored = {}
 
     def inspect(*args, **kwargs):
-        assert args[:2] == ("gh", "api")
+        assert len(args) == 1 and args[0][:2] == ["gh", "api"]
         return SimpleNamespace(returncode=1, stderr="HTTP 404", stdout="")
 
     def api(*args, input=None):
