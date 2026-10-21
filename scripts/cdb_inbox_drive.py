@@ -203,7 +203,8 @@ def _state(folder_id, path):
 
 
 def fetch(folder_id: str, output: Path, *, state_path: Path | None = None,
-          next_state_path: Path | None = None, session=None, max_files: int = MAX_FILES):
+          next_state_path: Path | None = None, session=None, max_files: int = MAX_FILES,
+          replay_ids: set[str] | None = None):
     if not re.fullmatch(r"[A-Za-z0-9_-]{15,150}", folder_id):
         raise ValueError("Invalid Drive inbox root ID")
     if not 1 <= max_files <= MAX_FILES:
@@ -215,6 +216,31 @@ def fetch(folder_id: str, output: Path, *, state_path: Path | None = None,
     known = _state(folder_id, state_path)
     inventory, folder_count = _inventory(session, folder_id)
     current_ids = {info["id"] for info in inventory}
+    # Revisit only explicitly selected historical sources; never reset the
+    # global cursor or infer identity/eligibility from a Drive file ID.
+    if replay_ids is not None and not isinstance(replay_ids, (set, frozenset)):
+        raise ValueError("Replay IDs must be an explicit set")
+    replay_ids = set(replay_ids or ())
+    if len(replay_ids) > min(12, max_files):
+        raise ValueError("Replay file count exceeds bounded per-run allowance")
+    if any(not isinstance(fid, str) or
+           not re.fullmatch(r"[A-Za-z0-9_-]{12,150}", fid)
+           for fid in replay_ids):
+        raise ValueError("Invalid Drive replay file ID")
+    indexed = {info["id"]: info for info in inventory}
+    if replay_ids - current_ids:
+        raise ValueError("Drive replay source is not present in the selected tree")
+    replay_bytes = 0
+    for fid in replay_ids:
+        info = indexed[fid]
+        size = int(info.get("size") or 0)
+        if (info.get("mimeType") == SHEET_MIME
+                or Path(info["name"]).suffix.lower() not in SUPPORTED
+                or not 0 <= size <= MAX_SINGLE):
+            raise ValueError("Drive replay source is unsupported or oversized")
+        replay_bytes += size
+    if replay_bytes > MAX_BYTES:
+        raise ValueError("Drive replay sources exceed per-run byte budget")
     # Remove stale metadata for files that are no longer in the selected tree.
     updated = {k: v for k, v in known.items() if k in current_ids}
     entries = []
@@ -223,7 +249,7 @@ def fetch(folder_id: str, output: Path, *, state_path: Path | None = None,
     for info in inventory:
         file_id = info["id"]
         fingerprint = _fingerprint(info)
-        if known.get(file_id) == fingerprint:
+        if known.get(file_id) == fingerprint and file_id not in replay_ids:
             previously_seen += 1
             continue
         name = info["name"]
@@ -243,8 +269,10 @@ def fetch(folder_id: str, output: Path, *, state_path: Path | None = None,
         entries.append({"id": file_id, "status": reason})
         updated[file_id] = fingerprint
 
-    candidates.sort(key=lambda item: _candidate_priority(item[0]))
+    candidates.sort(key=lambda item: (item[0]["id"] not in replay_ids,
+                                      _candidate_priority(item[0])))
     total_bytes = 0
+    replayed = 0
     downloaded = 0
     seen_sha = set()
     for info, fingerprint in candidates:
@@ -268,6 +296,8 @@ def fetch(folder_id: str, output: Path, *, state_path: Path | None = None,
         sha = hashlib.sha256(blob).hexdigest()
         total_bytes += len(blob)
         downloaded += 1
+        if file_id in replay_ids and file_id in known:
+            replayed += 1
         if sha in seen_sha:
             entries.append({"id": file_id, "status": "duplicate_bytes", "sha256": sha})
         else:
@@ -275,8 +305,7 @@ def fetch(folder_id: str, output: Path, *, state_path: Path | None = None,
             safe = re.sub(r"[^A-Za-z0-9_.-]", "_", Path(info["name"]).name)[:90]
             destination = output / (file_id + "__" + safe)
             destination.write_bytes(blob)
-            # Preserve actual Drive folder provenance for strict SOURCE-ONLY tour
-            # classification; never use it as match or player identity proof.
+            # Retain Drive folder evidence for SOURCE-ONLY tour classification.
             entries.append({"id": file_id, "status": "fetched", "sha256": sha,
                             "bytes": len(blob), "local_file": str(destination),
                             "source_path": str(info["path"])})
@@ -294,6 +323,10 @@ def fetch(folder_id: str, output: Path, *, state_path: Path | None = None,
               "folders_seen": folder_count, "inventory_files": len(inventory),
               "previously_seen": previously_seen, "reviewed": sum(x["status"].startswith("review_") for x in entries),
               "duplicate_bytes": sum(x["status"] == "duplicate_bytes" for x in entries),
+              "explicit_replay_requested": len(replay_ids),
+              "explicit_replay_completed": sum(x["id"] in replay_ids for x in entries
+                                               if x["status"] in {"fetched", "duplicate_bytes"}),
+              "replayed_from_checkpoint": replayed,
               "pending_supported": pending, "fetched": sum(x["status"] == "fetched" for x in entries),
               "downloaded_bytes": total_bytes, "files": entries}
     (output.parent / "drive_manifest.json").write_text(
@@ -308,12 +341,20 @@ def main():
     parser.add_argument("--state-file", type=Path)
     parser.add_argument("--next-state", type=Path)
     parser.add_argument("--max-files", type=int, default=MAX_FILES)
+    parser.add_argument("--replay-ids", default="",
+                        help="Comma-separated exact Drive IDs, at most 12. "
+                             "Revisit checkpointed files without a global reset.")
     args = parser.parse_args()
+    ids = args.replay_ids.split(",") if args.replay_ids else []
+    if any(not item.strip() for item in ids) or len(ids) != len(set(ids)):
+        parser.error("Replay IDs must be unique, nonempty comma-separated IDs")
     report = fetch(args.folder_id, args.output, state_path=args.state_file,
-                   next_state_path=args.next_state, max_files=args.max_files)
+                   next_state_path=args.next_state, max_files=args.max_files,
+                   replay_ids=set(ids))
     print(json.dumps({k: report[k] for k in (
         "folders_seen", "inventory_files", "previously_seen",
-        "reviewed", "pending_supported", "fetched", "downloaded_bytes"
+        "reviewed", "pending_supported", "fetched", "downloaded_bytes",
+        "explicit_replay_requested", "explicit_replay_completed", "replayed_from_checkpoint"
     )}))
 
 

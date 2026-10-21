@@ -268,36 +268,38 @@ def _statistics_segment_yield(segments):
 
 
 def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
-    """Mix proven high-yield work with underserved ATP/WTA years (no extra API calls).
+    """Keep 2024-26 front and centre without abandoning productive older cohorts.
 
-    Every candidate has already passed canonical event-ID and retry checks.
-    The 6:2:1:1 schedule reserves exploration outside historically productive
-    cohorts. The previous fixed ATP-2025 hot spot is now depleted; prioritize
-    verified WTA-2024/2023/2022 and ATP-2024 yield without extra API calls.
-    Within each tour/year, verified *two-player* identity is attempted first.
+    The 20-slot deterministic baseline allocates 8 slots to verified 2024
+    cohorts, 6 to under-covered 2025-26 cohorts, 3 to verified 2022-23
+    providers, 1 to other underserved historical cohorts, and 2 to broad
+    exploration. These are *baseline* slots, not fixed paid API quotas: the
+    online adaptive queue still follows measured new CDB values per call.
+    Canonical identity and provider retry/cooldown gates ran before this step.
     """
     from collections import defaultdict, deque
 
-    families = ("high_yield", "wta_gap", "atp_gap", "other")
+    families = ("recent_verified", "recent_gap", "historic_verified",
+                "historic_gap", "other")
     grouped = {name: defaultdict(list) for name in families}
     for candidate in candidates:
         match = candidate[-1]
         tour = str(match.tour or "unknown").lower()
         year = int(match.scheduled_at.year)
         bucket = (tour, year)
+        stats = match.stats if isinstance(match.stats, dict) else {}
         incomplete_rates = not (
-            _quality_ready(match.stats or {}, "p1")
-            and _quality_ready(match.stats or {}, "p2")
+            _quality_ready(stats, "p1") and _quality_ready(stats, "p2")
         )
         coverage = bucket_ready[bucket] / max(1, bucket_total[bucket])
         if candidate[0] == 0:
-            family = "high_yield"  # verified October 20 CDB gains
-        elif (incomplete_rates and 2022 <= year <= 2025 and coverage < 0.55
-              and tour == "wta"):
-            family = "wta_gap"
-        elif (incomplete_rates and 2022 <= year <= 2024 and coverage < 0.55
-              and tour == "atp"):
-            family = "atp_gap"
+            family = "recent_verified" if year >= 2024 else "historic_verified"
+        elif (incomplete_rates and 2025 <= year <= 2026 and
+              tour in {"atp", "wta"} and coverage < 0.75):
+            family = "recent_gap"
+        elif (incomplete_rates and 2022 <= year <= 2023 and
+              tour in {"atp", "wta"} and coverage < 0.55):
+            family = "historic_gap"
         else:
             family = "other"
         grouped[family][bucket].append(candidate)
@@ -305,37 +307,48 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
     pending = {}
     years = {}
     for family in families:
-        # Stable within-year ordering: exact verified pair identity; incomplete
-        # whole-match service/return; partial reusable statistics; newer dates.
         pending[family] = {
             bucket: deque(sorted(rows, key=lambda r: (
                 r[4], r[2], r[3], r[5], r[6], r[7]
             )))
             for bucket, rows in grouped[family].items()
         }
-        # Rotate distinct tour/year cohorts, not only years (ATP and WTA
-        # from the same year must both get slots). Verified ordering is a
-        # deterministic initial prior, not a substitute for paid online yield.
-        years[family] = deque(sorted(pending[family], key=lambda bucket: (
-            VERIFIED_HIGH_YIELD_COHORTS.index(bucket)
-            if family == "high_yield" and bucket in VERIFIED_HIGH_YIELD_COHORTS
-            else len(VERIFIED_HIGH_YIELD_COHORTS),
-            -bucket[1], bucket[0],
-        )))
 
-    schedule = ("high_yield",) * 6 + ("wta_gap",) * 2 + ("atp_gap", "other")
+        def bucket_priority(bucket):
+            if family == "recent_gap":
+                return (0, bucket_ready[bucket] / max(1, bucket_total[bucket]),
+                        -bucket[1], bucket[0])
+            prior = (VERIFIED_HIGH_YIELD_COHORTS.index(bucket)
+                     if family in {"recent_verified", "historic_verified"}
+                     and bucket in VERIFIED_HIGH_YIELD_COHORTS
+                     else len(VERIFIED_HIGH_YIELD_COHORTS))
+            return (1, prior, -bucket[1], bucket[0])
+
+        years[family] = deque(sorted(pending[family], key=bucket_priority))
+
+    # Interleave families so each gets early paid samples before adaptation.
+    # Of 20 available slots: 14 recent, 4 historical and 2 other. Empty
+    # families simply yield their slots; no requests are made to fill quotas.
+    schedule = (
+        "recent_verified", "recent_gap", "recent_verified", "historic_verified",
+        "recent_gap", "recent_verified", "historic_gap", "recent_gap",
+        "recent_verified", "other",
+        "recent_verified", "recent_gap", "historic_verified", "recent_verified",
+        "recent_gap", "recent_verified", "historic_verified", "recent_gap",
+        "recent_verified", "other",
+    )
     result = []
     while len(result) < len(candidates):
         advanced = False
         for family in schedule:
             if not years[family]:
                 continue
-            year = years[family].popleft()
-            queue = pending[family][year]
+            bucket = years[family].popleft()
+            queue = pending[family][bucket]
             result.append(queue.popleft())
             advanced = True
             if queue:
-                years[family].append(year)
+                years[family].append(bucket)
         if not advanced:
             raise RuntimeError("Targeted gap queue stopped before consuming candidates")
     return result
@@ -429,8 +442,10 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
         "historical_high_yield": historical_high_yield,
         "preferred_verified_cohort": "wta:2024:serve_return_incomplete" if historical_high_yield else None,
         "verified_high_yield_cohorts": [f"{tour}:{year}" for tour, year in VERIFIED_HIGH_YIELD_COHORTS] if historical_high_yield else [],
-        "priority_policy": "6_high_yield_2_undercovered_wta_1_undercovered_atp_1_other" if historical_high_yield else None,
+        "priority_policy": "8_recent_verified_6_recent_gap_3_historic_verified_1_historic_gap_2_other" if historical_high_yield else None,
         "first_1000_by_tour_year": priority_preview,
+        "recent_focus_years": [2024, 2025, 2026] if historical_high_yield else [],
+        "planned_recent_baseline_share_if_all_families_available": 0.7 if historical_high_yield else None,
         "skipped": dict(skipped),
         "bucket_coverage": {
             f"{tour}:{year}": {

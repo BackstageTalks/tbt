@@ -158,3 +158,38 @@ def test_recent_score_uses_actual_provider_requests_including_retries():
     assert row["recent_new_quality_ready_rows"] == 1
     assert row["recent_paid_matches"] == 2
     assert report["adaptive_choices"] == 0  # normal warm-up
+
+
+def test_recent_seasons_win_on_similar_paid_yield_but_history_can_outperform():
+    # The 2026/2025/2024 focus is a *bounded* preference, not a hard
+    # exclusion of high-yield 2023 history.
+    rows = [_match("current", "WTA", 2026),
+            _match("priority", "ATP", 2024),
+            _match("history", "WTA", 2023)]
+    q = AdaptiveStatisticsQueue(rows, {
+        "wta:2026": {"quality_ready_rate": 0.71},
+        "atp:2024": {"quality_ready_rate": 0.21},
+        "wta:2023": {"quality_ready_rate": 0.29},
+    })
+    assert q.summary()["recency_reference_year"] == 2026
+    assert q.summary()["recency_score_policy"] == (
+        "bounded_latest_three_seasons_after_paid_yield"
+    )
+    assert q._score("atp:2024:serve_return") > q._score("wta:2023:serve_return")
+
+    # The older cohort can still win if it is substantially more productive.
+    for row in q:
+        q.record(row, 1, _gain(24, 1, 4) if row.scheduled_at.year == 2023
+                 else _gain(4))
+    assert q._score("wta:2023:serve_return") > q._score("atp:2024:serve_return")
+
+
+def test_recency_factor_never_bypasses_api_guard_or_paid_yield_warmup():
+    rows = [_match(f"recent-{i}", "WTA", 2025) if i % 2 else
+            _match(f"older-{i}", "ATP", 2022) for i in range(80)]
+    q = AdaptiveStatisticsQueue(rows)
+    for row in q:
+        q.record(row, 0, _gain(5, 1, 2))
+    assert q.summary()["observed_paid_requests"] == 0
+    assert q.summary()["adaptive_choices"] == 0
+    assert q.summary()["baseline_choices"] == 80
