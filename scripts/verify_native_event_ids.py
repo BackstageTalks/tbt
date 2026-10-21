@@ -30,6 +30,7 @@ def verify_rows(rows, expected):
         witness = payload.get("_tbt_event_identity")
         if (not isinstance(witness, dict) or witness.get("status") != "finished"
                 or payload.get("_tbt_provider_event_id") != proof["event_id"]
+                or str(payload.get("_tbt_source_category_id")) != proof["category_id"]
                 or event_id(match) != proof["event_id"]
                 or {str(witness.get("home")), str(witness.get("away"))}
                    != {proof["home"], proof["away"]}
