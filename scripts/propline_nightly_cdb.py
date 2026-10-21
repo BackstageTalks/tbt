@@ -423,6 +423,9 @@ def stage_additions(matches, reports: Path, now):
         counters["new_stat_cells_staged"] += len(additions)
         for key in additions:
             counters["new_" + key.split("_", 1)[1] + "_staged"] += 1
+    # Rejected matches whose first provider record was already invalid have
+    # no proposal row. Still count each quarantined identity exactly once.
+    counters["quarantined"] += len(rejected - set(proposals))
     stage.sort(key=lambda v: v["match_id"])
     return stage, dict(counters)
 
