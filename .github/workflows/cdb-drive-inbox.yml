@@ -1,8 +1,14 @@
 name: CDB Drive Inbox - guarded external file import
+run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
 
 'on':
   workflow_dispatch:
     inputs:
+      request_id:
+        description: Admin Model Lab correlation (optional)
+        type: string
+        required: false
+        default: ''
       catchup_remaining:
         description: 'Remaining extra 100-file batches (0-6); bounded and checkpoint-gated'
         required: false
