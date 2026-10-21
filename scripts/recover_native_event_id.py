@@ -173,7 +173,8 @@ def recover_day(canonical, provider_events, *, day: date):
             raise RuntimeError("Recovered identity failed local readback")
         changes[str(match.match_id)] = {
             "tour": tour, "year": _day(match).year,
-            "event_id": ident, "home": str(witness["home"]),
+            "event_id": ident, "category_id": _category(match),
+            "home": str(witness["home"]),
             "away": str(witness["away"]),
         }
         claimed[(tour, ident)].add(str(match.match_id))
