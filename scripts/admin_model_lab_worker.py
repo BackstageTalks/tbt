@@ -68,10 +68,12 @@ def dispatch(pending):
 
 
 def published_main_revision(read=github, checkout_sha=None):
-    """Only run the new signed bridge once this *exact* commit reached Azure.
+    """Prove this exact main checkout was really deployed and read back.
 
-    A successful CI check with a skipped deploy is not a published Admin API.
-    The worker also fires on unrelated workflow completions during a deploy.
+    GitHub sometimes marks the whole workflow/job cancelled after every deploy
+    step, including final cleanup, has succeeded. Trust only the complete set
+    of individually successful deployment and runtime verification steps, not
+    a green CI label or a cancelled run in isolation.
     """
     sha = checkout_sha or subprocess.check_output(
         ["git", "rev-parse", "HEAD"], text=True, timeout=10,
@@ -79,16 +81,32 @@ def published_main_revision(read=github, checkout_sha=None):
     if len(sha) != 40 or any(ch not in "0123456789abcdef" for ch in sha):
         raise RuntimeError("Cannot verify checked-out deployment revision")
     runs = read(f"{APP}/actions/workflows/ci.yml/runs?branch=main&event=push&per_page=30")
+    required = {
+        "Reject queued stale deploy and stamp exact frontend revision",
+        "Deploy BlinQ to Azure Static Web Apps",
+        "Verify deployed frontend release",
+        "Smoke deployed authentication readiness",
+        "Confirm deployed prediction publication",
+        "Smoke deployed health endpoint",
+        "Seed private calibration Admin snapshot",
+        "Complete job",
+    }
     for item in runs.get("workflow_runs", []):
         if item.get("head_sha") != sha:
             continue
-        if item.get("status") != "completed" or item.get("conclusion") != "success":
+        if item.get("status") != "completed" or item.get("conclusion") not in ("success", "cancelled"):
             return False
         jobs = read(f"{APP}/actions/runs/{item['id']}/jobs?per_page=100")
-        return any(j.get("name") == "deploy" and
-                   j.get("status") == "completed" and
-                   j.get("conclusion") == "success"
-                   for j in jobs.get("jobs", []))
+        for job in jobs.get("jobs", []):
+            if job.get("name") != "deploy" or job.get("status") != "completed":
+                continue
+            if job.get("conclusion") not in ("success", "cancelled"):
+                return False
+            successful = {step.get("name") for step in job.get("steps", [])
+                          if step.get("status") == "completed" and
+                             step.get("conclusion") == "success"}
+            return required <= successful
+        return False
     return False
 
 
