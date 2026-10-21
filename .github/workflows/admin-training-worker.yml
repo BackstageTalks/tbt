@@ -1,12 +1,10 @@
 name: BlinQ admin training worker
 on:
-  # Poll the existing signed Admin queues even when no other workflow finishes.
-  # Avoid the crowded top of the hour; no new workflow or provider requests.
-  schedule:
-    - cron: '7,37 * * * *'
+  # GitHub cron is forbidden. Subscribe to existing externally clocked
+  # match-status completions (every 30 minutes), not to an additional timer.
   workflow_dispatch:
   workflow_run:
-    workflows: [Test and deploy, Hourly prediction match status, BlinQ protected frozen-CDB candidate training, CDB Drive Inbox - guarded external file import, BlinQ read-only champion vs challenger shadow audit, BlinQ private model calibration monitor, Activate verified 7.2.1 shadow candidate]
+    workflows: [Test and deploy, Prediction fixture schedule and match status, Hourly prediction match status, Tennis data and predictions, BlinQ protected frozen-CDB candidate training, CDB Drive Inbox - guarded external file import, BlinQ read-only champion vs challenger shadow audit, BlinQ private model calibration monitor, Activate verified 7.2.1 shadow candidate]
     types: [completed]
     branches: [main]
 permissions:
@@ -17,9 +15,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sync:
-    # Scheduled heartbeat also processes queued Admin requests if upstream
-    # Actions are quiet. The workers are at-most-once and fail closed.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'skipped'
+    # External scheduler calls match-status every 30 minutes. Subscribe to
+    # completed real work; skip push-triggered no-op runs.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
