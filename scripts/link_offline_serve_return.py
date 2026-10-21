@@ -279,8 +279,20 @@ def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                             return candidate
                     return display_name
 
-                winner = identity_name(winner, row.get("winner_id"))
-                loser = identity_name(loser, row.get("loser_id"))
+                # Native Sackmann columns identify players in the Sackmann
+                # namespace. Generic Drive-normalized rows retain external
+                # IDs in source_* fields; they MUST NOT be promoted to
+                # Sackmann IDs or used for name inference.
+                drive_normalized = "source_winner_id" in row or "source_loser_id" in row
+                winner_source_id = str((
+                    row.get("source_winner_id") if drive_normalized else row.get("winner_id")
+                ) or "").strip()
+                loser_source_id = str((
+                    row.get("source_loser_id") if drive_normalized else row.get("loser_id")
+                ) or "").strip()
+                if not drive_normalized:
+                    winner = identity_name(winner, row.get("winner_id"))
+                    loser = identity_name(loser, row.get("loser_id"))
                 if not day or not winner or not loser:
                     continue
                 w_stats = _service_stats("w", row)
@@ -341,9 +353,9 @@ def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                     best_of=int(bo) if bo in (3.0, 5.0) else None,
                     stats_a=w_stats,
                     stats_b=l_stats,
-                    source_player_a_id=str(row.get("winner_id") or "").strip(),
-                    source_player_b_id=str(row.get("loser_id") or "").strip(),
-                    source_id_namespace="sackmann",
+                    source_player_a_id=winner_source_id,
+                    source_player_b_id=loser_source_id,
+                    source_id_namespace="drive-unverified" if drive_normalized else "sackmann",
                 )
 
 
@@ -1355,6 +1367,11 @@ def main() -> None:
             "score": score,
             "evidence": evidence,
             "mapping": mapping,
+            # Keep external source IDs as namespaced provenance alongside
+            # the canonical match ID; never replace canonical player IDs.
+            "source_player_a_id": source.source_player_a_id,
+            "source_player_b_id": source.source_player_b_id,
+            "source_id_namespace": source.source_id_namespace,
             "stats": incoming,
         })
 
@@ -1378,7 +1395,7 @@ def main() -> None:
                 "blocked_missing_fields": sorted(blocked),
                 "rescued_fields": sorted(merged),
                 "sources": [
-                    {k: row[k] for k in ("source", "source_match_id", "score", "evidence", "mapping")}
+                    {k: row[k] for k in ("source", "source_match_id", "score", "evidence", "mapping", "source_player_a_id", "source_player_b_id", "source_id_namespace")}
                     for row in rows
                 ],
             })
@@ -1391,7 +1408,7 @@ def main() -> None:
             continue
         used_indices = sorted({index for indices in field_sources.values() for index in indices})
         provenance = [
-            {k: rows[index][k] for k in ("source", "source_match_id", "score", "evidence", "mapping")}
+            {k: rows[index][k] for k in ("source", "source_match_id", "score", "evidence", "mapping", "source_player_a_id", "source_player_b_id", "source_id_namespace")}
             for index in used_indices
         ]
 

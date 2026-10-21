@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Run the existing offline linker and retain only independently corroborated matches.
 
-The linker is source-specific and may accept tournament-start windows. This
-generic Drive inbox is stricter: exact day, exact tournament, winner and
-additional round/surface evidence are required for unattended canonical import.
+The linker is source-specific and may accept tournament-start windows. Generic
+Drive imports require exact day, exact tournament, winner, and round/surface;
+tournament-start dates require stronger corroboration (winner, exact tournament,
+round, surface AND best-of), with a unique canonical match and no conflicts.
 """
 from __future__ import annotations
 
@@ -14,6 +15,24 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
+
+def _strict_source_evidence(proof: dict) -> bool:
+    if not isinstance(proof, dict):
+        return False
+    evidence = set(proof.get("evidence") or [])
+    if not {"winner", "tournament_exact"}.issubset(evidence):
+        return False
+    if {"round_conflict", "surface_conflict", "best_of_conflict"} & evidence:
+        return False
+    if "date_exact" in evidence:
+        return bool({"round", "surface"} & evidence)
+    # Sackmann-style files commonly contain the tournament start date, not
+    # the match date. The read-only linker independently enforces a bounded
+    # forward-only window and unique canonical candidate. For this weaker
+    # date evidence, insist on every other strong match discriminator.
+    return {"date_tournament_window", "round", "surface", "best_of"}.issubset(evidence)
+
 
 def run(normalized_report: Path, history_dir: Path, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -57,9 +76,7 @@ def run(normalized_report: Path, history_dir: Path, out_dir: Path):
                   and bool(proof) and all(
                       p.get("source") in accepted_names
                       and isinstance(p.get("evidence"), list)
-                      and {"date_exact", "winner", "tournament_exact"}.issubset(set(p["evidence"]))
-                      and bool({"round", "surface"} & set(p["evidence"]))
-                      and not {"round_conflict", "surface_conflict", "best_of_conflict"} & set(p["evidence"])
+                      and _strict_source_evidence(p)
                       for p in proof
                   ))
         year = str((candidate.get("canonical") or {}).get("scheduled_date_utc") or "")[:4]
@@ -96,6 +113,8 @@ def run(normalized_report: Path, history_dir: Path, out_dir: Path):
                 rejection_reasons["outside_supported_years"] += 1
             continue
         staged.append(candidate)
+        if any("date_tournament_window" in (p.get("evidence") or []) for p in proof):
+            result["tournament_window_eligible_matches"] = result.get("tournament_window_eligible_matches", 0) + 1
         result["eligible_matches"] += 1
         result["eligible_new_values"] += len(candidate["incoming_stats"])
     with target.open("w", encoding="utf-8") as handle:
