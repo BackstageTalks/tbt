@@ -50,6 +50,10 @@ def build(normalized_report: Path, stage_dir: Path, drive_manifest: Path, out: P
             raise ValueError("Unverified raw Drive provenance")
         raw_by_sha[sha].append(fid)
     files = {}
+    # Read-only, SHA-bound source row metadata for PRIVATE rejected-match QA.
+    # Duplicate native match keys are deliberately not resolved by guessing.
+    source_match_rows = {}
+    duplicate_source_match_keys = set()
     observations = defaultdict(lambda: {
         "names": set(), "source_rows": 0, "candidates": defaultdict(set), "evidence": set()
     })
@@ -66,12 +70,32 @@ def build(normalized_report: Path, stage_dir: Path, drive_manifest: Path, out: P
             raise ValueError("Duplicate normalized file provenance")
         files[ref] = (sha, tour, raw_by_sha[sha][0])
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
-            for row in csv.DictReader(handle):
+            for line_number, row in enumerate(csv.DictReader(handle), start=2):
                 count["normalized_rows_seen"] += 1
                 if count["normalized_rows_seen"] > 250_000:
                     raise ValueError("Review registry row cap exceeded")
                 if row.get("league") != tour:
                     raise ValueError("Tour changed in normalized CSV")
+                source_match_id = str(row.get("source_record_id") or "").strip() or (
+                    str(row.get("tourney_id") or "") + ":" +
+                    str(row.get("match_num") or line_number)
+                )
+                match_key = (ref, source_match_id)
+                raw_metadata = {
+                    "tournament": str(row.get("tourney_name") or ""),
+                    "date": str(row.get("tourney_date") or ""),
+                    "date_kind": str(row.get("source_date_kind") or "unverified"),
+                    "round": str(row.get("round") or ""),
+                    "surface": str(row.get("surface") or ""),
+                    "best_of": str(row.get("best_of") or ""),
+                    "winner_name": str(row.get("winner_name") or ""),
+                    "loser_name": str(row.get("loser_name") or ""),
+                }
+                if match_key in source_match_rows:
+                    duplicate_source_match_keys.add(match_key)
+                    source_match_rows[match_key] = None
+                else:
+                    source_match_rows[match_key] = raw_metadata
                 for side in ("winner", "loser"):
                     sid = native_id(row.get(f"source_{side}_id"))
                     if not sid:
@@ -97,6 +121,7 @@ def build(normalized_report: Path, stage_dir: Path, drive_manifest: Path, out: P
                     raise ValueError("Duplicate eligible canonical ID")
                 eligible_ids.add(item["match_id"])
     all_candidate_matches = set()
+    candidate_match_reviews = []
     with auto_path.open(encoding="utf-8") as handle:
         for line in handle:
             if not line.strip():
@@ -109,12 +134,30 @@ def build(normalized_report: Path, stage_dir: Path, drive_manifest: Path, out: P
             }
             if not match_id or not all(cids.values()) or cids["p1"] == cids["p2"]:
                 raise ValueError("Missing canonical candidate identity")
+            if match_id in all_candidate_matches:
+                raise ValueError("Duplicate canonical candidate match in linker evidence")
             all_candidate_matches.add(match_id)
+            if len(all_candidate_matches) > 25_000:
+                raise ValueError("Unbounded private candidate review")
+            source_proofs = []
             for source in candidate.get("sources") or []:
                 ref = source.get("source")
                 if ref not in files:
                     raise ValueError("Unrecognized source in linker evidence")
-                sha, tour, _ = files[ref]
+                sha, tour, drive_id = files[ref]
+                source_key = (ref, str(source.get("source_match_id") or ""))
+                source_metadata = source_match_rows.get(source_key)
+                source_proofs.append({
+                    "source": ref,
+                    "source_match_id": source_key[1],
+                    "source_sha256": sha,
+                    "source_drive_id": drive_id,
+                    "evidence": sorted(set(source.get("evidence") or [])),
+                    "metadata_status": ("AMBIGUOUS_SOURCE_KEY" if source_key in duplicate_source_match_keys
+                                        else "SOURCE_ROW_MISSING" if source_metadata is None
+                                        else "UNIQUE_SHA_BOUND_NORMALIZED_ROW"),
+                    "source_metadata": source_metadata,
+                })
                 mapping = source.get("mapping") or {}
                 if set(mapping) != {"a", "b"} or set(mapping.values()) != {"p1", "p2"}:
                     raise ValueError("Invalid candidate player orientation")
@@ -130,6 +173,19 @@ def build(normalized_report: Path, stage_dir: Path, drive_manifest: Path, out: P
                     cid = cids[mapping[side]]
                     observations[key]["candidates"][cid].add(match_id)
                     observations[key]["evidence"].update(source.get("evidence") or [])
+            candidate_match_reviews.append({
+                "match_id": match_id,
+                "canonical": {
+                    key: str(canon.get(key) or "")
+                    for key in ("tour", "scheduled_date_utc", "tournament",
+                                "round_name", "surface", "winner_id")
+                },
+                "source_proofs": source_proofs,
+                "strict_stage_eligible_not_written": match_id in eligible_ids,
+                "state": "PRIVATE_METADATA_REVIEW_ONLY",
+                "independently_verified": False,
+                "write_authorized": False,
+            })
     rows = []
     for (sha, tour, sid), ob in sorted(observations.items()):
         matches = sorted({mid for mids in ob["candidates"].values() for mid in mids})
@@ -164,6 +220,9 @@ def build(normalized_report: Path, stage_dir: Path, drive_manifest: Path, out: P
         "candidate_match_count": len(all_candidate_matches),
         "strict_eligible_match_count": len(eligible_ids),
         "counts": dict(sorted(count.items())), "players": rows,
+        "candidate_match_reviews": sorted(candidate_match_reviews,
+                                          key=lambda item: str(item["match_id"])),
+        "duplicate_source_match_keys_count": len(duplicate_source_match_keys),
         "warning": "Metadata candidates only. Independent primary-source ID attestation and reuse rights are required before crosswalk promotion.",
     }
     out.parent.mkdir(parents=True, exist_ok=True)
