@@ -4934,14 +4934,32 @@
     const operation=d?.operation, last=d?.last_operation;
     const trainRun=training?.runs?.[0], trainBusy=!!trainRun&&['queued','in_progress','waiting','pending','requested'].includes(trainRun.status);
     const canBuild=!busy&&d?.can_start===true&&training?.can_start===true&&!trainBusy;
-    const canActivate=!busy&&d?.can_start===true&&training?.can_start===true&&!trainBusy;
+    // A stored binary + SHA proves identity, NOT an independently evaluated fit.
+    // The signed calibration snapshot validates the untouched holdout and
+    // remote candidate readback. Match BOTH immutable tag and model digest.
+    const offline=state.adminCalibration?.offline_candidate;
+    const offlineVerified=offline?.status==='evaluated_not_deployed'&&
+      offline?.evaluation_type==='untouched_offline_holdout'&&
+      offline?.production_version===state.adminCalibration?.production_version&&
+      Number.isSafeInteger(offline?.n)&&offline.n>=200&&
+      ['accuracy','log_loss','brier_score','ece_10'].every(key=>
+        Number.isFinite(offline?.candidate?.[key])&&Number.isFinite(offline?.champion?.[key]));
     const candidates=(d?.candidates||[]).filter(c=>c.sha256!==d?.active_sha256);
-    const options=candidates.slice(0,30).map(c=>'<option value="'+escapeHtml(c.tag)+'">'+escapeHtml(c.tag)+'</option>').join('');
+    const verifiedCandidates=offlineVerified?candidates.filter(c=>
+      c.tag===offline.candidate_release_tag&&c.sha256===offline.candidate_sha256):[];
+    const canActivate=canBuild&&verifiedCandidates.length>0;
+    const options=verifiedCandidates.slice(0,30).map(c=>
+      '<option value="'+escapeHtml(c.tag)+'">'+escapeHtml(c.tag)+'</option>').join('');
     const stateLabels={QUEUED:'Čaká na bezpečné spustenie',DISPATCH_UNCONFIRMED:'Spustenie nepotvrdené – nespúšťaj znova',RUNNING:'Prebieha',COMPLETED_PENDING_VERIFICATION:'Dokončené – čaká na kontrolu',WORKFLOW_VERIFIED:'Overené',FAILED_NEEDS_REVIEW:'Zlyhanie – vyžaduje kontrolu'};
     const fmtRun=record=>record?(' '+safeLink(record.html_url,'GitHub beh #'+record.id)+' · '+escapeHtml(String(record.conclusion||record.status||''))):'';
     const activeText=operation?('<strong>'+escapeHtml(stateLabels[operation.state]||operation.state)+'</strong> · '+escapeHtml(operation.action)+' · '+escapeHtml(operation.id)+fmtRun(operation.run)):'Bez rozpracovanej Model Factory operácie.';
     const lastText=last?('<strong>'+escapeHtml(stateLabels[last.state]||last.state)+'</strong> · '+escapeHtml(last.action||'')+fmtRun(last.run)):'Zatiaľ bez ukončenej operácie.';
     const trainingText=trainRun?(safeLink(trainRun.html_url,'Tréning #'+trainRun.id)+' · '+escapeHtml(String(trainRun.conclusion||trainRun.status||''))):'Bez dostupného tréningového behu.';
+    const trainingStep=trainBusy&&Array.isArray(training?.active_steps)?
+      training.active_steps.filter(step=>typeof step==='string').slice(0,2).join(' · '):'';
+    const evidenceText=verifiedCandidates.length?
+      'Nezávislý offline holdout overený · '+escapeHtml(String(offline.n))+' zápasov · model SHA sa zhoduje s release.':
+      'Aktivácia zostáva zablokovaná, kým sa nezobrazí overený offline report s rovnakým release tagom a SHA.';
     const failed=operation&&last&&last.id===operation.id&&last.state==='FAILED_NEEDS_REVIEW';
     const unsafeFailure=failed&&!['refresh_tests','audit_shadow'].includes(operation.action);
     const hint=state.adminTrainingMessage||state.adminModelLabMessage||training?.reason||d?.reason||'Načítavam aktuálny stav…';
@@ -4955,11 +4973,13 @@
       '<article class="admin-calibration-panel"><h3>1 · Vytvoriť a otestovať</h3>'+
       '<p>Jeden klik: existujúca overená CDB → nemenná záloha → ochrana proti leakage → tréning → offline ATP/WTA testy a porovnanie s championom → uložený kandidát. Žiadne nové platené API volania.</p>'+
       '<button type="button" class="btn btn-primary" data-admin-action="training-start" '+(canBuild?'':'disabled')+'>Vytvoriť a otestovať kandidáta 7.2.1</button>'+
-      '<p><strong>Tréning:</strong> '+trainingText+'</p></article>'+
+      '<p><strong>Tréning:</strong> '+trainingText+'</p>'+
+      (trainingStep?'<p role="status"><strong>Aktuálna fáza:</strong> '+escapeHtml(trainingStep)+'</p>':'')+'</article>'+
       '<article class="admin-calibration-panel"><h3>2 · Aktivovať shadow</h3>'+
       '<p>Až po kontrole offline reportu vyber nemenný kandidát. Aktivácia overí release SHA a spätné načítanie. Champion zostáva v produkcii.</p>'+
-      '<label>Overený uložený model <select id="admin-model-lab-candidate" '+(canActivate?'':'disabled')+'>'+options+'</select></label>'+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="activate_shadow" '+(canActivate&&candidates.length?'':'disabled')+'>Aktivovať iba shadow</button>'+
+      '<p role="status">'+evidenceText+'</p>'+
+      '<label>Nezávisle vyhodnotený model <select id="admin-model-lab-candidate" '+(canActivate?'':'disabled')+'>'+options+'</select></label>'+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="activate_shadow" '+(canActivate?'':'disabled')+'>Aktivovať iba shadow</button>'+
       '<p><strong>Naposledy uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article></div>'+
       '<div class="admin-calibration-bottom"><div><strong>Rozpracovaná operácia</strong><span>'+activeText+'</span></div><div><strong>Posledná kontrola</strong><span>'+lastText+'</span></div></div>'+
       (failed&&!unsafeFailure?'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-acknowledge" '+(busy?'disabled':'')+'>Potvrdiť zlyhanie read-only auditu</button>':'')+
