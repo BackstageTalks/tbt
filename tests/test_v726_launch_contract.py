@@ -5,10 +5,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_top_dynamic_fallback_contract_present():
     src=(ROOT/'api/tbt/services/market_selection.py').read_text()
-    assert 'TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.65' in src
+    assert 'TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.70' in src
     assert 'TOP_FALLBACK_MIN_ODDS = 1.50' in src
     assert 'TOP_MIN_COUNT = 3' in src
-    assert '(0.65, 1.50)' in src
+    assert '(0.70, 1.50)' in src
 
 
 def test_info_general_audience_and_live_minimum_is_dynamic(monkeypatch):
