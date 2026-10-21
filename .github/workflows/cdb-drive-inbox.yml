@@ -167,7 +167,8 @@ jobs:
           python scripts/cdb_inbox_drive.py --folder-id "$INBOX_FOLDER_ID" \
             --output work/input --state-file work/private-state/current.json \
             --next-state work/private-state/next.json --max-files 100
-          python scripts/cdb_inbox_adapter.py --input-dir work/input --out-dir work/source --max-files 100
+          python scripts/cdb_inbox_adapter.py --input-dir work/input --out-dir work/source --max-files 100 \
+            --drive-manifest work/drive_manifest.json
       - name: Avoid downloading CDB for empty or entirely unsupported sources
         id: source
         run: |
