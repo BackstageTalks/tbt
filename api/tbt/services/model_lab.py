@@ -12,7 +12,7 @@ import re
 import secrets
 
 from .admin_storage import _table, UI_TABLE, AdminStorageUnavailable
-from .model_training import APP, DATA, TrainingBlocked, TrainingUnavailable, github, inspect
+from .model_training import APP, DATA, TrainingBlocked, TrainingUnavailable, github, inspect, status as training_status
 
 PARTITION = "model-lab-queue"
 WORKFLOWS = {
@@ -174,6 +174,9 @@ def start(payload, actor):
     if action != "activate_shadow" and "source_tag" in payload:
         raise ValueError("Tag modelu sa pri tejto operácii nesmie zadávať.")
     current = status()
+    training = training_status()
+    if not training.get("can_start"):
+        raise TrainingBlocked("Ochranná fronta tréningu je obsadená alebo neaktuálna.")
     if not current["can_start"]:
         raise TrainingBlocked(current["reason"])
     tag = None
