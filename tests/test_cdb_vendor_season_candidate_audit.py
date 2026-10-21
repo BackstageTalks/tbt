@@ -74,6 +74,30 @@ def test_bad_sha_fails_no_output(tmp_path):
         audit([match()],[(src,"wta","0"*64)])
 
 
+def test_zero_zero_complement_missing_rate_sentinel_never_counted(tmp_path):
+    src = tmp_path / "zero-sentinel.csv"
+    digest = csv_source(src, home_service_points_won_perc="0",
+                        away_return_points_won_perc="0")
+    result = audit([match()], [(src, "wta", digest)])
+    assert result["counts"]["no_valid_match_stats"] == 1
+    assert result["counts"].get("candidate_missing_cells_UNVERIFIED", 0) == 0
+    assert result["canonical_matches_confirmed"] == 0
+
+
+def test_complementary_serving_returning_rates_rounding_and_fail_closed():
+    base = dict(home_service_points_won_perc="71",
+                away_return_points_won_perc="29",
+                away_service_points_won_perc="53",
+                home_return_points_won_perc="47")
+    assert _stats(base) is not None
+    assert _stats({**base, "away_return_points_won_perc": "30"}) is not None
+    assert _stats({**base, "away_return_points_won_perc": "28"}) is not None
+    assert _stats({**base, "away_return_points_won_perc": "0"}) is None
+    assert _stats({**base, "home_return_points_won_perc": "0"}) is None
+    assert _stats({**base, "home_service_points_won_perc": "0",
+                   "away_return_points_won_perc": "100"}) is not None
+
+
 def test_challenger_tour_code_pair_checked_not_guessed(tmp_path):
     from scripts.cdb_vendor_season_candidate_audit import TOUR_CODE_LABELS
     assert TOUR_CODE_LABELS[("3", "atp chall")] == "atp"
