@@ -2093,6 +2093,23 @@ class RapidTennisClient:
                 tournament_ground
             )
 
+        # Some provider pre-match payloads place the *explicit* court type
+        # under tournament.uniqueTournament instead of tournament.groundType.
+        # Recover it only when the direct event/tournament court is absent.
+        # Never infer surface from the tournament name, country or final score;
+        # that would fabricate point-in-time information for model features.
+        if surface_value in (None, ""):
+            unique_tournament = tournament_obj.get("uniqueTournament")
+            if isinstance(unique_tournament, dict):
+                nested_ground = first_present(
+                    unique_tournament, "groundType", "ground_type"
+                )
+                if (
+                    isinstance(nested_ground, str)
+                    and normalize_surface(nested_ground) != "unknown"
+                ):
+                    surface_value = nested_ground
+
         level_value: Any = (
             first_present(
                 raw,
