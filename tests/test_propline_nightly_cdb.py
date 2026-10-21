@@ -140,7 +140,7 @@ class NightCanonicalGapsTests(TestCase):
             root = Path(directory)
             save(root, [sample])
             staged, counts = stage_additions([match()], root, today)
-        self.assertEqual(counts["new_stat_cells_staged"], 3)
+        self.assertEqual(counts["new_stat_cells_staged"], 4)
         self.assertEqual(staged[0]["incoming_stats"]["p1_return_break_points_converted_count"], 3)
         original = match()
         changed = deepcopy(original)
