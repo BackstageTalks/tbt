@@ -173,6 +173,20 @@ def _rate(numerator: object, denominator: object) -> float | None:
     return value if 0 <= value <= 1 else None
 
 
+
+def _paired_percent(row: dict[str, object], own: str, opponent: str) -> float | None:
+    """Observed percentages only: reject missing, out-of-range and 0+0 pairs.
+
+    These are direct match-level percentages, not invented denominators. A
+    1.01-point tolerance permits independent integer rounding of two sides.
+    """
+    left, right = _num(row.get(own)), _num(row.get(opponent))
+    if (left is None or right is None or not 0 <= left <= 100
+            or not 0 <= right <= 100 or abs(left + right - 100) > 1.01):
+        return None
+    return left / 100
+
+
 def _service_stats(prefix: str, row: dict[str, object]) -> dict[str, float]:
     svpt = _num(row.get(f"{prefix}_svpt"))
     first_in = _num(row.get(f"{prefix}_1stIn"))
@@ -190,6 +204,10 @@ def _service_stats(prefix: str, row: dict[str, object]) -> dict[str, float]:
     service = None
     if first_won is not None and second_won is not None and svpt and svpt > 0:
         service = _rate(first_won + second_won, svpt)
+    if service is None:
+        opponent = "l" if prefix == "w" else "w"
+        service = _paired_percent(row, f"{prefix}_service_points_won_pct",
+                                  f"{opponent}_return_points_won_pct")
     for field, value in (
         ("first_serve_win", first),
         ("second_serve_win", second),
@@ -204,10 +222,12 @@ def _return_rate(opponent_prefix: str, row: dict[str, object]) -> float | None:
     svpt = _num(row.get(f"{opponent_prefix}_svpt"))
     first_won = _num(row.get(f"{opponent_prefix}_1stWon"))
     second_won = _num(row.get(f"{opponent_prefix}_2ndWon"))
-    if svpt is None or first_won is None or second_won is None or svpt <= 0:
-        return None
-    lost = svpt - first_won - second_won
-    return _rate(lost, svpt)
+    if svpt is not None and first_won is not None and second_won is not None and svpt > 0:
+        lost = svpt - first_won - second_won
+        return _rate(lost, svpt)
+    player = "w" if opponent_prefix == "l" else "l"
+    return _paired_percent(row, f"{player}_return_points_won_pct",
+                           f"{opponent_prefix}_service_points_won_pct")
 
 
 @dataclass(frozen=True)
@@ -284,6 +304,18 @@ def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                     None if w_bp_saved is None or w_bp_faced is None else w_bp_faced - w_bp_saved,
                     w_bp_faced,
                 )
+                if w_bp_serve is None:
+                    w_bp_serve = _paired_percent(
+                        row, "w_break_points_saved_pct", "l_break_points_won_pct")
+                if l_bp_serve is None:
+                    l_bp_serve = _paired_percent(
+                        row, "l_break_points_saved_pct", "w_break_points_won_pct")
+                if w_bp_return is None:
+                    w_bp_return = _paired_percent(
+                        row, "w_break_points_won_pct", "l_break_points_saved_pct")
+                if l_bp_return is None:
+                    l_bp_return = _paired_percent(
+                        row, "l_break_points_won_pct", "w_break_points_saved_pct")
                 for stats, serve_bp, return_bp in (
                     (w_stats, w_bp_serve, w_bp_return),
                     (l_stats, l_bp_serve, l_bp_return),
