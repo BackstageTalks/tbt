@@ -16,6 +16,10 @@ spec.loader.exec_module(mod)
 
 class CloseoutContractTests(unittest.TestCase):
     def setUp(self):
+        # Fixture contracts are independent of workflow_dispatch max_requests.
+        cap_patcher = mock.patch.object(mod, "MAX_CALLS", 750)
+        cap_patcher.start()
+        self.addCleanup(cap_patcher.stop)
         mod.STATE.update(calls=0, remaining=None, reason="", batches=0)
         mod.DATA.clear()
         # The production workflow exports the CDB gap path before running tests.
@@ -349,6 +353,36 @@ class CloseoutContractTests(unittest.TestCase):
             with mock.patch.dict(mod.os.environ, {"CLOSEOUT_GAP_TARGETS": str(path)}), \
                  mock.patch.object(mod, "request", side_effect=AssertionError("spent reserve")):
                 mod.probe_recent_event_stats("2026-10-21", "123")
+        self.assertEqual(mod.STATE["calls"], 0)
+
+    def test_manual_30_budget_collects_stats_and_reserves_10_for_odds(self):
+        requested = []
+        def respond(path, *args, **kwargs):
+            requested.append(path)
+            mod.STATE["calls"] += 1
+            mod.STATE["remaining"] -= 1
+            return {"games": [{"status": "final", "stats": {"total_games": 20}}]}
+        with mock.patch.object(mod, "MAX_CALLS", 30), \
+             mock.patch.object(mod, "_targeted_player_names",
+                               return_value=[f"Player{i} Name" for i in range(40)]), \
+             mock.patch.object(mod, "request", side_effect=respond), \
+             mock.patch.object(mod, "flush_if_needed"):
+            self.assertEqual(mod.run_odds_reserve(), 10)
+            mod.STATE["remaining"] = 200
+            mod.probe_player_games([], "2026-10-21", "test")
+        self.assertEqual(len(requested), 20)
+        self.assertEqual(mod.STATE["calls"], 20)
+        self.assertEqual(mod.STATE["remaining"], 180)
+        self.assertEqual(len(mod.DATA), 20)
+
+    def test_manual_30_budget_protects_last_50_provider_calls(self):
+        with mock.patch.object(mod, "MAX_CALLS", 30), \
+             mock.patch.object(mod, "_targeted_player_names",
+                               return_value=["Carlos Alcaraz"]), \
+             mock.patch.object(mod, "request",
+                               side_effect=AssertionError("daily reserve spent")):
+            mod.STATE["remaining"] = 50
+            mod.probe_player_games([], "2026-10-21", "test")
         self.assertEqual(mod.STATE["calls"], 0)
 
     def test_player_logs_with_games_and_sets_do_not_trigger_aces_only_stop(self):

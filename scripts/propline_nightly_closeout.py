@@ -9,7 +9,7 @@ Collection contract:
   4) Preserve unmodified provider payload + UTC capture time + provider event ID.
   5) Flush immutable batches every 25 attempted requests; read back blob SHA/size.
   6) Recover final recent score-linked stats first; then historical player
-     logs for actual 2026 CDB gaps. Preserve ≥50 calls for existing niche odds.
+     logs for actual 2026 CDB gaps. Protect odds in full and small manual runs.
   7) Separate exact-linking, single-writer, full-year independent readback
      authorizes additive CDB imports in the SAME nighttime workflow.
   8) Never train, promote or touch daytime CLV workflows.
@@ -63,6 +63,13 @@ def odds_priority(market_keys):
 PLAYER_GAMES_PROBE_MAX = 16  # Offline compatibility; active night reads exact CDB gaps
 NIGHTLY_GAP_PLAYER_MAX = 600
 NIGHTLY_ODDS_RESERVE = 50
+
+
+def run_odds_reserve():
+    """Scale per-run reservation, while keeping provider daily guard at 50."""
+    return min(NIGHTLY_ODDS_RESERVE, max(1, MAX_CALLS // 3))
+
+
 PLAYER_GAMES_LIMIT = 100
 PLAYER_STATS_FOCUS = ("aces", "dblfaults", "breakpts", "breakpts_w",
                       "tiebreaks", "tiebreaks_w", "total_games", "sets_won",
@@ -206,7 +213,7 @@ def probe_recent_event_stats(day, runid):
         return
     # One board call is needed to discover final event IDs. No fixed event-ID
     # guessing and no optional stats traffic after reserve is reached.
-    if (STATE["reason"] or STATE["calls"] >= MAX_CALLS - NIGHTLY_ODDS_RESERVE
+    if (STATE["reason"] or STATE["calls"] >= MAX_CALLS - run_odds_reserve()
             or STATE["remaining"] is not None
             and STATE["remaining"] <= NIGHTLY_ODDS_RESERVE):
         return
@@ -248,7 +255,7 @@ def probe_recent_event_stats(day, runid):
     selected.sort()
     fetched, useful, raw_fields = 0, 0, {}
     for _started, eid in selected:
-        if (STATE["reason"] or STATE["calls"] >= MAX_CALLS - NIGHTLY_ODDS_RESERVE
+        if (STATE["reason"] or STATE["calls"] >= MAX_CALLS - run_odds_reserve()
                 or STATE["remaining"] is not None
                 and STATE["remaining"] <= NIGHTLY_ODDS_RESERVE):
             break
@@ -303,9 +310,9 @@ def probe_player_games(future, day, runid):
     for name in targets:
         if STATE["reason"] or STATE["calls"] >= MAX_CALLS:
             break
-        # Preserve useful nightly odds bandwidth within the same 750 calls.
+        # Preserve nightly odds bandwidth within this run's actual request cap.
         if exact_targets is not None and (
-            STATE["calls"] >= MAX_CALLS - NIGHTLY_ODDS_RESERVE
+            STATE["calls"] >= MAX_CALLS - run_odds_reserve()
             or (STATE["remaining"] is not None and STATE["remaining"] <= NIGHTLY_ODDS_RESERVE)
         ):
             break
