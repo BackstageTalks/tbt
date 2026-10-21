@@ -92,3 +92,14 @@ def test_retraining_is_one_shot_nonpromoting_and_backup_gated():
     assert "python scripts/cdb_global_writer_lock.py acquire" in workflow
     assert "python scripts/cdb_global_writer_lock.py release --if-held" in workflow
     assert "  schedule:" not in workflow
+
+
+def test_wta_tour_calibrator_requires_both_proper_scores_on_calibration_only():
+    approved = TennisEnsemble._tour_calibration_approved
+    # Lower log loss alone is not enough on WTA.
+    assert not approved("wta", "platt", "identity", .500, .520, .250, .240)
+    assert approved("wta", "platt", "identity", .500, .520, .230, .240)
+    # The established ATP selector remains loss-based.
+    assert approved("atp", "platt", "identity", .500, .520, .250, .240)
+    assert not approved("wta", "identity", "identity", .480, .520, .220, .240)
+    assert not approved("wta", "platt", "identity", .515, .520, .230, .240)
