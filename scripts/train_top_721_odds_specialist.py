@@ -142,9 +142,13 @@ def _high_confidence_settled(frame, column):
     }
 
 
-def _top_three(frame, column):
-    # Select before looking at settlement; pending picks consume daily capacity.
-    ranked = frame.sort_values(
+def _top_three(frame, column, *, minimum_probability=None):
+    # Optional VIP research: a predeclared 80% gate, with no forced fill.
+    # Select before settlement; pending picks consume daily capacity.
+    eligible = frame if minimum_probability is None else frame.loc[
+        frame[column] >= minimum_probability
+    ]
+    ranked = eligible.sort_values(
         ["betting_day", column, "event_id"],
         ascending=[True, False, True], kind="stable",
     ).groupby("betting_day", sort=True, group_keys=False).head(3)
@@ -231,6 +235,12 @@ def train_and_compare(
             "market": _top_three(offered, "fair_market_probability"),
             "specialist": _top_three(offered, "specialist_probability"),
         },
+        "vip_selective_metrics": {
+            "blinq": _top_three(offered, "public_top_probability", minimum_probability=.80),
+            "raw_model": _top_three(offered, "model_probability", minimum_probability=.80),
+            "market": _top_three(offered, "fair_market_probability", minimum_probability=.80),
+            "specialist": _top_three(offered, "specialist_probability", minimum_probability=.80),
+        },
         "top_80_reliability": {
             "blinq": _high_confidence_settled(test, "public_top_probability"),
             "raw_model": _high_confidence_settled(test, "model_probability"),
@@ -242,6 +252,9 @@ def train_and_compare(
             "criterion": "95% Wilson lower bound >= 0.87 on disjoint settled priced picks",
             "status": "RESEARCH_ONLY_NOT_PROMOTED",
             "coverage_must_be_reported": True,
+            "research_minimum_probability": 0.80,
+            "daily_max": 3,
+            "no_forced_picks": True,
         },
         "limitations": [
             "Small retrospective snapshot sample, previously explored",
