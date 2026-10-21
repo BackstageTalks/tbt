@@ -51,6 +51,13 @@ def test_training_includes_exact_top_odds_boundary_and_keeps_days_disjoint(tmp_p
     assert top["hit_rate_ci95_wilson"] is not None
     assert top["target_87_supported"] is False
     assert result["vip_accuracy_goal"]["target"] == .87
+    vip = result["vip_selective_metrics"]["blinq"]
+    assert vip["offered"] == 24
+    assert vip["selected"] == 0  # 80% gate does not force three picks/day
+    assert vip["settled"] == 0
+    assert vip["hit_rate"] is None
+    assert vip["selection_coverage"] == 0
+    assert vip["target_87_supported"] is False
     assert (tmp_path / "out" / "research_model.joblib").exists()
 
 
@@ -127,3 +134,8 @@ def test_vip_report_counts_pending_selection_against_capacity():
     assert top["settled"] == 18
     assert top["unsettled_selected"] == 3
     assert top["selection_coverage"] == 21 / 56
+    vip = _top_three(frame, "model_probability", minimum_probability=.80)
+    assert vip["selected"] == 14  # exactly two eligible offers/day
+    assert vip["settled"] == 12
+    assert vip["unsettled_selected"] == 2
+    assert vip["selection_coverage"] == 14 / 56
