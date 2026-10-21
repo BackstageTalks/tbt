@@ -26,6 +26,8 @@ import urllib.request
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from tbt.data.offline_odds import norm_text
+
 API = "https://api.prop-line.com/v1"
 REPO = os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data")
 ROOT = "research/propline_closeout"
@@ -199,7 +201,7 @@ def probe_recent_event_stats(day, runid):
             date.fromisoformat(date_text)
         except ValueError:
             raise RuntimeError("Bad canonical score target date") from None
-        wanted.add((date_text, tuple(sorted(" ".join(p.casefold().split()) for p in players))))
+        wanted.add((date_text, tuple(sorted(norm_text(p) for p in players))))
     if not wanted:
         return
     # One board call is needed to discover final event IDs. No fixed event-ID
@@ -208,8 +210,12 @@ def probe_recent_event_stats(day, runid):
             or STATE["remaining"] is not None
             and STATE["remaining"] <= NIGHTLY_ODDS_RESERVE):
         return
-    board = request("/sports/tennis/scores", {"days_from": RECENT_SCORES_DAYS},
-                    allow_not_found=True)
+    try:
+        board = request("/sports/tennis/scores", {"days_from": RECENT_SCORES_DAYS},
+                        allow_not_found=True, optional_stats=True)
+    except OptionalStatsAccessUnavailable:
+        print(json.dumps({"recent_event_stats": "scores_not_entitled"}), flush=True)
+        return
     if board is None:
         return
     try:
@@ -234,8 +240,7 @@ def probe_recent_event_stats(day, runid):
         home, away = item.get("home_team"), item.get("away_team")
         if not isinstance(home, str) or not isinstance(away, str):
             continue
-        pair = tuple(sorted((" ".join(home.casefold().split()),
-                             " ".join(away.casefold().split()))))
+        pair = tuple(sorted((norm_text(home), norm_text(away))))
         if (started.date().isoformat(), pair) not in wanted:
             continue
         seen_ids.add(eid)
@@ -248,7 +253,8 @@ def probe_recent_event_stats(day, runid):
                 and STATE["remaining"] <= NIGHTLY_ODDS_RESERVE):
             break
         try:
-            payload = request(f"/sports/tennis/events/{eid}/stats", allow_not_found=True)
+            payload = request(f"/sports/tennis/events/{eid}/stats",
+                              allow_not_found=True, optional_stats=True)
         except OptionalStatsAccessUnavailable:
             break
         if not isinstance(payload, dict) or payload.get("status") != "final":
@@ -256,9 +262,12 @@ def probe_recent_event_stats(day, runid):
         if str(payload.get("id") or "") != eid or not isinstance(payload.get("stats"), list):
             continue
         # Trust only the exact event scope already checked on the score board.
-        if (str(payload.get("commence_time") or "") !=
-                next((str(e.get("commence_time") or "") for e in events
-                      if isinstance(e, dict) and str(e.get("id") or "") == eid), "")):
+        score = next((e for e in events if isinstance(e, dict)
+                      and str(e.get("id") or "") == eid), None)
+        if (score is None or str(payload.get("commence_time") or "") !=
+                str(score.get("commence_time") or "")
+                or {norm_text(payload.get("home_team")), norm_text(payload.get("away_team"))}
+                != {norm_text(score.get("home_team")), norm_text(score.get("away_team"))}):
             continue
         fields = {}
         for row in payload["stats"]:
@@ -431,7 +440,7 @@ def flush_if_needed(day, runid):
         save(day, runid)
 
 
-def request(path, params=None, *, allow_not_found=False):
+def request(path, params=None, *, allow_not_found=False, optional_stats=False):
     if STATE["calls"] >= MAX_CALLS:
         STATE["reason"] = "run_cap"
         return None
@@ -488,10 +497,14 @@ def request(path, params=None, *, allow_not_found=False):
                     time.sleep(max(1, seconds))
                     continue
                 STATE["reason"] = "burst_throttle"
+            elif optional_stats and exc.code in (500, 502, 503, 504):
+                return None  # Optional box scores must not block nightly odds.
             else:
                 STATE["reason"] = "provider_http_" + str(exc.code)
             return None
         except (urllib.error.URLError, TimeoutError):
+            if optional_stats:
+                return None
             STATE["reason"] = "provider_network_error"
             return None
 
