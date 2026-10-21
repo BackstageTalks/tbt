@@ -38,6 +38,8 @@ def test_real_native_linker_exact_writer_and_readback(tmp_path):
         row = {
             "tour": "ATP", "match_date": "2026-10-17", "tournament": "Vienna",
             "winner": "Alpha One", "loser": "Beta Two", "round": "QF",
+            # Provider-side IDs are preserved as provenance, never CDB IDs.
+            "winner_id": "external-100", "loser_id": "external-200",
             "surface": "hard", "best_of": 3,
             "w_svpt": 70, "w_1stIn": 40, "w_1stWon": 30, "w_2ndWon": 14,
             "w_ace": 5, "w_df": 2, "w_bpSaved": 4, "w_bpFaced": 6,
@@ -76,6 +78,13 @@ def test_real_native_linker_exact_writer_and_readback(tmp_path):
         check=True, capture_output=True, text=True, env=environment, timeout=60
     )
     staged = [json.loads(x) for x in (tmp_path / "link/eligible.jsonl").read_text().splitlines()]
+    evidence = staged[0]["sources"][0]
+    assert evidence["source_player_a_id"] == "external-100"
+    assert evidence["source_player_b_id"] == "external-200"
+    assert evidence["source_id_namespace"] == "drive-unverified"
+    assert staged[0]["canonical"]["player1_id"] == "canonical-alpha"
+    assert staged[0]["canonical"]["player2_id"] == "canonical-beta"
+    assert "verified_player_id_pair" not in evidence["evidence"]
     proof = verify_persisted(before, after, staged, [2026])
     assert proof["enriched_matches"] == 1
     assert proof["added_values"] == linked["eligible_new_values"]
@@ -84,3 +93,8 @@ def test_real_native_linker_exact_writer_and_readback(tmp_path):
     after_stored = load_snapshot(after / "history-2026.parquet")[0]
     assert original_stored.stats == {}
     assert len(after_stored.stats) == linked["eligible_new_values"]
+    assert after_stored.match_id == original_stored.match_id
+    assert (after_stored.player1_id, after_stored.player2_id) == (
+        original_stored.player1_id, original_stored.player2_id
+    )
+    assert after_stored.provider_payload == original_stored.provider_payload
