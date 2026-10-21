@@ -93,3 +93,29 @@ def test_unverified_candidate_never_counted():
     e["candidate_remote_readback_verified"] = False
     with pytest.raises(ValueError, match="immutable"):
         evaluate_721([issued_row()], [shadow()], e)
+
+
+def test_active_pair_is_selected_even_when_latest_experiment_is_different():
+    from audit_721_top_market import active_candidate_evidence
+    report = {"promotion_decision": {"candidate_version": "v7.2.1-v201", "production_version": "v201"}}
+    active = {"production_model_version": "v201", "challenger_model_version": "v7.2.1-v201"}
+    evidence = active_candidate_evidence(report, "v201", active, "a"*64)
+    assert evidence["candidate_release_tag"] == "tbt-model-candidate-v1"
+    result = evaluate_721([issued_row()], [shadow()], evidence)
+    assert result["model_pair"]["candidate"] == "v7.2.1-v201"
+    with pytest.raises(ValueError, match="disagree"):
+        active_candidate_evidence(report, "v201", dict(active, challenger_model_version="v7.2.1-new"), "a"*64)
+    with pytest.raises(ValueError, match="disagree"):
+        active_candidate_evidence(report, "other-champion", active, "a"*64)
+
+
+def test_excluded_repeat_does_not_hide_real_first_prematch_pick():
+    from datetime import datetime, timezone
+    original = shadow()
+    repeat = {**original, "match_id": "later", "captured_at": PREPARED,
+              "status": "pending", "target_player1_win": None}
+    result = evaluate_721([issued_row()], [original, repeat], frozen_evidence(),
+                          now=datetime(2026, 10, 22, tzinfo=timezone.utc))
+    assert result["matched_unique"] == 1
+    assert result["excluded_repeated_shadow_snapshots"] == 1
+    assert repeat["status"] == "pending"  # read-only audit

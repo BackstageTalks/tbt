@@ -62,19 +62,30 @@ def exact_issued_top(ledger):
 
 def evaluate_721(ledger, shadow, evidence, *, now=None):
     now = now or datetime.now(timezone.utc)
-    if not isinstance(evidence, dict) or evidence.get("status") != "EVALUATED_NOT_DEPLOYED":
+    if not isinstance(evidence, dict) or evidence.get("status") not in {
+            "EVALUATED_NOT_DEPLOYED", "ACTIVE_SHADOW_READBACK_VERIFIED"}:
         raise ValueError("Verified independently evaluated frozen candidate required")
+    frozen_verified = (evidence.get("status") == "EVALUATED_NOT_DEPLOYED"
+                       and evidence.get("backup_readback_verified") is True
+                       and evidence.get("champion_restore_verified") is True)
+    active_verified = (evidence.get("status") == "ACTIVE_SHADOW_READBACK_VERIFIED"
+                       and evidence.get("active_pair_readback_verified") is True)
     if (evidence.get("candidate_remote_readback_verified") is not True
-            or evidence.get("backup_readback_verified") is not True
-            or evidence.get("champion_restore_verified") is not True):
+            or not (frozen_verified or active_verified)):
         raise ValueError("Candidate immutable release evidence missing")
     champion, candidate = evidence.get("champion_version"), evidence.get("candidate_version")
     if (not isinstance(candidate, str) or not candidate.startswith("v7.2.1-")
             or not isinstance(champion, str) or not champion):
         raise ValueError("Exact v7.2.1/champion model versions required")
     frozen, exclusions = exact_issued_top(ledger)
+    from tbt.services.frozen_721_research import exclude_repeated_events
+    cohort = [r for r in shadow if r.get("production_model_version") == champion
+              and r.get("challenger_model_version") == candidate]
+    cohort = exclude_repeated_events(cohort)
+    repeated = sum(r.get("excluded_reason") == "duplicate_provider_event_snapshot" for r in cohort)
+    cohort = [r for r in cohort if r.get("excluded_reason") != "duplicate_provider_event_snapshot"]
     result = evaluate(
-        frozen, shadow, cutoff=now, champion=champion, candidate=candidate,
+        frozen, cohort, cutoff=now, champion=champion, candidate=candidate,
         sections={"top_daily"},
     )
     matched = result["matched_unique"]
@@ -87,6 +98,7 @@ def evaluate_721(ledger, shadow, evidence, *, now=None):
         "candidate_release_tag": evidence["candidate_release_tag"],
         "candidate_sha256": evidence["candidate_sha256"],
         "quote_provenance_exclusions": exclusions,
+        "excluded_repeated_shadow_snapshots": repeated,
         "review_gate": {
             "ready_for_independent_market_review": eligible_for_review,
             "minimum_matched_top": MIN_MATCHED_TOP, "minimum_per_tour": MIN_PER_TOUR,
@@ -102,26 +114,62 @@ def evaluate_721(ledger, shadow, evidence, *, now=None):
     return result
 
 
+def active_candidate_evidence(candidate_report, champion_version, shadow_report, candidate_sha):
+    """Identity from verified active bundles, never the latest unactivated fit."""
+    decision = candidate_report.get("promotion_decision") or {}
+    candidate = decision.get("candidate_version")
+    champion = shadow_report.get("production_model_version")
+    if (not candidate or candidate != shadow_report.get("challenger_model_version")
+            or not champion or decision.get("production_version") != champion
+            or champion_version != champion or not isinstance(candidate_sha, str)
+            or len(candidate_sha) != 64):
+        raise ValueError("Active candidate, champion and shadow report disagree")
+    return {
+        "status": "ACTIVE_SHADOW_READBACK_VERIFIED",
+        "candidate_remote_readback_verified": True, "active_pair_readback_verified": True,
+        "champion_version": champion, "candidate_version": candidate,
+        "candidate_release_tag": "tbt-model-candidate-v1", "candidate_sha256": candidate_sha,
+    }
+
+
 def main():
     import argparse
     from release_store import ReleaseStore
-    from publish_model_calibration_status import _json_content
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-repository", default="BackstageTalks/tbt-data")
     ap.add_argument("--out", default=".cache/tbt/model-shadow-audit/721-top-market.json")
     args = ap.parse_args()
     root = Path(args.out).parent
-    evidence = _json_content(
-        args.data_repository, "audit/model-frozen-candidate-latest.json")
     rows = {}
     source_sha = {}
     for tag, name in (("tbt-predictions-v1", "ledger.json"),
                       ("tbt-model-shadow-v1", "shadow_ledger.json")):
         store = ReleaseStore(args.data_repository, tag, root / tag)
-        store.download(required_names=(name,), require_bundle_manifest=True)
+        names = (name, "shadow_report.json") if name == "shadow_ledger.json" else (name,)
+        store.download(extra_names=names, required_names=names, require_bundle_manifest=True)
         raw = (store.directory / name).read_bytes()
         rows[name] = json.loads(raw)
         source_sha[name] = sha256(raw).hexdigest()
+        if name == "shadow_ledger.json":
+            shadow_report = json.loads((store.directory / "shadow_report.json").read_bytes())
+    models = {}
+    versions = {}
+    for role, tag in (("candidate", "tbt-model-candidate-v1"), ("champion", "tbt-model-production-v1")):
+        store = ReleaseStore(args.data_repository, tag, root / tag)
+        names = ("model.joblib", "training_report.json")
+        store.download(extra_names=names, required_names=names, require_bundle_manifest=True)
+        models[role] = json.loads((store.directory / "training_report.json").read_bytes())
+        source_sha[role + "_model"] = sha256((store.directory / "model.joblib").read_bytes()).hexdigest()
+        # Read the binary identity as well as the report: a report alone cannot
+        # prove which artifact actually occupies the candidate slot.
+        from tbt.models.artifact import load_model
+        model = load_model(str(store.directory / "model.joblib"))
+        expected = shadow_report.get("challenger_model_version" if role == "candidate" else "production_model_version")
+        if not model.fitted or model.version != expected:
+            raise ValueError("Active model binary disagrees with shadow report")
+        versions[role] = model.version
+    evidence = active_candidate_evidence(models["candidate"], versions["champion"], shadow_report,
+                                         source_sha["candidate_model"])
     report = evaluate_721(rows["ledger.json"], rows["shadow_ledger.json"], evidence)
     report["source_sha256"] = source_sha
     out = Path(args.out)
