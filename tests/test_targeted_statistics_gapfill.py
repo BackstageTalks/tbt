@@ -272,17 +272,67 @@ def test_hourly_97_percent_queue_gives_undercovered_atp_wta_years_a_budget_share
     )
     assert len(selected) == len(rows)
     assert len({m.match_id for m in selected}) == len(rows)
-    first_ten = Counter((m.tour.lower(), m.scheduled_at.year) for m in selected[:10])
-    assert first_ten == {
-        ("wta", 2024): 4,
-        ("wta", 2023): 4,
+    # Initial baseline samples recent gaps while retaining older ATP/WTA work.
+    first_twenty = Counter((m.tour.lower(), m.scheduled_at.year)
+                           for m in selected[:20])
+    assert first_twenty == {
+        ("wta", 2024): 9,
+        ("wta", 2023): 3,
         ("atp", 2022): 1,
-        ("atp", 2025): 1,
+        ("atp", 2025): 7,
     }
     assert report["priority_policy"] == (
-        "6_high_yield_2_undercovered_wta_1_undercovered_atp_1_other"
+        "8_recent_verified_6_recent_gap_3_historic_verified_1_historic_gap_2_other"
     )
+    assert report["recent_focus_years"] == [2024, 2025, 2026]
+    assert report["planned_recent_baseline_share_if_all_families_available"] == 0.7
     assert sum(report["first_1000_by_tour_year"].values()) == len(rows)
+
+
+
+def test_full_baseline_cycle_protects_recent_2024_2026_and_older_evidence(match_factory):
+    from datetime import date
+    from collections import Counter
+    from download_tennis_history import _statistics_candidates
+
+    # Supply all five lanes so empty-family fallthrough cannot mask a regression.
+    cohorts = (
+        ("WTA", 2024, False), ("ATP", 2024, False),
+        ("WTA", 2025, False), ("WTA", 2026, False), ("ATP", 2026, False),
+        ("WTA", 2023, False), ("WTA", 2022, False),
+        ("ATP", 2022, False), ("ATP", 2025, True),
+    )
+    rows = []
+    for tour, year, ready in cohorts:
+        for n in range(30):
+            row = match_factory(f"{tour}-{year}-{n}", "A", "B", "A")
+            row.tour = tour
+            row.scheduled_at = datetime(year, 8, 1, tzinfo=timezone.utc) + timedelta(days=n)
+            row.stats = ({f"{p}_{field}": .5 for p in ("p1", "p2")
+                         for field in ("service_points_won", "return_points_won")}
+                         if ready else {"p1_service_points_won": .6})
+            row.provider_payload = {"id": str(1000 + len(rows))}
+            rows.append(row)
+    ordered, plan = _statistics_candidates(
+        rows, date(2022, 1, 1), date(2026, 12, 31),
+        targeted=True, historical_high_yield=True,
+    )
+    first = ordered[:20]
+    assert len(first) == 20
+    assert len({row.match_id for row in ordered}) == len(rows)
+    assert sum(row.scheduled_at.year >= 2024 for row in first) == 16
+    assert sum(row.scheduled_at.year <= 2023 for row in first) == 4
+    buckets = Counter((row.tour.lower(), row.scheduled_at.year) for row in first)
+    assert buckets[("wta", 2024)] == 4
+    assert buckets[("atp", 2024)] == 4
+    assert buckets[("wta", 2025)] >= 1
+    assert buckets[("wta", 2026)] >= 1
+    assert buckets[("atp", 2026)] >= 1
+    assert buckets[("wta", 2023)] >= 1
+    assert buckets[("wta", 2022)] >= 1
+    assert buckets[("atp", 2022)] == 1
+    assert plan["recent_focus_years"] == [2024, 2025, 2026]
+    assert sum(plan["first_1000_by_tour_year"].values()) == len(rows)
 
 
 def test_high_yield_queue_prioritizes_independently_verified_player_pair(match_factory):
@@ -323,8 +373,10 @@ def test_wta_older_underserved_years_rotate_instead_of_starving(match_factory):
         matches, date(2022, 1, 1), date(2025, 12, 31),
         targeted=True, historical_high_yield=True,
     )
-    # Both independently verified WTA seasons now share the high-yield lane.
-    assert [m.scheduled_at.year for m in ordered[:6]] == [2024, 2023] * 3
+    # Recent gaps get the front slots; older proven WTA work is still sampled.
+    assert ordered[0].scheduled_at.year == 2024
+    assert 2025 in [m.scheduled_at.year for m in ordered[:6]]
+    assert 2023 in [m.scheduled_at.year for m in ordered[:6]]
     assert {m.scheduled_at.year for m in ordered[:12]} == {2023, 2024, 2025}
 
 
