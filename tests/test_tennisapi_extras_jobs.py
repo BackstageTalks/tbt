@@ -335,7 +335,7 @@ def test_wrong_event_in_optional_pbp_is_hard_conflict(match_factory):
 def test_controlled_manual_extras_smoke_cannot_spend_bulk_quota_or_promote():
     root = Path(__file__).resolve().parents[1]
     workflow = (root / ".github/workflows/data.yml").read_text()
-    assert "ace-statistics|statistics|extras) ;;" in workflow
+    assert "ace-statistics|statistics|extras|identity) ;;" in workflow
     assert '[[ "$mode" == "extras" ]]' in workflow
     assert '(( 10#$max_requests <= 30 ))' in workflow
     assert '[[ "$promote" == "false" ]]' in workflow
