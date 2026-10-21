@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 from hashlib import sha256
 import json
+from datetime import timezone
 from pathlib import Path
 import subprocess
 import tempfile
@@ -36,7 +37,7 @@ def verify_rows(rows, expected):
                    != {proof["home"], proof["away"]}
                 or str(match.winner_id) not in {proof["home"], proof["away"]}
                 or str(match.tour).lower() != proof["tour"]
-                or match.scheduled_at.year != proof["year"]):
+                or match.scheduled_at.astimezone(timezone.utc).year != proof["year"]):
             raise ValueError("Persisted provider identity differs from verified proposal")
         if (match.stats or {}) != proof["stats_before"]:
             raise ValueError("Native identity repair unexpectedly changed historical statistics")
