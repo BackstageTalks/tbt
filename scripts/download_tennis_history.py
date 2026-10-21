@@ -32,7 +32,7 @@ from release_store import ReleaseStore
 from date_window import history_window
 from audit_statistics_inventory import _quality_ready, statistics_value_change
 from adaptive_statistics_queue import AdaptiveStatisticsQueue
-from recover_native_event_id import candidate_days, recover_day
+from recover_native_event_id import candidate_days, recover_day, identity_gap_inventory
 
 # Priorities from five independently read-back VERIFIED CDB statistics runs on
 # 2026-10-20 (11,564 paid calls; 135,213 persisted new values). WTA 2023
@@ -665,8 +665,18 @@ def main():
             # Use the same first-party TennisApi calendar as the history collector.
             # This branch NEVER promotes cross-provider research candidates.
             attempts = progress.setdefault("identity_day_attempts", {})
+            # Missing provider IDs != native-calendar eligibility. Preserve a
+            # machine-readable blocker inventory on every zero-gain run.
+            gaps = identity_gap_inventory(
+                matches, start=start, end=end, attempts=attempts,
+                max_days=args.identity_max_days)
+            report["identity_gap_inventory"] = gaps
+            print(json.dumps({"identity_gap_inventory": gaps}, sort_keys=True), flush=True)
             planned = candidate_days(matches, start=start, end=end,
                                      attempts=attempts, max_days=args.identity_max_days)
+            if (len(planned) != gaps["scheduled_days"] or
+                    sum(r[2] for r in planned) != gaps["scheduled_eligible_rows"]):
+                raise RuntimeError("Identity calendar and blocker audit disagree")
             report["identity_candidate_days"] = len(planned)
             report["identity_candidate_rows"] = sum(row[2] for row in planned)
             changed = set()
