@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 from tbt.services.model_training import APP, TrainingBlocked, github, inspect, status as training_status
 from tbt.services.model_lab import collect_status, WORKFLOWS
@@ -67,52 +67,38 @@ def dispatch(pending):
 
 
 
-def published_main_revision(read=github, checkout_sha=None):
-    """Prove this exact main checkout was really deployed and read back.
+def admin_model_lab_endpoint_ready(base_url=None, open_url=urlopen):
+    """Read-only origin probe of the *actual* deployed admin route.
 
-    GitHub sometimes marks the whole workflow/job cancelled after every deploy
-    step, including final cleanup, has succeeded. Trust only the complete set
-    of individually successful deployment and runtime verification steps, not
-    a green CI label or a cancelled run in isolation.
+    Frequent unrelated commits can cancel the GitHub workflow after Azure has
+    already published the API. Do not rely on CI run labels or checkout SHA.
+    Require the real protected route to deny an anonymous GET with the exact
+    expected JSON 401 response before sending any signed request.
     """
-    sha = checkout_sha or subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], text=True, timeout=10,
-    ).strip()
-    if len(sha) != 40 or any(ch not in "0123456789abcdef" for ch in sha):
-        raise RuntimeError("Cannot verify checked-out deployment revision")
-    runs = read(f"{APP}/actions/workflows/ci.yml/runs?branch=main&event=push&per_page=30")
-    required = {
-        "Reject queued stale deploy and stamp exact frontend revision",
-        "Deploy BlinQ to Azure Static Web Apps",
-        "Verify deployed frontend release",
-        "Smoke deployed authentication readiness",
-        "Confirm deployed prediction publication",
-        "Smoke deployed health endpoint",
-        "Seed private calibration Admin snapshot",
-        "Complete job",
-    }
-    for item in runs.get("workflow_runs", []):
-        if item.get("head_sha") != sha:
-            continue
-        if item.get("status") != "completed" or item.get("conclusion") not in ("success", "cancelled"):
+    base = (base_url or os.environ["BLINQ_BASE_URL"]).rstrip("/")
+    if base != "https://agreeable-sky-011a7fe10.7.azurestaticapps.net":
+        raise RuntimeError("Unexpected Model Lab Admin deployment")
+    req = Request(base + "/api/v1/admin/model-lab", method="GET")
+    try:
+        with open_url(req, timeout=20):
+            raise RuntimeError("Admin-only Model Lab endpoint accepted anonymous request")
+    except HTTPError as error:
+        if error.code == 404:
             return False
-        jobs = read(f"{APP}/actions/runs/{item['id']}/jobs?per_page=100")
-        for job in jobs.get("jobs", []):
-            if job.get("name") != "deploy" or job.get("status") != "completed":
-                continue
-            if job.get("conclusion") not in ("success", "cancelled"):
-                return False
-            successful = {step.get("name") for step in job.get("steps", [])
-                          if step.get("status") == "completed" and
-                             step.get("conclusion") == "success"}
-            return required <= successful
-        return False
-    return False
+        if error.code != 401:
+            raise RuntimeError(f"Unexpected Model Lab Admin probe HTTP {error.code}") from error
+        try:
+            body = json.loads(error.read(1024))
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError("Invalid unauthorized Model Lab response") from exc
+        if not isinstance(body, dict) or body.get("error") != "unauthorized":
+            raise RuntimeError("Admin route did not prove protected access")
+        return True
 
 
 def main():
-    if not published_main_revision():
-        print("MODEL_LAB_DEFERRED: current checkout has not completed a verified Azure deployment", flush=True)
+    if not admin_model_lab_endpoint_ready():
+        print("MODEL_LAB_DEFERRED: protected Admin route is not deployed yet", flush=True)
         return
     snapshot = collect_status()
     result = sync(snapshot)

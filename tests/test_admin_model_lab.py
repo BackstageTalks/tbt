@@ -1,6 +1,8 @@
 """Model Lab actions are one-shot, fail-closed and never promote production."""
 import json
 import sys
+import io
+from urllib.error import HTTPError
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -199,97 +201,59 @@ class TestLab(unittest.TestCase):
         self.assertEqual(result["operation"]["state"], "QUEUED")
 
 
-DEPLOYED_STEPS = (
-    "Reject queued stale deploy and stamp exact frontend revision",
-    "Deploy BlinQ to Azure Static Web Apps",
-    "Verify deployed frontend release",
-    "Smoke deployed authentication readiness",
-    "Confirm deployed prediction publication",
-    "Smoke deployed health endpoint",
-    "Seed private calibration Admin snapshot",
-    "Complete job",
-)
+class TestLiveAdminProbe(unittest.TestCase):
+    def setUp(self):
+        import os
+        p = patch.dict(os.environ, {"BLINQ_BASE_URL": "https://agreeable-sky-011a7fe10.7.azurestaticapps.net"})
+        p.start()
+        self.addCleanup(p.stop)
 
+    @staticmethod
+    def endpoint_status(code, body=b''):
+        def fake(request, timeout):
+            assert request.full_url == (
+                "https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/admin/model-lab")
+            assert request.get_method() == "GET"
+            raise HTTPError(request.full_url, code, "test", {}, io.BytesIO(body))
+        return fake
 
-def deployed_job(*, conclusion="success", steps=DEPLOYED_STEPS):
-    return {"name": "deploy", "status": "completed", "conclusion": conclusion,
-            "steps": [{"name": name, "status": "completed", "conclusion": "success"}
-                      for name in steps]}
-
-
-class TestDeployReadiness(unittest.TestCase):
-    def test_waits_for_exact_deployed_revision(self):
-        from admin_model_lab_worker import published_main_revision
-        commit = "a" * 40
-        wrong = "b" * 40
-        jobs_path = f"{m.APP}/actions/runs/71/jobs?per_page=100"
-        runs = {"workflow_runs": [
-            {"id": 75, "head_sha": wrong, "status": "completed", "conclusion": "success"},
-            {"id": 71, "head_sha": commit, "status": "completed", "conclusion": "success"},
-        ]}
-        calls = []
-        def read(path):
-            calls.append(path)
-            if path == jobs_path:
-                return {"jobs": [{"name": "checks", "status": "completed", "conclusion": "success"},
-                                 deployed_job()]}
-            return runs
-        self.assertTrue(published_main_revision(read=read, checkout_sha=commit))
-        self.assertIn(jobs_path, calls)
-        self.assertFalse(published_main_revision(read=lambda path: {"workflow_runs": [
-            {"id": 71, "head_sha": wrong, "status": "completed", "conclusion": "success"}
-        ]}, checkout_sha=commit))
-
-    def test_check_success_without_actual_deploy_is_not_ready(self):
-        from admin_model_lab_worker import published_main_revision
-        commit = "a" * 40
-        runs = {"workflow_runs": [{"id": 71, "head_sha": commit,
-                                   "status": "completed", "conclusion": "success"}]}
-        def read(path):
-            if path.endswith("/jobs?per_page=100"):
-                return {"jobs": [{"name": "checks", "status": "completed", "conclusion": "success"},
-                                 {"name": "deploy", "status": "completed", "conclusion": "skipped"}]}
-            return runs
-        self.assertFalse(published_main_revision(read=read, checkout_sha=commit))
-        pending = {"workflow_runs": [{"id": 71, "head_sha": commit,
-                                      "status": "in_progress", "conclusion": None}]}
-        self.assertFalse(published_main_revision(read=lambda path: pending, checkout_sha=commit))
-
-    def test_late_cancelled_job_is_safe_only_when_all_verifications_succeeded(self):
-        from admin_model_lab_worker import published_main_revision
-        commit = "a" * 40
-        run = {"workflow_runs": [{"id": 77, "head_sha": commit,
-                                  "status": "completed", "conclusion": "cancelled"}]}
-        def check(job):
-            def read(path):
-                return {"jobs": [job]} if path.endswith("/jobs?per_page=100") else run
-            return published_main_revision(read=read, checkout_sha=commit)
-        self.assertTrue(check(deployed_job(conclusion="cancelled")))
-        self.assertFalse(check(deployed_job(
-            conclusion="cancelled", steps=DEPLOYED_STEPS[:-1])))
-        self.assertFalse(check(deployed_job(
-            conclusion="cancelled",
-            steps=tuple(s for s in DEPLOYED_STEPS if s != "Verify deployed frontend release"))))
-        self.assertFalse(check({"name": "deploy", "status": "in_progress",
-                                "conclusion": None, "steps": deployed_job()["steps"]}))
-
-    def test_failed_workflow_never_passes_even_with_positive_partial_steps(self):
-        from admin_model_lab_worker import published_main_revision
-        commit = "a" * 40
-        run = {"workflow_runs": [{"id": 77, "head_sha": commit,
-                                  "status": "completed", "conclusion": "failure"}]}
-        def read(path):
-            return {"jobs": [deployed_job()]} if path.endswith("/jobs?per_page=100") else run
-        self.assertFalse(published_main_revision(read=read, checkout_sha=commit))
-
-    def test_no_sync_until_deployed(self):
-        from admin_model_lab_worker import main
-        with patch("admin_model_lab_worker.published_main_revision", return_value=False), \
+    def test_404_waits_without_any_signed_model_write(self):
+        from admin_model_lab_worker import admin_model_lab_endpoint_ready, main
+        self.assertFalse(admin_model_lab_endpoint_ready(
+            open_url=self.endpoint_status(404)))
+        with patch("admin_model_lab_worker.admin_model_lab_endpoint_ready", return_value=False), \
              patch("admin_model_lab_worker.collect_status") as collect, \
              patch("admin_model_lab_worker.sync") as sync:
             main()
             collect.assert_not_called()
             sync.assert_not_called()
+
+    def test_only_exact_protected_json_401_proves_live_endpoint(self):
+        from admin_model_lab_worker import admin_model_lab_endpoint_ready
+        self.assertTrue(admin_model_lab_endpoint_ready(
+            open_url=self.endpoint_status(401, b'{"error":"unauthorized"}')))
+        for code, body in ((401, b'{"error":"something-else"}'),
+                           (401, b'not-json'),
+                           (403, b'{"error":"forbidden"}'),
+                           (503, b'{"error":"storage-unavailable"}')):
+            with self.subTest(code=code, body=body):
+                with self.assertRaises(RuntimeError):
+                    admin_model_lab_endpoint_ready(open_url=self.endpoint_status(code, body))
+
+    def test_unauthenticated_success_never_proves_admin_protection(self):
+        from admin_model_lab_worker import admin_model_lab_endpoint_ready
+        class SuccessfulResponse:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+        with self.assertRaises(RuntimeError):
+            admin_model_lab_endpoint_ready(open_url=lambda request, timeout: SuccessfulResponse())
+
+    def test_wrong_publication_target_is_rejected(self):
+        from admin_model_lab_worker import admin_model_lab_endpoint_ready
+        with self.assertRaises(RuntimeError):
+            admin_model_lab_endpoint_ready(base_url="http://localhost:7071",
+                                            open_url=self.endpoint_status(401, b'{"error":"unauthorized"}'))
+
 
 
 class TestWorker(unittest.TestCase):
