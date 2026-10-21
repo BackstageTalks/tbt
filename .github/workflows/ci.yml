@@ -213,6 +213,8 @@ jobs:
           node tests/test_v736_ui_regression_contract.js
           node tests/test_banner_editor_contract.js
           node tests/test_admin_diagnostics_view.js
+          node tests/test_admin_training_panel.js
+          node tests/test_admin_model_lab_panel.js
 
       - name: Run real-browser runtime contract
         run: |
