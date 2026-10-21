@@ -208,6 +208,7 @@ class TestWorker(unittest.TestCase):
                    "expected_champion_sha256": "b" * 64}
         with patch("admin_model_lab_worker.collect_status", return_value=snapshot()), \
              patch("admin_model_lab_worker.inspect", return_value={"can_start": True}), \
+             patch("admin_model_lab_worker.training_status", return_value={"can_start": True}), \
              patch("admin_model_lab_worker.github") as gh:
             with self.assertRaises(model_training.TrainingBlocked):
                 dispatch(pending)
