@@ -64,7 +64,7 @@ state.adminModelLab.operation.action='activate_shadow';
 state.adminModelLab.last_operation.action='activate_shadow';
 html=ctx.renderAdminModelLab();
 assert.doesNotMatch(html,/data-admin-action="model-lab-acknowledge"/);
-assert.match(html,/Zápis mohol byť čiastočný/);
+assert.match(html,/Zápis sa mohol vykonať čiastočne/);
 assert.match(src,/state\.adminModelLab=await BlinqAuth\.adminModelLab\(\);/);
 state.adminModelLab.can_start=true;
 state.adminModelLab.operation=null;
