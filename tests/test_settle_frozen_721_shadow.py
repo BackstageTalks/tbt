@@ -84,10 +84,19 @@ def test_preliminary_metric_is_descriptive_and_reports_uncertainty():
     json.dumps(result, allow_nan=False)
 
 
+@pytest.mark.parametrize("use_alias", [False, True])
 def test_private_settlement_persists_only_verified_outcomes_and_no_provider_calls(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, use_alias
 ):
     now, payload, match = fixture()
+    if use_alias:
+        from dataclasses import replace
+        match = replace(match, match_id="canonical-changed-hash", provider_payload={
+            "_tbt_provider_event_id": "event1", "_tbt_event_identity": {
+                "event_id": "event1", "home": "a", "away": "b", "status": "finished"}})
+        duplicate = {**payload["rows"][0], "match_id": "later-prediction",
+                     "captured_at": (now - timedelta(hours=4)).isoformat()}
+        payload["rows"].append(duplicate)
     remote_assets = {
         service.LEDGER_ASSET: (json.dumps(payload, sort_keys=True)+"\n").encode(),
         service.REPORT_ASSET: b'{"initial":true}\n',
@@ -133,6 +142,11 @@ def test_private_settlement_persists_only_verified_outcomes_and_no_provider_call
     assert saved["rows"][0]["challenger_player1_probability"] == 0.71
     assert saved["rows"][0]["captured_at"] == payload["rows"][0]["captured_at"]
     assert saved["rows"][0]["status"] == "settled"
+    if use_alias:
+        assert first["counts"]["excluded"] == 1
+        assert saved["rows"][0]["settlement_identity"]["canonical_match_id"] == "canonical-changed-hash"
+        assert saved["rows"][1]["status"] == "excluded"
+        assert saved["rows"][1]["primary_match_id"] == saved["rows"][0]["match_id"]
     report = json.loads(remote_assets[service.REPORT_ASSET])
     assert report["preliminary"]["groups"]["ATP"]["n"] == 1
     assert report["automatic_promotion"] is False
@@ -224,3 +238,59 @@ def test_pending_diagnostics_exact_identity_not_inflated_by_fuzzy_lookup():
     assert actual["alternate_id_same_players_day_diagnostic_only"] == 0
     assert actual["scheduled_at_or_before_now"] == 1
     assert actual["provider_requests"] == 0
+
+
+def test_verified_provider_event_resolves_changed_hash_without_mutating_cdb():
+    from dataclasses import replace
+    now, payload, match = fixture()
+    canonical = replace(match, match_id='changed-after-delay',
+                        scheduled_at=match.scheduled_at + timedelta(minutes=30),
+                        provider_payload={'_tbt_provider_event_id': 'event1',
+                          '_tbt_event_identity': {'event_id': 'event1', 'home': 'a', 'away': 'b', 'status': 'finished'}})
+    accepted, audit = service.completed_matches_for_pending(payload['rows'], [canonical], now)
+    assert accepted[0].match_id == payload['rows'][0]['match_id']
+    assert canonical.match_id == 'changed-after-delay'
+    assert audit['verified_provider_event_aliases'] == 1
+    assert audit['provider_alias_evidence'][accepted[0].match_id]['canonical_match_id'] == canonical.match_id
+    # Reversing canonical orientation preserves the exact provider event and winner.
+    reversed_match = canonical.swapped()
+    accepted, _ = service.completed_matches_for_pending(payload['rows'], [reversed_match], now)
+    assert accepted[0].winner_id == 'a'
+
+
+@pytest.mark.parametrize('failure', ['missing_identity', 'different_event', 'different_players', 'ambiguous', 'early_start'])
+def test_provider_alias_fails_closed(failure):
+    from dataclasses import replace
+    now, payload, match = fixture()
+    raw = {'_tbt_provider_event_id': 'event1', '_tbt_event_identity':
+           {'event_id': 'event1', 'home': 'a', 'away': 'b', 'status': 'finished'}}
+    canonical = replace(match, match_id='changed', provider_payload=raw)
+    matches = [canonical]
+    if failure == 'missing_identity': raw.pop('_tbt_event_identity')
+    if failure == 'different_event': raw['_tbt_event_identity']['event_id'] = 'other'
+    if failure == 'different_players': raw['_tbt_event_identity']['away'] = 'other'
+    if failure == 'ambiguous': matches.append(replace(canonical, match_id='another'))
+    if failure == 'early_start': canonical.scheduled_at = now - timedelta(hours=8)
+    accepted, _ = service.completed_matches_for_pending(payload['rows'], matches, now)
+    assert accepted == []
+
+
+def test_duplicate_provider_event_keeps_earliest_prediction_and_audit_rows():
+    from copy import deepcopy
+    now, payload, match = fixture()
+    first = payload['rows'][0]
+    later = {**deepcopy(first), 'match_id': 'new-internal-hash',
+             'captured_at': (now - timedelta(hours=4)).isoformat(),
+             'challenger_player1_probability': .99}
+    originals = [later, first]
+    result = service.exclude_repeated_events(originals)
+    assert len(result) == 2
+    assert result[0]['status'] == 'excluded'
+    assert result[0]['primary_match_id'] == first['match_id']
+    assert result[0]['challenger_player1_probability'] == .99
+    assert result[1] == first
+    assert originals[0]['status'] == 'pending'
+    assert service.exclude_repeated_events(result) == result
+    later['player2_id'] = 'different'
+    with pytest.raises(ValueError, match='Conflicting provider event'):
+        service.exclude_repeated_events(originals)

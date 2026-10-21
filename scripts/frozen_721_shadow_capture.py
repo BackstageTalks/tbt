@@ -19,7 +19,7 @@ from tbt.services.engine import predict
 from tbt.services.shadow_evaluation import update_shadow_ledger
 from tbt.services.frozen_721_research import (
     FROZEN_721_TAG, FROZEN_721_VERSION, FROZEN_721_MODEL_SHA256,
-    research_frozen_721, validate_frozen_evidence,
+    research_frozen_721, validate_frozen_evidence, exclude_repeated_events,
 )
 
 SHADOW_TAG = "blinq-frozen-721-private-shadow-v1"
@@ -104,7 +104,7 @@ def capture_frozen_721_shadow(
         ledger = []
 
     updated = update_shadow_ledger(
-        ledger,
+        exclude_repeated_events(ledger),
         production_predictions=production_predictions,
         challenger_predictions=challenger_predictions,
         completed_matches=matches,
@@ -112,6 +112,7 @@ def capture_frozen_721_shadow(
         challenger_model_version=FROZEN_721_VERSION,
         now=captured_at,
     )
+    updated = exclude_repeated_events(updated)
     source = {
         "candidate_tag": FROZEN_721_TAG,
         "candidate_version": FROZEN_721_VERSION,

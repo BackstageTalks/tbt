@@ -6,6 +6,7 @@ Only the original exact model-pair release is updated, under the CDB writer lock
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -18,7 +19,7 @@ from cdb_global_writer_lock import acquire, release
 from frozen_721_shadow_capture import SHADOW_TAG, LEDGER_ASSET, REPORT_ASSET
 from tbt.data.history_snapshot import load_snapshot
 from tbt.models.metrics import evaluate_probabilities, wilson_interval
-from tbt.services.frozen_721_research import validate_frozen_evidence, research_frozen_721
+from tbt.services.frozen_721_research import validate_frozen_evidence, research_frozen_721, exclude_repeated_events
 from tbt.services.shadow_evaluation import update_shadow_ledger
 
 DATA_REPO = "BackstageTalks/tbt-data"
@@ -81,35 +82,78 @@ def preliminary_scoreboard(rows):
 
 
 def completed_matches_for_pending(rows, matches, now):
-    """Prevent reoriented, foreign or future fixtures from silently settling."""
-    pending = {str(r["match_id"]): r for r in rows if r.get("status") == "pending"}
-    accepted = []
-    declined = {"identity_mismatch": 0, "not_yet_played": 0, "not_canonically_completed": 0}
-    checked = 0
+    """Join exact internal IDs or independently recorded provider event IDs.
+
+    Alias lookup requires both stored provider IDs, the provider's player IDs,
+    canonical players/tour, and pre-start capture. Never join on names/date alone.
+    Canonical objects are copied only for the shadow ledger; CDB is not changed.
+    """
+    exact = {}
+    events = {}
     for match in matches:
-        source = pending.get(str(match.match_id))
-        if source is None:
+        exact.setdefault(str(match.match_id), []).append(match)
+        raw = match.provider_payload or {}
+        identity = raw.get("_tbt_event_identity") or {}
+        # Index every claimed event so contradictory evidence cannot hide a
+        # duplicate and make another row look uniquely verified.
+        for event in {str(raw.get("_tbt_provider_event_id") or ""),
+                      str(identity.get("event_id") or "")} - {""}:
+            events.setdefault(event, []).append(match)
+    accepted = []
+    audit = {"identity_mismatch": 0, "not_yet_played": 0,
+             "not_canonically_completed": 0, "matched_canonical_rows": 0,
+             "verified_provider_event_aliases": 0, "ambiguous_provider_events": 0,
+             "capture_not_before_canonical_start": 0, "provider_alias_evidence": {}}
+    for source in rows:
+        if source.get("status") != "pending":
             continue
-        checked += 1
-        if (
-            str(match.tour or "").upper() != str(source["tour"]).upper()
-            or {str(match.player1_id), str(match.player2_id)}
-               != {str(source["player1_id"]), str(source["player2_id"])}
-        ):
-            declined["identity_mismatch"] += 1
+        original_id = str(source["match_id"])
+        candidates = exact.get(original_id, [])
+        alias = not candidates
+        event = str(source.get("event_id") or "")
+        if alias:
+            candidates = events.get(event, []) if event else []
+        if not candidates:
             continue
-        if (
-            match.scheduled_at >= now or _utc(source["scheduled_at"]) >= now
-        ):
-            declined["not_yet_played"] += 1
+        if len(candidates) != 1:
+            audit["ambiguous_provider_events"] += 1
+            continue
+        match = candidates[0]
+        audit["matched_canonical_rows"] += 1
+        players = {str(match.player1_id), str(match.player2_id)}
+        if (str(match.tour or "").upper() != str(source["tour"]).upper()
+                or players != {str(source["player1_id"]), str(source["player2_id"])}):
+            audit["identity_mismatch"] += 1
+            continue
+        if alias:
+            raw = match.provider_payload or {}
+            identity = raw.get("_tbt_event_identity") or {}
+            if (str(raw.get("_tbt_provider_event_id") or "") != event
+                    or str(identity.get("event_id") or "") != event
+                    or {str(identity.get("home") or ""), str(identity.get("away") or "")} != players
+                    or identity.get("status") != "finished"
+                    or abs((match.scheduled_at - _utc(source["scheduled_at"])).total_seconds()) > 86400):
+                audit["identity_mismatch"] += 1
+                continue
+        if match.scheduled_at >= now or _utc(source["scheduled_at"]) >= now:
+            audit["not_yet_played"] += 1
+            continue
+        if _utc(source["captured_at"]) >= match.scheduled_at:
+            audit["capture_not_before_canonical_start"] += 1
             continue
         if not match.is_completed:
-            declined["not_canonically_completed"] += 1
+            audit["not_canonically_completed"] += 1
             continue
+        if alias:
+            audit["verified_provider_event_aliases"] += 1
+            audit["provider_alias_evidence"][original_id] = {
+                "canonical_match_id": str(match.match_id), "provider_event_id": event,
+                "canonical_scheduled_at": match.scheduled_at.isoformat(),
+                "method": "exact_verified_provider_event_and_players",
+            }
+            match = replace(match, match_id=original_id)
         accepted.append(match)
-    if len({m.match_id for m in accepted}) != len(accepted):
-        raise ValueError("Duplicated canonical match identities in settlement window")
-    return accepted, {"matched_canonical_rows": checked, **declined}
+    return accepted, audit
 
 
 
@@ -272,8 +316,10 @@ def settle(*, repo=DATA_REPO, workdir=None, now=None):
     source = json.loads((store.directory / LEDGER_ASSET).read_text())
     prod_version = (source.get("source") or {}).get("production_version")
     rows, before = validate_frozen_evidence(source, production_version=prod_version)
+    rows = exclude_repeated_events(rows)
     pending = [r for r in rows if r.get("status") == "pending"]
-    if not pending:
+    duplicate_exclusions = sum(r["status"] == "excluded" for r in rows) - before["excluded"]
+    if not pending and not duplicate_exclusions:
         return {
             "status": "NO_PENDING_SHADOW_MATCHES", "counts": before,
             "provider_requests": 0, "production_mutated": False,
@@ -284,10 +330,10 @@ def settle(*, repo=DATA_REPO, workdir=None, now=None):
     accepted, matching = completed_matches_for_pending(rows, history, now)
     diagnostics = pending_schedule_diagnostics(rows, history, now)
 
-    if not accepted:
+    if not accepted and not duplicate_exclusions:
         return {
             "status": "WAITING_FOR_VERIFIED_CANONICAL_RESULTS",
-            "counts": before, "canonical_matching": matching,
+            "counts": before, "canonical_matching": {k: v for k, v in matching.items() if k != "provider_alias_evidence"},
             "pending_diagnostics": diagnostics,
             "canonical_provenance": history_evidence,
             "provider_requests": 0, "production_mutated": False,
@@ -308,14 +354,21 @@ def settle(*, repo=DATA_REPO, workdir=None, now=None):
         current_rows, current_counts = validate_frozen_evidence(
             payload, production_version=prod_version
         )
+        unique_rows = exclude_repeated_events(current_rows)
+        # Resolve again against the locked, re-read cohort, not stale preflight rows.
+        accepted, matching = completed_matches_for_pending(unique_rows, history, now)
         updated = update_shadow_ledger(
-            current_rows, completed_matches=accepted, now=now
+            unique_rows, completed_matches=accepted, now=now
         )
+        for row in updated:
+            evidence = matching["provider_alias_evidence"].get(row["match_id"])
+            if evidence and row.get("status") in {"settled", "void", "excluded"}:
+                row["settlement_identity"] = evidence
         if len(updated) != len(current_rows):
             raise RuntimeError("Settlement may never append/remove paired predictions")
         for old, row in zip(current_rows, updated):
             for key in (
-                "match_id", "player1_id", "player2_id", "scheduled_at",
+                "match_id", "event_id", "tour", "player1_id", "player2_id", "scheduled_at",
                 "production_player1_probability", "challenger_player1_probability",
                 "production_model_version", "challenger_model_version", "captured_at",
             ):
@@ -331,7 +384,7 @@ def settle(*, repo=DATA_REPO, workdir=None, now=None):
         if not (newly or new_void or new_excluded):
             return {
                 "status": "NO_NEW_VERIFIED_SETTLEMENTS",
-                "counts": after, "canonical_matching": matching,
+                "counts": after, "canonical_matching": {k: v for k, v in matching.items() if k != "provider_alias_evidence"},
                 "pending_diagnostics": diagnostics,
                 "provider_requests": 0, "production_mutated": False,
             }
@@ -376,7 +429,7 @@ def settle(*, repo=DATA_REPO, workdir=None, now=None):
             "new_void": new_void,
             "new_excluded": new_excluded,
             "candidate_minus_champion": report["preliminary"]["groups"]["overall"]["candidate_minus_champion"],
-            "canonical_matching": matching,
+            "canonical_matching": {k: v for k, v in matching.items() if k != "provider_alias_evidence"},
             "pending_diagnostics_before_settlement": diagnostics,
             "provider_requests": 0, "production_mutated": False,
             "automatic_promotion": False,
