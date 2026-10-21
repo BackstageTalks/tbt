@@ -15,8 +15,8 @@ priors can satisfy the rank requirement when legacy rank fields are absent. The
 report records finite/nonzero counts, unique values and variance. This is a minimum
 availability check, not proof of sufficient coverage or predictive value.
 
-TOP still requires separate point-in-time market evaluation at odds >=1.50 with
-at most ten daily picks and no mandatory fill. The report explicitly marks this
+TOP still requires separate point-in-time market evaluation at odds >=1.50,
+with no numerical daily cap and no mandatory fill (VALUE selection takes priority). The report explicitly marks this
 NOT_EVALUATED and the pipeline blocks promotion for this profile. A probability
 candidate's general holdout gain must not be presented as proven TOP performance.
 
