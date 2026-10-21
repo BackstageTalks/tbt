@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
-from scripts.recover_native_event_id import candidate_days, eligible, recover_day
+from scripts.recover_native_event_id import candidate_days, eligible, recover_day, identity_gap_inventory
 
 
 @dataclass
@@ -114,3 +114,51 @@ def test_recent_first_and_negative_cooldown():
                           attempts={"2025-04-10": {"at": "2026-10-20", "recovered": 0}},
                           today=date(2026, 10, 21))
     assert str(days[0][0]) == "2023-03-04"
+
+
+def test_inventory_distinguishes_missing_scope_conflicts_cooldown_and_day_cap():
+    examples = [
+        Match("no-cat", provider_payload={}),
+        Match("same-person", player2_id="111"),
+        Match("bad-winner", winner_id="333"),
+        Match("bad-round", round_name=""),
+        Match("foreign-claim", provider_payload={"_tbt_source_category_id": "456",
+                                                  "event_id": "foreign-alpha"}),
+        Match("eligible"),
+        Match("cooldown", scheduled_at=datetime(2025, 4, 11, 13, tzinfo=timezone.utc)),
+        Match("old", scheduled_at=datetime(2023, 4, 11, 13, tzinfo=timezone.utc)),
+        Match("already-known", provider_payload={"_tbt_source_category_id": "456",
+                                                  "_tbt_provider_event_id": "900"}),
+    ]
+    report = identity_gap_inventory(
+        examples, start=date(2023, 1, 1), end=date(2026, 10, 21),
+        attempts={"2025-04-11": {"at": "2026-10-20", "recovered": 0}},
+        today=date(2026, 10, 21), max_days=1,
+    )
+    assert report["canonical_missing_or_conflicting_id_rows"] == 8
+    assert report["primary_blockers"] == {
+        "eligible_native_calendar": 3,
+        "existing_unusable_or_conflicting_event_claims": 1,
+        "missing_first_party_category": 1,
+        "missing_or_colliding_player_ids": 1,
+        "missing_round": 1,
+        "winner_outside_pair": 1,
+    }
+    assert report["eligible_native_calendar_rows"] == 3
+    assert report["cooldown_blocked_days"] == 1
+    assert report["cooldown_blocked_rows"] == 1
+    assert report["scheduled_days"] == 1
+    assert report["scheduled_eligible_rows"] == 1
+    assert report["eligible_rows_outside_top_day_limit"] == 1
+    assert report["native_provider_requests"] == report["cdb_writes"] == 0
+    assert all("_tbt_provider_event_id" not in m.provider_payload for m in examples[:8])
+    assert report["identity_attested_by_audit"] is False
+
+
+def test_inventory_rejects_corrupt_persisted_identity_cooldown():
+    with __import__("pytest").raises(ValueError, match="Invalid persisted identity cooldown"):
+        identity_gap_inventory(
+            [Match("blocked")], start=date(2025, 1, 1), end=date(2026, 1, 1),
+            attempts={"2025-04-10": {"at": "not-date", "recovered": "x"}},
+            today=date(2026, 10, 21),
+        )
