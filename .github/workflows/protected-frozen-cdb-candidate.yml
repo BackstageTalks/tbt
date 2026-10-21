@@ -111,6 +111,8 @@ jobs:
           # unless all checks pass and the run-bound backup remains valid.
           python scripts/audit_training_leakage.py \
             --history-dir .cache/tbt/history \
+            --training-profile "$BLINQ_TRAINING_PROFILE" \
+            --feature-cache .cache/tbt/verified-training-features.parquet \
             --report .cache/tbt/production/leakage_audit_report.json
           python scripts/guarded_candidate_backup.py verify
 
@@ -118,7 +120,8 @@ jobs:
         run: |
           set -euo pipefail
           # No --promote. No current candidate tag rewrite. No app deployment.
-          python scripts/pipeline.py train --max-requests 1 --training-profile "$BLINQ_TRAINING_PROFILE"
+          python scripts/pipeline.py train --max-requests 1 --training-profile "$BLINQ_TRAINING_PROFILE" \
+            --verified-feature-cache .cache/tbt/verified-training-features.parquet
           python scripts/guarded_candidate_backup.py verify
       - name: Independently persist champion-versus-candidate offline holdout
         if: success()
