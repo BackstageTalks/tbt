@@ -277,3 +277,58 @@ def test_transient_media_http_502_resumes_bounded_file_intake(tmp_path, monkeypa
     assert report["fetched"] == 3
     assert delays == [1]
     assert (tmp_path / "next.json").exists()
+
+
+def test_targeted_replay_revisits_old_processed_source_without_cursor_reset(tmp_path):
+    """Parser upgrades can re-run selected raw sources without re-downloading 2k files."""
+    drive = Drive()
+    first_state = tmp_path / "state-1.json"
+    fetch(ROOT, tmp_path / "initial", session=drive, next_state_path=first_state)
+    before = json.loads(first_state.read_text())
+    assert len(drive.file_reads) == 3
+    drive.file_reads.clear()
+
+    second_state = tmp_path / "state-2.json"
+    result = fetch(ROOT, tmp_path / "replay", session=drive,
+                   state_path=first_state, next_state_path=second_state,
+                   replay_ids={ID2})
+    assert drive.file_reads == [ID2]
+    assert result["explicit_replay_requested"] == 1
+    assert result["explicit_replay_completed"] == 1
+    assert result["replayed_from_checkpoint"] == 1
+    assert result["fetched"] == 1
+    assert result["pending_supported"] == 0
+    assert json.loads(second_state.read_text()) == before
+    assert json.loads((tmp_path / "drive_manifest.json").read_text())["production_mutated"] is False
+
+    # Normal dispatches do not silently replay unchanged raw files.
+    drive.file_reads.clear()
+    third = fetch(ROOT, tmp_path / "third", session=drive,
+                  state_path=second_state, next_state_path=tmp_path / "state-3.json")
+    assert third["fetched"] == 0
+    assert third["explicit_replay_requested"] == 0
+    assert drive.file_reads == []
+
+
+def test_replay_fail_closed_on_unknown_invalid_and_unbounded_selections(tmp_path):
+    drive = Drive()
+    for requested, message in (
+        ({"unverified"}, "Invalid Drive replay file ID"),
+        ({"zzzzzzzzzzzzzzzz"}, "not present"),
+        ({ID1, ID2}, "exceeds bounded per-run allowance"),
+    ):
+        out = tmp_path / ("test-" + str(len(requested)) + message[:4])
+        with pytest.raises(ValueError, match=message):
+            fetch(ROOT, out, session=drive, max_files=1,
+                  next_state_path=out / "state.json", replay_ids=requested)
+        assert not (out / "state.json").exists()
+    assert drive.file_reads == []
+
+
+def test_replay_rejects_known_but_unsupported_file_without_checkpoint(tmp_path):
+    drive = Drive()
+    with pytest.raises(ValueError, match="unsupported or oversized"):
+        fetch(ROOT, tmp_path / "blocked", session=drive,
+              next_state_path=tmp_path / "blocked-state.json", replay_ids={ID4})
+    assert not (tmp_path / "blocked-state.json").exists()
+    assert drive.file_reads == []
