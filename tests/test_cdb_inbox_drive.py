@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.cdb_inbox_drive import BASE, fetch
+from scripts.cdb_inbox_drive import BASE, fetch, _fingerprint
 
 ROOT = "1jzdzztz8cXquO8VDswqE19PHupQau-xM"
 CHILD = "aaaaaaaaaaaaaaaa"
@@ -76,6 +76,9 @@ def test_recursive_bounded_batches_and_recoverable_checkpoint(tmp_path):
     assert first["inventory_files"] == 4
     assert first["reviewed"] == 1
     assert first["fetched"] == 1
+    fetched = [item for item in first["files"] if item["status"] == "fetched"]
+    assert len(fetched) == 1
+    assert fetched[0]["source_path"] == "/atp_matches_2026.csv"
     assert first["pending_supported"] == 2
     assert len(drive.file_reads) == 1
 
@@ -332,3 +335,55 @@ def test_replay_rejects_known_but_unsupported_file_without_checkpoint(tmp_path):
               next_state_path=tmp_path / "blocked-state.json", replay_ids={ID4})
     assert not (tmp_path / "blocked-state.json").exists()
     assert drive.file_reads == []
+
+
+def test_only_drive_folder_tour_upgrade_replays_existing_checkpoint_once(tmp_path):
+    dedicated_atp = "mmmmmmmmmmmmmmmm"
+
+    class DedicatedATPDrive(Drive):
+        def get(self, url, params=None, timeout=None):
+            if url != BASE:
+                return super().get(url, params=params, timeout=timeout)
+            parent = params["q"]
+            if ROOT in parent:
+                return Response(data={"files": [{
+                    "id": dedicated_atp, "name": "ATP",
+                    "mimeType": "application/vnd.google-apps.folder",
+                }]})
+            if dedicated_atp in parent:
+                return Response(data={"files": [self.item(ID1, "X (99).csv")]})
+            raise AssertionError(parent)
+
+    drive = DedicatedATPDrive()
+    original = drive.item(ID1, "X (99).csv")
+    old_fields = ("id", "name", "mimeType", "size", "md5Checksum", "modifiedTime")
+    old_fingerprint = hashlib.sha256(json.dumps(
+        [str(original.get(field) or "") for field in old_fields],
+        ensure_ascii=False, separators=(",", ":"),
+    ).encode()).hexdigest()
+    assert _fingerprint(dict(original, path="/ATP/X (99).csv")) != old_fingerprint
+    assert _fingerprint(dict(original, path="/X (99).csv")) == old_fingerprint
+    # A source with a tour in its own filename must keep its old SHA key.
+    assert _fingerprint(dict(original, name="atp_matches_2026.csv",
+                            path="/ATP/atp_matches_2026.csv")) == hashlib.sha256(
+        json.dumps([str(dict(original, name="atp_matches_2026.csv").get(field) or "")
+                    for field in old_fields],
+                   ensure_ascii=False, separators=(",", ":")).encode()
+    ).hexdigest()
+
+    old_checkpoint = tmp_path / "legacy.json"
+    old_checkpoint.write_text(json.dumps({
+        "schema": 1, "folder_id": ROOT,
+        "processed": {ID1: old_fingerprint},
+    }))
+    upgraded_checkpoint = tmp_path / "upgraded.json"
+    first = fetch(ROOT, tmp_path / "upgrade-input", session=drive,
+                  state_path=old_checkpoint, next_state_path=upgraded_checkpoint)
+    assert first["fetched"] == 1
+    assert first["previously_seen"] == 0
+    assert first["files"][0]["source_path"] == "/ATP/X (99).csv"
+    second = fetch(ROOT, tmp_path / "next-input", session=drive,
+                   state_path=upgraded_checkpoint, next_state_path=tmp_path / "next.json")
+    assert second["fetched"] == 0
+    assert second["previously_seen"] == 1
+    assert drive.file_reads == [ID1]

@@ -122,11 +122,35 @@ def _inventory(session, root):
     return sorted(found_files.values(), key=lambda x: (x["path"].casefold(), x["id"])), len(visited_folders)
 
 
+def _folder_tour_upgrade(info):
+    """Selective replay: only unnamed match-table candidates with ATP/WTA parent.
+
+    Existing checkpoints were created before the strict Drive-folder tour hint
+    existed. Keep fingerprints of every unrelated source byte-for-byte stable.
+    """
+    name = str(info.get("name") or "")
+    if Path(name).suffix.lower() not in SUPPORTED - {".zip"}:
+        return ""
+    if any(re.search(r"(^|[^a-z])" + tour + r"([^a-z]|$)",
+                     name.casefold()) for tour in ("atp", "wta")):
+        return ""
+    path = str(info.get("path") or "")
+    folders = [part.casefold() for part in path.split("/")[:-1]]
+    tours = {part for part in folders if part in {"atp", "wta"}}
+    return next(iter(tours)) if len(tours) == 1 else ""
+
+
 def _fingerprint(info):
     fields = ("id", "name", "mimeType", "size", "md5Checksum", "modifiedTime")
+    values = [str(info.get(field) or "") for field in fields]
+    folder_tour = _folder_tour_upgrade(info)
+    if folder_tour:
+        # Replay only candidate sources affected by folder-provenance support.
+        # Include tour so moves between dedicated ATP/WTA folders invalidate
+        # the old checkpoint. All unaffected fingerprints remain identical.
+        values.append("drive-folder-tour-v1:" + folder_tour)
     encoded = json.dumps(
-        [str(info.get(key) or "") for key in fields],
-        ensure_ascii=False, separators=(",", ":"),
+        values, ensure_ascii=False, separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -281,8 +305,10 @@ def fetch(folder_id: str, output: Path, *, state_path: Path | None = None,
             safe = re.sub(r"[^A-Za-z0-9_.-]", "_", Path(info["name"]).name)[:90]
             destination = output / (file_id + "__" + safe)
             destination.write_bytes(blob)
+            # Retain Drive folder evidence for SOURCE-ONLY tour classification.
             entries.append({"id": file_id, "status": "fetched", "sha256": sha,
-                            "bytes": len(blob), "local_file": str(destination)})
+                            "bytes": len(blob), "local_file": str(destination),
+                            "source_path": str(info["path"])})
         updated[file_id] = fingerprint
     pending = sum(updated.get(info["id"]) != _fingerprint(info)
                   for info in inventory if Path(info["name"]).suffix.lower() in SUPPORTED)

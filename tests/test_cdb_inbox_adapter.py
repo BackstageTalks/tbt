@@ -1,5 +1,6 @@
 """Contract tests for private Drive inbox source normalization and safe link filtering."""
 import csv
+import hashlib
 import io
 import json
 import zipfile
@@ -194,3 +195,98 @@ def test_missing_precise_start_keeps_existing_tournament_date_behavior():
     )
     assert reason == ""
     assert row["tourney_date"] == "20261018"
+
+def _drive_context_manifest(tmp_path, source, source_path, source_sha=None):
+    manifest = tmp_path / "drive_manifest.json"
+    manifest.write_text(json.dumps({
+        "schema": 2, "state": "DRIVE_SOURCE_FETCH_ONLY",
+        "production_mutated": False,
+        "files": [{"status": "fetched", "local_file": str(source),
+                   "sha256": source_sha or hashlib.sha256(source.read_bytes()).hexdigest(),
+                   "source_path": source_path}],
+    }))
+    return manifest
+
+
+def test_ambiguous_filename_recovers_tour_only_from_sha_verified_drive_folder(tmp_path):
+    incoming = tmp_path / "input"
+    incoming.mkdir()
+    source = incoming / "bbbbbbbbbbbbbbbb__X_99.csv"
+    data = sample(tour="")
+    with source.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=data)
+        writer.writeheader()
+        writer.writerow(data)
+    manifest = _drive_context_manifest(
+        tmp_path, source, "/10_POVODNE_ZDROJE_ARCHIVY/ATP/X (99).csv"
+    )
+    report = normalize(incoming, tmp_path / "out", drive_manifest_path=manifest)
+    assert report["state"] == "SOURCE_ONLY"
+    assert report["production_mutated"] is False
+    assert report["api_requests"] == 0
+    assert report["counts"]["normalized_rows"] == 1
+    assert report["counts"]["rows_rescued_by_sha_verified_drive_folder_tour"] == 1
+    written = list(csv.DictReader(Path(report["normalized"][0]["path"]).open()))
+    assert written[0]["league"] == "atp"
+    assert written[0]["source_winner_id"] == ""
+    assert "import_ready" not in written[0]
+
+
+def test_folder_tour_conflict_and_ambiguous_parent_are_quarantined(tmp_path):
+    incoming = tmp_path / "input"
+    incoming.mkdir()
+    source = incoming / "bbbbbbbbbbbbbbbb__X_99.csv"
+    row = sample(tour="WTA")
+    with source.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=row)
+        writer.writeheader()
+        writer.writerow(row)
+    manifest = _drive_context_manifest(
+        tmp_path, source, "/10_POVODNE_ZDROJE_ARCHIVY/ATP/X (99).csv"
+    )
+    result = normalize(incoming, tmp_path / "conflict", drive_manifest_path=manifest)
+    assert result["counts"].get("normalized_rows", 0) == 0
+    assert result["counts"]["reason_tour_provenance_conflict"] == 1
+
+    row["tour"] = ""
+    with source.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=row)
+        writer.writeheader()
+        writer.writerow(row)
+    manifest = _drive_context_manifest(
+        tmp_path, source, "/10_POVODNE_ZDROJE_ARCHIVY/WTA/ATP/X (99).csv"
+    )
+    result = normalize(incoming, tmp_path / "ambiguous", drive_manifest_path=manifest)
+    assert result["counts"].get("normalized_rows", 0) == 0
+    assert result["counts"]["reason_tour_missing_or_unsupported"] == 1
+
+
+def test_drive_path_hint_never_bypasses_source_sha_or_zip_member_tour(tmp_path):
+    incoming = tmp_path / "input"
+    incoming.mkdir()
+    source = incoming / "bbbbbbbbbbbbbbbb__X_99.csv"
+    data = sample(tour="")
+    with source.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=data)
+        writer.writeheader()
+        writer.writerow(data)
+    manifest = _drive_context_manifest(
+        tmp_path, source, "/10_POVODNE_ZDROJE_ARCHIVY/ATP/X (99).csv",
+        source_sha="0" * 64,
+    )
+    with pytest.raises(ValueError, match="provenance SHA"):
+        normalize(incoming, tmp_path / "invalid-sha", drive_manifest_path=manifest)
+    source.unlink()
+    archive = incoming / "bbbbbbbbbbbbbbbb__mixed.zip"
+    with zipfile.ZipFile(archive, "w") as handle:
+        body = io.StringIO()
+        writer = csv.DictWriter(body, fieldnames=data)
+        writer.writeheader()
+        writer.writerow(data)
+        handle.writestr("unknown.csv", body.getvalue())
+    manifest = _drive_context_manifest(
+        tmp_path, archive, "/10_POVODNE_ZDROJE_ARCHIVY/ATP/mixed.zip"
+    )
+    result = normalize(incoming, tmp_path / "mixed-tour", drive_manifest_path=manifest)
+    assert result["counts"].get("normalized_rows", 0) == 0
+    assert result["counts"]["reason_tour_missing_or_unsupported"] == 1
