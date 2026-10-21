@@ -199,6 +199,24 @@ class TestLab(unittest.TestCase):
         self.assertEqual(result["operation"]["state"], "QUEUED")
 
 
+DEPLOYED_STEPS = (
+    "Reject queued stale deploy and stamp exact frontend revision",
+    "Deploy BlinQ to Azure Static Web Apps",
+    "Verify deployed frontend release",
+    "Smoke deployed authentication readiness",
+    "Confirm deployed prediction publication",
+    "Smoke deployed health endpoint",
+    "Seed private calibration Admin snapshot",
+    "Complete job",
+)
+
+
+def deployed_job(*, conclusion="success", steps=DEPLOYED_STEPS):
+    return {"name": "deploy", "status": "completed", "conclusion": conclusion,
+            "steps": [{"name": name, "status": "completed", "conclusion": "success"}
+                      for name in steps]}
+
+
 class TestDeployReadiness(unittest.TestCase):
     def test_waits_for_exact_deployed_revision(self):
         from admin_model_lab_worker import published_main_revision
@@ -214,7 +232,7 @@ class TestDeployReadiness(unittest.TestCase):
             calls.append(path)
             if path == jobs_path:
                 return {"jobs": [{"name": "checks", "status": "completed", "conclusion": "success"},
-                                 {"name": "deploy", "status": "completed", "conclusion": "success"}]}
+                                 deployed_job()]}
             return runs
         self.assertTrue(published_main_revision(read=read, checkout_sha=commit))
         self.assertIn(jobs_path, calls)
@@ -236,6 +254,33 @@ class TestDeployReadiness(unittest.TestCase):
         pending = {"workflow_runs": [{"id": 71, "head_sha": commit,
                                       "status": "in_progress", "conclusion": None}]}
         self.assertFalse(published_main_revision(read=lambda path: pending, checkout_sha=commit))
+
+    def test_late_cancelled_job_is_safe_only_when_all_verifications_succeeded(self):
+        from admin_model_lab_worker import published_main_revision
+        commit = "a" * 40
+        run = {"workflow_runs": [{"id": 77, "head_sha": commit,
+                                  "status": "completed", "conclusion": "cancelled"}]}
+        def check(job):
+            def read(path):
+                return {"jobs": [job]} if path.endswith("/jobs?per_page=100") else run
+            return published_main_revision(read=read, checkout_sha=commit)
+        self.assertTrue(check(deployed_job(conclusion="cancelled")))
+        self.assertFalse(check(deployed_job(
+            conclusion="cancelled", steps=DEPLOYED_STEPS[:-1])))
+        self.assertFalse(check(deployed_job(
+            conclusion="cancelled",
+            steps=tuple(s for s in DEPLOYED_STEPS if s != "Verify deployed frontend release"))))
+        self.assertFalse(check({"name": "deploy", "status": "in_progress",
+                                "conclusion": None, "steps": deployed_job()["steps"]}))
+
+    def test_failed_workflow_never_passes_even_with_positive_partial_steps(self):
+        from admin_model_lab_worker import published_main_revision
+        commit = "a" * 40
+        run = {"workflow_runs": [{"id": 77, "head_sha": commit,
+                                  "status": "completed", "conclusion": "failure"}]}
+        def read(path):
+            return {"jobs": [deployed_job()]} if path.endswith("/jobs?per_page=100") else run
+        self.assertFalse(published_main_revision(read=read, checkout_sha=commit))
 
     def test_no_sync_until_deployed(self):
         from admin_model_lab_worker import main
