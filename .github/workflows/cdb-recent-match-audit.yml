@@ -6,6 +6,8 @@ name: Recent ATP/WTA match-level Drive source vs CDB - read-only
     paths:
       - scripts/cdb_recent_pinned_sources.py
       - scripts/cdb_recent_strict_stage.py
+      - scripts/cdb_inbox_adapter.py
+      - tests/test_cdb_inbox_adapter.py
       - tests/test_cdb_recent_official_match_audit.py
       - .github/workflows/cdb-recent-match-audit.yml
   push:
@@ -13,6 +15,8 @@ name: Recent ATP/WTA match-level Drive source vs CDB - read-only
     paths:
       - scripts/cdb_recent_pinned_sources.py
       - scripts/cdb_recent_strict_stage.py
+      - scripts/cdb_inbox_adapter.py
+      - tests/test_cdb_inbox_adapter.py
       - .github/workflows/cdb-recent-match-audit.yml
 
 permissions:
