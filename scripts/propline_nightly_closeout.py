@@ -8,8 +8,8 @@ Collection contract:
      Retain the existing double-fault/ace/regular markets as fallback.
   4) Preserve unmodified provider payload + UTC capture time + provider event ID.
   5) Flush immutable batches every 25 attempted requests; read back blob SHA/size.
-  6) Prioritize canonical 2026 missing Aces/DF via up to 600 historical
-     player-log calls; preserve ≥50 attempted calls for existing niche odds.
+  6) Recover final recent score-linked stats first; then historical player
+     logs for actual 2026 CDB gaps. Preserve ≥50 calls for existing niche odds.
   7) Separate exact-linking, single-writer, full-year independent readback
      authorizes additive CDB imports in the SAME nighttime workflow.
   8) Never train, promote or touch daytime CLV workflows.
@@ -63,7 +63,12 @@ NIGHTLY_GAP_PLAYER_MAX = 600
 NIGHTLY_ODDS_RESERVE = 50
 PLAYER_GAMES_LIMIT = 100
 PLAYER_STATS_FOCUS = ("aces", "dblfaults", "breakpts", "breakpts_w",
-                      "tiebreaks", "tiebreaks_w", "total_games", "sets_won")
+                      "tiebreaks", "tiebreaks_w", "total_games", "sets_won",
+                      "games_w", "sets_w", "matches_w", "opp_aces",
+                      "opp_dblfaults", "opp_breakpts", "opp_breakpts_w",
+                      "set_1_games", "set_2_games", "set_3_games",
+                      "set_4_games", "set_5_games")
+RECENT_SCORES_DAYS = 3
 
 
 class OptionalStatsAccessUnavailable(Exception):
@@ -166,6 +171,116 @@ def _targeted_player_names(day=None):
     return rotated
 
 
+def probe_recent_event_stats(day, runid):
+    """Fetch documented FREE /scores -> final /stats for *exact* CDB gaps.
+
+    Raw provider responses are archived unchanged. Importing them is a
+    separate strict exact-day/full-pair, single-writer operation; stats alone
+    never authorize a speculative match or source ID.
+    """
+    path = os.getenv("CLOSEOUT_GAP_TARGETS", "").strip()
+    if not path:
+        return
+    index = json.loads(Path(path).read_text(encoding="utf-8"))
+    if (index.get("schema") != 1 or index.get("source") != "canonical_cdb_2026"
+            or not isinstance(index.get("partition_sha256"), str)
+            or len(index["partition_sha256"]) != 64):
+        raise RuntimeError("Invalid recent CDB score target index")
+    wanted = set()
+    for item in index.get("recent_event_targets", []):
+        if not isinstance(item, dict) or not isinstance(item.get("players"), list):
+            raise RuntimeError("Bad canonical score target")
+        players = item["players"]
+        date_text = item.get("date_utc")
+        if (len(players) != 2 or any(not isinstance(p, str) or not p for p in players)
+                or not isinstance(date_text, str)):
+            raise RuntimeError("Bad canonical score target identity")
+        try:
+            date.fromisoformat(date_text)
+        except ValueError:
+            raise RuntimeError("Bad canonical score target date") from None
+        wanted.add((date_text, tuple(sorted(" ".join(p.casefold().split()) for p in players))))
+    if not wanted:
+        return
+    # One board call is needed to discover final event IDs. No fixed event-ID
+    # guessing and no optional stats traffic after reserve is reached.
+    if (STATE["reason"] or STATE["calls"] >= MAX_CALLS - NIGHTLY_ODDS_RESERVE
+            or STATE["remaining"] is not None
+            and STATE["remaining"] <= NIGHTLY_ODDS_RESERVE):
+        return
+    board = request("/sports/tennis/scores", {"days_from": RECENT_SCORES_DAYS},
+                    allow_not_found=True)
+    if board is None:
+        return
+    try:
+        events = unpack(board, ("scores", "events", "data", "results"))
+    except ValueError:
+        print(json.dumps({"recent_event_stats": "scores_unrecognized_shape"}), flush=True)
+        return
+    selected = []
+    seen_ids = set()
+    for item in events:
+        if not isinstance(item, dict) or item.get("status") != "final":
+            continue
+        eid = str(item.get("id") or "")
+        if not eid.isdigit() or eid in seen_ids:
+            continue
+        try:
+            started = datetime.fromisoformat(str(item.get("commence_time") or "").replace("Z", "+00:00"))
+            if started.tzinfo is None or started > now():
+                continue
+        except ValueError:
+            continue
+        home, away = item.get("home_team"), item.get("away_team")
+        if not isinstance(home, str) or not isinstance(away, str):
+            continue
+        pair = tuple(sorted((" ".join(home.casefold().split()),
+                             " ".join(away.casefold().split()))))
+        if (started.date().isoformat(), pair) not in wanted:
+            continue
+        seen_ids.add(eid)
+        selected.append((started, eid))
+    selected.sort()
+    fetched, useful, raw_fields = 0, 0, {}
+    for _started, eid in selected:
+        if (STATE["reason"] or STATE["calls"] >= MAX_CALLS - NIGHTLY_ODDS_RESERVE
+                or STATE["remaining"] is not None
+                and STATE["remaining"] <= NIGHTLY_ODDS_RESERVE):
+            break
+        try:
+            payload = request(f"/sports/tennis/events/{eid}/stats", allow_not_found=True)
+        except OptionalStatsAccessUnavailable:
+            break
+        if not isinstance(payload, dict) or payload.get("status") != "final":
+            continue
+        if str(payload.get("id") or "") != eid or not isinstance(payload.get("stats"), list):
+            continue
+        # Trust only the exact event scope already checked on the score board.
+        if (str(payload.get("commence_time") or "") !=
+                next((str(e.get("commence_time") or "") for e in events
+                      if isinstance(e, dict) and str(e.get("id") or "") == eid), "")):
+            continue
+        fields = {}
+        for row in payload["stats"]:
+            if not isinstance(row, dict):
+                continue
+            key = row.get("stat_type")
+            value = row.get("stat_value")
+            if (key in PLAYER_STATS_FOCUS and isinstance(value, (int, float))
+                    and not isinstance(value, bool)):
+                fields[key] = fields.get(key, 0) + 1
+        for key, count in fields.items():
+            raw_fields[key] = raw_fields.get(key, 0) + count
+        useful += bool(fields)
+        DATA.append({"stage": "event_stats_probe", "captured_at_utc": now().isoformat(),
+                     "event_id": eid, "payload": payload, "research_only": True})
+        fetched += 1
+        flush_if_needed(day, runid)
+    print(json.dumps({"recent_event_stats": {"scores_eligible": len(selected),
+                      "final_events_archived": fetched, "events_with_supported_stats": useful,
+                      "available_fields": dict(sorted(raw_fields.items()))}}), flush=True)
+
+
 def probe_player_games(future, day, runid):
     """Night-only CDB-gap-targeted raw historical boxscore acquisition."""
     exact_targets = _targeted_player_names(day)
@@ -174,6 +289,7 @@ def probe_player_games(future, day, runid):
     attempted = 0
     with_stats = 0
     detailed_stat_rows = 0
+    raw_fields = {}
     dry_streak = 0
     for name in targets:
         if STATE["reason"] or STATE["calls"] >= MAX_CALLS:
@@ -203,21 +319,26 @@ def probe_player_games(future, day, runid):
             continue
         summary = summarize_player_games(result)
         examined += 1
+        # PropLine has much broader tennis box scores than Aces/DF. Never
+        # stop a useful stats stream merely because serve detail is absent.
         detailed = sum(summary["focus_fields"].get(key, 0)
                        for key in ("aces", "dblfaults"))
-        dry_streak = 0 if detailed else dry_streak + 1
+        dry_streak = 0 if summary["completed_with_focus"] else dry_streak + 1
         detailed_stat_rows += summary["focus_fields"].get("aces", 0)
         with_stats += summary["completed_with_focus"]
+        for field, count in summary["focus_fields"].items():
+            raw_fields[field] = raw_fields.get(field, 0) + count
         DATA.append({"stage": "player_game_stats_probe", "player_name": name,
                      "captured_at_utc": now().isoformat(), "summary": summary,
                      "payload": result, "research_only": True})
         flush_if_needed(day, runid)
         if exact_targets is not None and dry_streak >= 30:
-            print(json.dumps({"player_games_gap_stop": "30_consecutive_no_aces_df"}), flush=True)
+            print(json.dumps({"player_games_gap_stop": "30_consecutive_no_supported_stats"}), flush=True)
             break
     print(json.dumps({"player_games_probe": {"attempted": attempted,
                       "responses": examined, "games_with_relevant_stats": with_stats,
                       "detailed_ace_df_rows": detailed_stat_rows,
+                      "available_fields": dict(sorted(raw_fields.items())),
                       "new_cdb_cells_verified": None}}), flush=True)
 
 
@@ -395,10 +516,12 @@ def collect():
     runid = os.getenv("GITHUB_RUN_ID", str(int(started.timestamp())))
     try:
         canonical_gap_mode = bool(os.getenv("CLOSEOUT_GAP_TARGETS", "").strip())
-        # Missing canonical Aces/DF take first priority, even if the future
-        # market board is empty or unavailable. This is only the 23:00 job.
+        # Final score-linked stats before sparse player-name logs. Both use
+        # one shared budget and leave room for niche offered odds markets.
         if canonical_gap_mode:
-            probe_player_games([], day, runid)
+            probe_recent_event_stats(day, runid)
+            if not STATE["reason"]:
+                probe_player_games([], day, runid)
         if STATE["reason"] or STATE["calls"] >= MAX_CALLS:
             return
         board = request("/sports/tennis/events")
