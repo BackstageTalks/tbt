@@ -149,7 +149,7 @@ def write_exact_stats_partition(history_dir, year, changed_matches, changed_ids,
             "added_values": sum(map(len, delta.values())), "existing_values_overwritten": 0}
 
 
-def verify_persisted(before_dir, after_dir, stage_rows, changed_years):
+def verify_persisted(before_dir, after_dir, stage_rows, changed_years, *, approved_count_fields=frozenset()):
     """Verify ALL rows on affected years from separate prewrite and remote copies."""
     years = sorted(set(map(int, changed_years)))
     before_dir, after_dir = Path(before_dir), Path(after_dir)
@@ -188,8 +188,17 @@ def verify_persisted(before_dir, after_dir, stage_rows, changed_years):
             if row.get("canonical") != _signature(original):
                 raise ValueError("Original canonical source signature changed")
             incoming = row.get("incoming_stats")
-            if not isinstance(incoming, dict) or not incoming or not set(incoming).issubset(ALLOWED):
+            approved = frozenset(approved_count_fields)
+            if approved - {"p1_return_break_points_converted_count",
+                            "p2_return_break_points_converted_count"}:
+                raise ValueError("Unapproved source count field")
+            if (not isinstance(incoming, dict) or not incoming
+                    or not set(incoming).issubset(ALLOWED | approved)):
                 raise ValueError("Untrusted source field name")
+            if any(not isinstance(v, (int, float)) or isinstance(v, bool)
+                   or v < 0 or int(v) != v
+                   for k, v in incoming.items() if k in approved):
+                raise ValueError("Invalid approved source count")
             old = original.stats or {}
             if any(k in old and old[k] is not None and abs(float(old[k]) - float(v)) > 1e-6
                    for k, v in incoming.items()):
