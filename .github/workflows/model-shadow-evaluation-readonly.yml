@@ -1,4 +1,5 @@
 name: BlinQ read-only champion vs challenger shadow audit
+run-name: "Model Lab audit ${{ inputs.request_id || github.run_id }}"
 on:
   push:
     branches: [main]
@@ -9,6 +10,12 @@ on:
       - tests/test_audit_model_shadow_readonly.py
       - tests/test_shadow_calibration_research.py
   workflow_dispatch:
+    inputs:
+      request_id:
+        description: Admin Model Lab correlation (optional)
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read

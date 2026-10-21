@@ -612,6 +612,11 @@
   async function adminModelCalibration() {
     return apiWithSession('/api/v1/admin/model-calibration');
   }
+  async function adminModelLab(payload) {
+    return apiWithSession('/api/v1/admin/model-lab', payload ? {
+      method: 'POST', body: JSON.stringify(payload),
+    } : undefined);
+  }
   async function adminModelTraining(payload) {
     return apiWithSession('/api/v1/admin/model-training', payload ? {
       method: 'POST', body: JSON.stringify(payload),
@@ -714,7 +719,7 @@
     adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
     adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult,
     adminResultTestExclusions, adminSetResultTestExclusions,
-    adminDiagnostics, adminModelCalibration, adminModelTraining, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
+    adminDiagnostics, adminModelCalibration, adminModelLab, adminModelTraining, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews, comparatorPlayers, comparatorCompare,
     bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
     sessionStorageKeys, sessionEpochKey,

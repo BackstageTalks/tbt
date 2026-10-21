@@ -1,4 +1,5 @@
 name: Activate verified 7.2.1 shadow candidate
+run-name: "Model Lab activate shadow ${{ inputs.request_id || github.run_id }}"
 on:
   # One-shot bootstrap on the exact reviewed merge commit only.
   # Subsequent workflow edits do not activate models automatically.
@@ -7,6 +8,11 @@ on:
     paths: [".github/workflows/activate-shadow-candidate.yml"]
   workflow_dispatch:
     inputs:
+      request_id:
+        description: Admin Model Lab correlation (optional)
+        type: string
+        required: false
+        default: ''
       source_tag:
         description: Immutable protected candidate release
         required: true

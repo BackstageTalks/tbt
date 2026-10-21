@@ -2,7 +2,7 @@ name: BlinQ admin training worker
 on:
   workflow_dispatch:
   workflow_run:
-    workflows: [Hourly prediction match status, BlinQ protected frozen-CDB candidate training]
+    workflows: [Test and deploy, Hourly prediction match status, BlinQ protected frozen-CDB candidate training, CDB Drive Inbox - guarded external file import, BlinQ read-only champion vs challenger shadow audit, BlinQ private model calibration monitor, Activate verified 7.2.1 shadow candidate]
     types: [completed]
     branches: [main]
 permissions:
@@ -13,6 +13,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sync:
+    # Deployment workflow completion guarantees the new signed API routes
+    # exist before the first Model Lab status is synchronized.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -29,4 +31,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python scripts/admin_training_worker.py
+      - name: Synchronize queued protected candidate training
+        run: python scripts/admin_training_worker.py
+      - name: Synchronize Model Lab and dispatch at most one guarded operation
+        run: python scripts/admin_model_lab_worker.py
