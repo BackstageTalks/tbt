@@ -170,7 +170,7 @@ def test_atp_blend_calibration_rejects_small_or_invalid_segments():
     elo = np.full(n, .7)
     targets = (np.arange(n) % 2).astype(int)
     selected, evidence = TennisEnsemble._choose_atp_blend(
-        linear, boost, elo, targets, np.ones(n), 260, .5, 0.)
+        linear, boost, elo, targets, np.ones(n), 300, .5, 0.)
     assert selected is None
     assert evidence["status"] == "INSUFFICIENT_DISJOINT_ATP"
     with pytest.raises(ValueError):
@@ -205,6 +205,7 @@ def test_atp_blend_selects_only_when_disjoint_scores_and_accuracy_improve():
 def test_frozen_atp_blend_rejects_half_configurations_before_fit():
     model = TennisEnsemble()
     with pytest.raises(ValueError, match="requires both"):
-        model.fit_frozen(pd.DataFrame(), pd.DataFrame(), blend_weight=.5,
-                         elo_weight=0., calibrator_kind="identity",
+        model.fit_frozen(pd.DataFrame({"tour_atp": np.ones(300)}),
+                         pd.DataFrame({"tour_atp": np.ones(120)}),
+                         blend_weight=.5, elo_weight=0., calibrator_kind="identity",
                          atp_blend_weight=.6)
