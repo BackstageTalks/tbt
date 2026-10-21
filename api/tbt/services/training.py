@@ -786,6 +786,7 @@ def train_from_matches(
     wta_rank_history=None,
     wta_season_stats=None,
     training_profile="standard",
+    verified_frame: pd.DataFrame | None = None,
 ) -> TrainingResult:
     if training_profile not in {"standard", "top-7.2.1"}:
         raise ValueError("Unknown training profile")
@@ -799,12 +800,17 @@ def train_from_matches(
         independent_direct_rates=(training_profile == "top-7.2.1"),
     )
 
-    frame = (
-        builder
-        .build_training_frame(
-            matches
-        )
-    )
+    if verified_frame is None:
+        frame = builder.build_training_frame(matches)
+    else:
+        # The protected runner has verified this cache against the exact run,
+        # profile, immutable full-input backup and complete match identities.
+        frame = verified_frame.copy()
+        if (len(frame) != len(matches)
+                or not frame["match_id"].is_unique
+                or set(frame["match_id"].astype(str)) !=
+                    {str(m.match_id) for m in matches}):
+            raise ValueError("Verified point-in-time frame/source mismatch")
     _training_progress("point_in_time_feature_replay", len(frame))
     frame, atp_leaderboard_coverage = _augment_atp_leaderboard_features(
         frame, matches, atp_leaderboards, inplace=True
