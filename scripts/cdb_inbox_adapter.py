@@ -217,12 +217,62 @@ def tour_from_filename(name):
     lowered = Path(name).name.lower()
     matches = [x for x in ("atp", "wta") if re.search(r"(^|[^a-z])" + x + r"([^a-z]|$)", lowered)]
     return matches[0] if len(matches) == 1 else ""
-def normalize(raw, filename, index):
+
+
+def tour_from_source_path(path):
+    """Only an unambiguous ATP/WTA *folder*, not arbitrary words, gives a hint.
+
+    The hint is SOURCE-ONLY. The linker still requires independent exact
+    canonical match/date/winner/tournament and round-or-surface evidence.
+    """
+    folders = [key(part) for part in str(path or "").split("/")[:-1]]
+    tours = {part for part in folders if part in {"atp", "wta"}}
+    return next(iter(tours)) if len(tours) == 1 else ""
+
+
+def _drive_source_hints(manifest_path: Path | None, input_dir: Path):
+    """Bind original Drive path to its exact downloaded bytes and local file."""
+    if manifest_path is None:
+        return {}
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if (not isinstance(data, dict) or data.get("schema") != 2
+            or data.get("state") != "DRIVE_SOURCE_FETCH_ONLY"
+            or data.get("production_mutated") is not False
+            or not isinstance(data.get("files"), list)):
+        raise ValueError("Untrusted Drive source provenance manifest")
+    hints = {}
+    for item in data["files"]:
+        if not isinstance(item, dict):
+            raise ValueError("Malformed Drive manifest entry")
+        if item.get("status") != "fetched":
+            continue
+        raw_path = item.get("local_file")
+        source_sha = item.get("sha256")
+        source_path = item.get("source_path") or ""
+        if (not isinstance(raw_path, str)
+                or not isinstance(source_sha, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", source_sha)
+                or not isinstance(source_path, str)):
+            raise ValueError("Invalid fetched Drive source provenance")
+        local = Path(raw_path).resolve()
+        if local.parent != input_dir.resolve() or str(local) in hints:
+            raise ValueError("Drive manifest local file boundary or duplicate")
+        if source_path and (not source_path.startswith("/")
+                            or ".." in source_path.split("/")):
+            raise ValueError("Invalid original Drive source path")
+        hints[str(local)] = (source_sha, source_path)
+    return hints
+
+
+def normalize(raw, filename, index, *, source_tour=""):
     if not isinstance(raw, dict):
         return None, "not_object"
     lookup = {key(k): v for k, v in raw.items() if k is not None}
     if "homename" in lookup or "awayname" in lookup:
-        return _season_match(lookup)
+        row, reason = _season_match(lookup)
+        if not reason and source_tour and row["league"] != source_tour:
+            return None, "tour_provenance_conflict"
+        return row, reason
     row = {}
     for target, aliases in ALIASES.items():
         value = next((lookup[key(alias)] for alias in aliases if key(alias) in lookup), "")
@@ -230,7 +280,12 @@ def normalize(raw, filename, index):
     row["tourney_date"], date_error = _resolved_match_date(lookup)
     if date_error:
         return None, date_error
-    row["league"] = (row["league"] or tour_from_filename(filename)).lower()
+    named_tour = tour_from_filename(filename)
+    explicit_tour = row["league"].lower()
+    if source_tour and (explicit_tour and explicit_tour != source_tour
+                        or named_tour and named_tour != source_tour):
+        return None, "tour_provenance_conflict"
+    row["league"] = (explicit_tour or named_tour or source_tour).lower()
     if row["league"] not in {"atp", "wta"}:
         return None, "tour_missing_or_unsupported"
     if not row["tourney_date"]:
@@ -295,7 +350,9 @@ def pieces(name, blob):
             if info.file_size > MAX_MEMBER_BYTES or info.flag_bits & 1:
                 raise ValueError("Oversized or encrypted ZIP member")
             yield info.filename, archive.read(info)
-def run(input_dir: Path, out_dir: Path, max_files: int = 100):
+def run(input_dir: Path, out_dir: Path, max_files: int = 100,
+        drive_manifest_path: Path | None = None):
+    source_hints = _drive_source_hints(drive_manifest_path, input_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     normalized = out_dir / "normalized"
     normalized.mkdir(exist_ok=True)
@@ -310,6 +367,9 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100):
     for path in files:
         blob = path.read_bytes()
         sha = digest(blob)
+        original_sha, original_path = source_hints.get(str(path.resolve()), ("", ""))
+        if drive_manifest_path is not None and (not original_sha or original_sha != sha):
+            raise ValueError("Downloaded source does not match Drive provenance SHA")
         if sha in hashes:
             counts["duplicate_source_files"] += 1
             continue
@@ -325,6 +385,10 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100):
             review.append({"sha256": sha, "reason": "invalid_archive"})
             continue
         for part_no, (member_name, part) in enumerate(components):
+            # ZIPs may mix tours: do not project an archive's folder onto
+            # unknown member rows. Only member names/explicit columns apply.
+            folder_tour = (tour_from_source_path(original_path)
+                           if path.suffix.lower() != ".zip" else "")
             if len(part) > MAX_MEMBER_BYTES:
                 counts["unsupported_or_oversized_files"] += 1
                 continue
@@ -339,13 +403,18 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100):
                         raise ValueError("Table exceeds row limit")
                     counts["raw_rows"] += 1
                     table_seen += 1
-                    row, reason = normalize(raw, member_name, index)
+                    row, reason = normalize(raw, member_name, index,
+                                            source_tour=folder_tour)
                     if reason:
                         counts["rejected_rows"] += 1
                         counts["reason_" + reason] += 1
                         table_rejections[reason] += 1
                         continue
                     tables[row["league"]].append(row)
+                    if folder_tour and not tour_from_filename(member_name) and isinstance(raw, dict):
+                        row_keys = {key(x) for x in raw}
+                        if not row_keys.intersection({"league", "tour", "circuit", "tourtypehuman"}):
+                            counts["rows_rescued_by_sha_verified_drive_folder_tour"] += 1
                 for tour, accepted in tables.items():
                     if not accepted:
                         continue
@@ -379,8 +448,10 @@ def main():
     parser.add_argument("--input-dir", required=True, type=Path)
     parser.add_argument("--out-dir", required=True, type=Path)
     parser.add_argument("--max-files", type=int, default=100)
+    parser.add_argument("--drive-manifest", type=Path,
+                        help="SHA-verified same-run Drive source provenance")
     args = parser.parse_args()
-    report = run(args.input_dir, args.out_dir, args.max_files)
+    report = run(args.input_dir, args.out_dir, args.max_files, args.drive_manifest)
     print(json.dumps({"state": report["state"], "counts": report["counts"],
                       "normalized_files": len(report["normalized"])}))
 if __name__ == "__main__":
