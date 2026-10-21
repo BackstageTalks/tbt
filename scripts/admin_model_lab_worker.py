@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from urllib.request import Request, urlopen
 
 from tbt.services.model_training import APP, TrainingBlocked, github, inspect, status as training_status
@@ -65,7 +66,36 @@ def dispatch(pending):
           operation, marker, flush=True)
 
 
+
+def published_main_revision(read=github, checkout_sha=None):
+    """Only run the new signed bridge once this *exact* commit reached Azure.
+
+    A successful CI check with a skipped deploy is not a published Admin API.
+    The worker also fires on unrelated workflow completions during a deploy.
+    """
+    sha = checkout_sha or subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], text=True, timeout=10,
+    ).strip()
+    if len(sha) != 40 or any(ch not in "0123456789abcdef" for ch in sha):
+        raise RuntimeError("Cannot verify checked-out deployment revision")
+    runs = read(f"{APP}/actions/workflows/ci.yml/runs?branch=main&event=push&per_page=30")
+    for item in runs.get("workflow_runs", []):
+        if item.get("head_sha") != sha:
+            continue
+        if item.get("status") != "completed" or item.get("conclusion") != "success":
+            return False
+        jobs = read(f"{APP}/actions/runs/{item['id']}/jobs?per_page=100")
+        return any(j.get("name") == "deploy" and
+                   j.get("status") == "completed" and
+                   j.get("conclusion") == "success"
+                   for j in jobs.get("jobs", []))
+    return False
+
+
 def main():
+    if not published_main_revision():
+        print("MODEL_LAB_DEFERRED: current checkout has not completed a verified Azure deployment", flush=True)
+        return
     snapshot = collect_status()
     result = sync(snapshot)
     pending = result.get("pending")
