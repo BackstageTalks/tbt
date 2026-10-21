@@ -38,6 +38,7 @@ PRODUCTION_FEATURE_NAMES = [
     for name in FEATURE_NAMES
     if (
         name not in set(RICH_CHARTING_FEATURE_NAMES)
+        and name != "atp_surface_opponent_form_diff"
         and name not in set(ATP_LEADERBOARD_FEATURE_NAMES)
         and name not in set(ATP_RANK_HISTORY_FEATURE_NAMES)
         and name not in set(WTA_RANK_HISTORY_FEATURE_NAMES)
@@ -81,8 +82,11 @@ def _candidate_feature_names(
     atp_rank_history=None,
     wta_rank_history=None,
     wta_season_stats=None,
+    atp_surface_opponent_form=False,
 ):
     names = list(PRODUCTION_FEATURE_NAMES)
+    if atp_surface_opponent_form:
+        names.append("atp_surface_opponent_form_diff")
     if atp_leaderboards is not None:
         names += list(ATP_LEADERBOARD_FEATURE_NAMES)
     if atp_rank_history is not None:
@@ -941,6 +945,7 @@ def train_from_matches(
         names = _candidate_feature_names(
             atp_leaderboards=atp_leaderboards, atp_rank_history=atp_rank_history,
             wta_rank_history=wta_rank_history, wta_season_stats=wta_season_stats,
+            atp_surface_opponent_form=True,
         )
         diagnostics = input_diagnostics({"train": train, "calibration": calibration}, names)
         require_informative_inputs(diagnostics)
@@ -954,6 +959,7 @@ def train_from_matches(
                     atp_rank_history=atp_rank_history,
                     wta_rank_history=wta_rank_history,
                     wta_season_stats=wta_season_stats,
+                    atp_surface_opponent_form=(training_profile == "top-7.2.1"),
                 ), objective=objective,
             )
             if (

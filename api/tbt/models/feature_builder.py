@@ -35,6 +35,7 @@ FEATURE_NAMES = [
     "recent_form_diff",
     "medium_form_diff",
     "opponent_adjusted_form_diff",
+    "atp_surface_opponent_form_diff",
     "surface_form_diff",
     "rank_advantage",
     "rank_known_both",
@@ -135,6 +136,7 @@ class RecentPerformance:
     aggression_balance: float | None = None
     serve_points_total: float | None = None
     return_points_total: float | None = None
+    surface_expected: float | None = None
 
 
 @dataclass
@@ -289,6 +291,7 @@ class FeatureBuilder:
                         "aggression_balance": item.aggression_balance,
                         "serve_points_total": item.serve_points_total,
                         "return_points_total": item.return_points_total,
+                        "surface_expected": item.surface_expected,
                     }
                     for item in state.recent
                 ],
@@ -417,6 +420,7 @@ class FeatureBuilder:
                                 aggression_balance=item.get("aggression_balance"),
                                 serve_points_total=item.get("serve_points_total"),
                                 return_points_total=item.get("return_points_total"),
+                                surface_expected=item.get("surface_expected"),
                             )
                         )
                 builder.players[str(key)] = state
@@ -604,6 +608,26 @@ class FeatureBuilder:
         return (
             numerator / denominator
         )
+
+    @staticmethod
+    def _atp_surface_opponent_form(
+        state: PlayerState, now: datetime, surface: str,
+    ) -> float:
+        """Historical surface Elo residual; uses only pre-match expectations."""
+        key = stats_surface_key(surface)
+        if key == "unknown":
+            return 0.
+        numerator, denominator = 0., 6.
+        for item in state.recent:
+            if stats_surface_key(item.surface) != key or item.surface_expected is None:
+                continue
+            if not 0 <= float(item.surface_expected) <= 1:
+                continue
+            age_days = max((now - item.played_at).total_seconds() / 86400., 0.)
+            weight = .5 ** (age_days / 120.)
+            numerator += weight * (item.won - item.surface_expected)
+            denominator += weight
+        return numerator / denominator
 
     @classmethod
     def _stat_quality(
@@ -1789,6 +1813,10 @@ class FeatureBuilder:
                     match.scheduled_at,
                 )
             ),
+            "atp_surface_opponent_form_diff": (
+                self._atp_surface_opponent_form(p1, match.scheduled_at, match.surface)
+                - self._atp_surface_opponent_form(p2, match.scheduled_at, match.surface)
+            ) if match.tour.lower() == "atp" else 0.,
             "surface_form_diff": (
                 sf1 - sf2
             ),
@@ -2088,6 +2116,11 @@ class FeatureBuilder:
             p1.overall_elo,
             p2.overall_elo,
         )
+        pre_surface = stats_surface_key(match.surface)
+        surface_expected1 = (
+            elo_expected(p1.get_surface_elo(pre_surface), p2.get_surface_elo(pre_surface))
+            if pre_surface != "unknown" else None
+        )
 
         new1, new2 = update_elo(
             p1.overall_elo,
@@ -2242,6 +2275,7 @@ class FeatureBuilder:
                 aggression_balance=p1_aggression,
                 serve_points_total=p1_serve_n,
                 return_points_total=p1_return_n,
+                surface_expected=surface_expected1,
             )
         )
 
@@ -2269,6 +2303,7 @@ class FeatureBuilder:
                 aggression_balance=p2_aggression,
                 serve_points_total=p2_serve_n,
                 return_points_total=p2_return_n,
+                surface_expected=(1. - surface_expected1 if surface_expected1 is not None else None),
             )
         )
 
