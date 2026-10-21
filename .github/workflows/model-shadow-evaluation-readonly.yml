@@ -6,6 +6,8 @@ on:
     paths:
       - .github/workflows/model-shadow-evaluation-readonly.yml
       - scripts/audit_model_shadow_readonly.py
+      - scripts/audit_frozen_721_segments.py
+      - tests/test_audit_frozen_721_segments.py
       - api/tbt/services/shadow_calibration_research.py
       - tests/test_audit_model_shadow_readonly.py
       - tests/test_shadow_calibration_research.py
@@ -43,11 +45,13 @@ jobs:
       - name: Install existing model dependencies
         run: python -m pip install -r api/requirements-train.txt pytest
       - name: Run read-only shadow integrity and evaluation unit tests
-        run: python -m pytest tests/test_audit_model_shadow_readonly.py tests/test_shadow_calibration_research.py tests/test_shadow_evaluation.py tests/test_audit_721_top_market.py tests/test_audit_711_top_value_shadow.py -q
+        run: python -m pytest tests/test_audit_model_shadow_readonly.py tests/test_shadow_calibration_research.py tests/test_shadow_evaluation.py tests/test_audit_721_top_market.py tests/test_audit_711_top_value_shadow.py tests/test_audit_frozen_721_segments.py -q
       - name: Independently read current champion, challenger and private issued shadow ledger
         run: python scripts/audit_model_shadow_readonly.py --out .cache/tbt/model-shadow-audit/report.json
       - name: Evaluate true pre-match priced TOP observations for frozen 7.2.1 (read only)
         run: python scripts/audit_721_top_market.py --out .cache/tbt/model-shadow-audit/721-top-market.json
+      - name: Diagnose pinned frozen 7.2.1 prospective VIP confidence (raw scores only, no prices)
+        run: python scripts/audit_frozen_721_segments.py --out .cache/tbt/model-shadow-audit/frozen-721-vip-raw-confidence.json
       - name: Publish aggregate summary only
         run: |
           python - <<'PY'
@@ -55,6 +59,9 @@ jobs:
           from pathlib import Path
           r=json.loads(Path('.cache/tbt/model-shadow-audit/report.json').read_text())
           top=json.loads(Path('.cache/tbt/model-shadow-audit/721-top-market.json').read_text())
+          vip=json.loads(Path('.cache/tbt/model-shadow-audit/frozen-721-vip-raw-confidence.json').read_text())['candidate_vip_raw_confidence_scorecard']
+          vip_core=vip['core_80_plus']
+          vip_fallback=vip['fallback_below_80']
           summary=[
             '### Current frozen champion versus challenger',
             f"Status: {r['status']}",
@@ -65,6 +72,10 @@ jobs:
             f"Full aggregate metrics: {r['overall']}",
             f"Temporal calibration research status: {r['calibration_research']['status']}",
             f"7.2.1 true pre-match TOP matched: {top['matched_unique']}; market review ready: {top['review_gate']['ready_for_independent_market_review']}",
+            f"PINNED older frozen-721 raw confidence >=80: {vip_core['settled']} settled, hit rate {vip_core['hit_rate']}, evidenced 80pct {vip_core['target_80_evidenced']}",
+            f"Raw 70-79pct fallback: {vip_fallback['settled']} settled, hit rate {vip_fallback['hit_rate']}",
+            f"Captured days with >=3 qualifying raw-model forecasts: {vip['days_with_3plus_raw_qualifiers']} of {vip['days_with_captured_cohort']}",
+            'Raw model shadow is not full price-qualified public VIP or latest immutable 7.2.1; no promotion.',
             f"Out-of-time Platt research metrics: {r['calibration_research'].get('overall', {})}",
             'No model training, production promotion, CDB write or provider calls.',
           ]
@@ -79,5 +90,6 @@ jobs:
           path: |
             .cache/tbt/model-shadow-audit/report.json
             .cache/tbt/model-shadow-audit/721-top-market.json
+            .cache/tbt/model-shadow-audit/frozen-721-vip-raw-confidence.json
           if-no-files-found: warn
           retention-days: 14
