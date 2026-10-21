@@ -74,3 +74,21 @@ def test_legacy_champion_has_no_tour_feature_requirement():
     model.tour_calibrators = {}
     p = model._predict_with_tour_calibration(pd.DataFrame(), np.array([.2, .8]))
     np.testing.assert_allclose(p, [.2, .8])
+
+
+def test_retraining_is_one_shot_nonpromoting_and_backup_gated():
+    from pathlib import Path
+    workflow = (Path(__file__).resolve().parents[1] /
+                ".github/workflows/protected-frozen-cdb-candidate.yml").read_text()
+    assert "api/tbt/models/ensemble.py" in workflow
+    assert "startsWith(github.event.head_commit.message" in workflow
+    assert "feat(721): one-shot candidate-only tour calibration study" in workflow
+    assert "github.event_name == 'workflow_dispatch'" in workflow
+    assert "python scripts/guarded_candidate_backup.py prepare" in workflow
+    assert "python scripts/audit_training_leakage.py" in workflow
+    assert "BLINQ_RAPIDAPI_MAX_RPS: '0'" in workflow
+    assert "No --promote" in workflow
+    assert "python scripts/guarded_candidate_backup.py verify" in workflow
+    assert "python scripts/cdb_global_writer_lock.py acquire" in workflow
+    assert "python scripts/cdb_global_writer_lock.py release --if-held" in workflow
+    assert "  schedule:" not in workflow
