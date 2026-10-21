@@ -290,3 +290,69 @@ def test_drive_path_hint_never_bypasses_source_sha_or_zip_member_tour(tmp_path):
     result = normalize(incoming, tmp_path / "mixed-tour", drive_manifest_path=manifest)
     assert result["counts"].get("normalized_rows", 0) == 0
     assert result["counts"]["reason_tour_missing_or_unsupported"] == 1
+
+
+def test_sackmann_ids_are_namespaced_and_not_promoted(tmp_path):
+    from scripts.link_offline_serve_return import _sackmann_rows, _verified_ids
+
+    raw = sample(winner_id="atp-100", loser_id="atp-200")
+    incoming = tmp_path / "raw"
+    incoming.mkdir()
+    with (incoming / "atp_matches.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(raw))
+        writer.writeheader()
+        writer.writerow(raw)
+    report = normalize(incoming, tmp_path / "normalized")
+    normalized_path = Path(report["normalized"][0]["path"])
+    match = list(_sackmann_rows([str(normalized_path)]))[0]
+    assert (match.source_player_a_id, match.source_player_b_id) == ("atp-100", "atp-200")
+    assert match.source_id_namespace == "drive-unverified"
+    assert (match.player_a, match.player_b) == ("Alpha One", "Beta Two")
+    # Even a real, independently verified Sackmann crosswalk may NOT bind an
+    # unrelated Drive provider namespace merely because the IDs look alike.
+    known = {
+        ("sackmann", "atp", "atp-100"): "canonical-alpha",
+        ("sackmann", "atp", "atp-200"): "canonical-beta",
+    }
+    assert _verified_ids(match, known) == (None, None)
+
+    # Direct native Sackmann exports retain their own ID namespace and are
+    # eligible for the crosswalk after independent SHA-pinned verification.
+    native = tmp_path / "atp_matches_2026.csv"
+    cols = ["league", "tourney_date", "tourney_name", "winner_name",
+            "loser_name", "winner_id", "loser_id", "w_svpt", "w_1stIn",
+            "w_1stWon", "w_2ndWon", "l_svpt", "l_1stIn",
+            "l_1stWon", "l_2ndWon"]
+    with native.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=cols)
+        writer.writeheader()
+        writer.writerow({
+            "league": "atp", "tourney_date": "20261012",
+            "tourney_name": "Vienna", "winner_name": "Alpha One",
+            "loser_name": "Beta Two", "winner_id": "atp-100",
+            "loser_id": "atp-200", "w_svpt": 70, "w_1stIn": 40,
+            "w_1stWon": 30, "w_2ndWon": 14, "l_svpt": 60,
+            "l_1stIn": 35, "l_1stWon": 25, "l_2ndWon": 11,
+        })
+    direct = list(_sackmann_rows([str(native)]))[0]
+    assert direct.source_id_namespace == "sackmann"
+    assert _verified_ids(direct, known) == (("canonical-alpha", "canonical-beta"), None)
+
+
+@pytest.mark.parametrize(("proof", "eligible"), [
+    (["date_exact", "winner", "tournament_exact", "round"], True),
+    (["date_tournament_window", "winner", "tournament_exact",
+      "round", "surface", "best_of"], True),
+    (["date_tournament_window", "winner", "tournament_exact",
+      "round", "surface"], False),
+    (["date_tournament_window", "winner", "tournament_tokens",
+      "round", "surface", "best_of"], False),
+    (["date_tournament_window", "winner", "tournament_exact",
+      "round", "surface", "best_of", "round_conflict"], False),
+    (["date_plusminus_1", "winner", "tournament_exact",
+      "round", "surface", "best_of"], False),
+])
+def test_window_requires_complete_independent_metadata(proof, eligible):
+    from scripts.cdb_inbox_stage import _strict_source_evidence
+
+    assert _strict_source_evidence({"evidence": proof}) is eligible
