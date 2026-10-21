@@ -236,3 +236,65 @@ def test_tournament_logo_stops_after_dark_variant(monkeypatch):
     monkeypatch.setattr(client, '_get_bytes', fake_bytes)
     assert client.tournament_logo(2368) == (b'dark-logo', 'image/webp')
     assert calls == [('/api/tennis/tournament/2368/image/dark', True)]
+
+
+def test_pre_match_surface_accepts_only_explicit_nested_unique_tournament_ground():
+    base = {
+        "id": "surface-nested-1",
+        "startTimestamp": 1748868630,
+        "homeTeam": {"id": 10, "name": "A"},
+        "awayTeam": {"id": 20, "name": "B"},
+        "status": {"type": "notstarted"},
+        "roundInfo": {"name": "R16"},
+        "tournament": {
+            "id": 77, "name": "Fixture",
+            "uniqueTournament": {"id": 17, "groundType": "Clay"},
+        },
+    }
+    prospective = RapidTennisClient.normalize_match(base, "atp", historical=False)
+    assert prospective.surface == "clay"
+    assert prospective.winner_id is None
+    assert prospective.provider_payload["tournament"]["uniqueTournament"]["groundType"] == "Clay"
+
+    # Explicit event court wins over a potentially inconsistent generic
+    # tournament description. Do not overwrite a verified pre-match field.
+    explicit = RapidTennisClient.normalize_match(
+        {**base, "surface": "Hard"}, "atp", historical=False
+    )
+    assert explicit.surface == "hard"
+    assert explicit.match_id == prospective.match_id
+
+    # Unsupported nested terms stay unknown. Never infer surface from a
+    # place name or completed result.
+    unknown = RapidTennisClient.normalize_match(
+        {**base, "tournament": {
+            "id": 77, "name": "Famous Hard Courts",
+            "uniqueTournament": {"groundType": "not supplied"},
+        }}, "atp", historical=False
+    )
+    assert unknown.surface == "unknown"
+    assert unknown.match_id == prospective.match_id
+
+
+def test_pre_match_nested_provider_surface_remains_point_in_time():
+    base = {
+        "id": "surface-nested-2",
+        "startTimestamp": 1748868630,
+        "homeTeam": {"id": 10, "name": "A"},
+        "awayTeam": {"id": 20, "name": "B"},
+        "status": {"type": "notstarted"},
+        "roundInfo": {"name": "R16"},
+        "tournament": {
+            "id": 77, "name": "Fixture",
+            "uniqueTournament": {"ground_type": "Indoor Hard"},
+        },
+    }
+    pre_match = RapidTennisClient.normalize_match(base, "wta", historical=False)
+    assert pre_match.surface == "indoor_hard"
+    # The first-snapshot surface does not depend on winnerCode or final score:
+    completed = RapidTennisClient.normalize_match(
+        {**base, "status": {"type": "finished"}, "winnerCode": 1},
+        "wta", historical=True,
+    )
+    assert pre_match.surface == completed.surface
+    assert pre_match.match_id == completed.match_id
