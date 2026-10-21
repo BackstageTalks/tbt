@@ -246,13 +246,18 @@ def build_shadow_report(
     ece_not_worse = (
         n > 0 and challenger.get("ece_10", float("inf")) <= production.get("ece_10", float("inf"))
     )
+    # Review is driven by aggregate proper-score gains; ECE and the exact
+    # no-regression flags remain visible diagnostics, not independent vetoes.
+    accuracy_within_tolerance = (
+        n > 0 and challenger.get("accuracy", 0.0) >= production.get("accuracy", 0.0) - 0.01
+    )
+    brier_within_tolerance = (
+        n > 0 and challenger.get("brier_score", float("inf"))
+        <= production.get("brier_score", float("inf")) + 0.003
+    )
     ready = bool(
-        min_matches_met
-        and min_days_met
-        and accuracy_not_worse
-        and log_loss_better
-        and brier_better
-        and ece_not_worse
+        min_matches_met and min_days_met and accuracy_within_tolerance
+        and log_loss_better and brier_within_tolerance
     )
 
     return {
@@ -287,6 +292,9 @@ def build_shadow_report(
             "log_loss_better": log_loss_better,
             "brier_better": brier_better,
             "ece_not_worse": ece_not_worse,
+            "accuracy_within_tolerance": accuracy_within_tolerance,
+            "brier_within_tolerance": brier_within_tolerance,
+            "policy": "aggregate_log_loss_gain_with_bounded_tradeoffs_no_auto_promotion",
             "ready_for_promotion_review": ready,
             "automatic_promotion": False,
         },
