@@ -40,4 +40,21 @@ html=ctx.renderAdminModelLab();
 assert.match(html,/data-model-lab-operation="import_drive" disabled/);
 assert.match(src,/if\(action==='model-lab-start'\)/);
 assert.match(src,/if\(action==='model-lab-acknowledge'\)/);
+
+state.adminModelLab.operation={
+  id:'e'.repeat(24),action:'audit_shadow',state:'COMPLETED_PENDING_VERIFICATION',run:null
+};
+state.adminModelLab.last_operation={
+  id:'e'.repeat(24),action:'audit_shadow',state:'FAILED_NEEDS_REVIEW',
+  run:{id:78,status:'completed',conclusion:'failure'}
+};
+html=ctx.renderAdminModelLab();
+assert.match(html,/data-admin-action="model-lab-acknowledge"/);
+assert.doesNotMatch(html,/Zápis mohol byť čiastočný/);
+state.adminModelLab.operation.action='activate_shadow';
+state.adminModelLab.last_operation.action='activate_shadow';
+html=ctx.renderAdminModelLab();
+assert.doesNotMatch(html,/data-admin-action="model-lab-acknowledge"/);
+assert.match(html,/Zápis mohol byť čiastočný/);
+assert.match(src,/state\.adminModelLab=await BlinqAuth\.adminModelLab\(\);/);
 console.log('Model Lab UI: disabled, ready, unsafe-input, ongoing and confirm-path states passed');

@@ -1,8 +1,10 @@
 name: BlinQ admin training worker
 on:
+  # GitHub cron is forbidden. Subscribe to existing externally clocked
+  # match-status completions (every 30 minutes), not to an additional timer.
   workflow_dispatch:
   workflow_run:
-    workflows: [Test and deploy, Hourly prediction match status, BlinQ protected frozen-CDB candidate training, CDB Drive Inbox - guarded external file import, BlinQ read-only champion vs challenger shadow audit, BlinQ private model calibration monitor, Activate verified 7.2.1 shadow candidate]
+    workflows: [Test and deploy, Prediction fixture schedule and match status, Hourly prediction match status, Tennis data and predictions, BlinQ protected frozen-CDB candidate training, CDB Drive Inbox - guarded external file import, BlinQ read-only champion vs challenger shadow audit, BlinQ private model calibration monitor, Activate verified 7.2.1 shadow candidate]
     types: [completed]
     branches: [main]
 permissions:
@@ -13,8 +15,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sync:
-    # Deployment workflow completion guarantees the new signed API routes
-    # exist before the first Model Lab status is synchronized.
+    # External scheduler calls match-status every 30 minutes. Subscribe to
+    # completed real work; skip push-triggered no-op runs.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 10
