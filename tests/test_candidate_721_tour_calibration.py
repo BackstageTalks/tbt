@@ -41,6 +41,44 @@ def test_small_tour_groups_keep_shared_global_calibrator():
     assert evidence["atp"]["status"] == "GLOBAL_RETAINED"  # enough rows, no improvement margin
 
 
+def test_tour_platt_fit_can_replace_a_pooled_platt_fit():
+    rng = np.random.default_rng(722)
+    n, split = 12000, 6600
+    raw = rng.uniform(.05, .95, n)
+    tours = (np.arange(n) % 2 == 0).astype(float)
+    logits = np.log(raw / (1 - raw))
+    true_p = 1 / (1 + np.exp(-np.where(tours == 1., 1.8, .2) * logits))
+    labels = rng.binomial(1, true_p)
+    pooled = TennisEnsemble._fit_calibrator("platt", raw[:split], labels[:split])
+    # Isolate same-method parameter specialization from method selection.
+    original_fit = TennisEnsemble._fit_calibrator
+    from unittest.mock import patch
+    def fit(kind, probabilities, targets):
+        return original_fit("platt" if kind == "isotonic" else kind,
+                            probabilities, targets)
+    with patch.object(TennisEnsemble, "_fit_calibrator", side_effect=fit):
+        selected, evidence = TennisEnsemble._choose_tour_calibrators(
+            raw, labels, tours, split, pooled,
+        )
+    assert evidence["wta"]["status"] == "SELECTED"
+    assert selected["wta"].kind == pooled.kind == "platt"
+    assert evidence["wta"]["selected_kind"] == "platt"
+    assert evidence["wta"]["global_kind"] == "platt"
+    assert any(row["kind"] == "platt" and row["approved"]
+               for row in evidence["wta"]["alternatives"])
+    assert not np.allclose(selected["wta"].predict(raw), pooled.predict(raw))
+
+
+@pytest.mark.parametrize("tour", ["atp", "wta"])
+@pytest.mark.parametrize("kind", ["platt", "isotonic"])
+def test_same_method_still_requires_both_proper_scores(tour, kind):
+    approved = TennisEnsemble._tour_calibration_approved
+    assert approved(tour, kind, kind, .500, .520, .230, .240)
+    assert not approved(tour, kind, kind, .515, .520, .230, .240)
+    assert not approved(tour, kind, kind, .500, .520, .250, .240)
+    assert not approved(tour, kind, kind, .500, float("nan"), .230, .240)
+
+
 def test_candidate_subgroup_inference_is_symmetry_preserving_and_legacy_safe():
     class Shrink:
         kind = "custom"

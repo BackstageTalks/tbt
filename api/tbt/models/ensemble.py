@@ -134,7 +134,12 @@ class TennisEnsemble:
         Calibration selection never uses the final chronological holdout.
         Existing serialized champion inference is unaffected by this gate.
         """
-        if kind == global_kind or loss + margin >= baseline_loss:
+        # A tour-specific Platt/isotonic fit has different parameters from
+        # the pooled fit, even when both use the same method. Only identity
+        # is necessarily the same transform without learned parameters.
+        if (kind == global_kind == "identity"
+                or not np.isfinite([loss, baseline_loss, brier, baseline_brier]).all()
+                or loss + margin >= baseline_loss):
             return False
         return tour in {"atp", "wta"} and brier <= baseline_brier + 1e-12
 
@@ -200,6 +205,15 @@ class TennisEnsemble:
                 "wta_brier_non_regression_required": tour == "wta",
                 "brier_non_regression_required": True,
                 "minimum_improvement": margin,
+                "global_kind": global_selected.kind,
+                "alternatives": [
+                    {"kind": kind, "selection_log_loss": loss,
+                     "selection_brier_score": brier,
+                     "approved": cls._tour_calibration_approved(
+                         tour, kind, global_selected.kind, loss, baseline_loss,
+                         brier, baseline_brier, margin)}
+                    for loss, brier, kind in alternatives
+                ],
             }
         return selected, evidence
 
