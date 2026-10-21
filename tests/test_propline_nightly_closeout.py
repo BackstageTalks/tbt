@@ -288,6 +288,97 @@ class CloseoutContractTests(unittest.TestCase):
             self.assertTrue(all(name.startswith("Tierzero") for name in first[:90]))
             self.assertTrue(all(name.startswith("Tierzero") for name in second[:90]))
 
+
+    def test_recent_final_scores_fetch_all_raw_boxscore_types_for_exact_cdb_pair(self):
+        utc = datetime(2026, 10, 21, 21, 0, tzinfo=timezone.utc)
+        seen = []
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "targets.json"
+            path.write_text(json.dumps({
+                "schema": 1, "source": "canonical_cdb_2026",
+                "partition_sha256": "e" * 64,
+                "recent_event_targets": [{
+                    "date_utc": "2026-10-20",
+                    "players": ["Carlos Alcaraz", "Jannik Sinner"],
+                }],
+            }))
+            def fake_request(endpoint, params=None, **kw):
+                seen.append((endpoint, params, kw))
+                if endpoint.endswith("/scores"):
+                    return {"scores": [
+                        {"id": "111", "status": "final",
+                         "commence_time": "2026-10-20T13:00:00Z",
+                         "home_team": "Carlos Alcaraz", "away_team": "Jannik Sinner"},
+                        {"id": "222", "status": "final",
+                         "commence_time": "2026-10-20T14:00:00Z",
+                         "home_team": "Different Player", "away_team": "Other Opponent"},
+                    ]}
+                if endpoint.endswith("/111/stats"):
+                    return {"id": "111", "status": "final",
+                            "commence_time": "2026-10-20T13:00:00Z",
+                            "home_team": "Carlos Alcaraz", "away_team": "Jannik Sinner",
+                            "stats": [
+                                {"player_name": "Carlos Alcaraz", "stat_type": "total_games",
+                                 "stat_value": 22},
+                                {"player_name": "Jannik Sinner", "stat_type": "sets_won",
+                                 "stat_value": 1},
+                            ]}
+                raise AssertionError(endpoint)
+            with mock.patch.dict(mod.os.environ, {"CLOSEOUT_GAP_TARGETS": str(path)}), \\
+                 mock.patch.object(mod, "now", return_value=utc), \\
+                 mock.patch.object(mod, "request", side_effect=fake_request), \\
+                 mock.patch.object(mod, "flush_if_needed"):
+                mod.probe_recent_event_stats("2026-10-21", "123")
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(seen[0][1], {"days_from": 3})
+        self.assertTrue(all(kw["optional_stats"] for _, _, kw in seen))
+        self.assertEqual(len(mod.DATA), 1)
+        self.assertEqual(mod.DATA[0]["stage"], "event_stats_probe")
+        self.assertEqual(mod.DATA[0]["payload"]["stats"][0]["stat_type"], "total_games")
+
+    def test_score_phase_keeps_remaining_odds_quota(self):
+        mod.STATE["remaining"] = mod.NIGHTLY_ODDS_RESERVE
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "targets.json"
+            path.write_text(json.dumps({
+                "schema": 1, "source": "canonical_cdb_2026",
+                "partition_sha256": "e" * 64,
+                "recent_event_targets": [{"date_utc": "2026-10-20",
+                                          "players": ["Carlos Alcaraz", "Jannik Sinner"]}],
+            }))
+            with mock.patch.dict(mod.os.environ, {"CLOSEOUT_GAP_TARGETS": str(path)}), \\
+                 mock.patch.object(mod, "request", side_effect=AssertionError("spent reserve")):
+                mod.probe_recent_event_stats("2026-10-21", "123")
+        self.assertEqual(mod.STATE["calls"], 0)
+
+    def test_player_logs_with_games_and_sets_do_not_trigger_aces_only_stop(self):
+        utc = datetime(2026, 10, 21, 21, 0, tzinfo=timezone.utc)
+        requested = []
+        def respond(path, *args, **kwargs):
+            requested.append(path)
+            mod.STATE["calls"] += 1
+            return {"games": [{"status": "final", "stats": {"total_games": 21,
+                      "sets_won": 2, "set_1_games": 10}}]}
+        with mock.patch.object(mod, "_targeted_player_names",
+                               return_value=[f"Player{i} Name" for i in range(40)]), \\
+             mock.patch.object(mod, "now", return_value=utc), \\
+             mock.patch.object(mod, "request", side_effect=respond), \\
+             mock.patch.object(mod, "flush_if_needed"):
+            mod.probe_player_games([], "2026-10-21", "test")
+        self.assertEqual(len(requested), 40)
+        self.assertEqual(len(mod.DATA), 40)
+        self.assertIn("set_1_games", mod.DATA[0]["summary"]["focus_fields"])
+
+    def test_optional_stats_network_errors_do_not_block_later_odds(self):
+        utc = datetime(2026, 10, 21, 21, 0, tzinfo=timezone.utc)
+        error = TimeoutError("upstream socket")
+        with mock.patch.object(mod, "now", return_value=utc), \\
+             mock.patch.object(mod.urllib.request, "urlopen", side_effect=error), \\
+             mock.patch.object(mod.time, "sleep", return_value=None):
+            self.assertIsNone(mod.request("/sports/tennis/scores", optional_stats=True))
+        self.assertEqual(mod.STATE["reason"], "")
+        self.assertEqual(mod.STATE["calls"], 1)
+
     def test_persistence_retries_transient_github_503(self):
         transient = HTTPError("https://api.github.com/x", 503, "unavailable", {}, None)
         response = mock.MagicMock()
