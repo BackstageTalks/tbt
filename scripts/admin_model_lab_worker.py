@@ -10,7 +10,7 @@ import os
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
-from tbt.services.model_training import APP, TrainingBlocked, github, inspect, status as training_status
+from tbt.services.model_training import APP, TrainingBlocked, github, inspect
 from tbt.services.model_lab import collect_status, WORKFLOWS
 
 
@@ -41,12 +41,15 @@ def dispatch(pending):
         raise RuntimeError("Unknown Model Lab operation")
     # Recheck current lock and inflight training before any dispatch.
     current = collect_status()
-    if not current["can_start"] or not inspect()["can_start"] or not training_status()["can_start"]:
+    if not current["can_start"] or not inspect()["can_start"]:
         raise TrainingBlocked("Model Lab or candidate training queue changed after claim; dispatch blocked")
     if current["active_sha256"] != pending["expected_candidate_sha256"]:
         raise TrainingBlocked("Active shadow candidate changed after claim")
     if current["champion_sha256"] != pending["expected_champion_sha256"]:
         raise TrainingBlocked("Champion changed after claim")
+    preflight = sync({**current, "dispatch_request_id": marker})
+    if preflight.get("dispatch_ready") is not True:
+        raise TrainingBlocked("Durable Admin queue did not confirm this claimed dispatch")
     inputs = {"request_id": marker}
     if operation == "import_drive":
         inputs["catchup_remaining"] = "0"  # One existing guarded 100-file batch.

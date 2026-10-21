@@ -66,6 +66,25 @@ class TestLab(unittest.TestCase):
                 m.start({"action": "import_drive"}, "admin")
             gh.assert_not_called()
 
+    def test_dispatch_preflight_reads_server_queue_without_claiming_again(self):
+        request = m.start({"action": "refresh_tests"}, "admin")
+        self.assertFalse(m.sync({**snapshot(), "dispatch_request_id": request["id"]})["dispatch_ready"])
+        m.sync(snapshot())
+        check = {**snapshot(), "dispatch_request_id": request["id"]}
+        self.assertTrue(m.sync(check)["dispatch_ready"])
+        self.assertNotIn("dispatch_request_id", m._json("snapshot"))
+        with patch.object(m, "training_status", return_value={"can_start": False}):
+            self.assertFalse(m.sync(check)["dispatch_ready"])
+        self.assertFalse(m.sync({**check, "dispatch_request_id": "0"*24})["dispatch_ready"])
+        self.assertIsNotNone(m._json("active"))
+
+    def test_training_queued_between_request_and_worker_does_not_consume_claim(self):
+        request = m.start({"action": "refresh_tests"}, "admin")
+        with patch.object(m, "training_status", return_value={"can_start": False}):
+            self.assertIsNone(m.sync(snapshot())["pending"])
+        self.assertIsNone(m._json("claim-" + request["id"]))
+        self.assertIsNotNone(m.sync(snapshot())["pending"])
+
     def test_factory_training_cannot_overlap_a_queued_shadow_or_import(self):
         # Both Admin entrypoints use the same durable Azure queue guard.
         m.start({"action": "import_drive"}, "admin")
@@ -316,6 +335,24 @@ class TestLiveAdminProbe(unittest.TestCase):
 
 
 class TestWorker(unittest.TestCase):
+    def test_worker_requires_server_preflight_and_never_reads_local_admin_store(self):
+        from admin_model_lab_worker import dispatch
+        pending = {"action": "refresh_tests", "id": "a" * 24,
+                   "expected_candidate_sha256": "a" * 64,
+                   "expected_champion_sha256": "b" * 64}
+        with patch("admin_model_lab_worker.collect_status", return_value=snapshot()), \
+             patch("admin_model_lab_worker.inspect", return_value={"can_start": True}), \
+             patch("admin_model_lab_worker.sync", return_value={"stored": True, "dispatch_ready": False}) as sync, \
+             patch("tbt.services.model_training._table", side_effect=AssertionError("No local credentials")), \
+             patch("admin_model_lab_worker.github") as gh:
+            with self.assertRaises(model_training.TrainingBlocked):
+                dispatch(pending)
+            gh.assert_not_called()
+            self.assertEqual(sync.call_args.args[0]["dispatch_request_id"], pending["id"])
+            sync.return_value = {"stored": True, "dispatch_ready": True}
+            dispatch(pending)
+            gh.assert_called_once()
+
     def test_import_has_hard_one_batch_cap_and_no_training_promotion(self):
         from admin_model_lab_worker import dispatch
         pending = {"action": "import_drive", "id": "a" * 24,
@@ -324,7 +361,7 @@ class TestWorker(unittest.TestCase):
         good = snapshot()
         with patch("admin_model_lab_worker.collect_status", return_value=good), \
              patch("admin_model_lab_worker.inspect", return_value={"can_start": True}), \
-             patch("admin_model_lab_worker.training_status", return_value={"can_start": True}), \
+             patch("admin_model_lab_worker.sync", return_value={"stored": True, "dispatch_ready": True}), \
              patch("admin_model_lab_worker.github") as gh:
             dispatch(pending)
             arguments = gh.call_args.args[1]
@@ -340,7 +377,7 @@ class TestWorker(unittest.TestCase):
                    "expected_champion_sha256": "b" * 64}
         with patch("admin_model_lab_worker.collect_status", return_value=snapshot()), \
              patch("admin_model_lab_worker.inspect", return_value={"can_start": True}), \
-             patch("admin_model_lab_worker.training_status", return_value={"can_start": True}), \
+             patch("admin_model_lab_worker.sync", return_value={"stored": True, "dispatch_ready": True}), \
              patch("admin_model_lab_worker.github") as gh:
             with self.assertRaises(model_training.TrainingBlocked):
                 dispatch(pending)

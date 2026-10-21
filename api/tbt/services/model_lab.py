@@ -255,8 +255,28 @@ def sync(snapshot):
         raise ValueError("Invalid champion model SHA")
     if _age(snapshot.get("observed_at")) > 120 or _age(snapshot.get("observed_at")) < -60:
         raise ValueError("Stale Model Lab snapshot")
+    snapshot = dict(snapshot)
+    dispatch_id = snapshot.pop("dispatch_request_id", None)
+    if dispatch_id is not None and not MARKER.fullmatch(str(dispatch_id)):
+        raise ValueError("Invalid dispatch preflight marker")
     _put("snapshot", snapshot)
     active = _json("active")
+    if dispatch_id is not None:
+        # Run on the API host, where the durable Admin queue actually lives.
+        # Actions workers deliberately have no Azure/Firestore credentials.
+        ready = bool(
+            active and active.get("id") == dispatch_id
+            and _json("claim-" + dispatch_id)
+            and snapshot["can_start"]
+            and active["expected_candidate_sha256"] == snapshot["active_sha256"]
+            and active["expected_champion_sha256"] == snapshot["champion_sha256"]
+            and not _find_run(active, snapshot)
+            and training_status().get("can_start")
+        )
+        if ready and active["action"] == "activate_shadow":
+            ready = any(c["tag"] == active["source_tag"] and c["sha256"] == active["source_sha256"]
+                        for c in snapshot["candidates"])
+        return {"stored": True, "pending": None, "dispatch_ready": ready}
     if not active:
         return {"stored": True, "pending": None}
     marker = active.get("id")
@@ -269,6 +289,8 @@ def sync(snapshot):
             _finalize(active, run, snapshot)
         return {"stored": True, "pending": None}
     if not snapshot["can_start"]:
+        return {"stored": True, "pending": None}
+    if not training_status().get("can_start"):
         return {"stored": True, "pending": None}
     if _age(active["snapshot_at"]) > 5400:
         return {"stored": True, "pending": None}
