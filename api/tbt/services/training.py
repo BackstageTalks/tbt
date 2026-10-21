@@ -1198,6 +1198,9 @@ def train_from_matches(
         ),
         "subgroups": subgroup_report(test, test_p),
         "evaluation_model": {
+            "tour_blend_experiment": (
+                (evaluation_model.metadata or {}).get("tour_blend_experiment")
+            ),
             "blend_weight_boost": (
                 evaluation_model
                 .blend_weight

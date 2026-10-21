@@ -370,6 +370,17 @@ class TennisEnsemble:
                     score = (-accuracy, loss) if self.objective == "accuracy" else (loss, -accuracy)
                     choices.append((score, float(weight), elo_weight))
             _, self.blend_weight, self.elo_weight = min(choices, key=lambda item: item[0])
+            # Nonpromoting ATP/WTA research report on disjoint calibration days.
+            # Never changes blended probabilities, the accepted ATP weights,
+            # calibration choice, final holdout, or frozen serving parameters.
+            if (self.objective == "log_loss"
+                    and getattr(self, "atp_blend_specialization", False)
+                    and "tour_atp" in cal.columns):
+                from .tour_blend_experiment import compare_tour_blends
+                self.metadata["tour_blend_experiment"] = compare_tour_blends(
+                    linear, boost, elo, y_cal, cal["tour_atp"].to_numpy(dtype=float),
+                    split, (self.blend_weight, self.elo_weight),
+                )
             if (self.objective == "log_loss"
                     and getattr(self, "atp_blend_specialization", False)
                     and "tour_atp" in cal.columns):
