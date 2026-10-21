@@ -145,6 +145,7 @@ def _high_confidence_settled(frame, column):
 def _top_three(
     frame, column, *, minimum_probability=None,
     maximum_daily_picks=3, minimum_daily_picks=None,
+    cascade_thresholds=None,
 ):
     """Compare old capped TOP to uncapped VIP, selecting before settlement.
 
@@ -155,9 +156,28 @@ def _top_three(
         raise ValueError("Daily maximum must be positive or None")
     if minimum_daily_picks is not None and minimum_daily_picks < 1:
         raise ValueError("Daily minimum must be positive or None")
-    eligible = frame if minimum_probability is None else frame.loc[
-        frame[column] >= minimum_probability
-    ]
+    applied_tiers = {}
+    if cascade_thresholds is not None:
+        tiers = tuple(float(t) for t in cascade_thresholds)
+        if not tiers or tiers != tuple(sorted(set(tiers), reverse=True)):
+            raise ValueError("Confidence cascade must be unique descending tiers")
+        if maximum_daily_picks is not None:
+            raise ValueError("Cascade must publish all qualifying picks, not a cap")
+        goal = minimum_daily_picks or 3
+        chosen = []
+        for day, daily in frame.groupby("betting_day", sort=True):
+            floor = tiers[-1]
+            for threshold in tiers:
+                floor = threshold
+                if int((daily[column] >= threshold).sum()) >= goal:
+                    break
+            applied_tiers[str(day)] = float(floor)
+            chosen.append(daily.loc[daily[column] >= floor])
+        eligible = pd.concat(chosen) if chosen else frame.iloc[0:0]
+    else:
+        eligible = frame if minimum_probability is None else frame.loc[
+            frame[column] >= minimum_probability
+        ]
     ranked = eligible.sort_values(
         ["betting_day", column, "event_id"],
         ascending=[True, False, True], kind="stable",
@@ -201,6 +221,10 @@ def _top_three(
         "daily_pick_shortfall": shortfall,
         "minimum_daily_target_met": minimum_daily_picks is not None and not shortfall_days and bool(len(all_days)),
         "qualified_picks_per_day": {str(day): int(count) for day, count in daily_counts.items()},
+        "applied_probability_floor_by_day": applied_tiers,
+        "cascade_tiers": list(cascade_thresholds) if cascade_thresholds is not None else None,
+        "core_80_and_up": int((ranked[column] >= .80).sum()),
+        "lower_tier_below_80": int((ranked[column] < .80).sum()),
     }
 
 
@@ -273,6 +297,16 @@ def train_and_compare(
             "market": _top_three(offered, "fair_market_probability"),
             "specialist": _top_three(offered, "specialist_probability"),
         },
+        "vip_cascade_metrics": {
+            "blinq": _top_three(offered, "public_top_probability", cascade_thresholds=(.80,.78,.75,.70),
+                                maximum_daily_picks=None, minimum_daily_picks=3),
+            "raw_model": _top_three(offered, "model_probability", cascade_thresholds=(.80,.78,.75,.70),
+                                    maximum_daily_picks=None, minimum_daily_picks=3),
+            "market": _top_three(offered, "fair_market_probability", cascade_thresholds=(.80,.78,.75,.70),
+                                 maximum_daily_picks=None, minimum_daily_picks=3),
+            "specialist": _top_three(offered, "specialist_probability", cascade_thresholds=(.80,.78,.75,.70),
+                                     maximum_daily_picks=None, minimum_daily_picks=3),
+        },
         "vip_selective_metrics": {
             "blinq": _top_three(offered, "public_top_probability", minimum_probability=.80,
                                 maximum_daily_picks=None, minimum_daily_picks=3),
@@ -295,6 +329,8 @@ def train_and_compare(
             "status": "RESEARCH_ONLY_NOT_PROMOTED",
             "coverage_must_be_reported": True,
             "research_minimum_probability": 0.80,
+            "dynamic_display_tiers": [0.80, 0.78, 0.75, 0.70],
+            "minimum_display_probability": 0.70,
             "daily_max": None,
             "daily_minimum_target": 3,
             "publish_at_least_three_only_if_qualified": True,
@@ -306,7 +342,8 @@ def train_and_compare(
             "Existing candidate data may be conditioned on the old selector; full-board coverage is not established",
             "The public TOP baseline uses data-depth-shrunk probability, not raw model probability",
             "80% probability is not proof of 80% hit rate; both need independent priced holdout",
-            "At least three qualifying picks per day is a coverage target, not a reason to lower the 80% gate",
+            "At least three picks per day uses the 80/78/75/70 display cascade without inventing confidence",
+            "Display at 70% does not certify a real 80% hit rate: report core and fallback performance separately",
             "No independently unseen forward holdout or fresh market coverage",
             "Only price-conditioned calibration of existing model, not a new tennis model",
         ],
