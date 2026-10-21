@@ -80,7 +80,7 @@ def test_prospective_scorecard_reports_actual_pair_and_surface_gaps():
     original = evidence(days=1, per_day=4)
     rows = original["rows"]
     # Expected: candidate loses two separate paired orientations vs champion.
-    scores = [(0.8, 0.1, 1), (0.7, 0.2, 1),
+    scores = [(0.8, 0.6, 1), (0.7, 0.2, 1),
               (0.2, 0.9, 0), (0.2, 0.1, 0)]
     for r, (p, q, truth) in zip(rows, scores):
         r.update({
