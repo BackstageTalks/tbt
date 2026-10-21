@@ -151,3 +151,46 @@ def test_unambiguous_pandas_date_literal_and_per_file_audit(tmp_path):
     }
     row = next(csv.DictReader(Path(report["normalized"][0]["path"]).open()))
     assert row["tourney_date"] == "20261017"
+
+
+def test_real_utc_start_overrides_tournament_start_only_within_window():
+    row, reason = normalize_row(
+        sample(tourney_date="20261018", match_date="", start_time_utc="2026-10-21T13:05:00Z"),
+        "atp_matches_2026.csv", 1,
+    )
+    # The input's match_date column is blank; use tournament start then an
+    # independently supplied UTC timestamp, never a canonical inferred date.
+    assert reason == ""
+    assert row["tourney_date"] == "20261021"
+
+
+def test_utc_start_does_not_rescue_disagreeing_davis_cup_season_date():
+    row, reason = normalize_row(
+        sample(match_date="", tourney_date="20260206",
+               start_time_utc="2026-09-18T14:20:00Z"),
+        "atp_matches_2026.csv", 1,
+    )
+    assert row is None
+    assert reason == "start_time_outside_tournament_window"
+
+
+def test_utc_start_invalid_or_conflicting_exact_match_date_fails_closed():
+    row, reason = normalize_row(
+        sample(start_time_utc="2026-10-21 13:05:00", match_date="2026-10-21"),
+        "atp_matches_2026.csv", 1,
+    )
+    assert row is None and reason == "start_time_utc_invalid"
+    row, reason = normalize_row(
+        sample(start_time_utc="2026-10-21T13:05:00Z", match_date="2026-10-20"),
+        "atp_matches_2026.csv", 1,
+    )
+    assert row is None and reason == "match_date_start_time_conflict"
+
+
+def test_missing_precise_start_keeps_existing_tournament_date_behavior():
+    row, reason = normalize_row(
+        sample(match_date="", tourney_date="20261018", start_time_utc=""),
+        "wta_matches_2026.csv", 1,
+    )
+    assert reason == ""
+    assert row["tourney_date"] == "20261018"

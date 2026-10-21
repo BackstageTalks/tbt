@@ -83,6 +83,28 @@ def normalize(raw, filename, index):
         value = next((lookup[key(alias)] for alias in aliases if key(alias) in lookup), "")
         row[target] = "" if value is None else str(value).strip()
     row["tourney_date"] = iso_date(next((lookup[key(a)] for a in ALIASES["tourney_date"] if key(a) in lookup), ""))
+    # Some match-level ATP exports expose the exact UTC start as well as a
+    # tournament start date. Exact UTC evidence replaces only the date used for
+    # linking; never infer a match date from the canonical history itself.
+    raw_start = lookup.get(key("start_time_utc"))
+    if raw_start is not None and str(raw_start).strip():
+        start = str(raw_start).strip()
+        if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", start):
+            return None, "start_time_utc_invalid"
+        try:
+            observed = datetime.strptime(start, "%Y-%m-%dT%H:%M:%SZ")
+            tournament = datetime.strptime(row["tourney_date"], "%Y%m%d")
+        except ValueError:
+            return None, "start_time_utc_invalid"
+        # Dated season containers (e.g. Davis Cup) can point hundreds of
+        # days before a real match; do not silently certify such disagreements.
+        if not 0 <= (observed.date() - tournament.date()).days <= 16:
+            return None, "start_time_outside_tournament_window"
+        explicit_match = lookup.get(key("match_date"))
+        if explicit_match is not None and str(explicit_match).strip():
+            if iso_date(explicit_match) != observed.strftime("%Y%m%d"):
+                return None, "match_date_start_time_conflict"
+        row["tourney_date"] = observed.strftime("%Y%m%d")
     row["league"] = (row["league"] or tour_from_filename(filename)).lower()
     if row["league"] not in {"atp", "wta"}:
         return None, "tour_missing_or_unsupported"
