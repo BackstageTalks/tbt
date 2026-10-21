@@ -1,5 +1,10 @@
 name: BlinQ admin training worker
 on:
+  # Initialize the new Admin Lab immediately on its reviewed release only.
+  # Routine source changes must not dispatch background model operations.
+  push:
+    branches: [main]
+    paths: [".github/workflows/admin-training-worker.yml"]
   workflow_dispatch:
   workflow_run:
     workflows: [Hourly prediction match status, BlinQ protected frozen-CDB candidate training, CDB Drive Inbox - guarded external file import, BlinQ read-only champion vs challenger shadow audit, BlinQ private model calibration monitor, Activate verified 7.2.1 shadow candidate]
@@ -13,7 +18,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sync:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'skipped'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       startsWith(github.event.head_commit.message, 'feat(admin): release unified Model Lab')) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
