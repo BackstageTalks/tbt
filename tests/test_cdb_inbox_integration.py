@@ -10,6 +10,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from scripts.cdb_inbox_adapter import run as normalize
 from scripts.cdb_inbox_stage import run as stage
 from scripts.offline_exact_cdb_write import verify_persisted
@@ -19,7 +21,8 @@ from tbt.schemas import MatchRecord
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_real_native_linker_exact_writer_and_readback(tmp_path):
+@pytest.mark.parametrize(("start_only", "expected_window"), [(False, False), (True, True)])
+def test_real_native_linker_exact_writer_and_readback(tmp_path, start_only, expected_window):
     before, after, source = (tmp_path / n for n in ("before", "after", "source"))
     before.mkdir()
     source.mkdir()
@@ -36,7 +39,10 @@ def test_real_native_linker_exact_writer_and_readback(tmp_path):
     write_year_partition([original], before, 2026)
     with (source / "atp_test.csv").open("w", encoding="utf-8", newline="") as handle:
         row = {
-            "tour": "ATP", "match_date": "2026-10-17", "tournament": "Vienna",
+            "tour": "ATP",
+            "match_date": "" if start_only else "2026-10-17",
+            "tourney_date": "2026-10-12" if start_only else "",
+            "tournament": "Vienna",
             "winner": "Alpha One", "loser": "Beta Two", "round": "QF",
             # Provider-side IDs are preserved as provenance, never CDB IDs.
             "winner_id": "external-100", "loser_id": "external-200",
@@ -79,6 +85,7 @@ def test_real_native_linker_exact_writer_and_readback(tmp_path):
     )
     staged = [json.loads(x) for x in (tmp_path / "link/eligible.jsonl").read_text().splitlines()]
     evidence = staged[0]["sources"][0]
+    assert ("date_tournament_window" in evidence["evidence"]) is expected_window
     assert evidence["source_player_a_id"] == "external-100"
     assert evidence["source_player_b_id"] == "external-200"
     assert evidence["source_id_namespace"] == "drive-unverified"
