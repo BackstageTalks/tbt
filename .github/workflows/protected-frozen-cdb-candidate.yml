@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/protected-frozen-cdb-candidate.yml
+      - api/tbt/models/ensemble.py
   workflow_dispatch:
     inputs:
       training_profile:
@@ -24,7 +25,14 @@ concurrency:
 
 jobs:
   await-cdb-idle:
-    if: github.repository == 'BackstageTalks/tbt'
+    # One explicitly named merge may launch ONE backup-gated candidate-only
+    # research fit. Normal pushes to ensemble.py must never start training.
+    if: >-
+      github.repository == 'BackstageTalks/tbt' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'push' &&
+        startsWith(github.event.head_commit.message,
+        'feat(721): one-shot candidate-only tour calibration study')))
     runs-on: ubuntu-latest
     # A separate read-only gate waits for prior owners; the full six-hour
     # training budget starts only AFTER this job reports observed idle.
