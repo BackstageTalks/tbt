@@ -240,7 +240,7 @@ def test_hourly_priority_favors_verified_yield_over_depleted_atp_2025(match_fact
     assert preferred[-1].match_id == 'atp-2025-ace'
     assert report['preferred_verified_cohort'] == 'wta:2024:serve_return_incomplete'
     assert report['verified_high_yield_cohorts'] == [
-        'wta:2024', 'wta:2022', 'atp:2024',
+        'wta:2024', 'wta:2023', 'wta:2022', 'atp:2024',
     ]
     assert report['historical_high_yield'] is True
     import pytest
@@ -274,8 +274,8 @@ def test_hourly_97_percent_queue_gives_undercovered_atp_wta_years_a_budget_share
     assert len({m.match_id for m in selected}) == len(rows)
     first_ten = Counter((m.tour.lower(), m.scheduled_at.year) for m in selected[:10])
     assert first_ten == {
-        ("wta", 2024): 6,
-        ("wta", 2023): 2,
+        ("wta", 2024): 4,
+        ("wta", 2023): 4,
         ("atp", 2022): 1,
         ("atp", 2025): 1,
     }
@@ -323,7 +323,8 @@ def test_wta_older_underserved_years_rotate_instead_of_starving(match_factory):
         matches, date(2022, 1, 1), date(2025, 12, 31),
         targeted=True, historical_high_yield=True,
     )
-    assert [m.scheduled_at.year for m in ordered[:6]] == [2024] * 5 + [2025]
+    # Both independently verified WTA seasons now share the high-yield lane.
+    assert [m.scheduled_at.year for m in ordered[:6]] == [2024, 2023] * 3
     assert {m.scheduled_at.year for m in ordered[:12]} == {2023, 2024, 2025}
 
 
