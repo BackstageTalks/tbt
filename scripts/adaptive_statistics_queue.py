@@ -63,6 +63,10 @@ class AdaptiveStatisticsQueue:
         self._ace_df = Counter()
         self._baseline_choices = Counter()
         self._adaptive_choices = Counter()
+        self._reference_year = max(
+            (int(row.scheduled_at.year) for queue in self._pending.values()
+             for row in queue), default=2026
+        )
         self._coverage = {}
         for group in self._pending:
             bucket = group.rsplit(":", 1)[0]
@@ -89,12 +93,15 @@ class AdaptiveStatisticsQueue:
                 if self._pending[group] and self._paid[group] >= self.MIN_COHORT_REQUESTS]
 
     def _score(self, group):
-        # Six virtual neutral requests damp early noise. Serve/return readiness
-        # transitions are more valuable than raw counts. Incomplete seasons
-        # receive a small bonus, not an overriding priority.
+        # Use paid, retry-adjusted recent yield as the dominant signal.
+        # A bounded recency factor shifts comparable-yield work to the latest
+        # three seasons, while very productive older cohorts can still win.
         reward = self._recent_reward[group]
         per_call = (18.0 + reward) / (6.0 + self._recent_requests[group])
-        return per_call * (1.0 + 0.25 * (1.0 - self._coverage[group]))
+        age = max(0, self._reference_year - int(group.split(":")[1]))
+        recency = (1.25 if age == 0 else 1.30 if age == 1 else
+                   1.32 if age == 2 else 0.94 if age == 3 else 0.82)
+        return per_call * (1.0 + 0.25 * (1.0 - self._coverage[group])) * recency
 
     def __next__(self):
         if not self._remaining:
@@ -164,6 +171,8 @@ class AdaptiveStatisticsQueue:
             "min_cohort_paid_requests": self.MIN_COHORT_REQUESTS,
             "minimum_baseline_exploration_fraction": 1 / self.EXPLORE_EVERY,
             "selection_value_policy": "quality_ready_and_new_fields_recent_paid_window",
+            "recency_score_policy": "bounded_latest_three_seasons_after_paid_yield",
+            "recency_reference_year": self._reference_year,
             "recent_paid_match_window": self.RECENT_MATCH_WINDOW,
             "candidate_rows": self._served + self._remaining,
             "selected_rows": self._served,
