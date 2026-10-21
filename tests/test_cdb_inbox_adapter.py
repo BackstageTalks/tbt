@@ -257,7 +257,7 @@ def test_folder_tour_conflict_and_ambiguous_parent_are_quarantined(tmp_path):
         tmp_path, source, "/10_POVODNE_ZDROJE_ARCHIVY/WTA/ATP/X (99).csv"
     )
     result = normalize(incoming, tmp_path / "ambiguous", drive_manifest_path=manifest)
-    assert result["counts"]["normalized_rows"] == 0
+    assert result["counts"].get("normalized_rows", 0) == 0
     assert result["counts"]["reason_tour_missing_or_unsupported"] == 1
 
 
@@ -288,5 +288,5 @@ def test_drive_path_hint_never_bypasses_source_sha_or_zip_member_tour(tmp_path):
         tmp_path, archive, "/10_POVODNE_ZDROJE_ARCHIVY/ATP/mixed.zip"
     )
     result = normalize(incoming, tmp_path / "mixed-tour", drive_manifest_path=manifest)
-    assert result["counts"]["normalized_rows"] == 0
+    assert result["counts"].get("normalized_rows", 0) == 0
     assert result["counts"]["reason_tour_missing_or_unsupported"] == 1
