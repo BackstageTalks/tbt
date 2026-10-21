@@ -51,6 +51,14 @@ def test_training_includes_exact_top_odds_boundary_and_keeps_days_disjoint(tmp_p
     assert top["hit_rate_ci95_wilson"] is not None
     assert top["target_87_supported"] is False
     assert result["vip_accuracy_goal"]["target"] == .87
+    staged = result["vip_cascade_metrics"]["blinq"]
+    assert staged["selected"] == 9
+    assert staged["days_meeting_minimum"] == 3
+    assert all(floor == .70 for floor in staged["applied_probability_floor_by_day"].values())
+    assert staged["core_80_and_up"] == 0
+    assert staged["lower_tier_below_80"] == 9
+    assert staged["cascade_tiers"] == [.80, .78, .75, .70]
+    assert staged["target_80_supported"] is False
     vip = result["vip_selective_metrics"]["blinq"]
     assert vip["offered"] == 24
     assert vip["selected"] == 0  # 80% gate does not force three picks/day
@@ -194,3 +202,42 @@ def test_vip_threshold_below_minimum_never_forces_low_probability_offers():
     assert "2026-10-04" in vip["days_below_minimum"]
     assert vip["daily_pick_shortfall"] >= 3
     assert vip["minimum_daily_target_met"] is False
+
+
+
+def test_display_cascade_uses_80_when_many_and_never_caps_three():
+    frame, _ = validated_candidates(rows())
+    frame.loc[:, "model_probability"] = .86
+    data = _top_three(frame, "model_probability",
+                      cascade_thresholds=(.80,.78,.75,.70),
+                      maximum_daily_picks=None, minimum_daily_picks=3)
+    assert data["selected"] == 56
+    assert data["core_80_and_up"] == 56
+    assert data["lower_tier_below_80"] == 0
+    assert data["days_meeting_minimum"] == 7
+    assert set(data["applied_probability_floor_by_day"].values()) == {.80}
+
+
+def test_display_cascade_relaxes_each_day_only_to_first_three_picks():
+    frame, _ = validated_candidates(rows())
+    # Every day has one >80, another >78, and third >75,
+    # with the fourth available at exactly 70.
+    for day, group in frame.groupby("betting_day"):
+        frame.loc[group.index, "model_probability"] = [.81, .78, .75, .70, .69, .68, .65, .60]
+    metric = _top_three(frame, "model_probability",
+                        cascade_thresholds=(.80,.78,.75,.70),
+                        maximum_daily_picks=None, minimum_daily_picks=3)
+    assert metric["selected"] == 21
+    assert metric["core_80_and_up"] == 7
+    assert metric["lower_tier_below_80"] == 14
+    assert all(floor == .75 for floor in metric["applied_probability_floor_by_day"].values())
+    # A day with only two 70+ cannot be filled by a 69% tip.
+    frame.loc[frame.betting_day == "2026-10-04", "model_probability"] = [.81,.78,.69,.68,.66,.65,.63,.60]
+    metric = _top_three(frame, "model_probability",
+                        cascade_thresholds=(.80,.78,.75,.70),
+                        maximum_daily_picks=None, minimum_daily_picks=3)
+    assert metric["selected"] == 20
+    assert metric["qualified_picks_per_day"]["2026-10-04"] == 2
+    assert "2026-10-04" in metric["days_below_minimum"]
+    assert metric["applied_probability_floor_by_day"]["2026-10-04"] == .70
+    assert metric["minimum_daily_target_met"] is False
