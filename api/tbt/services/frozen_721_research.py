@@ -126,6 +126,106 @@ def exclude_repeated_events(rows):
     return result
 
 
+def _paired_diagnostics(rows, *, minimum_segment=30):
+    """Point-in-time, outcome-blind cohort coverage and descriptive winner scores.
+
+    Never infer missing surface from tournament identity and never fit or select
+    parameters from this cohort. Only rows with a verified settled outcome
+    contribute to model accuracy and probability scoring.
+    """
+    active = [r for r in rows if r.get("status") != "excluded"]
+    known_surfaces = {"hard", "clay", "grass", "carpet"}
+
+    def surface(r):
+        value = str(r.get("surface") or "").strip().lower()
+        return value if value in known_surfaces else "unknown"
+
+    settled = [r for r in active if r.get("status") == "settled"]
+
+    def scored(group):
+        n = len(group)
+        if not n:
+            return {"n": 0, "status": "NO_VERIFIED_OUTCOMES",
+                    "champion": None, "candidate": None,
+                    "champion_only_correct": 0, "candidate_only_correct": 0}
+        champion_hits = candidate_hits = champion_only = candidate_only = 0
+        champ_brier = cand_brier = champ_loss = cand_loss = 0.
+        for r in group:
+            truth = int(r["target_player1_win"])
+            p = float(r["production_player1_probability"])
+            q = float(r["challenger_player1_probability"])
+            pc, qc = (p >= 0.5) == bool(truth), (q >= 0.5) == bool(truth)
+            champion_hits += int(pc)
+            candidate_hits += int(qc)
+            champion_only += int(pc and not qc)
+            candidate_only += int(qc and not pc)
+            champ_brier += (p - truth) ** 2
+            cand_brier += (q - truth) ** 2
+            champ_loss -= math.log(p if truth else 1 - p)
+            cand_loss -= math.log(q if truth else 1 - q)
+        return {
+            "n": n,
+            "status": "DESCRIPTIVE_ONLY" if n < minimum_segment else "OBSERVED_NOT_CAUSAL",
+            "champion": {
+                "correct": champion_hits, "accuracy": round(champion_hits/n, 8),
+                "brier_score": round(champ_brier/n, 8),
+                "log_loss": round(champ_loss/n, 8),
+            },
+            "candidate": {
+                "correct": candidate_hits, "accuracy": round(candidate_hits/n, 8),
+                "brier_score": round(cand_brier/n, 8),
+                "log_loss": round(cand_loss/n, 8),
+            },
+            "champion_only_correct": champion_only,
+            "candidate_only_correct": candidate_only,
+        }
+
+    cover = {
+        "total_excluding_repeated_snapshots": len(active),
+        "by_tour": {tour: sum(str(r.get("tour")).upper() == tour for r in active)
+                    for tour in ("ATP", "WTA")},
+        "by_surface": {name: sum(surface(r) == name for r in active)
+                       for name in ("hard", "clay", "grass", "carpet", "unknown")},
+        "known_surface_rate": round(
+            sum(surface(r) != "unknown" for r in active) / len(active), 8
+        ) if active else None,
+        "unknown_surface_settled": sum(surface(r) == "unknown" for r in settled),
+        "unknown_surface_pending": sum(
+            surface(r) == "unknown" for r in active if r.get("status") == "pending"),
+        "no_surface_inference_or_backfill": True,
+    }
+    total = scored(settled)
+    reasons = []
+    if len(settled) < 200:
+        reasons.append("fewer_than_200_verified_independent_settlements")
+    if any(sum(str(r.get("tour")).upper() == tour for r in settled) < 50
+           for tour in ("ATP", "WTA")):
+        reasons.append("tour_split_insufficient")
+    if active and cover["known_surface_rate"] < .8:
+        reasons.append("prematch_surface_coverage_below_80_percent")
+    if (total["champion"] and total["candidate"] and
+            total["candidate"]["correct"] < total["champion"]["correct"]):
+        reasons.append("candidate_accuracy_below_champion")
+    return {
+        "status": "PROSPECTIVE_DIAGNOSTIC_NOT_MODEL_SELECTION",
+        "overall": total,
+        "tour": {
+            tour: scored([r for r in settled if str(r.get("tour")).upper() == tour])
+            for tour in ("ATP", "WTA")
+        },
+        "surface": {
+            name: scored([r for r in settled if surface(r) == name])
+            for name in ("hard", "clay", "grass", "carpet", "unknown")
+        },
+        "coverage": cover,
+        "review_blockers": reasons,
+        "minimum_segment_settled": minimum_segment,
+        "automatic_promotion": False,
+        "retraining_or_recalibration_performed": False,
+        "next_model_requires_independent_chronological_holdout": True,
+    }
+
+
 def research_frozen_721(payload, *, production_version, minimum_fit=200,
                         minimum_eval=100, minimum_tour_fit=100):
     """Diagnostic only: no production decision, writes, or provider requests."""
@@ -137,6 +237,7 @@ def research_frozen_721(payload, *, production_version, minimum_fit=200,
         minimum_fit=minimum_fit, minimum_eval=minimum_eval,
         minimum_tour_fit=minimum_tour_fit,
     )
+    result["prospective_diagnostics"] = _paired_diagnostics(rows)
     result.update({
         "candidate_tag": FROZEN_721_TAG,
         "candidate_version": FROZEN_721_VERSION,
