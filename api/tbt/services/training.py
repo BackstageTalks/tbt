@@ -362,6 +362,10 @@ def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
         blend_weight=float(selected.blend_weight),
         elo_weight=float(getattr(selected, "elo_weight", 0.0)),
         calibrator_kind=str(selected.calibrator.kind),
+        tour_calibrator_kinds={
+            tour: cal.kind for tour, cal in
+            (getattr(selected, "tour_calibrators", {}) or {}).items()
+        },
     )
 
     selected_metadata = dict(getattr(selected, "metadata", {}) or {})
@@ -1127,6 +1131,12 @@ def train_from_matches(
                 evaluation_model
                 .calibrator
                 .kind
+            ),
+            "tour_calibration_methods": dict(
+                (evaluation_model.metadata or {}).get("tour_calibration_methods") or {}
+            ),
+            "tour_calibration_validation": dict(
+                (evaluation_model.metadata or {}).get("tour_calibration_validation") or {}
             ),
         },
     }
