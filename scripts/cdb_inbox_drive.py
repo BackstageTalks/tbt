@@ -251,8 +251,11 @@ def fetch(folder_id: str, output: Path, *, state_path: Path | None = None,
             safe = re.sub(r"[^A-Za-z0-9_.-]", "_", Path(info["name"]).name)[:90]
             destination = output / (file_id + "__" + safe)
             destination.write_bytes(blob)
+            # Preserve actual Drive folder provenance for strict SOURCE-ONLY tour
+            # classification; never use it as match or player identity proof.
             entries.append({"id": file_id, "status": "fetched", "sha256": sha,
-                            "bytes": len(blob), "local_file": str(destination)})
+                            "bytes": len(blob), "local_file": str(destination),
+                            "source_path": str(info["path"])})
         updated[file_id] = fingerprint
     pending = sum(updated.get(info["id"]) != _fingerprint(info)
                   for info in inventory if Path(info["name"]).suffix.lower() in SUPPORTED)
