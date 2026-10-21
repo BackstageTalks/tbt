@@ -273,6 +273,10 @@ def build_segment_report(payload):
     captured_safe = []
     quarantined = 0
     for row in rows:
+        # Excluded duplicates and disqualified fixtures were never independent
+        # public opportunities; do not let them satisfy the daily three target.
+        if row["status"] == "excluded":
+            continue
         if (_time(row["scheduled_at"]) -
                 _time(row["captured_at"])).total_seconds() < MIN_CAPTURE_LEAD_SECONDS:
             if row["status"] == "settled":
