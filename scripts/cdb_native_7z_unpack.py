@@ -48,7 +48,9 @@ def source_path(entry: str, start: int, end: int) -> tuple[str, str] | None:
     if name == "UPSTREAM_README.md":
         return kind, name
     native = NATIVE.fullmatch(name)
-    if kind in {"atp", "wta"} and native:
+    if native:
+        if kind not in {"atp", "wta"}:
+            raise ValueError("Native match file in wrong archive root")
         tour, family, year = native.groups()
         if kind != tour or (tour == "atp" and family == "qual_itf") or (
             tour == "wta" and family in {"qual_chall", "futures"}
@@ -56,7 +58,9 @@ def source_path(entry: str, start: int, end: int) -> tuple[str, str] | None:
             raise ValueError("Native tour/source-family mismatch")
         return (kind, name) if start <= int(year) <= end else None
     slam = SLAM.fullmatch(name)
-    if kind == "slam_pointbypoint" and slam:
+    if slam:
+        if kind != "slam_pointbypoint":
+            raise ValueError("Slam point file in wrong archive root")
         return (kind, name) if start <= int(slam.group(1)) <= end else None
     return None
 
