@@ -105,7 +105,7 @@ jobs:
             "pairwise_years":pairwise["changed_years"],
           }
           (root/"preflight-receipt.json").write_text(
-            json.dumps(receipt,indent=2,sort_keys=True)+"\\n")
+            json.dumps(receipt,indent=2,sort_keys=True)+"\n")
           print("CDB_COMPLEMENT_FRESH_SHA_PREFLIGHT",
                 json.dumps(receipt,sort_keys=True),flush=True)
           PY
