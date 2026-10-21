@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 import math
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from _bootstrap import ROOT  # noqa: F401
 from release_store import ReleaseStore
@@ -30,6 +31,8 @@ from frozen_721_shadow_capture import SHADOW_TAG, LEDGER_ASSET, REPORT_ASSET
 
 DATA_REPO = "BackstageTalks/tbt-data"
 MIN_CAPTURE_LEAD_SECONDS = 15 * 60
+VIP_PROBABILITY_TIERS = (0.80, 0.78, 0.75, 0.70)
+MIN_EVIDENCE_FOR_HIT_RATE = 100
 
 def _time(value):
     result = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
@@ -143,6 +146,118 @@ def _paired_difference_ci(rows):
     return [_round(max(-1., average-radius)), _round(min(1., average+radius))]
 
 
+def _vip_local_day(row):
+    """Same 06:00 Europe/Bratislava betting-day boundary as public TOP."""
+    return (_time(row["scheduled_at"]).astimezone(ZoneInfo("Europe/Bratislava"))
+            - timedelta(hours=6)).date().isoformat()
+
+
+def _vip_confidence(row, model="challenger"):
+    p = float(row[model + "_player1_probability"])
+    return max(p, 1. - p)
+
+
+def _vip_outcome_metrics(rows, model="challenger"):
+    """Always score the side selected BEFORE the outcome was known."""
+    settled = [row for row in rows if row["status"] == "settled"]
+    wins = sum(
+        bool(float(row[model + "_player1_probability"]) >= .5)
+        == bool(row["target_player1_win"])
+        for row in settled
+    )
+    n = len(settled)
+    interval = [_round(x) for x in wilson_interval(wins, n)] if n else None
+    return {
+        "offered_before_settlement": len(rows),
+        "settled": n, "pending_or_void": len(rows) - n, "wins": wins,
+        "hit_rate": _round(wins / n) if n else None,
+        "mean_issued_raw_confidence": _round(
+            sum(_vip_confidence(row, model) for row in settled) / n) if n else None,
+        "hit_rate_ci95_wilson": interval,
+        "target_80_evidenced": bool(
+            n >= MIN_EVIDENCE_FOR_HIT_RATE and interval is not None
+            and interval[0] >= .80),
+        "target_87_evidenced": bool(
+            n >= MIN_EVIDENCE_FOR_HIT_RATE and interval is not None
+            and interval[0] >= .87),
+    }
+
+
+def _vip_prospective_scorecard(all_rows):
+    """Outcome-blind daily selector on already issued *raw model* forecasts.
+
+    This is a diagnostic, NOT a VIP price-qualified replay: there is no
+    immutable two-way bookmaker price or public data-depth shrinkage in this
+    shadow cohort. Select from settled AND pending rows before scoring any wins.
+    """
+    days = {}
+    for row in all_rows:
+        days.setdefault(_vip_local_day(row), []).append(row)
+    selected = []
+    daily = {}
+    for day, rows in sorted(days.items()):
+        applied = VIP_PROBABILITY_TIERS[-1]
+        for tier in VIP_PROBABILITY_TIERS:
+            applied = tier
+            if sum(_vip_confidence(row) + 1e-12 >= tier for row in rows) >= 3:
+                break
+        chosen = [row for row in rows if _vip_confidence(row) + 1e-12 >= applied]
+        selected.extend(chosen)
+        daily[day] = {
+            "captured": len(rows), "applied_raw_confidence_floor": applied,
+            "selected": len(chosen),
+            "below_three": len(chosen) < 3,
+            "settled_selected": sum(r["status"] == "settled" for r in chosen),
+        }
+    bins = [
+        ("80_plus", .80, 1.01), ("78_80", .78, .80),
+        ("75_78", .75, .78), ("70_75", .70, .75),
+    ]
+    return {
+        "status": "RAW_MODEL_PROSPECTIVE_DIAGNOSTIC_NOT_PRICE_QUALIFIED_VIP",
+        "scope": "only exact pinned pre-start frozen candidate/champion pairs, each scheduled local betting day",
+        "days_with_captured_cohort": len(daily),
+        "days_with_3plus_raw_qualifiers": sum(not x["below_three"] for x in daily.values()),
+        "daily": daily,
+        "all_selected": _vip_outcome_metrics(selected),
+        "core_80_plus": _vip_outcome_metrics([
+            r for r in selected if _vip_confidence(r) >= .80]),
+        "fallback_below_80": _vip_outcome_metrics([
+            r for r in selected if _vip_confidence(r) < .80]),
+        "by_tour": {tour: {
+            "selected": _vip_outcome_metrics([
+                r for r in selected if str(r["tour"]).upper() == tour]),
+            "core_80_plus": _vip_outcome_metrics([
+                r for r in selected
+                if str(r["tour"]).upper() == tour and _vip_confidence(r) >= .80]),
+            "fallback_below_80": _vip_outcome_metrics([
+                r for r in selected
+                if str(r["tour"]).upper() == tour and _vip_confidence(r) < .80]),
+        } for tour in ("ATP", "WTA")},
+        "by_raw_confidence_band": {
+            name: _vip_outcome_metrics([
+                r for r in selected if low <= _vip_confidence(r) < high])
+            for name, low, high in bins
+        },
+        "fixed_cumulative_thresholds": {
+            str(tier): _vip_outcome_metrics([
+                r for r in all_rows if _vip_confidence(r) + 1e-12 >= tier])
+            for tier in VIP_PROBABILITY_TIERS
+        },
+        "minimum_settled_for_hit_rate_evidence": MIN_EVIDENCE_FOR_HIT_RATE,
+        "fixed_tiers": list(VIP_PROBABILITY_TIERS),
+        "no_model_retrained": True, "model_promoted": False,
+        "provider_requests": 0,
+        "limitations": [
+            "This study uses raw model probabilities, not depth-adjusted published BlinQ confidence.",
+            "No verified pre-match bookmaker odds or TOP/Value eligibility gates exist in frozen shadow rows.",
+            "Captured fixtures may be only a subset of the full daily tennis board.",
+            "Only previously recorded forecast probabilities are scored; pending and void outcomes are never treated as wins or losses.",
+            "An 80% probability label does not establish 80% hit rate; no production selection change is authorized.",
+        ],
+    }
+
+
 def build_segment_report(payload):
     if not isinstance(payload, dict) or not isinstance(payload.get("source"), dict):
         raise ValueError("Private frozen cohort provenance required")
@@ -155,15 +270,17 @@ def build_segment_report(payload):
     if counts["settled"] != prior_counts["settled"]:
         raise ValueError("Deduplication may not silently remove settled outcomes")
     eligible = []
+    captured_safe = []
     quarantined = 0
     for row in rows:
-        if row["status"] != "settled":
-            continue
         if (_time(row["scheduled_at"]) -
                 _time(row["captured_at"])).total_seconds() < MIN_CAPTURE_LEAD_SECONDS:
-            quarantined += 1
+            if row["status"] == "settled":
+                quarantined += 1
             continue
-        eligible.append(row)
+        captured_safe.append(row)
+        if row["status"] == "settled":
+            eligible.append(row)
     # No fuzzy identity grouping, retrospective probabilities or missing results.
     event_keys = [
         (str(row.get("event_id") or row["match_id"]),
@@ -209,6 +326,7 @@ def build_segment_report(payload):
         "eligible_utc_days": len(days),
         "eligible_rows_by_utc_day": dict(sorted(days.items())),
         "overall": _paired_result(eligible),
+        "candidate_vip_raw_confidence_scorecard": _vip_prospective_scorecard(captured_safe),
         "by_tour": by_tour,
         "by_surface": by_surface,
         "by_champion_confidence": by_confidence,
