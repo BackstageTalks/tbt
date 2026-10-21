@@ -51,3 +51,6 @@ jobs:
             gh workflow run cdb-drive-inbox.yml -R "$GITHUB_REPOSITORY" --ref main -f catchup_remaining=4
             echo 'CDB_OPERATOR_DISPATCH_SUBMITTED_NOT_IMPORT_VERIFIED'
           fi
+
+# One-shot owner-authorized 2026-10-22 metadata/date QA replay after PR #953/#955.
+# Existing guarded Drive importer exclusively; source IDs are not CDB identities.
