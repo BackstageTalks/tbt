@@ -99,7 +99,10 @@ def test_wta_tour_calibrator_requires_both_proper_scores_on_calibration_only():
     # Lower log loss alone is not enough on WTA.
     assert not approved("wta", "platt", "identity", .500, .520, .250, .240)
     assert approved("wta", "platt", "identity", .500, .520, .230, .240)
-    # The established ATP selector remains loss-based.
-    assert approved("atp", "platt", "identity", .500, .520, .250, .240)
+    # ATP must now satisfy both proper scores, just like WTA.
+    assert not approved("atp", "platt", "identity", .500, .520, .250, .240)
+    assert approved("atp", "platt", "identity", .500, .520, .230, .240)
     assert not approved("wta", "identity", "identity", .480, .520, .220, .240)
     assert not approved("wta", "platt", "identity", .515, .520, .230, .240)
+    assert not approved("atp", "platt", "identity", .515, .520, .230, .240)
+    assert not approved("atp", "identity", "identity", .480, .520, .220, .240)
