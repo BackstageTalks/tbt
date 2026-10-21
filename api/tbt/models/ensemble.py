@@ -286,6 +286,12 @@ class TennisEnsemble:
                     score = (-accuracy, loss) if self.objective == "accuracy" else (loss, -accuracy)
                     choices.append((score, float(weight), elo_weight))
             _, self.blend_weight, self.elo_weight = min(choices, key=lambda item: item[0])
+            if self.objective == "log_loss" and "tour_atp" in cal.columns:
+                from .tour_blend_experiment import compare_tour_blends
+                self.metadata["tour_blend_experiment"] = compare_tour_blends(
+                    linear, boost, elo, y_cal, cal.tour_atp.to_numpy(dtype=float),
+                    split, (self.blend_weight, self.elo_weight),
+                )
             raw = self._raw(cal)
             kinds = ["identity", "platt"]
             if split >= 350 and len(np.unique(np.round(raw[:split], 3))) >= 20:
