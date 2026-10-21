@@ -33,6 +33,7 @@ jobs:
       BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
       WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
       GH_TOKEN: ${{ github.token }}
+      CDB_READ_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       DRY_RUN: ${{ (github.event_name == 'push' && !contains(github.event.head_commit.message, '[api-autofill-tick]')) || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +53,7 @@ jobs:
 
           REPO = os.environ["GITHUB_REPOSITORY"]
           TOKEN = os.getenv("GH_TOKEN", "")
+          CDB_READ_TOKEN = os.getenv("CDB_READ_TOKEN", "")
           WORKER = os.getenv("WORKER_TOKEN", "")
           BUDGET_URL = os.getenv("BUDGET_URL", "")
           DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
@@ -78,7 +80,7 @@ jobs:
           if local.hour == 19 and not (final_topup or new_day_start):
               print("No provider dispatch after 19:03 before the 19:10 reset except at 19:11.")
               sys.exit(0)
-          if not TOKEN or not WORKER or not BUDGET_URL.startswith("https://"):
+          if not TOKEN or not WORKER or not CDB_READ_TOKEN or not BUDGET_URL.startswith("https://"):
               raise SystemExit("Required GitHub / shared-budget credentials missing; fail closed")
 
           def get_json(url, token, worker=False):
@@ -92,6 +94,11 @@ jobs:
                   return json.load(response)
 
           def check_writers():
+              # Also inspect the authoritative private CDB tag: some writers
+              # run outside this repo or have workflow names not in this list.
+              # Never remove or time-expire a lock in this scheduler.
+              from scripts.api_writer_wait import read_cdb_writer_lock
+              active = read_cdb_writer_lock(get_json, CDB_READ_TOKEN)
               # Check all concurrent and pending runs, not just this scheduler.
               writer_paths = {
                   "data.yml", "training-data-enrichment.yml",
@@ -103,7 +110,6 @@ jobs:
                   "livetennisapi-public-sample.yml", "kaggle-hwaitt-history-enrichment.yml",
                   "tennis-data-historical-odds.yml", "rank-input-readback-closeout.yml",
               }
-              active = []
               for status in ("queued", "pending", "in_progress", "waiting", "requested"):
                   url = f"https://api.github.com/repos/{REPO}/actions/runs?status={status}&per_page=100"
                   result = get_json(url, TOKEN)
@@ -164,7 +170,8 @@ jobs:
               sys.exit(0)
 
 
-          # A busy canonical writer is deferred, not silently skipped.
+          # A busy canonical writer *or its authoritative private tag* is
+          # deferred, not silently skipped. An unobservable tag fails closed.
           # Leave the Git tag lock untouched while waiting. Keep the
           # window bounded below the 6-hour GitHub Actions job maximum.
           run_day = local.date()
