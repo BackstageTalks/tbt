@@ -123,6 +123,12 @@ def start(payload, actor):
     profile = payload.get("profile", "top-7.2.1")
     if profile not in {"standard", "top-7.2.1"}:
         raise ValueError("Neplatný tréningový profil.")
+    # Both Admin entrypoints share the same queue guard. A candidate training
+    # request must not leapfrog an active Drive import or shadow activation.
+    # Lazy import avoids a module cycle; an unavailable table fails closed.
+    from .model_lab import _row as lab_row
+    if lab_row("active") is not None:
+        raise TrainingBlocked("Model Factory má rozpracovanú operáciu. Obnov stav.")
     current = status()
     if not current["can_start"]:
         raise TrainingBlocked(current["reason"])
