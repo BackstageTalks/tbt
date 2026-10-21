@@ -16,6 +16,7 @@ import math
 from pathlib import Path
 
 MAX_CANDIDATES = 500
+MAX_AUDIT_INPUT_ROWS = 100_000
 ALLOWED_YEARS = set(range(2023, 2027))
 
 
@@ -26,7 +27,7 @@ def _json(path: Path) -> dict:
     return value
 
 
-def _records(path: Path) -> list[dict]:
+def _records(path: Path, *, max_rows: int = MAX_AUDIT_INPUT_ROWS) -> list[dict]:
     records = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip():
@@ -34,8 +35,8 @@ def _records(path: Path) -> list[dict]:
             if not isinstance(record, dict):
                 raise ValueError("Non-object stage row")
             records.append(record)
-            if len(records) > MAX_CANDIDATES:
-                raise ValueError("Unbounded candidate queue")
+            if len(records) > max_rows:
+                raise ValueError("Unbounded input audit")
     return records
 
 
@@ -82,7 +83,10 @@ def build(link_dir: Path, normalized_report: Path, stage_dir: Path,
     seen = set()
     reasons = Counter()
     years = Counter()
-    for row in _records(link_dir / "auto_linked.jsonl"):
+    linked = _records(link_dir / "auto_linked.jsonl")
+    if len(linked) > MAX_CANDIDATES:
+        raise ValueError("Unbounded candidate queue")
+    for row in linked:
         mid = str(row.get("match_id") or "")
         if not mid or mid in seen:
             raise ValueError("Duplicate/missing canonical candidate ID")
