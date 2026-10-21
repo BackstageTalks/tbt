@@ -59,12 +59,12 @@ def test_match_start_overrides_tourney_date_without_identity_shortcuts():
     assert good["winner_name"] == "Alpha One"
     for changed, reason in (
         ({"start_time_utc": "2026-10-18T00:05:00Z"},
-         "match_date_tournament_window_conflict"),
+         "start_time_outside_tournament_window"),
         ({"start_time_utc": "2026-09-30T23:00:00Z"},
-         "match_date_tournament_window_conflict"),
+         "start_time_outside_tournament_window"),
         ({"start_time_utc": "2026-10-17T19:05:00"},
-         "match_start_invalid"),
-        ({"match_date": "2026-10-16"}, "conflicting_match_dates"),
+         "start_time_utc_invalid"),
+        ({"match_date": "2026-10-16"}, "match_date_start_time_conflict"),
     ):
         row, why = parse(count_source(**changed), "atp_matches_2026.csv", 1)
         assert row is None and why == reason
@@ -86,7 +86,7 @@ def test_season_home_away_orientation_and_complementary_rates(tmp_path):
     assert row["l_break_points_saved_pct"] == "71"
     assert row["w_svpt"] == ""
     assert _service_stats("w", row)["service_points_won"] == pytest.approx(0.75)
-    assert _return_rate("l", row) == pytest.approx(0.25)
+    assert _return_rate("l", row) == pytest.approx(0.57)  # winner returns vs loser's 43% service
 
     input_folder = tmp_path / "input"
     input_folder.mkdir()
