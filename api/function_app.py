@@ -2665,6 +2665,50 @@ def internal_model_training_sync(req):
         return response({"error": "storage_unavailable"}, 503)
 
 
+@app.route(route="v1/admin/model-lab", methods=["GET", "POST"])
+def admin_model_lab(req):
+    """Admin-only queued operator controls; Azure never receives GitHub keys."""
+    from tbt.services import model_lab
+    try:
+        admin, denied = _admin_user(req)
+        if denied:
+            return denied
+        if req.method == "GET":
+            return response(model_lab.status())
+        if len(req.get_body()) > 4096:
+            return response({"error": "payload_too_large"}, 413)
+        payload = req.get_json()
+        if isinstance(payload, dict) and payload.get("action") == "acknowledge_failed":
+            return response(model_lab.acknowledge_failed(payload))
+        return response(model_lab.start(payload, admin.get("id", "")), 202)
+    except (TypeError, ValueError):
+        return response({"error": "Neplatná požiadavka na Model Lab."}, 400)
+    except model_lab.TrainingBlocked as exc:
+        return response({"error": str(exc)}, 409)
+    except model_lab.TrainingUnavailable as exc:
+        return response({"error": str(exc)}, 503)
+    except (AuthUnavailable, AdminStorageUnavailable):
+        return response({"error": "Model Lab úložisko nie je dostupné."}, 503)
+
+
+@app.route(route="v1/internal/model-lab-sync", methods=["POST"])
+def internal_model_lab_sync(req):
+    """Signed worker snapshot, one-shot claim and independent run verification."""
+    from tbt.services import model_lab
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    if len(req.get_body()) > 64000:
+        return response({"error": "payload_too_large"}, 413)
+    try:
+        return response(model_lab.sync(req.get_json()))
+    except (ValueError, TypeError, KeyError):
+        return response({"error": "invalid_snapshot"}, 400)
+    except model_lab.TrainingBlocked as exc:
+        return response({"error": str(exc)}, 409)
+    except AdminStorageUnavailable:
+        return response({"error": "model_lab_storage_unavailable"}, 503)
+
+
 @app.route(route="v1/admin/model-calibration", methods=["GET"])
 def admin_model_calibration(req):
     """Only verified admins can see private model-pair evaluation progress."""
