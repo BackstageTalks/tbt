@@ -173,3 +173,29 @@ def test_production_identity_mode_keeps_provider_reserve_and_header_attestation(
     assert 'BLINQ_PROVIDER_REQUEST_RESERVE=500' in clause
     assert 'BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER=true' in clause
     assert 'python scripts/verify_native_event_ids.py' in workflow
+
+
+def test_claim_diagnostics_do_not_promote_or_hide_metadata_gaps():
+    rows = [
+        Match("unscoped", provider_payload={"event_id": "foreign-alpha"}),
+        Match("native-claim", provider_payload={"_tbt_provider_event_id": "native-alpha",
+                                               "_tbt_source_category_id": "456"},
+              player2_id="111"),
+        Match("conflict", provider_payload={"event_id": "901", "provider_event_id": "902",
+                                            "_tbt_source_category_id": "456"},
+              round_name=""),
+    ]
+    report = identity_gap_inventory(
+        rows, start=date(2025, 1, 1), end=date(2025, 12, 31),
+        today=date(2026, 10, 21))
+    assert report["primary_blockers"]["existing_unusable_or_conflicting_event_claims"] == 3
+    assert report["existing_claim_diagnostics"]["unscoped_event_claim"] == 2
+    assert report["existing_claim_diagnostics"]["explicit_native_provider_claim"] == 1
+    assert report["existing_claim_diagnostics"]["multiple_distinct_claim_values"] == 1
+    assert report["existing_claim_diagnostics"]["non_positive_or_nonnumeric_claim"] == 2
+    assert report["existing_claim_secondary_blockers"]["missing_first_party_category"] == 1
+    assert report["existing_claim_secondary_blockers"]["missing_or_colliding_player_ids"] == 1
+    assert report["existing_claim_secondary_blockers"]["missing_round"] == 1
+    assert report["scheduled_days"] == 0
+    assert report["cdb_writes"] == report["native_provider_requests"] == 0
+    assert all(not eligible(m) for m in rows)
