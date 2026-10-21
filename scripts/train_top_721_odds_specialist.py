@@ -142,16 +142,43 @@ def _high_confidence_settled(frame, column):
     }
 
 
-def _top_three(frame, column, *, minimum_probability=None):
-    # Optional VIP research: a predeclared 80% gate, with no forced fill.
-    # Select before settlement; pending picks consume daily capacity.
+def _top_three(
+    frame, column, *, minimum_probability=None,
+    maximum_daily_picks=3, minimum_daily_picks=None,
+):
+    """Compare old capped TOP to uncapped VIP, selecting before settlement.
+
+    The VIP daily minimum is an evidence target, never a forced-fill rule.
+    All days in the offered universe count, including days with zero picks.
+    """
+    if maximum_daily_picks is not None and maximum_daily_picks < 1:
+        raise ValueError("Daily maximum must be positive or None")
+    if minimum_daily_picks is not None and minimum_daily_picks < 1:
+        raise ValueError("Daily minimum must be positive or None")
     eligible = frame if minimum_probability is None else frame.loc[
         frame[column] >= minimum_probability
     ]
     ranked = eligible.sort_values(
         ["betting_day", column, "event_id"],
         ascending=[True, False, True], kind="stable",
-    ).groupby("betting_day", sort=True, group_keys=False).head(3)
+    )
+    if maximum_daily_picks is not None:
+        ranked = ranked.groupby(
+            "betting_day", sort=True, group_keys=False,
+        ).head(maximum_daily_picks)
+    all_days = pd.Index(frame.betting_day.drop_duplicates().sort_values())
+    daily_counts = ranked.groupby("betting_day").size().reindex(
+        all_days, fill_value=0,
+    )
+    shortfall_days = (
+        [str(day) for day, count in daily_counts.items()
+         if count < minimum_daily_picks]
+        if minimum_daily_picks is not None else []
+    )
+    shortfall = (
+        int((minimum_daily_picks - daily_counts).clip(lower=0).sum())
+        if minimum_daily_picks is not None else 0
+    )
     settled = ranked.loc[ranked.outcome.isin(("win", "loss"))]
     n, wins = len(settled), int((settled.outcome == "win").sum())
     net = float(np.where(settled.outcome == "win", settled.odds - 1, -1).sum())
@@ -160,12 +187,20 @@ def _top_three(frame, column, *, minimum_probability=None):
         "selected": int(len(ranked)), "settled": n, "wins": wins,
         "hit_rate": wins / n if n else None,
         "hit_rate_ci95_wilson": interval,
+        "target_80_supported": n >= 100 and interval is not None and interval[0] >= 0.80,
         "target_87_supported": n >= 100 and interval is not None and interval[0] >= 0.87,
         "unsettled_selected": int(len(ranked) - n),
         "offered": int(len(frame)),
         "selection_coverage": len(ranked) / len(frame) if len(frame) else None,
         "roi": net / n if n else None, "net_units": net,
-        "days": int(frame.betting_day.nunique()),
+        "days": int(len(all_days)),
+        "maximum_daily_picks": maximum_daily_picks,
+        "minimum_daily_picks_target": minimum_daily_picks,
+        "days_meeting_minimum": int(len(all_days) - len(shortfall_days)),
+        "days_below_minimum": shortfall_days,
+        "daily_pick_shortfall": shortfall,
+        "minimum_daily_target_met": minimum_daily_picks is not None and not shortfall_days and bool(len(all_days)),
+        "qualified_picks_per_day": {str(day): int(count) for day, count in daily_counts.items()},
     }
 
 
@@ -209,7 +244,10 @@ def train_and_compare(
         "guardrails": {
             "odds": ">=1.50 including the exact TOP boundary",
             "time": "quote_at <= snapshot_at < scheduled_at",
-            "max_daily_picks": 3,
+            "legacy_comparator_max_daily_picks": 3,
+            "vip_max_daily_picks": None,
+            "vip_min_daily_picks_target": 3,
+            "vip_minimum_probability": 0.80,
             "production_writes": 0,
             "original_champion_retrained": False,
         },
@@ -236,10 +274,14 @@ def train_and_compare(
             "specialist": _top_three(offered, "specialist_probability"),
         },
         "vip_selective_metrics": {
-            "blinq": _top_three(offered, "public_top_probability", minimum_probability=.80),
-            "raw_model": _top_three(offered, "model_probability", minimum_probability=.80),
-            "market": _top_three(offered, "fair_market_probability", minimum_probability=.80),
-            "specialist": _top_three(offered, "specialist_probability", minimum_probability=.80),
+            "blinq": _top_three(offered, "public_top_probability", minimum_probability=.80,
+                                maximum_daily_picks=None, minimum_daily_picks=3),
+            "raw_model": _top_three(offered, "model_probability", minimum_probability=.80,
+                                    maximum_daily_picks=None, minimum_daily_picks=3),
+            "market": _top_three(offered, "fair_market_probability", minimum_probability=.80,
+                                 maximum_daily_picks=None, minimum_daily_picks=3),
+            "specialist": _top_three(offered, "specialist_probability", minimum_probability=.80,
+                                     maximum_daily_picks=None, minimum_daily_picks=3),
         },
         "top_80_reliability": {
             "blinq": _high_confidence_settled(test, "public_top_probability"),
@@ -253,14 +295,18 @@ def train_and_compare(
             "status": "RESEARCH_ONLY_NOT_PROMOTED",
             "coverage_must_be_reported": True,
             "research_minimum_probability": 0.80,
-            "daily_max": 3,
+            "daily_max": None,
+            "daily_minimum_target": 3,
+            "publish_at_least_three_only_if_qualified": True,
             "no_forced_picks": True,
+            "retrospective_daily_minimum_is_not_a_production_promise": True,
         },
         "limitations": [
             "Small retrospective snapshot sample, previously explored",
             "Existing candidate data may be conditioned on the old selector; full-board coverage is not established",
             "The public TOP baseline uses data-depth-shrunk probability, not raw model probability",
-            "80% reliability requires independently unseen, adequately sized priced holdout",
+            "80% probability is not proof of 80% hit rate; both need independent priced holdout",
+            "At least three qualifying picks per day is a coverage target, not a reason to lower the 80% gate",
             "No independently unseen forward holdout or fresh market coverage",
             "Only price-conditioned calibration of existing model, not a new tennis model",
         ],
