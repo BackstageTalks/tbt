@@ -6,9 +6,25 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
 from tbt.services import model_training as m
+from tbt.services import model_lab
 
 
 class TrainingTests(unittest.TestCase):
+    def setUp(self):
+        # Queue tests operate against fake Admin storage; the cross-queue
+        # guard is mocked unless a case explicitly simulates Lab contention.
+        active = patch.object(model_lab, "_row", return_value=None)
+        active.start()
+        self.addCleanup(active.stop)
+
+    def test_model_factory_active_operation_blocks_training(self):
+        with patch.object(model_lab, "_row", return_value={"id": "busy"}), \
+             patch.object(m, "status", return_value={"can_start": True, "base": "7"}), \
+             patch.object(m, "_table") as table:
+            with self.assertRaises(m.TrainingBlocked):
+                m.start({"profile": "top-7.2.1"}, "admin")
+            table.assert_not_called()
+
     def test_busy_blocks_before_claim(self):
         with patch.object(m, "status", return_value={"can_start": False, "reason": "busy"}), patch.object(m, "_table") as table:
             with self.assertRaises(m.TrainingBlocked): m.start({}, "admin")
