@@ -38,7 +38,7 @@ def test_small_tour_groups_keep_shared_global_calibrator():
     )
     assert selected == {}
     assert evidence["wta"]["status"] == "INSUFFICIENT_DISJOINT_CALIBRATION"
-    assert evidence["atp"]["status"] == "INSUFFICIENT_DISJOINT_CALIBRATION"
+    assert evidence["atp"]["status"] == "GLOBAL_RETAINED"  # enough rows, no improvement margin
 
 
 def test_candidate_subgroup_inference_is_symmetry_preserving_and_legacy_safe():
