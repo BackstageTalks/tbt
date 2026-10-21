@@ -100,9 +100,9 @@ def _resolved_match_date(lookup):
     start_raw = str(lookup.get("starttimeutc") or "").strip()
     start_day = _utc_start(start_raw) if start_raw else ""
     if start_raw and not start_day:
-        return "", "match_start_invalid"
+        return "", "start_time_utc_invalid"
     if match_day and start_day and match_day != start_day:
-        return "", "conflicting_match_dates"
+        return "", "match_date_start_time_conflict"
     day = start_day or match_day or tournament_day or iso_date(
         lookup.get("eventdate") or lookup.get("date")
     )
@@ -114,7 +114,7 @@ def _resolved_match_date(lookup):
         span = (datetime.strptime(day, "%Y%m%d") -
                 datetime.strptime(tournament_day, "%Y%m%d")).days
         if not 0 <= span <= 16:
-            return "", "match_date_tournament_window_conflict"
+            return "", "start_time_outside_tournament_window"
     return day, ""
 
 
