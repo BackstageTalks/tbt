@@ -57,7 +57,7 @@ def run(*argv):
     return p.stdout.strip()
 
 
-def verify_job_identity():
+def verify_job_identity(*, require_writer_lock: bool = True):
     if (os.environ.get("GITHUB_REPOSITORY") != "BackstageTalks/tbt"
             or os.environ.get("GITHUB_ACTIONS") != "true"
             or not os.environ.get("GH_TOKEN")
@@ -67,8 +67,9 @@ def verify_job_identity():
         raise RuntimeError("Private GitHub Actions run identity/permission required")
     if os.environ.get("TBT_DATA_REPOSITORY", REPO) != REPO:
         raise RuntimeError("Unexpected private CDB repository")
-    from cdb_global_writer_lock import verify
-    verify(REPO, ROOT / ".cdb-global-writer-lock.json")
+    if require_writer_lock:
+        from cdb_global_writer_lock import verify
+        verify(REPO, ROOT / ".cdb-global-writer-lock.json")
     if run("gh", "repo", "view", REPO, "--json", "visibility", "--jq", ".visibility") != "PRIVATE":
         raise RuntimeError("Immutable backups require a PRIVATE data repository")
 
@@ -376,10 +377,10 @@ def prepare():
     return cert
 
 
-def validate_certificate():
+def validate_certificate(*, require_writer_lock: bool = True):
     if not CERT.is_file():
         raise RuntimeError("Missing independently verified immutable backup certificate")
-    verify_job_identity()
+    verify_job_identity(require_writer_lock=require_writer_lock)
     cert = json.loads(CERT.read_text(encoding="utf-8"))
     if (cert.get("schema") != 1
             or cert.get("status") != "VERIFIED_FULL_INPUTS_AND_ISOLATED_RESTORE"
