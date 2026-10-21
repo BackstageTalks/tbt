@@ -29,4 +29,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Synchronize queued protected candidate training\n        run: python scripts/admin_training_worker.py\n      - name: Synchronize Model Lab and dispatch at most one guarded operation\n        run: python scripts/admin_model_lab_worker.py
+      - name: Synchronize queued protected candidate training
+        run: python scripts/admin_training_worker.py
+      - name: Synchronize Model Lab and dispatch at most one guarded operation
+        run: python scripts/admin_model_lab_worker.py
