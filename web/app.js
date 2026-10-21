@@ -4969,7 +4969,8 @@
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="import_drive" '+(canActivate?'':'disabled')+'>Importovať 100 Drive súborov</button> '+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(canActivate?'':'disabled')+'>Nezávislý shadow audit</button> '+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="refresh_tests" '+(canActivate?'':'disabled')+'>Synchronizovať výsledky</button>'+
-      renderAdminTraining()+'</details></section>';
+      '<p>Úplný priebeh tréningu a uložené kandidáty možno overiť v GitHub Actions a súkromnom dátovom repozitári. Produkcia sa pri tréningu ani pri shadow aktivácii nepovyšuje.</p>'+
+      '</details></section>';
   }
   async function loadAdminModelLab(startOperation='', acknowledge=false){
     if(state.adminModelLabBusy)return;
