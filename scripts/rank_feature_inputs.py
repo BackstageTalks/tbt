@@ -165,6 +165,7 @@ def load_rank_feature_inputs(
     repository: str,
     cache_root: str | Path,
     matches: Iterable,
+    *, frozen: bool = False,
 ) -> RankFeatureInputs:
     """Load the exact same verified rank-history sources for train and serving.
 
@@ -174,6 +175,11 @@ def load_rank_feature_inputs(
     profiles used by the research finalizer.
     """
     root = Path(cache_root)
+    if frozen:
+        from guarded_candidate_backup import BASE, REPO, validate_certificate
+        if repository != REPO or root.resolve() != (BASE / 'rank-feature-inputs').resolve():
+            raise ValueError('Frozen ranking source must be the certified training directory')
+        validate_certificate(require_writer_lock=False)
     source = root / "source"
     profiles = root / "profiles"
     atp_dir = root / "atp"
@@ -185,16 +191,19 @@ def load_rank_feature_inputs(
             shutil.rmtree(path)
         path.mkdir(parents=True, exist_ok=True)
 
-    manifest = _source_manifest(repository)
-    research = ReleaseStore(repository, RESEARCH_RELEASE, source)
-    available = research._asset_names()
+    metadata = root.parent / 'training-source-metadata'
+    manifest = (json.loads((metadata / 'rank_source_acquisition.json').read_text(encoding='utf-8'))
+                if frozen else _source_manifest(repository))
     required_assets = {ATP_ASSET, WTA_ASSET}
-    missing = sorted(required_assets - available)
-    if missing:
-        raise FileNotFoundError(
-            "Verified rank-history research assets missing: " + ", ".join(missing)
-        )
-    research.download(extra_names=tuple(sorted(required_assets)))
+    if not frozen:
+        research = ReleaseStore(repository, RESEARCH_RELEASE, source)
+        available = research._asset_names()
+        missing = sorted(required_assets - available)
+        if missing:
+            raise FileNotFoundError(
+                "Verified rank-history research assets missing: " + ", ".join(missing)
+            )
+        research.download(extra_names=tuple(sorted(required_assets)))
 
     source_rows = {}
     for asset in sorted(required_assets):
@@ -216,18 +225,16 @@ def load_rank_feature_inputs(
     _safe_extract(source / ATP_ASSET, atp_dir)
     _safe_extract(source / WTA_ASSET, wta_dir)
 
-    supplement_audit = _repo_json(repository, WTA_OFFICIAL_SUPPLEMENT_AUDIT)
+    supplement_audit = (json.loads((metadata / 'wta_supplement_audit.json').read_text(encoding='utf-8'))
+                        if frozen else _repo_json(repository, WTA_OFFICIAL_SUPPLEMENT_AUDIT))
     supplement_expected = str(
         ((supplement_audit.get("singles") or {}).get("gzip_sha256") or "")
     ).strip()
     if len(supplement_expected) != 64:
         raise ValueError("WTA official supplement audit lacks a valid singles SHA-256")
     wta_supplement = source / Path(WTA_OFFICIAL_SUPPLEMENT_PATH).name
-    _download_repo_binary(
-        repository,
-        WTA_OFFICIAL_SUPPLEMENT_PATH,
-        wta_supplement,
-    )
+    if not frozen:
+        _download_repo_binary(repository, WTA_OFFICIAL_SUPPLEMENT_PATH, wta_supplement)
     supplement_actual = _sha256(wta_supplement)
     if supplement_actual != supplement_expected:
         raise ValueError("WTA official supplement checksum mismatch")
@@ -249,12 +256,13 @@ def load_rank_feature_inputs(
     atp_rankings = _ranking_files(atp_dir, "atp")
     wta_rankings = _ranking_files(wta_dir, "wta")
 
-    profile_store = ReleaseStore(repository, PLAYER_ASSET_RELEASE, profiles)
-    profile_store.download(
-        extra_names=("player_profiles.json",),
-        required_names=("player_profiles.json",),
-        require_bundle_manifest=True,
-    )
+    if not frozen:
+        profile_store = ReleaseStore(repository, PLAYER_ASSET_RELEASE, profiles)
+        profile_store.download(
+            extra_names=("player_profiles.json",),
+            required_names=("player_profiles.json",),
+            require_bundle_manifest=True,
+        )
     profile_path = profiles / "player_profiles.json"
     by_tour_id, by_id = load_profiles(profile_path)
 

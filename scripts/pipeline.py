@@ -892,6 +892,7 @@ def main():
             args.data_repository,
             cache / "rank-feature-inputs",
             matches,
+            frozen=bool(frozen),
         )
         atp_rank_history = rank_inputs.atp
         wta_rank_history = rank_inputs.wta
