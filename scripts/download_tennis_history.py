@@ -32,6 +32,7 @@ from release_store import ReleaseStore
 from date_window import history_window
 from audit_statistics_inventory import _quality_ready, statistics_value_change
 from adaptive_statistics_queue import AdaptiveStatisticsQueue
+from recover_native_event_id import candidate_days, recover_day
 
 # Priorities from five independently read-back VERIFIED CDB statistics runs on
 # 2026-10-20 (11,564 paid calls; 135,213 persisted new values). WTA 2023
@@ -490,7 +491,9 @@ def main():
     parser.add_argument("--start", default=None, help="Optional oldest date; overrides lookback")
     parser.add_argument("--end", default=None, help="Optional newest date; default yesterday UTC")
     parser.add_argument("--lookback-days", type=int, default=1095)
-    parser.add_argument("--mode", choices=["history", "statistics", "extras"], default="history")
+    parser.add_argument("--mode", choices=["history", "statistics", "extras", "identity"], default="history")
+    parser.add_argument("--identity-max-days", type=int, default=40,
+                        help="Maximum native provider calendar dates for event-ID recovery")
     parser.add_argument("--targeted-statistics", action="store_true",
                         help="Queue only identifiable missing fields whose retry is due, recent years first")
     parser.add_argument("--target-tour", choices=("atp", "wta"), default=None,
@@ -516,6 +519,8 @@ def main():
         parser.error(str(exc))
     if not 1 <= args.max_requests <= 12000:
         parser.error("max-requests must be 1..12000")
+    if not 1 <= args.identity_max_days <= 366:
+        parser.error("identity-max-days must be 1..366")
     if not settings.rapidapi_key:
         parser.error("Set RAPIDAPI_KEY before starting")
     if settings.rapidapi_host != "tennisapi1.p.rapidapi.com" or settings.rapidapi_base_url != "https://tennisapi1.p.rapidapi.com":
@@ -647,6 +652,8 @@ def main():
     extras_changed_years = set()
     extras_processed_by_year = Counter()
     provider_quarantine = []
+    identity_recovered_expected = {}
+    identity_changed_years = set()
     enricher = None
     primary_error = None
     primary_traceback = None
@@ -654,6 +661,45 @@ def main():
     try:
         if args.mode == "history":
             download_days(provider, matches, progress, start, end, checkpoint, provider_quarantine)
+        elif args.mode == "identity":
+            # Use the same first-party TennisApi calendar as the history collector.
+            # This branch NEVER promotes cross-provider research candidates.
+            attempts = progress.setdefault("identity_day_attempts", {})
+            planned = candidate_days(matches, start=start, end=end,
+                                     attempts=attempts, max_days=args.identity_max_days)
+            report["identity_candidate_days"] = len(planned)
+            report["identity_candidate_rows"] = sum(row[2] for row in planned)
+            changed = set()
+            for index, (day, tours, _total) in enumerate(planned, 1):
+                requests_before = provider.request_count
+                source_rows = []
+                for tour in tours:
+                    source_rows.extend(provider.matches_for_day(tour, day, historical=True))
+                before_stats = {
+                    str(m.match_id): dict(m.stats or {})
+                    for m in matches
+                    if m.is_completed and m.scheduled_at.astimezone(timezone.utc).date() == day
+                }
+                updates, outcomes = recover_day(matches, source_rows, day=day)
+                for mid, row in updates.items():
+                    row["stats_before"] = before_stats[mid]
+                    identity_recovered_expected[mid] = row
+                    changed.add(row["year"])
+                    identity_changed_years.add(row["year"])
+                for key, amount in outcomes.items():
+                    if isinstance(amount, int) and not isinstance(amount, bool):
+                        report["identity_" + key] += amount
+                attempts[day.isoformat()] = {
+                    "at": datetime.now(timezone.utc).isoformat(),
+                    "recovered": len(updates),
+                    "api_requests": provider.request_count - requests_before,
+                }
+                report["identity_scanned_days"] += 1
+                # Reuse the only approved publisher, checkpoint and writer lock.
+                if index % 10 == 0:
+                    checkpoint(changed, True)
+                    changed.clear()
+            checkpoint(changed, True)
         elif args.mode == "extras":
             changed = set()
             pending = _extras_candidates(matches, start, end)
@@ -796,6 +842,20 @@ def main():
                     ),
                     "policy": "Actual full serve+return readiness transitions; cache/local gains separated. Denominator includes provider retries/failures. Not an estimate of model accuracy gain.",
                 }
+            if args.mode == "identity":
+                output_report["identity_backfill"] = {
+                    "recovered_native_event_ids": len(identity_recovered_expected),
+                    "changed_years": sorted(identity_changed_years),
+                    "provider": "tennisapi1_native_calendar",
+                    "identity_evidence": "native_category_two_participants_round_winner_day_unique",
+                    "cross_provider_guesses": 0,
+                    "raw_statistics_overwrites": 0,
+                    "independent_cdb_readback_pending": True,
+                }
+                write_json(directory / "identity_expected.json", {
+                    "schema": 1, "years": sorted(identity_changed_years),
+                    "recovered": identity_recovered_expected,
+                })
             if args.mode == "extras":
                 output_report["extras_observed_matches"] = len(extras_expected)
                 output_report["extras_processed_by_year"] = dict(extras_processed_by_year)
