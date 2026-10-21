@@ -81,16 +81,15 @@ def test_owned_frame_augments_in_place_without_losing_rows():
     assert frame["wta_season_stats_known_both"].eq(0.0).all()
 
 
-def test_one_shot_full_fit_only_after_successful_morning_and_never_promotes():
+def test_retired_one_shot_cannot_bypass_current_candidate_readiness():
     from pathlib import Path
-    workflow = (Path(__file__).resolve().parents[1] /
-        ".github/workflows/one-shot-20261020-post-morning-calibration.yml"
-    ).read_text(encoding="utf-8")
-    assert "workflow_run:" in workflow
-    assert "BlinQ morning prediction refresh" in workflow
-    assert "github.event.workflow_run.conclusion == 'success'" in workflow
-    assert "2026-10-20" in workflow
-    assert "protected-frozen-cdb-candidate.yml/runs?per_page=100" in workflow
-    assert "-f training_profile=top-7.2.1" in workflow
-    assert "-f promote=true" not in workflow
-    assert "-f mode=train" not in workflow
+    workflows = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+    assert not (workflows / "one-shot-20261020-post-morning-calibration.yml").exists()
+    morning = (workflows / "morning-refresh.yml").read_text(encoding="utf-8")
+    assert "BlinQ morning prediction refresh" in morning
+    assert "protected-frozen-cdb-candidate.yml" in morning
+    assert "ready_for_retrain // false" in morning
+    assert "vars.BLINQ_MORNING_CANDIDATE_ENABLED || 'false'" in morning
+    assert "-f training_profile=top-7.2.1" in morning
+    assert "-f promote=true" not in morning
+    assert "-f mode=train" not in morning

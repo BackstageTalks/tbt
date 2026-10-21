@@ -5,9 +5,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 MARKER=".github/cdb-gap-20261015-request.json"
 READERS={
-    "blinq-drive-cdb-gap-once.yml",
     "blinq-current-source-field-delta.yml",
-    "blinq-uploaded-crosswalk-recheck-once.yml",
 }
 WRITERS={"blinq-uploaded-2025-26-cdb-guarded.yml"}
 

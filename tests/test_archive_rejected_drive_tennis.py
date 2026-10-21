@@ -130,15 +130,14 @@ class RejectedSourcesTests(unittest.TestCase):
             a.build(self.root,self.out)
         self.assertFalse(self.out.exists())
 
-    def test_github_release_sanitized_wta_filename_is_strictly_restored(self):
-        workflow = (Path(__file__).resolve().parents[1] /
-                    ".github/workflows/blinq-rejected-drive-evidence-once.yml").read_text()
-        self.assertIn("gh_name='WTA.Tennis.2007.-.2026.Daily.update.xlsx'", workflow)
-        self.assertIn("original='WTA Tennis 2007 - 2026 Daily update.xlsx'", workflow)
-        self.assertIn('mv -- "$gh_name" "$original"', workflow)
-        self.assertIn('test -f "$original"', workflow)
-        self.assertIn("sha256sum -c SHA256SUMS", workflow)
-        self.assertIn("duplicate original and GitHub-normalized WTA assets", workflow)
-        self.assertNotIn("schedule:", workflow)
+    def test_retired_rejected_drive_job_cannot_run_without_review(self):
+        # The historical one-shot download/restore workflow is retired.
+        # The source parser remains available for manual provenance review,
+        # but must not activate a CDB writer by itself.
+        workflows = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+        self.assertFalse((workflows / "blinq-rejected-drive-evidence-once.yml").exists())
+        self.assertFalse((workflows / "blinq-rejected-drive-private-verify-once.yml").exists())
+        self.assertEqual(a.SOURCES["wta"][0], "WTA Tennis 2007 - 2026 Daily update.xlsx")
+
 
 if __name__=="__main__":unittest.main()
