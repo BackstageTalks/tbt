@@ -412,8 +412,10 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
                         continue
                     tables[row["league"]].append(row)
                     if folder_tour and not tour_from_filename(member_name) and isinstance(raw, dict):
-                        row_keys = {key(x) for x in raw}
-                        if not row_keys.intersection({"league", "tour", "circuit", "tourtypehuman"}):
+                        row_values = {key(x): str(value or "").strip()
+                                      for x, value in raw.items() if x is not None}
+                        if not any(row_values.get(name) for name in
+                                   ("league", "tour", "circuit", "tourtypehuman")):
                             counts["rows_rescued_by_sha_verified_drive_folder_tour"] += 1
                 for tour, accepted in tables.items():
                     if not accepted:
