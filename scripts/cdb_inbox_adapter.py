@@ -80,7 +80,7 @@ def iso_date(value):
 def _utc_start(value):
     """Accept only a timestamp with a genuine explicit UTC offset."""
     raw = str(value or "").strip()
-    if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})", raw):
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})", raw):
         return ""
     try:
         value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
@@ -157,7 +157,7 @@ def _season_match(lookup):
         if score_winner != code:
             return None, "season_score_winner_conflict"
     timestamp = str(lookup["datetimestamp"]).strip()
-    if not re.fullmatch(r"[1-9]\\d{8,10}", timestamp):
+    if not re.fullmatch(r"[1-9]\d{8,10}", timestamp):
         return None, "date_missing_or_invalid"
     try:
         day = datetime.fromtimestamp(int(timestamp), tz=timezone.utc).date()
@@ -175,7 +175,7 @@ def _season_match(lookup):
             return None, "conflicting_match_dates"
     tournament = str(lookup["tournament"]).strip()
     # Only strip an explicit tour suffix. Tour remains independently required.
-    tournament = re.sub(r"\\s+" + tour + r"$", "", tournament, flags=re.I).strip()
+    tournament = re.sub(r"\s+" + tour + r"$", "", tournament, flags=re.I).strip()
     winner_side, loser_side = ("home", "away") if code == "1" else ("away", "home")
     row = {field: "" for field in FIELDS}
     row.update({
@@ -192,7 +192,7 @@ def _season_match(lookup):
     for label, side in (("w", winner_side), ("l", loser_side)):
         for source_field, target in (("aces", "ace"), ("doublefaults", "df")):
             count = str(lookup.get(side + source_field) or "").strip()
-            if re.fullmatch(r"(?:0|[1-9]\\d{0,3})", count):
+            if re.fullmatch(r"(?:0|[1-9]\d{0,3})", count):
                 row[f"{label}_{target}"] = count
     # The same point is a service win for one player and a return loss
     # for their opponent. Enforce this before retaining either percentage.
