@@ -134,3 +134,66 @@ def test_season_rejects_nonfinished_ambiguous_winners_and_unverified_tour():
         row, why = parse(season_source(**changes), "2026-atp-season.csv", 1)
         assert row is None and why == reason
 
+
+
+def test_home_away_full_pipeline_is_staged_dryrun_and_local_exact_only(tmp_path):
+    """Synthetic full match names prove the path; abbreviated real names get no shortcut."""
+    import json
+    import os
+    import shutil
+    import subprocess
+    import sys
+
+    from scripts.cdb_inbox_stage import run as strict_stage
+    from scripts.offline_exact_cdb_write import verify_persisted
+    from tbt.data.history_snapshot import write_year_partition
+    from tbt.schemas import MatchRecord
+
+    before, after, source = (tmp_path / n for n in ("before", "after", "source"))
+    before.mkdir()
+    source.mkdir()
+    canonical = MatchRecord(
+        match_id="season-schema-2026", tour="atp",
+        scheduled_at=datetime(2026, 10, 17, 12, tzinfo=timezone.utc),
+        player1_id="canonical-alpha", player1_name="Alpha One",
+        player2_id="canonical-beta", player2_name="Beta Two",
+        surface="hard", tournament="Vienna", tournament_id="vienna-2026",
+        tournament_level="A", round_name="QF",
+        winner_id="canonical-beta", status="completed",
+        best_of=3, stats={}, provider_payload={},
+    )
+    write_year_partition([canonical], before, 2026)
+    observed = season_source()
+    with (source / "2026-atp-season.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(observed))
+        writer.writeheader()
+        writer.writerow(observed)
+
+    normalized = normalize_batch(source, tmp_path / "normalized")
+    assert normalized["counts"]["normalized_rows"] == 1
+    staged = strict_stage(tmp_path / "normalized/report.json", before, tmp_path / "stage")
+    assert staged["eligible_matches"] == 1, staged
+    assert staged["eligible_new_values"] >= 8
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join((".", "api", "scripts", env.get("PYTHONPATH", "")))
+    importer = "scripts/import_offline_linked_serve_return.py"
+    stage_path = str(tmp_path / "stage/eligible.jsonl")
+    subprocess.run([sys.executable, importer, "--stage", stage_path,
+                    "--history-dir", str(before), "--out-dir", str(tmp_path / "dryrun")],
+                   check=True, env=env, capture_output=True, text=True)
+    dry = json.loads((tmp_path / "dryrun/report.json").read_text())
+    assert dry["production_mutated"] is False
+    assert dry["counts"]["updated"] == 1
+    shutil.copytree(before, after)
+    subprocess.run([sys.executable, importer, "--stage", stage_path,
+                    "--history-dir", str(after), "--out-dir", str(tmp_path / "local"),
+                    "--write-partitions", "--write-history-dir", str(after),
+                    "--exact-stats-only"],
+                   check=True, env=env, capture_output=True, text=True)
+    linked = [json.loads(line) for line in (tmp_path / "stage/eligible.jsonl").read_text().splitlines()]
+    proof = verify_persisted(before, after, linked, [2026])
+    assert proof["enriched_matches"] == 1
+    assert proof["added_values"] == staged["eligible_new_values"]
+    assert proof["existing_values_overwritten"] == 0
+
