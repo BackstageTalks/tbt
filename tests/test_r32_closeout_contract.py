@@ -32,10 +32,10 @@ def test_r32_top_short_odds_boundary_is_gapless_and_only_probability_relaxes():
     top = UI["market_rules"]["top_daily"]
     assert "PRIME_MAX_ODDS_EXCLUSIVE = 1.50" in market
     assert "TOP_FALLBACK_MIN_ODDS = 1.50" in market
-    assert "TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.65" in market
+    assert "TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.70" in market
     assert top["min_odds"] == 1.5
     assert top["fallback_min_odds"] == 1.5
-    assert [x["min_probability"] for x in top["dynamic_fallback_tiers"]] == [.67, .66, .65]
+    assert [x["min_probability"] for x in top["dynamic_fallback_tiers"]] == [.78, .75, .70]
     assert {x["min_odds"] for x in top["dynamic_fallback_tiers"]} == {1.5}
     assert UI["market_rules"]["match_winner_assignment"]["exclusive"] is True
     assert UI["market_rules"]["match_winner_assignment"]["priority"][:2] == ["top200", "value"]
