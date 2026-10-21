@@ -11,10 +11,11 @@ import csv
 import hashlib
 import io
 import json
+import math
 import re
 import zipfile
 from collections import Counter
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 MAX_FILE_BYTES = 64 * 1024 * 1024
@@ -30,6 +31,11 @@ FIELDS = (
     "w_ace", "w_df", "w_svpt", "w_1stIn", "w_1stWon", "w_2ndWon",
     "w_bpSaved", "w_bpFaced", "l_ace", "l_df", "l_svpt",
     "l_1stIn", "l_1stWon", "l_2ndWon", "l_bpSaved", "l_bpFaced",
+    # Explicit observed percentages, never fabricated service-point counts.
+    "w_service_points_won_pct", "w_return_points_won_pct",
+    "w_break_points_won_pct", "w_break_points_saved_pct",
+    "l_service_points_won_pct", "l_return_points_won_pct",
+    "l_break_points_won_pct", "l_break_points_saved_pct",
 )
 ALIASES = {
     "league": ("league", "tour", "circuit"),
@@ -70,6 +76,143 @@ def iso_date(value):
         except ValueError:
             pass
     return ""
+
+def _utc_start(value):
+    """Accept only a timestamp with a genuine explicit UTC offset."""
+    raw = str(value or "").strip()
+    if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})", raw):
+        return ""
+    try:
+        value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return value.astimezone(timezone.utc).strftime("%Y%m%d")
+    except ValueError:
+        return ""
+
+
+def _resolved_match_date(lookup):
+    """Use explicit match timestamps, never silently prefer tournament start."""
+    tournament_raw = str(lookup.get("tourneydate") or "").strip()
+    tournament_day = iso_date(tournament_raw) if tournament_raw else ""
+    match_raw = str(lookup.get("matchdate") or "").strip()
+    match_day = iso_date(match_raw) if match_raw else ""
+    if match_raw and not match_day:
+        return "", "date_missing_or_invalid"
+    start_raw = str(lookup.get("starttimeutc") or "").strip()
+    start_day = _utc_start(start_raw) if start_raw else ""
+    if start_raw and not start_day:
+        return "", "match_start_invalid"
+    if match_day and start_day and match_day != start_day:
+        return "", "conflicting_match_dates"
+    day = start_day or match_day or tournament_day or iso_date(
+        lookup.get("eventdate") or lookup.get("date")
+    )
+    if not day:
+        return "", "date_missing_or_invalid"
+    if (start_day or match_day) and tournament_raw:
+        if not tournament_day:
+            return "", "date_missing_or_invalid"
+        span = (datetime.strptime(day, "%Y%m%d") -
+                datetime.strptime(tournament_day, "%Y%m%d")).days
+        if not 0 <= span <= 16:
+            return "", "match_date_tournament_window_conflict"
+    return day, ""
+
+
+def _valid_percent_pair(first, complementary):
+    """No ratios from uncorroborated or contradictory 0+0 percentages."""
+    try:
+        first, complementary = float(first), float(complementary)
+    except (ValueError, TypeError):
+        return False
+    return (math.isfinite(first) and math.isfinite(complementary)
+            and 0 <= first <= 100 and 0 <= complementary <= 100
+            and abs(first + complementary - 100) <= 1.01)
+
+
+def _season_match(lookup):
+    """Strict home/away event schema: source-only counts and paired percentages.
+
+    Abbreviated names and source player IDs remain unverified; the canonical
+    exact match linker, not this adapter, decides identity and import readiness.
+    """
+    required = ("homename", "awayname", "winnercode", "tourtypehuman",
+                "datetimestamp", "status", "tournament")
+    if any(not str(lookup.get(field) or "").strip() for field in required):
+        return None, "season_schema_missing"
+    tour = {"atptour": "atp", "wtatour": "wta"}.get(key(lookup["tourtypehuman"]))
+    if not tour:
+        return None, "tour_missing_or_unsupported"
+    if (key(lookup["status"]) != "finished" or
+            (lookup.get("statusextra") and key(lookup["statusextra"]) != "finished")):
+        return None, "match_not_finished"
+    code = str(lookup["winnercode"]).strip()
+    if code not in {"1", "2"}:
+        return None, "winner_unverified"
+    home, away = str(lookup["homename"]).strip(), str(lookup["awayname"]).strip()
+    if not home or not away or key(home) == key(away):
+        return None, "players_missing_or_equal"
+    home_sets, away_sets = str(lookup.get("homesetscore") or ""), str(lookup.get("awaysetscore") or "")
+    if home_sets.isdigit() and away_sets.isdigit() and home_sets != away_sets:
+        score_winner = "1" if int(home_sets) > int(away_sets) else "2"
+        if score_winner != code:
+            return None, "season_score_winner_conflict"
+    timestamp = str(lookup["datetimestamp"]).strip()
+    if not re.fullmatch(r"[1-9]\\d{8,10}", timestamp):
+        return None, "date_missing_or_invalid"
+    try:
+        day = datetime.fromtimestamp(int(timestamp), tz=timezone.utc).date()
+    except (ValueError, OverflowError, OSError):
+        return None, "date_missing_or_invalid"
+    if not 2016 <= day.year <= 2026:
+        return None, "date_missing_or_invalid"
+    human = str(lookup.get("datehuman") or "").strip()
+    if human:
+        try:
+            local_day = datetime.strptime(human, "%d %b %Y").date()
+        except ValueError:
+            return None, "date_missing_or_invalid"
+        if abs((local_day - day).days) > 1:
+            return None, "conflicting_match_dates"
+    tournament = str(lookup["tournament"]).strip()
+    # Only strip an explicit tour suffix. Tour remains independently required.
+    tournament = re.sub(r"\\s+" + tour + r"$", "", tournament, flags=re.I).strip()
+    winner_side, loser_side = ("home", "away") if code == "1" else ("away", "home")
+    row = {field: "" for field in FIELDS}
+    row.update({
+        "league": tour, "tourney_date": day.strftime("%Y%m%d"),
+        "tourney_name": tournament,
+        "match_num": str(lookup.get("matchid") or "").strip(),
+        "winner_name": home if code == "1" else away,
+        "loser_name": away if code == "1" else home,
+        "source_winner_id": str(lookup.get(winner_side + "id") or "").strip(),
+        "source_loser_id": str(lookup.get(loser_side + "id") or "").strip(),
+        "surface": str(lookup.get("surface") or "").strip(),
+        "round": str(lookup.get("round") or "").strip(),
+    })
+    for label, side in (("w", winner_side), ("l", loser_side)):
+        for source_field, target in (("aces", "ace"), ("doublefaults", "df")):
+            count = str(lookup.get(side + source_field) or "").strip()
+            if re.fullmatch(r"(?:0|[1-9]\\d{0,3})", count):
+                row[f"{label}_{target}"] = count
+    # The same point is a service win for one player and a return loss
+    # for their opponent. Enforce this before retaining either percentage.
+    for first, second, first_stat, second_stat in (
+        ("servicepointswonperc", "returnpointswonperc",
+         "service_points_won_pct", "return_points_won_pct"),
+        ("breakpointssavedperc", "breakpointswonperc",
+         "break_points_saved_pct", "break_points_won_pct"),
+    ):
+        for own, other in (("home", "away"), ("away", "home")):
+            a, b = lookup.get(own + first), lookup.get(other + second)
+            if _valid_percent_pair(a, b):
+                own_label = "w" if own == winner_side else "l"
+                other_label = "w" if other == winner_side else "l"
+                row[f"{own_label}_{first_stat}"] = str(a).strip()
+                row[f"{other_label}_{second_stat}"] = str(b).strip()
+    if not any(row[field] for field in STAT_FIELDS):
+        return None, "no_supported_serve_return_stats"
+    return row, ""
+
 def tour_from_filename(name):
     lowered = Path(name).name.lower()
     matches = [x for x in ("atp", "wta") if re.search(r"(^|[^a-z])" + x + r"([^a-z]|$)", lowered)]
@@ -78,11 +221,15 @@ def normalize(raw, filename, index):
     if not isinstance(raw, dict):
         return None, "not_object"
     lookup = {key(k): v for k, v in raw.items() if k is not None}
+    if "homename" in lookup or "awayname" in lookup:
+        return _season_match(lookup)
     row = {}
     for target, aliases in ALIASES.items():
         value = next((lookup[key(alias)] for alias in aliases if key(alias) in lookup), "")
         row[target] = "" if value is None else str(value).strip()
-    row["tourney_date"] = iso_date(next((lookup[key(a)] for a in ALIASES["tourney_date"] if key(a) in lookup), ""))
+    row["tourney_date"], date_error = _resolved_match_date(lookup)
+    if date_error:
+        return None, date_error
     row["league"] = (row["league"] or tour_from_filename(filename)).lower()
     if row["league"] not in {"atp", "wta"}:
         return None, "tour_missing_or_unsupported"
