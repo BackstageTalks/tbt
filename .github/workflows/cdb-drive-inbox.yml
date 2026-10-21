@@ -14,6 +14,11 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
         required: false
         type: number
         default: 0
+      replay_drive_ids:
+        description: 'Optional comma-separated exact Drive file IDs for bounded replay (max 12)'
+        required: false
+        type: string
+        default: ''
   pull_request:
     paths:
       - scripts/cdb_large_source_stage.py
@@ -95,6 +100,7 @@ jobs:
       CDB_REPO: BackstageTalks/tbt-data
       CDB_TAG: tbt-data-v1
       INBOX_FOLDER_ID: 1jzdzztz8cXquO8VDswqE19PHupQau-xM
+      REPLAY_DRIVE_IDS: ${{ inputs.replay_drive_ids || '' }}
       PYTHONPATH: api:scripts
     steps:
       - uses: actions/checkout@v4
@@ -159,6 +165,11 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/cdb_inbox_pending_batch.py restore --folder-id "$INBOX_FOLDER_ID"
+      - name: Reject replay when deferred private staged batch must resume
+        if: inputs.replay_drive_ids != '' && steps.prepared.outputs.restored == 'true'
+        run: |
+          echo '::error::Complete the existing protected staged import before explicit source replay.'
+          exit 1
       - name: Read all BlinQ_data descendants; ingest bounded new/changed files
         if: steps.prepared.outputs.restored != 'true'
         run: |
@@ -166,7 +177,8 @@ jobs:
           mkdir -p work/input
           python scripts/cdb_inbox_drive.py --folder-id "$INBOX_FOLDER_ID" \
             --output work/input --state-file work/private-state/current.json \
-            --next-state work/private-state/next.json --max-files 100
+            --next-state work/private-state/next.json --max-files 100 \
+            --replay-ids "$REPLAY_DRIVE_IDS"
           python scripts/cdb_inbox_adapter.py --input-dir work/input --out-dir work/source --max-files 100
       - name: Avoid downloading CDB for empty or entirely unsupported sources
         id: source
