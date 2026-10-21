@@ -34,10 +34,12 @@ from audit_statistics_inventory import _quality_ready, statistics_value_change
 from adaptive_statistics_queue import AdaptiveStatisticsQueue
 
 # Priorities from five independently read-back VERIFIED CDB statistics runs on
-# 2026-10-19 (9,358 paid calls). The online queue still re-learns within every
-# run and retains at least 25% baseline exploration. ATP 2025 is deliberately
-# absent: its latest 85 attempted requests yielded no new statistics.
-VERIFIED_HIGH_YIELD_COHORTS = (("wta", 2024), ("wta", 2022), ("atp", 2024))
+# 2026-10-20 (11,564 paid calls; 135,213 persisted new values). WTA 2023
+# earned a high-yield slot alongside WTA 2024/2022 and ATP 2024.
+# These are initial ordering priors, not fixed quota shares: the online queue
+# relearns from paid CDB gains each run, with >=25% baseline exploration.
+# ATP 2025 and 2026 remain available for exploration, never guessed or forced.
+VERIFIED_HIGH_YIELD_COHORTS = (("wta", 2024), ("wta", 2023), ("wta", 2022), ("atp", 2024))
 
 
 def read_json(path, default):
@@ -271,7 +273,7 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
     Every candidate has already passed canonical event-ID and retry checks.
     The 6:2:1:1 schedule reserves exploration outside historically productive
     cohorts. The previous fixed ATP-2025 hot spot is now depleted; prioritize
-    verified WTA-2024, WTA-2022 and ATP-2024 yield without new API calls.
+    verified WTA-2024/2023/2022 and ATP-2024 yield without extra API calls.
     Within each tour/year, verified *two-player* identity is attempted first.
     """
     from collections import defaultdict, deque
@@ -289,7 +291,7 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
         )
         coverage = bucket_ready[bucket] / max(1, bucket_total[bucket])
         if candidate[0] == 0:
-            family = "high_yield"  # verified October 19 cohort yield
+            family = "high_yield"  # verified October 20 CDB gains
         elif (incomplete_rates and 2022 <= year <= 2025 and coverage < 0.55
               and tour == "wta"):
             family = "wta_gap"
