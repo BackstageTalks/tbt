@@ -4951,8 +4951,9 @@
       '<div class="admin-calibration-grid">'+
       '<article class="admin-calibration-panel"><h3>1 · Načítať nové dáta</h3><p>Jedna kontrolovaná dávka maximálne 100 súborov z existujúceho Drive inboxu; 0 nových volaní Tennis API.</p>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="import_drive" '+(disabled?'disabled':'')+'>Spustiť Drive import</button></article>'+
-      '<article class="admin-calibration-panel"><h3>2 · Prepočítať testy</h3><p>Obnoviť nezávislý prehľad champion/kandidát, výsledky zápasov a kalibráciu. Žiadny nový tréning.</p>'+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="refresh_tests" '+(disabled?'disabled':'')+'>Spustiť testy</button></article>'+
+      '<article class="admin-calibration-panel"><h3>2 · Testovať a vyhodnotiť</h3><p>Nezávislý párový audit aktuálneho championa a shadow kandidáta. Oddelený prehľad následne obnoví Admin snapshot; bez nových predikcií a API volaní.</p>'+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(disabled?'disabled':'')+'>Spustiť shadow audit</button> '+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="refresh_tests" '+(disabled?'disabled':'')+'>Obnoviť Admin výsledky</button></article>'+
       '<article class="admin-calibration-panel"><h3>3 · Aktivovať shadow</h3><p>Vyber hotový zmrazený model. Zápis musí potvrdiť checksum a spätné načítanie; produkcia sa neprepína.</p>'+
       '<label>Overený model <select id="admin-model-lab-candidate" '+(disabled?'disabled':'')+'>'+options+'</select></label>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="activate_shadow" '+(disabled||!candidates.length?'disabled':'')+'>Aktivovať shadow kandidáta</button></article></div>'+
@@ -5582,7 +5583,7 @@
       if(action==='model-lab-refresh'){loadAdminModelLab();return;}
       if(action==='model-lab-start'){
         const operation=String(actionNode.dataset.modelLabOperation||'');
-        if(!['import_drive','refresh_tests','activate_shadow'].includes(operation))return;
+        if(!['import_drive','refresh_tests','audit_shadow','activate_shadow'].includes(operation))return;
         if(operation==='activate_shadow'&&!window.confirm('Aktivovať vybraný model iba v shadow režime? Produkčný champion zostane nezmenený.'))return;
         if(operation==='import_drive'&&!window.confirm('Spustiť jednu ohraničenú dávku existujúceho Drive importu do CDB?'))return;
         loadAdminModelLab(operation);return;
