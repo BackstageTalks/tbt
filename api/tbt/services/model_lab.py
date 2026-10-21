@@ -294,6 +294,10 @@ def acknowledge_failed(payload):
     last = _json("last")
     if not active or not last or active["id"] != payload["id"] or last.get("id") != payload["id"] or last.get("state") != "FAILED_NEEDS_REVIEW":
         raise TrainingBlocked("No independently verified failed operation")
+    # An importer or shadow activation may have failed after a partial write.
+    # Browser acknowledgement is safe only for read-only refreshes.
+    if active["action"] != "refresh_tests":
+        raise TrainingBlocked("Import alebo shadow zápis vyžaduje nezávislé overenie a ručnú rekonciliáciu.")
     snapshot = status()
     run = _find_run(active, snapshot)
     if not run or run.get("status") != "completed" or run.get("conclusion") == "success":
