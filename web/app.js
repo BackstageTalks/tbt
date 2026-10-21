@@ -4941,7 +4941,7 @@
     const finalText=last?('<strong>'+escapeHtml(stateLabels[last.state]||last.state)+'</strong> · '+escapeHtml(last.action||'')+fmtRun(confirmed)):'Zatiaľ bez ukončeného behu.';
     const disabled=busy||!d?.can_start;
     const failed=operation&&last&&last.id===operation.id&&last.state==='FAILED_NEEDS_REVIEW';
-    const unsafeFailure=failed&&operation.action!=='refresh_tests';
+    const unsafeFailure=failed&&!['refresh_tests','audit_shadow'].includes(operation.action);
     const hint=d?.reason||'Načítavam stav bezpečných operácií…';
     return '<section class="admin-ux-section admin-model-lab" aria-label="Model Lab – operácie">'+
       '<div class="admin-ux-heading"><div><small>MODEL LAB · OPERÁCIE</small><h2>Dáta, testy a shadow</h2>'+
@@ -4976,7 +4976,10 @@
       if(generation!==feedGeneration)return;
       if(startOperation||acknowledge){
         state.adminModelLabMessage=result.message||result.state||'Požiadavka zaznamenaná.';
-        state.adminModelLab=null;
+        // Read back the persisted operator request before leaving the busy
+        // state. loadAdminCalibration() cannot re-enter this loader while busy.
+        state.adminModelLab=await BlinqAuth.adminModelLab();
+        if(generation!==feedGeneration)return;
         await loadAdminCalibration(true);
       }else state.adminModelLab=result;
     }catch(error){
