@@ -4929,7 +4929,7 @@
   function renderAdminModelLab(){
     const d=state.adminModelLab, training=state.adminTraining;
     const busy=!!state.adminModelLabBusy||!!state.adminTrainingBusy;
-    const safeLink=(url,label)=>/^https:\\/\\/github\\.com\\/BackstageTalks\\/tbt\\/actions\\/runs\\/[0-9]+$/.test(String(url||''))?
+    const safeLink=(url,label)=>/^https:\/\/github\.com\/BackstageTalks\/tbt\/actions\/runs\/[0-9]+$/.test(String(url||''))?
       '<a href="'+escapeHtml(url)+'" rel="noopener noreferrer" target="_blank">'+escapeHtml(label)+'</a>':escapeHtml(label);
     const operation=d?.operation, last=d?.last_operation;
     const trainRun=training?.runs?.[0], trainBusy=!!trainRun&&['queued','in_progress','waiting','pending','requested'].includes(trainRun.status);
