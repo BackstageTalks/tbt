@@ -67,3 +67,33 @@ def test_invalid_cache_cannot_be_sealed(tmp_path):
         frame.loc[0, "scheduled_at"] = datetime(2026, 11, 1, tzinfo=timezone.utc)
         with pytest.raises(RuntimeError, match="chronology"):
             persist(frame, tmp_path / "future.parquet", "top-7.2.1")
+
+
+def test_filtered_cohort_reuses_sealed_audit_time_and_still_checks_identities(tmp_path):
+    def match(identity, day):
+        return SimpleNamespace(match_id=identity, scheduled_at=datetime(2026, 10, day, tzinfo=timezone.utc),
+                               provider_payload={}, is_completed=True, player1_id="a", player2_id="b",
+                               stats={}, tour="atp", surface="hard")
+    source = [match("1", 1), match("2", 2), match("future", 4)]
+    cutoff = datetime(2026, 10, 3, tzinfo=timezone.utc)
+    path = tmp_path / "filtered.parquet"
+    with patch("verified_training_frame.validate_certificate", return_value=CERT):
+        persist(_frame(), path, "top-7.2.1", audit_at=cutoff)
+        # Even if loaded weeks later, future-at-audit remains excluded.
+        frame = load(path, "top-7.2.1", source)
+        assert frame.match_id.tolist() == ["1", "2"]
+        assert frame.attrs["history_audit_at"] == cutoff.isoformat()
+        with pytest.raises(RuntimeError, match="count"):
+            load(path, "top-7.2.1", source + [match("extra", 2)])
+        with pytest.raises(RuntimeError, match="identity"):
+            load(path, "top-7.2.1", [source[0], match("wrong", 2), source[2]])
+        from tbt.services import training
+        from tbt.services.data_quality import audit_history
+        # Stop before feature augmentation/fitting; verify the downstream
+        # trainer uses exactly the same frozen cutoff and accepted cohort.
+        with patch.object(training, "audit_history", wraps=audit_history) as audit_mock:
+            with patch.object(training, "_enforce_rank_provenance", side_effect=RuntimeError("stop before fit")) as rank:
+                with pytest.raises(RuntimeError, match="stop before fit"):
+                    training.train_from_matches(source, verified_frame=frame)
+            assert audit_mock.call_args.kwargs["now"] == cutoff
+            assert [m.match_id for m in rank.call_args.args[0]] == ["1", "2"]

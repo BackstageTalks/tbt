@@ -855,7 +855,12 @@ def train_from_matches(
 ) -> TrainingResult:
     if training_profile not in {"standard", "top-7.2.1"}:
         raise ValueError("Unknown training profile")
-    matches, quality = audit_history(matches)
+    # Reuse the audited cutoff: a future-result row must not become eligible
+    # merely because feature replay took long enough for its start to pass.
+    audit_at = (verified_frame.attrs.get("history_audit_at")
+                if verified_frame is not None else None)
+    matches, quality = audit_history(
+        matches, now=datetime.fromisoformat(audit_at) if audit_at else None)
     matches, rank_provenance = _enforce_rank_provenance(matches)
     _training_progress("validated_history", len(matches))
     # 7.2.1 uses independent serve and return availability. The champion

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -42,11 +43,16 @@ def _assert_frame(frame: pd.DataFrame) -> None:
         raise RuntimeError("Audited feature cache chronology is invalid")
 
 
-def persist(frame: pd.DataFrame, path: str | Path, profile: str) -> dict:
+def persist(frame: pd.DataFrame, path: str | Path, profile: str, *, audit_at=None) -> dict:
     if profile not in PROFILES:
         raise ValueError("Unknown frozen training profile")
     cert = validate_certificate(require_writer_lock=False)
     _assert_frame(frame)
+    if audit_at is not None:
+        if audit_at.tzinfo is None:
+            raise ValueError("Naive history audit timestamp")
+        # Stored inside the SHA-sealed parquet, not only in its sidecar.
+        frame.attrs["history_audit_at"] = audit_at.isoformat()
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() or _metadata_path(path).exists():
@@ -82,6 +88,12 @@ def load(path: str | Path, profile: str, matches) -> pd.DataFrame:
         raise RuntimeError("Feature cache SHA readback mismatch")
     frame = pd.read_parquet(path)
     _assert_frame(frame)
+    if frame.attrs.get("history_audit_at"):
+        from tbt.services.data_quality import audit_history
+        cutoff = datetime.fromisoformat(frame.attrs["history_audit_at"])
+        if cutoff.tzinfo is None:
+            raise RuntimeError("Naive history audit timestamp")
+        matches, _ = audit_history(matches, now=cutoff)
     if len(frame) != proof.get("rows") or len(frame) != len(matches):
         raise RuntimeError("Feature cache match count mismatch")
     # The source itself is independently validated against the backup cert;
