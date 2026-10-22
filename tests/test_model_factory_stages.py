@@ -62,7 +62,11 @@ def test_stage1_preflight_is_queued_once_and_requires_remote_artifact():
             {"id": 123, "status": "completed", "conclusion": "success",
              "created_at": datetime.now(timezone.utc).isoformat(),
              "display_title": "Prepare " + cmd["id"],
-             "artifact_verified": False},
+             "artifact_verified": False,
+             "preflight_report": {"eligible_rows": 600000, "tours": {
+                 "atp": {"eligible_matches": 350000},
+                 "wta": {"eligible_matches": 250000},
+             }}},
         ]
         with pytest.raises(model_training.TrainingBlocked):
             lab.sync(finished)
