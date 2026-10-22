@@ -56,6 +56,7 @@ def main():
                 button.click()
                 page.wait_for_function('trainingCalls.length===2 && !adminTestUi.state.adminTrainingBusy')
                 assert page.evaluate('trainingCalls[0].profile')=='top-7.2.1'
+                assert page.evaluate('trainingCalls[0].auto_shadow') is True
                 assert page.evaluate('trainingCalls[1]===undefined')
                 assert page.locator('[data-admin-action="training-start"]').is_disabled()
                 assert page.get_by_text('Požiadavka uložená.', exact=True).is_visible()
