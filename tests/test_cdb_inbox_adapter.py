@@ -376,7 +376,7 @@ def test_date_provenance_is_adapter_attested_and_not_source_spoofable():
 
 
 def test_native_linker_date_provenance_day_zero_one_five():
-    from datetime import date, datetime, timezone
+    from datetime import date, datetime, timedelta, timezone
     from types import SimpleNamespace
     from scripts.link_offline_serve_return import OfflineMatch, _candidate_score
 
@@ -389,7 +389,7 @@ def test_native_linker_date_provenance_day_zero_one_five():
     )
     for offset in (0, 1, 5):
         match = SimpleNamespace(
-            tour="atp", scheduled_at=datetime(2026, 10, 12 + offset, tzinfo=timezone.utc),
+            tour="atp", scheduled_at=datetime(2026, 10, 12, tzinfo=timezone.utc) + timedelta(days=offset),
             player1_name="Alpha One", player2_name="Beta Two",
             player1_id="p1", player2_id="p2", winner_id="p1",
             surface="hard", tournament="Vienna", round_name="QF", best_of=3,
