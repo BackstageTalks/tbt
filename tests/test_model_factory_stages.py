@@ -136,6 +136,71 @@ def test_legacy_manual_training_never_implies_shadow():
         assert table.rows[(model_training.PARTITION, "request-8")]["auto_shadow"] is False
 
 
+def test_stage3_refuses_to_unlock_on_missing_or_rejected_audit():
+    import base64
+    import json
+
+    champion = "b" * 64
+    good_rollback = {
+        "status": "PASS", "backup_tag": "tbt-champion-backup-sha256-" + champion,
+        "bundle_files": {"model.joblib": {"sha256": champion}},
+    }
+
+    def read_for(shadow, rollback):
+        documents = {
+            "audit/model-shadow-promotion-latest.json": shadow,
+            "audit/champion-rollback-rehearsal-latest.json": rollback,
+        }
+
+        def read(path, missing_ok=False):
+            artifact = next((v for suffix, v in documents.items()
+                             if path.endswith(suffix)), None)
+            if artifact is None:
+                return None
+            payload = base64.b64encode(json.dumps(artifact).encode()).decode()
+            return {"encoding": "base64", "content": payload}
+        return read
+
+    rejected = {"status": "rejected",
+                "decision": {"reasons": ["log_loss_worse_than_production"]}}
+    state = lab._stage3_diagnostics(read_for(rejected, good_rollback), champion)
+    assert state["enabled"] is False
+    assert state["shadow_audit_status"] == "rejected"
+    assert "log_loss_worse_than_production" in state["reasons"][0]
+    assert len(state["reasons"]) == 2  # matching rollback, but rollout unimplemented
+
+    ready = {"status": "eligible_pending_approval"}
+    state = lab._stage3_diagnostics(read_for(ready, good_rollback), champion)
+    assert state["enabled"] is False  # favorable audit never enables production
+    assert state["reasons"] == [
+        "Chýba otestovaný Stage 3 controller, TOP/VALUE dôkazy a živý read-back."]
+
+    stale = {**good_rollback, "backup_tag": "tbt-champion-backup-sha256-" + "a" * 64}
+    state = lab._stage3_diagnostics(read_for(ready, stale), champion)
+    assert state["enabled"] is False
+    assert any("rollback" in reason for reason in state["reasons"])
+
+    state = lab._stage3_diagnostics(read_for(None, None), champion)
+    assert state["enabled"] is False
+    assert len(state["reasons"]) == 3
+
+    malformed = {"status": "rejected", "decision": "invalid"}
+    nested = {"status": "PASS", "bundle_files": {"model.joblib": None}}
+    state = lab._stage3_diagnostics(read_for(malformed, nested), champion)
+    assert state["enabled"] is False
+    assert any("rollback" in reason for reason in state["reasons"])
+
+
+
+def test_stage3_diagnostics_never_accepts_invalid_audit_bytes():
+    def invalid(path, missing_ok=False):
+        return {"encoding": "base64", "content": "%%%%not JSON"}
+    result = lab._stage3_diagnostics(invalid, "a" * 64)
+    assert result["enabled"] is False
+    assert result["shadow_audit_status"] == "NOT_VERIFIED"
+    assert result["rollback_status"] == "NOT_VERIFIED"
+
+
 def test_production_never_dispatched_from_model_factory_automation():
     root = Path(__file__).resolve().parents[1]
     workflow = (root / ".github/workflows/protected-frozen-cdb-candidate.yml").read_text()

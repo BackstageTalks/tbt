@@ -7,6 +7,8 @@ an atomic one-shot claim prevents retry after ambiguous dispatch outcomes.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import base64
+import binascii
 import json
 import re
 import secrets
@@ -157,6 +159,58 @@ def _read_preflight_report(run: dict, artifacts: list[dict]) -> dict:
             "source_run_id": run_id}
 
 
+def _read_private_audit(path, read):
+    """Treat remote private audit JSON as diagnostics, NEVER as promotion authority."""
+    try:
+        document = read(f"{DATA}/contents/{path}", missing_ok=True)
+        if not isinstance(document, dict) or document.get("encoding") != "base64":
+            return None
+        encoded = document.get("content")
+        if not isinstance(encoded, str) or len(encoded) > 1000000:
+            return None
+        raw = base64.b64decode(encoded, validate=False)
+        if len(raw) > 500000:
+            return None
+        result = json.loads(raw)
+        return result if isinstance(result, dict) else None
+    except (TrainingUnavailable, ValueError, TypeError, UnicodeError,
+            json.JSONDecodeError, binascii.Error, KeyError):
+        return None
+
+
+def _stage3_diagnostics(read, champion_sha):
+    """Explain blocking evidence. Production activation remains impossible."""
+    shadow = _read_private_audit("audit/model-shadow-promotion-latest.json", read)
+    rollback = _read_private_audit("audit/champion-rollback-rehearsal-latest.json", read)
+    reasons = []
+    if shadow is None:
+        reasons.append("Chýba nezávislý forward-shadow audit.")
+    elif shadow.get("status") != "eligible_pending_approval":
+        decision = shadow.get("decision")
+        decision = decision if isinstance(decision, dict) else {}
+        findings = decision.get("reasons")
+        findings = findings if isinstance(findings, list) else []
+        first = next((str(v) for v in findings if isinstance(v, str)), "")
+        reasons.append("Forward-shadow audit zamietol kandidáta"
+                       + (": " + first if first else "."))
+    bundle = rollback.get("bundle_files") if isinstance(rollback, dict) else None
+    bundle = bundle if isinstance(bundle, dict) else {}
+    saved_model = bundle.get("model.joblib")
+    saved_model = saved_model if isinstance(saved_model, dict) else {}
+    if (not isinstance(rollback, dict)
+            or rollback.get("status") != "PASS"
+            or saved_model.get("sha256") != champion_sha
+            or rollback.get("backup_tag") != "tbt-champion-backup-sha256-" + champion_sha):
+        reasons.append("Chýba SHA-viazaný overený rollback aktuálneho championa.")
+    # Historical evidence may pass, but there is not yet an audited, atomic
+    # publication+serving-readback controller. Never make 'ready' from metadata.
+    reasons.append("Chýba otestovaný Stage 3 controller, TOP/VALUE dôkazy a živý read-back.")
+    return {"enabled": False, "reasons": reasons,
+            "shadow_audit_status": shadow.get("status") if shadow else "NOT_VERIFIED",
+            "rollback_status": (rollback.get("status") if isinstance(rollback, dict)
+                                else "NOT_VERIFIED")}
+
+
 def collect_status(read=github):
     """Worker-only GitHub fetch. No provider calls and no CDB writes."""
     # Prove private data repository access before treating missing evidence as empty.
@@ -211,6 +265,7 @@ def collect_status(read=github):
                    else training["reason"]),
         "active_sha256": active_sha, "champion_sha256": champion_sha,
         "candidates": candidates, "runs": runs,
+        "stage3": _stage3_diagnostics(read, champion_sha),
     }
 
 
