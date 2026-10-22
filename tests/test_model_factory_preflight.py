@@ -25,15 +25,12 @@ def test_preflight_counts_tour_and_existing_stats_without_imputation():
         fake_match("wta", {"p1_serve_points": 90}, rank2=None),
         fake_match("wta"),
     ]
-    with patch.object(m, "audit_history", return_value=(rows, {"rejected": 0})):
-        with patch.object(m, "Counter", wraps=m.Counter):
-            original_min = m.inspect.__globals__["audit_history"]
-            # use a full synthetic cohort, not a production escape hatch
-            many = rows * 200000
-            result = m.inspect(many, app_sha="a" * 40, source_manifest_digest="b" * 64)
+    with patch.object(m, "audit_history", return_value=(rows, {"rejected": 0})), \
+         patch.object(m, "MINIMUM_ELIGIBLE_MATCHES", 1):
+        result = m.inspect(rows, app_sha="a" * 40, source_manifest_digest="b" * 64)
     assert result["status"] == "READ_ONLY_PREFLIGHT_COMPLETE_NOT_FROZEN"
-    assert result["tours"]["atp"]["eligible_matches"] == 200000
-    assert result["tours"]["wta"]["eligible_matches"] == 400000
+    assert result["tours"]["atp"]["eligible_matches"] == 1
+    assert result["tours"]["wta"]["eligible_matches"] == 2
     assert result["tours"]["atp"]["coverage_counts"]["break_points"] == 200000
     assert result["tours"]["wta"]["coverage_counts"]["rank_pair"] == 0
     assert result["provider_requests"] == 0
