@@ -14,6 +14,10 @@ on:
         type: choice
         options: [standard, top-7.2.1]
         default: top-7.2.1
+      auto_shadow:
+        description: Only for explicit Model Factory phase 2; never promotes production
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -152,6 +156,11 @@ jobs:
           assert d['offline_candidate']['model_promoted'] is False
           print('New frozen candidate included in signed Admin snapshot')
           PY
+      - name: Apply extra offline gates and activate verified candidate in shadow only
+        if: ${{ inputs.auto_shadow == true }}
+        run: |
+          set -euo pipefail
+          python scripts/auto_shadow_candidate.py
       - name: Write private aggregate candidate result to job summary
         if: success()
         run: |
