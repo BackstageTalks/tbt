@@ -32,11 +32,17 @@ assert.match(html,/data-admin-action="training-start" disabled/);
 state.adminModelLab.last_preflight={
   state:'WORKFLOW_VERIFIED', verified_at:new Date().toISOString(),
   run:{id:123,html_url:'https://github.com/BackstageTalks/tbt/actions/runs/123',
-       conclusion:'success',artifact_verified:true},
+       conclusion:'success',artifact_verified:true,
+       preflight_report:{eligible_rows:600000,tours:{
+         atp:{eligible_matches:350000,coverage_counts:{rank_pair:290000,serve:120000,return:115000,break_points:64000}},
+         wta:{eligible_matches:250000,coverage_counts:{rank_pair:205000,serve:105000,return:103000,break_points:58000}}
+       }}},
 };
 html=ctx.renderAdminModelLab();
 assert.doesNotMatch(html,/data-admin-action="training-start" disabled/);
 assert.match(html,/Audit dát overený/);
+assert.match(html,/ATP: 350/);
+assert.match(html,/WTA: 250/);
 assert.match(html,/Finálne zmrazenie a zálohovanie vstupov/);
 state.adminModelLab.last_preflight.run.artifact_verified=false;
 html=ctx.renderAdminModelLab();
