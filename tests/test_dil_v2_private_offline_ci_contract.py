@@ -8,7 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/dil-v2-private-offline-ci.yml"
-SOURCE_SHA = "1ebe0365190bed1b8a351670578f5dfb4d1d8649"
+SOURCE_SHA = "a10449e0237882e78cffb5d169d021b33c48a626"
 
 
 class PublicDILV2BridgeContract(unittest.TestCase):
