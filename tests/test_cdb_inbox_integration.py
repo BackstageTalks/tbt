@@ -88,6 +88,7 @@ def test_real_native_linker_exact_writer_and_readback(tmp_path, start_only, star
     staged = [json.loads(x) for x in (tmp_path / "link/eligible.jsonl").read_text().splitlines()]
     evidence = staged[0]["sources"][0]
     assert ("date_tournament_window" in evidence["evidence"]) is expected_window
+    assert ("date_exact" in evidence["evidence"]) is not expected_window
     assert ("date_exact" in evidence["evidence"]) is (not start_only)
     assert evidence["source_player_a_id"] == "external-100"
     assert evidence["source_player_b_id"] == "external-200"
