@@ -118,6 +118,15 @@ def collect_status(read=github):
         for item in raw.get("workflow_runs", []):
             record = {k: item.get(k) for k in
                       ("id", "status", "conclusion", "html_url", "display_title", "created_at")}
+            if action == "prepare_inputs" and item.get("status") == "completed" and item.get("conclusion") == "success":
+                artifacts = read(f"{APP}/actions/runs/{item['id']}/artifacts?per_page=100")
+                expected_name = f"model-factory-preflight-{item['id']}"
+                record["artifact_verified"] = any(
+                    asset.get("name") == expected_name and
+                    int(asset.get("size_in_bytes") or 0) > 0 and
+                    asset.get("expired") is False
+                    for asset in artifacts.get("artifacts", [])
+                )
             entries.append(record)
             if item.get("status") in ("queued", "in_progress", "waiting", "pending", "requested"):
                 busy = True
@@ -164,6 +173,7 @@ def status():
         snapshot.update(can_start=False, reason="Operácia už beží alebo čaká na nezávislé overenie.")
     snapshot["operation"] = _operation_view(active, snapshot) if active else None
     snapshot["last_operation"] = _json("last")
+    snapshot["last_preflight"] = _json("last_preflight")
     return snapshot
 
 
@@ -219,6 +229,8 @@ def _finalize(request, run, snapshot):
         _put("last", {"id": request["id"], "action": request["action"],
                       "state": "FAILED_NEEDS_REVIEW", "run": run})
         return
+    if request["action"] == "prepare_inputs" and run.get("artifact_verified") is not True:
+        raise TrainingBlocked("Preflight report was not independently retained as a GitHub artifact")
     if request["action"] == "activate_shadow":
         expected = request["source_sha256"]
         source = next((c for c in snapshot["candidates"]
@@ -241,6 +253,8 @@ def _finalize(request, run, snapshot):
                  "Testovací snapshot bol synchronizovaný."),
     }
     _put("last", result)
+    if request["action"] == "prepare_inputs":
+        _put("last_preflight", result)
     try:
         _table(UI_TABLE).delete_entity(partition_key=PARTITION, row_key="active")
     except Exception as exc:
