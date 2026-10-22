@@ -4934,6 +4934,15 @@
     const operation=d?.operation, last=d?.last_operation;
     const trainRun=training?.runs?.[0], trainBusy=!!trainRun&&['queued','in_progress','waiting','pending','requested'].includes(trainRun.status);
     const canBuild=!busy&&d?.can_start===true&&training?.can_start===true&&!trainBusy;
+    const preflight=d?.last_preflight;
+    const evidenceTime=Date.parse(preflight?.verified_at||'');
+    const preflightFresh=preflight?.state==='WORKFLOW_VERIFIED'&&
+      preflight?.run?.conclusion==='success'&&preflight?.run?.artifact_verified===true&&
+      Number.isFinite(evidenceTime)&&Date.now()-evidenceTime>=0&&
+      Date.now()-evidenceTime<=24*60*60*1000;
+    // The authoritative trainer independently freezes and verifies inputs again.
+    // Preflight alone never authorizes deployment or claims a reusable binary.
+    const canTrain=canBuild&&preflightFresh;
     // A stored binary + SHA proves identity, NOT an independently evaluated fit.
     // The signed calibration snapshot validates the untouched holdout and
     // remote candidate readback. Match BOTH immutable tag and model digest.
@@ -4964,23 +4973,34 @@
     const unsafeFailure=failed&&!['refresh_tests','audit_shadow'].includes(operation.action);
     const hint=state.adminTrainingMessage||state.adminModelLabMessage||training?.reason||d?.reason||'Načítavam aktuálny stav…';
     const latestCandidate=training?.candidates?.[0]?.tag||'—';
+    const preflightText=preflightFresh?
+      '<strong>Audit dát overený.</strong> '+safeLink(preflight.run?.html_url,'Report ATP/WTA · beh #'+preflight.run?.id)+
+      ' · Finálne zmrazenie a zálohovanie vstupov prebehne v tréningu.':
+      'Zatiaľ chýba čerstvý overený report ATP/WTA. Najprv spusti prípravu dát.';
+    const shadowNow=state.adminCalibration?.candidate_active===true;
+    const shadowText=shadowNow?'Shadow kandidát beží; na produkciu nemá vplyv.':
+      'Po úspešnom tréningu, offline porovnaní a kontrolách sa kandidát automaticky aktivuje iba v shadow režime.';
     return '<section class="admin-ux-section admin-model-lab" aria-label="BlinQ Model Factory">'+
-      '<div class="admin-ux-heading"><div><small>MODEL FACTORY · 2 KROKY</small><h2>Kandidát bez ručných workflowov</h2>'+
-      '<p>Z existujúcej CDB vytvoríme nový nemenný model, nezávisle ho otestujeme a uložíme. Aktivácia shadow je samostatné rozhodnutie. Produkčný champion sa nemení.</p></div>'+
+      '<div class="admin-ux-heading"><div><small>MODEL FACTORY · 3 FÁZY</small><h2>Od dát po produkčný model</h2>'+
+      '<p>Jeden postup: príprava dát → tréning a shadow → schválené produkčné nasadenie. Champion zostáva nedotknutý až do samostatne schváleného prepnutia.</p></div>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="calibration-refresh" '+(busy?'disabled':'')+'>Obnoviť celý stav</button></div>'+
       '<p role="status">'+escapeHtml(hint)+'</p>'+
-      '<div class="admin-calibration-grid">'+
-      '<article class="admin-calibration-panel"><h3>1 · Vytvoriť a otestovať</h3>'+
-      '<p>Jeden klik: existujúca overená CDB → nemenná záloha → ochrana proti leakage → tréning → offline ATP/WTA testy a porovnanie s championom → uložený kandidát. Žiadne nové platené API volania.</p>'+
-      '<button type="button" class="btn btn-primary" data-admin-action="training-start" '+(canBuild?'':'disabled')+'>Vytvoriť a otestovať kandidáta 7.2.1</button>'+
+      '<div class="admin-calibration-grid model-factory-three-steps">'+
+      '<article class="admin-calibration-panel"><small>FÁZA 1 · READ-ONLY</small><h3>1 · Pripraviť dáta</h3>'+
+      '<p>Audit aktuálnej kanonickej CDB: ATP/WTA zápasy, historické obdobie, identity, chýbajúce rebríčky, serve/return a break points. Bez importu, API požiadaviek či kopírovania tréningových záloh.</p>'+
+      '<button type="button" class="btn btn-primary" data-admin-action="model-lab-start" data-model-lab-operation="prepare_inputs" '+(canBuild?'':'disabled')+'>Pripraviť a skontrolovať dáta</button>'+
+      '<p role="status">'+preflightText+'</p></article>'+
+      '<article class="admin-calibration-panel"><small>FÁZA 2 · KANDIDÁT / SHADOW</small><h3>2 · Natrénovať a aktivovať kandidáta</h3>'+
+      '<p>Chránený tréning zmrazí overené vstupy, otestuje modely ATP/WTA proti championovi a uloží kandidáta. Shadow sa aktivuje automaticky len pri splnení ďalších offline kvalitatívnych brán.</p>'+
+      '<button type="button" class="btn btn-primary" data-admin-action="training-start" '+(canTrain?'':'disabled')+'>Natrénovať a spustiť shadow</button>'+
       '<p><strong>Tréning:</strong> '+trainingText+'</p>'+
-      (trainingStep?'<p role="status"><strong>Aktuálna fáza:</strong> '+escapeHtml(trainingStep)+'</p>':'')+'</article>'+
-      '<article class="admin-calibration-panel"><h3>2 · Aktivovať shadow</h3>'+
-      '<p>Až po kontrole offline reportu vyber nemenný kandidát. Aktivácia overí release SHA a spätné načítanie. Champion zostáva v produkcii.</p>'+
-      '<p role="status">'+evidenceText+'</p>'+
-      '<label>Nezávisle vyhodnotený model <select id="admin-model-lab-candidate" '+(canActivate?'':'disabled')+'>'+options+'</select></label>'+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="activate_shadow" '+(canActivate?'':'disabled')+'>Aktivovať iba shadow</button>'+
-      '<p><strong>Naposledy uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article></div>'+
+      (trainingStep?'<p role="status"><strong>Aktuálna fáza:</strong> '+escapeHtml(trainingStep)+'</p>':'')+
+      '<p role="status">'+escapeHtml(shadowText)+'</p></article>'+
+      '<article class="admin-calibration-panel"><small>FÁZA 3 · SCHVÁLENIE</small><h3>3 · Nasadiť do produkcie</h3>'+
+      '<p>Sprístupní sa až po nezávislom forward shadow vyhodnotení, kontrole TOP/VALUE, overenom rollbacku a výslovnom potvrdení konkrétneho modelu.</p>'+
+      '<button type="button" class="btn btn-primary" data-admin-action="model-factory-promote" disabled>Nasadiť do produkcie</button>'+
+      '<p role="status">Zatiaľ zablokované. Produkčný prepínač nemá implementovanú schválenú bezpečnú cestu; žiadna akcia nemení championa.</p>'+
+      '<p><strong>Posledný uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article></div>'+
       '<div class="admin-calibration-bottom"><div><strong>Rozpracovaná operácia</strong><span>'+activeText+'</span></div><div><strong>Posledná kontrola</strong><span>'+lastText+'</span></div></div>'+
       (failed&&!unsafeFailure?'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-acknowledge" '+(busy?'disabled':'')+'>Potvrdiť zlyhanie read-only auditu</button>':'')+
       (unsafeFailure?'<p role="alert">Zápis sa mohol vykonať čiastočne. Pred ďalším krokom je nutná nezávislá ručná kontrola CDB/release.</p>':'')+
@@ -5621,7 +5641,8 @@
       if(action==='model-lab-refresh'){loadAdminModelLab();return;}
       if(action==='model-lab-start'){
         const operation=String(actionNode.dataset.modelLabOperation||'');
-        if(!['import_drive','refresh_tests','audit_shadow','activate_shadow'].includes(operation))return;
+        if(!['prepare_inputs','import_drive','refresh_tests','audit_shadow','activate_shadow'].includes(operation))return;
+        if(operation==='prepare_inputs'&&!window.confirm('Spustiť read-only kontrolu zdrojových ATP/WTA dát? Nevytvorí produkčný model ani CDB import.'))return;
         if(operation==='activate_shadow'&&!window.confirm('Aktivovať vybraný model iba v shadow režime? Produkčný champion zostane nezmenený.'))return;
         if(operation==='import_drive'&&!window.confirm('Spustiť jednu ohraničenú dávku existujúceho Drive importu do CDB?'))return;
         loadAdminModelLab(operation);return;
@@ -5632,7 +5653,7 @@
       }
       if(action==='training-refresh'){loadAdminTraining();return;}
       if(action==='training-start'){
-        if(!window.confirm('Vytvoriť nový nemenný model 7.2.1 z overenej CDB, vrátane záloh a offline testov? Žiadne platené API ani aktivácia shadow či produkcie.'))return;
+        if(!window.confirm('Natrénovať kandidáta 7.2.1 a po úspešných nezávislých kontrolách ho automaticky aktivovať iba v shadow? Produkčný champion sa nemení.'))return;
         loadAdminTraining(true);return;
       }
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
