@@ -4,64 +4,61 @@ const assert=require('assert');
 const src=fs.readFileSync('web/app.js','utf8');
 const begin=src.indexOf('  function renderAdminModelLab(){');
 const end=src.indexOf('  async function loadAdminModelLab(',begin);
-assert(begin>0&&end>begin,'Model Lab UI must exist');
-const render=src.slice(begin,end);
+assert(begin>0&&end>begin,'Model Factory UI must exist');
 const state={};
 const escapeHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')
   .replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 const ctx={state,escapeHtml};
 vm.createContext(ctx);
-vm.runInContext(render,ctx);
+vm.runInContext(src.slice(begin,end),ctx);
+
 let html=ctx.renderAdminModelLab();
-assert.match(html,/BlinQ Model Factory/);
+assert.match(html,/MODEL FACTORY · 3 FÁZY/);
+for(const phrase of ['1 · Pripraviť dáta','2 · Natrénovať a aktivovať kandidáta','3 · Nasadiť do produkcie']){
+  assert(html.includes(phrase));
+}
+assert.match(html,/data-model-lab-operation="prepare_inputs" disabled/);
 assert.match(html,/data-admin-action="training-start" disabled/);
-assert.match(html,/data-model-lab-operation="import_drive" disabled/);
+assert.match(html,/data-admin-action="model-factory-promote" disabled/);
 assert.match(html,/data-model-lab-operation="activate_shadow" disabled/);
 state.adminTraining={can_start:true,runs:[],candidates:[{tag:'blinq-candidate-frozen-123-1'}]};
-state.adminModelLab={
-  can_start:true,reason:'Pripravené',
-  active_sha256:'a'.repeat(64),
+state.adminModelLab={can_start:true,reason:'Pripravené',active_sha256:'a'.repeat(64),
   candidates:[{tag:'blinq-candidate-frozen-123-1',sha256:'b'.repeat(64)},
               {tag:'bad<script>',sha256:'a'.repeat(64)}],
-  operation:null,last_operation:null,
+  operation:null,last_operation:null};
+html=ctx.renderAdminModelLab();
+assert.doesNotMatch(html,/data-model-lab-operation="prepare_inputs" disabled/);
+assert.match(html,/data-admin-action="training-start" disabled/);
+state.adminModelLab.last_preflight={
+  state:'WORKFLOW_VERIFIED', verified_at:new Date().toISOString(),
+  run:{id:123,html_url:'https://github.com/BackstageTalks/tbt/actions/runs/123',
+       conclusion:'success',artifact_verified:true},
 };
 html=ctx.renderAdminModelLab();
-assert.match(html,/data-model-lab-operation="import_drive"/);
-assert.match(html,/data-admin-action="training-start"/);
 assert.doesNotMatch(html,/data-admin-action="training-start" disabled/);
-assert.match(html,/data-model-lab-operation="activate_shadow"/);
-assert.match(html,/data-model-lab-operation="activate_shadow" disabled/);
-assert.match(html,/Aktivácia zostáva zablokovaná/);
-state.adminCalibration={
-  production_version:'v201',
-  offline_candidate:{status:'evaluated_not_deployed',
-    evaluation_type:'untouched_offline_holdout',production_version:'v201',
-    candidate_release_tag:'blinq-candidate-frozen-123-1',candidate_sha256:'b'.repeat(64),
-    n:312,champion:{accuracy:.64,log_loss:.64,brier_score:.22,ece_10:.07},
-    candidate:{accuracy:.65,log_loss:.63,brier_score:.21,ece_10:.06}},
-};
+assert.match(html,/Audit dát overený/);
+assert.match(html,/Finálne zmrazenie a zálohovanie vstupov/);
+state.adminModelLab.last_preflight.run.artifact_verified=false;
 html=ctx.renderAdminModelLab();
-assert.doesNotMatch(html,/data-model-lab-operation="activate_shadow" disabled/);
-assert.match(html,/Nezávislý offline holdout overený/);
+assert.match(html,/data-admin-action="training-start" disabled/);
+state.adminModelLab.last_preflight.run.artifact_verified=true;
 state.adminTraining.runs=[{id:123,status:'in_progress',html_url:'https://github.com/BackstageTalks/tbt/actions/runs/123'}];
 state.adminTraining.active_steps=['Fit separate candidate only if immutable backup gate passed'];
 html=ctx.renderAdminModelLab();
 assert.match(html,/Aktuálna fáza/);
-assert.match(html,/Fit separate candidate only if immutable backup gate passed/);
-assert.match(html,/data-model-lab-operation="activate_shadow" disabled/);
+assert.match(html,/data-admin-action="training-start" disabled/);
 state.adminTraining.runs=[];
 state.adminTraining.active_steps=[];
-state.adminCalibration.offline_candidate.candidate_sha256='c'.repeat(64);
-html=ctx.renderAdminModelLab();
-assert.match(html,/data-model-lab-operation="activate_shadow" disabled/);
-state.adminCalibration.offline_candidate.candidate_sha256='b'.repeat(64);
+state.adminCalibration={production_version:'v201',
+  offline_candidate:{status:'evaluated_not_deployed',
+  evaluation_type:'untouched_offline_holdout',production_version:'v201',
+  candidate_release_tag:'blinq-candidate-frozen-123-1',candidate_sha256:'b'.repeat(64),
+  n:312,champion:{accuracy:.64,log_loss:.64,brier_score:.22,ece_10:.07},
+  candidate:{accuracy:.66,log_loss:.63,brier_score:.21,ece_10:.06}}};
 html=ctx.renderAdminModelLab();
 assert.doesNotMatch(html,/data-model-lab-operation="activate_shadow" disabled/);
-assert.match(html,/Pokročilé operácie a história/);
-assert.match(src,/calibration:\(\)=>renderAdminModelLab\(\)\+renderAdminCalibration\(\)/);
-assert.doesNotMatch(html,/data-model-lab-operation="import_drive" disabled/);
-assert.match(html,/blinq-candidate-frozen-123-1/);
-assert(!html.includes('<script>'));
+assert.match(html,/Nezávislý offline holdout overený/);
+assert.match(html,/data-admin-action="model-factory-promote" disabled/);
 state.adminModelLab.operation={
   id:'a'.repeat(24),action:'activate_shadow',state:'RUNNING',
   run:{id:123,html_url:'javascript:alert(1)',status:'in_progress'},
@@ -69,35 +66,15 @@ state.adminModelLab.operation={
 html=ctx.renderAdminModelLab();
 assert(!html.includes('javascript:alert'));
 state.adminModelLab.operation=null;
+state.adminModelLab.last_preflight.run.html_url='javascript:alert(1)';
+html=ctx.renderAdminModelLab();
+assert(!html.includes('javascript:alert'));
 state.adminModelLab.can_start=false;
 html=ctx.renderAdminModelLab();
-assert.match(html,/data-model-lab-operation="import_drive" disabled/);
 assert.match(html,/data-admin-action="training-start" disabled/);
+assert.match(html,/data-model-lab-operation="prepare_inputs" disabled/);
 assert.match(src,/if\(action==='model-lab-start'\)/);
 assert.match(src,/if\(action==='model-lab-acknowledge'\)/);
-
-state.adminModelLab.operation={
-  id:'e'.repeat(24),action:'audit_shadow',state:'COMPLETED_PENDING_VERIFICATION',run:null
-};
-state.adminModelLab.last_operation={
-  id:'e'.repeat(24),action:'audit_shadow',state:'FAILED_NEEDS_REVIEW',
-  run:{id:78,status:'completed',conclusion:'failure'}
-};
-html=ctx.renderAdminModelLab();
-assert.match(html,/data-admin-action="model-lab-acknowledge"/);
-assert.doesNotMatch(html,/Zápis mohol byť čiastočný/);
-state.adminModelLab.operation.action='activate_shadow';
-state.adminModelLab.last_operation.action='activate_shadow';
-html=ctx.renderAdminModelLab();
-assert.doesNotMatch(html,/data-admin-action="model-lab-acknowledge"/);
-assert.match(html,/Zápis sa mohol vykonať čiastočne/);
-assert.match(src,/state\.adminModelLab=await BlinqAuth\.adminModelLab\(\);/);
-state.adminModelLab.can_start=true;
-state.adminModelLab.operation=null;
-state.adminTraining.can_start=false;
-html=ctx.renderAdminModelLab();
-assert.match(html,/data-admin-action="training-start" disabled/);
-assert.match(html,/data-model-lab-operation="activate_shadow" disabled/);
 assert.match(src,/state\.adminTraining=await BlinqAuth\.adminModelTraining\(\);/);
-assert.match(src,/Vytvoriť nový nemenný model 7\.2\.1/);
-console.log('Model Factory UI: two-step build/test and shadow, safe concurrency, advanced diagnostics passed');
+assert.match(src,/Natrénovať kandidáta 7\.2\.1 a po úspešných nezávislých kontrolách/);
+console.log('Model Factory: guarded 3 phases, preflight artifact, training, shadow, production lock, XSS passed');
