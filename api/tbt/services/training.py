@@ -120,6 +120,17 @@ class TrainingResult:
     feature_frame: pd.DataFrame
 
 
+def _candidate_learning_window(frame, training_profile):
+    """Keep historical replay context, but fit 7.2.1 only on 2024+ labels."""
+    if training_profile != "top-7.2.1":
+        return frame
+    timestamps = pd.to_datetime(frame["scheduled_at"], utc=True)
+    recent = frame.loc[timestamps >= pd.Timestamp("2024-01-01", tz="UTC")].copy()
+    if recent.empty:
+        raise ValueError("No 2024+ matches available for candidate training")
+    return recent.reset_index(drop=True)
+
+
 def _split_by_date(
     frame: pd.DataFrame,
     train_fraction: float,
@@ -930,6 +941,8 @@ def train_from_matches(
     frame['tournament'] = frame.match_id.map(lambda key: source[key].tournament or 'unknown')
     frame['history_band'] = frame.data_depth.map(lambda value: history_band(round(float(value) * 50)))
     frame['surface_history_band'] = frame.surface_history_count.map(history_band)
+    replay_rows = len(frame)
+    frame = _candidate_learning_window(frame, training_profile)
 
     # -------------------------------------------------
     # Strict out-of-time evaluation
@@ -1084,6 +1097,13 @@ def train_from_matches(
     }
     report = {
         "training_profile": training_profile,
+        "learning_window": {
+            "start_inclusive_utc": "2024-01-01T00:00:00Z" if training_profile == "top-7.2.1" else None,
+            "historical_replay_rows": replay_rows,
+            "eligible_learning_rows": len(frame),
+            "context_only_rows": replay_rows - len(frame),
+            "split_policy": "70/15/15 chronological whole UTC days within learning window",
+        },
         "optimization_objective": objective,
         "input_diagnostics": diagnostics,
         "top_market_validation": {
