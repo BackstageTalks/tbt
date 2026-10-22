@@ -46,7 +46,9 @@ def _posthoc_weather_training_violation(match) -> bool:
 def audit(history_dir: Path, *, training_profile: str = "standard",
           feature_cache_path: Path | None = None) -> dict[str, Any]:
     raw, identity_safety = sanitize_history_identities(load_partitions(history_dir))
-    accepted, quality = audit_history(raw)
+    from datetime import datetime, timezone
+    audit_at = datetime.now(timezone.utc)
+    accepted, quality = audit_history(raw, now=audit_at)
     cleaned, rank = _enforce_rank_provenance(accepted)
     retained_unverified_ranks = [
         m.match_id for m in cleaned
@@ -131,7 +133,7 @@ def audit(history_dir: Path, *, training_profile: str = "standard",
     if report["status"] == "pass" and feature_cache_path is not None:
         from verified_training_frame import persist
         report["verified_feature_cache"] = persist(
-            frame, feature_cache_path, training_profile)
+            frame, feature_cache_path, training_profile, audit_at=audit_at)
     return report
 
 
