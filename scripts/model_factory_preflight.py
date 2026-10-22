@@ -22,6 +22,7 @@ from tbt.services.data_quality import audit_history
 REPO = "BackstageTalks/tbt-data"
 ROOT_OUT = ROOT / ".cache/tbt/model-factory-preflight"
 CANONICAL = "tbt-data-v1"
+MINIMUM_ELIGIBLE_MATCHES = 500000
 
 
 def inspect(matches, *, app_sha: str, source_manifest_digest: str) -> dict:
@@ -53,7 +54,7 @@ def inspect(matches, *, app_sha: str, source_manifest_digest: str) -> dict:
             if any(any(term in key for term in terms) for key in values):
                 coverage[tour][field] += 1
     total = counts["atp"] + counts["wta"]
-    if total < 500000:
+    if total < MINIMUM_ELIGIBLE_MATCHES:
         raise ValueError("Canonical ATP/WTA dataset unexpectedly small")
     result = {
         "schema": 1,
