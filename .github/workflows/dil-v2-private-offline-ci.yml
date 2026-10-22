@@ -1,0 +1,110 @@
+name: DIL V2 SHA-pinned private synthetic contract on public runner
+
+'on':
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dil-v2-private-offline-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dil-v2-readonly-contract:
+    # No pull_request or untrusted code is allowed access to the private token.
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      SOURCE_COMMIT: 1ebe0365190bed1b8a351670578f5dfb4d1d8649
+    steps:
+      - name: Checkout public security contract only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prove read-only SHA-pin and no-output security rules
+        run: python -m unittest discover -q -s tests -p 'test_dil_v2_private_offline_ci_contract.py'
+      - name: Prepare test-only DuckDB dependency without private token
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check 'duckdb>=1.1,<2'
+      - name: Fetch only fixed SHA-pinned private modules, synthetic tests and inventories
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'BLOCKED_MISSING_PRIVATE_READ_TOKEN'; exit 1; }
+          mkdir -p private
+          while IFS='|' read -r source_path expected_git_blob; do
+            test -n "$source_path" || continue
+            target="private/$source_path"
+            mkdir -p "$(dirname "$target")"
+            gh api "repos/$PRIVATE_REPO/contents/$source_path?ref=$SOURCE_COMMIT" --jq .content | base64 --decode > "$target"
+            if [ "$(git hash-object "$target")" != "$expected_git_blob" ]; then
+              echo 'DIL_V2_PINNED_BLOB_MISMATCH_REDACTED'
+              exit 1
+            fi
+          done <<'SHA_PINNED_FILES'
+          til_v2/__init__.py|697a2499cb92a9897f071b96086c974afcb019fe
+          til_v2/ingest.py|e273477a54aa923a487aaaa4d8fccb92992ea24b
+          til_v2/schema.sql|8e5cbc0a5134c27af1bb9db537aefbe441469edb
+          til_v2/bulk.py|979d0107a149311d778386e5ebfea2a74b5665e0
+          til_v2/aux_ingest.py|2a8ea7501cee246f6ae21d9b54680a0d6d7ddc4d
+          til_v2/atp_world_tour.py|c77745e99760df450a9cea8d88fc7954185944c0
+          til_v2/cdb_seed.py|5ebc5205bf1f77d078822e51ffb0667fe0591a22
+          til_v2/coverage.py|0fbf026db13abb26f3ae49fceb4b72e9446cf901
+          til_v2/link.py|f2eb8efe3f989a80927382ae6f1950fe6e3bdbe3
+          til_v2/pipeline.py|805cb642cb0ad3001e50d6be8eb7b81200149902
+          til_v2/dil_core.py|ca81ab7144104cc6e2cbdbe205423217dbfcb44b
+          til_v2/dil_core_schema.sql|e5ce3750fe49253b6a7732d60a3238dd6d77266c
+          til_v2/drive_inventory_extended_20261022.json|2d7dc358b9d9d7092f290b3233a5657ca3d51267
+          til_v2/drive_inventory_aux_20261022.json|ff8c7247c1077087e4cce0364766e29a422393a4
+          tests/test_dil_core.py|70143c5ff98310e9b969e4d8366b9107b9d1541c
+          tests/test_til_v2.py|65281b182ae00c68fe679c3d7660c864863e6732
+          tests/test_til_v2_link.py|8cbc1b219e2a85b70fd9f14e628f7facabb6e41d
+          tests/test_til_v2_aux.py|3d8e03bac12e81fbb599e7382703656d7d724708
+          tests/test_til_v2_atp_world_tour.py|3438b4f40b8cc49359eadea8022e45e975a2fa28
+          tests/test_til_v2_orchestration.py|8c3a6f2a884f9725b727fdcb231d7140e317031c
+          tests/test_til_v2_pipeline.py|54a79e02a2c4d3d222f42597a2098afebc61565d
+          SHA_PINNED_FILES
+          echo 'DIL_V2_21_PRIVATE_BLOB_HASHES_VERIFIED'
+      - name: Compile, test all synthetic contracts with DuckDB, no credentials or private logs
+        shell: bash
+        env:
+          GH_TOKEN: ''
+          GITHUB_TOKEN: ''
+        run: |
+          set -euo pipefail
+          cd private
+          if python -m compileall -q til_v2 tests/test_til_v2*.py tests/test_dil_core.py >/tmp/dil-v2-compile.log 2>&1; then
+            echo 'DIL_V2_PRIVATE_MODULES_COMPILED'
+          else
+            echo 'DIL_V2_PRIVATE_COMPILE_FAILED_REDACTED'
+            exit 1
+          fi
+          if PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -q -s tests -p 'test_til_v2*.py' >/tmp/dil-v2-contract.log 2>&1; then
+            echo 'DIL_V2_ALL_MATCH_AND_PIPELINE_SYNTHETIC_TESTS_PASSED'
+          else
+            echo 'DIL_V2_MATCH_OR_PIPELINE_SYNTHETIC_TEST_FAILED_REDACTED'
+            exit 1
+          fi
+          if PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -q -s tests -p 'test_dil_core.py' >/tmp/dil-v2-core.log 2>&1; then
+            echo 'DIL_V2_CANONICAL_SCHEMA_DUCKDB_TESTS_PASSED'
+          else
+            echo 'DIL_V2_CANONICAL_SCHEMA_DUCKDB_TEST_FAILED_REDACTED'
+            exit 1
+          fi
+          echo 'DIL_V2_ALL_PRIVATE_SYNTHETIC_SUITES_PASSED'
+      - name: Erase temporary private code and logs
+        if: always()
+        shell: bash
+        run: |
+          rm -rf private
+          rm -f /tmp/dil-v2-compile.log /tmp/dil-v2-contract.log /tmp/dil-v2-core.log
