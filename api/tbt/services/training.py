@@ -855,7 +855,18 @@ def train_from_matches(
 ) -> TrainingResult:
     if training_profile not in {"standard", "top-7.2.1"}:
         raise ValueError("Unknown training profile")
-    matches, quality = audit_history(matches)
+    # Do not allow future rows to become eligible while the lengthy protected
+    # feature replay is running; use exactly the audit cutoff sealed at freeze.
+    frozen_audit_at = (verified_frame.attrs.get("history_audit_at")
+                       if verified_frame is not None else None)
+    if frozen_audit_at is not None:
+        from datetime import datetime
+        cutoff = datetime.fromisoformat(frozen_audit_at)
+        if cutoff.tzinfo is None or cutoff.utcoffset() is None:
+            raise ValueError("Naive frozen history audit timestamp")
+    else:
+        cutoff = None
+    matches, quality = audit_history(matches, now=cutoff)
     matches, rank_provenance = _enforce_rank_provenance(matches)
     _training_progress("validated_history", len(matches))
     # 7.2.1 uses independent serve and return availability. The champion
