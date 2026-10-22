@@ -1,4 +1,5 @@
 name: BlinQ Model Factory source preflight
+run-name: Model Factory prepare ${{ inputs.request_id }}
 
 on:
   workflow_dispatch:
