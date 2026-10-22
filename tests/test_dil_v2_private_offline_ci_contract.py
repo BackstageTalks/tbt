@@ -44,10 +44,10 @@ class PublicDILV2BridgeContract(unittest.TestCase):
         self.assertIn("SOURCE_COMMIT: " + SOURCE_SHA, t)
         self.assertIn("repos/$PRIVATE_REPO/contents/$source_path?ref=$SOURCE_COMMIT", t)
         self.assertIn("git hash-object", t)
-        block = t.split("done <<'SHA_PINNED_FILES'\n", 1)[1].split("\nSHA_PINNED_FILES", 1)[0]
+        block = t.split("done <<'SHA_PINNED_FILES'\n", 1)[1].split("\n          SHA_PINNED_FILES", 1)[0]
         lines = [line for line in block.splitlines() if line]
         self.assertEqual(len(lines), 21)
-        parsed = [line.split("|") for line in lines]
+        parsed = [line.strip().split("|") for line in lines]
         self.assertTrue(all(len(p) == 2 for p in parsed))
         paths = [p for p, _ in parsed]
         self.assertEqual(len(set(paths)), 21)
