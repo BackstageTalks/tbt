@@ -97,6 +97,38 @@ def test_missing_or_extra_audited_id_remains_fatal(tmp_path):
             load(path, "top-7.2.1", [_match("1"), _match("3")])
 
 
+def test_frozen_audit_cutoff_avoids_future_row_drift_and_preserves_identity_gate(tmp_path):
+    """A row future at snapshot time stays excluded even if fit starts later."""
+    cutoff = datetime(2026, 10, 3, tzinfo=timezone.utc)
+    source = [*_matches(), _match("future")]
+    source[-1].scheduled_at = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    path = tmp_path / "pinned.parquet"
+    with patch("verified_training_frame.validate_certificate", return_value=CERT):
+        proof = persist(_frame(), path, "top-7.2.1", audit_at=cutoff)
+        assert proof["history_audit_at"] == cutoff.isoformat()
+        loaded = load(path, "top-7.2.1", source)
+        assert loaded.match_id.tolist() == ["1", "2"]
+        assert loaded.attrs["history_audit_at"] == cutoff.isoformat()
+        with pytest.raises(RuntimeError, match="count mismatch"):
+            load(path, "top-7.2.1", source + [_match("unexpected")])
+        with pytest.raises(RuntimeError, match="identity mismatch"):
+            load(path, "top-7.2.1", [_match("1"), _match("wrong"), source[-1]])
+        from tbt.services import training
+        from tbt.services.data_quality import audit_history
+        with patch.object(training, "audit_history", wraps=audit_history) as audited:
+            with patch.object(training, "_enforce_rank_provenance", side_effect=RuntimeError("stop before fit")) as rank:
+                with pytest.raises(RuntimeError, match="stop before fit"):
+                    training.train_from_matches(source, verified_frame=loaded, training_profile="top-7.2.1")
+            assert audited.call_args.kwargs["now"] == cutoff
+            assert [m.match_id for m in rank.call_args.args[0]] == ["1", "2"]
+
+
+def test_frozen_audit_cutoff_rejects_naive_timestamp(tmp_path):
+    with patch("verified_training_frame.validate_certificate", return_value=CERT):
+        with pytest.raises(ValueError, match="Naive"):
+            persist(_frame(), tmp_path / "naive.parquet", "top-7.2.1", audit_at=datetime(2026, 10, 3))
+
+
 def test_audit_and_fit_use_identical_point_weighted_profile_settings():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
