@@ -105,6 +105,37 @@ def test_shadow_requires_materially_higher_accuracy_and_gate_pass():
         assert not ok and "wta_segment_regression" in reasons
 
 
+def test_server_rejects_shadow_training_without_verified_preflight():
+    now = datetime.now(timezone.utc).isoformat()
+    from tbt.services import model_training
+    table = Table()
+    with patch.object(lab, "_table", return_value=table), \
+         patch.object(model_training, "_table", return_value=table), \
+         patch.object(model_training, "status", return_value={"can_start": True, "base": "7"}):
+        with pytest.raises(model_training.TrainingBlocked, match="overený audit"):
+            model_training.start({"profile": "top-7.2.1", "auto_shadow": True}, "admin")
+        assert (model_training.PARTITION, "request-7") not in table.rows
+        lab._put("last_preflight", {
+            "state": "WORKFLOW_VERIFIED", "verified_at": now,
+            "run": {"status": "completed", "conclusion": "success",
+                    "artifact_verified": True,
+                    "preflight_report": {"eligible_rows": 600000}},
+        })
+        response = model_training.start({"profile": "top-7.2.1", "auto_shadow": True}, "admin")
+        assert response["state"] == "QUEUED"
+        assert table.rows[(model_training.PARTITION, "request-7")]["auto_shadow"] is True
+
+
+def test_legacy_manual_training_never_implies_shadow():
+    table = Table()
+    from tbt.services import model_training
+    with patch.object(lab, "_table", return_value=table), \
+         patch.object(model_training, "_table", return_value=table), \
+         patch.object(model_training, "status", return_value={"can_start": True, "base": "8"}):
+        assert model_training.start({"profile": "top-7.2.1"}, "admin")["state"] == "QUEUED"
+        assert table.rows[(model_training.PARTITION, "request-8")]["auto_shadow"] is False
+
+
 def test_production_never_dispatched_from_model_factory_automation():
     root = Path(__file__).resolve().parents[1]
     workflow = (root / ".github/workflows/protected-frozen-cdb-candidate.yml").read_text()
