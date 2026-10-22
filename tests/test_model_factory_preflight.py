@@ -32,7 +32,7 @@ def test_preflight_counts_tour_and_existing_stats_without_imputation():
     assert result["tours"]["atp"]["eligible_matches"] == 1
     assert result["tours"]["wta"]["eligible_matches"] == 2
     assert result["tours"]["atp"]["coverage_counts"]["break_points"] == 200000
-    assert result["tours"]["wta"]["coverage_counts"]["rank_pair"] == 0
+    assert result["tours"]["wta"]["coverage_counts"]["rank_pair"] == 1
     assert result["provider_requests"] == 0
     assert result["cdb_mutations"] == 0
     assert result["production_mutations"] == 0
