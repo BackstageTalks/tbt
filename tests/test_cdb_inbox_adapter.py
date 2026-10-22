@@ -356,3 +356,50 @@ def test_window_requires_complete_independent_metadata(proof, eligible):
     from scripts.cdb_inbox_stage import _strict_source_evidence
 
     assert _strict_source_evidence({"evidence": proof}) is eligible
+
+
+def test_date_provenance_is_adapter_attested_and_not_source_spoofable():
+    from scripts.cdb_inbox_adapter import normalize
+
+    base = {
+        "tour": "atp", "tourney_date": "20261012",
+        "tournament": "Vienna", "winner": "Alpha One", "loser": "Beta Two",
+        "surface": "hard", "round": "QF", "w_ace": 3,
+        "source_date_kind": "match_exact",  # untrusted input must be ignored
+    }
+    start, err = normalize(base, "atp.csv", 1)
+    assert err == ""
+    assert start["source_date_kind"] == "tournament_start"
+    precise, err = normalize(dict(base, match_date="2026-10-17"), "atp.csv", 1)
+    assert err == ""
+    assert precise["source_date_kind"] == "match_exact"
+
+
+def test_native_linker_date_provenance_day_zero_one_five():
+    from datetime import date, datetime, timezone
+    from types import SimpleNamespace
+    from scripts.link_offline_serve_return import OfflineMatch, _candidate_score
+
+    src = OfflineMatch(
+        source="sackmann:atp_fixture.csv", source_match_id="one", tour="atp",
+        event_date=date(2026, 10, 12), player_a="Alpha One",
+        player_b="Beta Two", winner="Alpha One", tournament="Vienna",
+        surface="hard", round_name="QF", best_of=3,
+        stats_a={"aces": 3.0}, stats_b={}, source_date_kind="tournament_start",
+    )
+    for offset in (0, 1, 5):
+        match = SimpleNamespace(
+            tour="atp", scheduled_at=datetime(2026, 10, 12 + offset, tzinfo=timezone.utc),
+            player1_name="Alpha One", player2_name="Beta Two",
+            player1_id="p1", player2_id="p2", winner_id="p1",
+            surface="hard", tournament="Vienna", round_name="QF", best_of=3,
+        )
+        _, evidence, accepted = _candidate_score(src, match)
+        assert accepted, (offset, evidence)
+        assert "date_tournament_window" in evidence
+        assert "date_exact" not in evidence
+    # Unverified sponsor aliases must not be promoted by a tournament date.
+    match.tournament = "Different Event"
+    _, evidence, accepted = _candidate_score(src, match)
+    assert not accepted
+    assert "tournament_exact" not in evidence
