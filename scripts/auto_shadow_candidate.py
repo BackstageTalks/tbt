@@ -85,7 +85,7 @@ def main():
     if summary:
         with open(summary, "a", encoding="utf-8") as out:
             out.write("\n### Model Factory · candidate shadow active\n")
-            out.write(f"Candidate: \`{result['candidate_version']}\` · source: \`{result['source_tag']}\`\n")
+            out.write(f"Candidate: `{result['candidate_version']}` · source: `{result['source_tag']}`\n")
             out.write("Production champion unchanged; prospective shadow evidence is still required.\n")
 
 
