@@ -184,6 +184,13 @@ def test_stage3_refuses_to_unlock_on_missing_or_rejected_audit():
     assert state["enabled"] is False
     assert len(state["reasons"]) == 3
 
+    malformed = {"status": "rejected", "decision": "invalid"}
+    nested = {"status": "PASS", "bundle_files": {"model.joblib": None}}
+    state = lab._stage3_diagnostics(read_for(malformed, nested), champion)
+    assert state["enabled"] is False
+    assert any("rollback" in reason for reason in state["reasons"])
+
+
 
 def test_stage3_diagnostics_never_accepts_invalid_audit_bytes():
     def invalid(path, missing_ok=False):
