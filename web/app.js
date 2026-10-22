@@ -5002,6 +5002,7 @@
       '<p role="status">'+preflightText+'</p>'+tourSummary('atp')+tourSummary('wta')+'</article>'+
       '<article class="admin-calibration-panel"><small>FÁZA 2 · KANDIDÁT / SHADOW</small><h3>2 · Natrénovať a aktivovať kandidáta</h3>'+
       '<p>Chránený tréning zmrazí overené vstupy, otestuje modely ATP/WTA proti championovi a uloží kandidáta. Shadow sa aktivuje automaticky len pri splnení ďalších offline kvalitatívnych brán.</p>'+
+      '<p><strong>Nový tréning 7.2.1: zápasy od 1. 1. 2024 (UTC).</strong> Staršia história slúži na výpočet predzápasových vstupov. Dni z obdobia 2024+ sa chronologicky rozdelia: 70 % učenie, 15 % kalibrácia a 15 % test. Skutočné obdobia a počty uvádza report tréningu; už použité testovacie zápasy nie sú novým nezávislým overením. Toto nastavenie nemení už aktívny model.</p>'+
       '<button type="button" class="btn btn-primary" data-admin-action="training-start" '+(canTrain?'':'disabled')+'>Natrénovať a spustiť shadow</button>'+
       '<p><strong>Tréning:</strong> '+trainingText+'</p>'+
       (trainingStep?'<p role="status"><strong>Aktuálna fáza:</strong> '+escapeHtml(trainingStep)+'</p>':'')+
