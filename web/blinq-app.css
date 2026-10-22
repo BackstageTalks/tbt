@@ -10269,3 +10269,12 @@ body#blinqPremium#blinqPremium .layered-player-avatar.player-fallback-wta{
 body#blinqPremium .layered-player-avatar.has-photo .player-avatar-initials{
   background:transparent!important;
 }
+
+/* Model Factory: one ordered, accessible, three-phase control surface. */
+.admin-model-lab .model-factory-three-steps{grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch;gap:14px}
+.admin-model-lab .model-factory-three-steps>.admin-calibration-panel{display:flex;flex-direction:column;min-width:0;gap:10px}
+.admin-model-lab .model-factory-three-steps>.admin-calibration-panel>small{font-size:10px;letter-spacing:.10em;font-weight:850;color:#8bbecb}
+.admin-model-lab .model-factory-three-steps>.admin-calibration-panel>h3{margin:0}
+.admin-model-lab .model-factory-three-steps>.admin-calibration-panel>.btn{margin-top:auto;min-height:44px;white-space:normal}
+.admin-model-lab .model-factory-three-steps>.admin-calibration-panel p{overflow-wrap:anywhere}
+@media(max-width:1100px){.admin-model-lab .model-factory-three-steps{grid-template-columns:1fr}}

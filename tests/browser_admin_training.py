@@ -24,7 +24,13 @@ def main():
                     s.feed.account={is_admin:true,role:'admin',plan:'admin'};
                     s.route='admin';s.adminTab='calibration';
                     s.adminTraining={can_start:true,reason:'Ready',runs:[],candidates:[]};
-                    s.adminModelLab={can_start:true,reason:'Ready',active_sha256:'a'.repeat(64),candidates:[],operation:null,last_operation:null};
+                    s.adminModelLab={can_start:true,reason:'Ready',active_sha256:'a'.repeat(64),candidates:[],operation:null,last_operation:null,
+                        last_preflight:{state:'WORKFLOW_VERIFIED',verified_at:new Date().toISOString(),
+                            run:{id:123,status:'completed',conclusion:'success',artifact_verified:true,
+                                 html_url:'https://github.com/BackstageTalks/tbt/actions/runs/123',
+                                 preflight_report:{eligible_rows:600000,tours:{
+                                   atp:{eligible_matches:340000,coverage_counts:{rank_pair:250000,serve:100000,return:90000,break_points:80000}},
+                                   wta:{eligible_matches:260000,coverage_counts:{rank_pair:200000,serve:80000,return:85000,break_points:60000}}}}}}};
                     window.trainingCalls=[];
                     BlinqAuth.adminModelTraining=async payload=>{
                         trainingCalls.push(payload);
@@ -39,13 +45,19 @@ def main():
                 }""")
                 button=page.locator('[data-admin-action="training-start"]')
                 assert button.is_enabled(), 'New Model Factory must allow a ready guarded training'
-                assert page.get_by_text('Vytvoriť a otestovať kandidáta 7.2.1').is_visible()
-                assert page.get_by_text('Aktivovať iba shadow').is_visible()
+                assert page.get_by_text('Natrénovať a spustiť shadow').is_visible()
+                page.locator('.admin-model-factory-advanced summary').click()
+                assert page.get_by_text('Aktivovať iba shadow (manuálne)').is_visible()
+                assert page.get_by_text('3 · Nasadiť do produkcie').is_visible()
+                assert page.locator('[data-admin-action="model-factory-promote"]').is_disabled()
+                assert page.get_by_text('ATP: 340', exact=False).is_visible()
+                assert page.get_by_text('WTA: 260', exact=False).is_visible()
                 # Confirm the one-click protected build/test path. A successful
                 # POST is always followed by durable Admin status GET.
                 button.click()
                 page.wait_for_function('trainingCalls.length===2 && !adminTestUi.state.adminTrainingBusy')
                 assert page.evaluate('trainingCalls[0].profile')=='top-7.2.1'
+                assert page.evaluate('trainingCalls[0].auto_shadow') is True
                 assert page.evaluate('trainingCalls[1]===undefined')
                 assert page.locator('[data-admin-action="training-start"]').is_disabled()
                 assert page.get_by_text('Požiadavka uložená.', exact=True).is_visible()
@@ -55,7 +67,7 @@ def main():
                 context.close()
         finally:
             browser.close()
-    print('Model Factory one-click training, durable readback, blocked concurrent shadow and safe advanced controls: PASS')
+    print('Model Factory three-phase preflight, one-click shadow training, durable readback, and safe advanced controls: PASS')
 
 
 if __name__ == '__main__':

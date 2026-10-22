@@ -13,6 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 from guarded_candidate_backup import validate_certificate
+from tbt.services.data_quality import audit_history
 
 PROFILES = {"standard", "top-7.2.1"}
 REQUIRED = {"match_id", "scheduled_at", "target", "tour_atp"}
@@ -82,10 +83,16 @@ def load(path: str | Path, profile: str, matches) -> pd.DataFrame:
         raise RuntimeError("Feature cache SHA readback mismatch")
     frame = pd.read_parquet(path)
     _assert_frame(frame)
-    if len(frame) != proof.get("rows") or len(frame) != len(matches):
+    if len(frame) != proof.get("rows"):
         raise RuntimeError("Feature cache match count mismatch")
-    # The source itself is independently validated against the backup cert;
-    # refuse any cache containing a different set of canonical identities.
-    if set(frame.match_id.astype(str)) != {str(m.match_id) for m in matches}:
+    # Leakage audit stores the point-in-time feature frame for the accepted
+    # completed match cohort, NOT all raw CDB rows. Reconstruct that exact
+    # quality-filtered cohort from the same immutable inputs. Comparing against
+    # raw counts falsely rejected valid caches whenever cancelled/future/
+    # invalid rows were present; bypassing this identity gate would be unsafe.
+    accepted, _ = audit_history(matches)
+    if len(frame) != len(accepted):
+        raise RuntimeError("Feature cache audited match count mismatch")
+    if set(frame.match_id.astype(str)) != {str(m.match_id) for m in accepted}:
         raise RuntimeError("Feature cache canonical identity mismatch")
     return frame

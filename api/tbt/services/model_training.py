@@ -118,24 +118,42 @@ def status():
 
 
 def start(payload, actor):
-    if not isinstance(payload, dict) or set(payload) - {"profile"}:
+    if not isinstance(payload, dict) or set(payload) - {"profile", "auto_shadow"}:
         raise ValueError("Neplatná požiadavka na tréning.")
     profile = payload.get("profile", "top-7.2.1")
     if profile not in {"standard", "top-7.2.1"}:
         raise ValueError("Neplatný tréningový profil.")
+    auto_shadow = payload.get("auto_shadow", False)
+    if not isinstance(auto_shadow, bool) or (auto_shadow and profile != "top-7.2.1"):
+        raise ValueError("Neplatná požiadavka na shadow tréning.")
     # Both Admin entrypoints share the same queue guard. A candidate training
     # request must not leapfrog an active Drive import or shadow activation.
     # Lazy import avoids a module cycle; an unavailable table fails closed.
-    from .model_lab import _row as lab_row
+    from .model_lab import _row as lab_row, _json as lab_json
     if lab_row("active") is not None:
         raise TrainingBlocked("Model Factory má rozpracovanú operáciu. Obnov stav.")
+    if auto_shadow:
+        preflight = lab_json("last_preflight")
+        record = preflight.get("run") if isinstance(preflight, dict) else None
+        try:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(
+                preflight["verified_at"].replace("Z", "+00:00"))).total_seconds()
+        except (AttributeError, KeyError, TypeError, ValueError):
+            age = float("inf")
+        if (not isinstance(record, dict) or preflight.get("state") != "WORKFLOW_VERIFIED"
+                or record.get("status") != "completed" or record.get("conclusion") != "success"
+                or record.get("artifact_verified") is not True
+                or not isinstance(record.get("preflight_report"), dict)
+                or int(record["preflight_report"].get("eligible_rows") or 0) < 500000
+                or not 0 <= age <= 86400):
+            raise TrainingBlocked("Model Factory: najprv treba čerstvý overený audit dát ATP/WTA.")
     current = status()
     if not current["can_start"]:
         raise TrainingBlocked(current["reason"])
     try:
         _table(UI_TABLE).create_entity({"PartitionKey": PARTITION,
             "RowKey": "request-" + current["base"], "actor": str(actor),
-            "profile": profile, "base": current["base"],
+            "profile": profile, "auto_shadow": auto_shadow, "base": current["base"],
             "created_at": datetime.now(timezone.utc).isoformat()})
     except Exception as exc:
         raise TrainingBlocked("Požiadavka už existuje alebo úložisko nie je dostupné. Obnov stav.") from exc
@@ -163,5 +181,6 @@ def sync(payload):
         except Exception:
             # A prior claim or unknown store result must never redispatch.
             return {"stored": True, "pending": None, "claim_blocked": True}
-        pending = {"base": request["base"], "profile": request["profile"]}
+        pending = {"base": request["base"], "profile": request["profile"],
+                   "auto_shadow": request.get("auto_shadow") is True}
     return {"stored": True, "pending": pending}

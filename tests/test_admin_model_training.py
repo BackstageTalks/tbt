@@ -35,6 +35,12 @@ class TrainingTests(unittest.TestCase):
             table.return_value.create_entity.side_effect = RuntimeError("exists")
             with self.assertRaises(m.TrainingBlocked): m.start({}, "admin")
 
+    def test_shadow_opt_in_rejects_invalid_profiles_or_types(self):
+        for payload in ({"profile": "standard", "auto_shadow": True},
+                        {"profile": "top-7.2.1", "auto_shadow": "true"}):
+            with self.assertRaises(ValueError):
+                m.start(payload, "admin")
+
     def test_client_cannot_choose_repository_or_promote(self):
         for payload in ({"repository": "other"}, {"promote": True}, {"profile": "unknown"}):
             with self.assertRaises(ValueError): m.start(payload, "admin")
