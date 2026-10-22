@@ -5071,7 +5071,7 @@
     const profile=document.getElementById('admin-training-profile')?.value||'top-7.2.1';
     state.adminTrainingBusy=true;state.adminTrainingMessage='';rerenderAdmin();
     try{
-      const result=await BlinqAuth.adminModelTraining(start?{profile}:undefined);
+      const result=await BlinqAuth.adminModelTraining(start?{profile,auto_shadow:profile==='top-7.2.1'}:undefined);
       if(generation!==feedGeneration)return;
       if(start){
         state.adminTrainingMessage=result.message||'Tréning bol uložený do ochrannej fronty.';
