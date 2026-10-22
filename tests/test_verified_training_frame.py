@@ -95,3 +95,14 @@ def test_missing_or_extra_audited_id_remains_fatal(tmp_path):
             load(path, "top-7.2.1", [_match("1"), _match("cancelled", completed=False)])
         with pytest.raises(RuntimeError, match="canonical identity mismatch"):
             load(path, "top-7.2.1", [_match("1"), _match("3")])
+
+
+def test_audit_and_fit_use_identical_point_weighted_profile_settings():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    audit_src = (root / "scripts/audit_training_leakage.py").read_text(encoding="utf-8")
+    fit_src = (root / "api/tbt/services/training.py").read_text(encoding="utf-8")
+    clause = 'point_weighted_quality=(training_profile == "top-7.2.1")'
+    assert clause in fit_src
+    # Audit uses the same profile switch (spacing may differ) for the cached frame.
+    assert 'point_weighted_quality=training_profile == "top-7.2.1"' in audit_src
