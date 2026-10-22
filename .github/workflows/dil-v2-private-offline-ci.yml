@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 15
     env:
       PRIVATE_REPO: BackstageTalks/tbt-data
-      SOURCE_COMMIT: 1ebe0365190bed1b8a351670578f5dfb4d1d8649
+      SOURCE_COMMIT: a10449e0237882e78cffb5d169d021b33c48a626
     steps:
       - name: Checkout public security contract only
         uses: actions/checkout@v4
@@ -56,12 +56,12 @@ jobs:
           til_v2/ingest.py|e273477a54aa923a487aaaa4d8fccb92992ea24b
           til_v2/schema.sql|8e5cbc0a5134c27af1bb9db537aefbe441469edb
           til_v2/bulk.py|979d0107a149311d778386e5ebfea2a74b5665e0
-          til_v2/aux_ingest.py|2a8ea7501cee246f6ae21d9b54680a0d6d7ddc4d
+          til_v2/aux_ingest.py|0b4c346d87f3c2b8e6f6c43c11dc1bcccf486b7c
           til_v2/atp_world_tour.py|c77745e99760df450a9cea8d88fc7954185944c0
           til_v2/cdb_seed.py|5ebc5205bf1f77d078822e51ffb0667fe0591a22
           til_v2/coverage.py|0fbf026db13abb26f3ae49fceb4b72e9446cf901
           til_v2/link.py|f2eb8efe3f989a80927382ae6f1950fe6e3bdbe3
-          til_v2/pipeline.py|805cb642cb0ad3001e50d6be8eb7b81200149902
+          til_v2/pipeline.py|40247438c200ca1e7f81e108be443941c70a2d67
           til_v2/dil_core.py|ca81ab7144104cc6e2cbdbe205423217dbfcb44b
           til_v2/dil_core_schema.sql|e5ce3750fe49253b6a7732d60a3238dd6d77266c
           til_v2/drive_inventory_extended_20261022.json|2d7dc358b9d9d7092f290b3233a5657ca3d51267
