@@ -42,8 +42,11 @@ def offline_gate(report, certificate) -> tuple[bool, list[str]]:
         reasons.append("candidate_training_source_mismatch")
     if (report.get("promotion_decision") or {}).get("promotion_requested") is not False:
         reasons.append("production_promotion_was_requested")
-    if not (report.get("evaluation_governance") or {}).get("holdout_fingerprint"):
+    governance = report.get("evaluation_governance") or {}
+    if not governance.get("holdout_fingerprint"):
         reasons.append("missing_untouched_holdout")
+    if governance.get("eligibility_reason"):
+        reasons.append("holdout_not_independently_eligible")
     gate_ok, failures = _promotion_metric_gate(report)
     if not gate_ok:
         reasons.extend(failures)
@@ -53,7 +56,7 @@ def offline_gate(report, certificate) -> tuple[bool, list[str]]:
     champion = (report.get("production_holdout") or {}).get("accuracy")
     if not isinstance(challenger, (int, float)) or not isinstance(champion, (int, float)):
         reasons.append("missing_champion_accuracy")
-    elif challenger <= champion + 0.01:
+    elif challenger <= champion + 0.02:
         reasons.append("insufficient_accuracy_gain_for_automatic_shadow")
     return not reasons, reasons
 
