@@ -188,9 +188,14 @@ def collect_status(read=github):
                     item.get("status") == "completed" and item.get("conclusion") == "success"):
                 inspected_preflight = True
                 artifacts = read(f"{APP}/actions/runs/{item['id']}/artifacts?per_page=100")
-                record["preflight_report"] = _read_preflight_report(
-                    item, artifacts.get("artifacts", []))
-                record["artifact_verified"] = True
+                try:
+                    record["preflight_report"] = _read_preflight_report(
+                        item, artifacts.get("artifacts", []))
+                    record["artifact_verified"] = True
+                except TrainingUnavailable:
+                    # Old/expired or unverified bytes must not break every future
+                    # worker sync; the preparation remains NOT verified.
+                    record["artifact_verified"] = False
             entries.append(record)
             if item.get("status") in ("queued", "in_progress", "waiting", "pending", "requested"):
                 busy = True
@@ -293,7 +298,9 @@ def _finalize(request, run, snapshot):
         _put("last", {"id": request["id"], "action": request["action"],
                       "state": "FAILED_NEEDS_REVIEW", "run": run})
         return
-    if request["action"] == "prepare_inputs" and run.get("artifact_verified") is not True:
+    if (request["action"] == "prepare_inputs" and
+            (run.get("artifact_verified") is not True or
+             not isinstance(run.get("preflight_report"), dict))):
         raise TrainingBlocked("Preflight report was not independently retained as a GitHub artifact")
     if request["action"] == "activate_shadow":
         expected = request["source_sha256"]
