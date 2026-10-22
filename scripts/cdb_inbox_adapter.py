@@ -283,12 +283,13 @@ def normalize(raw, filename, index, *, source_tour=""):
     row["tourney_date"], date_error = _resolved_match_date(lookup)
     if date_error:
         return None, date_error
-    # A native tournament start is not an observed match date. The exact
-    # provenance is derived only from validated UTC start/match_date input.
-    # Never trust a caller-supplied source_date_kind field.
+    # Never trust a caller-supplied source_date_kind field. Only an
+    # explicit, validated match day can establish match_exact evidence.
+    # The generic eventdate/date fallbacks are actual match-day fields;
+    # tourneydate is explicitly a tournament start, not a match date.
     row["source_date_kind"] = (
-        "match_exact" if (str(lookup.get("starttimeutc") or "").strip()
-                          or str(lookup.get("matchdate") or "").strip())
+        "match_exact" if any(str(lookup.get(key) or "").strip() for key in
+                             ("starttimeutc", "matchdate", "eventdate", "date"))
         else "tournament_start"
     )
     named_tour = tour_from_filename(filename)
