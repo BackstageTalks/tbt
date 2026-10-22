@@ -46,6 +46,7 @@ def main():
                 button=page.locator('[data-admin-action="training-start"]')
                 assert button.is_enabled(), 'New Model Factory must allow a ready guarded training'
                 assert page.get_by_text('Natrénovať a spustiť shadow').is_visible()
+                page.locator('.admin-model-factory-advanced summary').click()
                 assert page.get_by_text('Aktivovať iba shadow (manuálne)').is_visible()
                 assert page.get_by_text('3 · Nasadiť do produkcie').is_visible()
                 assert page.locator('[data-admin-action="model-factory-promote"]').is_disabled()
