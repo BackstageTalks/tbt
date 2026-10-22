@@ -1,8 +1,8 @@
 # BlinQ Model Factory — three-stage operator interface (2026-10-22)
 
-**Implementation status:** staged on `training/model-factory`, not yet deployed.
+**Implementation status:** Stages 1–2 merged into `main` via #957 at `ba03093de71eb9a32f6e523a10cb5a269cb9907a`; Azure deployment requires separate CI success and live readback. Stage 3 remains disabled and is tracked in #959.
 Canonical input remains the existing CDB in private `BackstageTalks/tbt-data`.
-The training branch is for **versioned code development**, not an additional
+The training branch was for **versioned code development**, not an additional
 database or another mutable copy of historical match records.
 
 ## 1. Pripraviť dáta — read-only source-quality preflight
@@ -44,7 +44,7 @@ The manually dispatched protected training workflow defaults to
 ## 3. Nasadiť do produkcie — not yet implemented
 
 The visual third button is disabled until a separate production promotion
-controller is implemented and independently tested. To enable it safely:
+controller is implemented and independently tested (tracked in #959). To enable it safely:
 - Bind approval to an exact immutable candidate tag, model digest, and
   serving champion digest (compare-and-swap).
 - Require independently issued/settled forward shadow evidence, ATP/WTA
@@ -66,4 +66,4 @@ saved candidate release. Existing TOP/VALUE policy and CDB remain unchanged.
 - Implemented stages are auditable through immutable run IDs and SHA.
 - Preflight completion means data-audit report ready, not binary freeze.
 - Launch/publish requires the usual GitHub CI and independent live health
-  verification; this branch/PR alone is not a deployed Admin interface.
+  verification; a merged PR alone is not a deployed Admin interface.
