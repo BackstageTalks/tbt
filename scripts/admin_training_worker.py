@@ -32,7 +32,7 @@ def main():
         if pending["profile"] not in {"standard", "top-7.2.1"}:
             raise RuntimeError("Invalid requested profile")
         github(f"{APP}/actions/workflows/{WORKFLOW}/dispatches", {
-            "ref": "main", "inputs": {"training_profile": pending["profile"], "auto_shadow": "true" if pending["profile"] == "top-7.2.1" else "false"}})
+            "ref": "main", "inputs": {"training_profile": pending["profile"], "auto_shadow": "true" if pending.get("auto_shadow") is True and pending["profile"] == "top-7.2.1" else "false"}})
         print("One protected training dispatch accepted; actual run will be verified on next sync")
     else:
         print("Admin snapshot persisted and read back; no new request dispatched")
