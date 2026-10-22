@@ -4938,6 +4938,8 @@
     const evidenceTime=Date.parse(preflight?.verified_at||'');
     const preflightFresh=preflight?.state==='WORKFLOW_VERIFIED'&&
       preflight?.run?.conclusion==='success'&&preflight?.run?.artifact_verified===true&&
+      Number.isSafeInteger(preflight?.run?.preflight_report?.eligible_rows)&&
+      preflight.run.preflight_report.eligible_rows>=500000&&
       Number.isFinite(evidenceTime)&&Date.now()-evidenceTime>=0&&
       Date.now()-evidenceTime<=24*60*60*1000;
     // The authoritative trainer independently freezes and verifies inputs again.
@@ -4977,6 +4979,14 @@
       '<strong>Audit dát overený.</strong> '+safeLink(preflight.run?.html_url,'Report ATP/WTA · beh #'+preflight.run?.id)+
       ' · Finálne zmrazenie a zálohovanie vstupov prebehne v tréningu.':
       'Zatiaľ chýba čerstvý overený report ATP/WTA. Najprv spusti prípravu dát.';
+    const tourSummary=tour=>{
+      const item=preflight?.run?.preflight_report?.tours?.[tour];
+      if(!preflightFresh||!item)return '';
+      const n=value=>Number.isSafeInteger(value)&&value>=0?value.toLocaleString('sk-SK'):'—';
+      const c=item.coverage_counts||{};
+      return '<p><strong>'+tour.toUpperCase()+': '+n(item.eligible_matches)+' zápasov</strong> · rebríčky '+n(c.rank_pair)+
+        ' · podanie '+n(c.serve)+' · return '+n(c.return)+' · break pointy '+n(c.break_points)+'</p>';
+    };
     const shadowNow=state.adminCalibration?.candidate_active===true;
     const shadowText=shadowNow?'Shadow kandidát beží; na produkciu nemá vplyv.':
       'Po úspešnom tréningu, offline porovnaní a kontrolách sa kandidát automaticky aktivuje iba v shadow režime.';
@@ -4989,7 +4999,7 @@
       '<article class="admin-calibration-panel"><small>FÁZA 1 · READ-ONLY</small><h3>1 · Pripraviť dáta</h3>'+
       '<p>Audit aktuálnej kanonickej CDB: ATP/WTA zápasy, historické obdobie, identity, chýbajúce rebríčky, serve/return a break points. Bez importu, API požiadaviek či kopírovania tréningových záloh.</p>'+
       '<button type="button" class="btn btn-primary" data-admin-action="model-lab-start" data-model-lab-operation="prepare_inputs" '+(canBuild?'':'disabled')+'>Pripraviť a skontrolovať dáta</button>'+
-      '<p role="status">'+preflightText+'</p></article>'+
+      '<p role="status">'+preflightText+'</p>'+tourSummary('atp')+tourSummary('wta')+'</article>'+
       '<article class="admin-calibration-panel"><small>FÁZA 2 · KANDIDÁT / SHADOW</small><h3>2 · Natrénovať a aktivovať kandidáta</h3>'+
       '<p>Chránený tréning zmrazí overené vstupy, otestuje modely ATP/WTA proti championovi a uloží kandidáta. Shadow sa aktivuje automaticky len pri splnení ďalších offline kvalitatívnych brán.</p>'+
       '<button type="button" class="btn btn-primary" data-admin-action="training-start" '+(canTrain?'':'disabled')+'>Natrénovať a spustiť shadow</button>'+
