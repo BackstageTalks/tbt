@@ -109,9 +109,12 @@ def _read_preflight_report(run: dict, artifacts: list[dict]) -> dict:
         raise TrainingUnavailable("Trusted preflight artifact reader has no GitHub token")
     with tempfile.TemporaryDirectory(prefix="blinq-preflight-") as directory:
         env = dict(os.environ, GH_TOKEN=token)
-        proc = subprocess.run(
-            ["gh", "run", "download", str(run_id), "-R", APP, "-n", name, "-D", directory],
-            capture_output=True, text=True, timeout=120, env=env)
+        try:
+            proc = subprocess.run(
+                ["gh", "run", "download", str(run_id), "-R", APP, "-n", name, "-D", directory],
+                capture_output=True, text=True, timeout=120, env=env)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise TrainingUnavailable("Preflight artifact download unavailable") from exc
         if proc.returncode:
             raise TrainingUnavailable("Cannot independently download preflight report")
         path = Path(directory) / "report.json"
