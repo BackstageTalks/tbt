@@ -186,13 +186,20 @@ def _stage3_diagnostics(read, champion_sha):
     if shadow is None:
         reasons.append("Chýba nezávislý forward-shadow audit.")
     elif shadow.get("status") != "eligible_pending_approval":
-        findings = (shadow.get("decision") or {}).get("reasons") or []
+        decision = shadow.get("decision")
+        decision = decision if isinstance(decision, dict) else {}
+        findings = decision.get("reasons")
+        findings = findings if isinstance(findings, list) else []
         first = next((str(v) for v in findings if isinstance(v, str)), "")
         reasons.append("Forward-shadow audit zamietol kandidáta"
                        + (": " + first if first else "."))
+    bundle = rollback.get("bundle_files") if isinstance(rollback, dict) else None
+    bundle = bundle if isinstance(bundle, dict) else {}
+    saved_model = bundle.get("model.joblib")
+    saved_model = saved_model if isinstance(saved_model, dict) else {}
     if (not isinstance(rollback, dict)
             or rollback.get("status") != "PASS"
-            or (rollback.get("bundle_files") or {}).get("model.joblib", {}).get("sha256") != champion_sha
+            or saved_model.get("sha256") != champion_sha
             or rollback.get("backup_tag") != "tbt-champion-backup-sha256-" + champion_sha):
         reasons.append("Chýba SHA-viazaný overený rollback aktuálneho championa.")
     # Historical evidence may pass, but there is not yet an audited, atomic
