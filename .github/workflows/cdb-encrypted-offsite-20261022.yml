@@ -1,0 +1,119 @@
+name: Private CDB encrypted offsite handoff
+
+on:
+  push:
+    branches:
+      - backup/secure-cdb-drive-transfer-20261022
+    paths:
+      - .github/workflows/cdb-encrypted-offsite-20261022.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-cdb-encrypted-backup-readonly
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PRIVATE_REPO: BackstageTalks/tbt-data
+      BACKUP_KEY_PATH: backup/CDB_OFFSITE_ZIP_PASSWORD_20261022.txt
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Verify private source credentials and fetch complete canonical release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/"$PRIVATE_REPO" --jq .private)" = true
+          mkdir -p cdb protected
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > release-before.json
+          gh release download tbt-data-v1 -R "$PRIVATE_REPO" \
+            -p 'history-*.parquet' \
+            -p history_manifest.json \
+            -p _tbt_bundle_manifest.json \
+            -D cdb
+          gh api "repos/$PRIVATE_REPO/releases/tags/tbt-data-v1" > release-after.json
+
+      - name: Verify 78 partitions and encrypt them into a password-protected ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pyzipper==0.3.6
+          python - <<'PY'
+          import hashlib,json,re,secrets,subprocess,os,base64,sys
+          from pathlib import Path
+          import pyzipper
+          before=json.loads(Path('release-before.json').read_text())
+          after=json.loads(Path('release-after.json').read_text())
+          assert before['id']==after['id'] and before['updated_at']==after['updated_at'], 'The canonical release changed while downloading'
+          remote={a['name']:a for a in after['assets']}
+          paths=sorted(Path('cdb').glob('history-*.parquet'))
+          required={f'history-{y}.parquet' for y in range(1949,2027)}
+          assert len(paths)==78 and {p.name for p in paths}==required, 'Missing years'
+          manifest=json.loads(Path('cdb/history_manifest.json').read_text())
+          assert isinstance(manifest.get('years'),dict) and set(manifest['years'])=={str(y) for y in range(1949,2027)}
+          bundle=json.loads(Path('cdb/_tbt_bundle_manifest.json').read_text())
+          assert isinstance(bundle.get('files'),dict)
+          files=paths+[Path('cdb/history_manifest.json'),Path('cdb/_tbt_bundle_manifest.json')]
+          proof={'release_id':after['id'],'release_tag':after['tag_name'],'release_updated_at':after['updated_at'],'history_partitions':78,'canonical_writes':0,'provider_api_requests':0,'files':{}}
+          for p in files:
+              digest=hashlib.sha256(p.read_bytes()).hexdigest()
+              assert remote[p.name]['digest']=='sha256:'+digest and remote[p.name]['size']==p.stat().st_size, 'Remote asset byte mismatch '+p.name
+              if p.name!='_tbt_bundle_manifest.json':
+                  assert bundle['files'][p.name]['sha256']==digest, 'Bundle digest mismatch '+p.name
+              if p.name.startswith('history-'):
+                  year=re.fullmatch(r'history-(\d{4})\.parquet',p.name).group(1)
+                  assert manifest['years'][year]['sha256']==digest, 'Year digest mismatch '+p.name
+              proof['files'][p.name]={'sha256':digest,'bytes':p.stat().st_size}
+          proof['total_bytes']=sum(x['bytes'] for x in proof['files'].values())
+          password=secrets.token_urlsafe(48)
+          assert len(password)>50
+          proof_path=Path('cdb/BACKUP_VERIFICATION.json')
+          proof_path.write_text(json.dumps(proof,indent=2,sort_keys=True)+'\n')
+          checksums_path=Path('cdb/SHA256SUMS.txt')
+          checksums_path.write_text(''.join(f"{x['sha256']}  {n}\n" for n,x in sorted(proof['files'].items())))
+          zippath=Path('protected/BLINQ_CDB_1949-2026_20261022_AES256.zip')
+          with pyzipper.AESZipFile(zippath,'w',compression=pyzipper.ZIP_STORED,encryption=pyzipper.WZ_AES) as zf:
+              zf.setpassword(password.encode('ascii'))
+              zf.setencryption(pyzipper.WZ_AES,nbits=256)
+              for p in files+[proof_path,checksums_path]:
+                  zf.write(p,p.name)
+          with pyzipper.AESZipFile(zippath) as zf:
+              zf.setpassword(password.encode('ascii'))
+              assert len(zf.namelist())==82
+              for name in zf.namelist():
+                  zf.read(name)
+          archive_sha=hashlib.sha256(zippath.read_bytes()).hexdigest()
+          # Store the password only in the PRIVATE repository, never in the public GitHub artifact.
+          payload={'message':'backup: retain secret for AES256 CDB offsite archive',
+                   'content':base64.b64encode((password+'\n').encode()).decode('ascii'),
+                   'branch':'main'}
+          subprocess.run(['gh','api','--method','PUT',f"repos/{os.environ['PRIVATE_REPO']}/contents/{os.environ['BACKUP_KEY_PATH']}",
+              '--input','-'],input=json.dumps(payload),text=True,check=True,stdout=subprocess.DEVNULL)
+          keycheck=subprocess.run(['gh','api',f"repos/{os.environ['PRIVATE_REPO']}/contents/{os.environ['BACKUP_KEY_PATH']}?ref=main"],
+              check=True,text=True,capture_output=True)
+          remote_key=json.loads(keycheck.stdout)
+          assert base64.b64decode(remote_key['content']).decode().strip()==password, 'Private key readback failed'
+          Path('protected/BACKUP_README.txt').write_text(
+              'Complete canonical BlinQ CDB, 78 yearly Parquet partitions, 1949-2026.\n'
+              'AES-256-encrypted ZIP; password kept only in private repository: '
+              +os.environ['PRIVATE_REPO']+'/blob/main/'+os.environ['BACKUP_KEY_PATH']+'\n'
+              +'SHA256 archive: '+archive_sha+'\n'
+              +'Canonical release ID: '+str(after['id'])+'; no CDB changes.\n')
+          print('CDB_ENCRYPTED_BACKUP_VERIFIED',len(paths),'YEARS',proof['total_bytes'],'BYTES','ZIP_SHA256',archive_sha)
+          PY
+
+      - name: Upload only encrypted ZIP and nonsecret README to transient artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLINQ_CDB_ENCRYPTED_BACKUP_20261022
+          path: protected/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
