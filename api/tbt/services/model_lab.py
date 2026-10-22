@@ -10,6 +10,10 @@ from datetime import datetime, timezone
 import json
 import re
 import secrets
+import os
+from pathlib import Path
+import subprocess
+import tempfile
 
 from .admin_storage import _table, UI_TABLE, AdminStorageUnavailable
 from .model_training import APP, DATA, TrainingBlocked, TrainingUnavailable, github, inspect, status as training_status
@@ -89,6 +93,67 @@ def _digest(release):
     return digest[7:] if digest.startswith("sha256:") and SHA.fullmatch(digest[7:]) else ""
 
 
+def _read_preflight_report(run: dict, artifacts: list[dict]) -> dict:
+    """Trusted Actions worker: independently download and validate audit bytes."""
+    run_id = run.get("id")
+    head_sha = str(run.get("head_sha") or "")
+    if not isinstance(run_id, int) or not re.fullmatch(r"[0-9a-f]{40}", head_sha):
+        raise TrainingUnavailable("Unpinned preflight run")
+    name = f"model-factory-preflight-{run_id}"
+    selected = [a for a in artifacts if a.get("name") == name and
+                a.get("expired") is False and int(a.get("size_in_bytes") or 0) > 0]
+    if len(selected) != 1:
+        raise TrainingUnavailable("Preflight report artifact not independently available")
+    token = os.environ.get("BLINQ_TRAINING_GITHUB_TOKEN", "").strip()
+    if not token:
+        raise TrainingUnavailable("Trusted preflight artifact reader has no GitHub token")
+    with tempfile.TemporaryDirectory(prefix="blinq-preflight-") as directory:
+        env = dict(os.environ, GH_TOKEN=token)
+        proc = subprocess.run(
+            ["gh", "run", "download", str(run_id), "-R", APP, "-n", name, "-D", directory],
+            capture_output=True, text=True, timeout=120, env=env)
+        if proc.returncode:
+            raise TrainingUnavailable("Cannot independently download preflight report")
+        path = Path(directory) / "report.json"
+        if not path.is_file() or path.stat().st_size > 32768:
+            raise TrainingUnavailable("Preflight report missing or unexpectedly large")
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            raise TrainingUnavailable("Invalid preflight report bytes") from exc
+    if (not isinstance(report, dict) or report.get("schema") != 1 or
+            report.get("status") != "READ_ONLY_PREFLIGHT_COMPLETE_NOT_FROZEN" or
+            report.get("code_sha") != head_sha or
+            not SHA.fullmatch(str(report.get("canonical_manifest_sha256") or ""))):
+        raise TrainingUnavailable("Preflight artifact failed source identity validation")
+    tours = report.get("tours")
+    if not isinstance(tours, dict) or set(tours) != {"atp", "wta"}:
+        raise TrainingUnavailable("Incomplete ATP/WTA report")
+    compact = {}
+    for tour in ("atp", "wta"):
+        row = tours[tour]
+        n = row.get("eligible_matches")
+        if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+            raise TrainingUnavailable("Invalid ATP/WTA match count")
+        counts = row.get("coverage_counts")
+        if not isinstance(counts, dict):
+            raise TrainingUnavailable("Invalid ATP/WTA stat coverage")
+        verified_counts = {}
+        for key in ("rank_pair", "serve", "return", "break_points", "stat_rows"):
+            value = counts.get(key)
+            if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= n:
+                raise TrainingUnavailable("Invalid per-tour stat count")
+            verified_counts[key] = value
+        compact[tour] = {"eligible_matches": n, "coverage_counts": verified_counts}
+    if (sum(row["eligible_matches"] for row in compact.values()) != report.get("eligible_rows") or
+            report["eligible_rows"] < 500000):
+        raise TrainingUnavailable("Preflight total count mismatch")
+    return {"tours": compact, "eligible_rows": report["eligible_rows"],
+            "excluded_rows": report.get("excluded_rows"),
+            "manifest_sha256": report["canonical_manifest_sha256"],
+            "source_run_id": run_id}
+
+
 def collect_status(read=github):
     """Worker-only GitHub fetch. No provider calls and no CDB writes."""
     # Prove private data repository access before treating missing evidence as empty.
@@ -115,18 +180,17 @@ def collect_status(read=github):
     for action, workflow in WORKFLOWS.items():
         raw = read(f"{APP}/actions/workflows/{workflow}/runs?per_page=15")
         entries = []
+        inspected_preflight = False
         for item in raw.get("workflow_runs", []):
             record = {k: item.get(k) for k in
-                      ("id", "status", "conclusion", "html_url", "display_title", "created_at")}
-            if action == "prepare_inputs" and item.get("status") == "completed" and item.get("conclusion") == "success":
+                      ("id", "status", "conclusion", "html_url", "display_title", "created_at", "head_sha")}
+            if (action == "prepare_inputs" and not inspected_preflight and
+                    item.get("status") == "completed" and item.get("conclusion") == "success"):
+                inspected_preflight = True
                 artifacts = read(f"{APP}/actions/runs/{item['id']}/artifacts?per_page=100")
-                expected_name = f"model-factory-preflight-{item['id']}"
-                record["artifact_verified"] = any(
-                    asset.get("name") == expected_name and
-                    int(asset.get("size_in_bytes") or 0) > 0 and
-                    asset.get("expired") is False
-                    for asset in artifacts.get("artifacts", [])
-                )
+                record["preflight_report"] = _read_preflight_report(
+                    item, artifacts.get("artifacts", []))
+                record["artifact_verified"] = True
             entries.append(record)
             if item.get("status") in ("queued", "in_progress", "waiting", "pending", "requested"):
                 busy = True
