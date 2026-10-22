@@ -89,16 +89,22 @@ jobs:
             echo 'DIL_V2_PRIVATE_COMPILE_FAILED_REDACTED'
             exit 1
           fi
+          FAILED=0
           if PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -q -s tests -p 'test_til_v2*.py' >/tmp/dil-v2-contract.log 2>&1; then
             echo 'DIL_V2_ALL_MATCH_AND_PIPELINE_SYNTHETIC_TESTS_PASSED'
           else
             echo 'DIL_V2_MATCH_OR_PIPELINE_SYNTHETIC_TEST_FAILED_REDACTED'
-            exit 1
+            python -c 'import re; s=open("/tmp/dil-v2-contract.log").read(); m=sorted(set(re.findall(r"(?m)^(?:ERROR|FAIL): (test_[A-Za-z0-9_]+)", s))); print("DIL_V2_FAILED_TEST_METHODS="+",".join(m)[:500]); z=re.search(r"(?m)^FAILED \([^\n]+\)", s); print("DIL_V2_TEST_COUNTS="+(z.group(0) if z else "unknown"))'
+            FAILED=1
           fi
           if PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -q -s tests -p 'test_dil_core.py' >/tmp/dil-v2-core.log 2>&1; then
             echo 'DIL_V2_CANONICAL_SCHEMA_DUCKDB_TESTS_PASSED'
           else
             echo 'DIL_V2_CANONICAL_SCHEMA_DUCKDB_TEST_FAILED_REDACTED'
+            python -c 'import re; s=open("/tmp/dil-v2-core.log").read(); m=sorted(set(re.findall(r"(?m)^(?:ERROR|FAIL): (test_[A-Za-z0-9_]+)", s))); print("DIL_V2_CORE_FAILED_METHODS="+",".join(m)[:500]); z=re.search(r"(?m)^FAILED \([^\n]+\)", s); print("DIL_V2_CORE_COUNTS="+(z.group(0) if z else "unknown"))'
+            FAILED=1
+          fi
+          if [ "$FAILED" -ne 0 ]; then
             exit 1
           fi
           echo 'DIL_V2_ALL_PRIVATE_SYNTHETIC_SUITES_PASSED'
