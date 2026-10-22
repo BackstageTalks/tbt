@@ -5015,6 +5015,10 @@
       (failed&&!unsafeFailure?'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-acknowledge" '+(busy?'disabled':'')+'>Potvrdiť zlyhanie read-only auditu</button>':'')+
       (unsafeFailure?'<p role="alert">Zápis sa mohol vykonať čiastočne. Pred ďalším krokom je nutná nezávislá ručná kontrola CDB/release.</p>':'')+
       '<details class="admin-model-factory-advanced"><summary>Pokročilé operácie a história</summary>'+
+      '<p>Ručná shadow aktivácia slúži len ako kontrolovaná záložná cesta pre už overený nemenný model.</p>'+
+      '<p role="status">'+evidenceText+'</p>'+
+      '<label>Overený kandidát <select id="admin-model-lab-candidate" '+(canActivate?'':'disabled')+'>'+options+'</select></label>'+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="activate_shadow" '+(canActivate?'':'disabled')+'>Aktivovať iba shadow (manuálne)</button>'+
       '<p>Voliteľný Drive import a read-only audit sú oddelené úkony; nie sú podmienkou na nový tréning z aktuálnej CDB.</p>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="import_drive" '+(canActivate?'':'disabled')+'>Importovať 100 Drive súborov</button> '+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(canActivate?'':'disabled')+'>Nezávislý shadow audit</button> '+
