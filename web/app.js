@@ -4975,6 +4975,9 @@
     const unsafeFailure=failed&&!['refresh_tests','audit_shadow'].includes(operation.action);
     const hint=state.adminTrainingMessage||state.adminModelLabMessage||training?.reason||d?.reason||'Načítavam aktuálny stav…';
     const latestCandidate=training?.candidates?.[0]?.tag||'—';
+    const stage3Reasons=Array.isArray(d?.stage3?.reasons)?
+      d.stage3.reasons.filter(v=>typeof v==='string').slice(0,4):
+      ['Chýbajú nezávislé Stage 3 dôkazy a overené produkčné prepnutie.'];
     const preflightText=preflightFresh?
       '<strong>Audit dát overený.</strong> '+safeLink(preflight.run?.html_url,'Report ATP/WTA · beh #'+preflight.run?.id)+
       ' · Finálne zmrazenie a zálohovanie vstupov prebehne v tréningu.':
@@ -5009,7 +5012,7 @@
       '<article class="admin-calibration-panel"><small>FÁZA 3 · SCHVÁLENIE</small><h3>3 · Nasadiť do produkcie</h3>'+
       '<p>Sprístupní sa až po nezávislom forward shadow vyhodnotení, kontrole TOP/VALUE, overenom rollbacku a výslovnom potvrdení konkrétneho modelu.</p>'+
       '<button type="button" class="btn btn-primary" data-admin-action="model-factory-promote" disabled>Nasadiť do produkcie</button>'+
-      '<p role="status">Zatiaľ zablokované. Produkčný prepínač nemá implementovanú schválenú bezpečnú cestu; žiadna akcia nemení championa.</p>'+
+      '<p role="status">Zablokované: '+escapeHtml(stage3Reasons.join(' · '))+'</p>'+
       '<p><strong>Posledný uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article></div>'+
       '<div class="admin-calibration-bottom"><div><strong>Rozpracovaná operácia</strong><span>'+activeText+'</span></div><div><strong>Posledná kontrola</strong><span>'+lastText+'</span></div></div>'+
       (failed&&!unsafeFailure?'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-acknowledge" '+(busy?'disabled':'')+'>Potvrdiť zlyhanie read-only auditu</button>':'')+
