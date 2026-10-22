@@ -16,6 +16,7 @@ from .model_training import APP, DATA, TrainingBlocked, TrainingUnavailable, git
 
 PARTITION = "model-lab-queue"
 WORKFLOWS = {
+    "prepare_inputs": "model-factory-preflight.yml",
     "import_drive": "cdb-drive-inbox.yml",
     "refresh_tests": "model-calibration-monitor.yml",
     "audit_shadow": "model-shadow-evaluation-readonly.yml",
@@ -233,6 +234,8 @@ def _finalize(request, run, snapshot):
         # A successful bounded import run is not proof that new eligible rows existed.
         "note": ("Skontroluj počet nových CDB riadkov v importe."
                  if request["action"] == "import_drive" else
+                 "Predtréningový audit prešiel; snapshot pre fit sa vytvorí až pri tréningu."
+                 if request["action"] == "prepare_inputs" else
                  "Zápis kandidáta a kontrola produkcie boli overené."
                  if request["action"] == "activate_shadow" else
                  "Testovací snapshot bol synchronizovaný."),
@@ -319,7 +322,7 @@ def acknowledge_failed(payload):
         raise TrainingBlocked("No independently verified failed operation")
     # An importer or shadow activation may have failed after a partial write.
     # Browser acknowledgement is safe only for read-only refreshes.
-    if active["action"] not in {"refresh_tests", "audit_shadow"}:
+    if active["action"] not in {"prepare_inputs", "refresh_tests", "audit_shadow"}:
         raise TrainingBlocked("Import alebo shadow zápis vyžaduje nezávislé overenie a ručnú rekonciliáciu.")
     snapshot = status()
     run = _find_run(active, snapshot)
