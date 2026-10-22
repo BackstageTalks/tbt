@@ -25,8 +25,17 @@ def _frame():
     })
 
 
+def _match(match_id: str, *, completed=True):
+    return SimpleNamespace(
+        match_id=match_id, is_completed=completed,
+        scheduled_at=datetime(2026, 9, 30, tzinfo=timezone.utc),
+        player1_id="player-1", player2_id="player-2",
+        provider_payload={}, stats={}, tour="atp", surface="hard",
+    )
+
+
 def _matches():
-    return [SimpleNamespace(match_id=x) for x in ("1", "2")]
+    return [_match(x) for x in ("1", "2")]
 
 
 def test_run_bound_cache_roundtrip_and_sha_readback(tmp_path):
@@ -38,8 +47,7 @@ def test_run_bound_cache_roundtrip_and_sha_readback(tmp_path):
         with pytest.raises(RuntimeError, match="profile"):
             load(path, "standard", _matches())
         with pytest.raises(RuntimeError, match="identity"):
-            load(path, "top-7.2.1", [SimpleNamespace(match_id="1"),
-                                       SimpleNamespace(match_id="3")])
+            load(path, "top-7.2.1", [_match("1"), _match("3")])
         with pytest.raises(RuntimeError, match="overwrite"):
             persist(_frame(), path, "top-7.2.1")
         path.write_bytes(path.read_bytes() + b"tamper")
@@ -67,3 +75,23 @@ def test_invalid_cache_cannot_be_sealed(tmp_path):
         frame.loc[0, "scheduled_at"] = datetime(2026, 11, 1, tzinfo=timezone.utc)
         with pytest.raises(RuntimeError, match="chronology"):
             persist(frame, tmp_path / "future.parquet", "top-7.2.1")
+
+
+def test_cache_is_checked_against_same_audited_eligible_cohort(tmp_path):
+    """Real run #39729023860 included excluded CDB rows; these are not cache IDs."""
+    path = tmp_path / "audited.parquet"
+    with patch("verified_training_frame.validate_certificate", return_value=CERT):
+        persist(_frame(), path, "top-7.2.1")
+        source = [*_matches(), _match("cancelled", completed=False)]
+        restored = load(path, "top-7.2.1", source)
+        assert restored.match_id.astype(str).tolist() == ["1", "2"]
+
+
+def test_missing_or_extra_audited_id_remains_fatal(tmp_path):
+    path = tmp_path / "audited.parquet"
+    with patch("verified_training_frame.validate_certificate", return_value=CERT):
+        persist(_frame(), path, "top-7.2.1")
+        with pytest.raises(RuntimeError, match="audited match count mismatch"):
+            load(path, "top-7.2.1", [_match("1"), _match("cancelled", completed=False)])
+        with pytest.raises(RuntimeError, match="canonical identity mismatch"):
+            load(path, "top-7.2.1", [_match("1"), _match("3")])
