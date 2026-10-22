@@ -65,6 +65,18 @@ html=ctx.renderAdminModelLab();
 assert.doesNotMatch(html,/data-model-lab-operation="activate_shadow" disabled/);
 assert.match(html,/Nezávislý offline holdout overený/);
 assert.match(html,/data-admin-action="model-factory-promote" disabled/);
+state.adminModelLab.stage3={
+  enabled:false,
+  reasons:['Forward-shadow audit zamietol kandidáta: log_loss_worse_than_production',
+           'Chýba otestovaný Stage 3 controller'],
+};
+html=ctx.renderAdminModelLab();
+assert.match(html,/log_loss_worse_than_production/);
+assert.match(html,/model-factory-promote" disabled/);
+state.adminModelLab.stage3.reasons=['<script>alert(1)</script>'];
+html=ctx.renderAdminModelLab();
+assert(!html.includes('<script>alert(1)</script>'));
+assert.match(html,/model-factory-promote" disabled/);
 state.adminModelLab.operation={
   id:'a'.repeat(24),action:'activate_shadow',state:'RUNNING',
   run:{id:123,html_url:'javascript:alert(1)',status:'in_progress'},
