@@ -58,6 +58,7 @@ def audit(history_dir: Path, *, training_profile: str = "standard",
     builder = FeatureBuilder(
         independent_serve_return=training_profile == "top-7.2.1",
         independent_direct_rates=training_profile == "top-7.2.1",
+        point_weighted_quality=training_profile == "top-7.2.1",
     )
     frame = builder.build_training_frame(cleaned).sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
 
