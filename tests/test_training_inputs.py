@@ -61,7 +61,7 @@ def test_721_fit_preserves_probability_profile_and_separate_market_gate():
     matches = []
     for i in range(1200):
         a, b = map(int, rng.choice(20, 2, replace=False))
-        at = datetime(2023, 1, 1, tzinfo=timezone.utc) + timedelta(days=i // 4)
+        at = datetime(2024, 1, 1, tzinfo=timezone.utc) + timedelta(days=i // 4)
         matches.append(MatchRecord(
             match_id=str(i), tour="atp" if i % 2 else "wta", scheduled_at=at,
             player1_id=str(a), player2_id=str(b), player1_name=str(a), player2_name=str(b),
