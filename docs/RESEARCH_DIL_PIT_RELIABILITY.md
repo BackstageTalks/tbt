@@ -75,3 +75,55 @@ Run focused checks including the source/selection gates with
 `PYTHONPATH=api python -m pytest -q tests/test_evidence_lab.py tests/test_evidence_training.py tests/test_evidence_selection_audit.py`.
 The newly added selection audit must remain candidate-research-only; the
 serving model and current TOP/VALUE path must never import it.
+
+
+## Paired original-7.2.1 versus DIL research fit (no deployment)
+
+`api/tbt/models/symmetry.py` now explicitly registers all 15 optional DIL
+features. Seven rate/form differences change sign when player orientation
+swaps; eight coverage/depth indicators are invariant. Existing production
+feature schema is unchanged. New focused symmetry/model-contract tests verify
+a two-way swap and the opt-in estimator constructor.
+
+`api/tbt/models/evidence_ablation.py` provides
+`run_dil_research_ablation(frozen_frame, canonical_matches, verified_dil_rows,
+original_721_feature_names=..., canonical_source_sha256=...,
+dil_sidecar_sha256=...)`. The sidecar SHA256 is the **canonical serialized
+HistoricalEvidence-row digest**, re-computed independently by
+`canonical_dil_evidence_digest` before fitting. The canonical source SHA256
+is a caller-provided reference and is **not** by itself an independently
+verified CDB backup: the protected training workflow must first verify the
+real canonical source and restore proof. Require the exact immutable
+run-bound feature frame and its original 7.2.1 feature-name list, never
+guess original features from a later artifact.
+
+The research helper applies independently verified DIL→CDB match and
+player links, source `available_at`, historically recorded pre-start
+opponent expectations, same-day embargo, and 2024+ learning labels. Only
+then does it fit two fresh models with identical original 7.2.1 features,
+estimator hyperparameters and chronological 70/15/15 whole-day
+train/calibration/descriptive-test split; the enriched arm adds the 15
+namespaced DIL columns. Minimum paired serve/return rows are required in
+**both ATP and WTA across train, calibration and test**. It reports Brier,
+log-loss, accuracy, ECE and ROC-AUC for the same matches, plus tour, surface
+and available competition-level segments. It returns a report only; no
+model/joblib artifact, CDB writer, API calls, live selector or champion
+activation. The descriptive test is NOT a new untouched holdout if its
+outcomes have already been examined. A later untouched interval plus
+prospective issued shadow are mandatory for any performance claim.
+
+**Source checkpoint:** The existing private
+`research/training_l2/serve_return_20261015/README.md` documents 270,622
+source-native completed match pairs and 302,509 unmatched references;
+the source has no attested canonical match IDs or actual completion/
+publication timestamps. The existing 1,435 canonical NULL-only writes
+from a separate import are not evidence that this L2 source was matched
+to those same rows. The recently created Drive rebuild-rules ZIP is not
+an attested match/player crosswalk or historical as-of evidence.
+Consequently do not dispatch a new DIL candidate fit or start automated
+TOP/VALUE filtering solely from these inventories. Require actual frozen
+trusted evidence, current writer idle, backup/restore/readback and leakage
+gates before fitting through the existing protected training job.
+
+Focused local/CI regression:
+`PYTHONPATH=api python -m pytest -q tests/test_evidence_lab.py tests/test_evidence_training.py tests/test_evidence_selection_audit.py tests/test_evidence_symmetry.py tests/test_evidence_ablation.py`.
