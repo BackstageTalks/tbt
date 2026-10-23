@@ -9,6 +9,7 @@ from __future__ import annotations
 from bisect import bisect_left
 from collections import defaultdict
 from datetime import datetime, time, timezone
+import math
 from typing import Iterable, Mapping
 
 from .evidence_lab import (
@@ -40,7 +41,7 @@ class FrozenEvidenceIndex:
             # A match from the same-day outcome must not affect earlier fixtures.
             if not isinstance(r.expected_win, (float, int)) or isinstance(r.expected_win, bool):
                 raise ValueError("Missing historical pre-match expectation")
-            if not 0 <= r.expected_win <= 1:
+            if not math.isfinite(r.expected_win) or not 0 <= r.expected_win <= 1:
                 raise ValueError("Invalid opponent expectation")
             _counts(r)
             key = (r.tour.lower(), r.player_id, r.canonical_match_id)
