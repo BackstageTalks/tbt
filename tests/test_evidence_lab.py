@@ -71,11 +71,11 @@ def test_reliability_withholds_confident_but_sparse_player():
                  ["serve", "return", "second_serve", "bp_save", "bp_convert"]})
     small = dict(large, canonical_player_id="B", matches_recent=3, matches_surface=1,
                  covered_matches={k: 3 for k in large["covered_matches"]})
-    assert not reliability_gate(large, small, [.80, .82])["eligible"]
+    assert not reliability_gate(large, small, two_models(.80, .82))["eligible"]
     rich = dict(large, canonical_player_id="B")
-    assert reliability_gate(large, rich, [.80, .82])["eligible"]
-    assert not reliability_gate(large, rich, [.80, .60])["eligible"]
-    assert not reliability_gate(large, rich, [.80])["eligible"]
+    assert reliability_gate(large, rich, two_models(.80, .82))["eligible"]
+    assert not reliability_gate(large, rich, two_models(.80, .60))["eligible"]
+    assert not reliability_gate(large, rich, {"elo": {"left_player_id": "A", "probability": .80}})["eligible"]
 
 
 def test_source_timestamp_and_malformed_data_rejected():
@@ -144,3 +144,24 @@ def test_pair_adapter_refuses_unreviewed_or_cross_tour_identity():
         pair_feature_projection(left, dict(left))
     with pytest.raises(ValueError):
         pair_feature_projection(left, dict(left, canonical_player_id="B", tour="wta"))
+
+
+def two_models(a, b):
+    return {
+        "elo": {"left_player_id": "A", "probability": a},
+        "hgb": {"left_player_id": "A", "probability": b},
+    }
+
+
+def test_model_disagreement_requires_same_canonical_left_player():
+    rich = dict(canonical_player_id="A", tour="atp", matches_recent=20,
+                matches_surface=15, covered_matches={k: 20 for k in
+                ("serve", "return", "second_serve", "bp_save", "bp_convert")})
+    other = dict(rich, canonical_player_id="B")
+    # Two complementary player sides from one model must NOT look like
+    # independent agreeing estimators.
+    spoofed = {"elo-p1": {"left_player_id": "A", "probability": .80},
+               "elo-p2": {"left_player_id": "B", "probability": .20}}
+    assert not reliability_gate(rich, other, spoofed)["eligible"]
+    assert not reliability_gate(rich, other, [.80, .82])["eligible"]
+    assert reliability_gate(rich, other, two_models(.80, .82))["eligible"]
