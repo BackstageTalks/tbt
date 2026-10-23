@@ -98,3 +98,27 @@ def test_no_verified_observations_cannot_start_research_fit():
     ms = [match("target", "A", "B", "A", T0)]
     with pytest.raises(ValueError, match="No independently verified"):
         augment_research_training_frame(frame_for(ms), ms, [])
+
+
+def test_actual_forecast_issuance_cutoff_takes_precedence_over_match_start():
+    matches = [match("a-history", "A", "X", "A", T0),
+               match("b-history", "B", "Y", "B", T0),
+               match("target", "A", "B", "A", T0 + timedelta(days=12))]
+    # A's old result was posted between issuance and fixture start.
+    late_a = sample("a-history", "A", T0,
+                    available=T0 + timedelta(days=11, hours=3))
+    src = [late_a, sample("b-history", "B", T0)]
+    raw = frame_for(matches)
+    _, ordinary = augment_research_training_frame(raw, matches, src)
+    assert ordinary["rows_with_both_serve_return"] == 1
+
+    raw["prediction_as_of"] = raw["scheduled_at"] - timedelta(days=1)
+    with pytest.raises(ValueError, match="No paired PIT-qualified"):
+        augment_research_training_frame(raw, matches, src)
+    _, actual = augment_research_training_frame(
+        raw, matches, src, require_stats_coverage=False)
+    assert actual["rows_with_both_serve_return"] == 0
+
+    raw.loc[2, "prediction_as_of"] = matches[2].scheduled_at + timedelta(hours=1)
+    with pytest.raises(ValueError, match="after the fixture"):
+        augment_research_training_frame(raw, matches, src, require_stats_coverage=False)
