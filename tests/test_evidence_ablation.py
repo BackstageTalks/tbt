@@ -96,10 +96,9 @@ def test_ablation_refuses_fake_baseline_schema_and_unverified_provenance():
 
 def test_ablation_fails_closed_without_paired_history_and_without_stable_cohort():
     frame, matches, evidence = synthetic(4)
+    late = [replace(x, available_at=FIRST + timedelta(days=3000)) for x in evidence]
     with pytest.raises(ValueError, match="No paired PIT"):
-        run(frame, matches, evidence, min_paired_by_tour=1,
-            # Post-match evidence not accessible at the 2024 target fixtures.
-            )
+        run(frame, matches, late, min_paired_by_tour=1)
     # Independent row/source equality is required even when the sole sidecar row is valid.
     with pytest.raises(ValueError, match="exact verified match cohort"):
         run(frame.iloc[:-1], matches, evidence)
