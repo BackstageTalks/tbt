@@ -29,19 +29,20 @@ jobs:
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'push' &&
         (contains(github.event.head_commit.message, '[cdb-import-now]') ||
-        contains(github.event.head_commit.message, '[cdb-drive-continue-20261024]')))
+        contains(github.event.head_commit.message, '[cdb-drive-continue-20261024]'))))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Submit guarded CDB Drive import on current main
         env:
           GH_TOKEN: ${{ github.token }}
+          PUSH_MESSAGE: ${{ github.event.head_commit.message }}
         shell: bash
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = 'BackstageTalks/tbt'
           test "$GITHUB_REF" = 'refs/heads/main'
-          if [[ "$GITHUB_EVENT_NAME" == "push" && "${{ github.event.head_commit.message }}" == *"[cdb-drive-continue-20261024]"* ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$PUSH_MESSAGE" == *"[cdb-drive-continue-20261024]"* ]]; then
             # One-shot fresh checkpointed Drive inventory. Existing guarded
             # importer alone owns source QA, NULL-only CDB write, CAS and readback.
             # No exact-ID replay of four previously rejected source files.
