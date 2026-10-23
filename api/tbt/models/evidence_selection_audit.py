@@ -170,7 +170,31 @@ def audit_preissued_reliability(
             raise ValueError("Verified left/right evidence snapshots required")
         if left.get("tour") != tour or right.get("tour") != tour:
             raise ValueError("PIT evidence tour mismatch")
-        gate = reliability_gate(left, right, item.get("model_probabilities"))
+        estimates = item.get("model_probabilities")
+        if not isinstance(estimates, Mapping) or fixed_model_sha256 not in estimates:
+            raise ValueError("Pinned candidate probability missing from model comparison")
+        candidate = estimates[fixed_model_sha256]
+        if (not isinstance(candidate, Mapping)
+                or candidate.get("left_player_id") != left.get("canonical_player_id")
+                or type(candidate.get("probability")) not in (int, float)
+                or not math.isclose(candidate["probability"], p, abs_tol=1e-12, rel_tol=0)):
+            raise ValueError("Issued candidate prediction mismatches frozen model comparison")
+        # A comparison made after issuance is future information even when the
+        # underlying historical DIL row was itself available in the past.
+        families = set()
+        for name, estimate in estimates.items():
+            if not isinstance(estimate, Mapping):
+                raise ValueError("Malformed independent estimator evidence")
+            asof = _utc(estimate.get("captured_at"))
+            if asof > issued or (scheduled - asof).total_seconds() < _MIN_PRESTART_SECONDS:
+                raise ValueError("Late or in-play estimator prediction")
+            family = estimate.get("estimator_family")
+            if not isinstance(family, str) or not family.strip():
+                raise ValueError("Verified estimator family required")
+            families.add(family.strip().lower())
+        if len(families) < 2:
+            raise ValueError("Two different independently identified estimator families required")
+        gate = reliability_gate(left, right, estimates)
         confidence = float(p if side == "left" else 1 - p)
         selected[labels[0]].append({
             "match_id": mid, "tour": tour, "level": level,
