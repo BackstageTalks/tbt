@@ -1,8 +1,8 @@
 name: BlinQ production UI revision watchdog
 
 on:
-  schedule:
-    - cron: '11,41 * * * *'
+  # The existing external 30-minute match-status clock dispatches this workflow.
+  # GitHub cron is intentionally prohibited by the repository contract.
   workflow_dispatch:
   push:
     branches: [main]
