@@ -271,14 +271,17 @@ DIL_FEATURE_NAMES = (
     "dil_bp_save_rate_diff", "dil_bp_convert_rate_diff",
     "dil_opponent_adjusted_form_diff", "dil_surface_opponent_form_diff",
     "dil_stats_known_both", "dil_min_recent_count", "dil_min_surface_count",
+    "dil_serve_known_both", "dil_return_known_both", "dil_second_serve_known_both",
+    "dil_bp_save_known_both", "dil_bp_convert_known_both",
 )
 
 
 def pair_feature_projection(left: Mapping, right: Mapping) -> dict[str, float]:
     """Candidate-only numeric feature adapter, with explicit availability signal.
 
-    Absent rates are neutral differences *only when paired with the known-both
-    flag*. Never replace established model features or rewrite history.
+    Absent rates use neutral differences with per-metric availability flags;
+    a single aggregate fraction cannot identify which denominator is absent.
+    Never replace established model features or rewrite history.
     """
     if left.get("tour") not in {"atp", "wta"} or left.get("tour") != right.get("tour"):
         raise ValueError("Distinct ATP/WTA tour pairing required")
@@ -290,6 +293,7 @@ def pair_feature_projection(left: Mapping, right: Mapping) -> dict[str, float]:
     for rate in ("serve", "return", "second_serve", "bp_save", "bp_convert"):
         l = left.get("stats", {}).get(rate + "_rate")
         r = right.get("stats", {}).get(rate + "_rate")
+        features["dil_" + rate + "_known_both"] = float(l is not None and r is not None)
         if l is None or r is None:
             features["dil_" + rate + "_rate_diff"] = 0.0
             missing += 1
