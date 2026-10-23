@@ -51,7 +51,9 @@ def verify_source(source: object, names: tuple[str, ...]):
 def prepare(paired: dict, research: dict):
     """Strict join of settled source rows, not a post-hoc nearest name/time join."""
     verify_source(paired.get("source"), ("production_version", "candidate_version", "candidate_model_sha256", "candidate_tag"))
-    verify_source(research.get("source"), ("model_version", "model_sha256", "training_end", "calibration_end", "input_release_sha256"))
+    verify_source(research.get("source"), ("model_version", "model_sha256", "training_end", "calibration_end", "input_release_sha256", "mode"))
+    if research["source"]["mode"] not in {"ISSUED_PREMATCH", "RETROSPECTIVE_PIT_REPLAY"}:
+        raise ValueError("unsupported_evidence_mode")
     if paired["source"]["candidate_version"] == paired["source"]["production_version"]:
         raise ValueError("same_champion_candidate_version")
     if not isinstance(paired.get("rows"), list) or not isinstance(research.get("rows"), list):
@@ -87,10 +89,18 @@ def prepare(paired: dict, research: dict):
             raise ValueError("wrong_version_in_paired_row")
         start = when(row.get("scheduled_at"), "scheduled_at")
         capture = when(row.get("captured_at"), "captured_at")
-        issued = when(other.get("issued_at"), "research_issued_at")
         asof = when(other.get("feature_asof"), "feature_asof")
-        if not (asof <= issued <= capture < start):
-            raise ValueError("research_prediction_not_asof_original_snapshot:" + key)
+        if not (asof <= capture < start):
+            raise ValueError("research_features_not_asof_original_snapshot:" + key)
+        if research["source"]["mode"] == "ISSUED_PREMATCH":
+            issued = when(other.get("issued_at"), "research_issued_at")
+            if not asof <= issued <= capture:
+                raise ValueError("research_prediction_not_issued_before_original_snapshot:" + key)
+        else:
+            # Replay may be generated after the match. Never claim issuance.
+            when(other.get("generated_at"), "replay_generated_at")
+            if other.get("issued_at"):
+                raise ValueError("replay_must_not_fake_issued_at")
         if not (when(research["source"]["training_end"], "training_end") < start
                 and when(research["source"]["calibration_end"], "calibration_end") < start):
             raise ValueError("research_fit_or_calibration_uses_test_time")
@@ -179,10 +189,12 @@ def report(paired: dict, research: dict) -> dict:
                        "candidate_version": paired["source"]["candidate_version"],
                        "research_version": research["source"]["model_version"],
                        "research_model_sha256": research["source"]["model_sha256"],
-                       "input_release_sha256": research["source"]["input_release_sha256"]},
+                       "input_release_sha256": research["source"]["input_release_sha256"],
+                       "research_evidence_mode": research["source"]["mode"]},
             "overall": overall, "tour": tour, "surface": surface,
             "paired_accuracy_delta_ci95_vs_721": ci,
-            "assessment": "DESCRIPTIVE_MINIMUM_REACHED" if fair else "INSUFFICIENT_COHORT",
+            "assessment": ("RETROSPECTIVE_ONLY_NOT_PROSPECTIVE" if research["source"]["mode"] == "RETROSPECTIVE_PIT_REPLAY" else
+                           "DESCRIPTIVE_MINIMUM_REACHED" if fair else "INSUFFICIENT_COHORT"),
             "limits": ["No automatic promotion or live odds qualification",
                        "A later untouched time holdout is required for tuned variants",
                        "The original 7.2.1 and champion fixtures must be the same exact issued cohort"]}
