@@ -50,8 +50,12 @@ prediction at least 15 minutes before scheduled start**, a verified
 `evidence_as_of == issued_at` per-player PIT snapshot, two same-player
 model estimates, a preissued selected side, an identical candidate model SHA256
 on every row, and an independently pinned SHA256 of the actual pre-outcome
-cohort fields (including both player evidence snapshots). The audit recomputes
-this cohort digest before filtering; pending outcomes or later settlements
+cohort fields (including both player evidence snapshots). The pinned candidate
+must also appear as an estimator with the exact same original probability and
+canonical left-player identity. Every estimator has a recorded pre-issuance
+capture timestamp and a declared estimator family; the filter abstains if
+at least two distinct estimator families are not documented. The audit recomputes
+the cohort digest before filtering; pending outcomes or later settlements
 cannot rewrite the initially eligible opportunity population.
 The caller must independently verify signed source snapshots and real
 identity/time lineage; hashes and boolean markers are not substitutes for
