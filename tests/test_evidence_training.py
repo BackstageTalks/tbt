@@ -23,7 +23,8 @@ def match(mid, a, b, winner, date, surface="hard"):
 def sample(mid, player, when, *, available=None, service_wins=65, reviewed=True):
     return HistoricalEvidence(
         canonical_match_id=mid, tour="ATP", player_id=player,
-        surface="hard", completed_at=when + timedelta(hours=2),
+        surface="hard", started_at=when,
+        completed_at=when + timedelta(hours=2),
         available_at=available or when + timedelta(hours=3),
         expected_recorded_at=when - timedelta(hours=1),
         won=True, expected_win=.5,
@@ -122,3 +123,9 @@ def test_actual_forecast_issuance_cutoff_takes_precedence_over_match_start():
     raw.loc[2, "prediction_as_of"] = matches[2].scheduled_at + timedelta(hours=1)
     with pytest.raises(ValueError, match="after the fixture"):
         augment_research_training_frame(raw, matches, src, require_stats_coverage=False)
+
+
+def test_training_index_refuses_inplay_probability_provenance():
+    inplay = replace(sample("a", "A", T0), expected_recorded_at=T0 + timedelta(minutes=5))
+    with pytest.raises(ValueError, match="Chronologically invalid"):
+        FrozenEvidenceIndex([inplay])
