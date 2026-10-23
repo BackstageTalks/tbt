@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 import math
+from datetime import timezone
 import re
 import unicodedata
 from typing import Iterable
@@ -69,7 +70,7 @@ class CourtSpeedHistory:
     """Leakage-safe court-speed proxy built only from already completed matches.
 
     For every historical match, the feature snapshot is calculated before that
-    match is ingested. Therefore the target match can never influence its own
+    UTC day is ingested. Therefore the target match can never influence its own
     court-speed estimate or player fast/slow-court history.
 
     Index 100 is the point-in-time same-surface baseline. Current-event estimates
@@ -96,9 +97,35 @@ class CourtSpeedHistory:
             key=lambda m: (m.scheduled_at, str(m.match_id)),
         )
 
+        pending = []
+        previous_day = None
+
+        def flush():
+            for surface_key, venue_key, event_key, raw, tour_key, match, effective in pending:
+                surface_sum[surface_key] += raw
+                surface_n[surface_key] += 1
+                venue_sum[venue_key] += raw
+                venue_n[venue_key] += 1
+                event_sum[event_key] += raw
+                event_n[event_key] += 1
+                if effective is not None:
+                    bucket = "fast" if effective >= 103.0 else "slow" if effective <= 97.0 else None
+                    if bucket:
+                        for pid in (match.player1_id, match.player2_id):
+                            row = player[(tour_key, str(pid))]
+                            row[f"{bucket}_matches"] += 1
+                            if str(match.winner_id) == str(pid):
+                                row[f"{bucket}_wins"] += 1.0
+            pending.clear()
+
         for match in ordered:
+            day = match.scheduled_at.astimezone(timezone.utc).date()
+            if day != previous_day:
+                flush()
+                previous_day = day
             surface = _norm(match.surface or "unknown")
             tour = _norm(match.tour)
+            surface_key = (tour, surface)
             venue = (tour, _norm(match.tournament), surface)
             event = (
                 *venue,
@@ -107,8 +134,8 @@ class CourtSpeedHistory:
             )
 
             baseline = (
-                surface_sum[surface] / surface_n[surface]
-                if surface_n[surface] >= 20 else None
+                surface_sum[surface_key] / surface_n[surface_key]
+                if surface_n[surface_key] >= 20 else None
             )
             event_s = event_sum[event]
             event_c = event_n[event]
@@ -128,7 +155,7 @@ class CourtSpeedHistory:
             effective = current_idx if current_idx is not None else prior_idx
 
             def wr(pid: str, bucket: str):
-                row = player[str(pid)]
+                row = player[(tour, str(pid))]
                 n = row[f"{bucket}_matches"]
                 return row[f"{bucket}_wins"] / n if n >= 5 else None
 
@@ -165,22 +192,9 @@ class CourtSpeedHistory:
             if raw is None:
                 continue
 
-            # Ingest only after snapshot creation: this is the leakage barrier.
-            surface_sum[surface] += raw
-            surface_n[surface] += 1
-            venue_sum[venue] += raw
-            venue_n[venue] += 1
-            event_sum[event] += raw
-            event_n[event] += 1
-
-            if effective is not None:
-                bucket = "fast" if effective >= 103.0 else "slow" if effective <= 97.0 else None
-                if bucket:
-                    for pid in (match.player1_id, match.player2_id):
-                        row = player[str(pid)]
-                        row[f"{bucket}_matches"] += 1
-                        if str(match.winner_id) == str(pid):
-                            row[f"{bucket}_wins"] += 1.0
+            # Start times do not prove earlier matches have finished. Apply
+            # results only on the next UTC day, as in FeatureBuilder replay.
+            pending.append((surface_key, venue, event, raw, tour, match, effective))
 
     def features_for_match(self, match: MatchRecord) -> dict[str, float]:
         key = str(match.match_id)
