@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import pytest
 
-from tbt.models.evidence_lab import HistoricalEvidence, player_features, reliability_gate
+from tbt.models.evidence_lab import HistoricalEvidence, player_features, reliability_gate, pair_feature_projection, DIL_FEATURE_NAMES
 
 UTC = timezone.utc
 T = datetime(2026, 10, 23, 10, tzinfo=UTC)
@@ -92,3 +92,55 @@ def test_future_fitted_expectation_rejected():
     with pytest.raises(ValueError):
         player_features([obs("x", expected_recorded_at=T)], player_id="A",
                         tour="ATP", surface="hard", issued_at=T)
+
+
+def test_partial_counts_still_enforce_source_integrity():
+    invalid = (
+        {"service_points": -1, "first_in": None, "first_won": None, "second_won": None},
+        {"first_in": 20, "first_won": 30, "second_won": 20},
+        {"first_in": 99, "second_won": 20},
+        {"opponent_service_points": -5, "opponent_first_won": None,
+         "opponent_second_won": None},
+        {"opponent_bp_saved": 8, "opponent_bp_faced": 7},
+        {"second_won": 101},
+    )
+    for values in invalid:
+        with pytest.raises(ValueError):
+            player_features([obs("bad", **values)], player_id="A", tour="ATP",
+                            surface="hard", issued_at=T)
+
+
+def test_candidate_pair_adapter_exposes_known_both_and_respects_orientation():
+    left = player_features([obs("a", player="A")], player_id="A",
+                           tour="ATP", surface="hard", issued_at=T)
+    right = player_features([obs("b", player="B", service_points=100,
+                                 first_in=60, first_won=30, second_won=20)],
+                            player_id="B", tour="ATP", surface="hard", issued_at=T)
+    features = pair_feature_projection(left, right)
+    swapped = pair_feature_projection(right, left)
+    assert set(features) == set(DIL_FEATURE_NAMES)
+    assert features["dil_serve_rate_diff"] == pytest.approx(.15)
+    assert features["dil_stats_known_both"] == 1.0
+    assert features["dil_serve_rate_diff"] == -swapped["dil_serve_rate_diff"]
+    assert features["dil_min_recent_count"] == 1.0
+
+
+def test_pair_adapter_never_invents_missing_rate_coverage():
+    left = player_features([obs("a", player="A")], player_id="A",
+                           tour="ATP", surface="hard", issued_at=T)
+    right = player_features([obs("b", player="B", opponent_bp_faced=None,
+                                 opponent_bp_saved=None, bp_faced=None, bp_saved=None)],
+                            player_id="B", tour="ATP", surface="hard", issued_at=T)
+    features = pair_feature_projection(left, right)
+    assert features["dil_bp_save_rate_diff"] == 0.0
+    assert features["dil_bp_convert_rate_diff"] == 0.0
+    assert features["dil_stats_known_both"] == pytest.approx(3 / 5)
+
+
+def test_pair_adapter_refuses_unreviewed_or_cross_tour_identity():
+    left = player_features([obs("a", player="A")], player_id="A",
+                           tour="ATP", surface="hard", issued_at=T)
+    with pytest.raises(ValueError):
+        pair_feature_projection(left, dict(left))
+    with pytest.raises(ValueError):
+        pair_feature_projection(left, dict(left, canonical_player_id="B", tour="wta"))
