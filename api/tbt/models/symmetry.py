@@ -6,11 +6,11 @@ import pandas as pd
 from ..data.atp_leaderboards import ATP_LEADERBOARD_FEATURE_NAMES
 from ..data.court_speed import COURT_SPEED_FEATURE_NAMES
 from ..data.wta_season_stats import WTA_SEASON_FEATURE_NAMES
-from .feature_builder import FEATURE_NAMES
+from .feature_builder import FEATURE_NAMES, EVIDENCE_FEATURE_NAMES
 
 MODEL_FEATURE_CONTRACT = set(FEATURE_NAMES) | set(COURT_SPEED_FEATURE_NAMES)
 
-INVARIANT_FEATURES = {
+INVARIANT_FEATURES = set(EVIDENCE_FEATURE_NAMES) | {
     "rank_known_both", "season_yelo_known_both", "travel_known", "altitude_change_known", "weather_known",
     "environment_known", "stats_known_both", "surface_stats_known_both",
     "rich_charting_known_both", "surface_h2h_known", "score_workload_known_both",
