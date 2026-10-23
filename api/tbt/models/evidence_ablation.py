@@ -8,7 +8,8 @@ only a descriptive report; no model artifact is saved or activated.
 """
 from __future__ import annotations
 
-from collections import Counter
+from dataclasses import asdict
+from datetime import datetime
 from hashlib import sha256
 import json
 import math
@@ -17,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from .ensemble import TennisEnsemble
-from .evidence_lab import DIL_FEATURE_NAMES
+from .evidence_lab import DIL_FEATURE_NAMES, HistoricalEvidence
 from .evidence_training import augment_research_training_frame
 from .metrics import evaluate_probabilities
 from .symmetry import MODEL_FEATURE_CONTRACT
@@ -27,6 +28,29 @@ def _pin(value, field):
     if not isinstance(value, str) or len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
         raise ValueError(field + " needs independently pinned lowercase SHA256")
     return value
+
+
+def canonical_dil_evidence_digest(rows):
+    """Canonical SHA256 of the complete reviewed row set, independent of row order.
+
+    Pin this independently when freezing the exact input sidecar. It is NOT a
+    claim that the original raw vendor archive or CDB backup has been verified.
+    """
+    serialized = []
+    for item in rows:
+        if not isinstance(item, HistoricalEvidence):
+            raise ValueError("Expected reviewed HistoricalEvidence dataclasses")
+        row = asdict(item)
+        for key in ("started_at", "completed_at", "available_at", "expected_recorded_at"):
+            timestamp = row[key]
+            if not isinstance(timestamp, datetime) or timestamp.tzinfo is None or timestamp.utcoffset() is None:
+                raise ValueError("Timezone-aware evidence required")
+            row[key] = timestamp.isoformat()
+        serialized.append(row)
+    serialized.sort(key=lambda x: (x["tour"], x["player_id"], x["canonical_match_id"]))
+    blob = json.dumps(serialized, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=False, allow_nan=False)
+    return sha256(blob.encode("utf-8")).hexdigest()
 
 
 def _metrics(frame, baseline_p, dil_p):
@@ -69,6 +93,9 @@ def run_dil_research_ablation(
 
     _pin(canonical_source_sha256, "Canonical source")
     _pin(dil_sidecar_sha256, "DIL sidecar")
+    verified_dil_rows = list(verified_dil_rows)
+    if canonical_dil_evidence_digest(verified_dil_rows) != dil_sidecar_sha256:
+        raise ValueError("Frozen DIL source row digest mismatch")
     names = tuple(original_721_feature_names)
     if (not names or len(names) != len(set(names))
             or "elo_probability" not in names
@@ -137,7 +164,8 @@ def run_dil_research_ablation(
     result = {
         "state": "OFFLINE_RESEARCH_DESCRIPTIVE_NOT_PROMOTION",
         "canonical_source_sha256": canonical_source_sha256,
-        "dil_sidecar_sha256": dil_sidecar_sha256,
+        "dil_evidence_rows_canonical_sha256": dil_sidecar_sha256,
+        "canonical_source_bundle_sha256_claim": canonical_source_sha256,
         "learning_cohort_identity_sha256": fingerprint,
         "feature_schema_exact_original_721": list(names),
         "candidate_extra_features": list(DIL_FEATURE_NAMES),
