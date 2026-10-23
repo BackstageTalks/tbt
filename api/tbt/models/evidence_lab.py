@@ -18,6 +18,7 @@ class HistoricalEvidence:
     tour: str
     player_id: str
     surface: str
+    started_at: datetime
     completed_at: datetime
     available_at: datetime
     expected_recorded_at: datetime
@@ -146,11 +147,13 @@ def player_features(records: Iterable[HistoricalEvidence], *, player_id: str, to
             continue
         if r.reviewed_cdb_link is not True or not r.canonical_match_id:
             raise ValueError("Unreviewed or missing canonical CDB identity")
+        _aware(r.started_at)
         _aware(r.completed_at)
         _aware(r.available_at)
         _aware(r.expected_recorded_at)
-        if not isinstance(r.won, bool) or r.expected_recorded_at >= r.completed_at:
-            raise ValueError("Outcome and prior probability require verified pre-result evidence")
+        if (not isinstance(r.won, bool) or r.started_at > r.completed_at
+                or r.expected_recorded_at >= r.started_at):
+            raise ValueError("Prior probability must be verified before actual match start")
         if r.completed_at > r.available_at:
             raise ValueError("Source stats marked available before match completion")
         if r.completed_at.astimezone(timezone.utc).date() >= cutoff_day or r.available_at > issued_at:
