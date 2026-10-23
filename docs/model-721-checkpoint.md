@@ -27,3 +27,6 @@ Opponent-adjusted serve/return ratings and validated DIL-to-CDB feature integrat
 ## Commands
 PYTHONPATH=api;scripts, PYTHONUTF8=1; Python ../test-venv/Scripts/python.exe.
 Use gh run view and gh run download for exact runs. Read AGENTS.md first when resuming. No local real fitting without enforced frozen-input/backup gate. No production activation.
+
+## Dispatch checkpoint
+Temporal study commit: 6863306. Run https://github.com/BackstageTalks/tbt/actions/runs/39988784731 dispatched with temporal_study=true and auto_shadow=false. Prior candidate run: https://github.com/BackstageTalks/tbt/actions/runs/39986158547. Four temporal tests passed after adding workflow publication-isolation check (21 targeted tests cumulatively). PR description updated to final combined scope. Dispatch is not successful completion; inspect current state before proceeding.
