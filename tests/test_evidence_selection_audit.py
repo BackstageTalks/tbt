@@ -34,8 +34,10 @@ def row(key, *, at=START, settled=True, right_thin=False, correct=True,
         "evidence_as_of": at, "evidence_provenance_verified": True,
         "left": evidence("A"), "right": evidence("B", thin=right_thin),
         "model_probabilities": {
-            "elo": {"left_player_id": "A", "probability": .80},
-            "hgb": {"left_player_id": "A", "probability": .82},
+            MODEL_SHA: {"left_player_id": "A", "probability": .80,
+                        "captured_at": at, "estimator_family": "ensemble"},
+            "elo": {"left_player_id": "A", "probability": .82,
+                    "captured_at": at, "estimator_family": "elo"},
         },
         "candidate_probability_left": .80, "selected_side": side,
         "candidate_model_sha256": MODEL_SHA,
@@ -150,7 +152,8 @@ def test_duplicate_rows_and_missing_or_overlapping_frozen_windows_are_rejected()
 def test_unknown_second_model_is_abstention_not_invented_agreement():
     item = row("x")
     item["model_probabilities"] = {
-        "elo": {"left_player_id": "A", "probability": .80},
+        MODEL_SHA: {"left_player_id": "A", "probability": .80,
+                    "captured_at": START, "estimator_family": "ensemble"},
     }
     report = run([item])["windows"]["development"]
     assert report["retained"]["issued"] == 0
@@ -185,6 +188,22 @@ def test_each_issued_row_must_match_pinned_candidate_binary():
     item["candidate_model_sha256"] = "c" * 64
     with pytest.raises(ValueError, match="model digest differs"):
         run([item])
+
+
+def test_model_disagreement_requires_original_candidate_and_prematch_estimators():
+    item = row("x")
+    item["model_probabilities"][MODEL_SHA]["probability"] = .6
+    with pytest.raises(ValueError, match="candidate prediction mismatches"):
+        run([item])
+    item = row("x")
+    item["model_probabilities"]["elo"]["captured_at"] = item["issued_at"] + timedelta(minutes=1)
+    with pytest.raises(ValueError, match="Late or in-play"):
+        run([item])
+    item = row("x")
+    item["model_probabilities"]["elo"]["estimator_family"] = "ensemble"
+    report = run([item])["windows"]["development"]
+    assert report["retained"]["issued"] == 0
+    assert report["gate_reasons"]["missing_or_invalid_model_disagreement"] == 1
 
 
 def test_pinned_hash_and_identity_protections():
