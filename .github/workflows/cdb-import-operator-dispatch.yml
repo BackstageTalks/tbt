@@ -28,7 +28,8 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'push' &&
-        contains(github.event.head_commit.message, '[cdb-import-now]')))
+        (contains(github.event.head_commit.message, '[cdb-import-now]') ||
+        contains(github.event.head_commit.message, '[cdb-drive-continue-20261024]')))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -40,7 +41,13 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = 'BackstageTalks/tbt'
           test "$GITHUB_REF" = 'refs/heads/main'
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "${{ github.event.head_commit.message }}" == *"[cdb-drive-continue-20261024]"* ]]; then
+            # One-shot fresh checkpointed Drive inventory. Existing guarded
+            # importer alone owns source QA, NULL-only CDB write, CAS and readback.
+            # No exact-ID replay of four previously rejected source files.
+            gh workflow run cdb-drive-inbox.yml -R "$GITHUB_REPOSITORY" --ref main -f catchup_remaining=4
+            echo 'CDB_20261024_FRESH_CHECKPOINT_IMPORT_DISPATCHED_NOT_VERIFIED'
+          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             # One-shot, exact-ID replay of 2025/26 ATP match rows and WTA season
             # serve/return rows. Do not reset the private 2047-file checkpoint.
             # Only a push containing [cdb-import-now] can take this path.
