@@ -48,7 +48,11 @@ frozen_cohort_sha256, windows)` for independent, read-only abstention
 measurement. Each supplied match must have an **actual, frozen issued
 prediction at least 15 minutes before scheduled start**, a verified
 `evidence_as_of == issued_at` per-player PIT snapshot, two same-player
-model estimates, a preissued selected side, and a fixed source/model hash.
+model estimates, a preissued selected side, an identical candidate model SHA256
+on every row, and an independently pinned SHA256 of the actual pre-outcome
+cohort fields (including both player evidence snapshots). The audit recomputes
+this cohort digest before filtering; pending outcomes or later settlements
+cannot rewrite the initially eligible opportunity population.
 The caller must independently verify signed source snapshots and real
 identity/time lineage; hashes and boolean markers are not substitutes for
 the upstream verification.
