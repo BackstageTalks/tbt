@@ -64,7 +64,44 @@ def _second_attempts(r: HistoricalEvidence) -> int | None:
     return r.service_points - r.first_in
 
 
+def _validate_counts(r: HistoricalEvidence) -> None:
+    """Validate even partial source counters; a missing denominator is not a waiver."""
+    fields = (
+        "service_points", "first_in", "first_won", "second_won",
+        "opponent_service_points", "opponent_first_won", "opponent_second_won",
+        "bp_saved", "bp_faced", "opponent_bp_saved", "opponent_bp_faced",
+    )
+    for key in fields:
+        value = getattr(r, key)
+        if value is not None and (type(value) is not int or value < 0):
+            raise ValueError("Invalid raw source counter: " + key)
+
+    for numerator, denominator in (
+        (r.first_in, r.service_points),
+        (r.first_won, r.first_in),
+        (r.first_won, r.service_points),
+        (r.second_won, r.service_points),
+        (r.bp_saved, r.bp_faced),
+        (r.opponent_first_won, r.opponent_service_points),
+        (r.opponent_second_won, r.opponent_service_points),
+        (r.opponent_bp_saved, r.opponent_bp_faced),
+    ):
+        if numerator is not None and denominator is not None and numerator > denominator:
+            raise ValueError("Impossible source count numerator / denominator")
+    if r.first_in is not None and r.service_points is not None:
+        second_attempts = r.service_points - r.first_in
+        if r.second_won is not None and r.second_won > second_attempts:
+            raise ValueError("Second-serve wins exceed second attempts")
+    for total, first, second in (
+        (r.service_points, r.first_won, r.second_won),
+        (r.opponent_service_points, r.opponent_first_won, r.opponent_second_won),
+    ):
+        if None not in (total, first, second) and first + second > total:
+            raise ValueError("Service points won exceed points played")
+
+
 def _counts(r: HistoricalEvidence) -> dict[str, tuple[int, int] | None]:
+    _validate_counts(r)
     serve_won = _sum_known(r.first_won, r.second_won)
     opp_won = _sum_known(r.opponent_first_won, r.opponent_second_won)
     if opp_won is not None and r.opponent_service_points is not None:
@@ -194,3 +231,51 @@ def reliability_gate(left: Mapping, right: Mapping,
     return {"eligible": not reasons, "evidence_score": score,
             "reasons": reasons, "recent_min": n, "surface_min": surf,
             "stat_coverage_min": cover, "model_probability_gap": round(gap, 4)}
+
+
+DIL_FEATURE_NAMES = (
+    "dil_serve_rate_diff", "dil_return_rate_diff", "dil_second_serve_rate_diff",
+    "dil_bp_save_rate_diff", "dil_bp_convert_rate_diff",
+    "dil_opponent_adjusted_form_diff", "dil_surface_opponent_form_diff",
+    "dil_stats_known_both", "dil_min_recent_count", "dil_min_surface_count",
+)
+
+
+def pair_feature_projection(left: Mapping, right: Mapping) -> dict[str, float]:
+    """Candidate-only numeric feature adapter, with explicit availability signal.
+
+    Absent rates are neutral differences *only when paired with the known-both
+    flag*. Never replace established model features or rewrite history.
+    """
+    if left.get("tour") not in {"atp", "wta"} or left.get("tour") != right.get("tour"):
+        raise ValueError("Distinct ATP/WTA tour pairing required")
+    a, b = left.get("canonical_player_id"), right.get("canonical_player_id")
+    if not isinstance(a, str) or not a or not isinstance(b, str) or not b or a == b:
+        raise ValueError("Both distinct reviewed CDB player IDs required")
+    features = {}
+    missing = 0
+    for rate in ("serve", "return", "second_serve", "bp_save", "bp_convert"):
+        l = left.get("stats", {}).get(rate + "_rate")
+        r = right.get("stats", {}).get(rate + "_rate")
+        if l is None or r is None:
+            features["dil_" + rate + "_rate_diff"] = 0.0
+            missing += 1
+        else:
+            if not all(isinstance(v, (float, int)) and math.isfinite(v)
+                       and 0 <= v <= 1 for v in (l, r)):
+                raise ValueError("Invalid source-derived rate")
+            features["dil_" + rate + "_rate_diff"] = float(l) - float(r)
+    for key, target in (
+        ("opponent_adjusted_form", "dil_opponent_adjusted_form_diff"),
+        ("surface_opponent_adjusted_form", "dil_surface_opponent_form_diff"),
+    ):
+        lv, rv = left.get(key), right.get(key)
+        if not all(isinstance(v, (float, int)) and math.isfinite(v) for v in (lv, rv)):
+            raise ValueError("Opponent-adjusted historical expectations unavailable")
+        features[target] = float(lv) - float(rv)
+    features["dil_stats_known_both"] = (5 - missing) / 5.0
+    features["dil_min_recent_count"] = float(min(left["matches_recent"], right["matches_recent"]))
+    features["dil_min_surface_count"] = float(min(left["matches_surface"], right["matches_surface"]))
+    if set(features) != set(DIL_FEATURE_NAMES):
+        raise AssertionError("Candidate DIL feature schema mismatch")
+    return features
