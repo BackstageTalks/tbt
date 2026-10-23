@@ -73,6 +73,7 @@ def make_evidence(cert, report, candidate_binary):
         "champion_sha256":cert["champion_sha256"],
         "candidate_version":version,
         "comparison":{"sample_size":new["n"],"champion":old,"candidate":new,
+                      "production_subgroups":{"tour": (report.get("production_subgroups") or {}).get("tour", {})},
                       "subgroups":{k:v for k,v in sub.items() if k=="tour" and isinstance(v,dict)}},
         "holdout_fingerprint":gov["holdout_fingerprint"],
         "holdout_period":(report.get("periods") or {}).get("holdout"),

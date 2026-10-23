@@ -57,6 +57,29 @@ def _timestamp(value: object) -> str:
     return parsed.astimezone(timezone.utc).isoformat()
 
 
+def _paired_tours(comparison, total):
+    candidate = (comparison.get("subgroups") or {}).get("tour", {})
+    champion = (comparison.get("production_subgroups") or {}).get("tour", {})
+    result = {}
+    for tour in ("atp", "wta"):
+        left, right = champion.get(tour), candidate.get(tour)
+        if left is None or right is None:
+            continue  # Legacy evidence may contain only candidate subgroups.
+        if not isinstance(left, dict) or not isinstance(right, dict):
+            raise ValueError("Invalid tour metrics")
+        n = _nonnegative(right.get("n"), "tour_n")
+        if type(left.get("n")) is not int or left["n"] != n or not 0 < n <= total:
+            raise ValueError("Unpaired tour sample")
+        a, b = _metric_row(left), _metric_row(right)
+        required = {"accuracy", "log_loss", "brier_score", "ece_10"}
+        if not required <= a.keys() or not required <= b.keys():
+            raise ValueError("Incomplete tour metrics")
+        result[tour] = {"n": n, "champion": a, "candidate": b, "small_sample": n < 200}
+    if sum(row["n"] for row in result.values()) > total:
+        raise ValueError("Tour samples exceed total")
+    return result
+
+
 def _offline_candidate(raw: object, production_version: str) -> dict | None:
     """Validate separate untouched-holdout evidence; never label it as shadow."""
     if not isinstance(raw, dict):
@@ -106,6 +129,7 @@ def _offline_candidate(raw: object, production_version: str) -> dict | None:
         "run_id": _bounded_text(raw.get("run_id"), 30),
         "generated_at_utc": _timestamp(raw.get("generated_at_utc")),
         "n": n,
+        "tours": _paired_tours(comparison, n),
         "champion": metrics("champion"),
         "candidate": metrics("candidate"),
         "promotion_requested": False,
