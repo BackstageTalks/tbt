@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from tbt.models.evidence_lab import HistoricalEvidence, DIL_FEATURE_NAMES
-from tbt.models.evidence_ablation import run_dil_research_ablation
+from tbt.models.evidence_ablation import run_dil_research_ablation, canonical_dil_evidence_digest
 from tbt.schemas import MatchRecord
 
 
@@ -59,7 +59,7 @@ def synthetic(n=760):
 def run(frame, matches, evidence, **overrides):
     settings = dict(original_721_feature_names=BASE,
                     canonical_source_sha256="a" * 64,
-                    dil_sidecar_sha256="b" * 64,
+                    dil_sidecar_sha256=canonical_dil_evidence_digest(evidence),
                     min_paired_by_tour=20, estimator_max_iter=8)
     settings.update(overrides)
     return run_dil_research_ablation(frame, matches, evidence, **settings)
@@ -90,6 +90,8 @@ def test_ablation_refuses_fake_baseline_schema_and_unverified_provenance():
         run(frame, matches, evidence, original_721_feature_names=["elo_probability"])
     with pytest.raises(ValueError, match="SHA256"):
         run(frame, matches, evidence, canonical_source_sha256="no")
+    with pytest.raises(ValueError, match="DIL source row digest mismatch"):
+        run(frame, matches, evidence, dil_sidecar_sha256="b" * 64)
     with pytest.raises(ValueError, match="link"):
         run(frame, matches, [replace(evidence[0], reviewed_cdb_link=False), *evidence[1:]])
 
