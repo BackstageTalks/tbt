@@ -199,15 +199,32 @@ def player_features(records: Iterable[HistoricalEvidence], *, player_id: str, to
 
 
 def reliability_gate(left: Mapping, right: Mapping,
-                     model_probabilities: Iterable[float]) -> dict:
-    """Research-only evidence filter; score is NOT a calibrated win probability."""
-    ps = tuple(model_probabilities)
-    if len(ps) < 2 or any(not isinstance(p, (int, float)) or not math.isfinite(p)
-                          or not 0 <= p <= 1 for p in ps):
-        return {"eligible": False, "evidence_score": 0.0,
-                "reasons": ["missing_or_invalid_model_disagreement"]}
-    if left.get("tour") != right.get("tour") or left.get("canonical_player_id") == right.get("canonical_player_id"):
-        raise ValueError("Players require distinct canonical IDs on the same tour")
+                     model_probabilities: Mapping[str, Mapping]) -> dict:
+    """Research-only abstention; independent models must score the SAME left player.
+
+    Each entry is model_id -> {left_player_id: canonical ID, probability: float}.
+    No confidence value is manufactured from complementary winner/loser sides.
+    The score is NOT a calibrated win probability.
+    """
+    if left.get("tour") not in {"atp", "wta"} or left.get("tour") != right.get("tour"):
+        raise ValueError("Both players must be on the same ATP/WTA tour")
+    player = left.get("canonical_player_id")
+    if not isinstance(player, str) or not player or not right.get("canonical_player_id") or player == right.get("canonical_player_id"):
+        raise ValueError("Distinct reviewed canonical players required")
+    invalid = {"eligible": False, "evidence_score": 0.0,
+               "reasons": ["missing_or_invalid_model_disagreement"]}
+    if not isinstance(model_probabilities, Mapping) or len(model_probabilities) < 2:
+        return invalid
+    ps = []
+    for model_id, observation in model_probabilities.items():
+        if (not isinstance(model_id, str) or not model_id.strip()
+                or not isinstance(observation, Mapping)
+                or observation.get("left_player_id") != player):
+            return invalid
+        p = observation.get("probability")
+        if isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(p) or not 0 <= p <= 1:
+            return invalid
+        ps.append(float(p))
     reasons = []
     n = min(int(left.get("matches_recent") or 0), int(right.get("matches_recent") or 0))
     surf = min(int(left.get("matches_surface") or 0), int(right.get("matches_surface") or 0))
