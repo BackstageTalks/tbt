@@ -125,6 +125,13 @@ def test_actual_forecast_issuance_cutoff_takes_precedence_over_match_start():
         augment_research_training_frame(raw, matches, src, require_stats_coverage=False)
 
 
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
+def test_frozen_index_rejects_nonfinite_expected_win(invalid):
+    row = replace(sample("bad", "A", T0), expected_win=invalid)
+    with pytest.raises(ValueError, match="Invalid opponent expectation"):
+        FrozenEvidenceIndex([row])
+
+
 def test_training_index_refuses_inplay_probability_provenance():
     inplay = replace(sample("a", "A", T0), expected_recorded_at=T0 + timedelta(minutes=5))
     with pytest.raises(ValueError, match="Chronologically invalid"):
