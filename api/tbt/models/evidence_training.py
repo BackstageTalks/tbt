@@ -29,12 +29,14 @@ class FrozenEvidenceIndex:
             if (r.tour.lower() not in {"atp", "wta"} or not r.player_id
                     or not r.canonical_match_id or r.reviewed_cdb_link is not True):
                 raise ValueError("Independent CDB match/player link is mandatory")
+            _aware(r.started_at)
             _aware(r.completed_at)
             _aware(r.available_at)
             _aware(r.expected_recorded_at)
-            if (r.available_at < r.completed_at or r.expected_recorded_at >= r.completed_at
+            if (r.started_at > r.completed_at or r.available_at < r.completed_at
+                    or r.expected_recorded_at >= r.started_at
                     or not isinstance(r.won, bool)):
-                raise ValueError("Chronologically invalid evidence")
+                raise ValueError("Chronologically invalid pre-match evidence")
             # A match from the same-day outcome must not affect earlier fixtures.
             if not isinstance(r.expected_win, (float, int)) or isinstance(r.expected_win, bool):
                 raise ValueError("Missing historical pre-match expectation")
