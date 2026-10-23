@@ -13,8 +13,8 @@ Existing `FeatureBuilder` already supports historical surface form, opponent-adj
 
 Each `HistoricalEvidence` row refers to one canonical player in one independently reviewed canonical match and carries:
 
-- tour, canonical player/match IDs, exact match completion timestamp;
-- evidence `available_at`, and the historical opponent probability's independently pre-result `expected_recorded_at`;
+- tour, canonical player/match IDs, exact match start and completion timestamps;
+- evidence `available_at`, and the historical opponent probability's independently **pre-start** `expected_recorded_at`;
 - original per-match integer service/return/break-point counts with missing values retained as NULL;
 - reviewed cross-source identity flag. A metadata flag is **not** a substitute for verification by the upstream `til_v2.link` evidence workflow.
 
@@ -28,7 +28,7 @@ The proposed reliability filter is **abstention only**. It evaluates the weaker 
 
 ## Validation and advancement
 
-Branch validation: the original implementation passed the full GitHub backend test step in CI run `39957460351` (subsequently completed successfully). The current extended code and tests must pass a newer branch-head CI run; this sentence does not claim they have. Run `PYTHONPATH=api python -m pytest -q tests/test_evidence_lab.py tests/test_evidence_training.py` to verify the 20 focused regression tests.
+Branch validation: the original implementation passed the full GitHub backend test step in CI run `39957460351` (subsequently completed successfully). The current extended code and tests must pass a newer branch-head CI run; this sentence does not claim they have. Run `PYTHONPATH=api python -m pytest -q tests/test_evidence_lab.py tests/test_evidence_training.py` to verify the 22 focused regression tests.
 
 Before any candidate fit or selection policy change:
 
