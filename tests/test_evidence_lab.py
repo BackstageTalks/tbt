@@ -150,16 +150,16 @@ def test_pair_adapter_never_invents_missing_rate_coverage():
 def test_candidate_adapter_distinguishes_same_aggregate_coverage_with_different_missing_fields():
     left = player_features([obs("a", player="A")], player_id="A",
                            tour="ATP", surface="hard", issued_at=T)
-    no_second = player_features([obs("b", player="B", second_won=None)], player_id="B",
-                                tour="ATP", surface="hard", issued_at=T)
+    no_return = player_features([obs("b", player="B", opponent_second_won=None)],
+                                player_id="B", tour="ATP", surface="hard", issued_at=T)
     no_break_save = player_features([obs("c", player="C", bp_saved=None)], player_id="C",
                                     tour="ATP", surface="hard", issued_at=T)
-    s = pair_feature_projection(left, no_second)
+    r = pair_feature_projection(left, no_return)
     b = pair_feature_projection(left, no_break_save)
-    assert s["dil_stats_known_both"] == b["dil_stats_known_both"]
-    assert s["dil_second_serve_known_both"] == 0.0
-    assert b["dil_second_serve_known_both"] == 1.0
-    assert s["dil_bp_save_known_both"] == 1.0
+    assert r["dil_stats_known_both"] == b["dil_stats_known_both"] == pytest.approx(4 / 5)
+    assert r["dil_return_known_both"] == 0.0
+    assert b["dil_return_known_both"] == 1.0
+    assert r["dil_bp_save_known_both"] == 1.0
     assert b["dil_bp_save_known_both"] == 0.0
 
 
