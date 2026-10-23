@@ -1,0 +1,29 @@
+# Model 7.2.1 checkpoint — 2026-10-23
+
+## Objective
+Improve winner accuracy without odds/EV. Establish temporal ATP/WTA comparisons before changing the active model. User authorized autonomous implementation and asked for durable checkpoints.
+
+## Confirmed baseline
+Active shadow: v7.2.1-v201-20261022T134742452543Z. Refresh 39934982800 succeeded; independently read shadow report with 176 captured / 0 settled at 2026-10-23 10:08 UTC. This is a historical observation, recheck current counts. Champion unchanged at last verification.
+
+## Code
+Branch feat/721-evidence-depth; PR https://github.com/BackstageTalks/tbt/pull/969.
+0785626: six recent evidence support inputs, candidate-only; prior turn 44 targeted tests passed.
+New temporal study: seven non-overlapping calendar quarters, 2025 Q1 through 2026 Q3. Training starts 2024; each fold has 60 calibration days, 30 model-selection days, then the test quarter. Compares baseline, same-model global calibration, evidence inputs, separate ATP/WTA fits and partial pooling. Specialist mixture uses selection-period accuracy with LL/Brier safeguards, never test labels. Sparse tour data fall back to pooled model. No deployable model is exported.
+
+Workflow temporal_study=true skips candidate fit/publication/Admin update/activation and runs the study only after immutable backup verification and leakage audit. Report is saved after each fold and uploaded with always() even on failure. Future reruns currently refit; partial reports are evidence/checkpoints, not automatic trusted resume input.
+
+## Verification
+20 targeted tests passed (temporal leakage, evidence features, backup requirements, Model Factory, verified feature cache) using PYTHONUTF8=1 and workspace --basetemp on Windows. One additional workflow isolation test added subsequently; run before push. Tests use fake estimators for orchestration, not ungated real training.
+
+## Running work / next actions
+Evidence candidate training 39986158547 advanced from CDB wait to frozen-candidate during this turn. Do not cancel now: actual backup/training preparation may be underway. Check result and artifact before any activation.
+Commit/push temporal study changes; dispatch protected-frozen-cdb-candidate.yml on this branch with training_profile=top-7.2.1, temporal_study=true, auto_shadow=false. Record returned run ID below. Shared workflow concurrency serializes it behind existing training.
+Then inspect study artifact: exact input SHA, eligible folds, ATP/WTA paired accuracy and uncertainty, calibration choices, weaker segments. Existing historical test is development evidence, not fresh promotion proof. If study fails, fix cause rather than loosen gates.
+
+## Outstanding scope
+Opponent-adjusted serve/return ratings and validated DIL-to-CDB feature integration are not implemented by this change. Admin recalibration controls also remain future work. Do not claim measured predictive improvement or finished production deployment from engineering tests.
+
+## Commands
+PYTHONPATH=api;scripts, PYTHONUTF8=1; Python ../test-venv/Scripts/python.exe.
+Use gh run view and gh run download for exact runs. Read AGENTS.md first when resuming. No local real fitting without enforced frozen-input/backup gate. No production activation.

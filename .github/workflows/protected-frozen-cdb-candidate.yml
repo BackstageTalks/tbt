@@ -14,6 +14,10 @@ on:
         type: choice
         options: [standard, top-7.2.1]
         default: top-7.2.1
+      temporal_study:
+        description: Research-only quarterly ATP/WTA comparison; no candidate publication
+        type: boolean
+        default: false
       auto_shadow:
         description: Only for explicit Model Factory phase 2; never promotes production
         type: boolean
@@ -124,7 +128,14 @@ jobs:
             --report .cache/tbt/production/leakage_audit_report.json
           python scripts/guarded_candidate_backup.py verify --read-only-snapshot
 
+      - name: Research temporal ATP/WTA variants on verified inputs
+        if: ${{ inputs.temporal_study == true }}
+        run: |
+          test "$BLINQ_TRAINING_PROFILE" = "top-7.2.1"
+          python -m pytest -q tests/test_temporal_tour_study.py tests/test_evidence_depth.py
+          python scripts/study_temporal_tours.py
       - name: Fit separate candidate only if immutable backup gate passed
+        if: ${{ inputs.temporal_study != true }}
         run: |
           set -euo pipefail
           # No --promote. No current candidate tag rewrite. No app deployment.
@@ -133,13 +144,13 @@ jobs:
             --frozen-backed-compute
           python scripts/guarded_candidate_backup.py verify
       - name: Independently persist champion-versus-candidate offline holdout
-        if: success()
+        if: ${{ success() && inputs.temporal_study != true }}
         run: |
           set -euo pipefail
           python scripts/publish_frozen_candidate_evidence.py
           test -s .cache/tbt/training-backup/frozen-candidate-evaluation.json
       - name: Update signed Admin model comparison without activation
-        if: success()
+        if: ${{ success() && inputs.temporal_study != true }}
         env:
           BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
           BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
@@ -158,12 +169,12 @@ jobs:
           print('New frozen candidate included in signed Admin snapshot')
           PY
       - name: Apply extra offline gates and activate verified candidate in shadow only
-        if: ${{ inputs.auto_shadow == true }}
+        if: ${{ inputs.auto_shadow == true && inputs.temporal_study != true }}
         run: |
           set -euo pipefail
           python scripts/auto_shadow_candidate.py
       - name: Write private aggregate candidate result to job summary
-        if: success()
+        if: ${{ success() && inputs.temporal_study != true }}
         run: |
           python - <<'PY'
           import json, os
@@ -193,6 +204,7 @@ jobs:
           path: |
             .cache/tbt/training-backup/verified-certificate.json
             .cache/tbt/model/training_report.json
+            .cache/tbt/training-backup/temporal-tour-study.json
             .cache/tbt/production/leakage_audit_report.json
           if-no-files-found: warn
           retention-days: 30
