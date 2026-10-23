@@ -58,8 +58,19 @@ def _timestamp(value: object) -> str:
 
 
 def _paired_tours(comparison, total):
-    candidate = (comparison.get("subgroups") or {}).get("tour", {})
-    champion = (comparison.get("production_subgroups") or {}).get("tour", {})
+    def tour_block(key):
+        group = comparison.get(key)
+        if group is None:
+            return {}
+        if not isinstance(group, dict):
+            raise ValueError("Invalid tour subgroup container")
+        block = group.get("tour", {})
+        if not isinstance(block, dict):
+            raise ValueError("Invalid tour metrics container")
+        return block
+
+    candidate = tour_block("subgroups")
+    champion = tour_block("production_subgroups")
     result = {}
     for tour in ("atp", "wta"):
         left, right = champion.get(tour), candidate.get(tour)

@@ -215,3 +215,11 @@ def test_paired_tours_rejects_mismatched_counts_and_keeps_legacy_missing():
     comparison['production_subgroups']['tour']['atp']['n'] = 299
     with pytest.raises(ValueError, match='Unpaired'):
         _paired_tours(comparison, 300)
+
+def test_paired_tours_rejects_malformed_containers():
+    from tbt.services.model_calibration_status import _paired_tours
+    import pytest
+    for key in ('subgroups', 'production_subgroups'):
+        for value in ([], 'invalid', {'tour': []}, {'tour': None}):
+            with pytest.raises(ValueError, match='container'):
+                _paired_tours({key: value}, 300)
