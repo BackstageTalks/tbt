@@ -7,7 +7,7 @@ and a real source-availability timestamp; this layer never guesses links.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import math
 from typing import Iterable, Mapping
 
@@ -20,6 +20,7 @@ class HistoricalEvidence:
     surface: str
     completed_at: datetime
     available_at: datetime
+    expected_recorded_at: datetime
     won: bool
     expected_win: float  # historical *pre-match* expected probability
     service_points: int | None = None
@@ -102,16 +103,20 @@ def player_features(records: Iterable[HistoricalEvidence], *, player_id: str, to
         raise ValueError("Explicit ATP/WTA canonical player and positive window required")
     prior: list[HistoricalEvidence] = []
     seen: set[str] = set()
+    cutoff_day = issued_at.astimezone(timezone.utc).date()
     for r in records:
         if r.player_id != player_id or r.tour.lower() != tour.lower():
             continue
-        if not r.reviewed_cdb_link or not r.canonical_match_id:
+        if r.reviewed_cdb_link is not True or not r.canonical_match_id:
             raise ValueError("Unreviewed or missing canonical CDB identity")
         _aware(r.completed_at)
         _aware(r.available_at)
+        _aware(r.expected_recorded_at)
+        if not isinstance(r.won, bool) or r.expected_recorded_at >= r.completed_at:
+            raise ValueError("Outcome and prior probability require verified pre-result evidence")
         if r.completed_at > r.available_at:
             raise ValueError("Source stats marked available before match completion")
-        if r.completed_at.date() >= issued_at.date() or r.available_at > issued_at:
+        if r.completed_at.astimezone(timezone.utc).date() >= cutoff_day or r.available_at > issued_at:
             continue
         if r.canonical_match_id in seen:
             raise ValueError("Duplicate linked canonical match for a player")
@@ -178,6 +183,8 @@ def reliability_gate(left: Mapping, right: Mapping,
     )
     if cover < 5: reasons.append("insufficient_verified_stat_coverage")
     gap = max(ps) - min(ps)
+    if n < 0 or surf < 0 or cover < 0 or surf > n or cover > n:
+        raise ValueError("Contradictory evidence counts")
     if gap > 0.12: reasons.append("model_disagreement")
     # Transparent evidence index; not trained/calibrated on the holdout.
     score = round(0.25 * min(n / 20, 1.0) + 0.2 * min(surf / 10, 1.0)
