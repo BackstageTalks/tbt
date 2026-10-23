@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from tbt.models.evidence_selection_audit import audit_preissued_reliability
+from tbt.models.evidence_selection_audit import audit_preissued_reliability, issued_cohort_digest
 
 
 START = datetime(2026, 10, 20, 10, tzinfo=timezone.utc)
@@ -38,6 +38,7 @@ def row(key, *, at=START, settled=True, right_thin=False, correct=True,
             "hgb": {"left_player_id": "A", "probability": .82},
         },
         "candidate_probability_left": .80, "selected_side": side,
+        "candidate_model_sha256": MODEL_SHA,
         "status": "settled" if settled else "pending",
         "target_left_won": (correct if side == "left" else not correct)
         if settled else None,
@@ -48,7 +49,7 @@ def row(key, *, at=START, settled=True, right_thin=False, correct=True,
 def run(rows, windows=WINDOWS):
     return audit_preissued_reliability(
         rows, fixed_model_sha256=MODEL_SHA,
-        frozen_cohort_sha256=SOURCE_SHA, windows=windows,
+        frozen_cohort_sha256=issued_cohort_digest(rows), windows=windows,
     )
 
 
@@ -155,6 +156,35 @@ def test_unknown_second_model_is_abstention_not_invented_agreement():
     assert report["retained"]["issued"] == 0
     assert report["withheld"]["issued"] == 1
     assert report["gate_reasons"]["missing_or_invalid_model_disagreement"] == 1
+
+
+def test_preissued_cohort_digest_detects_modified_probability_or_missing_fixture():
+    original = [row("a"), row("b", settled=False)]
+    frozen_digest = issued_cohort_digest(original)
+    updated = deepcopy(original)
+    updated[0]["candidate_probability_left"] = .90
+    with pytest.raises(ValueError, match="SHA256 read-back mismatch"):
+        audit_preissued_reliability(
+            updated, fixed_model_sha256=MODEL_SHA,
+            frozen_cohort_sha256=frozen_digest, windows=WINDOWS,
+        )
+    with pytest.raises(ValueError, match="SHA256 read-back mismatch"):
+        audit_preissued_reliability(
+            original[:1], fixed_model_sha256=MODEL_SHA,
+            frozen_cohort_sha256=frozen_digest, windows=WINDOWS,
+        )
+    # Results can arrive later without rewriting the earlier opportunity set.
+    later = deepcopy(original)
+    later[1].update(status="settled", target_left_won=False,
+                    settled_at=START + timedelta(days=1))
+    assert issued_cohort_digest(later) == frozen_digest
+
+
+def test_each_issued_row_must_match_pinned_candidate_binary():
+    item = row("x")
+    item["candidate_model_sha256"] = "c" * 64
+    with pytest.raises(ValueError, match="model digest differs"):
+        run([item])
 
 
 def test_pinned_hash_and_identity_protections():
