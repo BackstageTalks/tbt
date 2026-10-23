@@ -38,3 +38,32 @@ Before any candidate fit or selection policy change:
 4. Gate any actual fitting on the established immutable-input + champion restore safety workflow. Never promote production without explicit owner approval, independent shadow read-back, and tested rollback.
 
 No live model improvement, selectivity gain or win-rate benefit can be asserted from synthetic unit tests.
+
+
+## Outcome-blind prospective selection audit (separate from training)
+
+`api/tbt/models/evidence_selection_audit.py` exposes
+`audit_preissued_reliability(complete_issued_rows, fixed_model_sha256,
+frozen_cohort_sha256, windows)` for independent, read-only abstention
+measurement. Each supplied match must have an **actual, frozen issued
+prediction at least 15 minutes before scheduled start**, a verified
+`evidence_as_of == issued_at` per-player PIT snapshot, two same-player
+model estimates, a preissued selected side, and a fixed source/model hash.
+The caller must independently verify signed source snapshots and real
+identity/time lineage; hashes and boolean markers are not substitutes for
+the upstream verification.
+
+All issued opportunities (settled, void, pending) are selected first and
+scored only afterwards, including the rejected cohort so the filter cannot
+hide its misses. Output splits by predeclared nonoverlapping issuance windows,
+ATP/WTA, main/Challenger/ITF and raw >=80% confidence. It measures
+coverage/abstention, hit-rate Wilson intervals and Brier score separately on
+*retained* and *withheld* rows; those different populations cannot be treated
+as a paired accuracy gain. No odds, implied ROI, CLV, new TOP selection or
+trained candidate are inferred. If the required authentic frozen data is
+missing, the audit cannot truthfully produce an improvement claim.
+
+Run focused checks including the source/selection gates with
+`PYTHONPATH=api python -m pytest -q tests/test_evidence_lab.py tests/test_evidence_training.py tests/test_evidence_selection_audit.py`.
+The newly added selection audit must remain candidate-research-only; the
+serving model and current TOP/VALUE path must never import it.
