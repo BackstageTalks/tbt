@@ -8,6 +8,8 @@ including pending and void, participate in selection BEFORE scoring results.
 from __future__ import annotations
 
 from collections import Counter
+from hashlib import sha256
+import json
 from datetime import datetime, timezone
 import math
 from typing import Iterable, Mapping
@@ -27,6 +29,35 @@ def _utc(value: datetime) -> datetime:
 def _sha(value) -> bool:
     return (isinstance(value, str) and len(value) == 64
             and all(c in "0123456789abcdef" for c in value))
+
+
+def issued_cohort_digest(rows: Iterable[Mapping]) -> str:
+    """Canonical fingerprint of exactly the original pre-outcome opportunity set.
+
+    Does NOT include settlement/outcome fields: those can arrive later without
+    retroactively changing which tips existed or passed the evidence filter.
+    The expected fingerprint must be pinned independently by the caller.
+    """
+    preissued = []
+    fields = (
+        "match_id", "tour", "competition_level", "evidence_provenance_verified",
+        "left", "right", "model_probabilities", "candidate_probability_left",
+        "selected_side", "candidate_model_sha256",
+    )
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise ValueError("Invalid issued snapshot")
+        item = {name: row.get(name) for name in fields}
+        for name in ("issued_at", "scheduled_at", "evidence_as_of"):
+            item[name] = _utc(row.get(name)).isoformat()
+        preissued.append(item)
+    preissued.sort(key=lambda x: str(x["match_id"]))
+    try:
+        serialized = json.dumps(preissued, sort_keys=True, separators=(",", ":"),
+                                ensure_ascii=False, allow_nan=False)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Noncanonical frozen cohort evidence") from error
+    return sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def _wilson(wins: int, total: int) -> list[float] | None:
@@ -70,11 +101,19 @@ def audit_preissued_reliability(
     evidence_provenance_verified, left, right, model_probabilities,
     candidate_probability_left, selected_side (left/right), status
     (settled/pending/void), target_left_won (bool iff settled), settled_at
-    (iff settled). Inputs must cover ALL pre-issued cohort opportunities, not
-    merely surviving or settled tips. A hash alone is not provenance evidence.
+    (iff settled), candidate_model_sha256. Inputs must cover ALL pre-issued
+    cohort opportunities, not merely surviving or settled tips. The cohort
+    fingerprint is calculated on the pre-outcome fields, checked against an
+    independently pinned digest, and never derived from settlement status.
+    A hash alone is not provenance evidence.
     """
     if not _sha(fixed_model_sha256) or not _sha(frozen_cohort_sha256):
         raise ValueError("Pinned lowercase SHA256 model and source cohort required")
+    # A frozen issued-set digest is independently compared before any selection.
+    # A caller cannot silently add/remove a losing or pending opportunity.
+    rows = list(rows)
+    if issued_cohort_digest(rows) != frozen_cohort_sha256:
+        raise ValueError("Frozen issued cohort SHA256 read-back mismatch")
     intervals = []
     for label, start, end in windows:
         a, b = _utc(start), _utc(end)
@@ -91,6 +130,8 @@ def audit_preissued_reliability(
     for item in rows:
         if not isinstance(item, Mapping):
             raise ValueError("Invalid immutable cohort row")
+        if item.get("candidate_model_sha256") != fixed_model_sha256:
+            raise ValueError("Issued forecast model digest differs from pinned candidate")
         mid = item.get("match_id")
         if not isinstance(mid, str) or not mid or mid in seen:
             raise ValueError("Missing or duplicate canonical match identity")
