@@ -114,10 +114,21 @@ def augment_research_training_frame(frame, matches: Iterable, evidence: Iterable
                 record.surface != original.surface or not original.is_completed):
             raise ValueError("Frozen row mismatches canonical source or pre-match metadata")
         oriented, _ = FeatureBuilder.orient_for_training(original)
+        # An immutable, verified actual issuance timestamp takes precedence
+        # over the fixture start. Without it, this remains historical
+        # pre-match research, not a replay of a published 06:00 selection.
+        prediction_at = original.scheduled_at
+        if "prediction_as_of" in frame.columns:
+            value = pd.Timestamp(record.prediction_as_of)
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError("Prediction as-of must be timezone-aware")
+            prediction_at = value.to_pydatetime()
+            if prediction_at > oriented.scheduled_at:
+                raise ValueError("Prediction as-of is after the fixture start")
         l = index.snapshot(tour=oriented.tour, player_id=oriented.player1_id,
-                           surface=oriented.surface, issued_at=oriented.scheduled_at)
+                           surface=oriented.surface, issued_at=prediction_at)
         r = index.snapshot(tour=oriented.tour, player_id=oriented.player2_id,
-                           surface=oriented.surface, issued_at=oriented.scheduled_at)
+                           surface=oriented.surface, issued_at=prediction_at)
         pair = pair_feature_projection(l, r)
         values.append([pair[name] for name in DIL_FEATURE_NAMES])
         if (l["covered_matches"]["serve"] and l["covered_matches"]["return"]
