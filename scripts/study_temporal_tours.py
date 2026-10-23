@@ -10,6 +10,8 @@ from tbt.models.ensemble import TennisEnsemble
 from tbt.models.feature_builder import EVIDENCE_FEATURE_NAMES
 from tbt.services.training import PRODUCTION_FEATURE_NAMES
 
+ARMS = ('baseline', 'global_calibration', 'evidence', 'specialist', 'partial_pool')
+
 STARTS = ('2025-01-01', '2025-04-01', '2025-07-01', '2025-10-01',
           '2026-01-01', '2026-04-01', '2026-07-01')
 
@@ -54,7 +56,7 @@ def summarize(rows):
     for name, group in [('all', rows), ('atp', rows[rows.tour_atp == 1]), ('wta', rows[rows.tour_atp == 0])]:
         if not len(group):
             continue
-        scores = {arm: metrics(group.target, group[arm]) for arm in ('baseline', 'global_calibration', 'evidence', 'specialist', 'partial_pool')}
+        scores = {arm: metrics(group.target, group[arm]) for arm in ARMS}
         # Paired daily-block bootstrap of accuracy differences. Not a promotion gate.
         base_correct = (group.baseline.to_numpy() >= .5) == group.target.to_numpy()
         for arm in ('global_calibration', 'evidence', 'specialist', 'partial_pool'):
@@ -67,6 +69,30 @@ def summarize(rows):
             scores[arm]['daily_block_ci95'] = np.quantile(draws, [.025, .975]).tolist()
         result[name] = scores
     return result
+
+
+def diagnostics(rows):
+    """Descriptive segments and accuracy/coverage; never used to choose a model."""
+    groups = {}
+    for column in ('surface', 'competition', 'data_support'):
+        if column not in rows:
+            continue
+        groups[column] = {
+            str(key): {'n': len(part), 'small_sample': len(part) < 200,
+                       'arms': {arm: metrics(part.target, part[arm]) for arm in ARMS}}
+            for key, part in rows.groupby(column, dropna=False)
+        }
+    confidence = {}
+    for tour, part in [('all', rows), ('atp', rows[rows.tour_atp == 1]), ('wta', rows[rows.tour_atp == 0])]:
+        if not len(part):
+            continue
+        confidence[tour] = {}
+        for arm in ARMS:
+            selected = part.loc[np.maximum(part[arm], 1-part[arm]) >= .8]
+            confidence[tour][arm] = {'n': len(selected), 'coverage': len(selected)/len(part),
+                                    'accuracy': metrics(selected.target, selected[arm])['accuracy'] if len(selected) else None}
+    return {'segments': groups, 'confidence_at_least_80': confidence,
+            'confidence_policy': 'Each arm selects its own subset; compare coverage alongside accuracy. Not paired evidence of improved winner selection.'}
 
 
 def study(frame, output, factory=TennisEnsemble, starts=STARTS):
@@ -82,7 +108,9 @@ def study(frame, output, factory=TennisEnsemble, starts=STARTS):
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     def save():
-        output.write_text(json.dumps(report, indent=2, allow_nan=False, default=str), encoding='utf-8')
+        temporary = output.with_suffix('.json.part')
+        temporary.write_text(json.dumps(report, indent=2, allow_nan=False, default=str), encoding='utf-8')
+        temporary.replace(output)
     save()
     collected = []
     for start in starts:
@@ -94,7 +122,9 @@ def study(frame, output, factory=TennisEnsemble, starts=STARTS):
         fold = {'start': start, 'status': 'EVALUATED', 'partitions': {
             key: {'n': len(part), 'first': str(part.scheduled_at.min()), 'last': str(part.scheduled_at.max())}
             for key, part in zip(('train', 'calibration', 'selection', 'test'), (train, cal, select, test))}, 'tour_choices': {}}
-        row = test[['match_id', 'scheduled_at', 'target', 'tour_atp']].copy()
+        columns = ['match_id', 'scheduled_at', 'target', 'tour_atp']
+        columns += [name for name in ('surface', 'competition', 'data_support') if name in test]
+        row = test[columns].copy()
         selection = {}
         fold['calibration_choices'] = {}
         for arm, features in [('baseline', PRODUCTION_FEATURE_NAMES), ('evidence', names)]:
@@ -125,6 +155,10 @@ def study(frame, output, factory=TennisEnsemble, starts=STARTS):
             del model
             gc.collect()
         fold['results'] = summarize(row)
+        fold['diagnostics'] = diagnostics(row)
+        import hashlib
+        fingerprint = pd.util.hash_pandas_object(row, index=False).values.tobytes()
+        fold['prediction_checkpoint'] = {'sha256': hashlib.sha256(fingerprint).hexdigest(), 'rows': len(row)}
         report['folds'].append(fold)
         collected.append(row)
         save()
@@ -135,6 +169,7 @@ def study(frame, output, factory=TennisEnsemble, starts=STARTS):
     if joined.match_id.duplicated().any():
         raise ValueError('Overlapping test folds')
     report['overall'] = summarize(joined)
+    report['diagnostics'] = diagnostics(joined)
     report['status'] = 'COMPLETED_RESEARCH_ONLY'
     report['evaluated_folds'] = len(collected)
     save()
@@ -152,7 +187,12 @@ def main():
         raise RuntimeError('Passing leakage audit required')
     matches, _ = sanitize_history_identities(load_partitions(BASE/'history'))
     frame = load(BASE/'verified-training-features.parquet', 'top-7.2.1', matches)
-    del matches
+    levels = {str(m.match_id): m.tournament_level or 'unknown' for m in matches}
+    frame['competition'] = frame.match_id.astype(str).map(levels).fillna('unknown')
+    # Fixed reporting categories, not learned thresholds or selection rules.
+    support = frame[['serve_evidence_depth', 'return_evidence_depth']].min(axis=1)
+    frame['data_support'] = pd.cut(support, [-1, 0, .25, 1], labels=['missing', 'sparse', 'observed'])
+    del matches, levels
     report_path = BASE/'training-backup/temporal-tour-study.json'
     study(frame, report_path)
     validate_certificate(require_writer_lock=False)

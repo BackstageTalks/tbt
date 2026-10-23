@@ -65,3 +65,13 @@ def test_research_workflow_cannot_publish_or_activate():
     research = workflow.split('- name: Research temporal ATP/WTA variants on verified inputs', 1)[1].split('- name:', 1)[0]
     assert 'inputs.temporal_study == true' in research
     assert 'study_temporal_tours.py' in research
+
+def test_diagnostics_reports_coverage_and_does_not_hide_empty_selection():
+    from study_temporal_tours import diagnostics, ARMS
+    rows = pd.DataFrame({'target': [1, 0, 1, 0], 'tour_atp': [1,1,0,0], 'surface': ['hard']*4})
+    for arm in ARMS:
+        rows[arm] = [.9, .7, .6, .55]
+    report = diagnostics(rows)
+    assert report['confidence_at_least_80']['all']['baseline'] == {'n': 1, 'coverage': .25, 'accuracy': 1.0}
+    assert report['confidence_at_least_80']['wta']['baseline']['accuracy'] is None
+    assert report['segments']['surface']['hard']['small_sample'] is True
