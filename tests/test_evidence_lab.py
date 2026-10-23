@@ -124,6 +124,8 @@ def test_candidate_pair_adapter_exposes_known_both_and_respects_orientation():
     assert set(features) == set(DIL_FEATURE_NAMES)
     assert features["dil_serve_rate_diff"] == pytest.approx(.15)
     assert features["dil_stats_known_both"] == 1.0
+    assert all(features[f"dil_{metric}_known_both"] == 1.0 for metric in
+               ("serve", "return", "second_serve", "bp_save", "bp_convert"))
     assert features["dil_serve_rate_diff"] == -swapped["dil_serve_rate_diff"]
     assert features["dil_min_recent_count"] == 1.0
 
@@ -138,6 +140,27 @@ def test_pair_adapter_never_invents_missing_rate_coverage():
     assert features["dil_bp_save_rate_diff"] == 0.0
     assert features["dil_bp_convert_rate_diff"] == 0.0
     assert features["dil_stats_known_both"] == pytest.approx(3 / 5)
+    assert features["dil_bp_save_known_both"] == 0.0
+    assert features["dil_bp_convert_known_both"] == 0.0
+    assert features["dil_serve_known_both"] == 1.0
+    assert features["dil_return_known_both"] == 1.0
+    assert features["dil_second_serve_known_both"] == 1.0
+
+
+def test_candidate_adapter_distinguishes_same_aggregate_coverage_with_different_missing_fields():
+    left = player_features([obs("a", player="A")], player_id="A",
+                           tour="ATP", surface="hard", issued_at=T)
+    no_second = player_features([obs("b", player="B", second_won=None)], player_id="B",
+                                tour="ATP", surface="hard", issued_at=T)
+    no_break_save = player_features([obs("c", player="C", bp_saved=None)], player_id="C",
+                                    tour="ATP", surface="hard", issued_at=T)
+    s = pair_feature_projection(left, no_second)
+    b = pair_feature_projection(left, no_break_save)
+    assert s["dil_stats_known_both"] == b["dil_stats_known_both"]
+    assert s["dil_second_serve_known_both"] == 0.0
+    assert b["dil_second_serve_known_both"] == 1.0
+    assert s["dil_bp_save_known_both"] == 1.0
+    assert b["dil_bp_save_known_both"] == 0.0
 
 
 def test_pair_adapter_refuses_unreviewed_or_cross_tour_identity():
