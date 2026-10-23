@@ -11,6 +11,7 @@ def obs(k, player="A", when=None, surface="hard", available=None, reviewed=True,
     day = when or T - timedelta(days=10)
     d = dict(canonical_match_id=str(k), tour="ATP", player_id=player, surface=surface,
              completed_at=day, available_at=available or day + timedelta(hours=1),
+             expected_recorded_at=day-timedelta(hours=2),
              won=True, expected_win=.5, service_points=100, first_in=60,
              first_won=45, second_won=20, opponent_service_points=100,
              opponent_first_won=38, opponent_second_won=18, bp_saved=4, bp_faced=5,
@@ -68,7 +69,8 @@ def test_reliability_withholds_confident_but_sparse_player():
     large = dict(canonical_player_id="A", tour="atp", matches_recent=20,
                  matches_surface=15, covered_matches={k: 20 for k in
                  ["serve", "return", "second_serve", "bp_save", "bp_convert"]})
-    small = dict(large, canonical_player_id="B", matches_recent=3, matches_surface=1)
+    small = dict(large, canonical_player_id="B", matches_recent=3, matches_surface=1,
+                 covered_matches={k: 3 for k in large["covered_matches"]})
     assert not reliability_gate(large, small, [.80, .82])["eligible"]
     rich = dict(large, canonical_player_id="B")
     assert reliability_gate(large, rich, [.80, .82])["eligible"]
@@ -84,3 +86,9 @@ def test_source_timestamp_and_malformed_data_rejected():
     with pytest.raises(ValueError):
         player_features([obs("x")], player_id="A", tour="ATP", surface="hard",
                         issued_at=datetime(2026, 10, 23))
+
+
+def test_future_fitted_expectation_rejected():
+    with pytest.raises(ValueError):
+        player_features([obs("x", expected_recorded_at=T)], player_id="A",
+                        tour="ATP", surface="hard", issued_at=T)
