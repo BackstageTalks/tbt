@@ -30,3 +30,8 @@ Use gh run view and gh run download for exact runs. Read AGENTS.md first when re
 
 ## Dispatch checkpoint
 Temporal study commit: 6863306. Run https://github.com/BackstageTalks/tbt/actions/runs/39988784731 dispatched with temporal_study=true and auto_shadow=false. Prior candidate run: https://github.com/BackstageTalks/tbt/actions/runs/39986158547. Four temporal tests passed after adding workflow publication-isolation check (21 targeted tests cumulatively). PR description updated to final combined scope. Dispatch is not successful completion; inspect current state before proceeding.
+
+## Continuation checkpoint — segment diagnostics
+Code e50b657 adds surface/competition/data-support diagnostic metrics, per-tour 80% confidence accuracy WITH coverage, and atomic report replacement. Aggregate fold checkpoints include prediction fingerprints; no raw rows are uploaded. Eight temporal/evidence tests passed after the change.
+Old temporal run 39988784731 was still pending with zero jobs and was cancelled before any fit to replace its older code. Replacement research run: https://github.com/BackstageTalks/tbt/actions/runs/39991649667 (temporal_study=true, auto_shadow=false). This is now the run to inspect for the study. Do not rerun the cancelled old study.
+Candidate run 39986158547 remains untouched; last observation was freezing/verifying input backup and champion restore, not a completed model fit. Read fresh workflow state before making completion claims. Opponent-adjusted feature work and Admin recalibration remain outstanding as above.
