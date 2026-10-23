@@ -179,6 +179,7 @@ def player_features(records: Iterable[HistoricalEvidence], *, player_id: str, to
     form = mix * surface_residual + (1 - mix) * global_form
     aggregated = {}
     coverage = {}
+    opportunities = {}
     for metric in ("serve", "return", "second_serve", "bp_save", "bp_convert"):
         numerator = denominator = n = 0
         for r in selected:
@@ -189,12 +190,14 @@ def player_features(records: Iterable[HistoricalEvidence], *, player_id: str, to
                 n += 1
         aggregated[metric + "_rate"] = numerator / denominator if denominator else None
         coverage[metric] = n
+        opportunities[metric] = denominator
     return {
         "canonical_player_id": player_id, "tour": tour.lower(),
         "matches_recent": len(selected), "matches_surface": len(same),
         "opponent_adjusted_form": global_form,
         "surface_opponent_adjusted_form": form,
         "stats": aggregated, "covered_matches": coverage,
+        "stat_opportunities": opportunities,
     }
 
 
@@ -236,6 +239,16 @@ def reliability_gate(left: Mapping, right: Mapping,
         for k in rates
     )
     if cover < 5: reasons.append("insufficient_verified_stat_coverage")
+    # Merely having 5 boxscores is not 5 sufficiently sampled break-point
+    # opportunities. Require actual observed denominators for both players.
+    minimum_opportunities = {
+        "serve": 300, "return": 300, "second_serve": 80,
+        "bp_save": 15, "bp_convert": 15,
+    }
+    if any(min(int(f.get("stat_opportunities", {}).get(metric) or 0)
+                   for f in (left, right)) < required
+           for metric, required in minimum_opportunities.items()):
+        reasons.append("insufficient_stat_opportunities")
     gap = max(ps) - min(ps)
     if n < 0 or surf < 0 or cover < 0 or surf > n or cover > n:
         raise ValueError("Contradictory evidence counts")
