@@ -44,7 +44,7 @@ jobs:
           python scripts/check_live_ui_revision.py \
             --url "$BLINQ_URL" \
             --web web \
-            --token "$GITHUB_SHA" \
+            --token "$GITHUB_SHA-$GITHUB_RUN_ID" \
             --retries 3 \
             --delay 8
 
