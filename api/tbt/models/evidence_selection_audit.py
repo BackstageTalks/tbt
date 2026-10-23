@@ -192,9 +192,8 @@ def audit_preissued_reliability(
             if not isinstance(family, str) or not family.strip():
                 raise ValueError("Verified estimator family required")
             families.add(family.strip().lower())
-        if len(families) < 2:
-            raise ValueError("Two different independently identified estimator families required")
-        gate = reliability_gate(left, right, estimates)
+        gate = (reliability_gate(left, right, estimates) if len(families) >= 2
+                else {"eligible": False, "reasons": ["missing_or_invalid_model_disagreement"]})
         confidence = float(p if side == "left" else 1 - p)
         selected[labels[0]].append({
             "match_id": mid, "tour": tour, "level": level,
