@@ -10,6 +10,7 @@ T = datetime(2026, 10, 23, 10, tzinfo=UTC)
 def obs(k, player="A", when=None, surface="hard", available=None, reviewed=True, **kw):
     day = when or T - timedelta(days=10)
     d = dict(canonical_match_id=str(k), tour="ATP", player_id=player, surface=surface,
+             started_at=day-timedelta(hours=1),
              completed_at=day, available_at=available or day + timedelta(hours=1),
              expected_recorded_at=day-timedelta(hours=2),
              won=True, expected_win=.5, service_points=100, first_in=60,
@@ -184,3 +185,9 @@ def test_bp_opportunity_denominators_gate_confident_thin_statistical_sample():
     assert "insufficient_stat_opportunities" in report["reasons"]
     assert reliability_gate(ample, dict(ample, canonical_player_id="B"),
                             two_models(.81, .82))["eligible"]
+
+
+def test_inplay_expectation_not_misclassified_as_prematch():
+    with pytest.raises(ValueError, match="before actual match start"):
+        player_features([obs("x", expected_recorded_at=T-timedelta(minutes=30))],
+                        player_id="A", tour="ATP", surface="hard", issued_at=T)
