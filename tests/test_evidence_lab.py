@@ -67,7 +67,9 @@ def test_form_uses_surface_shrink_and_indoor_hard_bucket():
 
 def test_reliability_withholds_confident_but_sparse_player():
     large = dict(canonical_player_id="A", tour="atp", matches_recent=20,
-                 matches_surface=15, covered_matches={k: 20 for k in
+                 matches_surface=15, stat_opportunities={k: 400 for k in
+                 ["serve", "return", "second_serve", "bp_save", "bp_convert"]},
+                 covered_matches={k: 20 for k in
                  ["serve", "return", "second_serve", "bp_save", "bp_convert"]})
     small = dict(large, canonical_player_id="B", matches_recent=3, matches_surface=1,
                  covered_matches={k: 3 for k in large["covered_matches"]})
@@ -155,7 +157,9 @@ def two_models(a, b):
 
 def test_model_disagreement_requires_same_canonical_left_player():
     rich = dict(canonical_player_id="A", tour="atp", matches_recent=20,
-                matches_surface=15, covered_matches={k: 20 for k in
+                matches_surface=15, stat_opportunities={k: 400 for k in
+                 ["serve", "return", "second_serve", "bp_save", "bp_convert"]},
+                 covered_matches={k: 20 for k in
                 ("serve", "return", "second_serve", "bp_save", "bp_convert")})
     other = dict(rich, canonical_player_id="B")
     # Two complementary player sides from one model must NOT look like
@@ -165,3 +169,18 @@ def test_model_disagreement_requires_same_canonical_left_player():
     assert not reliability_gate(rich, other, spoofed)["eligible"]
     assert not reliability_gate(rich, other, [.80, .82])["eligible"]
     assert reliability_gate(rich, other, two_models(.80, .82))["eligible"]
+
+
+def test_bp_opportunity_denominators_gate_confident_thin_statistical_sample():
+    ample = dict(canonical_player_id="A", tour="atp", matches_recent=20,
+                 matches_surface=12, covered_matches={k: 20 for k in
+                 ("serve", "return", "second_serve", "bp_save", "bp_convert")},
+                 stat_opportunities={k: 300 for k in
+                 ("serve", "return", "second_serve", "bp_save", "bp_convert")})
+    other = dict(ample, canonical_player_id="B",
+                 stat_opportunities={**ample["stat_opportunities"], "bp_convert": 2})
+    report = reliability_gate(ample, other, two_models(.81, .82))
+    assert not report["eligible"]
+    assert "insufficient_stat_opportunities" in report["reasons"]
+    assert reliability_gate(ample, dict(ample, canonical_player_id="B"),
+                            two_models(.81, .82))["eligible"]
