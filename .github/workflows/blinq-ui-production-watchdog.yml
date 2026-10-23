@@ -1,0 +1,82 @@
+name: BlinQ production UI revision watchdog
+
+on:
+  # The existing external 30-minute match-status clock dispatches this workflow.
+  # GitHub cron is intentionally prohibited by the repository contract.
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/blinq-ui-production-watchdog.yml'
+      - 'scripts/check_live_ui_revision.py'
+      - 'tests/test_check_live_ui_revision.py'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: blinq-ui-production-watchdog
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout current source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Offline watchdog regression tests
+        run: python -m unittest discover -s tests -p 'test_check_live_ui_revision.py' -v
+
+      - name: Verify Azure root, SPA route, exact HTML and frontend assets
+        id: live
+        continue-on-error: true
+        env:
+          BLINQ_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        run: |
+          python scripts/check_live_ui_revision.py \
+            --url "$BLINQ_URL" \
+            --web web \
+            --token "$GITHUB_SHA-$GITHUB_RUN_ID" \
+            --retries 3 \
+            --delay 8
+
+      - name: Open a single actionable drift incident
+        if: steps.live.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BLINQ_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh label create production-ui-drift --color E11D48 --description "Azure BlinQ UI differs from the checked-out frontend" --force >/dev/null
+          issue="$(gh issue list --state open --label production-ui-drift --json number --jq '.[0].number // empty')"
+          if [[ -z "$issue" ]]; then
+            gh issue create \
+              --title "Production BlinQ UI drift: Azure serving incorrect frontend" \
+              --label production-ui-drift \
+              --body "The read-only production watchdog found different HTML/JS/CSS or an invalid deployment stamp on **$BLINQ_URL**. Three cache-busted checks failed. This may be a stale CDN edge, an unintended Azure overwrite, or a deployment not yet published. Examine the [failing verification run](https://github.com/$GH_REPO/actions/runs/$GITHUB_RUN_ID) and production deployment SHA; publish only through the guarded UI workflow. No CDB/model changes were made by this checker."
+          fi
+          echo "::error::Azure BlinQ UI drift confirmed. See the production-ui-drift issue and restore via guarded deployment."
+          exit 1
+
+      - name: Close resolved drift incident
+        if: steps.live.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          issue="$(gh issue list --state open --label production-ui-drift --json number --jq '.[0].number // empty')"
+          if [[ -n "$issue" ]]; then
+            gh issue close "$issue" --comment "Verified restored: current Azure frontend HTML, assets and stamped SHA match the repository. Watchdog run: https://github.com/$GH_REPO/actions/runs/$GITHUB_RUN_ID"
+          fi

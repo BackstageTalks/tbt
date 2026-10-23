@@ -154,3 +154,15 @@ jobs:
           fi
           gh workflow run cdb-drive-inbox.yml --repo "$GITHUB_REPOSITORY" --ref main
           echo 'CDB_INBOX_DISPATCH_SUBMITTED_NOT_IMPORT_VERIFIED'
+
+      - name: Dispatch read-only production UI revision watchdog
+        # Reuse the governed external 30-minute clock, even when match-status
+        # reconciliation fails. Never consume tennis API quota or write to CDB.
+        if: always() && github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run blinq-ui-production-watchdog.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo 'BLINQ_UI_WATCHDOG_DISPATCH_SUBMITTED'
