@@ -54,7 +54,8 @@ def issued_cohort_digest(rows: Iterable[Mapping]) -> str:
     preissued.sort(key=lambda x: str(x["match_id"]))
     try:
         serialized = json.dumps(preissued, sort_keys=True, separators=(",", ":"),
-                                ensure_ascii=False, allow_nan=False)
+                                ensure_ascii=False, allow_nan=False,
+                                default=lambda value: _utc(value).isoformat())
     except (TypeError, ValueError) as error:
         raise ValueError("Noncanonical frozen cohort evidence") from error
     return sha256(serialized.encode("utf-8")).hexdigest()
