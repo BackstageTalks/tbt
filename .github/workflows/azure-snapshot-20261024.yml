@@ -1,0 +1,113 @@
+name: Snapshot BlinQ to isolated Azure environment 2026-10-24
+
+on:
+  push:
+    branches: ['ops/azure-snapshot-20261024']
+    paths: ['.github/workflows/azure-snapshot-20261024.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: azure-snapshot-blinq-20261024
+  cancel-in-progress: false
+
+jobs:
+  azure-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact known-good production source
+        uses: actions/checkout@v4
+        with:
+          ref: c6b949eae94562fc571c3b0d733aa671fe5a7337
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Prepare serving bundle without touching production
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          python scripts/clean_generated_artifacts.py
+          python scripts/prepare_feed.py
+          python scripts/verify_presentation_feed.py api/data/feed.json --summary
+          python scripts/stamp_web_deployment.py --web web --sha c6b949eae94562fc571c3b0d733aa671fe5a7337
+          python - <<'PY'
+          import datetime, hashlib, json, pathlib
+          root=pathlib.Path('web')
+          paths=sorted(p for p in root.rglob('*') if p.is_file() and not p.is_symlink())
+          marker={
+              'kind':'blinq-dated-azure-recovery-environment',
+              'date_europe_bratislava':'2026-10-24',
+              'production_code_commit':'c6b949eae94562fc571c3b0d733aa671fe5a7337',
+              'includes':'web and Azure Functions API package from pinned commit; feed rebuilt from serving release',
+              'note':'isolated Azure preview environment; not immutable Blob storage and not a CDB/model backup',
+              'files':{str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths},
+          }
+          (root/'azure-snapshot-2026-10-24.json').write_text(
+              json.dumps(marker,sort_keys=True,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print('Snapshot web files:',len(paths))
+          PY
+
+      - name: Deploy to dated Azure preview only, never production
+        id: deploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: web
+          api_location: api
+          output_location: ''
+          skip_app_build: true
+          deployment_environment: b20261024
+          production_branch: main
+
+      - name: Independently verify dated Azure copy by read-back
+        env:
+          SNAPSHOT_URL: ${{ steps.deploy.outputs.static_web_app_url }}
+          PRODUCTION_URL: https://agreeable-sky-011a7fe10.7.azurestaticapps.net
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SNAPSHOT_URL" || { echo 'Snapshot URL not provided; deployment unverified'; exit 1; }
+          test "${SNAPSHOT_URL%/}" != "${PRODUCTION_URL%/}" || { echo 'Refusing to treat production as snapshot'; exit 1; }
+          mkdir -p /tmp/blinq-azure-snapshot
+          for attempt in $(seq 1 8); do
+            base="${SNAPSHOT_URL%/}"
+            suffix="20261024-$GITHUB_RUN_ID-$attempt"
+            if curl -fsSL --max-time 20 -H 'Cache-Control: no-cache' "$base/deployment.json?check=$suffix" -o /tmp/blinq-azure-snapshot/deployment.json &&
+               curl -fsSL --max-time 20 -H 'Cache-Control: no-cache' "$base/app.js?check=$suffix" -o /tmp/blinq-azure-snapshot/app.js &&
+               curl -fsSL --max-time 20 -H 'Cache-Control: no-cache' "$base/azure-snapshot-2026-10-24.json?check=$suffix" -o /tmp/blinq-azure-snapshot/manifest.json; then
+              if python - <<'PY'
+          import hashlib,json,pathlib
+          got=pathlib.Path('/tmp/blinq-azure-snapshot')
+          sha='c6b949eae94562fc571c3b0d733aa671fe5a7337'
+          dep=json.loads((got/'deployment.json').read_text())
+          manifest=json.loads((got/'manifest.json').read_text())
+          app=(got/'app.js').read_bytes()
+          assert dep['git_sha']==sha
+          assert manifest['production_code_commit']==sha
+          assert manifest['date_europe_bratislava']=='2026-10-24'
+          assert hashlib.sha256(app).hexdigest()==manifest['files']['app.js']
+          assert hashlib.sha256(app).hexdigest()==dep['files_sha256']['app.js']
+          print('AZURE_SNAPSHOT_READBACK_VERIFIED',sha,len(manifest['files']))
+          PY
+              then
+                echo "Snapshot URL: $SNAPSHOT_URL"
+                exit 0
+              fi
+            fi
+            sleep 8
+          done
+          echo 'Azure snapshot upload could not be independently verified' >&2
+          exit 1
