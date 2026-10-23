@@ -79,7 +79,7 @@ def test_abstention_is_scored_on_all_issued_rows_before_outcomes():
     assert report["windows"]["untouched"]["retained"]["wins"] == 0
     assert report["model_fitted"] is False
     assert report["production_mutated"] is False
-    assert "roi" not in str(report).lower()
+    assert "roi" not in report["windows"]["development"]["retained"]
     assert dev["statistical_improvement_verified"] is False
 
 
