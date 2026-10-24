@@ -5658,6 +5658,31 @@ function adminActivityRows(){
       const quick=event.target.closest('[data-admin-user-plan]');if(quick){const input=$('adminUserPlan');if(input){input.value=quick.dataset.adminUserPlan;host.querySelectorAll('[data-admin-user-plan]').forEach(btn=>btn.classList.toggle('active',btn===quick));setAdminPlanDefaults(input.value,false);}return;}
       const expiryQuick=event.target.closest('[data-admin-expiry-days]');if(expiryQuick){adminAddDaysToExpiry(Number(expiryQuick.dataset.adminExpiryDays));return;}
       const actionNode=event.target.closest('[data-admin-action]');const action=actionNode?.dataset.adminAction;if(!action)return;
+      if(action==='toggle-activity'){state.adminActivityExpanded=state.adminActivityExpanded===false;rerenderAdmin();return;}
+      if(action==='refresh-activity'){await loadAdminAccountActivity(true);return;}
+      if(action==='tg-cleanup-confirm'){
+        if(state.adminActivityActionBusy)return;
+        const eventId=String(actionNode.dataset.activityId||''),targetId=String(actionNode.dataset.activityUser||'');
+        if(!window.confirm('Potvrď až po tom, čo si tohto člena naozaj odstránil z platených Telegram skupín. Zmení sa iba evidencia v BlinQ.'))return;
+        state.adminActivityActionBusy=true;actionNode.disabled=true;
+        try{
+          const result=await BlinqAuth.adminConfirmTelegramCleanup(targetId,eventId);
+          state.adminUsers=(state.adminUsers||[]).map(user=>String(user.id)!==targetId?user:{...user,tg_cleanup_confirmed_event:result.event_id,tg_cleanup_confirmed_at:result.confirmed_at,tg_private_member:false});
+          rerenderAdmin();
+          showStatus('Ručné odstránenie z TG bolo označené ako vybavené.');
+        }catch(error){actionNode.disabled=false;showStatus(error.message||'Potvrdenie TG odstránenia sa nepodarilo uložiť.');}
+        finally{state.adminActivityActionBusy=false;}
+        return;
+      }
+      if(action==='clear-activity'){
+        if(state.adminActivityActionBusy)return;
+        if(!window.confirm('ZMAZAŤ VŠETKY operačné udalosti účtov vrátane histórie e-mailov a prechodov na ROOKIE? Účty a bezpečnostný audit zostanú zachované.'))return;
+        state.adminActivityActionBusy=true;actionNode.disabled=true;
+        try{const result=await BlinqAuth.adminClearAccountActivity();state.adminActivity=null;await loadAdminAccountActivity(true);showStatus(`Vymazaných ${result.deleted||0} udalostí.`);}
+        catch(error){showStatus(error.message||'Log sa nepodarilo vymazať.');}
+        finally{state.adminActivityActionBusy=false;}
+        return;
+      }
       if(action==='project-create'){
         actionNode.disabled=true;
         try{
@@ -5832,7 +5857,7 @@ function adminActivityRows(){
       else if(action==='preview-demo'){state.previewPlan=null;enableDemoBoardPreview();}
       else if(action==='preview'){state.previewPlan=state.adminPlan;renderAllUiContent();setRoute('predictions');showStatus(`Previewing page as ${accessLabel(state.previewPlan)}.`);}
       else if(action==='clear-preview'){state.previewPlan=null;renderAllUiContent();rerenderAdmin();showStatus('Admin preview disabled.');}
-      else if(action==='reset-user-password'){const user=state.adminSelectedUser;if(!user)return;const savedEmail=String(user.email||'').trim(),editedEmail=String($('adminUserEmail')?.value||savedEmail).trim();if(!savedEmail){showStatus('Účet nemá uložený e-mail.');return;}if(editedEmail.toLowerCase()!==savedEmail.toLowerCase()){showStatus('Najprv ulož zmenený e-mail a potom pošli link na obnovu hesla.');return;}try{await BlinqAuth.reset(savedEmail);showStatus(`Link na obnovu hesla bol odoslaný na ${savedEmail}.`);}catch(error){showStatus(error.message||'Obnovu hesla sa nepodarilo odoslať.');}}
+      else if(action==='reset-user-password'){const user=state.adminSelectedUser;if(!user)return;const savedEmail=String(user.email||'').trim(),editedEmail=String($('adminUserEmail')?.value||savedEmail).trim();if(!savedEmail){showStatus('Účet nemá uložený e-mail.');return;}if(editedEmail.toLowerCase()!==savedEmail.toLowerCase()){showStatus('Najprv ulož zmenený e-mail a potom pošli link na obnovu hesla.');return;}try{await BlinqAuth.reset(savedEmail);showStatus(`Požiadavka na obnovu hesla bola prijatá pre ${savedEmail}. Stav SMTP sa zobrazuje v logu.`);}catch(error){showStatus(error.message||'Obnovu hesla sa nepodarilo odoslať.');}}
       else if(action==='apply-default-term'){const plan=String($('adminUserPlan')?.value||'');if(!plan){showStatus('Najprv vyber level.');return;}setAdminPlanDefaults(plan,true);}
       else if(action==='extend-default-term'){const plan=String($('adminUserPlan')?.value||'');if(!plan){showStatus('Najprv vyber level.');return;}const cfg=state.ui?.plans?.[plan]||{};if(planIsUnlimited(plan,cfg)){setAdminPlanDefaults(plan,true);showStatus('ROOKIE je bez časového obmedzenia.');return;}adminAddDaysToExpiry(adminDefaultPlanDays());}
       else if(action==='delete-user'){const user=state.adminSelectedUser;if(!user)return;const confirmation=window.prompt(`Naozaj zmazať účet ${user.email||user.id}?\n\nPre potvrdenie napíš DELETE`);if(confirmation!=='DELETE')return;try{await BlinqAuth.adminDeleteUser(user.id);state.adminUsers=(state.adminUsers||[]).filter(row=>row.id!==user.id);state.adminSelectedUser=null;rerenderAdmin();adminApplyUserFilters();showStatus('Účet bol zmazaný.');}catch(error){showStatus(error.message||'Účet sa nepodarilo zmazať.');}}
@@ -5841,7 +5866,16 @@ function adminActivityRows(){
       else if(action==='reset-user-filters'){state.adminUserFilters={q:'',plan:'all',status:'all',sort:'email',loginDate:''};rerenderAdmin();adminApplyUserFilters();}
       else if(action==='copy-tg-nicks'){const nicks=adminFilteredUsers().map(u=>String(u.telegram_nick||'').trim()).filter(Boolean);const text=nicks.join('\n');if(!text){showStatus('V aktuálnom filtri nie sú žiadne Telegram nicky.');return;}try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}showStatus(`Skopírovaných ${nicks.length} Telegram nickov.`);}catch{showStatus('Telegram nicky sa nepodarilo skopírovať.');}}
     };
-    host.onchange=event=>{
+    host.onchange=async event=>{
+      if(event.target?.id==='adminActivityType'){state.adminActivityType=event.target.value;rerenderAdmin();return;}
+      if(event.target?.id==='adminActivityRetention'){
+        const days=Number(event.target.value);
+        if(!window.confirm(`Nastaviť uchovávanie na ${days} dní? Staršie udalosti sa odstránia z operačného logu.`)){rerenderAdmin();return;}
+        event.target.disabled=true;
+        try{const result=await BlinqAuth.adminSetAccountActivityRetention(days);state.adminActivity=null;await loadAdminAccountActivity(true);showStatus(`Uchovávanie: ${days} dní · odstránené ${result.deleted||0} starších udalostí.`);}
+        catch(error){showStatus(error.message||'Nastavenie uchovávania sa nepodarilo uložiť.');rerenderAdmin();}
+        return;
+      }
       const t=event.target;
       if(t.dataset.adminTestCheck){const chosen=new Set(state.adminTestSelected||[]);if(t.checked)chosen.add(t.dataset.adminTestCheck);else chosen.delete(t.dataset.adminTestCheck);state.adminTestSelected=[...chosen];rerenderAdmin();return;}
       if(t.dataset.adminTestFilter){adminTestFilter()[t.dataset.adminTestFilter]=String(t.value||'');state.adminTestPage=0;rerenderAdmin();return;}
@@ -5906,6 +5940,7 @@ function adminActivityRows(){
     host.onkeydown=event=>{if(event.target?.id==='adminTestGoPage'&&event.key==='Enter'){event.preventDefault();adminTestAction('go');}};
     host.oninput=event=>{
       const t=event.target,field=t?.dataset?.simpleBannerField;
+      if(t?.id==='adminActivitySearch'){const position=t.selectionStart;state.adminActivitySearch=t.value;rerenderAdmin();const node=$('adminActivitySearch');if(node){node.focus();node.setSelectionRange(position,position);}return;}
       const liveFields=['eyebrow','headline','text','button_text','desktop_image_x','desktop_image_y','mobile_image_x','mobile_image_y','desktop_text_x','desktop_text_y','desktop_text_width','mobile_text_x','mobile_text_y','mobile_text_width','desktop_headline_size','mobile_headline_size','desktop_text_size','mobile_text_size','desktop_eyebrow_size','mobile_eyebrow_size','desktop_social_x','desktop_social_y','mobile_social_x','mobile_social_y','desktop_social_size','mobile_social_size','desktop_shadow_strength','mobile_shadow_strength'];
       if(!field||!liveFields.includes(field))return;
       const wrap=t.closest('[data-simple-banner]'),item=elements()?.[wrap?.dataset?.simpleBanner];
