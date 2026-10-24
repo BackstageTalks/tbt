@@ -232,7 +232,8 @@ def test_expired_paid_plans_are_persistently_downgraded_and_push_is_synced(monke
         assert result["subscription_7"] == result["subscription_3"] == 0
         if plan in {"elite", "legend", "goat"}:
             admin_mail = next(kwargs for recipient, kwargs in sent if recipient == "ops@example.test")
-            assert "check manual Telegram VIP removal" in admin_mail["body_sk"]
+            assert "Paid → ROOKIE" in admin_mail["body_sk"]
+            assert "manual Telegram" not in admin_mail["body_sk"]
 
 
 def test_paid_downgrade_emits_operator_queue_event(monkeypatch):
