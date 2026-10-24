@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from datetime import datetime, timezone
-from audit_champion_weakness_current import compact
+from audit_champion_weakness_current import compact, compare_published_to_market
 
 
 def test_compact_omits_private_loss_rows_and_preserves_model_pair():
@@ -33,3 +33,18 @@ def test_compact_omits_private_loss_rows_and_preserves_model_pair():
     assert report["published_top_value_losses"]["discarded_individual_loss_examples"]==1
     assert report["provider_requests"]==0
     assert report["production_mutated"] is False
+
+
+def test_market_brier_compared_on_identical_real_quote_population():
+    rows=[]
+    for day in range(1,15):
+        rows.append({"correct":bool(day%2),"probability":.9,
+                     "implied_probability":.55,"implied_source":"both_sides_no_vig",
+                     "betting_day":f"2026-10-{day:02d}"})
+    result=compare_published_to_market(rows)
+    assert result["n"] == 14
+    assert result["blinq_minus_market_brier"] > 0
+    assert result["paired_brier_daily_block_ci95"] is not None
+    assert result["not_a_prospective_new_selector"] is True
+    rows[0]["implied_source"]="one_side_raw_with_margin"
+    assert compare_published_to_market(rows)["n"] == 13
