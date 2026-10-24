@@ -135,8 +135,8 @@ jobs:
 
       - name: Research temporal ATP/WTA variants on verified inputs
         if: ${{ inputs.temporal_study == true }}
-          env:
-            BLINQ_METRIC_COMBINATIONS: ${{ inputs.metric_combinations }}
+        env:
+          BLINQ_METRIC_COMBINATIONS: ${{ inputs.metric_combinations }}
         run: |
           test "$BLINQ_TRAINING_PROFILE" = "top-7.2.1"
           python -m pytest -q tests/test_temporal_tour_study.py tests/test_evidence_depth.py
