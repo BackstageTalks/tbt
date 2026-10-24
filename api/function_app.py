@@ -47,6 +47,11 @@ from tbt.services.account_storage import (
     record_manual_payment,
     list_manual_payments,
     list_account_audit,
+    list_account_activity,
+    account_activity_settings,
+    save_account_activity_settings,
+    prune_account_activity,
+    confirm_telegram_cleanup,
     delete_account_metadata,
     save_daily_access_allocations,
 )
@@ -3253,6 +3258,90 @@ def admin_audit(req):
         return response({"error": "admin_storage_unavailable"}, 503)
 
 
+
+
+@app.route(route="v1/admin/account-activity", methods=["GET"])
+def admin_account_activity(req):
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        try:
+            limit = int(req.params.get("limit") or 500)
+        except (TypeError, ValueError):
+            return response({"error": "invalid_limit"}, 400)
+        return response(list_account_activity(limit=limit))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/account-activity/retention", methods=["PUT"])
+def admin_account_activity_retention(req):
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        payload = req.get_json()
+        if not isinstance(payload, dict) or set(payload) != {"retention_days"}:
+            return response({"error": "invalid_retention_request"}, 400)
+        settings = save_account_activity_settings(payload["retention_days"])
+        pruned = prune_account_activity()
+        return response({"settings": settings, **pruned})
+    except (ValueError, TypeError) as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/account-activity/clear", methods=["POST"])
+def admin_account_activity_clear(req):
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        payload = req.get_json()
+        if not isinstance(payload, dict) or payload.get("confirm") != "DELETE_ACTIVITY_LOG":
+            return response({"error": "confirmation_required"}, 400)
+        return response(prune_account_activity(all_events=True))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/account-activity/tg-confirm", methods=["POST"])
+def admin_account_telegram_cleanup(req):
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        payload = req.get_json()
+        if not isinstance(payload, dict):
+            return response({"error": "invalid_cleanup_request"}, 400)
+        uid = str(payload.get("target_id") or "").strip()
+        event_id = str(payload.get("event_id") or "").strip()
+        if not uid or not event_id or set(payload) != {"target_id", "event_id"}:
+            return response({"error": "invalid_cleanup_request"}, 400)
+        target = get_user(settings, uid)
+        current = public_account(target, cfg=settings)
+        if str(current.get("plan") or "").lower() not in {"rookie", "expired"}:
+            return response({"error": "paid_access_restored"}, 409)
+        saved = confirm_telegram_cleanup(uid, event_id=event_id, actor_id=str(actor.get("id") or ""))
+        return response(saved)
+    except (ValueError, TypeError) as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
 
 
 @app.route(route="v1/admin/project-groups", methods=["GET", "POST"])
