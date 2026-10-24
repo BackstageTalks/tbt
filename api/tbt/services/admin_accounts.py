@@ -309,6 +309,11 @@ def _validate_legend_term_on_grant(claims: dict, changes: dict, *, now=None) -> 
         raise ValueError("LEGEND grant needs a timezone-aware expiration")
     # Small timing tolerance for browser clock skew / server request latency.
     if expiry.astimezone(timezone.utc) < instant + timedelta(days=180, minutes=-5):
+        # A mistakenly shortened legacy grant may need only its *remaining*
+        # entitlement restored. This operator-only override is explicit, not
+        # inferred from a 30-day timestamp or silent frontend changes.
+        if changes.get("restore_legend_remaining_term") is True:
+            return
         raise ValueError("New LEGEND grants require at least 180 days of validity")
 
 
@@ -471,6 +476,12 @@ def delete_user_account(cfg, user_id):
 
 def update_user_access(cfg, user_id, payload, *, actor_id="", client=None, expected_claims=None):
     changes = normalize_access_update(payload)
+    if isinstance(payload, dict) and "restore_legend_remaining_term" in payload:
+        if payload["restore_legend_remaining_term"] is not True:
+            raise ValueError("Invalid LEGEND restoration flag")
+        if not str(actor_id or "").strip():
+            raise ValueError("LEGEND restoration requires an audited admin actor")
+        changes["restore_legend_remaining_term"] = True
     if not firebase_configured(cfg):
         raise AuthUnavailable("Firebase admin account management is not configured")
     return _update_firebase_user_access(cfg, user_id, changes, actor_id=actor_id, expected_claims=expected_claims)
