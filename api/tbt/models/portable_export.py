@@ -44,6 +44,9 @@ def _export_calibrator(calibrator) -> dict[str, Any]:
 
 
 def export_portable_model(model) -> dict[str, Any]:
+    from .tour_bundle import TourBundle
+    if isinstance(model, TourBundle):
+        raise ValueError("Tour bundle portable export is not yet supported; refusing partial export")
     """Serialize only inference state required by :mod:`portable_model`.
 
     The returned object is JSON-compatible and contains no pickle/joblib payload.
