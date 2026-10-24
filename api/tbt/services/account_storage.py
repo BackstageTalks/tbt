@@ -515,6 +515,44 @@ def record_access_audit(*, actor_id: object, target_id: object, before: dict, af
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to store account audit record") from exc
 
+
+def record_account_event(*, actor_id: object, target_id: object, action: str,
+                         outcome: str, before: dict | None = None,
+                         after: dict | None = None) -> None:
+    """Append one operational account event to the existing admin-only audit."""
+    actor = str(actor_id or "").strip()[:256]
+    target = str(target_id or "").strip()[:256]
+    if not actor or not target:
+        raise ValueError("Audit actor and target are required")
+    if action not in {"account_email_delivery", "paid_membership_downgraded"}:
+        raise ValueError("Unsupported operational audit action")
+    if outcome not in {"success", "sent", "failed"}:
+        raise ValueError("Unsupported operational audit outcome")
+    allowed = {"email", "subject", "from_plan", "to_plan", "expired_at", "error_type"}
+    def clean(payload: dict | None) -> dict:
+        return {
+            key: str(value)[:240]
+            for key, value in (payload or {}).items()
+            if key in allowed and value is not None
+        }
+    now = datetime.now(timezone.utc)
+    entity = {
+        "PartitionKey": now.strftime("%Y%m"),
+        "RowKey": f"{int(now.timestamp()*1000):013d}-{uuid.uuid4().hex}",
+        "actor_id": actor,
+        "target_id": target,
+        "action": action,
+        "outcome": outcome,
+        "before_json": json.dumps(clean(before), ensure_ascii=False, separators=(",", ":")),
+        "after_json": json.dumps(clean(after), ensure_ascii=False, separators=(",", ":")),
+        "occurred_at": now.isoformat(),
+    }
+    try:
+        _table(AUDIT_TABLE).create_entity(entity)
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to store account activity event") from exc
+
+
 PAYMENTS_TABLE = "BlinQPayments"
 
 
@@ -660,6 +698,7 @@ def list_account_audit(*, target_id: object = "", limit: int = 100, months: int 
             except ValueError:
                 return {}
         result.append({
+            "event_id": str(row.get("RowKey") or ""),
             "actor_id": str(row.get("actor_id") or ""),
             "target_id": str(row.get("target_id") or ""),
             "action": str(row.get("action") or ""),
