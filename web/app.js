@@ -481,7 +481,7 @@
     // optional endpoint must not serialize several timeout windows and hold an
     // authenticated user behind presentation configuration.
     const [uiResult,telegramResult,runtimeResult,linksResult]=await Promise.allSettled([
-      getJSON('/ui-config.json?v=7360&p=61&dashboard-setting=1',{timeoutMs:3000}),
+      getJSON('/ui-config.json?v=7360&p=61&dashboard-setting=1&acca-stats=1',{timeoutMs:3000}),
       getJSON('/config/telegram-groups.json?v=7360&p=61',{timeoutMs:3000}),
       getJSON('/api/v1/ui-config',{timeoutMs:3500}),
       getJSON('/membership-links.json',{timeoutMs:3000})
@@ -3429,7 +3429,10 @@
     }
     return allowed;
   }
-  function settledPublishedEntries(rows,category='all',filters=null){
+  function accaExcludedFromStats(){
+    return state.ui?.dashboard?.daily_hub?.tabs?.prime?.exclude_from_stats===true;
+  }
+  function settledPublishedEntries(rows,category='all',filters=null,statsOnly=false){
     const specific=String(category).includes(',')||['top200','prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
     const unique=new Map();
     const cohort=memberResultCohort(filters?.membership);
@@ -3439,6 +3442,9 @@
       const pubs=publicResultPublications(row)
         .filter(p=>!filters||resultPublicationMatchesWindow(row,p,filters,now,todayKeys))
         .filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category))
+        // Keep ACCA in immutable Results history. Exclude it only from STATS,
+        // before cross-section deduplication so a separate TOP bet is retained.
+        .filter(p=>!statsOnly||!accaExcludedFromStats()||String(p.section||'').toLowerCase()!=='prime')
         .filter(p=>category!=='winners'||String(row?.prediction_family||'').toLowerCase()!=='doubles')
         .filter(p=>publicationOutcome(p).kind!=='pending');
       pubs.forEach((publication,index)=>{
@@ -3480,9 +3486,12 @@
   }
   function localResultMetrics(rows,category,filters=null){
     const entries=settledPublishedEntries(rows,category,filters);
-    const graded=entries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
+    // Preserve the normal Results sample when ACCA is included. If disabled,
+    // reselect *before* deduplication so an overlapping TOP bet stays counted.
+    const metricEntries=accaExcludedFromStats()?settledPublishedEntries(rows,category,filters,true):entries;
+    const graded=metricEntries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
     const wins=graded.filter(({publication})=>publicationOutcome(publication).kind==='win').length;
-    const voids=entries.filter(({publication})=>publicationOutcome(publication).kind==='void').length;
+    const voids=metricEntries.filter(({publication})=>publicationOutcome(publication).kind==='void').length;
     const aceDfCategory=!filters?.membership&&(category==='ace'||category==='double_faults');
     let stake=0,profit=0,oddsTotal=0,oddsSample=0,unitSample=0,roiOddsSum=0,roiOddCount=0,ledgerDiscrepancies=0;
     for(const {publication} of graded){
@@ -3783,12 +3792,15 @@
       const tc=hub.tabs?.[tab]||{},rule=tc.plans?.[state.adminPlan]||{},globalOn=tc.enabled!==false;
       const visible=String(rule.visible_rows??0).toUpperCase(),display=String(rule.display_state||((rule.tab_enabled!==false)?'active':'hidden'));
       const selection=String(rule.selection_mode||'first'),overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};
+      const accaStatsToggle=tab==='prime'
+        ?`<label class="admin-acca-stats-toggle"><input type="checkbox" data-admin-acca-exclude-stats ${tc.exclude_from_stats===true?'checked':''}><span><strong>Vylúčiť ACCA zo STATS</strong><small>ACCA sa nebude počítať do úspešnosti, vzorky, kurzov, ROI ani zisku. História tipov zostane zachovaná. Platí globálne pre všetky levely.</small></span></label>`
+        :'';
       const rowOverrides=[1,2,3,4,5,6,7,8,9,10].map(position=>{const mode=String(overrides[position]||'active');return `<label><span>${position}</span><select data-admin-hub-row-state="${position}" data-admin-hub-tab="${tab}"><option value="active"${mode==='active'?' selected':''}>SHOW</option><option value="blurred"${mode==='blurred'?' selected':''}>BLUR</option><option value="hidden"${mode==='hidden'?' selected':''}>HIDE</option></select></label>`;}).join('');
       return `<div class="admin-daily-matrix-row${globalOn?'':' is-global-off'}${display==='hidden'?' is-level-off':''}" data-admin-hub-tab-card="${tab}">
         <div class="admin-daily-category"><strong>${escapeHtml(dailyHubTabLabel(tab))}</strong><small>${globalOn?'Na webe':'Globálne vypnuté'}</small></div>
         <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-global-field="enabled" data-admin-hub-tab="${tab}" ${globalOn?'checked':''}><span>Na webe</span></label>
         <label class="admin-daily-row-count"><span>Prístup pre ${escapeHtml(levelLabel)}</span><select data-admin-hub-field="display_state" data-admin-hub-tab="${tab}" ${!globalOn?'disabled':''}><option value="active"${display==='active'?' selected':''}>ZOBRAZIŤ</option><option value="blurred"${display==='blurred'?' selected':''}>ZAMKNÚŤ</option><option value="hidden"${display==='hidden'?' selected':''}>SKRYŤ</option></select></label>
-        <label class="admin-daily-row-count"><span>Odomknuté riadky</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}>${[0,1,2,3,4,5,6,7,8,9,10,'ALL'].map(v=>`<option value="${v}"${visible===String(v).toUpperCase()?' selected':''}>${String(v).toUpperCase()==='ALL'?'VŠETKY':v}</option>`).join('')}</select></label><label class="admin-daily-row-count"><span>Výber</span><select data-admin-hub-field="selection_mode" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}><option value="first"${selection==='first'?' selected':''}>PRVÉ</option><option value="stable_random"${selection==='stable_random'?' selected':''}>NÁHODNÉ / DEŇ</option></select></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''} ${!globalOn||display==='hidden'?'disabled':''}><span>Zamknúť zvyšok</span></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''} ${!globalOn||display!=='active'?'disabled':''}><span>Celá ponuka</span></label><details class="admin-row-overrides admin-row-advanced"><summary><span>Pokročilé nastavenia</span><small>Ručné pravidlá pre jednotlivé pozície</small></summary><div class="admin-row-advanced-body"><strong>Riadky 1–10 · SHOW / BLUR / HIDE</strong><div>${rowOverrides}</div><small>BLUR a HIDE neposielajú citlivý obsah do prehliadača. Pri NÁHODNÉ / DEŇ zostáva výber stabilný celý deň pre konkrétny účet.</small></div></details>
+        <label class="admin-daily-row-count"><span>Odomknuté riadky</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}>${[0,1,2,3,4,5,6,7,8,9,10,'ALL'].map(v=>`<option value="${v}"${visible===String(v).toUpperCase()?' selected':''}>${String(v).toUpperCase()==='ALL'?'VŠETKY':v}</option>`).join('')}</select></label><label class="admin-daily-row-count"><span>Výber</span><select data-admin-hub-field="selection_mode" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}><option value="first"${selection==='first'?' selected':''}>PRVÉ</option><option value="stable_random"${selection==='stable_random'?' selected':''}>NÁHODNÉ / DEŇ</option></select></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''} ${!globalOn||display==='hidden'?'disabled':''}><span>Zamknúť zvyšok</span></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''} ${!globalOn||display!=='active'?'disabled':''}><span>Celá ponuka</span></label><details class="admin-row-overrides admin-row-advanced"><summary><span>Pokročilé nastavenia</span><small>Ručné pravidlá pre jednotlivé pozície</small></summary><div class="admin-row-advanced-body"><strong>Riadky 1–10 · SHOW / BLUR / HIDE</strong><div>${rowOverrides}</div><small>BLUR a HIDE neposielajú citlivý obsah do prehliadača. Pri NÁHODNÉ / DEŇ zostáva výber stabilný celý deň pre konkrétny účet.</small>${accaStatsToggle}</div></details>
       </div>`;
     }).join('');
     return `<section class="admin-ux-section admin-daily-settings-v687">
@@ -5346,7 +5358,7 @@
       showStatus('Nastavenie bolo publikované na live web.');
       renderAllUiContent();
       rerenderAdmin();
-      if(state.adminTab==='dashboard'){
+      if(state.adminTab==='dashboard'||state.adminTab==='layout'){
         // After publishing, re-read only the three server-approved KPI scalars.
         // Do not derive restricted historical metrics from the browser's feed.
         await loadFeed(false).catch(()=>showStatus('Nastavenia uložené. Obnov stránku, ak sa nové KPI ešte nenačítali.'));
@@ -5740,6 +5752,15 @@
         return;
       }
       if(t.dataset.dashboardGlobalField){state.ui.dashboard=state.ui.dashboard||{};let value=t.type==='checkbox'?t.checked:Number(t.value);state.ui.dashboard[t.dataset.dashboardGlobalField]=value;state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();return;}
+      if(t.dataset.adminAccaExcludeStats!==undefined){
+        const tabs=state.ui?.dashboard?.daily_hub?.tabs;
+        if(!tabs?.prime)return;
+        tabs.prime.exclude_from_stats=Boolean(t.checked);
+        renderAllUiContent();
+        rerenderAdmin();
+        showStatus(`ACCA · ${t.checked?'vylúčené zo STATS':'zahrnuté do STATS'} · klikni Publikovať.`);
+        return;
+      }
       if(t.dataset.adminHubGlobalField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc[t.dataset.adminHubGlobalField]=t.type==='checkbox'?t.checked:t.value;renderAllUiContent();rerenderAdmin();showStatus(`${dailyHubTabLabel(tab)} · ${tc.enabled===false?'vypnuté':'zapnuté'} globálne.`);return;}
       if(t.dataset.adminHubField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{visible_rows:0,blur_remaining:true,tab_enabled:true,see_all:false,selection_mode:'first',display_state:'active',row_overrides:{}};let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.adminHubField==='visible_rows'&&String(value).toUpperCase()!=='ALL')value=Number(value);rule[t.dataset.adminHubField]=value;rule.tab_enabled=rule.display_state!=='hidden';if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminHubRowState){const tab=t.dataset.adminHubTab,position=String(t.dataset.adminHubRowState),hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.row_overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};if(t.value==='active')delete rule.row_overrides[position];else rule.row_overrides[position]=t.value;if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
@@ -6048,7 +6069,7 @@
   function renderDashboardResultsPreview(){
     const host=$('resultsPreviewContent');if(!host)return;
     const filters={category:'all',tour:'',surface:'',window:'today',dateFrom:'',dateTo:'',bettingDay:true};
-    const rows=filteredResults(filters),m=localResultMetrics(rows,'all',filters),total=todayPublishedPickCount();
+    const rows=filteredResults(filters),m=localResultMetrics(rows,'all',filters),total=accaExcludedFromStats()?null:todayPublishedPickCount();
     host.innerHTML=`<div class="results-preview-metrics"><span><small>${escapeHtml(publicText('Record'))}</small><strong>${m.wins}-${m.losses}</strong></span><span><small>${escapeHtml(publicText('Hit rate'))}</small><strong>${m.hit==null?'—':pct(m.hit)}</strong></span><span><small>ROI</small><strong>${m.roi==null?'—':pct(m.roi)}</strong></span><span><small>${escapeHtml(publicText('Units'))}</small><strong>${m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—'}</strong></span></div>`;
     const progress=total==null?`${m.sample}`:`${m.sample}/${total}`;
     const progressText=lcopy(`${progress} settled today`,`${progress} vyhodnotených dnes`,`${progress} vyhodnocených dnes`);
@@ -6058,7 +6079,7 @@
 
   function resultsSummary(){
     const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',m=localResultMetrics(rows,category,filters);
-    const todayTotal=filters.window==='today'&&category==='all'?todayPublishedPickCount():null;
+    const todayTotal=filters.window==='today'&&category==='all'&&!accaExcludedFromStats()?todayPublishedPickCount():null;
     const sampleValue=todayTotal==null?String(m.sample):`${m.sample}/${todayTotal}`;
     const sampleNote=todayTotal==null
       ?lcopy('settled published rows','vyhodnotené publikované záznamy','vyhodnocené publikované záznamy')

@@ -1244,6 +1244,10 @@ def validate_ui_config(payload: object) -> dict:
     for tab_id, tab in hub_tabs.items():
         if not isinstance(tab, dict) or not isinstance(tab.get("enabled"), bool):
             raise ValueError(f"Invalid Daily Picks tab: {tab_id}")
+        # Optional for legacy published UI configs; must be an explicit boolean
+        # when provided. Statistics inclusion must never derive from SHOW/HIDE.
+        if tab_id == "prime" and "exclude_from_stats" in tab and not isinstance(tab["exclude_from_stats"], bool):
+            raise ValueError("ACCA exclude_from_stats must be boolean")
         plan_settings = tab.get("plans") or {}
         for plan_id in ("trial", "expired", "rookie", "pro", "elite", "legend", "goat"):
             rule = plan_settings.get(plan_id)

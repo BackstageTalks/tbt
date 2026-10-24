@@ -10278,3 +10278,10 @@ body#blinqPremium .layered-player-avatar.has-photo .player-avatar-initials{
 .admin-model-lab .model-factory-three-steps>.admin-calibration-panel>.btn{margin-top:auto;min-height:44px;white-space:normal}
 .admin-model-lab .model-factory-three-steps>.admin-calibration-panel p{overflow-wrap:anywhere}
 @media(max-width:1100px){.admin-model-lab .model-factory-three-steps{grid-template-columns:1fr}}
+
+/* ACCA stats switch: global policy, not membership visibility. */
+body#blinqPremium .admin-row-overrides .admin-acca-stats-toggle{grid-column:1/-1!important;display:flex!important;grid-template-columns:none!important;align-items:flex-start!important;gap:10px!important;margin-top:10px!important;padding:12px!important;border:1px solid rgba(66,200,150,.27);border-radius:9px;background:rgba(8,45,35,.52);color:#cfe9df!important;font-size:11px!important;cursor:pointer}
+body#blinqPremium .admin-row-overrides .admin-acca-stats-toggle input{flex:none;width:16px;height:16px;margin:1px 0 0}
+body#blinqPremium .admin-row-overrides .admin-acca-stats-toggle>span{display:grid;gap:4px}
+body#blinqPremium .admin-row-overrides .admin-acca-stats-toggle strong{font-size:11px;color:#eaf7f1}
+body#blinqPremium .admin-row-overrides .admin-acca-stats-toggle small{font-size:9px;line-height:1.5;color:#9abeb0;margin:0}
