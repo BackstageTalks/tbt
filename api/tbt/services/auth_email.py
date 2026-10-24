@@ -13,6 +13,7 @@ from email.message import EmailMessage
 from email.utils import format_datetime, make_msgid, parseaddr
 from html import escape as html_escape
 import hashlib
+import logging
 import smtplib
 import ssl
 from urllib.parse import urlsplit, urlunsplit
@@ -229,6 +230,52 @@ def _build_transactional_message(cfg, recipient: str, subject: str, plain: str, 
     return msg
 
 
+def _audit_smtp_delivery(recipient: str, subject: str, outcome: str, error_type: str = "") -> None:
+    """Best-effort audit; a logging outage must never retry an accepted e-mail."""
+    try:
+        from .account_storage import record_account_event
+        normalized = recipient.strip().lower()
+        target = "email:" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+        record_account_event(
+            actor_id="blinq-mailer",
+            target_id=target,
+            action="account_email_delivery",
+            outcome=outcome,
+            after={"email": normalized, "subject": subject, "error_type": error_type},
+        )
+    except Exception:
+        logging.exception("Unable to persist SMTP activity (transport result unchanged)")
+
+
+def _deliver_blinq_message(cfg, msg: EmailMessage, recipient: str, subject: str) -> bool:
+    """'sent' means SMTP acceptance, not verified inbox delivery."""
+    try:
+        host = str(getattr(cfg, "blinq_smtp_host", "") or "").strip()
+        port = int(getattr(cfg, "blinq_smtp_port", 587) or 587)
+        username = str(getattr(cfg, "blinq_smtp_username", "") or "").strip()
+        password = str(getattr(cfg, "blinq_smtp_password", "") or "")
+        if port == 465:
+            client = smtplib.SMTP_SSL(host, port, timeout=20, context=ssl.create_default_context())
+        else:
+            client = smtplib.SMTP(host, port, timeout=20)
+        with client:
+            if port != 465:
+                client.ehlo()
+                if bool(getattr(cfg, "blinq_smtp_starttls", True)):
+                    client.starttls(context=ssl.create_default_context())
+                    client.ehlo()
+            if username:
+                client.login(username, password)
+            refused = client.send_message(msg)
+            if refused:
+                raise smtplib.SMTPRecipientsRefused(refused)
+    except Exception as exc:
+        _audit_smtp_delivery(recipient, subject, "failed", exc.__class__.__name__)
+        raise
+    _audit_smtp_delivery(recipient, subject, "sent")
+    return True
+
+
 def send_blinq_transactional_email(
     cfg,
     recipient: str,
@@ -264,24 +311,7 @@ def send_blinq_transactional_email(
     )
     msg = _build_transactional_message(cfg, recipient, subject, plain, html)
 
-    host = str(getattr(cfg, "blinq_smtp_host", "") or "").strip()
-    port = int(getattr(cfg, "blinq_smtp_port", 587) or 587)
-    username = str(getattr(cfg, "blinq_smtp_username", "") or "").strip()
-    password = str(getattr(cfg, "blinq_smtp_password", "") or "")
-    if port == 465:
-        client = smtplib.SMTP_SSL(host, port, timeout=20, context=ssl.create_default_context())
-    else:
-        client = smtplib.SMTP(host, port, timeout=20)
-    with client:
-        if port != 465:
-            client.ehlo()
-            if bool(getattr(cfg, "blinq_smtp_starttls", True)):
-                client.starttls(context=ssl.create_default_context())
-                client.ehlo()
-        if username:
-            client.login(username, password)
-        client.send_message(msg)
-    return True
+    return _deliver_blinq_message(cfg, msg, recipient, subject)
 
 
 def _content(kind: str, action_url: str, *, logo_url: str = "") -> tuple[str, str, str]:
@@ -323,21 +353,4 @@ def send_blinq_action_email(cfg, recipient: str, kind: str) -> bool:
         raise RuntimeError("SMTP is not configured")
     msg = _build_transactional_message(cfg, recipient, subject, plain, html)
 
-    host = str(getattr(cfg, "blinq_smtp_host", "") or "").strip()
-    port = int(getattr(cfg, "blinq_smtp_port", 587) or 587)
-    username = str(getattr(cfg, "blinq_smtp_username", "") or "").strip()
-    password = str(getattr(cfg, "blinq_smtp_password", "") or "")
-    if port == 465:
-        client = smtplib.SMTP_SSL(host, port, timeout=20, context=ssl.create_default_context())
-    else:
-        client = smtplib.SMTP(host, port, timeout=20)
-    with client:
-        if port != 465:
-            client.ehlo()
-            if bool(getattr(cfg, "blinq_smtp_starttls", True)):
-                client.starttls(context=ssl.create_default_context())
-                client.ehlo()
-        if username:
-            client.login(username, password)
-        client.send_message(msg)
-    return True
+    return _deliver_blinq_message(cfg, msg, recipient, subject)
