@@ -23,6 +23,56 @@ REQUIRED = ("tbt-predictions-v1", "tbt-model-production-v1",
             "tbt-data-v1", "blinq-frozen-721-private-shadow-v1")
 
 
+def compare_published_to_market(entries):
+    """Same-pick displayed BlinQ probability versus pre-issue two-way no-vig quote."""
+    from math import log
+    from collections import defaultdict
+    from random import Random
+    rows=[e for e in entries if e.get("implied_source")=="both_sides_no_vig"
+          and e.get("probability") is not None
+          and e.get("implied_probability") is not None]
+    if not rows:
+        return {"n":0,"status":"NO_VERIFIED_COMPARABLE_TWO_WAY_QUOTES"}
+    def individual(e):
+        y=int(e["correct"])
+        p=max(1e-9,min(1-1e-9,e["probability"]))
+        q=max(1e-9,min(1-1e-9,e["implied_probability"]))
+        brier_p=(p-y)**2
+        brier_m=(q-y)**2
+        ll_p=-(y*log(p)+(1-y)*log(1-p))
+        ll_m=-(y*log(q)+(1-y)*log(1-q))
+        return brier_p,brier_m,ll_p,ll_m
+    scores=[individual(e) for e in rows]
+    n=len(scores)
+    by_day=defaultdict(lambda:[0.,0.,0])
+    for e,(bp,bm,lp,lm) in zip(rows,scores):
+        group=by_day[e["betting_day"]]
+        group[0]+=bp-bm
+        group[1]+=lp-lm
+        group[2]+=1
+    ci=None
+    blocks=list(by_day.values())
+    if len(blocks)>=10:
+        rng=Random(721)
+        draws=[]
+        for _ in range(1000):
+            picked=[blocks[rng.randrange(len(blocks))] for j in range(len(blocks))]
+            draws.append(sum(x[0] for x in picked)/sum(x[2] for x in picked))
+        draws.sort()
+        ci=[draws[24],draws[974]]
+    return {"n":n,"source":"issued_pairwise_no_vig_not_retrospective_odds",
+            "blinq_brier":sum(x[0] for x in scores)/n,
+            "market_brier":sum(x[1] for x in scores)/n,
+            "blinq_minus_market_brier":sum(x[0]-x[1] for x in scores)/n,
+            "blinq_log_loss":sum(x[2] for x in scores)/n,
+            "market_log_loss":sum(x[3] for x in scores)/n,
+            "blinq_minus_market_log_loss":sum(x[2]-x[3] for x in scores)/n,
+            "paired_brier_daily_block_ci95":ci,
+            "calendar_days":len(blocks),
+            "market_side_favored_n":sum(e["implied_probability"]>=.5 for e in rows),
+            "not_a_prospective_new_selector":True}
+
+
 def compact(top, losses, shadow, *, version_breakdown, ledger_sha, model_sha, history_sha, now):
     """Keep aggregate-only fields; never include private loss examples."""
     return {
@@ -142,6 +192,8 @@ def main():
         "current_by_competition":groups(current, "competition"),
         "current_by_confidence_band":groups(tagged_current, "audit_confidence_band"),
         "current_by_market_gap_band":groups(tagged_current, "audit_market_gap"),
+        "current_model_vs_market":compare_published_to_market(current),
+        "current_exact_issue_model_vs_market":compare_published_to_market(current_exact),
         "current_market_reference": {
             "n_with_implied":sum(e.get("implied_probability") is not None for e in current),
             "mean_implied_probability":mean([e.get("implied_probability") for e in current]),
