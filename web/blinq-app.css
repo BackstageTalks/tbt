@@ -10447,3 +10447,31 @@ body#blinqPremium.blinq-admin .admin-nav-toolbar button[data-admin-nav-expand]{d
   body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs.admin-tabs-v685.is-collapsed .admin-nav-group{grid-template-columns:1fr!important}
   body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs.admin-tabs-v685.is-collapsed .admin-nav-entry:not(.is-active){display:none!important}
 }
+
+
+/* BlinQ shared homepage artwork: one backdrop on the outer page, not on cards.
+   Admin and route content retains its own dark, legible data surfaces. */
+body#blinqPremium.blinq-admin {
+  background-color:#020d0e!important;
+  background-image:
+    radial-gradient(1000px 650px at 10% 0%,rgba(44,205,150,.085),transparent 65%),
+    linear-gradient(180deg,rgba(1,12,12,.70),rgba(2,13,15,.89) 75%,#020c0d),
+    var(--blinq-page-bg,var(--blinq-page-bg-fallback,url("/assets/blinq_page_background.webp")))!important;
+  background-position:center top,center top,var(--blinq-page-bg-position,center top)!important;
+  background-size:auto,auto,var(--blinq-page-bg-size,cover)!important;
+  background-repeat:no-repeat!important;
+  background-attachment:fixed!important;
+}
+body#blinqPremium.blinq-admin::before {
+  background-image:none!important;
+  opacity:0!important;
+}
+body#blinqPremium.blinq-admin .admin-workarea {
+  background:linear-gradient(180deg,rgba(4,22,24,.94),rgba(2,15,18,.96))!important;
+}
+body#blinqPremium.blinq-route:not(.blinq-admin) .route-panel {
+  background:linear-gradient(180deg,rgba(5,22,22,.88),rgba(3,15,18,.93))!important;
+}
+@media(max-width:600px){
+  body#blinqPremium.blinq-admin{background-attachment:scroll!important}
+}
