@@ -5682,6 +5682,7 @@ function adminActivityRows(){
       const userButton=event.target.closest('[data-admin-user]');if(userButton){state.adminSelectedUser=(state.adminUsers||[]).find(x=>String(x.id)===String(userButton.dataset.adminUser))||null;rerenderAdmin();return;}
       const quick=event.target.closest('[data-admin-user-plan]');if(quick){const input=$('adminUserPlan');if(input){input.value=quick.dataset.adminUserPlan;host.querySelectorAll('[data-admin-user-plan]').forEach(btn=>btn.classList.toggle('active',btn===quick));setAdminPlanDefaults(input.value,false);}return;}
       const expiryQuick=event.target.closest('[data-admin-expiry-days]');if(expiryQuick){adminAddDaysToExpiry(Number(expiryQuick.dataset.adminExpiryDays));return;}
+      if(event.target.closest('[data-admin-toggle="telemetry"]')){state.adminTelemetryExpanded=!state.adminTelemetryExpanded;rerenderAdmin();return;}
       const actionNode=event.target.closest('[data-admin-action]');const action=actionNode?.dataset.adminAction;if(!action)return;
       if(action==='toggle-activity'){state.adminActivityExpanded=state.adminActivityExpanded===false;rerenderAdmin();return;}
       if(action==='refresh-activity'){await loadAdminAccountActivity(true);return;}
@@ -5696,6 +5697,18 @@ function adminActivityRows(){
           rerenderAdmin();
           showStatus('Ručné odstránenie z TG bolo označené ako vybavené.');
         }catch(error){actionNode.disabled=false;showStatus(error.message||'Potvrdenie TG odstránenia sa nepodarilo uložiť.');}
+        finally{state.adminActivityActionBusy=false;}
+        return;
+      }
+      if(action==='clear-telemetry'){
+        if(state.adminActivityActionBusy)return;
+        if(!window.confirm('ZMAZAŤ históriu prihlásení a obnovení stránky všetkých používateľov? Účty, platnosti, TG fronta a bezpečnostný audit zostanú zachované.'))return;
+        state.adminActivityActionBusy=true;actionNode.disabled=true;
+        try{
+          const result=await BlinqAuth.adminClearTelemetry();
+          await loadAdminUsers(true);
+          showStatus(`Vymazaných ${result.deleted||0} záznamov návštevnosti.`);
+        }catch(error){showStatus(error.message||'Históriu návštevnosti sa nepodarilo vymazať.');}
         finally{state.adminActivityActionBusy=false;}
         return;
       }
@@ -5892,6 +5905,18 @@ function adminActivityRows(){
       else if(action==='copy-tg-nicks'){const nicks=adminFilteredUsers().map(u=>String(u.telegram_nick||'').trim()).filter(Boolean);const text=nicks.join('\n');if(!text){showStatus('V aktuálnom filtri nie sú žiadne Telegram nicky.');return;}try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}showStatus(`Skopírovaných ${nicks.length} Telegram nickov.`);}catch{showStatus('Telegram nicky sa nepodarilo skopírovať.');}}
     };
     host.onchange=async event=>{
+      if(event.target?.id==='adminTelemetryRetention'){
+        const days=Number(event.target.value);
+        if(!window.confirm(`Nastaviť uchovávanie prihlásení a obnovení na ${days} dní? Staršie údaje sa hneď odstránia.`)){rerenderAdmin();return;}
+        event.target.disabled=true;
+        try{
+          const result=await BlinqAuth.adminSetTelemetryRetention(days);
+          state.adminTelemetry={settings:result.settings};
+          await loadAdminUsers(true);
+          showStatus(`História návštevnosti: ${days} dní · vymazané ${result.deleted||0} starších záznamov.`);
+        }catch(error){showStatus(error.message||'Nepodarilo sa nastaviť uchovávanie návštevnosti.');rerenderAdmin();}
+        return;
+      }
       if(event.target?.id==='adminActivityType'){state.adminActivityType=event.target.value;rerenderAdmin();return;}
       if(event.target?.id==='adminActivityRetention'){
         const days=Number(event.target.value);
