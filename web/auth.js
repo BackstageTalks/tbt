@@ -628,6 +628,19 @@
   async function adminAccountAudit(limit = 500) {
     return apiWithSession(`/api/v1/admin/account-activity?limit=${encodeURIComponent(limit)}`);
   }
+  async function adminAccountTelemetry() {
+    return apiWithSession('/api/v1/admin/account-telemetry');
+  }
+  async function adminSetTelemetryRetention(days) {
+    return apiWithSession('/api/v1/admin/account-telemetry/retention', {
+      method:'PUT', body:JSON.stringify({retention_days: days}),
+    });
+  }
+  async function adminClearTelemetry() {
+    return apiWithSession('/api/v1/admin/account-telemetry/clear', {
+      method:'POST', body:JSON.stringify({confirm:'DELETE_TELEMETRY'}),
+    });
+  }
   async function adminSetAccountActivityRetention(days) {
     return apiWithSession('/api/v1/admin/account-activity/retention', {
       method: 'PUT', body: JSON.stringify({retention_days: days}),
@@ -737,7 +750,7 @@
     adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
     adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult,
     adminResultTestExclusions, adminSetResultTestExclusions,
-    adminDiagnostics, adminModelCalibration, adminModelLab, adminModelTraining, adminUsers, adminAccountAudit, adminSetAccountActivityRetention, adminClearAccountActivity, adminConfirmTelegramCleanup, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
+    adminDiagnostics, adminModelCalibration, adminModelLab, adminModelTraining, adminUsers, adminAccountAudit, adminAccountTelemetry, adminSetTelemetryRetention, adminClearTelemetry, adminSetAccountActivityRetention, adminClearAccountActivity, adminConfirmTelegramCleanup, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews, comparatorPlayers, comparatorCompare,
     bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
     sessionStorageKeys, sessionEpochKey,
