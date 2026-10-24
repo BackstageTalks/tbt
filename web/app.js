@@ -4185,7 +4185,7 @@ function adminActivityRows(){
     });
     const sent=events.filter(row=>row.action==='account_email_delivery'&&row.outcome==='sent').length;
     const failed=events.filter(row=>row.action==='account_email_delivery'&&row.outcome==='failed').length;
-    const changes=events.filter(row=>row.action==='account_access_changed').length;
+    const scheduled=events.filter(row=>row.action==='account_email_delivery'&&row.outcome==='pending').length;
     const retention=Number(activity?.settings?.retention_days||90);
     const options=[7,14,30,60,90,180,365].map(days=>`<option value="${days}"${retention===days?' selected':''}>${days} dní</option>`).join('');
     const cards=`<div class="admin-activity-stats">
@@ -4193,7 +4193,7 @@ function adminActivityRows(){
       <article><span>Prechody na ROOKIE</span><strong>${expiry.length}</strong></article>
       <article><span>E-maily · SMTP prijaté</span><strong>${sent}</strong></article>
       <article><span>Chyby odoslania</span><strong>${failed}</strong></article>
-      <article><span>Ostatné zmeny prístupu</span><strong>${changes}</strong></article>
+      <article><span>E-maily · naplánované</span><strong>${scheduled}</strong></article>
     </div>`;
     const cleanupRows=pending.map(row=>{
       const user=profileMap.get(String(row.target_id)),email=row.after?.email||user?.email||'—',nickname=user?.telegram_nick||row.after?.telegram_nick||'—';
@@ -4214,8 +4214,8 @@ function adminActivityRows(){
           ?`${String(row.after?.from_plan||'').toUpperCase()} → ROOKIE · platnosť ${adminLastLoginLabel(row.after?.expired_at)}`
           :`${String(row.before?.from_plan||'').toUpperCase()} → ${String(row.after?.to_plan||'').toUpperCase()}`;
       const delivered=row.action==='account_email_delivery';
-      const label=delivered?(row.outcome==='sent'?'SMTP prijaté':row.outcome==='failed'?'Chyba':'Neznámy stav'):'Zaznamenané';
-      const statusClass=delivered&&row.outcome==='failed'?'is-error':kind==='tg'?'is-attention':'is-ok';
+      const label=delivered?(row.outcome==='pending'?'Naplánované':row.outcome==='sent'?'SMTP prijaté':row.outcome==='failed'?'Chyba':'Neznámy stav'):'Zaznamenané';
+      const statusClass=delivered&&row.outcome==='failed'?'is-error':(delivered&&row.outcome==='pending')||kind==='tg'?'is-attention':'is-ok';
       const errorType=String(row.after?.error_type||'');
       return `<div class="admin-activity-event" data-admin-activity-row>
         <span class="admin-activity-when">${escapeHtml(adminLastLoginLabel(row.occurred_at))}</span>

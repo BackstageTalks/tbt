@@ -319,3 +319,16 @@ def test_smtp_diagnostics_flags_unencrypted_transport_without_claiming_authentic
     assert info["authentication_results"] == "not_verified"
     settings.blinq_smtp_port = 465
     assert lifecycle.smtp_diagnostics(settings)["tls_mode"] == "implicit_tls"
+
+def test_paid_notice_scheduled_event_precedes_transport(monkeypatch):
+    user = paid(7, "elite")
+    setup(monkeypatch, [user])
+    activity = []
+    monkeypatch.setattr(lifecycle, "record_account_event", lambda **kwargs: activity.append(kwargs))
+    result = lifecycle.run_inactivity_review(cfg(), {"account_inactivity": {}}, now=NOW)
+    pending = [row for row in activity if row["action"] == "account_email_delivery"]
+    assert len(pending) == 1
+    assert pending[0]["outcome"] == "pending"
+    assert pending[0]["target_id"] == user["id"]
+    assert "7 dní" in pending[0]["after"]["subject"]
+    assert result["subscription_7"] == 1

@@ -531,7 +531,9 @@ def record_account_event(*, actor_id: object, target_id: object, action: str,
         raise ValueError("Audit actor and target are required")
     if action not in {"account_email_delivery", "paid_membership_downgraded", "account_access_changed", "telegram_cleanup_confirmed"}:
         raise ValueError("Unsupported operational audit action")
-    if outcome not in {"success", "sent", "failed"}:
+    if outcome not in {"success", "sent", "failed", "pending"}:
+        raise ValueError("Unsupported operational audit outcome")
+    if outcome == "pending" and action != "account_email_delivery":
         raise ValueError("Unsupported operational audit outcome")
     allowed = {"email", "subject", "from_plan", "to_plan", "expired_at", "error_type", "telegram_nick"}
     def clean(payload: dict | None) -> dict:

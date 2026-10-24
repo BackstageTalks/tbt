@@ -484,6 +484,16 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                         )
                         if claim.get("notice_claimed") is False:
                             continue
+                        # Persisted "pending" claim precedes SMTP; transport result is independent.
+                        try:
+                            record_account_event(
+                                actor_id="account-lifecycle-worker", target_id=uid,
+                                action="account_email_delivery", outcome="pending",
+                                after={"email": email, "subject": f"Upozornenie na členstvo · {due} dní",
+                                       "expired_at": exact_expiry},
+                            )
+                        except AdminStorageUnavailable:
+                            logging.exception("Paid notice claimed; pending activity audit unavailable")
                         if _send_subscription_expiry(cfg, user, access, days=due, expiry=expiry):
                             summary["user_emails"] += 1
                             save_subscription_notice_state(
@@ -544,6 +554,15 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                     warning_status="pending",
                     warning_pending_at=now.isoformat(),
                 )
+                try:
+                    record_account_event(
+                        actor_id="account-lifecycle-worker", target_id=uid,
+                        action="account_email_delivery", outcome="pending",
+                        after={"email": email, "subject": "Upozornenie na neaktivitu",
+                               "expired_at": planned_expiry.isoformat()},
+                    )
+                except AdminStorageUnavailable:
+                    logging.exception("Inactivity notice claimed; pending activity audit unavailable")
                 if _send_inactivity_warning(cfg, user, days_inactive=days_inactive, expiry=planned_expiry):
                     delivered = True
                     summary["user_emails"] += 1

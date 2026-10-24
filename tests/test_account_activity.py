@@ -167,3 +167,31 @@ def test_admin_ui_contract():
     assert "clear-telemetry" in app
     assert "adminConfirmTelegramCleanup" in auth
     assert 'route="v1/admin/account-activity/tg-confirm"' in api
+
+def test_pending_email_event_is_separate_from_delivery_and_not_telegram(store):
+    accounts.record_account_event(
+        actor_id="worker", target_id="u1",
+        action="account_email_delivery", outcome="pending",
+        after={"email": "u1@example.test", "subject": "Upozornenie na členstvo · 7 dní"},
+    )
+    accounts.record_account_event(
+        actor_id="mailer", target_id="email:sha256",
+        action="account_email_delivery", outcome="sent",
+        after={"email": "u1@example.test", "subject": "Upozornenie na členstvo · 7 dní"},
+    )
+    rows = accounts.list_account_activity()
+    assert sorted(row["outcome"] for row in rows["items"]) == ["pending", "sent"]
+    assert rows["tg_pending"] == []
+    with pytest.raises(ValueError, match="Unsupported operational audit outcome"):
+        accounts.record_account_event(
+            actor_id="worker", target_id="u1",
+            action="paid_membership_downgraded", outcome="pending",
+        )
+
+
+def test_admin_ui_distinguishes_scheduled_sent_and_failed():
+    app = (Path(__file__).resolve().parents[1] / "web" / "app.js").read_text(encoding="utf-8")
+    assert "row.outcome==='pending'?'Naplánované'" in app
+    assert "row.outcome==='sent'?'SMTP prijaté'" in app
+    assert "row.outcome==='failed'?'Chyba'" in app
+    assert "E-maily · naplánované" in app
