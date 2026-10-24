@@ -708,7 +708,7 @@ def prune_account_activity(*, all_events: bool = False) -> dict:
     return {"deleted": removed}
 
 
-def confirm_telegram_cleanup(user_id: object, *, event_id: str, actor_id: str) -> dict:
+def confirm_telegram_cleanup(user_id: object, *, event_id: str, actor_id: str, user_exists: bool = True) -> dict:
     """Confirm manual Telegram removal for the latest downgrade of this account."""
     uid = str(user_id or "").strip()
     key = _key(uid)
@@ -733,11 +733,12 @@ def confirm_telegram_cleanup(user_id: object, *, event_id: str, actor_id: str) -
         raise ValueError("Cleanup request is not pending")
     now = datetime.now(timezone.utc).isoformat()
     try:
-        _table(ACCOUNT_TABLE).upsert_entity({
-            "PartitionKey": "account", "RowKey": key, "user_id": uid,
-            "tg_private_member": False, "tg_cleanup_confirmed_event": event_id,
-            "tg_cleanup_confirmed_at": now, "tg_cleanup_confirmed_by": actor[:256],
-        }, mode="merge")
+        if user_exists:
+            _table(ACCOUNT_TABLE).upsert_entity({
+                "PartitionKey": "account", "RowKey": key, "user_id": uid,
+                "tg_private_member": False, "tg_cleanup_confirmed_event": event_id,
+                "tg_cleanup_confirmed_at": now, "tg_cleanup_confirmed_by": actor[:256],
+            }, mode="merge")
         client.upsert_entity({
             "PartitionKey": "pending", "RowKey": key,
             "status": "done", "confirmed_at": now,
