@@ -127,6 +127,10 @@ from tbt.services.entitlements import (
 )
 from tbt.services.login_metrics import load_login_statistics, TRACKING_STARTED_AT
 from tbt.services.page_reload_metrics import record_reload, load_reload_statistics
+from tbt.services.account_telemetry import (
+    load_account_telemetry_settings, save_account_telemetry_settings,
+    prune_account_telemetry,
+)
 from tbt.services.account_inactivity import run_inactivity_review, smtp_diagnostics, inactivity_policy
 from tbt.services.live_comeback import (
     scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
@@ -2136,6 +2140,11 @@ def internal_account_inactivity_worker(req):
             # never auto-expire because the published admin policy is unavailable.
             runtime={"account_inactivity":{"enabled":True,"notify_admin":True,"notify_user":False,"auto_expire_rookie":False}}
         result=run_inactivity_review(settings,runtime)
+        try:
+            result["telemetry_pruned"] = prune_account_telemetry()
+        except AdminStorageUnavailable:
+            logging.exception("Account telemetry retention cleanup unavailable")
+            result["telemetry_pruned"] = {"error": "storage_unavailable"}
         persisted=True
         try:
             save_account_worker_status(result)
@@ -3261,6 +3270,57 @@ def admin_audit(req):
         return response({"error": "admin_storage_unavailable"}, 503)
 
 
+
+
+@app.route(route="v1/admin/account-telemetry", methods=["GET"])
+def admin_account_telemetry(req):
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        return response({"settings": load_account_telemetry_settings()})
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/account-telemetry/retention", methods=["PUT"])
+def admin_account_telemetry_retention(req):
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        payload = req.get_json()
+        if not isinstance(payload, dict) or set(payload) != {"retention_days"}:
+            return response({"error": "invalid_retention_request"}, 400)
+        settings = save_account_telemetry_settings(payload["retention_days"])
+        result = prune_account_telemetry()
+        return response({"settings": settings, **result})
+    except (ValueError, TypeError) as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/account-telemetry/clear", methods=["POST"])
+def admin_account_telemetry_clear(req):
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        payload = req.get_json()
+        if not isinstance(payload, dict) or payload.get("confirm") != "DELETE_TELEMETRY":
+            return response({"error": "confirmation_required"}, 400)
+        return response(prune_account_telemetry(all_events=True))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
 
 
 @app.route(route="v1/admin/account-activity", methods=["GET"])
