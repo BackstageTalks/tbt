@@ -1615,6 +1615,7 @@
     "daily_hub": {
       "enabled": true,
       "default_tab": "top200",
+      "tab_order": ["daily", "prime", "value", "ace", "double_faults", "doubles", "games", "sets", "see_all"],
       "preview_rows": 10,
       "expand_rows": 20,
       "tabs": {
