@@ -2635,6 +2635,66 @@ def delete_info_result(result_id: str, *, actor_id: str = "") -> dict:
         "deleted_by": str(actor_id or "")[:256],
     }
 
+_INFO_RETENTION_TABLE = "BlinQInfoRetention"
+
+
+def info_result_retention_days() -> int:
+    """0 keeps INFO results until explicit deletion."""
+    try:
+        row = _table(_INFO_RETENTION_TABLE).get_entity(partition_key="settings", row_key="info-results")
+    except Exception as exc:
+        if _is_missing_entity(exc):
+            return 0
+        raise AdminStorageUnavailable("Unable to read INFO retention") from exc
+    return int(row.get("retention_days") or 0)
+
+
+def save_info_result_retention(days: int, *, actor_id: str) -> int:
+    if isinstance(days, bool) or not isinstance(days, int) or days not in (0, 7, 14, 30, 60, 90, 180, 365, 730):
+        raise ValueError("Unsupported INFO retention days")
+    try:
+        _table(_INFO_RETENTION_TABLE).upsert_entity({
+            "PartitionKey": "settings", "RowKey": "info-results",
+            "retention_days": days,
+            "updated_by": str(actor_id or "")[:256],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }, mode="merge")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save INFO retention") from exc
+    return days
+
+
+def cleanup_info_results(*, delete_all: bool = False, actor_id: str = "") -> dict:
+    """Operate on the complete INFO-result partition, not the paginated UI."""
+    from datetime import timedelta
+    days = info_result_retention_days()
+    if not delete_all and days == 0:
+        return {"deleted": 0, "retention_days": days, "failed": 0}
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days) if not delete_all else None
+    client = _table(INSIGHTS_TABLE)
+    try:
+        rows = list(client.query_entities(query_filter=f"PartitionKey eq '{_INFO_RESULT_PARTITION}'"))
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to scan INFO results for retention") from exc
+    deleted, failed = 0, 0
+    for row in rows:
+        if not delete_all:
+            try:
+                stamp = datetime.fromisoformat(str(row.get("settled_at") or "").replace("Z", "+00:00"))
+                if stamp.tzinfo is None:
+                    stamp = stamp.replace(tzinfo=timezone.utc)
+                if stamp > cutoff:
+                    continue
+            except (ValueError, TypeError):
+                continue  # Unknown age must never be treated as expired.
+        try:
+            client.delete_entity(partition_key=_INFO_RESULT_PARTITION, row_key=str(row["RowKey"]))
+            deleted += 1
+        except Exception:
+            failed += 1
+    return {"deleted": deleted, "failed": failed, "retention_days": days, "scanned": len(rows), "actor_id": str(actor_id or "")[:256]}
+
+
 def save_automated_insight(payload: object, *, actor_id: str = "automation", insight_id: str) -> tuple[dict, bool]:
     """Create or refresh one deterministic system insight idempotently.
 

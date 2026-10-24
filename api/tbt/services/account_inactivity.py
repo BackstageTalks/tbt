@@ -13,11 +13,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from math import ceil
+import logging
 import re
 from zoneinfo import ZoneInfo
 
 from .account_storage import (
     load_account_metadata,
+    record_account_event,
     save_inactivity_state,
     save_subscription_notice_state,
 )
@@ -275,7 +277,7 @@ def _admin_summary_body(policy: dict, warnings: list[dict], expired: list[dict],
         f"Paid → ROOKIE: {len(downgraded or [])}",
         f"Chyby jednotlivých mailov: {len(failures)}",
     ]
-    for title, rows in (("Inactivity warnings", warnings), ("EXPIRED", expired), ("Paid 7d", paid7), ("Paid 3d", paid3), ("Paid → ROOKIE (check manual Telegram VIP removal)", downgraded or [])):
+    for title, rows in (("Inactivity warnings", warnings), ("EXPIRED", expired), ("Paid 7d", paid7), ("Paid 3d", paid3), ("Paid → ROOKIE", downgraded or [])):
         if rows:
             lines += ["", f"{title}:"]
             for row in rows[:30]:
@@ -422,6 +424,25 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                     actor_id="account-lifecycle-worker",
                     expected_claims=expected_claims,
                 )
+                # Claims were changed successfully. Record the *raw* former
+                # paid tier: account_access() already presents an expired tier
+                # as ROOKIE and would lose that history in its regular audit.
+                try:
+                    record_account_event(
+                        actor_id="account-lifecycle-worker",
+                        target_id=uid,
+                        action="paid_membership_downgraded",
+                        outcome="success",
+                        before={"from_plan": latest_plan},
+                        after={
+                            "email": str(latest_user.get("email") or email),
+                            "telegram_nick": str(meta.get("telegram_nick") or ""),
+                            "from_plan": latest_plan, "to_plan": "rookie",
+                            "expired_at": latest_expiry.isoformat(),
+                        },
+                    )
+                except AdminStorageUnavailable:
+                    logging.exception("Paid membership was downgraded but activity audit is unavailable")
                 sync_push_access(user_id=uid, plan="rookie", status="active", expires_at=None)
                 downgraded.append({
                     "id": uid, "email": email, "plan": latest_plan.upper(),
@@ -463,6 +484,16 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                         )
                         if claim.get("notice_claimed") is False:
                             continue
+                        # Persisted "pending" claim precedes SMTP; transport result is independent.
+                        try:
+                            record_account_event(
+                                actor_id="account-lifecycle-worker", target_id=uid,
+                                action="account_email_delivery", outcome="pending",
+                                after={"email": email, "subject": f"Upozornenie na členstvo · {due} dní",
+                                       "expired_at": exact_expiry},
+                            )
+                        except AdminStorageUnavailable:
+                            logging.exception("Paid notice claimed; pending activity audit unavailable")
                         if _send_subscription_expiry(cfg, user, access, days=due, expiry=expiry):
                             summary["user_emails"] += 1
                             save_subscription_notice_state(
@@ -523,6 +554,15 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                     warning_status="pending",
                     warning_pending_at=now.isoformat(),
                 )
+                try:
+                    record_account_event(
+                        actor_id="account-lifecycle-worker", target_id=uid,
+                        action="account_email_delivery", outcome="pending",
+                        after={"email": email, "subject": "Upozornenie na neaktivitu",
+                               "expired_at": planned_expiry.isoformat()},
+                    )
+                except AdminStorageUnavailable:
+                    logging.exception("Inactivity notice claimed; pending activity audit unavailable")
                 if _send_inactivity_warning(cfg, user, days_inactive=days_inactive, expiry=planned_expiry):
                     delivered = True
                     summary["user_emails"] += 1
@@ -594,6 +634,15 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                 except Exception as exc:
                     summary["mail_failures"] += 1
                     failures.append(f"{email or uid} · inactivity expired · {exc.__class__.__name__}")
+
+    # Enforce administrator-configured INFO history retention during daily
+    # account housekeeping. Errors must not abort membership reconciliation.
+    try:
+        from .admin_storage import cleanup_info_results
+        summary["info_results_cleanup"] = cleanup_info_results(actor_id="account-lifecycle-worker")
+    except AdminStorageUnavailable:
+        summary["info_results_cleanup"] = {"error": "storage_unavailable"}
+        logging.exception("INFO result retention cleanup was unavailable")
 
     summary["warnings"] = len(new_warnings)
     summary["expired"] = len(newly_expired)

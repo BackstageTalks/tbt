@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from tbt.services.auth import account_access, public_account
-from tbt.services.admin_accounts import _apply_access_metadata, normalize_access_update
+from tbt.services.admin_accounts import _apply_access_metadata, normalize_access_update, _validate_legend_term_on_grant
 
 
 NOW = datetime(2026, 9, 6, 18, 0, tzinfo=timezone.utc)
@@ -262,3 +262,61 @@ def test_guarded_worker_write_does_not_overwrite_renewed_firebase_claims(monkeyp
             expected_claims={**claims, "blinq_expires_at": (NOW - timedelta(days=1)).isoformat()},
         )
     assert writes == []
+
+
+
+def test_new_legend_grant_rejects_stale_30_day_expiry():
+    today = datetime(2026, 10, 24, 12, tzinfo=timezone.utc)
+    raw = {"role": "user", "plan": "legend", "status": "active"}
+    short = {**raw, "expires_at": (today + timedelta(days=30)).isoformat()}
+    with pytest.raises(ValueError, match="at least 180 days"):
+        _validate_legend_term_on_grant({"blinq_plan": "elite"}, short, now=today)
+    correct = {**raw, "expires_at": (today + timedelta(days=180)).isoformat()}
+    _validate_legend_term_on_grant({"blinq_plan": "rookie"}, correct, now=today)
+    # Routine edits to an already-active legacy LEGEND are not silently
+    # rewritten; the admin must review actual payment/entitlement evidence.
+    _validate_legend_term_on_grant({"blinq_plan": "legend"}, short, now=today)
+
+
+def test_plan_switch_resets_expiry_instead_of_carrying_previous_plan_date():
+    from pathlib import Path
+    app = (Path(__file__).resolve().parents[1] / "web" / "app.js").read_text(encoding="utf-8")
+    assert "setAdminPlanDefaults(input.value,input.value!==previous)" in app
+    assert "Math.max(180,Math.trunc(legendDays))" in app
+
+
+
+def test_legend_early_expiry_restoration_requires_explicit_audited_admin_override(monkeypatch):
+    import tbt.services.admin_accounts as admin
+    today = datetime(2026, 10, 24, 12, tzinfo=timezone.utc)
+    remaining = (today + timedelta(days=150)).isoformat()
+    payload = {"role": "user", "plan": "legend", "status": "active",
+               "expires_at": remaining, "restore_legend_remaining_term": True}
+    with pytest.raises(ValueError, match="audited admin actor"):
+        admin.update_user_access(cfg(), "u1", payload, actor_id="")
+    with pytest.raises(ValueError, match="at least 180 days"):
+        _validate_legend_term_on_grant(
+            {"blinq_plan": "rookie"},
+            {**payload, "restore_legend_remaining_term": False}, now=today,
+        )
+    _validate_legend_term_on_grant(
+        {"blinq_plan": "rookie"},
+        payload, now=today,
+    )
+    monkeypatch.setattr(admin, "firebase_configured", lambda *_: True)
+    writes = []
+    monkeypatch.setattr(
+        admin, "_update_firebase_user_access",
+        lambda _cfg, uid, changes, **kwargs: writes.append((uid, changes, kwargs)) or {"id": uid},
+    )
+    assert admin.update_user_access(cfg(), "u1", payload, actor_id="admin-verified")["id"] == "u1"
+    assert writes[0][1]["restore_legend_remaining_term"] is True
+    assert writes[0][2]["actor_id"] == "admin-verified"
+
+
+def test_legend_manual_short_term_requires_visible_frontend_confirmation():
+    from pathlib import Path
+    source = (Path(__file__).resolve().parents[1] / "web" / "app.js").read_text(encoding="utf-8")
+    assert "const restoreLegend=plan==='legend'" in source
+    assert "if(restoreLegend&&!window.confirm(" in source
+    assert "if(restoreLegend)accessPayload.restore_legend_remaining_term=true;" in source
