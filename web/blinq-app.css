@@ -10543,3 +10543,8 @@ body#blinqPremium.blinq-admin .admin-daily-matrix-row>.admin-row-advanced{grid-c
     min-width:0!important;
   }
 }
+
+/* Order reset is visible only in edit mode; tool row wraps predictably. */
+body#blinqPremium.blinq-admin .admin-nav-toolbar{flex-wrap:wrap!important}
+body#blinqPremium.blinq-admin .admin-nav-toolbar strong{margin-right:auto}
+body#blinqPremium.blinq-admin .admin-nav-toolbar button{min-height:36px;white-space:nowrap}
