@@ -4187,7 +4187,7 @@ function adminActivityRows(){
         <span class="admin-tg-cleanup-user"><strong>${escapeHtml(nickname)}</strong><small>${escapeHtml(email)}</small></span>
         <span><small>Skončený level</small><b>${escapeHtml(String(row.after?.from_plan||'').toUpperCase())} → ROOKIE</b></span>
         <span><small>Expirácia</small><b>${escapeHtml(adminLastLoginLabel(row.after?.expired_at||row.occurred_at))}</b></span>
-        ${isRestored?'<span class="admin-activity-muted">Platený prístup obnovený</span>':`<button class="btn btn-ghost" type="button" data-admin-action="tg-cleanup-confirm" data-activity-id="${escapeHtml(row.id)}" data-activity-user="${escapeHtml(row.target_id)}">Potvrdiť odobratie z TG</button>`}
+        ${isRestored?'<span class="admin-activity-muted">Platený prístup obnovený</span>':`<button class="btn btn-ghost" type="button" data-admin-action="tg-cleanup-confirm" data-activity-id="${escapeHtml(row.id)}" data-activity-user="${escapeHtml(row.target_id)}">Potvrdiť TG kontrolu</button>`}
       </div>`;
     }).join('');
     const rows=adminActivityVisibleRows().map(row=>{
@@ -4218,7 +4218,7 @@ function adminActivityRows(){
         ${state.adminActivityLoading&&!activity?'<div class="admin-activity-notice">Načítavam události…</div>':''}
         ${state.adminActivityError?`<div class="admin-activity-notice is-error" role="alert">${escapeHtml(state.adminActivityError)}</div>`:''}
         <section class="admin-tg-cleanup" aria-label="Odstránenie z Telegramu">
-          <header><div><h4>Na odstránenie z Telegramu <span>${pending.length}</span></h4><p>Skončené platené členstvo → ROOKIE. Potvrdenie vykonaj až po manuálnom odstránení z TG skupiny.</p></div></header>
+          <header><div><h4>Na kontrolu v Telegrame <span>${pending.length}</span></h4><p>Skončené platené členstvo → ROOKIE. Over, či účet patrí do platenej TG skupiny. Ak áno, odstráň ho pred potvrdením kontroly.</p></div></header>
           ${cleanupRows||'<div class="admin-activity-empty">Žiadny nevybavený prechod na ROOKIE v dostupnej histórii.</div>'}
         </section>
         <div class="admin-activity-log-head"><div><h4>História udalostí</h4><p>Zobrazujú sa iba zaznamenané udalosti, nie odhadované doručenia e-mailov.</p></div><div class="admin-activity-options"><label>Uchovávať <select id="adminActivityRetention">${options}</select></label><button class="btn btn-ghost admin-activity-delete" type="button" data-admin-action="clear-activity">Zmazať celý log</button></div></div>
@@ -5706,7 +5706,7 @@ function adminActivityRows(){
       if(action==='tg-cleanup-confirm'){
         if(state.adminActivityActionBusy)return;
         const eventId=String(actionNode.dataset.activityId||''),targetId=String(actionNode.dataset.activityUser||'');
-        if(!window.confirm('Potvrď až po tom, čo si tohto člena naozaj odstránil z platených Telegram skupín. Zmení sa iba evidencia v BlinQ.'))return;
+        if(!window.confirm('Pred potvrdením skontroluj príslušnú TG skupinu. Ak účet bol členom, najprv ho odstráň. Potvrdenie zmení iba internú evidenciu BlinQ.'))return;
         state.adminActivityActionBusy=true;actionNode.disabled=true;
         try{
           const result=await BlinqAuth.adminConfirmTelegramCleanup(targetId,eventId);
