@@ -159,7 +159,7 @@ def test_admin_ui_contract():
     auth = (root / "web" / "auth.js").read_text(encoding="utf-8")
     api = (root / "api" / "function_app.py").read_text(encoding="utf-8")
     assert "renderAdminAccountActivity()" in app
-    assert "Na odstránenie z Telegramu" in app
+    assert "Na kontrolu v Telegrame" in app
     assert "adminActivityRetention" in app
     assert "clear-activity" in app
     assert "admin-legacy-metrics" in app
