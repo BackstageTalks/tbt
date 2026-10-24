@@ -316,6 +316,27 @@ def _auto_across_sources(feed: dict, metric: str, cache: dict,
 def selected_dashboard_cards(feed: dict, ui_config: dict | None, *, now: datetime | None = None) -> list[dict]:
     """Return only three configured scalar values; auto selects each metric's
     highest valid time-window value without mixing winner and Results samples."""
+    # This admin policy is independent of presentation visibility. Exclude
+    # ACCA publications from Results-based KPI statistics without editing the
+    # settled ledger or affecting other categories of the same match.
+    dashboard = ui_config.get("dashboard") if isinstance(ui_config, dict) else {}
+    hub = dashboard.get("daily_hub") if isinstance(dashboard, dict) else {}
+    tabs = hub.get("tabs") if isinstance(hub, dict) else {}
+    prime = tabs.get("prime") if isinstance(tabs, dict) else {}
+    exclude_acca = isinstance(prime, dict) and prime.get("exclude_from_stats") is True
+    if exclude_acca:
+        rows = []
+        for row in feed.get("results") or []:
+            if not isinstance(row, dict) or not isinstance(row.get("market_publications"), list):
+                rows.append(row)
+                continue
+            original = row["market_publications"]
+            retained = [
+                p for p in original
+                if not (isinstance(p, dict) and str(p.get("section") or "").strip().lower() == "prime")
+            ]
+            rows.append({**row, "market_publications": retained} if len(retained) != len(original) else row)
+        feed = {**feed, "results": rows}
     output = []
     cache: dict[tuple[str, str], dict] = {}
     best = feed.get("dashboard_model_success") or {}
