@@ -2141,6 +2141,11 @@ def internal_account_inactivity_worker(req):
             runtime={"account_inactivity":{"enabled":True,"notify_admin":True,"notify_user":False,"auto_expire_rookie":False}}
         result=run_inactivity_review(settings,runtime)
         try:
+            result["activity_pruned"] = prune_account_activity()
+        except AdminStorageUnavailable:
+            logging.exception("Account activity retention cleanup unavailable")
+            result["activity_pruned"] = {"error": "storage_unavailable"}
+        try:
             result["telemetry_pruned"] = prune_account_telemetry()
         except AdminStorageUnavailable:
             logging.exception("Account telemetry retention cleanup unavailable")
