@@ -351,6 +351,29 @@ def _update_firebase_user_access(cfg, user_id, changes, *, actor_id="", expected
                 )
             except AdminStorageUnavailable:
                 storage_warning = "audit_not_persisted"
+        # Operational activity is user-clearable and separate from immutable audit.
+        if storage_ready and (before_access.get("plan") != after_access.get("plan")
+                              or before_access.get("status") != after_access.get("status")
+                              or before_access.get("expires_at") != after_access.get("expires_at")):
+            try:
+                from .account_storage import record_account_event
+                old = str(before_access.get("plan") or "").lower()
+                new = str(after_access.get("plan") or "").lower()
+                action = ("paid_membership_downgraded"
+                          if old in {"pro", "elite", "legend", "goat"} and new == "rookie"
+                          else "account_access_changed")
+                record_account_event(
+                    actor_id=actor_id or "account-admin", target_id=uid,
+                    action=action, outcome="success",
+                    before={"from_plan": old},
+                    after={
+                        "from_plan": old, "to_plan": new,
+                        "email": str(updated_user.get("email") or ""),
+                        "expired_at": str(before_access.get("expires_at") or ""),
+                    },
+                )
+            except AdminStorageUnavailable:
+                storage_warning = "activity_not_persisted"
         if storage_warning:
             updated_user["admin_storage_warning"] = storage_warning
         return updated_user
