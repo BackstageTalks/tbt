@@ -3839,7 +3839,7 @@
       <section class="admin-tab-sort-shell" aria-label="Poradie záložiek Dnešné predikcie"><header><div><small>PORADIE NA WEBE</small><h3>Poradie kategórií Dnešných predikcií</h3><p>Potiahni kategóriu alebo použi šípky. Poradie bude rovnaké pre všetky levely po kliknutí na Publikovať.</p></div><button type="button" class="btn btn-ghost" data-admin-hub-order-reset>Predvolené poradie</button></header><div class="admin-tab-sort-grid">${tabOrderControls}</div></section>
       <div class="admin-daily-matrix-card">
         <header><div><small>DENNÁ PONUKA</small><h3>Čo uvidí ${escapeHtml(levelLabel)}</h3><p>Domovská stránka drží maximálne 10 pozícií. „VŠETKY“ odomkne všetky aktuálne riadky. „Celá ponuka“ dovolí otvoriť rozšírený zoznam.</p></div><button class="btn btn-ghost" type="button" data-admin-action="preview">Náhľad ako ${escapeHtml(levelLabel)}</button></header>
-        <div class="admin-daily-matrix-head"><span>Kategória</span><span>Globálne</span><span>Panel</span><span>Riadky</span><span>Výber</span><span>Zvyšok</span></div>
+        <div class="admin-daily-matrix-head"><span>Kategória</span><span>Globálne</span><span>Panel</span><span>Riadky</span><span>Výber</span><span>Zvyšok</span><span>Celá ponuka</span></div>
         <div class="admin-daily-matrix">${rows}</div>
         <div class="admin-admin-legend"><span><i class="is-global"></i><b>SHOW</b> = plný obsah</span><span><i class="is-level"></i><b>BLUR</b> = viditeľný premium teaser bez citlivých dát v HTML</span><span><i class="is-lock"></i><b>HIDE</b> = prvok sa pre level nezobrazí</span></div>
       </div>
