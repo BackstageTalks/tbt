@@ -1236,6 +1236,16 @@ def validate_ui_config(payload: object) -> dict:
         value = daily_hub.get(field)
         if not isinstance(value, int) or not 1 <= value <= 20:
             raise ValueError(f"Invalid Daily Picks setting: {field}")
+    tab_order = daily_hub.get("tab_order")
+    if tab_order is not None:
+        expected = {"daily", "prime", "value", "ace", "double_faults", "doubles", "games", "sets", "see_all"}
+        if (
+            not isinstance(tab_order, list)
+            or len(tab_order) != len(expected)
+            or set(map(str, tab_order)) != expected
+            or any(not isinstance(tab, str) for tab in tab_order)
+        ):
+            raise ValueError("Invalid Daily Picks tab order")
     hub_tabs = daily_hub.get("tabs") or {}
     required_hub_tabs = {"daily", "value", "ace", "double_faults", "games", "sets"}
     allowed_hub_tabs = required_hub_tabs | {"top200", "prime", "top", "doubles", "board", "see_all"}
