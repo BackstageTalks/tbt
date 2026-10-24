@@ -27,6 +27,7 @@ from ..data.wta_season_stats import (
 )
 from ..models.ensemble import TennisEnsemble
 from ..models.feature_builder import FEATURE_NAMES, EVIDENCE_FEATURE_NAMES, RICH_CHARTING_FEATURE_NAMES, FeatureBuilder
+from ..models.momentum import MOMENTUM_FEATURE_NAMES
 from ..models.metrics import evaluate_probabilities
 from ..schemas import MatchRecord
 from .data_quality import audit_history
@@ -38,6 +39,7 @@ PRODUCTION_FEATURE_NAMES = [
     for name in FEATURE_NAMES
     if (
         name not in set(EVIDENCE_FEATURE_NAMES)
+        and name not in set(MOMENTUM_FEATURE_NAMES)
         and name not in set(RICH_CHARTING_FEATURE_NAMES)
         and name != "atp_surface_opponent_form_diff"
         and name not in set(ATP_LEADERBOARD_FEATURE_NAMES)
@@ -85,10 +87,13 @@ def _candidate_feature_names(
     wta_season_stats=None,
     atp_surface_opponent_form=False,
     evidence_depth=False,
+    momentum=False,
 ):
     names = list(PRODUCTION_FEATURE_NAMES)
     if evidence_depth:
         names += EVIDENCE_FEATURE_NAMES
+    if momentum:
+        names += MOMENTUM_FEATURE_NAMES
     if atp_surface_opponent_form:
         names.append("atp_surface_opponent_form_diff")
     if atp_leaderboards is not None:
@@ -973,7 +978,7 @@ def train_from_matches(
         names = _candidate_feature_names(
             atp_leaderboards=atp_leaderboards, atp_rank_history=atp_rank_history,
             wta_rank_history=wta_rank_history, wta_season_stats=wta_season_stats,
-            atp_surface_opponent_form=True, evidence_depth=True,
+            atp_surface_opponent_form=True, evidence_depth=True, momentum=True,
         )
         diagnostics = input_diagnostics({"train": train, "calibration": calibration}, names)
         require_informative_inputs(diagnostics)
@@ -989,6 +994,7 @@ def train_from_matches(
                     wta_season_stats=wta_season_stats,
                     atp_surface_opponent_form=(training_profile == "top-7.2.1"),
                     evidence_depth=(training_profile == "top-7.2.1"),
+                    momentum=(training_profile == "top-7.2.1"),
                 ), objective=objective,
             )
             if (
