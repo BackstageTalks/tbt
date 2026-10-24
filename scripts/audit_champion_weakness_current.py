@@ -14,8 +14,8 @@ from pathlib import Path
 
 from _bootstrap import ROOT
 from release_store import gh
-from audit_top_reliability import analyze as top_analyze, download, model_freshness
-from audit_loss_review import analyze_loss_review
+from audit_top_reliability import analyze as top_analyze, download, model_freshness, summarize
+from audit_loss_review import analyze_loss_review, extract_entries
 from audit_frozen_721_segments import audit as frozen_shadow_audit
 
 DATA_REPOSITORY = "BackstageTalks/tbt-data"
@@ -23,7 +23,7 @@ REQUIRED = ("tbt-predictions-v1", "tbt-model-production-v1",
             "tbt-data-v1", "blinq-frozen-721-private-shadow-v1")
 
 
-def compact(top, losses, shadow, *, ledger_sha, model_sha, history_sha, now):
+def compact(top, losses, shadow, *, version_breakdown, ledger_sha, model_sha, history_sha, now):
     """Keep aggregate-only fields; never include private loss examples."""
     return {
         "schema": 1,
@@ -33,6 +33,7 @@ def compact(top, losses, shadow, *, ledger_sha, model_sha, history_sha, now):
         "source_sha256": {"issued_ledger": ledger_sha, "production_training_report": model_sha,
                           "history_manifest": history_sha},
         "production_model_freshness": top["production_model_vs_history"],
+        "published_top_by_model_version": version_breakdown,
         "published_top": {
             "window_days": top["window_days"],
             "overall": top["overall"],
@@ -95,7 +96,33 @@ def main():
     top["production_model_vs_history"]=model_freshness(training,history)
     losses=analyze_loss_review(ledger,now=now,window_days=args.loss_days)
     shadow=frozen_shadow_audit(DATA_REPOSITORY)
-    report=compact(top,losses,shadow,now=now,
+    # TOP probabilities and version must originate from the issued publication.
+    issued, _, _, _ = extract_entries(ledger, now=now, window_days=args.top_days)
+    top_issued = [e for e in issued if e["section"] == "top_daily"]
+    current_version = shadow["production_version"]
+    verifiable = [e for e in top_issued if e["model_version_source"] in
+                  {"exact_at_issuance", "matching_original_event"}]
+    current = [e for e in verifiable if e["model_version"] == current_version]
+    current_exact = [e for e in current if e["model_version_source"] == "exact_at_issuance"]
+    start_21 = now.timestamp() - 21*86400
+    def recent21(entry):
+        return datetime.fromisoformat(entry["scheduled_at"]).timestamp() >= start_21
+    def groups(items, key):
+        return {group:summarize([e for e in items if e[key]==group])
+                for group in sorted({e[key] for e in items})}
+    version_breakdown = {
+        "current_version":current_version,
+        "settled_top_all_versions":len(top_issued),
+        "settled_top_version_verifiable":len(verifiable),
+        "settled_top_unverified_model_version":len(top_issued)-len(verifiable),
+        "by_model_version":groups(verifiable, "model_version"),
+        "current_45_days":summarize(current),
+        "current_exact_issue_45_days":summarize(current_exact),
+        "current_21_days":summarize([e for e in current if recent21(e)]),
+        "current_by_competition":groups(current, "competition"),
+        "current_by_model_version_source":groups(current, "model_version_source"),
+    }
+    report=compact(top,losses,shadow,version_breakdown=version_breakdown,now=now,
         ledger_sha=sha256((cache/"predictions/ledger.json").read_bytes()).hexdigest(),
         model_sha=sha256((cache/"champion/training_report.json").read_bytes()).hexdigest(),
         history_sha=sha256((cache/"history/history_manifest.json").read_bytes()).hexdigest())
