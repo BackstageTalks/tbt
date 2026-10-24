@@ -110,6 +110,26 @@ def main():
     def groups(items, key):
         return {group:summarize([e for e in items if e[key]==group])
                 for group in sorted({e[key] for e in items})}
+    # Predeclared probability bands, not fitted or applied as live filters.
+    def conf_band(p):
+        if p is None: return "unknown"
+        if p < .68: return "below_68"
+        if p < .75: return "68_75"
+        if p < .80: return "75_80"
+        if p < .85: return "80_85"
+        return "85_plus"
+    def gap_band(v):
+        if v is None: return "unknown"
+        if v < 0: return "negative"
+        if v < .05: return "00_05"
+        if v < .10: return "05_10"
+        if v < .15: return "10_15"
+        return "15_plus"
+    tagged_current=[dict(e, audit_confidence_band=conf_band(e.get("probability")),
+                         audit_market_gap=gap_band(e.get("probability_market_gap"))) for e in current]
+    def mean(values):
+        good=[float(x) for x in values if x is not None]
+        return sum(good)/len(good) if good else None
     version_breakdown = {
         "current_version":current_version,
         "settled_top_all_versions":len(top_issued),
@@ -120,6 +140,15 @@ def main():
         "current_exact_issue_45_days":summarize(current_exact),
         "current_21_days":summarize([e for e in current if recent21(e)]),
         "current_by_competition":groups(current, "competition"),
+        "current_by_confidence_band":groups(tagged_current, "audit_confidence_band"),
+        "current_by_market_gap_band":groups(tagged_current, "audit_market_gap"),
+        "current_market_reference": {
+            "n_with_implied":sum(e.get("implied_probability") is not None for e in current),
+            "mean_implied_probability":mean([e.get("implied_probability") for e in current]),
+            "mean_public_minus_implied":mean([e.get("probability_market_gap") for e in current]),
+            "implied_basis_counts":{k:sum(e.get("implied_source")==k for e in current)
+                                    for k in sorted({e.get("implied_source") for e in current})},
+        },
         "current_by_model_version_source":groups(current, "model_version_source"),
     }
     report=compact(top,losses,shadow,version_breakdown=version_breakdown,now=now,
