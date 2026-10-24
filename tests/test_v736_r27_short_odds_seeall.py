@@ -13,9 +13,10 @@ def test_r27_short_odds_is_public_and_admin_managed():
     assert prime["enabled"] is True
     assert prime["label"] == "ACCA"
     assert prime["plans"]["rookie"]["visible_rows"] == 1
-    assert "const tabs=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];" in APP
+    assert "const tabs=orderedDailyHubTabs();" in APP
+    assert "const DAILY_HUB_TABS=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];" in APP
     assert "if(tab==='prime')return shortOddsDisplayRows(marketRows('prime'));" in APP
-    assert "const rows=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].map" in APP
+    assert "const rows=orderedDailyHubTabs().map" in APP
 
 def test_r27_see_all_uses_same_controls_as_other_categories():
     assert "admin-see-all-rule-note" not in APP
