@@ -10326,3 +10326,11 @@ body#blinqPremium.blinq-admin .admin-tab-sort-actions button:disabled{opacity:.2
   body#blinqPremium.blinq-admin .admin-tab-sort-item strong{font-size:9.5px}
   body#blinqPremium.blinq-admin .admin-tab-sort-actions button{min-width:25px;min-height:30px;font-size:13px}
 }
+
+/* Mobile admin section picker: one active section by default, expand on demand. */
+body#blinqPremium.blinq-admin .admin-nav-toolbar button[data-admin-nav-expand]{display:none}
+@media(max-width:900px){
+  body#blinqPremium.blinq-admin .admin-nav-toolbar button[data-admin-nav-expand]{display:inline-flex}
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs.admin-tabs-v685.is-collapsed .admin-nav-group{grid-template-columns:1fr!important}
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs.admin-tabs-v685.is-collapsed .admin-nav-entry:not(.is-active){display:none!important}
+}
