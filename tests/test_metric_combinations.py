@@ -24,3 +24,16 @@ def test_test_labels_do_not_change_weights(tmp_path):
     assert a['folds'][0]['choices']==b['folds'][0]['choices']
     assert a['folds'][0]['groups']['all']['baseline']['accuracy']==1
     assert b['folds'][0]['groups']['all']['baseline']['accuracy']==0
+
+
+def test_protected_workflow_persists_and_validates_real_metric_report():
+    from pathlib import Path
+    workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/protected-frozen-cdb-candidate.yml').read_text(encoding='utf-8')
+    research = workflow.split('- name: Research temporal ATP/WTA variants on verified inputs', 1)[1].split('- name:', 1)[0]
+    assert 'tests/test_metric_combinations.py' in research
+    assert "test -s .cache/tbt/training-backup/metric-combinations.json" in research
+    assert "d['status']=='COMPLETED_RESEARCH_ONLY'" in research
+    assert "d.get('verified_backup',{}).get('remote_manifest_sha256')" in research
+    upload = workflow.split('- name: Persist non-sensitive run proof as GitHub artifact', 1)[1].split('- name:', 1)[0]
+    assert '.cache/tbt/training-backup/metric-combinations.json' in upload
+    assert 'if: always()' in upload
