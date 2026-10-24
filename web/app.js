@@ -1980,6 +1980,19 @@
   }
 
 
+  const DAILY_HUB_TABS=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];
+  function orderedDailyHubTabs(){
+    const saved=state.ui?.dashboard?.daily_hub?.tab_order;
+    const order=Array.isArray(saved)?saved.filter((id,i)=>DAILY_HUB_TABS.includes(id)&&saved.indexOf(id)===i):[];
+    return [...order,...DAILY_HUB_TABS.filter(id=>!order.includes(id))];
+  }
+  function moveDailyHubTab(source,target){
+    const order=orderedDailyHubTabs(),from=order.indexOf(source),to=order.indexOf(target);
+    if(from<0||to<0||from===to)return false;
+    order.splice(from,1);order.splice(to,0,source);
+    state.ui.dashboard.daily_hub.tab_order=order;
+    return true;
+  }
   function dailyHubConfig(){
     const cfg=state.ui?.dashboard?.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};
     const tabs={...(cfg.tabs||{})};delete tabs.top200;
@@ -2681,7 +2694,7 @@
   function renderDailyHub(){
     const host=$('dailyHub'); if(!host)return; wireDailyHub();
     const cfg=dailyHubConfig(); host.hidden=cfg.enabled===false; if(host.hidden)return;
-    const tabs=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];
+    const tabs=orderedDailyHubTabs();
     if(!tabs.includes(state.dailyHubTab))state.dailyHubTab='daily';
     const plan=accountPlan();
     const visibleTabs=tabs.filter(tab=>dailyHubEntitlement(tab).enabled!==false);
@@ -3788,7 +3801,8 @@
     const detailPlanChecks=membershipHierarchy.map(id=>{const label=String(state.ui?.plans?.[id]?.label||id).replace(/^BlinQ\s+/i,'');return `<label class="admin-detail-plan-check"><input type="checkbox" data-admin-detail-plan="${escapeHtml(id)}" ${detailCfg?.plans?.[id]!==false?'checked':''}><span>${escapeHtml(label)}</span></label>`;}).join('');
     const detailSectionSelect=(section,label)=>{const current=matchDetailSectionMinimum(section);return `<label><span>${escapeHtml(label)}</span><select data-admin-detail-section="${escapeHtml(section)}">${membershipHierarchy.map(id=>`<option value="${id}"${id===current?' selected':''}>${escapeHtml(String(state.ui?.plans?.[id]?.label||id).replace(/^BlinQ\s+/i,''))}</option>`).join('')}</select></label>`;};
     const detailSettings=`<div class="admin-detail-access-card"><header><div><small>DETAIL ZÁPASU</small><h3>Prístup ku karte detailu</h3><p>Jednoducho zapni, ktoré levely môžu otvoriť detail. Vnútri karty môžeš jednotlivé sekcie stupňovať minimálnym levelom.</p></div></header><div class="admin-detail-plan-grid">${detailPlanChecks}</div><div class="admin-detail-section-grid"><strong>Minimálny level pre sekcie</strong>${detailSectionSelect('statistics','Forma & povrch')}${detailSectionSelect('radar','Model víťaza')}${detailSectionSelect('history','História / H2H')}</div><small class="admin-detail-help">Prehľad ostáva základnou sekciou. ADMIN má vždy plný prístup. Neprístupná sekcia sa v detaile zobrazí ako zámok s najnižším potrebným levelom.</small></div>`;
-    const rows=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].map(tab=>{
+    const tabOrderControls=orderedDailyHubTabs().map((id,index,order)=>`<div class="admin-tab-sort-item" draggable="true" data-admin-hub-order-item="${id}"><span class="admin-tab-sort-grip" aria-hidden="true">⠿</span><strong>${index+1}. ${escapeHtml(dailyHubTabLabel(id))}</strong><span class="admin-tab-sort-actions"><button type="button" data-admin-hub-order-step="-1" data-admin-hub-order-id="${id}" aria-label="Posunúť ${escapeHtml(dailyHubTabLabel(id))} vyššie" ${index===0?'disabled':''}>↑</button><button type="button" data-admin-hub-order-step="1" data-admin-hub-order-id="${id}" aria-label="Posunúť ${escapeHtml(dailyHubTabLabel(id))} nižšie" ${index===order.length-1?'disabled':''}>↓</button></span></div>`).join('');
+    const rows=orderedDailyHubTabs().map(tab=>{
       const tc=hub.tabs?.[tab]||{},rule=tc.plans?.[state.adminPlan]||{},globalOn=tc.enabled!==false;
       const visible=String(rule.visible_rows??0).toUpperCase(),display=String(rule.display_state||((rule.tab_enabled!==false)?'active':'hidden'));
       const selection=String(rule.selection_mode||'first'),overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};
@@ -3814,6 +3828,7 @@
         ${adminLevelChips(state.adminPlan,'admin-plan-chip',true)}
       </div>
       <div class="admin-daily-preset-bar"><div><strong>Rýchle nastavenie pre ${escapeHtml(levelLabel)}</strong><span>Voliteľné. Prepíše iba pravidlá dennej ponuky pre tento level, nie globálne zapnutie kategórií.</span></div><div><button type="button" data-admin-daily-preset="full">Plný prístup</button><button type="button" data-admin-daily-preset="preview3">3 riadky</button><button type="button" data-admin-daily-preset="rookie2">2 náhodné + blur</button><button type="button" data-admin-daily-preset="blurred">Rozmazať panely</button><button type="button" data-admin-daily-preset="hidden">Skryť všetko</button></div></div>
+      <section class="admin-tab-sort-shell" aria-label="Poradie záložiek Dnešné predikcie"><header><div><small>PORADIE NA WEBE</small><h3>Poradie kategórií Dnešných predikcií</h3><p>Potiahni kategóriu alebo použi šípky. Poradie bude rovnaké pre všetky levely po kliknutí na Publikovať.</p></div><button type="button" class="btn btn-ghost" data-admin-hub-order-reset>Predvolené poradie</button></header><div class="admin-tab-sort-grid">${tabOrderControls}</div></section>
       <div class="admin-daily-matrix-card">
         <header><div><small>DENNÁ PONUKA</small><h3>Čo uvidí ${escapeHtml(levelLabel)}</h3><p>Domovská stránka drží maximálne 10 pozícií. „VŠETKY“ odomkne všetky aktuálne riadky. „Celá ponuka“ dovolí otvoriť rozšírený zoznam.</p></div><button class="btn btn-ghost" type="button" data-admin-action="preview">Náhľad ako ${escapeHtml(levelLabel)}</button></header>
         <div class="admin-daily-matrix-head"><span>Kategória</span><span>Globálne</span><span>Panel</span><span>Riadky</span><span>Výber</span><span>Zvyšok</span></div>
@@ -5310,6 +5325,23 @@
    }catch(error){await loadAdminTestList(true);showStatus('Uložených '+count+' / '+ids.length+'. '+(error.message||'Ukladanie bolo prerušené.'));}
  }
 }
+  const ADMIN_TAB_ORDER_KEY='blinq:admin-tab-order:v1';
+  function orderedAdminTabs(ids){
+    if(!Array.isArray(state.adminNavOrder)){
+      try{state.adminNavOrder=JSON.parse(localStorage.getItem(ADMIN_TAB_ORDER_KEY)||'null');}catch{state.adminNavOrder=null;}
+    }
+    const saved=Array.isArray(state.adminNavOrder)?state.adminNavOrder.filter((id,i)=>ids.includes(id)&&state.adminNavOrder.indexOf(id)===i):[];
+    return [...saved,...ids.filter(id=>!saved.includes(id))];
+  }
+  function moveAdminTab(source,target){
+    const ids=['accounts','projects','levels','dashboard','testresults','layout','banners','telegram','insights','calibration','system'];
+    const ordered=orderedAdminTabs(ids),from=ordered.indexOf(source),to=ordered.indexOf(target);
+    if(from<0||to<0||from===to)return false;
+    ordered.splice(from,1);ordered.splice(to,0,source);
+    state.adminNavOrder=ordered;
+    try{localStorage.setItem(ADMIN_TAB_ORDER_KEY,JSON.stringify(ordered));}catch{}
+    return true;
+  }
   function renderAdminRoute(){
     const tabs=[['accounts','Účty','Prístup · platnosť'],['projects','Projektové skupiny','Skupiny · INFO · výsledky'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard setting','3 karty · KPI'],['testresults','Výsledky','Testovacie tipy · výber'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram','Skupiny · odkazy'],['insights','Info & LIVE','Správy · radar'],['calibration','Kalibrácia','Model · 1 000 zápasov'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
@@ -5326,8 +5358,12 @@
     const uiWarning=state.uiStorageAvailable===false
       ?'<div class="admin-runtime-note is-error" role="alert"><strong>Publikovanie konfigurácie je pozastavené</strong><span>'+escapeHtml(state.uiRuntimeNotice||'Azure konfigurácia je nedostupná.')+' Zobrazené nastavenia môžu byť iba posledná overená kópia alebo predvolené hodnoty. Nemeň živé bannery ani odkazy, kým sa spojenie neobnoví.</span></div>'
       :'';
-    const nav=tabs.map(([id,label,hint])=>`<button type="button" class="${state.adminTab===id?'active':''}" data-admin-tab="${id}"><span class="admin-nav-mark"></span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(hint)}</small></span></button>`).join('');
-    return `<div class="admin-console admin-console-v685 admin-console-v687 lean-admin-console"><aside class="admin-side-nav"><div class="admin-side-brand"><span>BLINQ CONTROL</span><strong>Admin</strong><small>Účty · obsah · LIVE</small></div><nav class="admin-tabs admin-tabs-v685" aria-label="Admin navigácia"><div class="admin-nav-group"><span>SPRÁVA</span>${nav}</div></nav><div class="admin-side-foot"><a href="#predictions" data-route="predictions"><svg viewBox="0 0 20 20"><path d="M4 10h12M9 5l-5 5 5 5"></path></svg><span>Späť na web</span></a></div></aside><section class="admin-workarea"><header class="admin-workarea-head admin-control-toolbar"><div><small>ADMIN / ${escapeHtml(state.adminTab.toUpperCase())}</small><h2>${escapeHtml(info[0])}</h2><p>${escapeHtml(info[1])}</p></div><div class="admin-global-actions">${contextual}</div></header><div class="admin-panel admin-panel-v685">${uiWarning}${uiHistoryPanel}${panel}</div></section></div>`;
+    const editable=Boolean(state.adminNavEditing),tabById=Object.fromEntries(tabs.map(row=>[row[0],row]));
+    const nav=orderedAdminTabs(valid).map((id,index,order)=>{
+      const [,label,hint]=tabById[id];
+      return `<div class="admin-nav-entry${editable?' is-reordering':''}" data-admin-order-item="${id}" draggable="${editable}"><button type="button" class="${state.adminTab===id?'active':''}" data-admin-tab="${id}" ${state.adminTab===id?'aria-current="page"':''}><span class="admin-nav-mark"></span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(hint)}</small></span></button>${editable?`<div class="admin-nav-order-actions"><button type="button" data-admin-nav-step="-1" data-admin-nav-id="${id}" aria-label="Presunúť ${escapeHtml(label)} doľava alebo vyššie" ${index===0?'disabled':''}>↑</button><button type="button" data-admin-nav-step="1" data-admin-nav-id="${id}" aria-label="Presunúť ${escapeHtml(label)} doprava alebo nižšie" ${index===order.length-1?'disabled':''}>↓</button></div>`:''}</div>`;
+    }).join('');
+    return `<div class="admin-console admin-console-v685 admin-console-v687 lean-admin-console"><aside class="admin-side-nav"><div class="admin-side-brand"><span>BLINQ CONTROL</span><strong>Admin</strong><small>Účty · obsah · LIVE</small></div><div class="admin-nav-toolbar"><strong>Sekcie</strong><button type="button" data-admin-nav-edit aria-pressed="${editable?'true':'false'}">${editable?'✓ Dokončiť':'↕ Upraviť poradie'}</button></div><nav class="admin-tabs admin-tabs-v685" aria-label="Admin navigácia"><div class="admin-nav-group"><span>SPRÁVA</span>${nav}</div></nav><div class="admin-side-foot"><a href="#predictions" data-route="predictions"><svg viewBox="0 0 20 20"><path d="M4 10h12M9 5l-5 5 5 5"></path></svg><span>Späť na web</span></a></div></aside><section class="admin-workarea"><header class="admin-workarea-head admin-control-toolbar"><div><small>ADMIN / ${escapeHtml(state.adminTab.toUpperCase())}</small><h2>${escapeHtml(info[0])}</h2><p>${escapeHtml(info[1])}</p></div><div class="admin-global-actions">${contextual}</div></header><div class="admin-panel admin-panel-v685">${uiWarning}${uiHistoryPanel}${panel}</div></section></div>`;
   }
 
 
@@ -5498,6 +5534,23 @@
     decorateAdminMediaUploads(host);
     decorateBannerNumberControls(host);
     host.onclick=async event=>{
+      const navEdit=event.target.closest('[data-admin-nav-edit]');
+      if(navEdit){state.adminNavEditing=!state.adminNavEditing;rerenderAdmin();return;}
+      const navStep=event.target.closest('[data-admin-nav-step]');
+      if(navStep){
+        const order=orderedAdminTabs(['accounts','projects','levels','dashboard','testresults','layout','banners','telegram','insights','calibration','system']);
+        const from=order.indexOf(navStep.dataset.adminNavId),target=order[from+Number(navStep.dataset.adminNavStep)];
+        if(target&&moveAdminTab(navStep.dataset.adminNavId,target))rerenderAdmin();
+        return;
+      }
+      const hubReset=event.target.closest('[data-admin-hub-order-reset]');
+      if(hubReset){state.ui.dashboard.daily_hub.tab_order=[...DAILY_HUB_TABS];renderAllUiContent();rerenderAdmin();showStatus('Predvolené poradie pripravené. Klikni Publikovať.');return;}
+      const hubStep=event.target.closest('[data-admin-hub-order-step]');
+      if(hubStep){
+        const order=orderedDailyHubTabs(),source=hubStep.dataset.adminHubOrderId,from=order.indexOf(source),target=order[from+Number(hubStep.dataset.adminHubOrderStep)];
+        if(target&&moveDailyHubTab(source,target)){renderAllUiContent();rerenderAdmin();}
+        return;
+      }
       const adminTestButton=event.target.closest('[data-admin-test-action]');
       if(adminTestButton){await adminTestAction(adminTestButton.dataset.adminTestAction);return;}
       const step=event.target.closest('[data-banner-step]');
@@ -5776,6 +5829,27 @@
       if(t.dataset.adminAccess){const item=elements()?.[state.selectedElement];if(item){item.access=item.access||{};item.access[t.dataset.adminAccess]=t.value;if(t.dataset.adminAccess==='rookie')item.access.trial=t.value;rerenderAdmin();}return;}
     };
     // Live copy feedback without replacing the selected editor or interrupting typing.
+    host.ondragstart=event=>{
+      const target=event.target.closest('[data-admin-hub-order-item], [data-admin-order-item]');
+      if(!target||!event.dataTransfer)return;
+      if(target.matches('[data-admin-order-item]')&&!state.adminNavEditing){event.preventDefault();return;}
+      event.dataTransfer.effectAllowed='move';
+      event.dataTransfer.setData('text/plain',target.hasAttribute('data-admin-hub-order-item')?'hub:'+target.dataset.adminHubOrderItem:'nav:'+target.dataset.adminOrderItem);
+    };
+    host.ondragover=event=>{
+      if(event.target.closest('[data-admin-hub-order-item],[data-admin-order-item]'))event.preventDefault();
+    };
+    host.ondrop=event=>{
+      const target=event.target.closest('[data-admin-hub-order-item],[data-admin-order-item]');
+      const payload=event.dataTransfer?.getData('text/plain')||'';
+      if(!target)return;
+      if(payload.startsWith('hub:')&&target.hasAttribute('data-admin-hub-order-item')){
+        event.preventDefault();
+        if(moveDailyHubTab(payload.slice(4),target.dataset.adminHubOrderItem)){renderAllUiContent();rerenderAdmin();}
+      }else if(payload.startsWith('nav:')&&state.adminNavEditing&&target.hasAttribute('data-admin-order-item')){
+        event.preventDefault();if(moveAdminTab(payload.slice(4),target.dataset.adminOrderItem))rerenderAdmin();
+      }
+    };
     host.onkeydown=event=>{if(event.target?.id==='adminTestGoPage'&&event.key==='Enter'){event.preventDefault();adminTestAction('go');}};
     host.oninput=event=>{
       const t=event.target,field=t?.dataset?.simpleBannerField;
