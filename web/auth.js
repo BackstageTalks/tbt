@@ -626,7 +626,22 @@
     return apiWithSession(`/api/v1/admin/users?page=${encodeURIComponent(page)}&per_page=${encodeURIComponent(perPage)}`);
   }
   async function adminAccountAudit(limit = 500) {
-    return apiWithSession(`/api/v1/admin/audit?limit=${encodeURIComponent(limit)}`);
+    return apiWithSession(`/api/v1/admin/account-activity?limit=${encodeURIComponent(limit)}`);
+  }
+  async function adminSetAccountActivityRetention(days) {
+    return apiWithSession('/api/v1/admin/account-activity/retention', {
+      method: 'PUT', body: JSON.stringify({retention_days: days}),
+    });
+  }
+  async function adminClearAccountActivity() {
+    return apiWithSession('/api/v1/admin/account-activity/clear', {
+      method: 'POST', body: JSON.stringify({confirm:'DELETE_ACTIVITY_LOG'}),
+    });
+  }
+  async function adminConfirmTelegramCleanup(targetId, eventId) {
+    return apiWithSession('/api/v1/admin/account-activity/tg-confirm', {
+      method: 'POST', body: JSON.stringify({target_id:targetId,event_id:eventId}),
+    });
   }
   async function adminUpdateAccess(userId, payload) {
     return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/access`, {
@@ -722,7 +737,7 @@
     adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
     adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult,
     adminResultTestExclusions, adminSetResultTestExclusions,
-    adminDiagnostics, adminModelCalibration, adminModelLab, adminModelTraining, adminUsers, adminAccountAudit, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
+    adminDiagnostics, adminModelCalibration, adminModelLab, adminModelTraining, adminUsers, adminAccountAudit, adminSetAccountActivityRetention, adminClearAccountActivity, adminConfirmTelegramCleanup, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews, comparatorPlayers, comparatorCompare,
     bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
     sessionStorageKeys, sessionEpochKey,
