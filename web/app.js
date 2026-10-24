@@ -4174,7 +4174,7 @@ function adminActivityRows(){
     </div>`;
     const cleanupRows=pending.map(row=>{
       const user=profileMap.get(String(row.target_id)),email=row.after?.email||user?.email||'—',nickname=user?.telegram_nick||row.after?.telegram_nick||'—';
-      const isRestored=adminActivityIsPaid(user.plan)&&String(user.status||'').toLowerCase()==='active';
+      const isRestored=adminActivityIsPaid(user?.plan)&&String(user?.status||'').toLowerCase()==='active';
       return `<div class="admin-tg-cleanup-item">
         <span class="admin-tg-cleanup-user"><strong>${escapeHtml(nickname)}</strong><small>${escapeHtml(email)}</small></span>
         <span><small>Skončený level</small><b>${escapeHtml(String(row.after?.from_plan||'').toUpperCase())} → ROOKIE</b></span>
