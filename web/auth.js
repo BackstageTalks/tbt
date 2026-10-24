@@ -656,6 +656,16 @@
       method: 'POST', body: JSON.stringify({target_id:targetId,event_id:eventId}),
     });
   }
+  async function adminInfoResultRetention(days) {
+    return apiWithSession('/api/v1/admin/info-results/manage', days === undefined ? undefined : {
+      method: 'PUT', body: JSON.stringify({retention_days: days})
+    });
+  }
+  async function adminDeleteAllInfoResults() {
+    return apiWithSession('/api/v1/admin/info-results/manage', {
+      method: 'DELETE', body: JSON.stringify({confirmation: 'DELETE ALL INFO RESULTS'})
+    });
+  }
   async function adminUpdateAccess(userId, payload) {
     return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/access`, {
       method: 'PUT', body: JSON.stringify(payload || {}),
