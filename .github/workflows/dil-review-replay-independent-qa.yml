@@ -26,6 +26,7 @@ jobs:
           export PYTHONPATH="$GITHUB_WORKSPACE/data/dil_rebuild"
           python -m unittest discover -s data/dil_rebuild/tests -p test_rebuild.py -v
           python -m unittest discover -s data/dil_rebuild/tests -p test_review_replay.py -v
+          python -m unittest discover -s data/dil_rebuild/tests -p test_report_status.py -v
           python -m unittest discover -s data/dil_rebuild/tests -p test_converted_intake.py -v
       - name: Record tested commit
         shell: bash
