@@ -48,6 +48,7 @@ from tbt.services.account_storage import (
     record_manual_payment,
     list_manual_payments,
     list_account_audit,
+    record_account_event,
     list_account_activity,
     account_activity_settings,
     save_account_activity_settings,
@@ -3281,6 +3282,39 @@ def admin_info_results_management(req):
         return response(result, 200 if not result["failed"] else 207)
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/telegram-removal", methods=["POST"])
+def admin_telegram_removal(req):
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        if not isinstance(payload, dict):
+            return response({"error": "invalid_json"}, 400)
+        target_id = str(payload.get("target_id") or "").strip()
+        reference_id = str(payload.get("event_id") or "").strip()
+        if not target_id or not reference_id or len(target_id) > 256 or len(reference_id) > 100:
+            return response({"error": "invalid_event"}, 400)
+        history = list_account_audit(target_id=target_id, limit=500, months=36)
+        valid = any(row["event_id"] == reference_id and row["action"] == "paid_membership_downgraded"
+                    and row["outcome"] == "success" for row in history)
+        if not valid:
+            return response({"error": "unknown_paid_expiry_event"}, 404)
+        already = any(row["action"] == "telegram_removal_confirmed" and row.get("after", {}).get("reference_id") == reference_id for row in history)
+        if not already:
+            record_account_event(actor_id=str(actor.get("id") or ""), target_id=target_id,
+                                 action="telegram_removal_confirmed", outcome="success",
+                                 after={"reference_id": reference_id})
+        return response({"confirmed": True, "already_confirmed": already})
     except AuthUnavailable:
         return response({"error": "admin_auth_unavailable"}, 503)
     except AdminStorageUnavailable:
