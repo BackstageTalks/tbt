@@ -666,6 +666,11 @@
       method: 'DELETE', body: JSON.stringify({confirmation: 'DELETE ALL INFO RESULTS'})
     });
   }
+  async function adminConfirmTelegramRemoval(targetId, eventId) {
+    return apiWithSession('/api/v1/admin/telegram-removal', {
+      method:'POST', body:JSON.stringify({target_id:targetId,event_id:eventId})
+    });
+  }
   async function adminUpdateAccess(userId, payload) {
     return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/access`, {
       method: 'PUT', body: JSON.stringify(payload || {}),
