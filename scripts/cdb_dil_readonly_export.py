@@ -7,7 +7,7 @@ import zstandard as zstd
 from release_store import ReleaseStore
 
 FIELDS=("match_id","tour","scheduled_at","player1_id","player2_id","winner_id","surface",
-        "tournament_id","tournament","round_name","status","stats_json","source_year")
+        "tournament_id","tournament","round_name","status","stats_json")
 SCHEMA=(
  "match_id TEXT PRIMARY KEY","tour TEXT","scheduled_at INTEGER","player1_id TEXT",
  "player2_id TEXT","winner_id TEXT","surface TEXT","tournament_id TEXT","tournament TEXT",
@@ -55,10 +55,11 @@ def main():
   if not set(FIELDS).issubset(present):
    raise SystemExit("CDB schema lacks "+str(set(FIELDS)-present)+" in "+f.name)
   count=0
+  year=int(f.stem.split("-")[1])
   for batch in reader.iter_batches(batch_size=4096,columns=list(FIELDS)):
    values=batch.to_pydict()
-   rows=[tuple(clean(v,col) for col,v in zip(FIELDS,vals)) for vals in zip(*(values[c] for c in FIELDS))]
-   con.executemany("INSERT INTO cdb_matches VALUES ("+",".join("?" for _ in FIELDS)+")",rows)
+   rows=[tuple(clean(v,col) for col,v in zip(FIELDS,vals))+(year,) for vals in zip(*(values[c] for c in FIELDS))]
+   con.executemany("INSERT INTO cdb_matches VALUES ("+",".join("?" for _ in SCHEMA)+")",rows)
    count+=len(rows)
   con.commit()
   total+=count
