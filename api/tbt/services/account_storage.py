@@ -19,6 +19,7 @@ ACCOUNT_TABLE = "BlinQAccounts"
 AUDIT_TABLE = "BlinQAccountAudit"
 ACTIVITY_TABLE = "BlinQAccountEvents"
 ACTIVITY_SETTINGS_TABLE = "BlinQAccountActivitySettings"
+TG_CLEANUP_TABLE = "BlinQTgCleanup"
 _TELEGRAM_RE = re.compile(r"^@?[A-Za-z0-9_]{5,32}$")
 
 
@@ -553,6 +554,17 @@ def record_account_event(*, actor_id: object, target_id: object, action: str,
     }
     try:
         _table(ACTIVITY_TABLE).create_entity(entity)
+        if action == "paid_membership_downgraded" and outcome == "success":
+            clean_after = clean(after)
+            _table(TG_CLEANUP_TABLE).upsert_entity({
+                "PartitionKey": "pending", "RowKey": _key(target),
+                "target_id": target, "event_id": entity["RowKey"],
+                "email": str(clean_after.get("email") or "")[:240],
+                "telegram_nick": str(clean_after.get("telegram_nick") or "")[:40],
+                "from_plan": str(clean_after.get("from_plan") or "")[:20],
+                "expired_at": str(clean_after.get("expired_at") or "")[:64],
+                "occurred_at": now.isoformat(), "status": "pending",
+            }, mode="merge")
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to store account activity event") from exc
 
@@ -598,18 +610,45 @@ def save_account_activity_settings(days: object) -> dict:
     return {"retention_days": days}
 
 
-def _load_activity_rows(*, target_id: str = "") -> list[dict]:
+def _load_activity_rows(*, target_id: str = "", all_history: bool = False) -> list[dict]:
     client = _table(ACTIVITY_TABLE)
     rows = []
     try:
-        for month in _activity_months(datetime.now(timezone.utc)):
-            for row in client.query_entities(query_filter=f"PartitionKey eq '{month}'"):
+        if all_history:
+            batches = [client.query_entities()]
+        else:
+            batches = [client.query_entities(query_filter=f"PartitionKey eq '{month}'")
+                       for month in _activity_months(datetime.now(timezone.utc))]
+        for batch in batches:
+            for row in batch:
                 if target_id and str(row.get("target_id") or "") != target_id:
                     continue
                 rows.append(row)
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to load account activity") from exc
     return rows
+
+
+def list_pending_telegram_cleanup() -> list[dict]:
+    """Pending Telegram removals live outside purgeable event history."""
+    try:
+        rows = _table(TG_CLEANUP_TABLE).query_entities(
+            query_filter="PartitionKey eq 'pending'"
+        )
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to load pending Telegram cleanup") from exc
+    return sorted([
+        {
+            "target_id": str(row.get("target_id") or ""),
+            "event_id": str(row.get("event_id") or ""),
+            "email": str(row.get("email") or ""),
+            "telegram_nick": str(row.get("telegram_nick") or ""),
+            "from_plan": str(row.get("from_plan") or ""),
+            "expired_at": str(row.get("expired_at") or ""),
+            "occurred_at": str(row.get("occurred_at") or ""),
+        }
+        for row in rows if row.get("status") == "pending"
+    ], key=lambda item: item["occurred_at"], reverse=True)
 
 
 def list_account_activity(*, limit: int = 500) -> dict:
@@ -643,7 +682,8 @@ def list_account_activity(*, limit: int = 500) -> dict:
             "after": parse("after_json"),
         })
     items.sort(key=lambda item: (item["occurred_at"], item["id"]), reverse=True)
-    return {"items": items[:limit], "total": len(items), "settings": settings}
+    return {"items": items[:limit], "total": len(items), "settings": settings,
+            "tg_pending": list_pending_telegram_cleanup()}
 
 
 def prune_account_activity(*, all_events: bool = False) -> dict:
@@ -654,7 +694,7 @@ def prune_account_activity(*, all_events: bool = False) -> dict:
     cutoff = datetime.now(timezone.utc).timestamp() - days * 86400
     removed = 0
     client = _table(ACTIVITY_TABLE)
-    for row in _load_activity_rows():
+    for row in _load_activity_rows(all_history=True):
         try:
             ts = datetime.fromisoformat(str(row.get("occurred_at") or "").replace("Z", "+00:00")).timestamp()
         except ValueError:
@@ -669,32 +709,39 @@ def prune_account_activity(*, all_events: bool = False) -> dict:
 
 
 def confirm_telegram_cleanup(user_id: object, *, event_id: str, actor_id: str) -> dict:
-    """Confirm manual removal for one verified paid->ROOKIE event (not a Telegram API action)."""
+    """Confirm manual Telegram removal for the latest downgrade of this account."""
     uid = str(user_id or "").strip()
     key = _key(uid)
     event_id = str(event_id or "").strip()
-    if not re.fullmatch(r"\d{13}-[a-f0-9]{32}", event_id):
+    if not re.fullmatch(r"\\d{13}-[a-f0-9]{32}", event_id):
         raise ValueError("Invalid cleanup event ID")
     actor = str(actor_id or "").strip()
     if not actor:
         raise ValueError("Missing cleanup actor")
-    month = datetime.fromtimestamp(int(event_id[:13]) / 1000, tz=timezone.utc).strftime("%Y%m")
+    client = _table(TG_CLEANUP_TABLE)
     try:
-        event = _table(ACTIVITY_TABLE).get_entity(partition_key=month, row_key=event_id)
+        row = client.get_entity(partition_key="pending", row_key=key)
     except Exception as exc:
         if _not_found(exc):
-            raise ValueError("Cleanup event not found") from exc
-        raise AdminStorageUnavailable("Unable to verify cleanup event") from exc
-    if (str(event.get("target_id") or "") != uid
-            or str(event.get("action") or "") != "paid_membership_downgraded"
-            or str(event.get("outcome") or "") != "success"):
-        raise ValueError("Invalid paid expiry cleanup event")
+            raise ValueError("Cleanup request no longer exists") from exc
+        raise AdminStorageUnavailable("Unable to verify cleanup request") from exc
+    if str(row.get("target_id") or "") != uid or str(row.get("event_id") or "") != event_id:
+        raise ValueError("Cleanup event is no longer current")
+    if str(row.get("status") or "") == "done":
+        return {"target_id": uid, "event_id": event_id, "confirmed_at": row.get("confirmed_at")}
+    if str(row.get("status") or "") != "pending":
+        raise ValueError("Cleanup request is not pending")
     now = datetime.now(timezone.utc).isoformat()
     try:
         _table(ACCOUNT_TABLE).upsert_entity({
             "PartitionKey": "account", "RowKey": key, "user_id": uid,
             "tg_private_member": False, "tg_cleanup_confirmed_event": event_id,
             "tg_cleanup_confirmed_at": now, "tg_cleanup_confirmed_by": actor[:256],
+        }, mode="merge")
+        client.upsert_entity({
+            "PartitionKey": "pending", "RowKey": key,
+            "status": "done", "confirmed_at": now,
+            "confirmed_by": actor[:256],
         }, mode="merge")
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to save Telegram cleanup confirmation") from exc
