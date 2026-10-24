@@ -4,7 +4,7 @@ This module manages identity/account metadata only and never tennis data.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import threading
 import time
 
@@ -286,6 +286,32 @@ def _apply_access_metadata(app, changes):
     return app
 
 
+def _validate_legend_term_on_grant(claims: dict, changes: dict, *, now=None) -> None:
+    """Block new 30-day LEGEND grants from stale clients/configuration.
+
+    This does not mutate existing accounts or historical expiry timestamps.
+    Existing LEGEND edits are left intact for explicit operator correction.
+    """
+    if not (changes.get("role") == "user"
+            and changes.get("plan") == "legend"
+            and changes.get("status") == "active"):
+        return
+    old = str((claims or {}).get("blinq_plan") or "").strip().lower()
+    if old == "legend":
+        return
+    instant = now or datetime.now(timezone.utc)
+    raw = str(changes.get("expires_at") or "").strip()
+    try:
+        expiry = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except (ValueError, TypeError) as exc:
+        raise ValueError("LEGEND grant needs a valid expiration") from exc
+    if expiry.tzinfo is None:
+        raise ValueError("LEGEND grant needs a timezone-aware expiration")
+    # Small timing tolerance for browser clock skew / server request latency.
+    if expiry.astimezone(timezone.utc) < instant + timedelta(days=180, minutes=-5):
+        raise ValueError("New LEGEND grants require at least 180 days of validity")
+
+
 def _update_firebase_user_access(cfg, user_id, changes, *, actor_id="", expected_claims=None):
     _, firebase_auth, _ = _firebase_modules()
     app = firebase_app(cfg)
@@ -297,6 +323,7 @@ def _update_firebase_user_access(cfg, user_id, changes, *, actor_id="", expected
             current = record.custom_claims or {}
             if any(current.get(key) != value for key, value in expected_claims.items()):
                 raise AccessConflict("Membership changed during paid-expiry review")
+        _validate_legend_term_on_grant(record.custom_claims or {}, changes)
         before_user = firebase_user_to_dict(record)
         before_access = account_access(before_user, cfg=cfg)
 
