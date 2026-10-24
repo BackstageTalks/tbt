@@ -139,8 +139,22 @@ jobs:
           BLINQ_METRIC_COMBINATIONS: ${{ inputs.metric_combinations }}
         run: |
           test "$BLINQ_TRAINING_PROFILE" = "top-7.2.1"
-          python -m pytest -q tests/test_temporal_tour_study.py tests/test_evidence_depth.py
+          python -m pytest -q tests/test_temporal_tour_study.py tests/test_evidence_depth.py tests/test_metric_combinations.py
           python scripts/study_temporal_tours.py
+          if [ "$BLINQ_METRIC_COMBINATIONS" = 'true' ]; then
+            test -s .cache/tbt/training-backup/metric-combinations.json
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('.cache/tbt/training-backup/metric-combinations.json').read_text())
+          assert d['status']=='COMPLETED_RESEARCH_ONLY'
+          assert len(d['folds'])==3
+          assert d.get('verified_backup',{}).get('remote_manifest_sha256')
+          print('Verified metric combination report present, complete, and backed by frozen provenance')
+          PY
+          else
+            test -s .cache/tbt/training-backup/temporal-tour-study.json
+          fi
       - name: Fit separate candidate only if immutable backup gate passed
         if: ${{ inputs.temporal_study != true }}
         run: |
@@ -212,6 +226,7 @@ jobs:
             .cache/tbt/training-backup/verified-certificate.json
             .cache/tbt/model/training_report.json
             .cache/tbt/training-backup/temporal-tour-study.json
+            .cache/tbt/training-backup/metric-combinations.json
             .cache/tbt/production/leakage_audit_report.json
           if-no-files-found: warn
           retention-days: 30
