@@ -277,7 +277,7 @@ def _admin_summary_body(policy: dict, warnings: list[dict], expired: list[dict],
         f"Paid → ROOKIE: {len(downgraded or [])}",
         f"Chyby jednotlivých mailov: {len(failures)}",
     ]
-    for title, rows in (("Inactivity warnings", warnings), ("EXPIRED", expired), ("Paid 7d", paid7), ("Paid 3d", paid3), ("Paid → ROOKIE (check manual Telegram VIP removal)", downgraded or [])):
+    for title, rows in (("Inactivity warnings", warnings), ("EXPIRED", expired), ("Paid 7d", paid7), ("Paid 3d", paid3), ("Paid → ROOKIE", downgraded or [])):
         if rows:
             lines += ["", f"{title}:"]
             for row in rows[:30]:
