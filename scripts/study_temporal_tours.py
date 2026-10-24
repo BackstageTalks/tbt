@@ -194,7 +194,13 @@ def main():
     frame['data_support'] = pd.cut(support, [-1, 0, .25, 1], labels=['missing', 'sparse', 'observed'])
     del matches, levels
     report_path = BASE/'training-backup/temporal-tour-study.json'
-    study(frame, report_path)
+    import os
+    if os.environ.get('BLINQ_METRIC_COMBINATIONS') == 'true':
+        from study_metric_combinations import study as metric_study
+        report_path = BASE/'training-backup/metric-combinations.json'
+        metric_study(frame, report_path)
+    else:
+        study(frame, report_path)
     validate_certificate(require_writer_lock=False)
     report = json.loads(report_path.read_text())
     report['verified_backup'] = {key: cert[key] for key in ('run_id', 'application_sha', 'remote_manifest_sha256')}
