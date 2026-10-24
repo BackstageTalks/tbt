@@ -3485,10 +3485,13 @@
     return NaN;
   }
   function localResultMetrics(rows,category,filters=null){
-    const entries=settledPublishedEntries(rows,category,filters,true);
-    const graded=entries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
+    const entries=settledPublishedEntries(rows,category,filters);
+    // Preserve the normal Results sample when ACCA is included. If disabled,
+    // reselect *before* deduplication so an overlapping TOP bet stays counted.
+    const metricEntries=accaExcludedFromStats()?settledPublishedEntries(rows,category,filters,true):entries;
+    const graded=metricEntries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
     const wins=graded.filter(({publication})=>publicationOutcome(publication).kind==='win').length;
-    const voids=entries.filter(({publication})=>publicationOutcome(publication).kind==='void').length;
+    const voids=metricEntries.filter(({publication})=>publicationOutcome(publication).kind==='void').length;
     const aceDfCategory=!filters?.membership&&(category==='ace'||category==='double_faults');
     let stake=0,profit=0,oddsTotal=0,oddsSample=0,unitSample=0,roiOddsSum=0,roiOddCount=0,ledgerDiscrepancies=0;
     for(const {publication} of graded){
