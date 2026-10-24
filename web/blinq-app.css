@@ -10386,3 +10386,15 @@ body#blinqPremium .admin-legacy-metrics-inner .admin-login-metrics{margin:12px 0
  body#blinqPremium .admin-activity-event>span:nth-child(3){grid-column:1/-1;grid-row:2}
  body#blinqPremium .admin-activity-event>span:nth-child(4){grid-column:2;grid-row:1}
 }
+
+body#blinqPremium .admin-telemetry-controls{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  border-top:1px solid #21423b;padding:13px 0 6px
+}
+body#blinqPremium .admin-telemetry-controls label{
+  display:flex;align-items:center;gap:9px;color:#bad5cb;font-size:11px;font-weight:700
+}
+body#blinqPremium .admin-telemetry-controls select{
+  height:36px;padding:0 10px;background:#09242a;color:#f1fafa;border:1px solid #295e53;border-radius:8px
+}
+body#blinqPremium .admin-telemetry-controls .admin-activity-delete{border-color:#974d44;color:#f5afa8}
