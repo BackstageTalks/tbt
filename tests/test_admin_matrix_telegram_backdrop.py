@@ -24,3 +24,11 @@ def test_telegram_background_is_once_on_section_not_on_each_card():
     assert 'background:rgba(2,18,18,.92)!important' in addition
     assert 'grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))!important' in addition
     assert "tg-artwork=1" in html
+
+
+def test_admin_navigation_supports_saved_order_and_default_reset():
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    css = (ROOT / "blinq-app.css").read_text(encoding="utf-8")
+    assert 'data-admin-nav-reset' in app
+    assert 'localStorage.removeItem(ADMIN_TAB_ORDER_KEY)' in app
+    assert 'admin-nav-toolbar{flex-wrap:wrap!important}' in css
