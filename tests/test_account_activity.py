@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from tbt.services import account_storage as accounts
+from tbt.services import account_telemetry as telemetry
 
 
 class MemoryTable:
@@ -127,6 +128,31 @@ def test_older_events_deleted_while_new_events_retained(store):
     assert next(iter(table.rows.values()))["RowKey"] == "new"
 
 
+def test_login_reload_telemetry_retention_does_not_erase_tg_tasks(store, monkeypatch):
+    monkeypatch.setattr(telemetry, "_table", lambda name: store.setdefault(name, MemoryTable()))
+    assert telemetry.save_account_telemetry_settings(14)["retention_days"] == 14
+    with pytest.raises(ValueError, match="Unsupported"):
+        telemetry.save_account_telemetry_settings(3)
+
+    now = datetime.now(timezone.utc)
+    login = store.setdefault(telemetry.LOGIN_TABLE, MemoryTable())
+    reload = store.setdefault(telemetry.RELOAD_TABLE, MemoryTable())
+    for table, field in ((login, "signed_in_at"), (reload, "reloaded_at")):
+        table.create_entity({"PartitionKey": "uid", "RowKey": "old", field: (now - timedelta(days=16)).isoformat()})
+        table.create_entity({"PartitionKey": "uid", "RowKey": "new", field: now.isoformat()})
+
+    accounts.record_account_event(
+        actor_id="worker", target_id="user42",
+        action="paid_membership_downgraded", outcome="success",
+        after={"from_plan": "elite", "to_plan": "rookie"},
+    )
+    purged = telemetry.prune_account_telemetry()
+    assert purged == {"deleted": 2, "logins": 1, "reloads": 1}
+    assert len(accounts.list_pending_telegram_cleanup()) == 1
+    assert telemetry.prune_account_telemetry(all_events=True)["deleted"] == 2
+    assert accounts.list_pending_telegram_cleanup()
+
+
 def test_admin_ui_contract():
     root = Path(__file__).resolve().parents[1]
     app = (root / "web" / "app.js").read_text(encoding="utf-8")
@@ -137,5 +163,7 @@ def test_admin_ui_contract():
     assert "adminActivityRetention" in app
     assert "clear-activity" in app
     assert "admin-legacy-metrics" in app
+    assert "adminTelemetryRetention" in app
+    assert "clear-telemetry" in app
     assert "adminConfirmTelegramCleanup" in auth
     assert 'route="v1/admin/account-activity/tg-confirm"' in api
