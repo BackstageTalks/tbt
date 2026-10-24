@@ -63,6 +63,7 @@ def setup(monkeypatch, users, metas=None):
         return True
 
     monkeypatch.setattr(lifecycle, "send_blinq_transactional_email", send)
+    monkeypatch.setattr(lifecycle, "record_account_event", lambda **_kwargs: None)
     monkeypatch.setattr(lifecycle, "save_inactivity_state", lambda uid, **kw: saved_inactivity.append((uid, kw)) or {})
     monkeypatch.setattr(lifecycle, "save_subscription_notice_state", lambda uid, **kw: saved_paid.append((uid, kw)) or {})
     monkeypatch.setattr(lifecycle, "update_user_access", lambda _cfg, uid, payload, **kw: updates.append((uid, payload, kw)) or {})
@@ -232,6 +233,20 @@ def test_expired_paid_plans_are_persistently_downgraded_and_push_is_synced(monke
         if plan in {"elite", "legend", "goat"}:
             admin_mail = next(kwargs for recipient, kwargs in sent if recipient == "ops@example.test")
             assert "check manual Telegram VIP removal" in admin_mail["body_sk"]
+
+
+def test_paid_downgrade_emits_operator_queue_event(monkeypatch):
+    account = paid(0, "elite")
+    setup(monkeypatch, [account], {account["id"]: {"telegram_nick": "@member78"}})
+    events = []
+    monkeypatch.setattr(lifecycle, "record_account_event", lambda **kw: events.append(kw))
+    monkeypatch.setattr(lifecycle, "sync_push_access", lambda **kw: None)
+    result = lifecycle.run_inactivity_review(cfg(), {"account_inactivity": {"enabled": False}}, now=NOW)
+    assert result["paid_downgraded"] == 1
+    assert len(events) == 1
+    assert events[0]["action"] == "paid_membership_downgraded"
+    assert events[0]["after"]["telegram_nick"] == "@member78"
+    assert events[0]["after"]["to_plan"] == "rookie"
 
 
 def test_renewed_paid_membership_is_not_downgraded_from_stale_scan(monkeypatch):
