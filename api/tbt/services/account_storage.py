@@ -713,7 +713,7 @@ def confirm_telegram_cleanup(user_id: object, *, event_id: str, actor_id: str) -
     uid = str(user_id or "").strip()
     key = _key(uid)
     event_id = str(event_id or "").strip()
-    if not re.fullmatch(r"\\d{13}-[a-f0-9]{32}", event_id):
+    if not re.fullmatch(r"\d{13}-[a-f0-9]{32}", event_id):
         raise ValueError("Invalid cleanup event ID")
     actor = str(actor_id or "").strip()
     if not actor:
