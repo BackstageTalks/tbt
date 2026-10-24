@@ -17,6 +17,8 @@ from .admin_storage import AdminStorageUnavailable, _table
 
 ACCOUNT_TABLE = "BlinQAccounts"
 AUDIT_TABLE = "BlinQAccountAudit"
+ACTIVITY_TABLE = "BlinQAccountEvents"
+ACTIVITY_SETTINGS_TABLE = "BlinQAccountActivitySettings"
 _TELEGRAM_RE = re.compile(r"^@?[A-Za-z0-9_]{5,32}$")
 
 
@@ -99,6 +101,8 @@ def _public_entity(entity: dict | None) -> dict:
         # Admin-only operational metadata. These values are intentionally kept
         # outside Firebase custom claims and are never returned by public_account().
         "tg_private_member": bool(row.get("tg_private_member", False)),
+        "tg_cleanup_confirmed_event": str(row.get("tg_cleanup_confirmed_event") or "")[:64],
+        "tg_cleanup_confirmed_at": row.get("tg_cleanup_confirmed_at"),
         "admin_note": str(row.get("admin_note") or "")[:500],
         "profile_updated_at": row.get("profile_updated_at"),
         "access_metadata_updated_at": row.get("access_metadata_updated_at"),
@@ -524,11 +528,11 @@ def record_account_event(*, actor_id: object, target_id: object, action: str,
     target = str(target_id or "").strip()[:256]
     if not actor or not target:
         raise ValueError("Audit actor and target are required")
-    if action not in {"account_email_delivery", "paid_membership_downgraded"}:
+    if action not in {"account_email_delivery", "paid_membership_downgraded", "account_access_changed", "telegram_cleanup_confirmed"}:
         raise ValueError("Unsupported operational audit action")
     if outcome not in {"success", "sent", "failed"}:
         raise ValueError("Unsupported operational audit outcome")
-    allowed = {"email", "subject", "from_plan", "to_plan", "expired_at", "error_type"}
+    allowed = {"email", "subject", "from_plan", "to_plan", "expired_at", "error_type", "telegram_nick"}
     def clean(payload: dict | None) -> dict:
         return {
             key: str(value)[:240]
@@ -548,9 +552,153 @@ def record_account_event(*, actor_id: object, target_id: object, action: str,
         "occurred_at": now.isoformat(),
     }
     try:
-        _table(AUDIT_TABLE).create_entity(entity)
+        _table(ACTIVITY_TABLE).create_entity(entity)
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to store account activity event") from exc
+
+
+
+def _activity_months(now: datetime, months: int = 13):
+    year, month = now.year, now.month
+    for _ in range(months):
+        yield f"{year:04d}{month:02d}"
+        month -= 1
+        if month == 0:
+            month, year = 12, year - 1
+
+
+def account_activity_settings() -> dict:
+    """Admin-only operational log retention; immutable access audit is separate."""
+    try:
+        row = _table(ACTIVITY_SETTINGS_TABLE).get_entity(
+            partition_key="global", row_key="settings"
+        )
+    except Exception as exc:
+        if _not_found(exc):
+            return {"retention_days": 90}
+        raise AdminStorageUnavailable("Unable to load account activity settings") from exc
+    days = int(row.get("retention_days") or 90)
+    return {"retention_days": max(7, min(365, days))}
+
+
+def save_account_activity_settings(days: object) -> dict:
+    try:
+        days = int(days)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid retention days") from exc
+    if days not in {7, 14, 30, 60, 90, 180, 365}:
+        raise ValueError("Unsupported retention period")
+    try:
+        _table(ACTIVITY_SETTINGS_TABLE).upsert_entity({
+            "PartitionKey": "global", "RowKey": "settings", "retention_days": days,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }, mode="merge")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save account activity settings") from exc
+    return {"retention_days": days}
+
+
+def _load_activity_rows(*, target_id: str = "") -> list[dict]:
+    client = _table(ACTIVITY_TABLE)
+    rows = []
+    try:
+        for month in _activity_months(datetime.now(timezone.utc)):
+            for row in client.query_entities(query_filter=f"PartitionKey eq '{month}'"):
+                if target_id and str(row.get("target_id") or "") != target_id:
+                    continue
+                rows.append(row)
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to load account activity") from exc
+    return rows
+
+
+def list_account_activity(*, limit: int = 500) -> dict:
+    limit = max(1, min(1000, int(limit)))
+    settings = account_activity_settings()
+    cutoff = datetime.now(timezone.utc).timestamp() - settings["retention_days"] * 86400
+    rows = _load_activity_rows()
+    items = []
+    for row in rows:
+        occurred = str(row.get("occurred_at") or "")
+        try:
+            dt = datetime.fromisoformat(occurred.replace("Z", "+00:00"))
+            if dt.timestamp() < cutoff:
+                continue
+        except ValueError:
+            continue
+        def parse(field):
+            try:
+                payload = json.loads(str(row.get(field) or "{}"))
+                return payload if isinstance(payload, dict) else {}
+            except (ValueError, TypeError):
+                return {}
+        items.append({
+            "id": str(row.get("RowKey") or ""),
+            "target_id": str(row.get("target_id") or ""),
+            "actor_id": str(row.get("actor_id") or ""),
+            "action": str(row.get("action") or ""),
+            "outcome": str(row.get("outcome") or ""),
+            "occurred_at": occurred,
+            "before": parse("before_json"),
+            "after": parse("after_json"),
+        })
+    items.sort(key=lambda item: (item["occurred_at"], item["id"]), reverse=True)
+    return {"items": items[:limit], "total": len(items), "settings": settings}
+
+
+def prune_account_activity(*, all_events: bool = False) -> dict:
+    """Remove only operational event rows; the immutable account audit is untouched."""
+    if not isinstance(all_events, bool):
+        raise ValueError("Invalid event removal option")
+    days = account_activity_settings()["retention_days"]
+    cutoff = datetime.now(timezone.utc).timestamp() - days * 86400
+    removed = 0
+    client = _table(ACTIVITY_TABLE)
+    for row in _load_activity_rows():
+        try:
+            ts = datetime.fromisoformat(str(row.get("occurred_at") or "").replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            continue
+        if all_events or ts < cutoff:
+            try:
+                client.delete_entity(partition_key=row["PartitionKey"], row_key=row["RowKey"])
+                removed += 1
+            except Exception as exc:
+                raise AdminStorageUnavailable("Unable to remove account activity") from exc
+    return {"deleted": removed}
+
+
+def confirm_telegram_cleanup(user_id: object, *, event_id: str, actor_id: str) -> dict:
+    """Confirm manual removal for one verified paid->ROOKIE event (not a Telegram API action)."""
+    uid = str(user_id or "").strip()
+    key = _key(uid)
+    event_id = str(event_id or "").strip()
+    if not re.fullmatch(r"\d{13}-[a-f0-9]{32}", event_id):
+        raise ValueError("Invalid cleanup event ID")
+    actor = str(actor_id or "").strip()
+    if not actor:
+        raise ValueError("Missing cleanup actor")
+    month = datetime.fromtimestamp(int(event_id[:13]) / 1000, tz=timezone.utc).strftime("%Y%m")
+    try:
+        event = _table(ACTIVITY_TABLE).get_entity(partition_key=month, row_key=event_id)
+    except Exception as exc:
+        if _not_found(exc):
+            raise ValueError("Cleanup event not found") from exc
+        raise AdminStorageUnavailable("Unable to verify cleanup event") from exc
+    if (str(event.get("target_id") or "") != uid
+            or str(event.get("action") or "") != "paid_membership_downgraded"
+            or str(event.get("outcome") or "") != "success"):
+        raise ValueError("Invalid paid expiry cleanup event")
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        _table(ACCOUNT_TABLE).upsert_entity({
+            "PartitionKey": "account", "RowKey": key, "user_id": uid,
+            "tg_private_member": False, "tg_cleanup_confirmed_event": event_id,
+            "tg_cleanup_confirmed_at": now, "tg_cleanup_confirmed_by": actor[:256],
+        }, mode="merge")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save Telegram cleanup confirmation") from exc
+    return {"target_id": uid, "event_id": event_id, "confirmed_at": now}
 
 
 PAYMENTS_TABLE = "BlinQPayments"
