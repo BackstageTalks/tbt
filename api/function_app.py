@@ -71,6 +71,9 @@ from tbt.services.admin_storage import (
     save_insight,
     delete_insight,
     list_info_results,
+    info_result_retention_days,
+    save_info_result_retention,
+    cleanup_info_results,
     save_info_result,
     delete_info_result,
     mark_insight_read,
@@ -3247,6 +3250,35 @@ def admin_user_payments(req):
             return response({"error": "invalid_json"}, 400)
         payment = record_manual_payment(user_id, payload, actor_id=str(actor.get("id") or ""))
         return response({"saved": True, "payment": payment, "items": list_manual_payments(user_id, limit=200)}, 201)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/info-results/manage", methods=["GET", "PUT", "DELETE"])
+def admin_info_results_management(req):
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        if req.method == "GET":
+            return response({"retention_days": info_result_retention_days()})
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        if not isinstance(payload, dict):
+            return response({"error": "invalid_json"}, 400)
+        if req.method == "PUT":
+            days = save_info_result_retention(payload.get("retention_days"), actor_id=str(actor.get("id") or ""))
+            return response({"retention_days": days})
+        if payload.get("confirmation") != "DELETE ALL INFO RESULTS":
+            return response({"error": "confirmation_required"}, 400)
+        result = cleanup_info_results(delete_all=True, actor_id=str(actor.get("id") or ""))
+        return response(result, 200 if not result["failed"] else 207)
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
     except AuthUnavailable:
