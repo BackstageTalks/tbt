@@ -26,6 +26,7 @@ from tbt.services.auth import (
     update_firebase_profile,
     verify_user,
     firebase_get_user_by_email,
+    firebase_get_user,
     firebase_app,
 )
 from tbt.services.admin_accounts import (
@@ -3332,11 +3333,15 @@ def admin_account_telegram_cleanup(req):
         event_id = str(payload.get("event_id") or "").strip()
         if not uid or not event_id or set(payload) != {"target_id", "event_id"}:
             return response({"error": "invalid_cleanup_request"}, 400)
-        target = get_user(settings, uid)
-        current = public_account(target, cfg=settings)
-        if str(current.get("plan") or "").lower() not in {"rookie", "expired"}:
-            return response({"error": "paid_access_restored"}, 409)
-        saved = confirm_telegram_cleanup(uid, event_id=event_id, actor_id=str(actor.get("id") or ""))
+        target = firebase_get_user(settings, uid)
+        if target:
+            current = public_account(target, cfg=settings)
+            if str(current.get("plan") or "").lower() not in {"rookie", "expired"}:
+                return response({"error": "paid_access_restored"}, 409)
+        saved = confirm_telegram_cleanup(
+            uid, event_id=event_id, actor_id=str(actor.get("id") or ""),
+            user_exists=bool(target),
+        )
         return response(saved)
     except (ValueError, TypeError) as exc:
         return response({"error": str(exc)}, 400)
