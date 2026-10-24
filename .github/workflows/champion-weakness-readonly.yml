@@ -1,0 +1,61 @@
+name: Read-only Champion Weakness Audit
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/audit_champion_weakness_current.py'
+      - 'tests/test_champion_weakness_current.py'
+      - '.github/workflows/champion-weakness-readonly.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  champion-diagnosis:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      PYTHONDONTWRITEBYTECODE: '1'
+      BLINQ_RAPIDAPI_MAX_RPS: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install offline audit dependencies
+        run: python -m pip install -r api/requirements-train.txt pytest
+      - name: Verify privacy and read-only contracts
+        run: python -m pytest -q tests/test_champion_weakness_current.py
+      - name: Read signed private source releases and compute aggregate only
+        run: |
+          test -n "$GH_TOKEN"
+          python scripts/audit_champion_weakness_current.py \
+            --top-days 45 --loss-days 21 \
+            --out /tmp/blinq-champion-weakness/aggregates.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/blinq-champion-weakness/aggregates.json')
+          d=json.loads(p.read_text())
+          assert d['provider_requests']==0
+          assert d['production_mutated'] is False
+          assert d['model_fitting_performed'] is False
+          assert 'losses' not in d['published_top_value_losses']
+          assert 'betting_day_counts' not in d['published_top']['coverage']
+          assert d['prospective_champion_vs_frozen_721']['eligible_settled'] >= 0
+          print('Source-pinned aggregate-only audit validated')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: champion-weakness-aggregate-${{ github.run_id }}
+          path: /tmp/blinq-champion-weakness/aggregates.json
+          retention-days: 14
+          if-no-files-found: error
