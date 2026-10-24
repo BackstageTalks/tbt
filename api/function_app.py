@@ -468,6 +468,8 @@ def _admin_account_row(user, profile=None):
         "payment_reference": str(profile.get("payment_reference") or "")[:120],
         **tg_state,
         "admin_note": str(profile.get("admin_note") or "")[:500],
+        "tg_cleanup_confirmed_event": str(profile.get("tg_cleanup_confirmed_event") or "")[:64],
+        "tg_cleanup_confirmed_at": profile.get("tg_cleanup_confirmed_at"),
         "legal_consent_version": str(profile.get("legal_consent_version") or "")[:40],
         "legal_consent_locale": str(profile.get("legal_consent_locale") or "")[:8],
         "legal_consent_at": profile.get("legal_consent_at"),
