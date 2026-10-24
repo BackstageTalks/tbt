@@ -1,0 +1,59 @@
+name: 7.2.1 latest issued shadow sanity check
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/721-current-shadow-sanity.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  shadow:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_RAPIDAPI_MAX_RPS: '0'
+      PYTHONPATH: api:scripts
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install offline dependencies
+        run: python -m pip install -r api/requirements-train.txt pytest
+      - name: Audit existing model tags and original issued pre-match probabilities
+        run: |
+          test -n "$GH_TOKEN"
+          python -m pytest -q tests/test_audit_model_shadow_readonly.py tests/test_shadow_evaluation.py
+          python scripts/audit_model_shadow_readonly.py --out /tmp/blinq-shadow-issued/current-shadow.json
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads(Path('/tmp/blinq-shadow-issued/current-shadow.json').read_text())
+          assert r['cohort']['settled'] >= 0
+          assert r.get('status') in {'EVALUATED','INSUFFICIENT_SAMPLE'} or 'status' in r
+          lines=[
+            '### Separate originally issued shadow cohort (NOT all champion-unseen matches)',
+            'Champion: '+str(r['production_model_version']),
+            'Candidate: '+str(r['challenger_model_version']),
+            'Captured / settled: '+str(r['cohort']),
+            'Metrics: '+str(r['overall']),
+            'Model promotion: prohibited by this read-only CI',
+          ]
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('\n'.join(lines)+'\n')
+          print('\n'.join(lines))
+          PY
+      - name: Upload aggregate-only issued prediction audit
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 721-current-issued-shadow-${{ github.run_id }}
+          path: /tmp/blinq-shadow-issued/current-shadow.json
+          if-no-files-found: error
+          retention-days: 14
