@@ -40,6 +40,9 @@ class TourBundle(TennisEnsemble):
     def fit(self, *args, **kwargs):
         raise RuntimeError("Fit components only through the governed training workflow")
 
+    def fit_frozen(self, *args, **kwargs):
+        raise RuntimeError("Fit components only through the governed training workflow")
+
     def predict_proba(self, frame):
         self.validate()
         return pooled_predictions(frame, self.pooled, self.specialists, self.weights)
