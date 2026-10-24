@@ -4151,9 +4151,14 @@ function adminActivityRows(){
     const activity=state.adminActivity,events=adminActivityRows(),users=state.adminUsers||[];
     const profileMap=new Map(users.map(u=>[String(u.id),u]));
     const expiry=events.filter(row=>row.action==='paid_membership_downgraded'&&row.outcome==='success');
-    const pending=expiry.filter(row=>{
+    // Telegram work queue is durable even after an operator clears or ages out
+    // the event feed. Never infer completion from missing history rows.
+    const pending=(Array.isArray(activity?.tg_pending)?activity.tg_pending:[]).map(item=>({
+      id:item.event_id, target_id:item.target_id, occurred_at:item.occurred_at,
+      after:{email:item.email,telegram_nick:item.telegram_nick,from_plan:item.from_plan,expired_at:item.expired_at}
+    })).filter(row=>{
       const user=profileMap.get(String(row.target_id));
-      return user&&String(user.tg_cleanup_confirmed_event||'')!==String(row.id||'');
+      return !(user&&adminActivityIsPaid(user.plan)&&String(user.status||'').toLowerCase()==='active');
     });
     const sent=events.filter(row=>row.action==='account_email_delivery'&&row.outcome==='sent').length;
     const failed=events.filter(row=>row.action==='account_email_delivery'&&row.outcome==='failed').length;
