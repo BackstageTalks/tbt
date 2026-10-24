@@ -86,7 +86,7 @@ def main():
                 if populated:
                     stats_nonempty+=1
                     by_year_stat[year]+=1
-                statskeys.update(populated)
+                statskeys.update(populated.keys())
                 record=(mid,tour,int(year))
                 remain=[]
                 for field in wanted[2:]:
