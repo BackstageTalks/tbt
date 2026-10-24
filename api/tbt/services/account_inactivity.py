@@ -20,7 +20,6 @@ from zoneinfo import ZoneInfo
 from .account_storage import (
     load_account_metadata,
     record_account_event,
-    prune_account_activity,
     save_inactivity_state,
     save_subscription_notice_state,
 )
@@ -627,12 +626,5 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
         count = _send_admin_summary(cfg, _admin_summary_body(policy, new_warnings, newly_expired, paid7, paid3, failures, downgraded))
         summary["admin_emails"] = count
         summary["admin_email"] = count > 0
-
-    # Enforce operator-selected retention on the existing scheduled daily worker.
-    # Audit maintenance must not roll back paid access updates or mail transport.
-    try:
-        prune_account_activity()
-    except AdminStorageUnavailable:
-        logging.exception("Account activity cleanup unavailable")
 
     return summary
