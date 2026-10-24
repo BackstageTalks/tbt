@@ -22,7 +22,7 @@ def test_compact_omits_private_loss_rows_and_preserves_model_pair():
             "losses":[{"player":"DO_NOT_EXPORT","event_id":"private-event"}]}
     shadow = {"eligible_settled":2,"overall":{"n":2},
               "eligible_rows_by_utc_day":{"2026-10-24":2}}
-    report=compact(top,loss,shadow,ledger_sha="a",model_sha="b",history_sha="c",
+    report=compact(top,loss,shadow,version_breakdown={"current_version":"pinned-champ","current_45_days":{"settled":1}},ledger_sha="a",model_sha="b",history_sha="c",
                    now=datetime(2026,10,24,tzinfo=timezone.utc))
     serialized=json.dumps(report)
     assert "DO_NOT_EXPORT" not in serialized
