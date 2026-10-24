@@ -3,6 +3,12 @@ import pandas as pd
 from study_metric_combinations import arms, select_mix, study
 from test_temporal_tour_study import FakeModel
 
+def test_metric_report_is_retained_by_protected_workflow():
+    from pathlib import Path
+    text=(Path(__file__).resolve().parents[1]/'.github/workflows/protected-frozen-cdb-candidate.yml').read_text()
+    upload=text.split('name: Persist non-sensitive run proof as GitHub artifact',1)[1]
+    assert '.cache/tbt/training-backup/metric-combinations.json' in upload
+
 def test_selection_prefers_baseline_on_tie_and_rejects_worse():
     y=np.array([0,1,0,1]);p=np.array([.2,.8,.2,.8])
     assert select_mix(y,{'baseline':p,'other':p})=={'baseline':1.}

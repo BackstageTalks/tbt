@@ -212,6 +212,7 @@ jobs:
             .cache/tbt/training-backup/verified-certificate.json
             .cache/tbt/model/training_report.json
             .cache/tbt/training-backup/temporal-tour-study.json
+            .cache/tbt/training-backup/metric-combinations.json
             .cache/tbt/production/leakage_audit_report.json
           if-no-files-found: warn
           retention-days: 30

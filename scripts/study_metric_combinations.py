@@ -67,5 +67,5 @@ def study(frame, output, factory=TennisEnsemble, starts=('2026-01-01','2026-04-0
         for group,mask in [('all',np.ones(len(test),dtype=bool)),('atp',test.tour_atp.to_numpy()==1),('wta',test.tour_atp.to_numpy()==0)]:
             if mask.sum(): fold['groups'][group]={k:metrics(test.target.to_numpy()[mask],v[mask]) for k,v in pred.items()}
         report['folds'].append(fold);save()
-        print(json.dumps({'completed_fold':start}),flush=True)
+        print(json.dumps({'completed_fold':start, 'results':fold}, allow_nan=False),flush=True)
     report['status']='COMPLETED_RESEARCH_ONLY';save();return report
