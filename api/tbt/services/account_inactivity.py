@@ -616,6 +616,15 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                     summary["mail_failures"] += 1
                     failures.append(f"{email or uid} · inactivity expired · {exc.__class__.__name__}")
 
+    # Enforce administrator-configured INFO history retention during daily
+    # account housekeeping. Errors must not abort membership reconciliation.
+    try:
+        from .admin_storage import cleanup_info_results
+        summary["info_results_cleanup"] = cleanup_info_results(actor_id="account-lifecycle-worker")
+    except AdminStorageUnavailable:
+        summary["info_results_cleanup"] = {"error": "storage_unavailable"}
+        logging.exception("INFO result retention cleanup was unavailable")
+
     summary["warnings"] = len(new_warnings)
     summary["expired"] = len(newly_expired)
     summary["subscription_7"] = len(paid7)
