@@ -26,6 +26,7 @@ from tbt.services.auth import (
     update_firebase_profile,
     verify_user,
     firebase_get_user_by_email,
+    firebase_get_user,
     firebase_app,
 )
 from tbt.services.admin_accounts import (
@@ -47,6 +48,11 @@ from tbt.services.account_storage import (
     record_manual_payment,
     list_manual_payments,
     list_account_audit,
+    list_account_activity,
+    account_activity_settings,
+    save_account_activity_settings,
+    prune_account_activity,
+    confirm_telegram_cleanup,
     delete_account_metadata,
     save_daily_access_allocations,
 )
@@ -65,6 +71,9 @@ from tbt.services.admin_storage import (
     save_insight,
     delete_insight,
     list_info_results,
+    info_result_retention_days,
+    save_info_result_retention,
+    cleanup_info_results,
     save_info_result,
     delete_info_result,
     mark_insight_read,
@@ -121,6 +130,10 @@ from tbt.services.entitlements import (
 )
 from tbt.services.login_metrics import load_login_statistics, TRACKING_STARTED_AT
 from tbt.services.page_reload_metrics import record_reload, load_reload_statistics
+from tbt.services.account_telemetry import (
+    load_account_telemetry_settings, save_account_telemetry_settings,
+    prune_account_telemetry,
+)
 from tbt.services.account_inactivity import run_inactivity_review, smtp_diagnostics, inactivity_policy
 from tbt.services.live_comeback import (
     scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
@@ -463,6 +476,8 @@ def _admin_account_row(user, profile=None):
         "payment_reference": str(profile.get("payment_reference") or "")[:120],
         **tg_state,
         "admin_note": str(profile.get("admin_note") or "")[:500],
+        "tg_cleanup_confirmed_event": str(profile.get("tg_cleanup_confirmed_event") or "")[:64],
+        "tg_cleanup_confirmed_at": profile.get("tg_cleanup_confirmed_at"),
         "legal_consent_version": str(profile.get("legal_consent_version") or "")[:40],
         "legal_consent_locale": str(profile.get("legal_consent_locale") or "")[:8],
         "legal_consent_at": profile.get("legal_consent_at"),
@@ -2128,6 +2143,16 @@ def internal_account_inactivity_worker(req):
             # never auto-expire because the published admin policy is unavailable.
             runtime={"account_inactivity":{"enabled":True,"notify_admin":True,"notify_user":False,"auto_expire_rookie":False}}
         result=run_inactivity_review(settings,runtime)
+        try:
+            result["activity_pruned"] = prune_account_activity()
+        except AdminStorageUnavailable:
+            logging.exception("Account activity retention cleanup unavailable")
+            result["activity_pruned"] = {"error": "storage_unavailable"}
+        try:
+            result["telemetry_pruned"] = prune_account_telemetry()
+        except AdminStorageUnavailable:
+            logging.exception("Account telemetry retention cleanup unavailable")
+            result["telemetry_pruned"] = {"error": "storage_unavailable"}
         persisted=True
         try:
             save_account_worker_status(result)
@@ -3233,6 +3258,35 @@ def admin_user_payments(req):
         return response({"error": "admin_storage_unavailable"}, 503)
 
 
+@app.route(route="v1/admin/info-results/manage", methods=["GET", "PUT", "DELETE"])
+def admin_info_results_management(req):
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        if req.method == "GET":
+            return response({"retention_days": info_result_retention_days()})
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        if not isinstance(payload, dict):
+            return response({"error": "invalid_json"}, 400)
+        if req.method == "PUT":
+            days = save_info_result_retention(payload.get("retention_days"), actor_id=str(actor.get("id") or ""))
+            return response({"retention_days": days})
+        if payload.get("confirmation") != "DELETE ALL INFO RESULTS":
+            return response({"error": "confirmation_required"}, 400)
+        result = cleanup_info_results(delete_all=True, actor_id=str(actor.get("id") or ""))
+        return response(result, 200 if not result["failed"] else 207)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
 @app.route(route="v1/admin/audit", methods=["GET"])
 def admin_audit(req):
     try:
@@ -3253,6 +3307,145 @@ def admin_audit(req):
         return response({"error": "admin_storage_unavailable"}, 503)
 
 
+
+
+@app.route(route="v1/admin/account-telemetry", methods=["GET"])
+def admin_account_telemetry(req):
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        return response({"settings": load_account_telemetry_settings()})
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/account-telemetry/retention", methods=["PUT"])
+def admin_account_telemetry_retention(req):
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        payload = req.get_json()
+        if not isinstance(payload, dict) or set(payload) != {"retention_days"}:
+            return response({"error": "invalid_retention_request"}, 400)
+        settings = save_account_telemetry_settings(payload["retention_days"])
+        result = prune_account_telemetry()
+        return response({"settings": settings, **result})
+    except (ValueError, TypeError) as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/account-telemetry/clear", methods=["POST"])
+def admin_account_telemetry_clear(req):
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        payload = req.get_json()
+        if not isinstance(payload, dict) or payload.get("confirm") != "DELETE_TELEMETRY":
+            return response({"error": "confirmation_required"}, 400)
+        return response(prune_account_telemetry(all_events=True))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/account-activity", methods=["GET"])
+def admin_account_activity(req):
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        try:
+            limit = int(req.params.get("limit") or 500)
+        except (TypeError, ValueError):
+            return response({"error": "invalid_limit"}, 400)
+        return response(list_account_activity(limit=limit))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/account-activity/retention", methods=["PUT"])
+def admin_account_activity_retention(req):
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        payload = req.get_json()
+        if not isinstance(payload, dict) or set(payload) != {"retention_days"}:
+            return response({"error": "invalid_retention_request"}, 400)
+        settings = save_account_activity_settings(payload["retention_days"])
+        pruned = prune_account_activity()
+        return response({"settings": settings, **pruned})
+    except (ValueError, TypeError) as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/account-activity/clear", methods=["POST"])
+def admin_account_activity_clear(req):
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        payload = req.get_json()
+        if not isinstance(payload, dict) or payload.get("confirm") != "DELETE_ACTIVITY_LOG":
+            return response({"error": "confirmation_required"}, 400)
+        return response(prune_account_activity(all_events=True))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/account-activity/tg-confirm", methods=["POST"])
+def admin_account_telegram_cleanup(req):
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        payload = req.get_json()
+        if not isinstance(payload, dict):
+            return response({"error": "invalid_cleanup_request"}, 400)
+        uid = str(payload.get("target_id") or "").strip()
+        event_id = str(payload.get("event_id") or "").strip()
+        if not uid or not event_id or set(payload) != {"target_id", "event_id"}:
+            return response({"error": "invalid_cleanup_request"}, 400)
+        target = firebase_get_user(settings, uid)
+        if target:
+            current = public_account(target, cfg=settings)
+            if str(current.get("plan") or "").lower() not in {"rookie", "expired"}:
+                return response({"error": "paid_access_restored"}, 409)
+        saved = confirm_telegram_cleanup(
+            uid, event_id=event_id, actor_id=str(actor.get("id") or ""),
+            user_exists=bool(target),
+        )
+        return response(saved)
+    except (ValueError, TypeError) as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
 
 
 @app.route(route="v1/admin/project-groups", methods=["GET", "POST"])

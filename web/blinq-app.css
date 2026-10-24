@@ -10286,6 +10286,119 @@ body#blinqPremium .admin-row-overrides .admin-acca-stats-toggle>span{display:gri
 body#blinqPremium .admin-row-overrides .admin-acca-stats-toggle strong{font-size:11px;color:#eaf7f1}
 body#blinqPremium .admin-row-overrides .admin-acca-stats-toggle small{font-size:9px;line-height:1.5;color:#9abeb0;margin:0}
 
+
+/* Admin account operations / lifecycle audit · 2026-10-24 */
+body#blinqPremium .admin-accounts-simple .admin-activity-panel{
+  margin:20px 0 22px;border:1px solid #235344;border-radius:15px;
+  background:linear-gradient(135deg,#051c1d,#031419 70%);overflow:hidden;
+}
+body#blinqPremium .admin-activity-header{
+  padding:20px 22px;display:flex;justify-content:space-between;align-items:center;gap:20px;
+}
+body#blinqPremium .admin-activity-header small{font-size:10px;color:#44eab3;font-weight:900;letter-spacing:.08em}
+body#blinqPremium .admin-activity-header h3{margin:5px 0 6px;font-size:19px;color:#ebfaf5}
+body#blinqPremium .admin-activity-header p,
+body#blinqPremium .admin-tg-cleanup p,
+body#blinqPremium .admin-activity-log-head p{margin:0;color:#90aca7;font-size:12px}
+body#blinqPremium .admin-activity-head-actions{display:flex;gap:8px;flex-wrap:wrap}
+body#blinqPremium .admin-activity-head-actions button{min-height:37px;white-space:nowrap}
+body#blinqPremium .admin-activity-body{padding:0 20px 20px}
+body#blinqPremium .admin-activity-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+body#blinqPremium .admin-activity-stats article{
+  padding:14px 15px;min-height:85px;border-radius:10px;background:#05251f;border:1px solid #1a4b3d;display:flex;flex-direction:column;gap:7px
+}
+body#blinqPremium .admin-activity-stats article.is-attention{border-color:#a87327;background:#302214}
+body#blinqPremium .admin-activity-stats span{color:#9ebeb4;font-size:11px}
+body#blinqPremium .admin-activity-stats strong{font-size:26px;color:#e4f7ef;font-variant-numeric:tabular-nums}
+body#blinqPremium .admin-tg-cleanup{
+  margin-top:20px;border:1px solid #93692f;border-radius:12px;padding:16px;
+  background:linear-gradient(90deg,rgba(137,92,34,.14),rgba(2,21,22,.6))
+}
+body#blinqPremium .admin-tg-cleanup header{margin-bottom:12px}
+body#blinqPremium .admin-tg-cleanup h4,
+body#blinqPremium .admin-activity-log-head h4{font-size:15px;margin:0 0 6px;color:#eff8f4}
+body#blinqPremium .admin-tg-cleanup h4 span{background:#65411e;color:#ffc97b;font-size:11px;padding:3px 7px;border-radius:20px;margin-left:5px}
+body#blinqPremium .admin-tg-cleanup-item{
+  border-top:1px solid #3c4032;padding:12px 1px;display:grid;align-items:center;
+  grid-template-columns:minmax(185px,2fr) minmax(125px,1fr) minmax(170px,1.25fr) auto;gap:12px
+}
+body#blinqPremium .admin-tg-cleanup-item>span{display:flex;flex-direction:column;gap:4px;min-width:0}
+body#blinqPremium .admin-tg-cleanup-item strong,body#blinqPremium .admin-tg-cleanup-item b{font-size:12px;color:#f2f7f1;overflow-wrap:anywhere}
+body#blinqPremium .admin-tg-cleanup-item small{font-size:10px;color:#a1aca5;overflow-wrap:anywhere}
+body#blinqPremium .admin-tg-cleanup-item .btn{white-space:normal;min-height:35px}
+body#blinqPremium .admin-activity-muted{font-size:11px;color:#b8c4b8}
+body#blinqPremium .admin-activity-log-head{
+  margin:20px 0 12px;display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap
+}
+body#blinqPremium .admin-activity-options{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+body#blinqPremium .admin-activity-options label{display:flex;gap:8px;align-items:center;font-size:11px;color:#adc4bd}
+body#blinqPremium .admin-activity-options select,
+body#blinqPremium .admin-activity-filters input,
+body#blinqPremium .admin-activity-filters select{
+  height:37px;border:1px solid #2c5d58;border-radius:8px;background:#081d24;color:#e5f9ef;padding:0 11px;font-size:12px;min-width:0
+}
+body#blinqPremium .admin-activity-options .admin-activity-delete{border-color:#975044;color:#f6ad9f}
+body#blinqPremium .admin-activity-filters{display:flex;gap:10px;margin-bottom:12px}
+body#blinqPremium .admin-activity-filters input{flex:1 1 250px}
+body#blinqPremium .admin-activity-filters select{flex:0 1 205px}
+body#blinqPremium .admin-activity-events{max-height:390px;overflow:auto;border:1px solid #21413e;border-radius:10px;background:#031517}
+body#blinqPremium .admin-activity-event{
+  display:grid;grid-template-columns:150px minmax(130px,1.2fr) minmax(210px,2fr) 110px;gap:12px;align-items:center;
+  padding:12px 14px;border-bottom:1px solid #173b36;font-size:12px
+}
+body#blinqPremium .admin-activity-event:last-child{border-bottom:0}
+body#blinqPremium .admin-activity-event>span{min-width:0;overflow-wrap:anywhere}
+body#blinqPremium .admin-activity-event b,
+body#blinqPremium .admin-activity-event strong{display:block;color:#e4f4f0;font-size:12px;font-weight:800}
+body#blinqPremium .admin-activity-event small{display:block;color:#8fa9a4;font-size:10px;margin-top:4px}
+body#blinqPremium .admin-activity-when{font-variant-numeric:tabular-nums;color:#91b8aa;font-size:11px}
+body#blinqPremium .admin-activity-status{border-radius:7px;padding:6px 8px;text-align:center;font-size:10px;font-weight:800}
+body#blinqPremium .admin-activity-status.is-ok{color:#61e2bc;background:#103b31}
+body#blinqPremium .admin-activity-status.is-error{color:#ffb3a8;background:#4e2527}
+body#blinqPremium .admin-activity-status.is-attention{color:#ffca84;background:#49341d}
+body#blinqPremium .admin-activity-empty,
+body#blinqPremium .admin-activity-notice{padding:16px;color:#a0bbb3;font-size:12px}
+body#blinqPremium .admin-activity-notice.is-error{color:#ffc5bf}
+body#blinqPremium .admin-activity-foot{color:#829e98;font-size:11px;line-height:1.5;margin:12px 0 0}
+body#blinqPremium .admin-legacy-metrics{margin:25px 0;border:1px solid #1c4241;border-radius:12px;background:#03171a}
+body#blinqPremium .admin-legacy-metrics summary{
+  padding:14px 18px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;
+  color:#cce6de;font-size:13px;font-weight:800;list-style:none
+}
+body#blinqPremium .admin-legacy-metrics summary::-webkit-details-marker{display:none}
+body#blinqPremium .admin-legacy-metrics summary span{color:#5de2b7;font-size:11px}
+body#blinqPremium .admin-legacy-metrics-inner{padding:0 14px 15px}
+body#blinqPremium .admin-legacy-metrics-inner .admin-login-metrics{margin:12px 0!important}
+@media(max-width:1100px){
+ body#blinqPremium .admin-activity-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+ body#blinqPremium .admin-tg-cleanup-item{grid-template-columns:minmax(140px,1.5fr) minmax(100px,1fr) minmax(130px,1fr)}
+ body#blinqPremium .admin-tg-cleanup-item button{grid-column:1/-1;justify-self:start}
+}
+@media(max-width:700px){
+ body#blinqPremium .admin-activity-header{align-items:flex-start;flex-direction:column;padding:16px}
+ body#blinqPremium .admin-activity-body{padding:0 12px 16px}
+ body#blinqPremium .admin-activity-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ body#blinqPremium .admin-tg-cleanup-item{grid-template-columns:1fr 1fr}
+ body#blinqPremium .admin-tg-cleanup-item .admin-tg-cleanup-user{grid-column:1/-1}
+ body#blinqPremium .admin-activity-filters{flex-direction:column}
+ body#blinqPremium .admin-activity-filters select{flex:auto}
+ body#blinqPremium .admin-activity-event{grid-template-columns:1fr auto;gap:7px}
+ body#blinqPremium .admin-activity-event>span:nth-child(3){grid-column:1/-1;grid-row:2}
+ body#blinqPremium .admin-activity-event>span:nth-child(4){grid-column:2;grid-row:1}
+}
+
+body#blinqPremium .admin-telemetry-controls{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  border-top:1px solid #21423b;padding:13px 0 6px
+}
+body#blinqPremium .admin-telemetry-controls label{
+  display:flex;align-items:center;gap:9px;color:#bad5cb;font-size:11px;font-weight:700
+}
+body#blinqPremium .admin-telemetry-controls select{
+  height:36px;padding:0 10px;background:#09242a;color:#f1fafa;border:1px solid #295e53;border-radius:8px
+}
+body#blinqPremium .admin-telemetry-controls .admin-activity-delete{border-color:#974d44;color:#f5afa8}
+
 /* Admin navigation and daily picks tab ordering (2026-10-24). */
 body#blinqPremium.blinq-admin .admin-nav-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 4px 9px}
 body#blinqPremium.blinq-admin .admin-nav-toolbar strong{font-size:10px;color:#8eb7a8;letter-spacing:.08em;text-transform:uppercase}
