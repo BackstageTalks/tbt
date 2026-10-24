@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminCalibration:null, adminCalibrationLoading:false, adminCalibrationError:'', adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email',loginDate:''}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminActivity:null, adminTelemetry:null, adminTelemetryLoading:false, adminTelemetryError:'', adminTelemetryExpanded:false, adminActivityLoading:false, adminActivityError:'', adminActivityExpanded:true, adminActivityType:'all', adminActivitySearch:'', adminActivityActionBusy:false, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminCalibration:null, adminCalibrationLoading:false, adminCalibrationError:'', adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email',loginDate:''}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -4107,6 +4107,152 @@
       ${self?'':`<details class="admin-danger-zone"><summary>Nebezpečná zóna</summary><div><div><strong>Zmazať účet</strong><small>Natrvalo odstráni Firebase účet a jeho profilové údaje</small></div><button type="button" data-admin-action="delete-user">Zmazať účet</button></div></details>`}
     </form>`;
   }
+function adminActivityRows(){
+    return Array.isArray(state.adminActivity?.items)?state.adminActivity.items:[];
+  }
+  function adminActivityUser(row){
+    return (state.adminUsers||[]).find(user=>String(user.id)===String(row?.target_id))||null;
+  }
+  function adminActivityIsPaid(plan){
+    return ['pro','elite','legend','goat'].includes(String(plan||'').toLowerCase());
+  }
+  function adminActivityLabel(row){
+    const act=String(row.action||'');
+    if(act==='paid_membership_downgraded')return 'Platený → ROOKIE';
+    if(act==='account_access_changed')return 'Zmena prístupu';
+    if(act==='telegram_cleanup_confirmed')return 'Telegram vybavený';
+    if(act==='account_email_delivery'){
+      const subject=String(row.after?.subject||'');
+      if(/7 dní|7 days/i.test(subject))return 'E-mail · 7 dní';
+      if(/3 dni|3 dní|3 days/i.test(subject))return 'E-mail · 3 dni';
+      if(/inactive|neaktív|free účet/i.test(subject))return 'E-mail · neaktivita';
+      if(/password|hesla/i.test(subject))return 'E-mail · heslo';
+      if(/overenie|verify/i.test(subject))return 'E-mail · overenie';
+      return 'E-mail · oznámenie';
+    }
+    return 'Udalosť účtu';
+  }
+  function adminActivityType(row){
+    if(row.action==='paid_membership_downgraded')return 'tg';
+    if(row.action==='account_email_delivery')return String(row.outcome)==='failed'?'failed':'email';
+    return 'change';
+  }
+  function adminActivityVisibleRows(){
+    const search=String(state.adminActivitySearch||'').toLowerCase().trim(),type=String(state.adminActivityType||'all');
+    return adminActivityRows().filter(row=>{
+      const category=adminActivityType(row);
+      if(type!=='all'&&type!==category&&!(type==='email'&&category==='failed'))return false;
+      const user=adminActivityUser(row);
+      const hay=[user?.email,user?.telegram_nick,row.after?.email,row.after?.subject,row.target_id,adminActivityLabel(row)].join(' ').toLowerCase();
+      return !search||hay.includes(search);
+    });
+  }
+  function renderAdminAccountActivity(){
+    const activity=state.adminActivity,events=adminActivityRows(),users=state.adminUsers||[];
+    const profileMap=new Map(users.map(u=>[String(u.id),u]));
+    const expiry=events.filter(row=>row.action==='paid_membership_downgraded'&&row.outcome==='success');
+    // Telegram work queue is durable even after an operator clears or ages out
+    // the event feed. Never infer completion from missing history rows.
+    const pending=(Array.isArray(activity?.tg_pending)?activity.tg_pending:[]).map(item=>({
+      id:item.event_id, target_id:item.target_id, occurred_at:item.occurred_at,
+      after:{email:item.email,telegram_nick:item.telegram_nick,from_plan:item.from_plan,expired_at:item.expired_at}
+    })).filter(row=>{
+      const user=profileMap.get(String(row.target_id));
+      return !(user&&adminActivityIsPaid(user.plan)&&String(user.status||'').toLowerCase()==='active');
+    });
+    const sent=events.filter(row=>row.action==='account_email_delivery'&&row.outcome==='sent').length;
+    const failed=events.filter(row=>row.action==='account_email_delivery'&&row.outcome==='failed').length;
+    const changes=events.filter(row=>row.action==='account_access_changed').length;
+    const retention=Number(activity?.settings?.retention_days||90);
+    const options=[7,14,30,60,90,180,365].map(days=>`<option value="${days}"${retention===days?' selected':''}>${days} dní</option>`).join('');
+    const cards=`<div class="admin-activity-stats">
+      <article class="is-attention"><span>Na kontrolu v Telegrame</span><strong>${pending.length}</strong></article>
+      <article><span>Prechody na ROOKIE</span><strong>${expiry.length}</strong></article>
+      <article><span>E-maily · SMTP prijaté</span><strong>${sent}</strong></article>
+      <article><span>Chyby odoslania</span><strong>${failed}</strong></article>
+      <article><span>Ostatné zmeny prístupu</span><strong>${changes}</strong></article>
+    </div>`;
+    const cleanupRows=pending.map(row=>{
+      const user=profileMap.get(String(row.target_id)),email=row.after?.email||user?.email||'—',nickname=user?.telegram_nick||row.after?.telegram_nick||'—';
+      const isRestored=adminActivityIsPaid(user?.plan)&&String(user?.status||'').toLowerCase()==='active';
+      return `<div class="admin-tg-cleanup-item">
+        <span class="admin-tg-cleanup-user"><strong>${escapeHtml(nickname)}</strong><small>${escapeHtml(email)}</small></span>
+        <span><small>Skončený level</small><b>${escapeHtml(String(row.after?.from_plan||'').toUpperCase())} → ROOKIE</b></span>
+        <span><small>Expirácia</small><b>${escapeHtml(adminLastLoginLabel(row.after?.expired_at||row.occurred_at))}</b></span>
+        ${isRestored?'<span class="admin-activity-muted">Platený prístup obnovený</span>':`<button class="btn btn-ghost" type="button" data-admin-action="tg-cleanup-confirm" data-activity-id="${escapeHtml(row.id)}" data-activity-user="${escapeHtml(row.target_id)}">Potvrdiť odobratie z TG</button>`}
+      </div>`;
+    }).join('');
+    const rows=adminActivityVisibleRows().map(row=>{
+      const user=profileMap.get(String(row.target_id)),kind=adminActivityType(row),email=row.after?.email||user?.email||'—';
+      const nick=user?.telegram_nick||row.after?.telegram_nick||'';
+      const details=row.action==='account_email_delivery'
+        ?String(row.after?.subject||'')
+        :row.action==='paid_membership_downgraded'
+          ?`${String(row.after?.from_plan||'').toUpperCase()} → ROOKIE · platnosť ${adminLastLoginLabel(row.after?.expired_at)}`
+          :`${String(row.before?.from_plan||'').toUpperCase()} → ${String(row.after?.to_plan||'').toUpperCase()}`;
+      const delivered=row.action==='account_email_delivery';
+      const label=delivered?(row.outcome==='sent'?'SMTP prijaté':row.outcome==='failed'?'Chyba':'Neznámy stav'):'Zaznamenané';
+      const statusClass=delivered&&row.outcome==='failed'?'is-error':kind==='tg'?'is-attention':'is-ok';
+      const errorType=String(row.after?.error_type||'');
+      return `<div class="admin-activity-event" data-admin-activity-row>
+        <span class="admin-activity-when">${escapeHtml(adminLastLoginLabel(row.occurred_at))}</span>
+        <span><strong>${escapeHtml(nick||email)}</strong>${nick?`<small>${escapeHtml(email)}</small>`:''}</span>
+        <span><b>${escapeHtml(adminActivityLabel(row))}</b><small>${escapeHtml(details)}${errorType?' · '+escapeHtml(errorType):''}</small></span>
+        <span class="admin-activity-status ${statusClass}">${escapeHtml(label)}</span>
+      </div>`;
+    }).join('');
+    return `<section class="admin-activity-panel" aria-label="Aktivita a upozornenia účtov">
+      <div class="admin-activity-header"><div><small>ADMIN / ACCOUNT ACTIVITY</small><h3>Aktivita účtov a upozornenia</h3><p>Vypršané členstvá, e-maily a zmeny prístupu. Údaje sú z operačného logu.</p></div>
+        <div class="admin-activity-head-actions"><button type="button" class="btn btn-ghost" data-admin-action="refresh-activity">Obnoviť log</button><button type="button" class="btn btn-ghost" data-admin-action="toggle-activity" aria-expanded="${state.adminActivityExpanded!==false}">${state.adminActivityExpanded===false?'Rozbaliť':'Zbaliť'} <span>${state.adminActivityExpanded===false?'+':'−'}</span></button></div>
+      </div>
+      ${state.adminActivityExpanded===false?'':`<div class="admin-activity-body">
+        ${cards}
+        ${state.adminActivityLoading&&!activity?'<div class="admin-activity-notice">Načítavam události…</div>':''}
+        ${state.adminActivityError?`<div class="admin-activity-notice is-error" role="alert">${escapeHtml(state.adminActivityError)}</div>`:''}
+        <section class="admin-tg-cleanup" aria-label="Odstránenie z Telegramu">
+          <header><div><h4>Na odstránenie z Telegramu <span>${pending.length}</span></h4><p>Skončené platené členstvo → ROOKIE. Potvrdenie vykonaj až po manuálnom odstránení z TG skupiny.</p></div></header>
+          ${cleanupRows||'<div class="admin-activity-empty">Žiadny nevybavený prechod na ROOKIE v dostupnej histórii.</div>'}
+        </section>
+        <div class="admin-activity-log-head"><div><h4>História udalostí</h4><p>Zobrazujú sa iba zaznamenané udalosti, nie odhadované doručenia e-mailov.</p></div><div class="admin-activity-options"><label>Uchovávať <select id="adminActivityRetention">${options}</select></label><button class="btn btn-ghost admin-activity-delete" type="button" data-admin-action="clear-activity">Zmazať celý log</button></div></div>
+        <div class="admin-activity-filters"><input id="adminActivitySearch" type="search" placeholder="Hľadať e-mail, Telegram alebo predmet…" value="${escapeHtml(state.adminActivitySearch||'')}"><select id="adminActivityType"><option value="all"${(!state.adminActivityType||state.adminActivityType==='all')?' selected':''}>Všetky udalosti</option><option value="tg"${state.adminActivityType==='tg'?' selected':''}>Prechody na ROOKIE</option><option value="email"${state.adminActivityType==='email'?' selected':''}>E-maily</option><option value="failed"${state.adminActivityType==='failed'?' selected':''}>Chyby</option><option value="change"${state.adminActivityType==='change'?' selected':''}>Zmeny prístupu</option></select></div>
+        <div class="admin-activity-events">${rows||'<div class="admin-activity-empty">Zatiaľ nie sú zaznamenané udalosti pre tento filter.</div>'}</div>
+        <p class="admin-activity-foot">„SMTP prijaté“ znamená prijatie poštovým serverom, nie potvrdené doručenie do schránky. Automatické čistenie sa spúšťa pri dennom spracovaní účtov. Zmazanie operačného logu nemaže účty ani bezpečnostný audit.</p>
+      </div>`}
+    </section>`;
+  }
+  async function loadAdminTelemetry(force=false){
+    const generation=feedGeneration;
+    if(state.adminTelemetryLoading||(!force&&state.adminTelemetry))return;
+    state.adminTelemetryLoading=true;
+    try{
+      const result=await BlinqAuth.adminAccountTelemetry();
+      if(generation!==feedGeneration)return;
+      state.adminTelemetry=result;state.adminTelemetryError='';
+    }catch(error){
+      if(generation!==feedGeneration)return;
+      state.adminTelemetryError=error.message||'Štatistiky návštevnosti sa nepodarilo načítať.';
+    }finally{
+      if(generation===feedGeneration){state.adminTelemetryLoading=false;rerenderAdmin();}
+    }
+  }
+  async function loadAdminAccountActivity(force=false){
+    const generation=feedGeneration;
+    if(state.adminActivityLoading||(!force&&state.adminActivity))return;
+    state.adminActivityLoading=true;
+    if(!state.adminActivity)rerenderAdmin();
+    try{
+      const result=await BlinqAuth.adminAccountAudit(500);
+      if(generation!==feedGeneration)return;
+      state.adminActivity=result;
+      state.adminActivityError='';
+    }catch(error){
+      if(generation!==feedGeneration)return;
+      state.adminActivityError=error.status===503?'Operačný log nie je dostupný – skontroluj Azure/Firestore úložisko.':(error.message||'Udalosti sa nepodarilo načítať.');
+    }finally{
+      if(generation===feedGeneration){state.adminActivityLoading=false;rerenderAdmin();}
+    }
+  }
+
   function renderAdminAccounts(){
     const users=Array.isArray(state.adminUsers)?state.adminUsers:[],f=adminUserFilterState(),sorted=adminSortedUsers(users),filtered=adminFilteredUsers();
     const loginStats=[['Dnes','login_count_today'],['Posledných 7 dní','login_count_7d'],['Posledných 30 dní','login_count_30d']].map(([label,key])=>[label,users.every(u=>Number.isInteger(u[key]))?users.reduce((n,u)=>n+u[key],0):'—']);
@@ -4118,9 +4264,15 @@
     const statusOptions=['all','active','expired','lifetime','suspended'].map(v=>`<option value="${v}"${f.status===v?' selected':''}>${v==='all'?'Všetky stavy':v.toUpperCase()}</option>`).join('');
     return `<section class="admin-ux-section admin-accounts-simple"><div class="admin-ux-heading"><div><small>POUŽÍVATELIA</small><h2>Správa účtov</h2><p>Nájdi účet, uprav prístup a ulož.</p></div><button class="btn btn-ghost icon-text-btn" type="button" data-admin-action="refresh-users"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 6.2A6 6 0 1 0 16 12"></path><path d="M15.5 2.8v3.8h-3.8"></path></svg><span>Obnoviť</span></button></div>
       ${state.adminUsersWarning?`<div class="admin-note admin-note-warning"><strong>Profilové úložisko je v náhradnom režime</strong><span>Levely fungujú cez Firebase. Niektoré profilové zmeny môžu čakať na dostupné úložisko.</span></div>`:''}
-      <div class="admin-simple-stats"><span><b>${users.length}</b> účtov</span><span><b>${countActive}</b> aktívnych</span>${countSuspended?`<span><b>${countSuspended}</b> pozastavených</span>`:''}</div><section class="admin-login-metrics" aria-label="Počet prihlásení"><h3>Počet prihlásení</h3><div class="admin-login-metrics-cards">${loginStats.map(([label,value])=>`<article><span>${escapeHtml(label)}</span><strong>${value}</strong></article>`).join('')}</div><p class="admin-login-metrics-note">Zaznamenávanie od 4. 10. 2026. Obnovenie stránky sa nepočíta ako nové prihlásenie. Súhrny platia pre načítané účty.</p></section><section class="admin-login-metrics admin-reload-metrics" aria-label="Počet obnovení stránky"><h3>Počet obnovení stránky</h3><div class="admin-login-metrics-cards">${reloadStats.map(([label,value])=>`<article><span>${escapeHtml(label)}</span><strong>${value}</strong></article>`).join('')}</div></section>
+      <div class="admin-simple-stats"><span><b>${users.length}</b> účtov</span><span><b>${countActive}</b> aktívnych</span>${countSuspended?`<span><b>${countSuspended}</b> pozastavených</span>`:''}</div>${renderAdminAccountActivity()}
       <div class="admin-simple-toolbar"><label class="search-box"><span class="admin-search-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5"></circle><path d="m12.2 12.2 4 4"></path></svg></span><input id="adminUserSearch" type="search" value="${escapeHtml(f.q)}" placeholder="Hľadať e-mail, Telegram alebo UID"></label><label>Level<select id="adminUserLevelFilter">${levelOptions}</select></label><label>Stav<select id="adminUserStatusFilter">${statusOptions}</select></label><label class="admin-login-date">Posledné prihlásenie<select id="adminUserLoginDate" aria-label="Filter posledného prihlásenia">${[['','Všetky'],['today','Dnes'],['yesterday','Včera'],['3','Posledné 3 dni'],['7','Posledných 7 dní'],['30','Posledných 30 dní'],['never','Bez záznamu']].map(([value,label])=>`<option value="${value}"${f.loginDate===value?' selected':''}>${label}</option>`).join('')}</select></label><label>Vznik účtu<select id="adminUserCreatedDate">${[['','Všetky'],['today','Dnes'],['yesterday','Včera'],['3','Posledné 3 dni'],['7','Posledných 7 dní'],['30','Posledných 30 dní']].map(([value,label])=>`<option value="${value}"${(f.createdDate||'')===value?' selected':''}>${label}</option>`).join('')}</select></label><label>Zoradiť<select id="adminUserSort"><option value="email"${f.sort==='email'?' selected':''}>E-mail</option><option value="telegram"${f.sort==='telegram'?' selected':''}>Telegram</option><option value="level"${f.sort==='level'?' selected':''}>Level</option><option value="expiry"${f.sort==='expiry'?' selected':''}>Najbližšia expirácia</option><option value="last-login"${f.sort==='last-login'?' selected':''}>Posledné prihlásenie</option><option value="created"${f.sort==='created'?' selected':''}>Najnovšie účty</option></select></label><span>Zobrazených <b id="adminFilteredCount">${filtered.length}</b></span></div>
       <div class="admin-accounts-split admin-accounts-split-v22${state.adminSelectedUser?' has-selection':' no-selection'}"><div class="admin-simple-user-table"><div class="admin-simple-user-head"><span>Používateľ</span><span>Level</span><span>Platnosť</span><span>Stav</span><span>Posledné prihlásenie</span><span>Vznik účtu</span><span></span></div><div class="admin-simple-user-list">${rows}${!state.adminUsersLoading&&users.length?`<div id="adminUserFilterEmpty" class="admin-filter-empty"${filtered.length?" hidden":""} role="status">Žiadne účty nezodpovedajú zvoleným filtrom.</div>`:""}</div></div><div class="admin-simple-user-editor-wrap">${renderAdminUserEditor(state.adminSelectedUser)}</div></div>
+      <details class="admin-legacy-metrics"${state.adminTelemetryExpanded?' open':''}><summary data-admin-toggle="telemetry">Štatistiky návštevnosti · prihlásenia a obnovenia stránky <span>${state.adminTelemetryExpanded?'Zbaliť −':'Rozbaliť +'}</span></summary><div class="admin-legacy-metrics-inner">
+        <div class="admin-telemetry-controls"><label>Uchovávať štatistiku <select id="adminTelemetryRetention"${!state.adminTelemetry?.settings?' disabled':''}>${[7,14,30,60,90,180,365].map(days=>`<option value="${days}"${Number(state.adminTelemetry?.settings?.retention_days||90)===days?' selected':''}>${days} dní</option>`).join('')}</select></label><button type="button" class="btn btn-ghost admin-activity-delete" data-admin-action="clear-telemetry">Zmazať históriu návštevnosti</button></div>
+        ${state.adminTelemetryError?`<p class="admin-activity-notice is-error">${escapeHtml(state.adminTelemetryError)}</p>`:''}
+        ${state.adminTelemetry?.settings?.retention_days<30?'<p class="admin-activity-foot">Pozor: 30-dňové počítadlá budú počítať iba dostupné údaje podľa nastavenej kratšej retencie.</p>':''}
+<section class="admin-login-metrics" aria-label="Počet prihlásení"><h3>Počet prihlásení</h3><div class="admin-login-metrics-cards">${loginStats.map(([label,value])=>`<article><span>${escapeHtml(label)}</span><strong>${value}</strong></article>`).join('')}</div><p class="admin-login-metrics-note">Zaznamenávanie od 4. 10. 2026. Obnovenie stránky sa nepočíta ako nové prihlásenie. Súhrny platia pre načítané účty.</p></section><section class="admin-login-metrics admin-reload-metrics" aria-label="Počet obnovení stránky"><h3>Počet obnovení stránky</h3><div class="admin-login-metrics-cards">${reloadStats.map(([label,value])=>`<article><span>${escapeHtml(label)}</span><strong>${value}</strong></article>`).join('')}</div></section>
+        </div></details>
     </section>`;
   }
   function buildDemoMatch(i,section='prime'){
@@ -5516,7 +5668,7 @@
         }
         return;
       }
-      const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;rerenderAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='insights'){loadAdminInsights();loadAdminInfoResults();loadAdminLiveResults();}if(state.adminTab==='system')loadAdminDiagnostics(true);if(state.adminTab==='calibration')loadAdminCalibration();if(state.adminTab==='testresults')loadAdminTestList();return;}
+      const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;rerenderAdmin();if(state.adminTab==='accounts'){loadAdminUsers();loadAdminAccountActivity();loadAdminTelemetry();}if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='insights'){loadAdminInsights();loadAdminInfoResults();loadAdminLiveResults();}if(state.adminTab==='system')loadAdminDiagnostics(true);if(state.adminTab==='calibration')loadAdminCalibration();if(state.adminTab==='testresults')loadAdminTestList();return;}
       const tgAction=event.target.closest('[data-admin-action="tg-add"],[data-admin-action="tg-remove"]');if(tgAction){const cfg=state.ui.telegram_groups=state.ui.telegram_groups||{schema:1,enabled:true,groups:[]};cfg.groups=Array.isArray(cfg.groups)?cfg.groups:[];if(tgAction.dataset.adminAction==='tg-add'){cfg.groups.push({id:`group_${Date.now()}`,enabled:true,badge:'KOMUNITA',title:'Telegram skupina',description:'',cta:'Otvoriť Telegram',url:'',min_plan:'rookie'});}else{const index=Number(tgAction.dataset.tgIndex);if(Number.isInteger(index)&&index>=0)cfg.groups.splice(index,1);}renderTelegramGroupsPanel();rerenderAdmin();return;}
       const planChip=event.target.closest('[data-admin-plan-chip]');if(planChip){state.adminPlan=planChip.dataset.adminPlanChip;rerenderAdmin();return;}
       const dailyPreset=event.target.closest('[data-admin-daily-preset]');if(dailyPreset){const preset=dailyPreset.dataset.adminDailyPreset,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].forEach(tab=>{const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.tab_enabled=true;rule.row_overrides={};if(preset==='full'){rule.display_state='active';rule.visible_rows='ALL';rule.selection_mode='first';rule.blur_remaining=false;rule.see_all=true;}else if(preset==='preview3'){rule.display_state='active';rule.visible_rows=3;rule.selection_mode='first';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='rookie2'){rule.display_state='active';rule.visible_rows=tab==='daily'?2:Math.min(1,Number(rule.visible_rows)||1);rule.selection_mode='stable_random';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='blurred'){rule.display_state='blurred';rule.visible_rows=0;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='hidden'){rule.display_state='hidden';rule.visible_rows=0;rule.blur_remaining=false;rule.see_all=false;}if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);});renderAllUiContent();rerenderAdmin();showStatus(`Zobrazenie · ${accessLabel(state.adminPlan)} preset bol nastavený.`);return;}
@@ -5530,7 +5682,45 @@
       const userButton=event.target.closest('[data-admin-user]');if(userButton){state.adminSelectedUser=(state.adminUsers||[]).find(x=>String(x.id)===String(userButton.dataset.adminUser))||null;rerenderAdmin();return;}
       const quick=event.target.closest('[data-admin-user-plan]');if(quick){const input=$('adminUserPlan');if(input){input.value=quick.dataset.adminUserPlan;host.querySelectorAll('[data-admin-user-plan]').forEach(btn=>btn.classList.toggle('active',btn===quick));setAdminPlanDefaults(input.value,false);}return;}
       const expiryQuick=event.target.closest('[data-admin-expiry-days]');if(expiryQuick){adminAddDaysToExpiry(Number(expiryQuick.dataset.adminExpiryDays));return;}
+      if(event.target.closest('[data-admin-toggle="telemetry"]')){state.adminTelemetryExpanded=!state.adminTelemetryExpanded;rerenderAdmin();return;}
       const actionNode=event.target.closest('[data-admin-action]');const action=actionNode?.dataset.adminAction;if(!action)return;
+      if(action==='toggle-activity'){state.adminActivityExpanded=state.adminActivityExpanded===false;rerenderAdmin();return;}
+      if(action==='refresh-activity'){await loadAdminAccountActivity(true);return;}
+      if(action==='tg-cleanup-confirm'){
+        if(state.adminActivityActionBusy)return;
+        const eventId=String(actionNode.dataset.activityId||''),targetId=String(actionNode.dataset.activityUser||'');
+        if(!window.confirm('Potvrď až po tom, čo si tohto člena naozaj odstránil z platených Telegram skupín. Zmení sa iba evidencia v BlinQ.'))return;
+        state.adminActivityActionBusy=true;actionNode.disabled=true;
+        try{
+          const result=await BlinqAuth.adminConfirmTelegramCleanup(targetId,eventId);
+          state.adminUsers=(state.adminUsers||[]).map(user=>String(user.id)!==targetId?user:{...user,tg_cleanup_confirmed_event:result.event_id,tg_cleanup_confirmed_at:result.confirmed_at,tg_private_member:false});
+          rerenderAdmin();
+          showStatus('Ručné odstránenie z TG bolo označené ako vybavené.');
+        }catch(error){actionNode.disabled=false;showStatus(error.message||'Potvrdenie TG odstránenia sa nepodarilo uložiť.');}
+        finally{state.adminActivityActionBusy=false;}
+        return;
+      }
+      if(action==='clear-telemetry'){
+        if(state.adminActivityActionBusy)return;
+        if(!window.confirm('ZMAZAŤ históriu prihlásení a obnovení stránky všetkých používateľov? Účty, platnosti, TG fronta a bezpečnostný audit zostanú zachované.'))return;
+        state.adminActivityActionBusy=true;actionNode.disabled=true;
+        try{
+          const result=await BlinqAuth.adminClearTelemetry();
+          await loadAdminUsers(true);
+          showStatus(`Vymazaných ${result.deleted||0} záznamov návštevnosti.`);
+        }catch(error){showStatus(error.message||'Históriu návštevnosti sa nepodarilo vymazať.');}
+        finally{state.adminActivityActionBusy=false;}
+        return;
+      }
+      if(action==='clear-activity'){
+        if(state.adminActivityActionBusy)return;
+        if(!window.confirm('ZMAZAŤ VŠETKY operačné udalosti účtov vrátane histórie e-mailov a prechodov na ROOKIE? Účty a bezpečnostný audit zostanú zachované.'))return;
+        state.adminActivityActionBusy=true;actionNode.disabled=true;
+        try{const result=await BlinqAuth.adminClearAccountActivity();state.adminActivity=null;await loadAdminAccountActivity(true);showStatus(`Vymazaných ${result.deleted||0} udalostí.`);}
+        catch(error){showStatus(error.message||'Log sa nepodarilo vymazať.');}
+        finally{state.adminActivityActionBusy=false;}
+        return;
+      }
       if(action==='project-create'){
         actionNode.disabled=true;
         try{
@@ -5705,16 +5895,37 @@
       else if(action==='preview-demo'){state.previewPlan=null;enableDemoBoardPreview();}
       else if(action==='preview'){state.previewPlan=state.adminPlan;renderAllUiContent();setRoute('predictions');showStatus(`Previewing page as ${accessLabel(state.previewPlan)}.`);}
       else if(action==='clear-preview'){state.previewPlan=null;renderAllUiContent();rerenderAdmin();showStatus('Admin preview disabled.');}
-      else if(action==='reset-user-password'){const user=state.adminSelectedUser;if(!user)return;const savedEmail=String(user.email||'').trim(),editedEmail=String($('adminUserEmail')?.value||savedEmail).trim();if(!savedEmail){showStatus('Účet nemá uložený e-mail.');return;}if(editedEmail.toLowerCase()!==savedEmail.toLowerCase()){showStatus('Najprv ulož zmenený e-mail a potom pošli link na obnovu hesla.');return;}try{await BlinqAuth.reset(savedEmail);showStatus(`Link na obnovu hesla bol odoslaný na ${savedEmail}.`);}catch(error){showStatus(error.message||'Obnovu hesla sa nepodarilo odoslať.');}}
+      else if(action==='reset-user-password'){const user=state.adminSelectedUser;if(!user)return;const savedEmail=String(user.email||'').trim(),editedEmail=String($('adminUserEmail')?.value||savedEmail).trim();if(!savedEmail){showStatus('Účet nemá uložený e-mail.');return;}if(editedEmail.toLowerCase()!==savedEmail.toLowerCase()){showStatus('Najprv ulož zmenený e-mail a potom pošli link na obnovu hesla.');return;}try{await BlinqAuth.reset(savedEmail);showStatus(`Požiadavka na obnovu hesla bola prijatá pre ${savedEmail}. Stav SMTP sa zobrazuje v logu.`);}catch(error){showStatus(error.message||'Obnovu hesla sa nepodarilo odoslať.');}}
       else if(action==='apply-default-term'){const plan=String($('adminUserPlan')?.value||'');if(!plan){showStatus('Najprv vyber level.');return;}setAdminPlanDefaults(plan,true);}
       else if(action==='extend-default-term'){const plan=String($('adminUserPlan')?.value||'');if(!plan){showStatus('Najprv vyber level.');return;}const cfg=state.ui?.plans?.[plan]||{};if(planIsUnlimited(plan,cfg)){setAdminPlanDefaults(plan,true);showStatus('ROOKIE je bez časového obmedzenia.');return;}adminAddDaysToExpiry(adminDefaultPlanDays());}
       else if(action==='delete-user'){const user=state.adminSelectedUser;if(!user)return;const confirmation=window.prompt(`Naozaj zmazať účet ${user.email||user.id}?\n\nPre potvrdenie napíš DELETE`);if(confirmation!=='DELETE')return;try{await BlinqAuth.adminDeleteUser(user.id);state.adminUsers=(state.adminUsers||[]).filter(row=>row.id!==user.id);state.adminSelectedUser=null;rerenderAdmin();adminApplyUserFilters();showStatus('Účet bol zmazaný.');}catch(error){showStatus(error.message||'Účet sa nepodarilo zmazať.');}}
-      else if(action==='refresh-users')await loadAdminUsers(true);
+      else if(action==='refresh-users'){await loadAdminUsers(true);await loadAdminAccountActivity(true);}
       else if(action==='login-today'||action==='clear-login-date'){const f=adminUserFilterState();f.loginDate=action==='login-today'?'today':'';const input=$('adminUserLoginDate');if(input)input.value=f.loginDate;adminApplyUserFilters();}
       else if(action==='reset-user-filters'){state.adminUserFilters={q:'',plan:'all',status:'all',sort:'email',loginDate:''};rerenderAdmin();adminApplyUserFilters();}
       else if(action==='copy-tg-nicks'){const nicks=adminFilteredUsers().map(u=>String(u.telegram_nick||'').trim()).filter(Boolean);const text=nicks.join('\n');if(!text){showStatus('V aktuálnom filtri nie sú žiadne Telegram nicky.');return;}try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}showStatus(`Skopírovaných ${nicks.length} Telegram nickov.`);}catch{showStatus('Telegram nicky sa nepodarilo skopírovať.');}}
     };
-    host.onchange=event=>{
+    host.onchange=async event=>{
+      if(event.target?.id==='adminTelemetryRetention'){
+        const days=Number(event.target.value);
+        if(!window.confirm(`Nastaviť uchovávanie prihlásení a obnovení na ${days} dní? Staršie údaje sa hneď odstránia.`)){rerenderAdmin();return;}
+        event.target.disabled=true;
+        try{
+          const result=await BlinqAuth.adminSetTelemetryRetention(days);
+          state.adminTelemetry={settings:result.settings};
+          await loadAdminUsers(true);
+          showStatus(`História návštevnosti: ${days} dní · vymazané ${result.deleted||0} starších záznamov.`);
+        }catch(error){showStatus(error.message||'Nepodarilo sa nastaviť uchovávanie návštevnosti.');rerenderAdmin();}
+        return;
+      }
+      if(event.target?.id==='adminActivityType'){state.adminActivityType=event.target.value;rerenderAdmin();return;}
+      if(event.target?.id==='adminActivityRetention'){
+        const days=Number(event.target.value);
+        if(!window.confirm(`Nastaviť uchovávanie na ${days} dní? Staršie udalosti sa odstránia z operačného logu.`)){rerenderAdmin();return;}
+        event.target.disabled=true;
+        try{const result=await BlinqAuth.adminSetAccountActivityRetention(days);state.adminActivity=null;await loadAdminAccountActivity(true);showStatus(`Uchovávanie: ${days} dní · odstránené ${result.deleted||0} starších udalostí.`);}
+        catch(error){showStatus(error.message||'Nastavenie uchovávania sa nepodarilo uložiť.');rerenderAdmin();}
+        return;
+      }
       const t=event.target;
       if(t.dataset.adminTestCheck){const chosen=new Set(state.adminTestSelected||[]);if(t.checked)chosen.add(t.dataset.adminTestCheck);else chosen.delete(t.dataset.adminTestCheck);state.adminTestSelected=[...chosen];rerenderAdmin();return;}
       if(t.dataset.adminTestFilter){adminTestFilter()[t.dataset.adminTestFilter]=String(t.value||'');state.adminTestPage=0;rerenderAdmin();return;}
@@ -5779,6 +5990,7 @@
     host.onkeydown=event=>{if(event.target?.id==='adminTestGoPage'&&event.key==='Enter'){event.preventDefault();adminTestAction('go');}};
     host.oninput=event=>{
       const t=event.target,field=t?.dataset?.simpleBannerField;
+      if(t?.id==='adminActivitySearch'){const position=t.selectionStart;state.adminActivitySearch=t.value;rerenderAdmin();const node=$('adminActivitySearch');if(node){node.focus();node.setSelectionRange(position,position);}return;}
       const liveFields=['eyebrow','headline','text','button_text','desktop_image_x','desktop_image_y','mobile_image_x','mobile_image_y','desktop_text_x','desktop_text_y','desktop_text_width','mobile_text_x','mobile_text_y','mobile_text_width','desktop_headline_size','mobile_headline_size','desktop_text_size','mobile_text_size','desktop_eyebrow_size','mobile_eyebrow_size','desktop_social_x','desktop_social_y','mobile_social_x','mobile_social_y','desktop_social_size','mobile_social_size','desktop_shadow_strength','mobile_shadow_strength'];
       if(!field||!liveFields.includes(field))return;
       const wrap=t.closest('[data-simple-banner]'),item=elements()?.[wrap?.dataset?.simpleBanner];
@@ -6436,7 +6648,7 @@
 
   function renderRoute(route){
     const host=$('routePanel'),feed=state.feed,p=feed.performance||{},history=feed.history||{},report=feed.model?.report||{}; let body='';
-    if(route==='admin'){host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='system')loadAdminDiagnostics();if(state.adminTab==='calibration')loadAdminCalibration();return;}
+    if(route==='admin'){host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts'){loadAdminUsers();loadAdminAccountActivity();loadAdminTelemetry();}if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='system')loadAdminDiagnostics();if(state.adminTab==='calibration')loadAdminCalibration();return;}
     if(route==='compare'){
       if(comparatorPlanAllowed()){host.innerHTML=renderComparatorRoute();wireComparator();}
       else{

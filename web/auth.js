@@ -625,6 +625,37 @@
   async function adminUsers(page = 1, perPage = 100) {
     return apiWithSession(`/api/v1/admin/users?page=${encodeURIComponent(page)}&per_page=${encodeURIComponent(perPage)}`);
   }
+  async function adminAccountAudit(limit = 500) {
+    return apiWithSession(`/api/v1/admin/account-activity?limit=${encodeURIComponent(limit)}`);
+  }
+  async function adminAccountTelemetry() {
+    return apiWithSession('/api/v1/admin/account-telemetry');
+  }
+  async function adminSetTelemetryRetention(days) {
+    return apiWithSession('/api/v1/admin/account-telemetry/retention', {
+      method:'PUT', body:JSON.stringify({retention_days: days}),
+    });
+  }
+  async function adminClearTelemetry() {
+    return apiWithSession('/api/v1/admin/account-telemetry/clear', {
+      method:'POST', body:JSON.stringify({confirm:'DELETE_TELEMETRY'}),
+    });
+  }
+  async function adminSetAccountActivityRetention(days) {
+    return apiWithSession('/api/v1/admin/account-activity/retention', {
+      method: 'PUT', body: JSON.stringify({retention_days: days}),
+    });
+  }
+  async function adminClearAccountActivity() {
+    return apiWithSession('/api/v1/admin/account-activity/clear', {
+      method: 'POST', body: JSON.stringify({confirm:'DELETE_ACTIVITY_LOG'}),
+    });
+  }
+  async function adminConfirmTelegramCleanup(targetId, eventId) {
+    return apiWithSession('/api/v1/admin/account-activity/tg-confirm', {
+      method: 'POST', body: JSON.stringify({target_id:targetId,event_id:eventId}),
+    });
+  }
   async function adminUpdateAccess(userId, payload) {
     return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/access`, {
       method: 'PUT', body: JSON.stringify(payload || {}),
@@ -719,7 +750,7 @@
     adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
     adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult,
     adminResultTestExclusions, adminSetResultTestExclusions,
-    adminDiagnostics, adminModelCalibration, adminModelLab, adminModelTraining, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
+    adminDiagnostics, adminModelCalibration, adminModelLab, adminModelTraining, adminUsers, adminAccountAudit, adminAccountTelemetry, adminSetTelemetryRetention, adminClearTelemetry, adminSetAccountActivityRetention, adminClearAccountActivity, adminConfirmTelegramCleanup, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews, comparatorPlayers, comparatorCompare,
     bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
     sessionStorageKeys, sessionEpochKey,

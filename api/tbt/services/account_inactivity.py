@@ -13,11 +13,14 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from math import ceil
+import logging
 import re
 from zoneinfo import ZoneInfo
 
 from .account_storage import (
     load_account_metadata,
+    record_account_event,
+    prune_account_activity,
     save_inactivity_state,
     save_subscription_notice_state,
 )
@@ -422,6 +425,25 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                     actor_id="account-lifecycle-worker",
                     expected_claims=expected_claims,
                 )
+                # Claims were changed successfully. Record the *raw* former
+                # paid tier: account_access() already presents an expired tier
+                # as ROOKIE and would lose that history in its regular audit.
+                try:
+                    record_account_event(
+                        actor_id="account-lifecycle-worker",
+                        target_id=uid,
+                        action="paid_membership_downgraded",
+                        outcome="success",
+                        before={"from_plan": latest_plan},
+                        after={
+                            "email": str(latest_user.get("email") or email),
+                            "telegram_nick": str(meta.get("telegram_nick") or ""),
+                            "from_plan": latest_plan, "to_plan": "rookie",
+                            "expired_at": latest_expiry.isoformat(),
+                        },
+                    )
+                except AdminStorageUnavailable:
+                    logging.exception("Paid membership was downgraded but activity audit is unavailable")
                 sync_push_access(user_id=uid, plan="rookie", status="active", expires_at=None)
                 downgraded.append({
                     "id": uid, "email": email, "plan": latest_plan.upper(),
@@ -605,5 +627,12 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
         count = _send_admin_summary(cfg, _admin_summary_body(policy, new_warnings, newly_expired, paid7, paid3, failures, downgraded))
         summary["admin_emails"] = count
         summary["admin_email"] = count > 0
+
+    # Enforce operator-selected retention on the existing scheduled daily worker.
+    # Audit maintenance must not roll back paid access updates or mail transport.
+    try:
+        prune_account_activity()
+    except AdminStorageUnavailable:
+        logging.exception("Account activity cleanup unavailable")
 
     return summary
