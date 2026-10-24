@@ -1,0 +1,42 @@
+name: DIL training source bridge (ephemeral)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/dil-training-source-bridge.yml'
+      - 'scripts/dil_training_source_bridge.py'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  bridge:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: BackstageTalks/tbt-data
+      PYTHONPATH: scripts
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy immutable, SHA-verified private training release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing private-release access'; exit 1; }
+          mkdir -p .cache/dil-training-source
+          python scripts/dil_training_source_bridge.py --repository "$TBT_DATA_REPOSITORY" --out-dir .cache/dil-training-source
+      - name: Temporary private handoff; no canonical DB mutation
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-dil-training-source-20261024
+          path: |
+            .cache/dil-training-source/training_table.parquet
+            .cache/dil-training-source/training_table_report.json
+            .cache/dil-training-source/leakage_audit_report.json
+            .cache/dil-training-source/dil_training_source_receipt.json
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
