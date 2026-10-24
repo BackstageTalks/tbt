@@ -666,11 +666,6 @@
       method: 'DELETE', body: JSON.stringify({confirmation: 'DELETE ALL INFO RESULTS'})
     });
   }
-  async function adminConfirmTelegramRemoval(targetId, eventId) {
-    return apiWithSession('/api/v1/admin/telegram-removal', {
-      method:'POST', body:JSON.stringify({target_id:targetId,event_id:eventId})
-    });
-  }
   async function adminUpdateAccess(userId, payload) {
     return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/access`, {
       method: 'PUT', body: JSON.stringify(payload || {}),
@@ -763,7 +758,7 @@
     init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, matchIntelligence,
     projectGroups, joinProjectGroup, leaveProjectGroup, insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, markInsightRead,
     adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
-    adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult, adminInfoResultRetention, adminDeleteAllInfoResults, adminConfirmTelegramRemoval,
+    adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult, adminInfoResultRetention, adminDeleteAllInfoResults,
     adminResultTestExclusions, adminSetResultTestExclusions,
     adminDiagnostics, adminModelCalibration, adminModelLab, adminModelTraining, adminUsers, adminAccountAudit, adminAccountTelemetry, adminSetTelemetryRetention, adminClearTelemetry, adminSetAccountActivityRetention, adminClearAccountActivity, adminConfirmTelegramCleanup, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews, comparatorPlayers, comparatorCompare,
