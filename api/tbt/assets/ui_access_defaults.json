@@ -387,6 +387,7 @@
         },
         "prime": {
           "enabled": true,
+          "exclude_from_stats": false,
           "plans": {
             "trial": {
               "visible_rows": 1,
