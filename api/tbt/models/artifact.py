@@ -81,6 +81,10 @@ def load_model(path: str) -> TennisEnsemble:
     # TennisEnsemble instance itself did not persist them.
     model.feature_names = list(feature_names)
 
+    from .tour_bundle import TourBundle
+    if isinstance(model, TourBundle):
+        model.validate()
+
     # V3 carries a compact replay checkpoint.  Attach it to the model instead of
     # changing TennisEnsemble's public API, which keeps older inference code and
     # model lifecycle tooling compatible.

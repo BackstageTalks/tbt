@@ -75,3 +75,23 @@ def test_missing_stats_fail_closed():
     row = history.features_for_match(match)
     assert set(row) == set(COURT_SPEED_FEATURE_NAMES)
     assert row["court_speed_known"] == 0.0
+
+def test_same_day_results_cannot_change_later_match_features():
+    base = [_match(i, i, f'Other {i}', f'o{i}') for i in range(20)]
+    base += [_match(100+i, 30+i, 'Venue X', 'old') for i in range(5)]
+    early = [_match(200+i, 60, 'Venue X', 'new', raw=.9) for i in range(3)]
+    target = _match(300, 60, 'Venue X', 'new')
+    target.scheduled_at += timedelta(hours=12)
+    expected = CourtSpeedHistory(base+[target]).features_for_match(target)
+    assert CourtSpeedHistory(base+early+[target]).features_for_match(target) == expected
+
+
+def test_other_tour_cannot_change_surface_baseline_or_player_profiles():
+    base = [_match(i, i, f'Other {i}', f'o{i}') for i in range(20)]
+    base += [_match(100+i, 30+i, 'Venue X', 'old') for i in range(6)]
+    target = _match(300, 60, 'Venue X', 'new')
+    other = [_match(400+i, 40+i, 'Venue X', 'old', raw=.95) for i in range(10)]
+    for match in other:
+        match.tour = 'WTA'
+    expected = CourtSpeedHistory(base+[target]).features_for_match(target)
+    assert CourtSpeedHistory(base+other+[target]).features_for_match(target) == expected

@@ -198,9 +198,28 @@ def test_model_711_alias_keeps_unique_model_id_and_is_bound_to_verified_frozen_r
     assert "Nemenný artefakt:" in ui
     assert "Záloha tréningových vstupov:" in ui
     assert "${escapeHtml(String(offline.candidate_version||'—'))}" in ui
-    assert "Nezávislé hodnotenie:" in ui
+    assert "Historické hodnotenie:" in ui
     assert "String(offline.candidate_release_tag||'—')" in ui
 
 
 if __name__ == "__main__":
     unittest.main()
+
+def test_paired_tours_rejects_mismatched_counts_and_keeps_legacy_missing():
+    from tbt.services.model_calibration_status import _paired_tours
+    import pytest
+    row = {'n': 300, 'accuracy': .7, 'log_loss': .55, 'brier_score': .19, 'ece_10': .02}
+    comparison = {'subgroups': {'tour': {'atp': row}}, 'production_subgroups': {'tour': {'atp': dict(row)}}}
+    assert _paired_tours(comparison, 300)['atp']['n'] == 300
+    assert _paired_tours({'subgroups': comparison['subgroups']}, 300) == {}
+    comparison['production_subgroups']['tour']['atp']['n'] = 299
+    with pytest.raises(ValueError, match='Unpaired'):
+        _paired_tours(comparison, 300)
+
+def test_paired_tours_rejects_malformed_containers():
+    from tbt.services.model_calibration_status import _paired_tours
+    import pytest
+    for key in ('subgroups', 'production_subgroups'):
+        for value in ([], 'invalid', {'tour': []}, {'tour': None}):
+            with pytest.raises(ValueError, match='container'):
+                _paired_tours({key: value}, 300)

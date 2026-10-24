@@ -5146,23 +5146,29 @@
       &&String(offline.production_version||'')===String(d.production_version||''));
     const shadowModel711=model711&&String(d.candidate_version||'')===String(offline.candidate_version||'');
     const newCandidateTitle=model711?'BlinQ 7.1.1':'Nový kandidát na aktuálnej CDB';
+    const tourPanels=offline?['atp','wta'].map(tour=>{
+      const row=offline.tours?.[tour];
+      if(!row)return `<article class="admin-calibration-card"><h4>${tour.toUpperCase()}</h4><p>Samostatné porovnanie ešte nie je dostupné.</p></article>`;
+      return `<article class="admin-calibration-panel"><h4>${tour.toUpperCase()} · ${numberOrDash(row.n)} zápasov</h4><div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Metrika</th><th>Produkčný model</th><th>Kandidát</th></tr></thead><tbody>${metrics.map(([label,key])=>`<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(score(row.champion?.[key],key))}</td><td>${escapeHtml(score(row.candidate?.[key],key))}</td></tr>`).join('')}</tbody></table></div>${row.small_sample?'<p>Malá vzorka — výsledok je orientačný.</p>':''}</article>`;
+    }).join(''):'';
     const offlinePanel=offline&&offlineRows?`<article class="admin-calibration-panel" aria-label="Nový kandidát na CDB – oddelený offline holdout">
       <h3>${escapeHtml(newCandidateTitle)} · offline holdout</h3>
-      <p>Vyhodnotenie rovnakých ${numberOrDash(offline.n)} historických zápasov, ktoré neboli použité v rozhodovacom holdoute. Nie je to Shadow ani živá predikcia. Produkčný model zostáva nezmenený.</p>
+      <p>Porovnanie na rovnakých ${numberOrDash(offline.n)} historických zápasoch. Historický test nenahrádza nové shadow výsledky. Produkčný model zostáva nezmenený.</p>
       <div class="admin-calibration-grid">
         ${card('Champion',String(offline.production_version||'—'),'Aktuálny produkčný model')}
         ${card('Kandidát po pretrénovaní',model711?'BlinQ 7.1.1':String(offline.candidate_version||'—'),'Iba offline · nenasadený')}
         ${card('Vyhodnotené zápasy',numberOrDash(offline.n),'Rovnaká testovacia vzorka')}
       </div>
       <div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Metrika</th><th>Champion</th><th>Nový kandidát</th><th>Rozdiel</th></tr></thead><tbody>${offlineRows}</tbody></table></div>
-      <p class="admin-calibration-foot">Nezávislé hodnotenie: ${escapeHtml(fmtStamp(offline.generated_at_utc))} · nenasadený model. Žiadne automatické povýšenie.</p>
+      <h4>Jeden model BlinQ · výsledky ATP a WTA</h4><div class="admin-calibration-split">${tourPanels}</div>
+      <p class="admin-calibration-foot">Historické hodnotenie: ${escapeHtml(fmtStamp(offline.generated_at_utc))} · nenasadený model. Žiadne automatické povýšenie.</p>
       <details class="admin-calibration-audit"><summary>Technický pôvod a audit modelu</summary>
         <p>Identifikátor modelu: <code>${escapeHtml(String(offline.candidate_version||'—'))}</code></p>
         <p>Nemenný artefakt: <code>${escapeHtml(String(offline.candidate_release_tag||'—'))}</code></p>
         <p>Záloha tréningových vstupov: <code>${escapeHtml(String(offline.backup_tag||'—'))}</code></p>
         <p>GitHub tréning: <code>${escapeHtml(String(offline.run_id||'—'))}</code></p>
       </details>
-    </article>`:`<article class="admin-calibration-panel"><h3>Model 7.1.1 · čaká na tréning</h3><p>Čakáme na úspešný zálohovaný tréning a nezávisle overený offline holdout. Starý Shadow test zostáva dostupný vyššie.</p></article>`;
+    </article>`:`<article class="admin-calibration-panel"><h3>Nový model BlinQ · čaká na tréning</h3><p>Čakáme na úspešný zálohovaný tréning a nezávisle overený offline holdout. Starý Shadow test zostáva dostupný vyššie.</p></article>`;
     return `<section class="admin-ux-section admin-calibration">${head}
       <div class="admin-calibration-status${d.stale?' is-stale':''}" role="status"><strong>${escapeHtml(status)}</strong><span>${d.stale?'Údaje synchronizácie sú staršie než 8 hodín.':''} Synchronizácia: ${escapeHtml(fmtStamp(d.updated_at))} · Shadow report: ${escapeHtml(fmtStamp(d.shadow_generated_at))}</span></div>
       <div class="admin-calibration-grid">

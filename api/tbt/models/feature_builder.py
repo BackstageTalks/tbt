@@ -14,6 +14,7 @@ from ..data.wta_season_stats import WTA_SEASON_FEATURE_NAMES
 from ..schemas import MatchRecord
 from ..utils import clamp, stable_hash
 from .elo import dynamic_k, elo_expected, update_elo
+from .momentum import MOMENTUM_FEATURE_NAMES, opponent_momentum
 
 
 FEATURE_STATE_SCHEMA_VERSION = 4
@@ -22,6 +23,12 @@ FEATURE_STATE_SCHEMA_VERSION = 4
 # training row. This is a memory batch size, NOT a training sample limit.
 _TRAIN_FRAME_CHUNK_ROWS = 2048
 
+
+EVIDENCE_FEATURE_NAMES = [
+    "recent_history_depth", "recent_surface_history_depth",
+    "serve_evidence_depth", "return_evidence_depth",
+    "surface_serve_evidence_depth", "surface_return_evidence_depth",
+]
 
 FEATURE_NAMES = [
     "elo_diff",
@@ -88,7 +95,7 @@ FEATURE_NAMES = [
     "indoor",
     "tour_atp",
     "data_depth",
-] + ATP_LEADERBOARD_FEATURE_NAMES + ATP_RANK_HISTORY_FEATURE_NAMES + WTA_RANK_HISTORY_FEATURE_NAMES + WTA_SEASON_FEATURE_NAMES
+] + EVIDENCE_FEATURE_NAMES + MOMENTUM_FEATURE_NAMES + ATP_LEADERBOARD_FEATURE_NAMES + ATP_RANK_HISTORY_FEATURE_NAMES + WTA_RANK_HISTORY_FEATURE_NAMES + WTA_SEASON_FEATURE_NAMES
 
 # Match Charting specialist rates are retained in canonical history and in
 # FeatureBuilder state for research / future coverage growth. Current paired
@@ -672,6 +679,33 @@ class FeatureBuilder:
             ),
             prior_weight=5.0,
         )
+
+    @staticmethod
+    def _evidence_depth(state: PlayerState, now: datetime, surface: str) -> dict[str, float]:
+        """Observed support from earlier UTC days; missing stats never count.
+
+        Decay uses the point-weighted quality estimator's 120-day half-life.
+        Old career depth must not conceal a lack of recent observations.
+        """
+        counts = dict.fromkeys(EVIDENCE_FEATURE_NAMES, 0.0)
+        for item in state.recent:
+            age = (now - item.played_at).total_seconds() / 86400.
+            if (item.played_at.astimezone(timezone.utc).date() >= now.astimezone(timezone.utc).date()
+                    or not 0 < age <= 365):
+                continue
+            weight = 0.5 ** (age / 120.)
+            same_surface = (stats_surface_key(surface) != "unknown" and
+                            stats_surface_key(item.surface) == stats_surface_key(surface))
+            counts["recent_history_depth"] += weight
+            if same_surface:
+                counts["recent_surface_history_depth"] += weight
+            for kind in ("serve", "return"):
+                value = getattr(item, f"{kind}_quality", None)
+                if value is not None and math.isfinite(float(value)) and 0 <= float(value) <= 1:
+                    counts[f"{kind}_evidence_depth"] += weight
+                    if same_surface:
+                        counts[f"surface_{kind}_evidence_depth"] += weight
+        return {name: min(value / 20., 1.) for name, value in counts.items()}
 
     def _quality_estimate(
         self, state: PlayerState, now: datetime, field_name: str, *,
@@ -1813,6 +1847,10 @@ class FeatureBuilder:
                     match.scheduled_at,
                 )
             ),
+            "opponent_momentum_diff": (
+                opponent_momentum(p1.recent, match.scheduled_at)
+                - opponent_momentum(p2.recent, match.scheduled_at)
+            ),
             "atp_surface_opponent_form_diff": (
                 self._atp_surface_opponent_form(p1, match.scheduled_at, match.surface)
                 - self._atp_surface_opponent_form(p2, match.scheduled_at, match.surface)
@@ -1959,6 +1997,14 @@ class FeatureBuilder:
                 match.tour.lower()
                 == "atp"
             ),
+            **{
+                name: min(left, right)
+                for name, left, right in zip(
+                    EVIDENCE_FEATURE_NAMES,
+                    self._evidence_depth(p1, match.scheduled_at, match.surface).values(),
+                    self._evidence_depth(p2, match.scheduled_at, match.surface).values(),
+                )
+            },
             "data_depth": (
                 min(
                     p1.matches,

@@ -132,6 +132,34 @@ def _matrix_vector(artifact: Mapping, features: Mapping[str, float]) -> list[flo
 
 def predict_probability(artifact: Mapping, features: Mapping[str, float]) -> float:
     """Return P(player1 wins) with the same symmetric ensemble contract."""
+    if artifact.get("schema") == 2:
+        if artifact.get("architecture") != "tour_partial_pool_v1":
+            raise ValueError("Unsupported bundle architecture")
+        specialists, weights = artifact.get("specialists"), artifact.get("weights")
+        if not isinstance(specialists, Mapping) or not isinstance(weights, Mapping):
+            raise ValueError("Invalid bundle components")
+        if set(specialists) - {"atp", "wta"} or set(weights) - {"atp", "wta"}:
+            raise ValueError("Unknown bundle tour")
+        for tour, weight in weights.items():
+            if (isinstance(weight, bool) or not isinstance(weight, (int, float))
+                    or not math.isfinite(weight) or not 0 <= weight <= 1
+                    or (weight > 0 and tour not in specialists)):
+                raise ValueError("Invalid bundle weight")
+        pooled = artifact.get("pooled")
+        for component in [pooled, *specialists.values()]:
+            if (not isinstance(component, Mapping) or component.get("schema") != 1
+                    or component.get("feature_names") != artifact.get("feature_names")):
+                raise ValueError("Invalid bundle component schema")
+        tour = features.get("tour_atp")
+        if tour not in (0, 1):
+            raise ValueError("Explicit ATP/WTA routing required")
+        key = "atp" if tour == 1 else "wta"
+        probability = predict_probability(pooled, features)
+        weight = weights.get(key, 0)
+        if weight:
+            probability = ((1-weight)*probability
+                           + weight*predict_probability(specialists[key], features))
+        return probability
     if int(artifact.get("schema", 0)) != 1:
         raise ValueError("unsupported portable model schema")
     vector = _matrix_vector(artifact, features)
