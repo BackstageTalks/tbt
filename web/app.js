@@ -6036,13 +6036,17 @@ function adminActivityRows(){
     adminApplyUserFilters();
     const form=$('adminUserForm');if(form)form.onsubmit=async event=>{event.preventDefault();const user=state.adminSelectedUser;if(!user)return;const message=$('adminUserMessage');message.textContent='Ukladám…';try{
       const email=String($('adminUserEmail')?.value||'').trim(),telegram_nick=String($('adminUserTelegram')?.value||'').trim();if(!email)throw new Error('E-mail je povinný.');
-      let updated=await BlinqAuth.adminUpdateUserProfile(user.id,{email,telegram_nick});
       const existingAdmin=String(user.role||'').toLowerCase()==='admin'||String(user.plan||'').toLowerCase()==='admin',plan=String($('adminUserPlan')?.value||''),rawExpiry=String($('adminUserExpires')?.value||'');
       let role=existingAdmin?'admin':'user',status='expired',expires_at=null,accessPlan=existingAdmin?'':plan;
       if(existingAdmin){status='active';}
       else if(plan==='rookie'){status='active';expires_at=null;}
       else if(plan){if(!rawExpiry)throw new Error('Pre tento level nastav platnosť do.');expires_at=new Date(rawExpiry).toISOString();status=new Date(expires_at).getTime()>Date.now()?'active':'expired';}
-      updated=await BlinqAuth.adminUpdateAccess(user.id,{role,plan:accessPlan,status,expires_at});
+      const restoreLegend=plan==='legend'&&status==='active'&&String(user.plan||'').toLowerCase()!=='legend'&&new Date(expires_at).getTime()-Date.now()<180*86400000-5*60000;
+      if(restoreLegend&&!window.confirm('LEGEND má štandardne 180 dní. Nastavený dátum je kratší. Potvrď iba obnovu zostávajúcej platnosti podľa pôvodného pridelenia, nie nové 30-dňové členstvo.')){message.textContent='Obnova platnosti bola zrušená.';return;}
+      let updated=await BlinqAuth.adminUpdateUserProfile(user.id,{email,telegram_nick});
+      const accessPayload={role,plan:accessPlan,status,expires_at};
+      if(restoreLegend)accessPayload.restore_legend_remaining_term=true;
+      updated=await BlinqAuth.adminUpdateAccess(user.id,accessPayload);
       state.adminUsers=(state.adminUsers||[]).map(row=>row.id===updated.id?updated:row);state.adminSelectedUser=updated;message.textContent='Účet bol uložený.';setTimeout(()=>{rerenderAdmin();adminApplyUserFilters();},300);
     }catch(error){message.textContent=error.message||'Účet sa nepodarilo uložiť.';}};
 
