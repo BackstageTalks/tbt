@@ -86,6 +86,6 @@ def test_admin_ui_statistics_toggle_only_filters_metrics_not_results_table():
     assert 'data-admin-acca-exclude-stats' in app
     assert 'tabs.prime.exclude_from_stats=Boolean(t.checked)' in app
     assert 'function accaExcludedFromStats()' in app
-    assert 'const entries=settledPublishedEntries(rows,category,filters,true);' in app
+    assert 'const metricEntries=accaExcludedFromStats()?settledPublishedEntries(rows,category,filters,true):entries;' in app
     assert 'const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||\'all\',entries=settledPublishedEntries(rows,category,filters);' in app
     assert ".filter(p=>!statsOnly||!accaExcludedFromStats()" in app
