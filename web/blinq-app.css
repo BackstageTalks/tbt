@@ -10285,3 +10285,52 @@ body#blinqPremium .admin-row-overrides .admin-acca-stats-toggle input{flex:none;
 body#blinqPremium .admin-row-overrides .admin-acca-stats-toggle>span{display:grid;gap:4px}
 body#blinqPremium .admin-row-overrides .admin-acca-stats-toggle strong{font-size:11px;color:#eaf7f1}
 body#blinqPremium .admin-row-overrides .admin-acca-stats-toggle small{font-size:9px;line-height:1.5;color:#9abeb0;margin:0}
+
+/* Admin navigation and daily picks tab ordering (2026-10-24). */
+body#blinqPremium.blinq-admin .admin-nav-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 4px 9px}
+body#blinqPremium.blinq-admin .admin-nav-toolbar strong{font-size:10px;color:#8eb7a8;letter-spacing:.08em;text-transform:uppercase}
+body#blinqPremium.blinq-admin .admin-nav-toolbar button{padding:7px 10px;border:1px solid rgba(66,200,150,.27);border-radius:9px;background:rgba(8,43,34,.72);color:#c8eadd;font-size:10px;font-weight:800;cursor:pointer}
+body#blinqPremium.blinq-admin .admin-nav-entry{min-width:0;display:grid;gap:4px}
+body#blinqPremium.blinq-admin .admin-nav-entry>button[data-admin-tab]{width:100%;min-width:0!important}
+body#blinqPremium.blinq-admin .admin-nav-entry.is-reordering{cursor:grab}
+body#blinqPremium.blinq-admin .admin-nav-order-actions{display:flex;gap:5px;justify-content:center}
+body#blinqPremium.blinq-admin .admin-nav-order-actions button{flex:1;min-width:0!important;min-height:32px!important;padding:3px 10px!important;border:1px solid rgba(66,200,150,.24)!important;border-radius:7px!important;background:rgba(5,35,27,.9)!important;color:#bde7d5!important;font-size:15px!important;cursor:pointer}
+body#blinqPremium.blinq-admin .admin-nav-order-actions button:disabled{opacity:.3;cursor:default}
+body#blinqPremium.blinq-admin .admin-tab-sort-shell{display:grid;gap:12px;padding:15px;border:1px solid rgba(66,200,150,.23);border-radius:13px;background:linear-gradient(125deg,rgba(10,49,38,.76),rgba(3,23,23,.94))}
+body#blinqPremium.blinq-admin .admin-tab-sort-shell>header{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+body#blinqPremium.blinq-admin .admin-tab-sort-shell>header>div{display:grid;gap:4px;min-width:0}
+body#blinqPremium.blinq-admin .admin-tab-sort-shell>header small{font-size:9px;font-weight:900;letter-spacing:.13em;color:#35dc9e}
+body#blinqPremium.blinq-admin .admin-tab-sort-shell h3{margin:0;color:#e6fff4;font-size:17px}
+body#blinqPremium.blinq-admin .admin-tab-sort-shell p{margin:0;color:#8eb5a8;line-height:1.5;font-size:10px}
+body#blinqPremium.blinq-admin .admin-tab-sort-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+body#blinqPremium.blinq-admin .admin-tab-sort-item{display:flex;min-width:0;align-items:center;gap:9px;padding:9px;border:1px solid rgba(64,161,124,.27);border-radius:9px;background:rgba(4,28,24,.86);cursor:grab}
+body#blinqPremium.blinq-admin .admin-tab-sort-item:active{cursor:grabbing}
+body#blinqPremium.blinq-admin .admin-tab-sort-grip{color:#57bfa0;font-size:18px;flex:none}
+body#blinqPremium.blinq-admin .admin-tab-sort-item strong{flex:1;min-width:0;overflow-wrap:anywhere;color:#e4f7ef;font-size:11px}
+body#blinqPremium.blinq-admin .admin-tab-sort-actions{display:flex;gap:4px}
+body#blinqPremium.blinq-admin .admin-tab-sort-actions button{min-width:30px;min-height:32px;border:1px solid rgba(63,180,139,.25);border-radius:6px;background:rgba(8,57,43,.76);color:#d6f2e6;font-size:15px;cursor:pointer}
+body#blinqPremium.blinq-admin .admin-tab-sort-actions button:disabled{opacity:.28;cursor:default}
+@media(max-width:900px){
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs.admin-tabs-v685{display:block!important;width:100%!important;overflow:visible!important;padding:6px!important}
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs.admin-tabs-v685 .admin-nav-group{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:6px!important}
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs.admin-tabs-v685 .admin-nav-entry{min-width:0!important}
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs.admin-tabs-v685 .admin-nav-entry>button[data-admin-tab]{min-width:0!important;min-height:46px!important;padding:7px!important}
+  body#blinqPremium.blinq-admin .admin-tab-sort-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:620px){
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs.admin-tabs-v685 .admin-nav-group{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs.admin-tabs-v685 .admin-nav-entry>button[data-admin-tab]{min-height:42px!important}
+  body#blinqPremium.blinq-admin .admin-tab-sort-shell{padding:11px}
+  body#blinqPremium.blinq-admin .admin-tab-sort-item{gap:5px;padding:7px}
+  body#blinqPremium.blinq-admin .admin-tab-sort-grip{font-size:13px}
+  body#blinqPremium.blinq-admin .admin-tab-sort-item strong{font-size:9.5px}
+  body#blinqPremium.blinq-admin .admin-tab-sort-actions button{min-width:25px;min-height:30px;font-size:13px}
+}
+
+/* Mobile admin section picker: one active section by default, expand on demand. */
+body#blinqPremium.blinq-admin .admin-nav-toolbar button[data-admin-nav-expand]{display:none}
+@media(max-width:900px){
+  body#blinqPremium.blinq-admin .admin-nav-toolbar button[data-admin-nav-expand]{display:inline-flex}
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs.admin-tabs-v685.is-collapsed .admin-nav-group{grid-template-columns:1fr!important}
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs.admin-tabs-v685.is-collapsed .admin-nav-entry:not(.is-active){display:none!important}
+}
