@@ -7,7 +7,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 
-MAX_FEED_BYTES = 20 * 1024 * 1024  # Guarded headroom for verified ~16.9 MB 2026-10-12 release
+MAX_FEED_BYTES = 32 * 1024 * 1024  # Guarded headroom for verified 21,728,761-byte 2026-10-25 release
 
 
 def _betting_day_key(moment, *, timezone_name="Europe/Bratislava", start_hour=6):
