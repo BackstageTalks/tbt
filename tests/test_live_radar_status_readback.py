@@ -18,12 +18,18 @@ def payload(reply):
 def budget():
     return {
         "provider_plan_limit": 15000,
-        "reserved_provider_headroom": 500,
-        "global_limit": 14500,
+        "reserved_provider_headroom": 300,
+        "global_limit": 14700,
         "global_spent": 2100,
+        "global_remaining": 12600,
+        "schema": 2,
+        "window": "provider_day_17_09_utc",
         "spent": {"live": 300, "match": 0, "refresh": 0, "history": 1800},
         "purpose_limits": {"live": 3000},
-        "next_reset_utc": "2026-10-11T17:10:00+00:00",
+        "next_reset_utc": "2026-10-26T17:09:00+00:00",
+        "next_reset_bratislava": "2026-10-26T18:09:00+01:00",
+        "next_reset_bratislava_time": "18:09",
+        "next_reset_bratislava_zone": "CET",
     }
 
 
@@ -45,7 +51,7 @@ def test_authorized_readback_is_fresh_and_makes_no_scan(monkeypatch):
     value = payload(response)
     assert response.status_code == 200 and value["ok"] is True
     assert value["heartbeat"]["fresh"] is True
-    assert value["budget"]["global_limit"] == 14500
+    assert value["budget"]["global_limit"] == 14700
     assert value["budget"]["live_spent"] == 300
 
 
