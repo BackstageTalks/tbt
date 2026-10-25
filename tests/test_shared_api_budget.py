@@ -47,6 +47,14 @@ def test_history_can_use_global_headroom_but_never_cross_provider_ceiling():
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "history", 1, now=NOW)
 
+def test_default_provider_client_uses_shared_14700_ceiling():
+    client = RapidTennisClient(Settings(rapidapi_key="test"))
+    try:
+        assert client.request_limit == shared_budget.GLOBAL_CEILING == 14700
+    finally:
+        client.close()
+
+
 def test_absolute_provider_hard_stop_between_1707_and_1710():
     for minute in (7, 8, 9):
         with pytest.raises(shared_budget.SharedBudgetExhausted, match="17:07"):
