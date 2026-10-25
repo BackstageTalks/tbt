@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
@@ -33,7 +34,7 @@ class SecondaryOperatorTests(unittest.TestCase):
         self.assertFalse((self.folder/'current-secondary.json').exists())
     def test_end_to_end_operator_publishes_secondary_only_on_strict_pass(self):
         source=self.root/'source.sqlite';source.write_bytes(b'synthetic-old-dil')
-        sha='e'*64;dilhash='d'*64
+        sha='e'*64;dilhash=hashlib.sha256(b'synthetic-new-dil').hexdigest()
         frozen={'tag_name':'tbt-data-v1','assets':[]}
         def fake_download(folder, before):
             folder.mkdir()
@@ -44,6 +45,7 @@ class SecondaryOperatorTests(unittest.TestCase):
             return {'export_sqlite_sha256':sha,'source_release_manifest_sha256':'f'*64}
         def fake_import(base,cdb,out,*args,**kw):
             Path(out).write_bytes(b'synthetic-new-dil')
+            Path(str(out)+'.audit.json').write_text('\"import-checked\"')
             return {'result_dil_sha256':dilhash,
                     'data_gate':'ISOLATED_PARITY_IMPORT_PASS_PENDING_REVALIDATION'}
         def fake_audit(*a,**kw):
@@ -58,6 +60,7 @@ class SecondaryOperatorTests(unittest.TestCase):
         self.assertEqual(result['status'],'SECONDARY_ACTIVATED_VERIFIED')
         self.assertEqual((self.folder/'current-secondary.json').is_file(),True)
         self.assertEqual(source.read_bytes(),b'synthetic-old-dil')
+        self.assertEqual(len(list(self.folder.glob('*.import.json'))),1)
     def test_operator_strict_parity_failure_leaves_active_version_unchanged(self):
         source=self.root/'source.sqlite';source.write_bytes(b'synthetic-old-dil')
         op.activate_secondary_pointer(self.folder,self.first,self.verified)
