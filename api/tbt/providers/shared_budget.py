@@ -97,13 +97,17 @@ def _normalized(raw: object, slot: int) -> list[list[int]]:
         numbers = [int(v) for v in entry]
         minute_slot = numbers[0]
         if raw["schema"] == 1:
-            # Count the entire legacy bucket in its final minute: safe across a
-            # live migration when the legacy 17:05–17:10 slot straddles 17:09.
+            # Count an old bucket through its end to conservatively preserve
+            # spend if the 17:05–17:10 bucket straddles the 17:09 UTC reset.
+            legacy_start = minute_slot * SLOT_SECONDS
+            current_start = slot * SLOT_SECONDS + SLOT_OFFSET_SECONDS
+            if legacy_start > current_start:
+                raise SharedBudgetUnavailable("Future-dated legacy budget bucket")
             legacy_end = datetime.fromtimestamp(
-                (minute_slot + 1) * SLOT_SECONDS - 1, tz=timezone.utc
+                legacy_start + SLOT_SECONDS - 1, tz=timezone.utc
             )
-            # An in-progress legacy 5-minute bucket may end after "now".
-            # Keep all of its recorded spend rather than failing or dropping it.
+            # The ongoing legacy bucket might not have ended yet; it is still
+            # already spent, so include it in the current new-provider slot.
             minute_slot = min(_now_slot(legacy_end), slot)
             numbers[0] = minute_slot
         if any(v < 0 for v in numbers[1:]) or minute_slot > slot:
