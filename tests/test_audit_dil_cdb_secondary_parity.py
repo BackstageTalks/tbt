@@ -60,6 +60,14 @@ class SecondaryParityTests(unittest.TestCase):
         with sqlite3.connect(self.dil) as db:db.execute('UPDATE canonical_matches SET stats_json=?',(json.dumps({'p1_aces':12,'p2_aces':2}),))
         r=self.check()
         self.assertEqual(r['counts']['cdb_stat_cells_conflicting_effective_dil'],1)
+    def test_source_only_null_provider_context_is_not_a_missing_value(self):
+        with sqlite3.connect(self.cdb) as db:
+            db.execute('UPDATE cdb_matches SET provider_context_json=?',
+                       (json.dumps({'venue':{'region':None},'unknown':None}),))
+        self.sha=audit.file_sha256(self.cdb)
+        rc=json.loads(self.receipt.read_text());rc['export_sqlite_sha256']=self.sha
+        self.receipt.write_text(json.dumps(rc))
+        self.assertTrue(self.check(full_integrity=True)['secondary_promotion_allowed'])
     def test_cdb_metadata_missing_blocks(self):
         with sqlite3.connect(self.dil) as db:
             db.execute('UPDATE canonical_matches SET tournament=NULL')
