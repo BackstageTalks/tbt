@@ -2820,6 +2820,43 @@ def run_history_retention(*, actor_id: str = "history-worker") -> dict:
             "failed": sum(int(row.get("failed") or 0) for row in per_kind.values())}
 
 
+
+def run_history_retention_guarded(*, actor_id: str = "history-worker", now: datetime | None = None) -> dict:
+    """At most one cleanup per UTC six-hour bucket across parallel LIVE workers.
+
+    An incomplete sweep releases its reservation so the next externally
+    dispatched worker can retry. Azure Table create_entity is atomic.
+    """
+    clock = now or datetime.now(timezone.utc)
+    if clock.tzinfo is None:
+        clock = clock.replace(tzinfo=timezone.utc)
+    clock = clock.astimezone(timezone.utc)
+    bucket = clock.strftime("%Y%m%d") + "-" + str(clock.hour // 6)
+    table = _table(_HISTORY_RETENTION_TABLE)
+    lease = {"PartitionKey": "worker-runs", "RowKey": bucket,
+             "started_at": clock.isoformat(), "actor": str(actor_id or "")[:128]}
+    try:
+        table.create_entity(lease)
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        name = type(exc).__name__.lower()
+        if status == 409 or "exists" in name or "conflict" in name:
+            return {"ok": True, "skipped": True, "bucket": bucket, "reason": "already_claimed"}
+        raise AdminStorageUnavailable("Unable to reserve history cleanup run") from exc
+    try:
+        result = run_history_retention(actor_id=actor_id)
+        if result["failed"]:
+            raise AdminStorageUnavailable("History cleanup was only partially successful")
+        return {"ok": True, "bucket": bucket, **result}
+    except Exception:
+        try:
+            table.delete_entity(partition_key="worker-runs", row_key=bucket)
+        except Exception:
+            pass
+        raise
+
+
+
 _INFO_RETENTION_TABLE = "BlinQInfoRetention"
 
 
