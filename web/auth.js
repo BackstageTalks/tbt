@@ -546,6 +546,18 @@
       method:'POST', body:JSON.stringify({ids,excluded}),
     });
   }
+  async function adminHistoryRetention(kind, retentionHours) {
+    if (kind === undefined) return apiWithSession('/api/v1/admin/history-retention');
+    return apiWithSession('/api/v1/admin/history-retention', {
+      method: 'PUT', body: JSON.stringify({kind, retention_hours: retentionHours}),
+    });
+  }
+  async function adminCleanupHistory(kind, mode) {
+    return apiWithSession('/api/v1/admin/history-retention', {
+      method: 'POST',
+      body: JSON.stringify({kind, mode, confirmation: 'DELETE HISTORY ' + kind.toUpperCase() + ' ' + mode.toUpperCase()}),
+    });
+  }
   async function adminLiveResults() {
     return apiWithSession('/api/v1/admin/live-radar/results');
   }
@@ -772,7 +784,7 @@
 
   window.BlinqAuth = {
     init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, matchIntelligence,
-    projectGroups, joinProjectGroup, leaveProjectGroup, insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, markInsightRead,
+    projectGroups, joinProjectGroup, leaveProjectGroup, insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, adminHistoryRetention, adminCleanupHistory, markInsightRead,
     adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
     adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult, adminInfoResultRetention, adminDeleteAllInfoResults,
     adminResultTestExclusions, adminSetResultTestExclusions,

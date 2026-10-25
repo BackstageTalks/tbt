@@ -83,6 +83,7 @@ def test_admin_ui_requires_explicit_delete_confirmation():
     app = (root / "web" / "app.js").read_text(encoding="utf-8")
     api = (root / "api" / "function_app.py").read_text(encoding="utf-8")
     assert "admin-info-results-collapsible" in app
-    assert "data-admin-action=\"info-results-delete-all\"" in app
+    assert "data-admin-action=\"history-delete-all\"" in app
+    assert "data-admin-action=\"history-delete-older\"" in app
     assert "DELETE ALL" in app
     assert "DELETE ALL INFO RESULTS" in api
