@@ -345,7 +345,7 @@ def test_binary_image_provider_request_requires_quota_header(monkeypatch):
 def test_remote_budget_receipt_must_confirm_live_300_reserve_contract(monkeypatch):
     from tbt.providers.shared_budget import HttpReservation
     current = {
-        "schema": 1,
+        "schema": 2,
         "window": "provider_day_17_09_utc",
         "provider_plan_limit": 15000,
         "global_limit": 14700,
