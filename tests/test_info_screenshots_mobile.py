@@ -93,6 +93,37 @@ def test_authorized_recipient_can_open_private_screenshot(monkeypatch):
     assert result.headers.get("Cache-Control") == "private, no-store"
 
 
+def test_photo_only_and_text_only_insights_are_allowed(monkeypatch):
+    from tbt.services import admin_storage as storage
+
+    monkeypatch.setattr(storage, "info_alert_levels", lambda: ["pro", "elite", "legend", "goat"])
+    base = {"type": "vip", "levels": ["pro"]}
+    assert storage.normalize_insight({**base, "title": "", "body": "", "media_ids": [PRIVATE_ID]})["title"] == ""
+    assert storage.normalize_insight({**base, "title": "", "body": "Just text"})["body"] == "Just text"
+    assert storage.normalize_insight({**base, "title": "Only title", "body": ""})["body"] == ""
+    with pytest.raises(ValueError, match="title, message or screenshot"):
+        storage.normalize_insight({**base, "title": "", "body": "", "media_ids": []})
+    with pytest.raises(ValueError, match="at most 140"):
+        storage.normalize_insight({**base, "title": "x"*141, "body": ""})
+    with pytest.raises(ValueError, match="at most 4000"):
+        storage.normalize_insight({**base, "title": "", "body": "x"*4001})
+
+
+def test_private_blob_csp_and_optional_frontend_contract():
+    config = json.loads((ROOT / "web/staticwebapp.config.json").read_text(encoding="utf-8"))
+    policy = config["globalHeaders"]["Content-Security-Policy"]
+    assert "img-src 'self' data: blob: https:" in policy
+    assert "script-src 'self'" in policy
+    app = (ROOT / "web/app.js").read_text(encoding="utf-8")
+    module = (ROOT / "web/insight-media.js").read_text(encoding="utf-8")
+    assert 'data-insight-title maxlength="140" required' not in app
+    assert 'data-insight-body maxlength="4000" required' not in app
+    assert "doplň nadpis aj text" not in app
+    assert "pridaj nadpis, text alebo obrázok" in app
+    assert "window.BlinqInsightMedia.gallery(item.media_ids)" in app
+    assert "source.naturalWidth===0" in module
+
+
 def test_mobile_gallery_is_wired_before_application_and_stays_private():
     index = (ROOT / "web/index.html").read_text(encoding="utf-8")
     auth = (ROOT / "web/auth.js").read_text(encoding="utf-8")
