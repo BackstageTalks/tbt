@@ -48,9 +48,22 @@ def nested_subset(actual, expected):
     ) else actual == expected
 
 
+def populated_context(data):
+    """Ignore absent CDB context leaves; zero and False are real values."""
+    if isinstance(data, dict):
+        cleaned = {k: v for k, raw in data.items()
+                   if (v := populated_context(raw)) is not None}
+        return cleaned or None
+    if data is None or isinstance(data, str) and miss(data):
+        return None
+    if isinstance(data, (dict, list)) and not data:
+        return None
+    return data
+
+
 def metadata_comparison(field, present, canonical):
     if field == 'provider_context_json':
-        source = json_obj(canonical)
+        source = populated_context(json_obj(canonical))
         if not source:
             return 'not_required'
         current = json_obj(present)
