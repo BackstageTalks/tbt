@@ -11,6 +11,8 @@ from collections import Counter
 from contextlib import closing
 import hashlib
 import json
+import math
+from numbers import Real
 from pathlib import Path
 import sqlite3
 import sys
@@ -32,6 +34,25 @@ def file_sha256(path: Path):
         for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b''):
             h.update(chunk)
     return h.hexdigest()
+
+
+# Match BackstageTalks/tbt api/tbt/utils.py is_rate_stat_field contract.
+RATE_KEYS = frozenset({'first_serve_win','second_serve_win','service_points_won',
+                       'ace_rate','return_points_won','break_points_won'})
+
+
+def valid_canonical_metric(key, value):
+    if value is None or value == '':
+        return True
+    if isinstance(value, bool) or not isinstance(value, Real):
+        return False
+    number = float(value)
+    if not math.isfinite(number):
+        return False
+    normalized = str(key).lower().strip()
+    if normalized.startswith(('p1_', 'p2_')):
+        normalized = normalized[3:]
+    return normalized not in RATE_KEYS or 0 <= number <= 1
 
 
 def nested_subset(actual, expected):
@@ -145,6 +166,10 @@ def audit(cdb_path, dil_path, cdb_sha256, *, full_integrity=False, attest=None):
             if has_overlay:
                 entry = query_overlay.execute('SELECT json_metrics FROM dil_enrichment_compact WHERE match_id=?', (m['match_id'],)).fetchone()
                 if entry: overlay = json_obj(entry[0])
+            counts['invalid_dil_canonical_metric_cells'] += sum(
+                not valid_canonical_metric(k, v) for k, v in stats_dil.items())
+            counts['invalid_dil_overlay_metric_cells'] += sum(
+                not valid_canonical_metric(k, v) for k, v in overlay.items())
             for k, value in stats_cdb.items():
                 if miss(value):
                     continue
@@ -174,7 +199,8 @@ def audit(cdb_path, dil_path, cdb_sha256, *, full_integrity=False, attest=None):
                 'core_mismatched_matches', 'cdb_metadata_missing_fields',
                 'cdb_metadata_conflicting_fields', 'cdb_stat_cells_missing_effective_dil',
                 'cdb_stat_cells_conflicting_effective_dil', 'cdb_sqlite_check_failures',
-                'dil_sqlite_check_failures', 'cdb_foreign_key_failures', 'dil_foreign_key_failures')
+                'dil_sqlite_check_failures', 'invalid_dil_canonical_metric_cells',
+                'invalid_dil_overlay_metric_cells', 'cdb_foreign_key_failures', 'dil_foreign_key_failures')
     passed = full_integrity and all(counts.get(x, 0) == 0 for x in failures)
     return {'schema': 'DIL_SECONDARY_STRICT_CURRENT_CDB_PARITY_V1',
             'status': ('VERIFIED_CURRENT_CDB_PARITY' if passed else
