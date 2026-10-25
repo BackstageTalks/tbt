@@ -101,7 +101,9 @@ def _normalized(raw: object, slot: int) -> list[list[int]]:
             # spend if the 17:05–17:10 bucket straddles the 17:09 UTC reset.
             legacy_start = minute_slot * SLOT_SECONDS
             current_start = slot * SLOT_SECONDS + SLOT_OFFSET_SECONDS
-            if legacy_start > current_start:
+            # During a rolling deploy, an old writer can legitimately place
+            # its 17:10 bucket inside the new 17:09–17:14 slot.
+            if legacy_start >= current_start + SLOT_SECONDS:
                 raise SharedBudgetUnavailable("Future-dated legacy budget bucket")
             legacy_end = datetime.fromtimestamp(
                 legacy_start + SLOT_SECONDS - 1, tz=timezone.utc
