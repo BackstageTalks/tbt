@@ -116,7 +116,7 @@ class RapidTennisClient:
         # server-side quota when a GitHub job supplies its budget credentials.
         # Missing/incomplete credentials fail closed rather than silently
         # bypassing a partially configured shared budget.
-        from .shared_budget import from_environment
+        from .shared_budget import GLOBAL_CEILING, from_environment
         shared_reservation = from_environment()
         self._shared_reservation = shared_reservation
         if shared_reservation is not None and request_budget is not None:
@@ -158,7 +158,8 @@ class RapidTennisClient:
             # Preserve the historical ~1.5 rps default for runtime/live callers.
             self._min_request_interval = 0.66
         self.request_count = 0
-        self.request_limit = 15000
+        # Per-client ceiling may never advertise more than the shared provider-day cap.
+        self.request_limit = GLOBAL_CEILING
         # Latency-sensitive workers may opt out of retries without affecting batch jobs.
         self.retry_attempts = 5
         self.rate_limit_remaining = None

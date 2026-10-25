@@ -12,13 +12,20 @@ from tbt.providers.budget import RequestBudgetExceeded
 
 
 def test_cancelled_runs_keep_reserved_allowance():
-    now = datetime(2026, 9, 5, tzinfo=timezone.utc)
+    # Unused reservations stay committed until 17:09 UTC, never for 28 hours.
+    now = datetime(2026, 9, 5, 16, 0, tzinfo=timezone.utc)
     ledger, granted = reserve_allocation({}, 9000, now)
     assert granted == 9000
     ledger, granted = reserve_allocation(ledger, 5000, now)
-    assert granted == 3000
-    assert reserve_allocation(ledger, 5000, now + timedelta(hours=26))[1] == 0
-    assert reserve_allocation(ledger, 5000, now + timedelta(hours=28))[1] == 5000
+    assert granted == 5000
+    ledger, granted = reserve_allocation(ledger, 1000, now)
+    assert granted == 700
+    assert reserve_allocation(ledger, 1000, now)[1] == 0
+    with pytest.raises(RequestBudgetExceeded):
+        reserve_allocation(ledger, 5000, datetime(2026, 9, 5, 17, 8, tzinfo=timezone.utc))
+    assert reserve_allocation(
+        ledger, 5000, datetime(2026, 9, 5, 17, 10, tzinfo=timezone.utc)
+    )[1] == 5000
 
 
 def test_local_budget_is_shared_across_instances_and_restarts(tmp_path):
