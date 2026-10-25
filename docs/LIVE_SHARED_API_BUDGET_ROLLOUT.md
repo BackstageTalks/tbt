@@ -8,7 +8,7 @@ keeps **300 requests (2.00%)** as provider headroom.
 
 The durable ledger is aligned to the verified provider-day reset used by the
 runtime guard: **17:09 UTC** (18:09 winter / 19:09 summer in Bratislava).
-ALL billable TennisAPI requests are blocked at **17:07–17:09 UTC**,
+ALL billable TennisAPI requests are blocked at **17:07–17:10 UTC**,
 regardless of priority. A guarded **17:10–17:13 UTC** new provider-day
 statistics startup is limited to a cumulative 3,000 requests.
 Usage is stored in five-minute buckets, but the accounting window is the
