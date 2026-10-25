@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_mobile_card_css_loaded_after_existing_styles():
     html = (ROOT / "web/index.html").read_text(encoding="utf-8")
-    assert "/blinq-daily-hub-mobile.css?v=20261025-1" in html
+    assert "/blinq-daily-hub-mobile.css?v=7360&daily-mobile=20261025-1" in html
     assert html.index("/blinq-mobile.css") < html.index("/blinq-daily-hub-mobile.css")
     assert html.index("/blinq-detail.css") < html.index("/blinq-daily-hub-mobile.css")
 
