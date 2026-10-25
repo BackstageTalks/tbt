@@ -323,7 +323,12 @@ def selected_dashboard_cards(feed: dict, ui_config: dict | None, *, now: datetim
     hub = dashboard.get("daily_hub") if isinstance(dashboard, dict) else {}
     tabs = hub.get("tabs") if isinstance(hub, dict) else {}
     prime = tabs.get("prime") if isinstance(tabs, dict) else {}
-    exclude_acca = isinstance(prime, dict) and prime.get("exclude_from_stats") is True
+    # Global ACCA OFF is a source gate for STATS, not just UI visibility.
+    # The explicit STATS-only toggle remains independently available while
+    # ACCA is globally ON. Historical Results rows stay intact.
+    exclude_acca = isinstance(prime, dict) and (
+        prime.get("enabled") is False or prime.get("exclude_from_stats") is True
+    )
     if exclude_acca:
         rows = []
         for row in feed.get("results") or []:

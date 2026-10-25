@@ -3475,7 +3475,10 @@
     return allowed;
   }
   function accaExcludedFromStats(){
-    return state.ui?.dashboard?.daily_hub?.tabs?.prime?.exclude_from_stats===true;
+    const prime=state.ui?.dashboard?.daily_hub?.tabs?.prime;
+    // Global ACCA OFF also disables the STATS feed. The separate exclusion
+    // checkbox remains effective while ACCA is ON. Results history is immutable.
+    return prime?.enabled===false||prime?.exclude_from_stats===true;
   }
   function settledPublishedEntries(rows,category='all',filters=null,statsOnly=false){
     const specific=String(category).includes(',')||['top200','prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
@@ -3839,12 +3842,12 @@
       const visible=String(rule.visible_rows??0).toUpperCase(),display=String(rule.display_state||((rule.tab_enabled!==false)?'active':'hidden'));
       const selection=String(rule.selection_mode||'first'),overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};
       const accaStatsToggle=tab==='prime'
-        ?`<label class="admin-acca-stats-toggle"><input type="checkbox" data-admin-acca-exclude-stats ${tc.exclude_from_stats===true?'checked':''}><span><strong>Vylúčiť ACCA zo STATS</strong><small>ACCA sa nebude počítať do úspešnosti, vzorky, kurzov, ROI ani zisku. História tipov zostane zachovaná. Platí globálne pre všetky levely.</small></span></label>`
+        ?`<label class="admin-acca-stats-toggle"><input type="checkbox" data-admin-acca-exclude-stats ${tc.exclude_from_stats===true||!globalOn?'checked':''} ${!globalOn?'disabled':''}><span><strong>Vylúčiť ACCA zo STATS</strong><small>Globálne vypnutie ACCA automaticky zastaví aj jej prísun do STATS. Týmto nezávislým prepínačom ju môžeš vylúčiť aj pri zapnutej ACCA. História tipov zostane zachovaná; platí pre všetky levely.</small></span></label>`
         :'';
       const rowOverrides=[1,2,3,4,5,6,7,8,9,10].map(position=>{const mode=String(overrides[position]||'active');return `<label><span>${position}</span><select data-admin-hub-row-state="${position}" data-admin-hub-tab="${tab}"><option value="active"${mode==='active'?' selected':''}>SHOW</option><option value="blurred"${mode==='blurred'?' selected':''}>BLUR</option><option value="hidden"${mode==='hidden'?' selected':''}>HIDE</option></select></label>`;}).join('');
       return `<div class="admin-daily-matrix-row${globalOn?'':' is-global-off'}${display==='hidden'?' is-level-off':''}" data-admin-hub-tab-card="${tab}">
-        <div class="admin-daily-category"><strong>${escapeHtml(dailyHubTabLabel(tab))}</strong><small>${globalOn?'Na webe':'Globálne vypnuté'}</small></div>
-        <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-global-field="enabled" data-admin-hub-tab="${tab}" ${globalOn?'checked':''}><span>Na webe</span></label>
+        <div class="admin-daily-category"><strong>${escapeHtml(dailyHubTabLabel(tab))}</strong><small>${tab==='prime'?(globalOn?(tc.exclude_from_stats===true?'Web zapnutý · STATS vypnuté':'Web + STATS zapnuté'):'Web + STATS vypnuté'):(globalOn?'Na webe':'Globálne vypnuté')}</small></div>
+        <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-global-field="enabled" data-admin-hub-tab="${tab}" ${globalOn?'checked':''}><span>${tab==='prime'?'ACCA aktívna':'Na webe'}</span></label>
         <label class="admin-daily-row-count"><span>Prístup pre ${escapeHtml(levelLabel)}</span><select data-admin-hub-field="display_state" data-admin-hub-tab="${tab}" ${!globalOn?'disabled':''}><option value="active"${display==='active'?' selected':''}>ZOBRAZIŤ</option><option value="blurred"${display==='blurred'?' selected':''}>ZAMKNÚŤ</option><option value="hidden"${display==='hidden'?' selected':''}>SKRYŤ</option></select></label>
         <label class="admin-daily-row-count"><span>Odomknuté riadky</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}>${[0,1,2,3,4,5,6,7,8,9,10,'ALL'].map(v=>`<option value="${v}"${visible===String(v).toUpperCase()?' selected':''}>${String(v).toUpperCase()==='ALL'?'VŠETKY':v}</option>`).join('')}</select></label><label class="admin-daily-row-count"><span>Výber</span><select data-admin-hub-field="selection_mode" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}><option value="first"${selection==='first'?' selected':''}>PRVÉ</option><option value="stable_random"${selection==='stable_random'?' selected':''}>NÁHODNÉ / DEŇ</option></select></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''} ${!globalOn||display==='hidden'?'disabled':''}><span>Zamknúť zvyšok</span></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''} ${!globalOn||display!=='active'?'disabled':''}><span>Celá ponuka</span></label><details class="admin-row-overrides admin-row-advanced"><summary><span>Pokročilé nastavenia</span><small>Ručné pravidlá pre jednotlivé pozície</small></summary><div class="admin-row-advanced-body"><strong>Riadky 1–10 · SHOW / BLUR / HIDE</strong><div>${rowOverrides}</div><small>BLUR a HIDE neposielajú citlivý obsah do prehliadača. Pri NÁHODNÉ / DEŇ zostáva výber stabilný celý deň pre konkrétny účet.</small>${accaStatsToggle}</div></details>
       </div>`;
@@ -6190,7 +6193,21 @@ function adminActivityRows(){
         showStatus(`ACCA · ${t.checked?'vylúčené zo STATS':'zahrnuté do STATS'} · klikni Publikovať.`);
         return;
       }
-      if(t.dataset.adminHubGlobalField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc[t.dataset.adminHubGlobalField]=t.type==='checkbox'?t.checked:t.value;renderAllUiContent();rerenderAdmin();showStatus(`${dailyHubTabLabel(tab)} · ${tc.enabled===false?'vypnuté':'zapnuté'} globálne.`);return;}
+      if(t.dataset.adminHubGlobalField){
+        const tab=t.dataset.adminHubTab;
+        const hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};
+        const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};
+        tc[t.dataset.adminHubGlobalField]=t.type==='checkbox'?t.checked:t.value;
+        renderAllUiContent();rerenderAdmin();
+        if(tab==='prime'){
+          showStatus(tc.enabled===false
+            ?'ACCA vypnutá: záložka aj prísun ACCA zápasov do STATS sú vypnuté. Klikni Publikovať.'
+            :'ACCA zapnutá: STATS rešpektujú aj samostatný prepínač vylúčenia. Klikni Publikovať.');
+        }else{
+          showStatus(`${dailyHubTabLabel(tab)} · ${tc.enabled===false?'vypnuté':'zapnuté'} globálne.`);
+        }
+        return;
+      }
       if(t.dataset.adminHubField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{visible_rows:0,blur_remaining:true,tab_enabled:true,see_all:false,selection_mode:'first',display_state:'active',row_overrides:{}};let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.adminHubField==='visible_rows'&&String(value).toUpperCase()!=='ALL')value=Number(value);rule[t.dataset.adminHubField]=value;rule.tab_enabled=rule.display_state!=='hidden';if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminHubRowState){const tab=t.dataset.adminHubTab,position=String(t.dataset.adminHubRowState),hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.row_overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};if(t.value==='active')delete rule.row_overrides[position];else rule.row_overrides[position]=t.value;if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminResultsPlan){const id=String(t.dataset.adminResultsPlan||'').toLowerCase();if(membershipHierarchy.includes(id)){const item=elements()?.SIDEBAR_RESULTS;if(item){item.access=item.access||{};item.access[id]=t.checked?'active':'locked';if(id==='rookie')item.access.trial=t.checked?'active':'locked';showStatus(`Výsledky · ${String(state.ui?.plans?.[id]?.label||id).replace(/^BlinQ\s+/i,'')} ${t.checked?'odomknuté':'zamknuté'} · klikni Publikovať.`);renderAllUiContent();rerenderAdmin();}}return;}
