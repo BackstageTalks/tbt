@@ -1,0 +1,130 @@
+name: DIL secondary - private full current CDB parity
+
+'on':
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dil-secondary-live-parity-private.yml'
+      - 'scripts/stage_dil_from_google_drive.py'
+      - 'tests/test_stage_dil_from_google_drive.py'
+      - 'scripts/summarize_dil_secondary_private_audit.py'
+      - 'tests/test_summarize_dil_secondary_private_audit.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dil-secondary-private-live-parity-single-reader
+  cancel-in-progress: false
+
+jobs:
+  read-only-secondary-reconciliation:
+    if: github.repository == 'BackstageTalks/tbt' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      DIL_PRIVATE_FOLDER_ID: 1crwy2Z0AoG-bApBOhZ8SKvK_gJ9T7Ypg
+      PYTHONPATH: api:scripts
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout trusted main without persisted GitHub credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test private DIL reader and immutability rules without credentials
+        env:
+          GH_TOKEN: ''
+          BLINQ_DRIVE_READER_JSON: ''
+        run: |
+          set -euo pipefail
+          python -m unittest discover -q -s tests -p 'test_stage_dil_from_google_drive.py'
+          python -m unittest discover -q -s tests -p 'test_summarize_dil_secondary_private_audit.py'
+          python -m unittest discover -q -s tests -p 'test_refresh_dil_secondary.py'
+          python -m unittest discover -q -s tests -p 'test_audit_dil_cdb_secondary_parity.py'
+      - name: Install canonical Parquet and private Drive read dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check 'google-auth>=2,<3' 'requests>=2.31,<3' 'pandas>=2,<3' 'pyarrow==18.1.0' 'numpy>=1.26,<3' 'pydantic>=2,<3' 'pydantic-settings>=2,<3'
+          command -v zstd || (sudo apt-get update -qq && sudo apt-get install -y zstd)
+      - name: Verify private source credentials and sufficient scratch capacity
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'BLOCKED_PRIVATE_CDB_TOKEN_MISSING'; exit 1; }
+          test -n "$BLINQ_DRIVE_READER_JSON" || { echo 'BLOCKED_PRIVATE_DRIVE_READER_MISSING'; exit 1; }
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = true
+          python - <<'PY'
+          import shutil,tempfile
+          gb=shutil.disk_usage(tempfile.gettempdir()).free/1024**3
+          print('PRIVATE_DIL_RUNNER_FREE_DISK_GIB',round(gb,2))
+          if gb<12: raise SystemExit('BLOCKED_INSUFFICIENT_RUNNER_DISK')
+          PY
+      - name: Restore all 33 private DIL parts and perform full SQLite integrity check
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/dil-private/source" "$RUNNER_TEMP/dil-private/secondary"
+          python scripts/stage_dil_from_google_drive.py \
+            --folder-id "$DIL_PRIVATE_FOLDER_ID" \
+            --out "$RUNNER_TEMP/dil-private/source/base.sqlite" \
+            --scratch "$RUNNER_TEMP/dil-private/source/drive-parts" \
+            --expected-archive-sha256 3bb17d3fe4a1b18aa324afd3d833e5743ddfe16a054511393c42c85f28289ede \
+            --expected-sqlite-sha256 b39f489e321f346c729bd150c871ee0cd54a70db2b0ebe0f8333892da840c816
+          echo 'PRIVATE_DIL_33_PARTS_SHA_AND_FULL_SQLITE_INTEGRITY_PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Full current CDB reconciliation into isolated secondary DIL
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/dil-private"
+          if python scripts/refresh_dil_secondary.py \
+              --base-dil "$ROOT/source/base.sqlite" \
+              --work-dir "$ROOT/attempt-one" \
+              --secondary-dir "$ROOT/secondary" \
+              --activate-secondary > "$ROOT/attempt-one-private-operator.log" 2>&1; then
+            echo 'PRIVATE_DIL_FIRST_LIVE_PARITY_PASS_SECONDARY_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'PRIVATE_DIL_FIRST_LIVE_PARITY_BLOCKED_NO_SECONDARY_ACTIVATION' >> "$GITHUB_STEP_SUMMARY"
+            python scripts/summarize_dil_secondary_private_audit.py \
+              --audit "$ROOT/attempt-one/secondary-parity.json" \
+              --out "$ROOT/live-aggregate-1.json" || true
+            if test -f "$ROOT/live-aggregate-1.json"; then cat "$ROOT/live-aggregate-1.json"; fi
+            exit 2
+          fi
+          python scripts/summarize_dil_secondary_private_audit.py \
+              --audit "$ROOT/attempt-one/secondary-parity.json" \
+              --out "$ROOT/live-aggregate-1.json"
+          cat "$ROOT/live-aggregate-1.json"
+      - name: Independently read back secondary health and latest CDB freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/dil-private"
+          python scripts/check_dil_secondary_health.py \
+            --secondary-dir "$ROOT/secondary" --verify-live-cdb \
+            > "$ROOT/secondary-health-private.log" 2>&1 || {
+              echo 'PRIVATE_DIL_HEALTH_OR_LATEST_RELEASE_CHECK_BLOCKED'; exit 2;
+            }
+          python - <<'PY'
+          import json,os,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'dil-private'
+          r=json.loads((root/'live-aggregate-1.json').read_text())
+          assert r['status']=='VERIFIED_CURRENT_CDB_PARITY'
+          assert r['secondary_promotion_allowed'] is True
+          ptr=json.loads((root/'secondary/current-secondary.json').read_text())
+          assert ptr['secondary_only'] is True
+          assert (root/'secondary'/ptr['filename']).is_file()
+          print('ONE_FULL_CURRENT_SOURCE_PARITY_AND_IMMUTABLE_SECONDARY_READBACK_PASS')
+          PY
+          echo 'ONE_FULL_CURRENT_SOURCE_PARITY_AND_IMMUTABLE_SECONDARY_READBACK_PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Erase source and isolated candidate after ephemeral audit
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/dil-private"
+          echo 'PRIVATE_DATA_ERASED_FROM_EPHEMERAL_RUNNER_NO_PUBLIC_ARTIFACT' >> "$GITHUB_STEP_SUMMARY"
