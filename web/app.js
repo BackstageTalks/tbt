@@ -1849,7 +1849,8 @@
       return;
     }
     if(!rows.length){const set2Empty=channel==='live'&&state.liveRadarTab==='set2';const msg=filter==='unread'?lcopy('You have read everything.','Všetko máš prečítané.','Všechno máš přečtené.'):filter==='pinned'?lcopy('No pinned messages yet.','Zatiaľ nemáš pripnuté správy.','Zatím nemáš připnuté zprávy.'):set2Empty?lcopy('No eligible set-2 candidate is active right now.','Momentálne nie je aktívny žiadny kvalifikovaný kandidát pre 2. set.','Momentálně není aktivní žádný kvalifikovaný kandidát pro 2. set.'):channel==='live'?lcopy('No LIVE signal is active right now.','Momentálne nie je aktívny žiadny LIVE signál.','Momentálně není aktivní žádný LIVE signál.'):channel==='project'?lcopy('No project messages yet.','V tejto projektovej skupine zatiaľ nie sú žiadne správy.','V této projektové skupině zatím nejsou žádné zprávy.'):lcopy('No messages for your membership yet.','Pre tvoju úroveň zatiaľ nie sú žiadne správy.','Pro tvoji úroveň zatím nejsou žádné zprávy.');const emptyDetail=set2Empty?lcopy('The set-2 radar waits for an eligible ACCA candidate after a lost first set; a real live set-2 price is shown when the provider offers it.','Radar 2. setu čaká na kvalifikovaného ACCA kandidáta po prehratom 1. sete; reálny LIVE kurz na 2. set zobrazí, keď ho provider ponúkne.','Radar 2. setu čeká na kvalifikovaného ACCA kandidáta po prohraném 1. setu; reálný LIVE kurz na 2. set zobrazí, když ho provider nabídne.'):channel==='live'?lcopy('WATCH candidates and confirmed comeback signals will appear here.','WATCH kandidáti a potvrdené comeback signály sa zobrazia tu.','WATCH kandidáti a potvrzené comeback signály se zobrazí zde.'):lcopy('Important BlinQ updates and private member notes will appear here.','Dôležité BlinQ informácie a súkromné správy pre členov sa zobrazia tu.','Důležité BlinQ informace a soukromé zprávy pro členy se zobrazí zde.');list.innerHTML=radarPanel+`<div class="insight-feed-empty"><i>✦</i><strong>${escapeHtml(msg)}</strong><p>${escapeHtml(emptyDetail)}</p></div>`;return;}
-    list.innerHTML=radarPanel+rows.map(item=>`<article class="insight-feed-item ${item.read?'is-read':'is-unread'} priority-${escapeHtml(item.priority||'normal')}" data-insight-id="${escapeHtml(item.id)}"><div class="insight-feed-icon type-${escapeHtml(item.type||'insight')}">${escapeHtml(insightTypeIcon(item.type))}</div><div class="insight-feed-content"><header><div><span>${escapeHtml(insightTypeLabel(item.type))}</span>${item.pinned?'<b>PRIPNUTÉ</b>':''}${!item.read?'<em>NEW</em>':''}</div><time>${escapeHtml(item.created_at?fmtDate(item.created_at)+' · '+fmtTime(item.created_at):'')}</time></header><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.body)}</p><footer><small>${escapeHtml(insightAudienceText(item.levels))}</small>${item.match_id?`<button type="button" data-insight-match="${escapeHtml(item.match_id)}">${escapeHtml(item.link_label||lcopy('Open match','Otvoriť zápas','Otevřít zápas'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></button>`:item.link?`<a href="${escapeHtml(item.link)}" ${isExternalLink(item.link)?'target="_blank" rel="noopener"':''}>${escapeHtml(item.link_label||lcopy('Open','Otvoriť','Otevřít'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></a>`:''}</footer></div></article>`).join('');
+    list.innerHTML=radarPanel+rows.map(item=>`<article class="insight-feed-item ${item.read?'is-read':'is-unread'} priority-${escapeHtml(item.priority||'normal')}" data-insight-id="${escapeHtml(item.id)}"><div class="insight-feed-icon type-${escapeHtml(item.type||'insight')}">${escapeHtml(insightTypeIcon(item.type))}</div><div class="insight-feed-content"><header><div><span>${escapeHtml(insightTypeLabel(item.type))}</span>${item.pinned?'<b>PRIPNUTÉ</b>':''}${!item.read?'<em>NEW</em>':''}</div><time>${escapeHtml(item.created_at?fmtDate(item.created_at)+' · '+fmtTime(item.created_at):'')}</time></header><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.body)}</p>${window.BlinqInsightMedia.gallery(item.media_ids)}<footer><small>${escapeHtml(insightAudienceText(item.levels))}</small>${item.match_id?`<button type="button" data-insight-match="${escapeHtml(item.match_id)}">${escapeHtml(item.link_label||lcopy('Open match','Otvoriť zápas','Otevřít zápas'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></button>`:item.link?`<a href="${escapeHtml(item.link)}" ${isExternalLink(item.link)?'target="_blank" rel="noopener"':''}>${escapeHtml(item.link_label||lcopy('Open','Otvoriť','Otevřít'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></a>`:''}</footer></div></article>`).join('');
+    window.BlinqInsightMedia.loadImages(list);
   }
   async function loadInsights(force=false){
     const generation=feedGeneration;
@@ -4420,11 +4421,12 @@ function adminActivityRows(){
   }
   function adminInsightMessageHtml(index,value={}){
     const n=Number(index)||0;
-    return `<div class="admin-insight-message-card" data-insight-message>
+    return `<div class="admin-insight-message-card" data-insight-message data-insight-media-ids='${escapeHtml(JSON.stringify(Array.isArray(value.media_ids)?value.media_ids:[]))}'>
       <div class="admin-insight-message-head"><div><small>SPRÁVA <b data-insight-message-number>${n+1}</b></small><span>Nadpis + text sa odošlú ako samostatná INFO/LIVE správa.</span></div><button type="button" class="admin-insight-message-remove" data-admin-action="insight-message-remove" aria-label="Odstrániť správu">×</button></div>
       <label>Nadpis<input data-insight-title maxlength="140" required value="${escapeHtml(value.title||'')}"></label>
       <label>Správa<textarea data-insight-body maxlength="4000" required rows="5">${escapeHtml(value.body||'')}</textarea></label>
       <label>Event ID / zápas <span>(voliteľné)</span><input data-insight-match-id value="${escapeHtml(value.match_id||'')}"></label>
+      ${window.BlinqInsightMedia.markup(value)}
     </div>`;
   }
   function syncAdminInsightBatchComposer(form){
@@ -4651,7 +4653,7 @@ function adminActivityRows(){
     const liveOptions=membershipHierarchy.map(level=>`<option value="${level}"${level===liveMin?' selected':''}>${escapeHtml(String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,'').toUpperCase())}+</option>`).join('');
     const infoOptions=membershipHierarchy.map(level=>`<option value="${level}"${level===infoMin?' selected':''}>${escapeHtml(String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,'').toUpperCase())}+</option>`).join('');
     const audiencePresets=[['all','VŠETCI'],['pro+','PRO+'],['elite+','ELITE+'],['legend+','LEGEND+'],['goat','GOAT']].map(([value,label])=>`<button type="button" class="btn btn-ghost" data-admin-action="insight-audience-preset" data-audience-preset="${value}">${label}</button>`).join('');
-    const composerMessages=adminInsightMessageHtml(0,{title:item.title||'',body:item.body||'',match_id:item.match_id||''});
+    const composerMessages=adminInsightMessageHtml(0,{title:item.title||'',body:item.body||'',match_id:item.match_id||'',media_ids:item.media_ids||[]});
     const addMessage=item.id?'':`<div class="admin-insight-batch-add"><button type="button" class="btn btn-ghost" data-admin-action="insight-message-add">+ Pridať ďalšiu správu</button><span data-insight-message-count>1/5</span></div>`;
     return `<section class="admin-ux-section admin-insights-section">
       <div class="admin-ux-heading"><div><small>SPRÁVY & LIVE</small><h2>Info & Comeback LIVE</h2><p>LIVE má globálne minimum prístupu. INFO má publikum pri každej správe samostatne.</p></div><button type="button" class="btn btn-ghost" data-admin-action="insight-new">Nová správa</button></div>
@@ -5698,9 +5700,12 @@ function adminActivityRows(){
   }
   function wireAdmin(){
     const host=$('routePanel'); if(!host)return;
+    window.BlinqInsightMedia.loadImages(host);
     decorateAdminMediaUploads(host);
     decorateBannerNumberControls(host);
     host.onclick=async event=>{
+      const picture=event.target.closest('[data-insight-image-open]');
+      if(picture){window.BlinqInsightMedia.open(picture);return;}
       const infoSummary=event.target.closest('.admin-info-results-collapsible > summary');
       if(infoSummary){state.adminInfoResultsExpanded=!infoSummary.parentElement.open;}
       const navExpand=event.target.closest('[data-admin-nav-expand]');
@@ -5842,6 +5847,9 @@ function adminActivityRows(){
         catch(error){showStatus(error?.message||'Používateľa sa nepodarilo odstrániť.');actionNode.disabled=false;}
         return;
       }
+      if(action==='insight-image-remove'){
+        window.BlinqInsightMedia.remove(actionNode);return;
+      }
       if(action==='insight-message-add'){
         const form=$('adminInsightForm'),list=form?.querySelector('.admin-insight-message-list');if(!form||!list)return;
         const count=list.querySelectorAll('[data-insight-message]').length;if(count>=5)return;
@@ -5851,7 +5859,7 @@ function adminActivityRows(){
       if(action==='insight-message-remove'){
         const form=$('adminInsightForm'),block=actionNode.closest('[data-insight-message]');if(!form||!block)return;
         if(form.querySelectorAll('[data-insight-message]').length<=1)return;
-        block.remove();syncAdminInsightBatchComposer(form);return;
+        window.BlinqInsightMedia.dispose(block);block.remove();syncAdminInsightBatchComposer(form);return;
       }
       if(action==='info-result-set'){
         const id=String(actionNode.dataset.insightId||''),outcome=String(actionNode.dataset.infoOutcome||'').toLowerCase();
@@ -6185,6 +6193,7 @@ function adminActivityRows(){
       if(untilInput)untilInput.oninput=()=>{untilInput.dataset.infoAuto='0';};
       syncAdminInsightAudienceForType(insightForm,false);
       syncAdminInsightBatchComposer(insightForm);
+      window.BlinqInsightMedia.wire(insightForm);
       insightForm.onsubmit=async event=>{
         event.preventDefault();
         const message=$('adminInsightMessage'),submit=$('adminInsightSubmit');if(message)message.textContent=state.adminInsightEditingId?'Ukladám…':'Publikujem…';
@@ -6198,10 +6207,17 @@ function adminActivityRows(){
             title:String(block.querySelector('[data-insight-title]')?.value||'').trim(),
             body:String(block.querySelector('[data-insight-body]')?.value||'').trim(),
             match_id:String(block.querySelector('[data-insight-match-id]')?.value||'').trim(),
+            media_ids:window.BlinqInsightMedia.idsFor(block),
             index:index+1,
           }));
           const invalid=messages.find(row=>!row.title||!row.body);
           if(invalid)throw new Error(`Správa ${invalid.index}: doplň nadpis aj text.`);
+          for(const row of messages){
+            const block=blocks[row.index-1];
+            row.media_ids=await window.BlinqInsightMedia.upload(block,number=>{
+              if(message)message.textContent='Nahrávam obrázok '+number+' v správe '+row.index+'…';
+            });
+          }
           const shared={
             type:$('adminInsightType').value,priority:$('adminInsightPriority').value,levels,
             link:$('adminInsightLink').value.trim(),link_label:$('adminInsightLinkLabel').value.trim(),
@@ -6211,12 +6227,12 @@ function adminActivityRows(){
           };
           if(state.adminInsightEditingId){
             const row=messages[0];
-            await BlinqAuth.adminUpdateInsight(state.adminInsightEditingId,{...shared,title:row.title,body:row.body,match_id:row.match_id});
+            await BlinqAuth.adminUpdateInsight(state.adminInsightEditingId,{...shared,title:row.title,body:row.body,match_id:row.match_id,media_ids:row.media_ids});
             state.adminInsightEditingId='';
             state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);
             showStatus('BlinQ Insight bol uložený.');
           }else{
-            const settled=await Promise.allSettled(messages.map(row=>BlinqAuth.adminCreateInsight({...shared,title:row.title,body:row.body,match_id:row.match_id})));
+            const settled=await Promise.allSettled(messages.map(row=>BlinqAuth.adminCreateInsight({...shared,title:row.title,body:row.body,match_id:row.match_id,media_ids:row.media_ids})));
             const ok=settled.filter(row=>row.status==='fulfilled').length,failed=settled.filter(row=>row.status==='rejected');
             state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);
             if(failed.length){
@@ -7109,6 +7125,8 @@ function adminActivityRows(){
     if($('insightBackdrop'))$('insightBackdrop').onclick=()=>setInsightDrawer(false);
     if($('insightDrawerToolbar'))$('insightDrawerToolbar').onclick=async event=>{const filter=event.target.closest('[data-insight-filter]');if(filter){state.insightFilter=filter.dataset.insightFilter||'all';renderInsightDrawer();return;}if(event.target.closest('[data-insight-read-all]')){const unread=state.insights.filter(item=>!item.read&&insightMatchesCurrentChannel(item));for(const item of unread){await markInsightRead(item.id);}renderInsightDrawer();}};
     if($('insightDrawerList'))$('insightDrawerList').onclick=event=>{
+      const picture=event.target.closest('[data-insight-image-open]');
+      if(picture){window.BlinqInsightMedia.open(picture);const article=picture.closest('[data-insight-id]');if(article)markInsightRead(article.dataset.insightId);return;}
       const liveTab=event.target.closest('[data-live-radar-tab]');if(liveTab){const tab=String(liveTab.dataset.liveRadarTab||'');state.liveRadarTab=['set2','results'].includes(tab)?tab:'comeback';state.insightFilter='all';renderInsightDrawer();return;}
       const article=event.target.closest('[data-insight-id]');if(article)markInsightRead(article.dataset.insightId);
       const matchButton=event.target.closest('[data-insight-match]');if(matchButton){const found=findRowByEventId(matchButton.dataset.insightMatch);if(found){setInsightDrawer(false);setRoute('predictions');openMatch(normalize(found.row),found.tab,found.row);}else showStatus(lcopy('This match is not on the current board.','Tento zápas už nie je v aktuálnej ponuke.','Tento zápas už není v aktuální nabídce.'));}
