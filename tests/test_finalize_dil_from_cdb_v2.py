@@ -111,6 +111,33 @@ class ReconciliationTests(unittest.TestCase):
             f.reconcile(self.dil,self.cdb,self.out,self.expected,M,export_receipt=receipt)
         self.assertFalse(self.out.exists())
 
+    def test_provider_context_nested_null_only_merge(self):
+        with sqlite3.connect(self.dil) as db:
+            db.execute('UPDATE canonical_matches SET provider_context_json=? WHERE match_id=?',
+               (json.dumps({'venue':{'city':'Bratislava','country':'SK'}}),'known-2026-id-abcde'))
+        with sqlite3.connect(self.cdb) as db:
+            db.execute('UPDATE cdb_matches SET provider_context_json=? WHERE match_id=?',
+               (json.dumps({'venue':{'city':'Bratislava','court':'Center'}}),'known-2026-id-abcde'))
+        r=f.reconcile(self.dil,self.cdb,self.out,f.sha256(self.cdb),M)
+        self.assertEqual(r['counts']['metadata_fields_filled'],1)
+        self.assertEqual(r['counts']['metadata_conflicts'],0)
+        with sqlite3.connect(self.out) as db:
+            obj=json.loads(db.execute('SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
+                                      ('known-2026-id-abcde',)).fetchone()[0])
+            self.assertEqual(obj['venue'],{'city':'Bratislava','country':'SK','court':'Center'})
+    def test_provider_context_conflict_does_not_overwrite(self):
+        with sqlite3.connect(self.dil) as db:
+            db.execute('UPDATE canonical_matches SET provider_context_json=? WHERE match_id=?',
+                (json.dumps({'venue':{'city':'Bratislava'}}),'known-2026-id-abcde'))
+        with sqlite3.connect(self.cdb) as db:
+            db.execute('UPDATE cdb_matches SET provider_context_json=? WHERE match_id=?',
+                (json.dumps({'venue':{'city':'Trnava'}}),'known-2026-id-abcde'))
+        r=f.reconcile(self.dil,self.cdb,self.out,f.sha256(self.cdb),M)
+        self.assertEqual(r['counts']['metadata_conflicts'],1)
+        self.assertEqual(r['data_gate'],'BLOCKED_REVIEW_REQUIRED')
+        with sqlite3.connect(self.out) as db:
+            self.assertEqual(json.loads(db.execute('SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
+                ('known-2026-id-abcde',)).fetchone()[0])['venue']['city'],'Bratislava')
     def test_refuse_wrong_cdb_sha(self):
         with self.assertRaises(ValueError): f.reconcile(self.dil,self.cdb,self.out,'9'*64,M)
         self.assertFalse(self.out.exists())
