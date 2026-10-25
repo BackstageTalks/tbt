@@ -102,6 +102,7 @@ from tbt.services.admin_storage import (
     save_history_retention,
     cleanup_history,
     run_history_retention,
+    run_history_retention_guarded,
 )
 from tbt.services.content_news import news_pool
 from tbt.services.media_storage import (
@@ -3356,7 +3357,9 @@ def internal_history_retention_worker(req):
     if not _live_worker_token_ok(req):
         return response({"error": "forbidden"}, 403)
     try:
-        result = run_history_retention()
+        result = run_history_retention_guarded()
+        if result.get('skipped'):
+            return response(result)
         # Preserve compatibility with already configured INFO result retention.
         if info_result_retention_days():
             result["legacy_info_result_cleanup"] = cleanup_info_results(actor_id="history-worker")
