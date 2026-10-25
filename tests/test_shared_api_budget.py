@@ -47,13 +47,13 @@ def test_history_can_use_global_headroom_but_never_cross_provider_ceiling():
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "history", 1, now=NOW)
 
-def test_absolute_provider_hard_stop_between_1707_and_1709():
-    for minute in (7, 8):
+def test_absolute_provider_hard_stop_between_1707_and_1710():
+    for minute in (7, 8, 9):
         with pytest.raises(shared_budget.SharedBudgetExhausted, match="17:07"):
             shared_budget.calculate(None, "live", 1,
                                     now=datetime(2026, 9, 27, 17, minute, tzinfo=timezone.utc))
     _, result = shared_budget.calculate(None, "live", 1,
-                                        now=datetime(2026, 9, 27, 17, 9, tzinfo=timezone.utc))
+                                        now=datetime(2026, 9, 27, 17, 10, tzinfo=timezone.utc))
     assert result["global_spent"] == 1
     assert result["global_remaining"] == 14699
 
@@ -61,7 +61,7 @@ def test_absolute_provider_hard_stop_between_1707_and_1709():
 @pytest.mark.parametrize("day", [(2026, 9, 27), (2026, 10, 25)])
 def test_provider_day_resets_at_1709_utc(day):
     before_reset = datetime(*day, 17, 6, tzinfo=timezone.utc)
-    at_reset = datetime(*day, 17, 9, tzinfo=timezone.utc)
+    at_reset = datetime(*day, 17, 10, tzinfo=timezone.utc)
 
     ledger, result = shared_budget.calculate(None, "refresh", 1000, now=before_reset)
     assert result["global_spent"] == 1000
