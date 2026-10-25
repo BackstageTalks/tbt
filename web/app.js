@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { adminInfoResultsExpanded:false,adminInfoRetentionDays:0,adminHistoryRetention:null,adminHistoryRetentionLoading:false,adminHistoryRetentionError:'', feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminActivity:null, adminTelemetry:null, adminTelemetryLoading:false, adminTelemetryError:'', adminTelemetryExpanded:false, adminActivityLoading:false, adminActivityError:'', adminActivityExpanded:true, adminActivityView:'tg', adminActivitySearch:'', adminActivityActionBusy:false, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminCalibration:null, adminCalibrationLoading:false, adminCalibrationError:'', adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email',loginDate:''}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
+  const state = { adminGuideOpen:false,adminLayoutView:'access',adminInsightsView:'messages',adminInfoResultsExpanded:false,adminInfoRetentionDays:0,adminHistoryRetention:null,adminHistoryRetentionLoading:false,adminHistoryRetentionError:'', feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminActivity:null, adminTelemetry:null, adminTelemetryLoading:false, adminTelemetryError:'', adminTelemetryExpanded:false, adminActivityLoading:false, adminActivityError:'', adminActivityExpanded:true, adminActivityView:'tg', adminActivitySearch:'', adminActivityActionBusy:false, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminCalibration:null, adminCalibrationLoading:false, adminCalibrationError:'', adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email',loginDate:''}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -3823,6 +3823,43 @@
     const ids=includeExpired?accessContexts:membershipHierarchy;
     return `<div class="admin-level-chips">${ids.map(id=>`<button type="button" class="admin-level-chip${id===selected?' active':''}${id==='goat'?' top-tier':''}" data-${attr}="${escapeHtml(id)}"><span>${escapeHtml(state.ui?.plans?.[id]?.label||id.toUpperCase())}</span>${id==='goat'?'<small>TOP</small>':''}</button>`).join('')}</div>`;
   }
+  function adminSubnav(kind,selected,items){
+    return `<nav class="admin-subnav" aria-label="Pohľady ${kind==='layout'?'Zobrazenie':'INFO a LIVE'}">
+      ${items.map(([id,label,detail])=>
+        `<button type="button" data-admin-subtab="${kind}:${id}" aria-pressed="${id===selected?'true':'false'}"
+        class="${id===selected?'is-active':''}"${kind==='layout'&&id==='daily'&&!membershipHierarchy.includes(state.adminPlan)?' disabled':''}>
+          <strong>${escapeHtml(label)}</strong><small>${escapeHtml(detail)}</small>
+        </button>`).join('')}
+    </nav>`;
+  }
+  function adminSubpanelHidden(kind,id,selected){
+    return selected===id?'':' hidden';
+  }
+  function adminGuideHtml(){
+    const groups=[
+      ['Účty & prístupy',[
+        ['accounts','Účty','Úprava účtu a aktivita · samostatné uloženie'],
+        ['levels','Členstvá','Plány, expirácie a politika neaktivity · Publikovať'],
+        ['layout','Zobrazenie','Prístupy, denné riadky a poradie · Publikovať']]],
+      ['Obsah & komunita',[
+        ['insights','INFO & LIVE','Správy, publikum a história · samostatné operácie'],
+        ['projects','Projektové skupiny','Členovia, žiadosti a skupinové INFO · samostatné operácie'],
+        ['telegram','Telegram skupiny','Odkazy a pravidlá vstupu · Publikovať'],
+        ['banners','Bannery','Obrázky, texty a pozadie · Publikovať']]],
+      ['Výsledky & systém',[
+        ['dashboard','Dashboard · KPI','Tri hlavné ukazovatele · Publikovať'],
+        ['testresults','Testovacie tipy','Manuálne vylúčenia · uložiť po potvrdení'],
+        ['calibration','Model Lab','Tréning, shadow a kalibrácia · riadené operácie'],
+        ['system','Systém','Diagnostika a prevádzkový stav · len čítanie']]]];
+    return `<section class="admin-guide-map" aria-label="Mapa administrácie">
+      <div class="admin-guide-map-head"><strong>Kde čo nastavím</strong><p>Vyber sekciu podľa úlohy. Publikovať mení UI konfiguráciu; samostatné Uložiť/Publikovať v INFO, účtoch či histórii volá ich vlastné API.</p></div>
+      <div class="admin-guide-map-grid">${groups.map(([heading,entries])=>
+        `<div class="admin-guide-map-group"><h3>${escapeHtml(heading)}</h3>
+          ${entries.map(([id,label,detail])=>
+            `<button type="button" data-admin-guide-tab="${id}"><b>${escapeHtml(label)}</b><small>${escapeHtml(detail)}</small></button>`).join('')}
+        </div>`).join('')}</div>
+      </section>`;
+  }
   function renderAdminLayout(){
     const levelLabel=accessLabel(state.adminPlan);
     const hub=dailyHubConfig();
@@ -3842,6 +3879,8 @@
         <label class="admin-daily-row-count"><span>Odomknuté riadky</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}>${[0,1,2,3,4,5,6,7,8,9,10,'ALL'].map(v=>`<option value="${v}"${visible===String(v).toUpperCase()?' selected':''}>${String(v).toUpperCase()==='ALL'?'VŠETKY':v}</option>`).join('')}</select></label><label class="admin-daily-row-count"><span>Výber</span><select data-admin-hub-field="selection_mode" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}><option value="first"${selection==='first'?' selected':''}>PRVÉ</option><option value="stable_random"${selection==='stable_random'?' selected':''}>NÁHODNÉ / DEŇ</option></select></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''} ${!globalOn||display==='hidden'?'disabled':''}><span>Zamknúť zvyšok</span></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''} ${!globalOn||display!=='active'?'disabled':''}><span>Celá ponuka</span></label><details class="admin-row-overrides admin-row-advanced"><summary><span>Pokročilé nastavenia</span><small>Ručné pravidlá pre jednotlivé pozície</small></summary><div class="admin-row-advanced-body"><strong>Riadky 1–10 · SHOW / BLUR / HIDE</strong><div>${rowOverrides}</div><small>BLUR a HIDE neposielajú citlivý obsah do prehliadača. Pri NÁHODNÉ / DEŇ zostáva výber stabilný celý deň pre konkrétny účet.</small>${accaStatsToggle}</div></details>
       </div>`;
     }).join('');
+    const activeView=['access','daily','order'].includes(state.adminLayoutView)?state.adminLayoutView:'access';
+    const view=(!membershipHierarchy.includes(state.adminPlan)&&activeView==='daily')?'access':activeView;
     return `<section class="admin-ux-section admin-daily-settings-v687">
       <div class="admin-admin-guide">
         <div><span>1</span><strong>Vyber úroveň účtu</strong><small>Všetky pravidlá nižšie upravuješ iba pre zvolený level</small></div>
@@ -3852,15 +3891,22 @@
         <div><small>UPRAVUJEŠ PRÍSTUP PRE</small><strong>${escapeHtml(levelLabel)}</strong><span>Všetky nastavenia viditeľnosti a prístupu pre tento level upravíš na jednom mieste. Zmeny sa prejavia až po publikovaní.</span></div>
         ${adminLevelChips(state.adminPlan,'admin-plan-chip',true)}
       </div>
-      ${renderAdminDisplayAccess(state.adminPlan)}
-      <div class="admin-daily-preset-bar"><div><strong>Rýchle nastavenie pre ${escapeHtml(levelLabel)}</strong><span>Voliteľné. Prepíše iba pravidlá dennej ponuky pre tento level, nie globálne zapnutie kategórií.</span></div><div><button type="button" data-admin-daily-preset="full">Plný prístup</button><button type="button" data-admin-daily-preset="preview3">3 riadky</button><button type="button" data-admin-daily-preset="rookie2">2 náhodné + blur</button><button type="button" data-admin-daily-preset="blurred">Rozmazať panely</button><button type="button" data-admin-daily-preset="hidden">Skryť všetko</button></div></div>
+      ${adminSubnav('layout',view,[['access','Prístupy a limity','Výsledky · detail · história'],['daily','Denná ponuka','SHOW / BLUR / HIDE · riadky'],['order','Poradie kategórií','Spoločné pre všetky levely']])}
+      <div class="admin-subpanel" data-admin-subpanel="layout:access"${adminSubpanelHidden('layout','access',view)}>
+        ${renderAdminDisplayAccess(state.adminPlan)}
+      </div>
+      <div class="admin-subpanel" data-admin-subpanel="layout:daily"${adminSubpanelHidden('layout','daily',view)}>
+      <div class="admin-daily-preset-bar"><div><strong>Rýchle nastavenie pre ${escapeHtml(levelLabel)}</strong><span>Voliteľné. Prepíše iba pravidlá dennej ponuky pre tento level, nie globálne zapnutie kategórií.</span></div><div><button type="button" data-admin-daily-preset="full">Plný prístup</button><button type="button" data-admin-daily-preset="preview3">3 riadky</button><button type="button" data-admin-daily-preset="rookie2">2 náhodné + blur</button><button type="button" data-admin-daily-preset="blurred">Rozmazať panely</button><button type="button" data-admin-daily-preset="hidden">Skryť všetko</button></div></div></div>
+      <div class="admin-subpanel" data-admin-subpanel="layout:order"${adminSubpanelHidden('layout','order',view)}>
       <section class="admin-tab-sort-shell" aria-label="Poradie záložiek Dnešné predikcie"><header><div><small>PORADIE NA WEBE</small><h3>Poradie kategórií Dnešných predikcií</h3><p>Potiahni kategóriu alebo použi šípky. Poradie bude rovnaké pre všetky levely po kliknutí na Publikovať.</p></div><button type="button" class="btn btn-ghost" data-admin-hub-order-reset>Predvolené poradie</button></header><div class="admin-tab-sort-grid">${tabOrderControls}</div></section>
+      </div>
+      <div class="admin-subpanel" data-admin-subpanel="layout:daily"${adminSubpanelHidden('layout','daily',view)}>
       <div class="admin-daily-matrix-card">
         <header><div><small>DENNÁ PONUKA</small><h3>Čo uvidí ${escapeHtml(levelLabel)}</h3><p>Domovská stránka drží maximálne 10 pozícií. „VŠETKY“ odomkne všetky aktuálne riadky. „Celá ponuka“ dovolí otvoriť rozšírený zoznam.</p></div><button class="btn btn-ghost" type="button" data-admin-action="preview">Náhľad ako ${escapeHtml(levelLabel)}</button></header>
         <div class="admin-daily-matrix-head"><span>Kategória</span><span>Globálne</span><span>Panel</span><span>Riadky</span><span>Výber</span><span>Zvyšok</span><span>Celá ponuka</span></div>
         <div class="admin-daily-matrix">${rows}</div>
         <div class="admin-admin-legend"><span><i class="is-global"></i><b>SHOW</b> = plný obsah</span><span><i class="is-level"></i><b>BLUR</b> = viditeľný premium teaser bez citlivých dát v HTML</span><span><i class="is-lock"></i><b>HIDE</b> = prvok sa pre level nezobrazí</span></div>
-      </div>
+      </div></div>
     </section>`;
   }
 
