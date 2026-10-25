@@ -66,6 +66,6 @@ def test_rookie_access_edits_keep_trial_alias_in_sync():
     app = Path("web/app.js").read_text(encoding="utf-8")
     assert "if(id==='rookie')item.access.trial=item.access[id]" in app
     assert "if(id==='rookie')cfg.plans.trial=Boolean(t.checked)" in app
-    assert "if(id==='rookie')tc.plans.trial=clone(rule)" in app
+    assert "if(state.adminPlan==='rookie')tc.plans.trial=clone(rule)" in app
 
 # Revalidation marker: merge build must include main 9a312855945987c046b3763246aed4e26f6607d3.
