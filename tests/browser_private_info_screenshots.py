@@ -82,6 +82,7 @@ def main():
                         localStorage.setItem('test-epoch','signed-in');
                         const root=document.getElementById('root');
                         root.innerHTML=window.BlinqInsightMedia.gallery([id]);
+                        root.querySelector('img').style.cssText='display:block;width:100px;height:90px';
                         window.BlinqInsightMedia.loadImages(root);
                     }""",
                     SCREENSHOT_ID,
