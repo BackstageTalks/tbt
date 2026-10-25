@@ -27,7 +27,7 @@ GLOBAL_CEILING = PROVIDER_PLAN_LIMIT - PROVIDER_RESERVE
 RESET_TIMEZONE = timezone.utc
 RESET_HOUR = 17
 RESET_MINUTE = 9
-DAILY_STOP_MINUTE = 7  # Hard stop 17:07–17:09 UTC for all priorities
+DAILY_STOP_MINUTE = 7  # 17:07–17:10 UTC: guard reset and one-minute rollover
 # Runtime classes retain bounded allocations. History/backfill may opportunistically
 # use any provider-day capacity that is still available, but GLOBAL_CEILING remains
 # authoritative and always preserves the 500-request provider reserve.
@@ -149,8 +149,8 @@ def calculate(ledger: dict | None, purpose: str, requested: int = 1,
     if instant.tzinfo is None:
         raise ValueError("Budget times must be timezone-aware")
     local = instant.astimezone(RESET_TIMEZONE)
-    if local.hour == RESET_HOUR and DAILY_STOP_MINUTE <= local.minute < RESET_MINUTE:
-        raise SharedBudgetExhausted("Provider daily hard stop: 17:07–17:09 UTC")
+    if local.hour == RESET_HOUR and DAILY_STOP_MINUTE <= local.minute <= RESET_MINUTE:
+        raise SharedBudgetExhausted("Provider rollover safety stop: 17:07–17:10 UTC")
     if purpose not in PURPOSE_CAPS:
         raise ValueError("Unknown budget purpose")
     if isinstance(requested, bool) or not isinstance(requested, int) or not 1 <= requested <= 3000:
