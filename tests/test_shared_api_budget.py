@@ -484,8 +484,8 @@ def test_guarded_research_http_stops_on_provider_reserve(monkeypatch):
 def test_schema1_rolling_bucket_migration_at_new_1709_boundary():
     legacy = int(datetime(2026, 10, 25, 17, 5, tzinfo=timezone.utc).timestamp()) // 300
     ledger = {"schema": 1, "buckets": [[legacy, 30, 0, 0, 0]]}
-    for now in (datetime(2026, 10, 25, 17, 9, 0, tzinfo=timezone.utc),
-                datetime(2026, 10, 25, 17, 9, 50, tzinfo=timezone.utc)):
+    for now in (datetime(2026, 10, 25, 17, 10, 0, tzinfo=timezone.utc),
+                datetime(2026, 10, 25, 17, 10, 50, tzinfo=timezone.utc)):
         migrated, status = shared_budget.calculate(ledger, "refresh", 1, now=now)
         assert migrated["schema"] == status["schema"] == 2
         assert status["global_spent"] == 31
