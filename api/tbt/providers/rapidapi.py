@@ -29,14 +29,14 @@ from ..utils import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PROVIDER_REQUEST_RESERVE = 500
+DEFAULT_PROVIDER_REQUEST_RESERVE = 300
 
 
 def _enforce_provider_day_hard_stop() -> None:
-    """No paid TennisAPI request from 19:08 to 19:10 Europe/Bratislava."""
-    local = datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Bratislava"))
-    if local.hour == 19 and 8 <= local.minute < 10:
-        raise RequestBudgetExceeded("Provider daily hard stop: 19:08–19:10 Bratislava")
+    """No paid TennisAPI request from 17:07 to 17:09 UTC."""
+    now = datetime.now(timezone.utc)
+    if now.hour == 17 and 7 <= now.minute < 9:
+        raise RequestBudgetExceeded("Provider daily hard stop: 17:07–17:09 UTC")
 
 
 def _provider_request_reserve() -> int:
