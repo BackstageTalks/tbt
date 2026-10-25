@@ -24,13 +24,17 @@ SLOT_OFFSET_SECONDS = 240
 PROVIDER_PLAN_LIMIT = 15000
 PROVIDER_RESERVE = 300
 GLOBAL_CEILING = PROVIDER_PLAN_LIMIT - PROVIDER_RESERVE
-RESET_TIMEZONE = timezone.utc
+# The provider clock is UTC; Bratislava is a presentation timezone only.
+# ZoneInfo applies CET/CEST DST transitions from the timezone database.
+PROVIDER_RESET_TIMEZONE = timezone.utc
+DISPLAY_TIMEZONE = ZoneInfo("Europe/Bratislava")
+RESET_TIMEZONE = PROVIDER_RESET_TIMEZONE
 RESET_HOUR = 17
 RESET_MINUTE = 9
 DAILY_STOP_MINUTE = 7  # 17:07–17:10 UTC: guard reset and one-minute rollover
 # Runtime classes retain bounded allocations. History/backfill may opportunistically
 # use any provider-day capacity that is still available, but GLOBAL_CEILING remains
-# authoritative and always preserves the 500-request provider reserve.
+# authoritative and always preserves the 300-request provider reserve.
 PURPOSE_CAPS = {
     "live": 3000,
     "match": 2500,
@@ -126,12 +130,18 @@ def _summary(buckets: list[list[int]], slot: int) -> dict[str, Any]:
              for name, idx in PURPOSE_INDEX.items()}
     total = sum(spent.values())
     global_remaining = max(0, GLOBAL_CEILING - total)
+    next_reset_utc = _provider_day_next_reset(slot)
+    next_reset_bratislava = next_reset_utc.astimezone(DISPLAY_TIMEZONE)
     return {
         "schema": 2,
         "window": "provider_day_17_09_utc",
         "updated_slot": slot,
         "provider_day_start_slot": _provider_day_start_slot(slot),
-        "next_reset_utc": _provider_day_next_reset(slot).isoformat(),
+        "next_reset_utc": next_reset_utc.isoformat(),
+        "next_reset_bratislava": next_reset_bratislava.isoformat(),
+        "next_reset_bratislava_time": next_reset_bratislava.strftime("%H:%M"),
+        "next_reset_bratislava_zone": next_reset_bratislava.tzname(),
+        "display_timezone": "Europe/Bratislava",
         "provider_plan_limit": PROVIDER_PLAN_LIMIT,
         "global_limit": GLOBAL_CEILING,
         "global_spent": total,
