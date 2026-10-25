@@ -135,7 +135,8 @@ def test_global_acca_off_is_a_server_and_client_stats_gate_not_a_visibility_only
     from tbt.services import dashboard_kpis
     from inspect import getsource
     assert "prime?.enabled===false||prime?.exclude_from_stats===true" in app
-    assert "prime.get(\"enabled\") is False or prime.get(\"exclude_from_stats\") is True" in getsource(
-        dashboard_kpis.selected_dashboard_cards)
+    server = getsource(dashboard_kpis.selected_dashboard_cards)
+    assert 'prime.get("enabled") is False' in server
+    assert 'prime.get("exclude_from_stats") is True' in server
     assert "ACCA aktívna" in app
     assert "záložka aj prísun ACCA zápasov do STATS" in app
