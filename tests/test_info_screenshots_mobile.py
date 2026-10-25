@@ -122,6 +122,9 @@ def test_private_blob_csp_and_optional_frontend_contract():
     assert "pridaj nadpis, text alebo obrázok" in app
     assert "window.BlinqInsightMedia.gallery(item.media_ids)" in app
     assert "source.naturalWidth===0" in module
+    assert 'class="insight-feed-brand"' in app
+    assert '/assets/blinq_favi.png' in app
+    assert "insight-feed-icon.is-blinq-info" in (ROOT / "web/blinq-app.css").read_text(encoding="utf-8")
 
 
 def test_mobile_gallery_is_wired_before_application_and_stays_private():
