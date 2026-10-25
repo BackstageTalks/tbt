@@ -22,6 +22,14 @@ class Table:
         key=(entity["PartitionKey"],entity["RowKey"])
         self.rows[key]=deepcopy(entity) if mode!="merge" else {**self.rows.get(key,{}),**deepcopy(entity)}
 
+    def create_entity(self, entity):
+        key=(entity["PartitionKey"],entity["RowKey"])
+        if key in self.rows:
+            class AlreadyExists(Exception):
+                status_code=409
+            raise AlreadyExists()
+        self.rows[key]=deepcopy(entity)
+
     def get_entity(self, partition_key, row_key):
         return deepcopy(self.rows[(partition_key,row_key)])
 
@@ -211,3 +219,35 @@ def test_history_worker_is_secret_guarded(monkeypatch):
     monkeypatch.setattr(api,"_live_worker_token_ok",lambda req: False)
     assert api.internal_history_retention_worker(Req()).status_code==403
     assert not calls
+
+
+def test_external_worker_sweeps_at_most_once_per_utc_six_hour_bucket(tables,monkeypatch):
+    now=datetime(2026,10,25,12,30,tzinfo=timezone.utc)
+    calls=[]
+    monkeypatch.setattr(storage,"run_history_retention",lambda actor_id="":calls.append(actor_id) or {
+        "failed":0,"settings":{"info":24,"comeback":72,"set2":168},
+        "results":{}
+    })
+    first=storage.run_history_retention_guarded(now=now)
+    same=storage.run_history_retention_guarded(now=now+timedelta(hours=4))
+    later=storage.run_history_retention_guarded(now=now+timedelta(hours=6))
+    assert first["ok"] and first["bucket"]=="20261025-2"
+    assert same["skipped"] is True and same["bucket"]=="20261025-2"
+    assert later["ok"] and later["bucket"]=="20261025-3"
+    assert len(calls)==2
+
+
+def test_failed_history_worker_releases_lease_for_retry(tables,monkeypatch):
+    now=datetime(2026,10,25,12,tzinfo=timezone.utc)
+    calls=[]
+    def run(*,actor_id=""):
+        calls.append(actor_id)
+        if len(calls)==1:
+            raise storage.AdminStorageUnavailable("temporary failure")
+        return {"failed":0,"settings":{"info":0,"comeback":0,"set2":0},"results":{}}
+    monkeypatch.setattr(storage,"run_history_retention",run)
+    with pytest.raises(storage.AdminStorageUnavailable):
+        storage.run_history_retention_guarded(now=now)
+    result=storage.run_history_retention_guarded(now=now)
+    assert result["ok"] and not result.get("skipped")
+    assert len(calls)==2
