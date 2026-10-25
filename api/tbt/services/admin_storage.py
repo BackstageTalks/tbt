@@ -2218,6 +2218,13 @@ def normalize_insight(payload: object, *, existing: dict | None = None) -> dict:
     if link and not _valid_destination(link, allow_internal=True):
         raise ValueError("Insight link must use HTTPS or a same-origin path")
     link_label = str(payload.get("link_label", base.get("link_label", "")) or "").strip()[:80]
+    media_ids = payload.get("media_ids", base.get("media_ids", []))
+    if not isinstance(media_ids, list) or len(media_ids) > 3:
+        raise ValueError("Select up to three screenshots")
+    if any(not isinstance(value, str) or not re.fullmatch(r"insight-[A-Za-z0-9._-]{6,175}", value) for value in media_ids):
+        raise ValueError("Invalid private screenshot")
+    if len(set(media_ids)) != len(media_ids):
+        raise ValueError("Duplicate screenshot")
     match_id = str(payload.get("match_id", base.get("match_id", "")) or "").strip()
     if match_id and not _VALID_ID.fullmatch(match_id):
         raise ValueError("Invalid insight match id")
@@ -2238,6 +2245,7 @@ def normalize_insight(payload: object, *, existing: dict | None = None) -> dict:
         "link": link,
         "link_label": link_label,
         "match_id": match_id,
+        "media_ids": media_ids,
         "active": active,
         "pinned": pinned,
         "active_from": active_from,
@@ -2268,6 +2276,7 @@ def _insight_from_entity(entity: dict) -> dict:
         "link": str(entity.get("link") or ""),
         "link_label": str(entity.get("link_label") or ""),
         "match_id": str(entity.get("match_id") or ""),
+        "media_ids": json.loads(entity.get("media_ids_json") or "[]"),
         "active": bool(entity.get("active", True)),
         "pinned": bool(entity.get("pinned", False)),
         "active_from": str(entity.get("active_from") or ""),
@@ -2300,7 +2309,8 @@ def save_insight(payload: object, *, actor_id: str = "", insight_id: str = "") -
     entity = {
         "PartitionKey": "insights",
         "RowKey": row_key,
-        **{k: v for k, v in clean.items() if k not in {"levels", "group_ids"}},
+        **{k: v for k, v in clean.items() if k not in {"levels", "group_ids", "media_ids"}},
+        "media_ids_json": json.dumps(clean["media_ids"], separators=(",", ":")),
         "levels_json": json.dumps(clean["levels"], separators=(",", ":")),
         "group_ids_json": json.dumps(clean["group_ids"], separators=(",", ":")),
         "created_at": (existing_entity or {}).get("created_at") or now,
