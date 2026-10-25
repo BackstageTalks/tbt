@@ -332,3 +332,45 @@ def test_paid_notice_scheduled_event_precedes_transport(monkeypatch):
     assert pending[0]["target_id"] == user["id"]
     assert "7 dní" in pending[0]["after"]["subject"]
     assert result["subscription_7"] == 1
+
+
+def test_recent_paid_to_rookie_transition_starts_new_inactivity_cycle(monkeypatch):
+    # The member did not log in during paid membership; an earlier 30-day
+    # warning must not be reused after the access writer switched the tier.
+    user = rookie(200)
+    meta = {
+        "access_metadata_updated_at": (NOW - timedelta(days=1)).isoformat(),
+        "inactivity_deactivation_warning_sent_at": (NOW - timedelta(days=30)).isoformat(),
+        "inactivity_warning_status": "sent",
+    }
+    sent, saved, _, updates = setup(monkeypatch, [user], {user["id"]: meta})
+    summary = lifecycle.run_inactivity_review(
+        cfg(), {"account_inactivity": {"inactive_days": 30, "warning_days": 7}},
+        now=NOW,
+    )
+    assert summary["inactive"] == summary["warnings"] == summary["expired"] == 0
+    assert saved == []
+    assert updates == []
+    assert not any(recipient == user["email"] for recipient, _ in sent)
+
+
+def test_rookie_inactivity_uses_latest_access_change_or_actual_activity(monkeypatch):
+    user = rookie(200)
+    access_change = NOW - timedelta(days=23)
+    meta = {
+        "access_metadata_updated_at": access_change.isoformat(),
+        "last_activity_at": (NOW - timedelta(days=50)).isoformat(),
+        "inactivity_deactivation_warning_sent_at": (NOW - timedelta(days=100)).isoformat(),
+    }
+    sent, _, _, updates = setup(monkeypatch, [user], {user["id"]: meta})
+    summary = lifecycle.run_inactivity_review(
+        cfg(), {"account_inactivity": {"inactive_days": 30, "warning_days": 7}},
+        now=NOW,
+    )
+    assert summary["warnings"] == 1
+    assert summary["expired"] == 0
+    assert updates == []
+    assert sum(recipient == user["email"] for recipient, _ in sent) == 1
+    # A later real login takes priority over the transition timestamp.
+    user["last_sign_in_at"] = (NOW - timedelta(days=2)).isoformat()
+    assert lifecycle._last_seen(user, meta) == NOW - timedelta(days=2)
