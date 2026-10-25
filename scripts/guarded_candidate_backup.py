@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 from _bootstrap import ROOT
@@ -290,6 +291,48 @@ def upload_immutable_backup(tag, rows, stage):
     _upload_one_immutable(tag, manifest, committed)
     _check_remote_backup_assets(tag, committed, complete=True)
 
+def download_immutable_backup(tag, rows, stage, restore):
+    """Read every asset remotely; retry transport failures, never integrity errors.
+
+    Each attempt has a fresh directory so a truncated CLI download cannot be
+    mistaken for a completed readback or prevent a later attempt. Only verified
+    bytes enter restore; the caller still checks the complete bundle and model.
+    """
+    manifest = stage / ASSET_MANIFEST
+    expected = [*rows, {"asset": ASSET_MANIFEST,
+                        "bytes": manifest.stat().st_size, "sha256": sha(manifest)}]
+    names = [row["asset"] for row in expected]
+    if (len(set(names)) != len(names) or any(
+            not re.fullmatch(r"[A-Za-z0-9_.-]+", name) or name in {".", ".."}
+            for name in names)):
+        raise RuntimeError("Duplicate/unsafe immutable backup asset names")
+    if any(restore.iterdir()):
+        raise RuntimeError("Independent readback must start empty")
+    for row in expected:
+        name = row["asset"]
+        for attempt in range(5):
+            with tempfile.TemporaryDirectory(prefix="readback-", dir=restore.parent) as scratch:
+                try:
+                    run("gh", "release", "download", tag, "-R", REPO,
+                        "--pattern", name, "-D", scratch)
+                except RuntimeError as exc:
+                    if attempt == 4 or not _TRANSIENT_UPLOAD.search(str(exc)):
+                        raise
+                    delay = min(2 ** (attempt + 1), 16)
+                    print(f"Transient backup readback failure ({name}, "
+                          f"retry {attempt+2}/5 in {delay}s): {exc}",
+                          file=sys.stderr, flush=True)
+                else:
+                    downloaded = Path(scratch) / name
+                    if (not downloaded.is_file()
+                            or downloaded.stat().st_size != row["bytes"]
+                            or sha(downloaded) != row["sha256"]):
+                        raise RuntimeError("Independent remote backup SHA mismatch: " + name)
+                    downloaded.replace(restore / name)
+                    break
+            time.sleep(delay)
+
+
 def prepare():
     verify_job_identity()
     if CERT.exists():
@@ -336,7 +379,7 @@ def prepare():
         "--notes", "Verified independent remote input readback required before any candidate fit.")
     upload_immutable_backup(tag, rows, stage)
 
-    run("gh", "release", "download", tag, "-R", REPO, "-D", str(restore))
+    download_immutable_backup(tag, rows, stage, restore)
     if sha(restore / ASSET_MANIFEST) != sha(stage / ASSET_MANIFEST):
         raise RuntimeError("Independent backup manifest remote readback mismatch")
     for row in rows:

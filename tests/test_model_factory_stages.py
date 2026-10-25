@@ -72,10 +72,29 @@ def test_stage1_preflight_is_queued_once_and_requires_remote_artifact():
             lab.sync(finished)
         assert lab._json("active") is not None
         assert lab._json("last_preflight") is None
+        assert lab._json("last")["state"] == "VERIFICATION_FAILED"
         finished["runs"]["prepare_inputs"][0]["artifact_verified"] = True
         lab.sync(finished)
         assert lab._json("active") is None
         assert lab.status()["last_preflight"]["state"] == "WORKFLOW_VERIFIED"
+
+
+def test_unverifiable_readonly_preflight_can_be_acknowledged_and_retried():
+    table = Table()
+    with patch.object(lab, "_table", return_value=table), \
+         patch.object(lab, "training_status", return_value={"can_start": True}):
+        lab._put("snapshot", source_snapshot())
+        queued = lab.start({"action": "prepare_inputs"}, "admin")
+        lab.sync(source_snapshot())
+        finished = source_snapshot()
+        finished["runs"]["prepare_inputs"] = [{
+            "id": 123, "status": "completed", "conclusion": "success",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "display_title": "Prepare " + queued["id"], "artifact_verified": False}]
+        with pytest.raises(model_training.TrainingBlocked):
+            lab.sync(finished)
+        assert lab.acknowledge_failed({"action": "acknowledge_failed", "id": queued["id"]})["state"] == "FAILED_ACKNOWLEDGED"
+        assert lab.start({"action": "prepare_inputs"}, "admin")["state"] == "QUEUED"
 
 
 def test_shadow_requires_materially_higher_accuracy_and_gate_pass():

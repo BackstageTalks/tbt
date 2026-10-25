@@ -61,6 +61,18 @@ def offline_gate(report, certificate) -> tuple[bool, list[str]]:
     return not reasons, reasons
 
 
+def write_outcome(cert, state, reasons, *, result=None):
+    payload = {"schema": 1, "run_id": os.environ["GITHUB_RUN_ID"],
+               "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+               "code_sha": os.environ["GITHUB_SHA"],
+               "candidate_tag": cert["candidate_tag"], "state": state,
+               "reasons": reasons, "production_mutated": False,
+               "remote_readback": (result or {}).get("remote_readback")}
+    path = ROOT / ".cache/tbt/training-backup/model-factory-outcome.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def main():
     if (os.environ.get("GITHUB_ACTIONS") != "true"
             or os.environ.get("GITHUB_REPOSITORY") != "BackstageTalks/tbt"):
@@ -70,6 +82,7 @@ def main():
     accepted, reasons = offline_gate(report, cert)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if not accepted:
+        write_outcome(cert, "SHADOW_BLOCKED", reasons)
         message = "Shadow NOT activated: " + ", ".join(reasons)
         print(message, flush=True)
         if summary:
@@ -81,6 +94,7 @@ def main():
     result = activate(cert["candidate_tag"], _current_candidate_digest())
     if result.get("production_mutated") is not False or result.get("remote_readback") != "VERIFIED":
         raise RuntimeError("Independent shadow activation readback failed")
+    write_outcome(cert, "SHADOW_ACTIVE", [], result=result)
     print(json.dumps(result, sort_keys=True), flush=True)
     if summary:
         with open(summary, "a", encoding="utf-8") as out:

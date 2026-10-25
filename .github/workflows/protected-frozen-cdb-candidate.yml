@@ -95,6 +95,7 @@ jobs:
           python -m pytest -q \
             tests/test_immutable_training_backup.py \
             tests/test_immutable_backup_upload_recovery.py \
+            tests/test_immutable_backup_download_recovery.py \
             tests/test_candidate_training_requires_backup.py \
             tests/test_champion_rollback_rehearsal.py \
             tests/test_training_inputs.py \
@@ -162,6 +163,14 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/auto_shadow_candidate.py
+      - name: Persist exact training and shadow outcome for Admin
+        if: ${{ always() && inputs.auto_shadow == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-factory-outcome-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .cache/tbt/training-backup/model-factory-outcome.json
+          if-no-files-found: warn
+          retention-days: 30
       - name: Write private aggregate candidate result to job summary
         if: success()
         run: |

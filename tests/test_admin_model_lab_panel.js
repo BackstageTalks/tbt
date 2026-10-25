@@ -84,3 +84,32 @@ assert.match(src,/if\(action==='model-lab-acknowledge'\)/);
 assert.match(src,/state\.adminTraining=await BlinqAuth\.adminModelTraining\(\);/);
 assert.match(src,/Natrénovať kandidáta 7\.2\.1 a po úspešných nezávislých kontrolách/);
 console.log('Model Factory: guarded 3 phases, preflight artifact, training, shadow, production lock, XSS passed');
+
+// Preparation/import/read-only audits must not require an offline candidate.
+state.adminModelLab.can_start=true;
+state.adminCalibration={};
+html=ctx.renderAdminModelLab();
+for(const action of ['prepare_inputs','import_drive','audit_shadow','refresh_tests']){
+  assert.doesNotMatch(html,new RegExp('data-model-lab-operation="'+action+'" disabled'));
+}
+assert.match(html,/data-model-lab-operation="activate_shadow" disabled/);
+state.adminModelLab.operation={id:'f'.repeat(24),action:'prepare_inputs',state:'FAILED_NEEDS_REVIEW'};
+state.adminModelLab.last_operation={id:'f'.repeat(24),action:'prepare_inputs',state:'VERIFICATION_FAILED'};
+html=ctx.renderAdminModelLab();
+assert.match(html,/data-admin-action="model-lab-acknowledge"/);
+assert.doesNotMatch(html,/Zápis sa mohol vykonať čiastočne/);
+state.adminModelLab.operation=null;
+state.adminModelLab.last_operation=null;
+state.adminTraining.candidates=[{tag:'incomplete',complete:false},{tag:'complete-model',complete:true}];
+state.adminTraining.runs=[{id:123,status:'completed',conclusion:'failure'}];
+state.adminTraining.failed_steps=['Freeze ALL current source inputs and independently restore champion'];
+state.adminTraining.steps=[{name:state.adminTraining.failed_steps[0],status:'completed',conclusion:'failure'}];
+state.adminTraining.shadow_outcome={state:'SHADOW_BLOCKED',reasons:['top_market_validation_required','<script>']};
+html=ctx.renderAdminModelLab();
+assert.match(html,/Zopakovať tréning a kontroly/);
+assert.match(html,/Zmrazenie dát a overenie obnovy zálohy/);
+assert.match(html,/Model uložený, shadow neaktivovaný/);
+assert.match(html,/Chýba nezávislé overenie na predzápasových kurzoch/);
+assert.match(html,/Posledný uložený model:<\/strong> complete-model/);
+assert(!html.includes('<script>'));
+console.log('Model Factory recovery, independent actions, progress and shadow outcome: passed');

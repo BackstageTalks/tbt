@@ -5296,7 +5296,7 @@ function adminActivityRows(){
     const canActivate=canBuild&&verifiedCandidates.length>0;
     const options=verifiedCandidates.slice(0,30).map(c=>
       '<option value="'+escapeHtml(c.tag)+'">'+escapeHtml(c.tag)+'</option>').join('');
-    const stateLabels={QUEUED:'Čaká na bezpečné spustenie',DISPATCH_UNCONFIRMED:'Spustenie nepotvrdené – nespúšťaj znova',RUNNING:'Prebieha',COMPLETED_PENDING_VERIFICATION:'Dokončené – čaká na kontrolu',WORKFLOW_VERIFIED:'Overené',FAILED_NEEDS_REVIEW:'Zlyhanie – vyžaduje kontrolu'};
+    const stateLabels={QUEUED:'Čaká na bezpečné spustenie',DISPATCH_UNCONFIRMED:'Spustenie nepotvrdené – nespúšťaj znova',RUNNING:'Prebieha',COMPLETED_PENDING_VERIFICATION:'Dokončené – čaká na kontrolu',WORKFLOW_VERIFIED:'Overené',FAILED_NEEDS_REVIEW:'Zlyhanie – vyžaduje kontrolu',VERIFICATION_FAILED:'Report sa nepodarilo overiť'};
     const fmtRun=record=>record?(' '+safeLink(record.html_url,'GitHub beh #'+record.id)+' · '+escapeHtml(String(record.conclusion||record.status||''))):'';
     const activeText=operation?('<strong>'+escapeHtml(stateLabels[operation.state]||operation.state)+'</strong> · '+escapeHtml(operation.action)+' · '+escapeHtml(operation.id)+fmtRun(operation.run)):'Bez rozpracovanej Model Factory operácie.';
     const lastText=last?('<strong>'+escapeHtml(stateLabels[last.state]||last.state)+'</strong> · '+escapeHtml(last.action||'')+fmtRun(last.run)):'Zatiaľ bez ukončenej operácie.';
@@ -5306,10 +5306,43 @@ function adminActivityRows(){
     const evidenceText=verifiedCandidates.length?
       'Nezávislý offline holdout overený · '+escapeHtml(String(offline.n))+' zápasov · model SHA sa zhoduje s release.':
       'Aktivácia zostáva zablokovaná, kým sa nezobrazí overený offline report s rovnakým release tagom a SHA.';
-    const failed=operation&&last&&last.id===operation.id&&last.state==='FAILED_NEEDS_REVIEW';
-    const unsafeFailure=failed&&!['refresh_tests','audit_shadow'].includes(operation.action);
-    const hint=state.adminTrainingMessage||state.adminModelLabMessage||training?.reason||d?.reason||'Načítavam aktuálny stav…';
-    const latestCandidate=training?.candidates?.[0]?.tag||'—';
+    const failed=operation&&last&&last.id===operation.id&&['FAILED_NEEDS_REVIEW','VERIFICATION_FAILED'].includes(last.state);
+    const unsafeFailure=failed&&!['prepare_inputs','refresh_tests','audit_shadow'].includes(operation.action);
+    const hint=state.adminTrainingMessage||state.adminModelLabMessage||
+      (d?.can_start===false?d.reason:training?.reason)||d?.reason||'Načítavam aktuálny stav…';
+    const latestCandidate=training?.candidates?.find(c=>c.complete===true)?.tag||'Zatiaľ bez dokončeného modelu';
+    const stepLabels=[
+      ['Observe global CDB writer idle','Čakanie na voľné dáta'],
+      ['Freeze ALL current source inputs','Zmrazenie dát a overenie obnovy zálohy'],
+      ['Audit frozen training history','Kontrola identít a úniku budúcich informácií'],
+      ['Fit separate candidate','Tréning kandidáta'],
+      ['Independently persist champion-versus-candidate','Nezávislé porovnanie a uloženie modelu'],
+      ['Apply extra offline gates','Kontrola kvality a shadow aktivácia']
+    ];
+    const readableStep=name=>stepLabels.find(([prefix])=>String(name).startsWith(prefix))?.[1]||String(name);
+    const failedSteps=(training?.failed_steps||[]).map(readableStep);
+    const timeline=(training?.steps||[]).length?'<ol class="model-factory-progress">'+stepLabels.map(([prefix,label])=>{
+      const step=training.steps.find(s=>s.name.startsWith(prefix));
+      const result=step?.conclusion==='success'?'Overené':step?.conclusion==='skipped'?'Preskočené':
+        ['failure','timed_out','cancelled'].includes(step?.conclusion)?'Zastavené':
+        step?.status==='in_progress'?'Prebieha':'Čaká';
+      return '<li><span>'+escapeHtml(label)+'</span><strong>'+result+'</strong></li>';
+    }).join('')+'</ol>':'';
+    const shadowReasons={top_market_validation_required:'Chýba nezávislé overenie na predzápasových kurzoch.',
+      insufficient_accuracy_gain_for_automatic_shadow:'Nárast úspešnosti neprekročil požadované 2 percentuálne body.',
+      wta_segment_regression:'Výsledok WTA nesplnil podmienky kvality.',
+      atp_segment_regression:'Výsledok ATP nesplnil podmienky kvality.',
+      holdout_not_independently_eligible:'Testovacie obdobie nie je nezávislé.',
+      unverified_champion_restore:'Obnova produkčného modelu nie je overená.'};
+    const outcome=training?.shadow_outcome;
+    const outcomeText=outcome?.state==='SHADOW_BLOCKED'?'<p role="status"><strong>Model uložený, shadow neaktivovaný.</strong></p><ul>'+outcome.reasons.map(r=>'<li>'+escapeHtml(shadowReasons[r]||r)+'</li>').join('')+'</ul>':
+      outcome?.state==='SHADOW_ACTIVE'?'<p role="status"><strong>Shadow aktivácia tohto tréningu bola overená.</strong> '+escapeHtml(outcome.candidate_tag)+'</p>':
+      training?.outcome_warning?'<p role="status">'+escapeHtml(training.outcome_warning)+'</p>':'';
+    const stamp=training?.observed_at?new Date(training.observed_at).toLocaleString('sk-SK'): 'zatiaľ neoverené';
+    const gate=state.adminCalibration?.shadow?.gate||{};
+    const missingShadow=[['minimum_matches_met','Aspoň 200 vyhodnotených shadow zápasov'],['minimum_days_met','Aspoň 3 samostatné dni'],
+      ['accuracy_not_worse','Úspešnosť nie horšia'],['log_loss_better','Lepší log loss'],['brier_better','Lepší Brier score'],['ece_not_worse','Kalibrácia ECE nie horšia']]
+      .filter(([key])=>gate[key]!==true).map(([,label])=>'<li>'+label+'</li>').join('');
     const preflightText=preflightFresh?
       '<strong>Audit dát overený.</strong> '+safeLink(preflight.run?.html_url,'Report ATP/WTA · beh #'+preflight.run?.id)+
       ' · Finálne zmrazenie a zálohovanie vstupov prebehne v tréningu.':
@@ -5330,6 +5363,7 @@ function adminActivityRows(){
       '<p>Jeden postup: príprava dát → tréning a shadow → schválené produkčné nasadenie. Champion zostáva nedotknutý až do samostatne schváleného prepnutia.</p></div>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="calibration-refresh" '+(busy?'disabled':'')+'>Obnoviť celý stav</button></div>'+
       '<p role="status">'+escapeHtml(hint)+'</p>'+
+      '<p class="model-factory-sync">Stav sa obnovuje každých 30 sekúnd počas otvorenia tejto karty. Posledná synchronizácia workerom: '+escapeHtml(stamp)+'. Požiadavku prevezme existujúci worker, bežne do 30 minút; kartu môžeš zavrieť.</p>'+
       '<div class="admin-calibration-grid model-factory-three-steps">'+
       '<article class="admin-calibration-panel"><small>FÁZA 1 · READ-ONLY</small><h3>1 · Pripraviť dáta</h3>'+
       '<p>Audit aktuálnej kanonickej CDB: ATP/WTA zápasy, historické obdobie, identity, chýbajúce rebríčky, serve/return a break points. Bez importu, API požiadaviek či kopírovania tréningových záloh.</p>'+
@@ -5338,16 +5372,22 @@ function adminActivityRows(){
       '<article class="admin-calibration-panel"><small>FÁZA 2 · KANDIDÁT / SHADOW</small><h3>2 · Natrénovať a aktivovať kandidáta</h3>'+
       '<p>Chránený tréning zmrazí overené vstupy, otestuje modely ATP/WTA proti championovi a uloží kandidáta. Shadow sa aktivuje automaticky len pri splnení ďalších offline kvalitatívnych brán.</p>'+
       '<p><strong>Nový tréning 7.2.1: zápasy od 1. 1. 2024 (UTC).</strong> Staršia história slúži na výpočet predzápasových vstupov. Dni z obdobia 2024+ sa chronologicky rozdelia: 70 % učenie, 15 % kalibrácia a 15 % test. Skutočné obdobia a počty uvádza report tréningu; už použité testovacie zápasy nie sú novým nezávislým overením. Toto nastavenie nemení už aktívny model.</p>'+
-      '<button type="button" class="btn btn-primary" data-admin-action="training-start" '+(canTrain?'':'disabled')+'>Natrénovať a spustiť shadow</button>'+
+      '<button type="button" class="btn btn-primary" data-admin-action="training-start" '+(canTrain?'':'disabled')+'>'+(['failure','timed_out','cancelled'].includes(trainRun?.conclusion)?'Zopakovať tréning a kontroly':'Natrénovať a spustiť shadow')+'</button>'+
+      (!canTrain?'<p role="status">'+escapeHtml(!preflightFresh?'Najprv dokonči prípravu dát v kroku 1.':d?.can_start===false?d.reason:training?.reason||'Čaká sa na overený stav.')+'</p>':'')+
       '<p><strong>Tréning:</strong> '+trainingText+'</p>'+
-      (trainingStep?'<p role="status"><strong>Aktuálna fáza:</strong> '+escapeHtml(trainingStep)+'</p>':'')+
+      (trainingStep?'<p role="status"><strong>Aktuálna fáza:</strong> '+escapeHtml(readableStep(training.active_steps[0]))+'</p>':'')+
+      (failedSteps.length?'<p role="alert"><strong>Tréning sa zastavil:</strong> '+escapeHtml(failedSteps.join(' · '))+'. Po uvoľnení dátového zámku a overení prípravy môžeš spustiť nový pokus. Nedokončený beh sa nevydáva za uložený model.</p>':'')+
+      timeline+outcomeText+
       '<p role="status">'+escapeHtml(shadowText)+'</p></article>'+
       '<article class="admin-calibration-panel"><small>FÁZA 3 · SCHVÁLENIE</small><h3>3 · Nasadiť do produkcie</h3>'+
       '<p>Sprístupní sa až po nezávislom forward shadow vyhodnotení, kontrole TOP/VALUE, overenom rollbacku a výslovnom potvrdení konkrétneho modelu.</p>'+
       '<button type="button" class="btn btn-primary" data-admin-action="model-factory-promote" disabled>Nasadiť do produkcie</button>'+
       '<p role="status">Zatiaľ zablokované. Produkčný prepínač nemá implementovanú schválenú bezpečnú cestu; žiadna akcia nemení championa.</p>'+
+      '<p><strong>Chýbajúce shadow podmienky:</strong></p>'+(missingShadow?'<ul>'+missingShadow+'</ul>':'<p>Základné shadow metriky splnené. Nasadenie ešte vyžaduje kontrolu TOP/VALUE, rollbacku a samostatné schválenie.</p>')+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(canBuild?'':'disabled')+'>Vyhodnotiť shadow výsledky</button>'+
       '<p><strong>Posledný uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article></div>'+
       '<div class="admin-calibration-bottom"><div><strong>Rozpracovaná operácia</strong><span>'+activeText+'</span></div><div><strong>Posledná kontrola</strong><span>'+lastText+'</span></div></div>'+
+      (last?.note?'<p role="status">'+escapeHtml(last.note)+'</p>':'')+
       (failed&&!unsafeFailure?'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-acknowledge" '+(busy?'disabled':'')+'>Potvrdiť zlyhanie read-only auditu</button>':'')+
       (unsafeFailure?'<p role="alert">Zápis sa mohol vykonať čiastočne. Pred ďalším krokom je nutná nezávislá ručná kontrola CDB/release.</p>':'')+
       '<details class="admin-model-factory-advanced"><summary>Pokročilé operácie a história</summary>'+
@@ -5356,14 +5396,14 @@ function adminActivityRows(){
       '<label>Overený kandidát <select id="admin-model-lab-candidate" '+(canActivate?'':'disabled')+'>'+options+'</select></label>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="activate_shadow" '+(canActivate?'':'disabled')+'>Aktivovať iba shadow (manuálne)</button>'+
       '<p>Voliteľný Drive import a read-only audit sú oddelené úkony; nie sú podmienkou na nový tréning z aktuálnej CDB.</p>'+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="import_drive" '+(canActivate?'':'disabled')+'>Importovať 100 Drive súborov</button> '+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(canActivate?'':'disabled')+'>Nezávislý shadow audit</button> '+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="refresh_tests" '+(canActivate?'':'disabled')+'>Synchronizovať výsledky</button>'+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="import_drive" '+(canBuild?'':'disabled')+'>Importovať 100 Drive súborov</button> '+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="refresh_tests" '+(canBuild?'':'disabled')+'>Synchronizovať výsledky</button>'+
       '<p>Úplný priebeh tréningu a uložené kandidáty možno overiť v GitHub Actions a súkromnom dátovom repozitári. Produkcia sa pri tréningu ani pri shadow aktivácii nepovyšuje.</p>'+
       '</details></section>';
   }
   async function loadAdminModelLab(startOperation='', acknowledge=false){
     if(state.adminModelLabBusy)return;
+    state.adminFactoryRevision=(state.adminFactoryRevision||0)+1;
     const generation=feedGeneration;
     const tag=document.getElementById('admin-model-lab-candidate')?.value||'';
     state.adminModelLabBusy=true;state.adminModelLabMessage='';rerenderAdmin();
@@ -5403,6 +5443,7 @@ function adminActivityRows(){
   }
   async function loadAdminTraining(start=false){
     if(state.adminTrainingBusy)return;
+    state.adminFactoryRevision=(state.adminFactoryRevision||0)+1;
     const generation=feedGeneration;
     const profile=document.getElementById('admin-training-profile')?.value||'top-7.2.1';
     state.adminTrainingBusy=true;state.adminTrainingMessage='';rerenderAdmin();
@@ -5731,6 +5772,37 @@ function adminActivityRows(){
     }finally{
       if(generation===feedGeneration){state.adminCalibrationLoading=false;rerenderAdmin();}
     }
+  }
+  async function pollAdminModelFactory(){
+    if(document.hidden||!navigator.onLine||state.route!=='admin'||state.adminTab!=='calibration'||!isAdminAccount()||
+      state.adminFactoryPolling||state.adminCalibrationLoading||state.adminTrainingBusy||state.adminModelLabBusy)return;
+    const generation=feedGeneration;
+    state.adminFactoryPolling=true;
+    const revision=state.adminFactoryRevision||0;
+    try{
+      const results=await Promise.allSettled([BlinqAuth.adminModelTraining(),BlinqAuth.adminModelLab(),BlinqAuth.adminModelCalibration()]);
+      if(generation!==feedGeneration||revision!==(state.adminFactoryRevision||0)||state.route!=='admin'||state.adminTab!=='calibration'||
+        state.adminTrainingBusy||state.adminModelLabBusy||state.adminCalibrationLoading)return;
+      const fields=['adminTraining','adminModelLab','adminCalibration'];
+      results.forEach((result,i)=>{
+        // A failed read must not leave an apparently actionable old snapshot.
+        state[fields[i]]=result.status==='fulfilled'?result.value:null;
+      });
+      if(results[0].status==='rejected')state.adminTrainingMessage='Stav tréningu sa nepodarilo obnoviť. Skúšam znova pri ďalšej kontrole.';
+      else state.adminTrainingMessage='';
+      if(results[1].status==='rejected')state.adminModelLabMessage='Stav operácie sa nepodarilo obnoviť.';
+      else state.adminModelLabMessage='';
+      state.adminCalibrationError=results[2].status==='rejected'?'Kalibračný snapshot sa nepodarilo obnoviť.':'';
+      const details=document.querySelector('.admin-model-factory-advanced');
+      const opened=!!details?.open, selected=document.getElementById('admin-model-lab-candidate')?.value;
+      // Avoid disrupting a keyboard user while they operate a control.
+      if(document.activeElement?.matches('select,input,textarea'))return;
+      rerenderAdmin();
+      const restored=document.querySelector('.admin-model-factory-advanced');
+      if(restored)restored.open=opened;
+      const select=document.getElementById('admin-model-lab-candidate');
+      if(select&&selected&&[...select.options].some(o=>o.value===selected))select.value=selected;
+    }finally{if(generation===feedGeneration)state.adminFactoryPolling=false;}
   }
   async function loadAdminDiagnostics(force=false){
     const generation=feedGeneration;
@@ -6160,7 +6232,7 @@ function adminActivityRows(){
         loadAdminModelLab(operation);return;
       }
       if(action==='model-lab-acknowledge'){
-        if(!window.confirm('Potvrdzuješ, že si preveril neúspešný workflow? Následné opakovanie môže znovu spustiť import alebo zmenu shadow kandidáta.'))return;
+        if(!window.confirm('Potvrdiť ukončený neúspešný audit a uvoľniť jeho frontu? Potom ho môžeš spustiť znova. Tento krok nemení dáta ani model.'))return;
         loadAdminModelLab('',true);return;
       }
       if(action==='training-refresh'){loadAdminTraining();return;}
@@ -7234,7 +7306,7 @@ function adminActivityRows(){
     state.insights=[];state.insightsUnread=0;state.insightsLoading=false;state.insightsStorageUnavailable=false;
     state.userLiveRadarStatus=null;state.userLiveRadarLoading=false;state.liveRadarHeartbeat=null;state.privateUpdatesBusy=false;state.privateUpdatesLastPoll=0;
     state.adminUsers=null;state.adminUsersLoading=false;state.adminUsersError='';state.adminUsersWarning='';state.adminSelectedUser=null;
-    state.adminTraining=null;state.adminTrainingBusy=false;state.adminTrainingMessage="";state.adminModelLab=null;state.adminModelLabBusy=false;state.adminModelLabMessage='';state.adminDiagnostics=null;state.adminDiagnosticsLoading=false;state.adminCalibration=null;state.adminCalibrationLoading=false;state.adminCalibrationError='';state.adminInsights=null;state.adminInsightsLoading=false;state.adminInsightsError='';state.adminInsightEditingId='';state.adminLiveRadarStatus=null;state.adminLiveRadarLoading=false;
+    state.adminFactoryPolling=false;state.adminFactoryRevision=0;state.adminTraining=null;state.adminTrainingBusy=false;state.adminTrainingMessage="";state.adminModelLab=null;state.adminModelLabBusy=false;state.adminModelLabMessage='';state.adminDiagnostics=null;state.adminDiagnosticsLoading=false;state.adminCalibration=null;state.adminCalibrationLoading=false;state.adminCalibrationError='';state.adminInsights=null;state.adminInsightsLoading=false;state.adminInsightsError='';state.adminInsightEditingId='';state.adminLiveRadarStatus=null;state.adminLiveRadarLoading=false;
     state.railMatch=null;state.previewPlan=null;state.demoFeedBackup=null;state.demoMode=false;state.dashboardVisibility=null;state.pushConfig=null;state.pushBusy=false;
     state.projectGroups=[];state.projectGroupsLoading=false;state.projectGroupsError='';state.activeProjectGroupId='';
     state.adminProjectGroups=null;state.adminProjectGroupsLoading=false;state.adminProjectGroupsError='';state.adminProjectGroupId='';
@@ -7431,6 +7503,7 @@ function adminActivityRows(){
     const refresh=()=>{if(document.hidden||!navigator.onLine||document.activeElement?.matches('input,select,textarea')||$('appShell').hidden||state.route==='admin'||state.demoMode||document.querySelector('dialog[open]')||Date.now()-lastAttempt<60000)return;lastAttempt=Date.now();refreshWorkspace(false).catch(()=>{});};
     const privateRefresh=()=>{if(!document.hidden&&navigator.onLine&&!$('appShell')?.hidden)refreshPrivateUpdates(false).catch(()=>{});};
     setInterval(refresh,5*60*1000);setInterval(privateRefresh,30*1000);
+    setInterval(()=>{pollAdminModelFactory().catch(()=>{});},30*1000);
     document.addEventListener('visibilitychange',()=>{refresh();if(!document.hidden)refreshPrivateUpdates(true).catch(()=>{});});
     window.addEventListener('online',()=>{lastAttempt=0;refresh();refreshPrivateUpdates(true).catch(()=>{});});
     window.addEventListener('offline',()=>window.BlinqUI.sync('offline'));
