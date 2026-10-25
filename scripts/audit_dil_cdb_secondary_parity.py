@@ -16,7 +16,7 @@ import sqlite3
 import sys
 
 from finalize_dil_from_cdb_v2 import (
-    CORE, cdb_time_seconds, comparable_equal, core_difference, json_obj, miss,
+    CORE, FIELDS, METADATA, comparable_equal, core_difference, json_obj, miss,
 )
 
 
@@ -32,6 +32,38 @@ def file_sha256(path: Path):
         for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b''):
             h.update(chunk)
     return h.hexdigest()
+
+
+def nested_subset(actual, expected):
+    """Treat DIL-only extra context as an allowed source-independent enrichment."""
+    if isinstance(expected, dict):
+        return isinstance(actual, dict) and all(
+            key in actual and nested_subset(actual[key], value)
+            for key, value in expected.items()
+        )
+    if isinstance(expected, list):
+        return isinstance(actual, list) and actual == expected
+    return comparable_equal(actual, expected) if (
+        isinstance(actual, (int, float)) and isinstance(expected, (int, float))
+    ) else actual == expected
+
+
+def metadata_comparison(field, present, canonical):
+    if field == 'provider_context_json':
+        source = json_obj(canonical)
+        if not source:
+            return 'not_required'
+        current = json_obj(present)
+        if not current:
+            return 'missing'
+        return 'matched' if nested_subset(current, source) else 'conflicting'
+    if miss(canonical):
+        return 'not_required'
+    if miss(present):
+        return 'missing'
+    if field in ('player1_rank', 'player2_rank', 'best_of', 'indoor'):
+        return 'matched' if comparable_equal(present, canonical) else 'conflicting'
+    return 'matched' if str(present).strip() == str(canonical).strip() else 'conflicting'
 
 
 def audit(cdb_path, dil_path, cdb_sha256, *, full_integrity=False, attest=None):
@@ -52,8 +84,8 @@ def audit(cdb_path, dil_path, cdb_sha256, *, full_integrity=False, attest=None):
     counts = Counter()
     with closing(_readonly(cdb_path)) as cdb, closing(_readonly(dil_path)) as dil:
         schemas = [
-            (cdb, 'cdb_matches', {'match_id', *CORE, 'stats_json'}),
-            (dil, 'canonical_matches', {'match_id', *CORE, 'stats_json'}),
+            (cdb, 'cdb_matches', set(FIELDS)),
+            (dil, 'canonical_matches', set(FIELDS)),
         ]
         for connection, table, required in schemas:
             fields = {row[1] for row in connection.execute(f'PRAGMA table_info({table})')}
@@ -75,21 +107,25 @@ def audit(cdb_path, dil_path, cdb_sha256, *, full_integrity=False, attest=None):
                 a = next(ids, None)
                 b = next(cdb_ids, None)
         has_overlay = dil.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='dil_enrichment_compact'").fetchone() is not None
-        matches = dil.execute('''SELECT match_id,tour,scheduled_at,player1_id,player2_id,winner_id,
-                         surface,status,source_year,stats_json FROM canonical_matches ORDER BY match_id''')
+        field_list=','.join('"'+field+'"' for field in FIELDS)
+        matches = dil.execute('SELECT '+field_list+' FROM canonical_matches ORDER BY match_id')
         # Indexed point queries into immutable CDB; bounded-memory across full corpus.
         query_cdb = cdb.cursor()
         query_overlay = dil.cursor()
         for row in matches:
-            m = dict(zip(('match_id', *CORE, 'stats_json'), row))
-            matched = query_cdb.execute('''SELECT match_id,tour,scheduled_at,player1_id,player2_id,
-                        winner_id,surface,status,source_year,stats_json FROM cdb_matches WHERE match_id=?''',
+            m = dict(zip(FIELDS, row))
+            matched = query_cdb.execute('SELECT '+field_list+' FROM cdb_matches WHERE match_id=?',
                         (m['match_id'],)).fetchone()
             if matched is None:
                 continue
-            source = dict(zip(('match_id', *CORE, 'stats_json'), matched))
+            source = dict(zip(FIELDS, matched))
             if core_difference(m, source):
                 counts['core_mismatched_matches'] += 1
+            for field in METADATA:
+                relation = metadata_comparison(field, m[field], source[field])
+                if relation != 'not_required':
+                    counts['cdb_populated_metadata_fields'] += 1
+                    counts['cdb_metadata_'+relation+'_fields'] += 1
             stats_dil = json_obj(m['stats_json'])
             stats_cdb = json_obj(source['stats_json'])
             overlay = {}
@@ -122,7 +158,8 @@ def audit(cdb_path, dil_path, cdb_sha256, *, full_integrity=False, attest=None):
     if file_sha256(cdb_path) != cdb_sha256:
         raise ValueError('CDB export changed while parity was checked')
     failures = ('missing_cdb_match_ids_in_dil', 'dil_canonical_ids_not_in_cdb',
-                'core_mismatched_matches', 'cdb_stat_cells_missing_effective_dil',
+                'core_mismatched_matches', 'cdb_metadata_missing_fields',
+                'cdb_metadata_conflicting_fields', 'cdb_stat_cells_missing_effective_dil',
                 'cdb_stat_cells_conflicting_effective_dil', 'cdb_sqlite_check_failures',
                 'dil_sqlite_check_failures', 'cdb_foreign_key_failures', 'dil_foreign_key_failures')
     passed = full_integrity and all(counts.get(x, 0) == 0 for x in failures)
