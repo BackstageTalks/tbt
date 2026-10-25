@@ -158,4 +158,8 @@ def test_frontend_and_scheduled_job_contract():
     assert 'DELETE HISTORY ' in auth and 'DELETE HISTORY ' in api
     assert 'def internal_history_retention_worker' in api
     assert 'X-Blinq-Worker-Token' in schedule
-    assert "17 */6 * * *" in schedule
+    assert "workflow_dispatch:" in schedule
+    assert "  schedule:" not in schedule
+    live=(root/".github/workflows/live-radar.yml").read_text(encoding="utf-8")
+    assert "/api/v1/internal/history-retention-worker" in live
+    assert "run_history_retention_guarded" in api
