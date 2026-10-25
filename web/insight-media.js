@@ -9,7 +9,7 @@
   const cache=new Map();
   let scope=null,observer=null;
   function currentScope(){
-    try{return String(localStorage.getItem(window.BlinqAuth?.sessionEpochKey)||'unavailable');}catch{return 'unavailable';}
+    try{return String(localStorage.getItem(window.BlinqAuth?.sessionEpochKey?.()||'')||'unavailable');}catch{return 'unavailable';}
   }
   function clearCache(next){
     for(const value of cache.values())Promise.resolve(value).then(url=>{if(url)URL.revokeObjectURL(url);}).catch(()=>{});
