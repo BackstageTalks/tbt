@@ -1622,6 +1622,7 @@
         "daily": {
           "label": "TOP",
           "enabled": true,
+          "exclude_from_stats": false,
           "plans": {
             "trial": {
               "visible_rows": 2,
@@ -1691,6 +1692,7 @@
         "value": {
           "label": "VALUE",
           "enabled": true,
+          "exclude_from_stats": false,
           "plans": {
             "trial": {
               "visible_rows": 0,
@@ -1760,6 +1762,7 @@
         "ace": {
           "label": "ACES",
           "enabled": true,
+          "exclude_from_stats": false,
           "plans": {
             "trial": {
               "visible_rows": 0,
@@ -1829,6 +1832,7 @@
         "double_faults": {
           "label": "DVOJCHYBY",
           "enabled": true,
+          "exclude_from_stats": false,
           "plans": {
             "trial": {
               "visible_rows": 0,
@@ -1898,6 +1902,7 @@
         "games": {
           "label": "GAMES",
           "enabled": true,
+          "exclude_from_stats": false,
           "plans": {
             "trial": {
               "visible_rows": 0,
@@ -2106,6 +2111,7 @@
         "doubles": {
           "label": "Štvorhra",
           "enabled": true,
+          "exclude_from_stats": false,
           "plans": {
             "trial": {
               "visible_rows": 0,
@@ -2244,6 +2250,7 @@
         "sets": {
           "label": "SETS",
           "enabled": true,
+          "exclude_from_stats": false,
           "plans": {
             "trial": {
               "visible_rows": 0,
