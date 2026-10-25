@@ -27,6 +27,17 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def next_quota_probe_after_reset(now: datetime) -> datetime:
+    """Next safe provider usage probe at 17:11 UTC, independent of DST."""
+    if now.tzinfo is None:
+        raise ValueError("Quota probe time must be timezone-aware")
+    utc = now.astimezone(timezone.utc)
+    probe_at = utc.replace(hour=17, minute=11, second=0, microsecond=0)
+    if utc >= probe_at:
+        probe_at += timedelta(days=1)
+    return probe_at
+
+
 def read_json(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -210,13 +221,13 @@ finally:
             remaining = probe("quota_probe_initial")
             if remaining is None or budget(remaining, report["requests_used"],
                                             max_spend=args.max_spend, reserve=args.reserve) < 350:
-                # RapidAPI billing reset may occur at UTC midnight. Check once
-                # after midnight, but never assume the reset actually happened.
-                retry_at = datetime(2026, 9, 27, 0, 7, tzinfo=timezone.utc)
+                # Subscription-day reset is 17:09 UTC, not midnight.
+                # The provider header, not an assumed reset, authorizes work.
+                retry_at = next_quota_probe_after_reset(utcnow())
                 if utcnow() < retry_at < deadline - timedelta(minutes=70):
                     while utcnow() < retry_at:
                         time.sleep(min(60, max(1, (retry_at - utcnow()).total_seconds())))
-                    remaining = probe("quota_probe_after_midnight")
+                    remaining = probe("quota_probe_after_provider_reset")
             available = budget(remaining, report["requests_used"],
                                max_spend=args.max_spend, reserve=args.reserve)
             if available >= 350:
