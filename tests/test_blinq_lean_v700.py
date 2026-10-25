@@ -94,7 +94,7 @@ def test_admin_is_visibly_reduced_to_three_sections():
     route = app.split("function renderAdminRoute(){", 1)[1].split("function rerenderAdmin", 1)[0]
     assert "['accounts','Účty','Prístup · platnosť']" in route
     assert "['banners','Bannery','Hero · pozadie']" in route
-    assert "['insights','Info & LIVE','Správy · radar']" in route
+    assert "['insights','INFO & LIVE','Správy · radar']" in route
     assert "campaigns" not in route
 
 
