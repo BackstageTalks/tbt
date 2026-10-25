@@ -313,23 +313,51 @@ def _auto_across_sources(feed: dict, metric: str, cache: dict,
     return value, source, period, sample
 
 
+# Eight independent publication sources; 'see_all' is an aggregate UI view
+# rather than a separate market. Legacy configs lacking the switch opt in.
+_STATS_TAB_TO_SECTION = {
+    "daily": "top_daily",
+    "prime": "prime",
+    "value": "value",
+    "ace": "ace",
+    "double_faults": "double_faults",
+    "doubles": "doubles",
+    "games": "games",
+    "sets": "sets",
+}
+_STATS_MARKET_FALLBACK = {
+    "aces": "ace",
+    "double_faults": "double_faults",
+    "sets": "sets",
+    "games": "games",
+}
+
+
+def _excluded_stats_sections(ui_config: dict | None) -> set[str]:
+    dashboard = ui_config.get("dashboard") if isinstance(ui_config, dict) else None
+    hub = dashboard.get("daily_hub") if isinstance(dashboard, dict) else None
+    tabs = hub.get("tabs") if isinstance(hub, dict) else None
+    if not isinstance(tabs, dict):
+        return set()
+    return {
+        section for tab_id, section in _STATS_TAB_TO_SECTION.items()
+        if isinstance(tabs.get(tab_id), dict)
+        and (
+            tabs[tab_id].get("enabled") is False
+            or tabs[tab_id].get("exclude_from_stats") is True
+        )
+    }
+
+
 def selected_dashboard_cards(feed: dict, ui_config: dict | None, *, now: datetime | None = None) -> list[dict]:
-    """Return only three configured scalar values; auto selects each metric's
-    highest valid time-window value without mixing winner and Results samples."""
-    # This admin policy is independent of presentation visibility. Exclude
-    # ACCA publications from Results-based KPI statistics without editing the
-    # settled ledger or affecting other categories of the same match.
-    dashboard = ui_config.get("dashboard") if isinstance(ui_config, dict) else {}
-    hub = dashboard.get("daily_hub") if isinstance(dashboard, dict) else {}
-    tabs = hub.get("tabs") if isinstance(hub, dict) else {}
-    prime = tabs.get("prime") if isinstance(tabs, dict) else {}
-    # Global ACCA OFF is a source gate for STATS, not just UI visibility.
-    # The explicit STATS-only toggle remains independently available while
-    # ACCA is globally ON. Historical Results rows stay intact.
-    exclude_acca = isinstance(prime, dict) and (
-        prime.get("enabled") is False or prime.get("exclude_from_stats") is True
-    )
-    if exclude_acca:
+    """Return three configured scalar values.
+
+    Each market's independent STATS exclusion (or global OFF) gates its
+    publications *before* cross-market deduplication. This changes only the
+    computed sample; Results history and other published markets stay intact.
+    """
+    excluded = _excluded_stats_sections(ui_config)
+    if excluded:
         rows = []
         for row in feed.get("results") or []:
             if not isinstance(row, dict) or not isinstance(row.get("market_publications"), list):
@@ -338,7 +366,13 @@ def selected_dashboard_cards(feed: dict, ui_config: dict | None, *, now: datetim
             original = row["market_publications"]
             retained = [
                 p for p in original
-                if not (isinstance(p, dict) and str(p.get("section") or "").strip().lower() == "prime")
+                if not (
+                    isinstance(p, dict)
+                    and (
+                        str(p.get("section") or "").strip().lower()
+                        or _STATS_MARKET_FALLBACK.get(str(p.get("market") or "").strip().lower(), "")
+                    ) in excluded
+                )
             ]
             rows.append({**row, "market_publications": retained} if len(retained) != len(original) else row)
         feed = {**feed, "results": rows}
