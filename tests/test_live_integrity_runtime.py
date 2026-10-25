@@ -149,3 +149,44 @@ def test_invalid_context_is_discarded_without_changing_settlement(monkeypatch):
     assert persisted["status"] == "loss"
     for field in ("first_set_outcome", "first_set_score", "max_live_odds"):
         assert field not in persisted
+
+def test_live_radar_status_uses_current_quota_guard_and_local_dst_reset(monkeypatch):
+    from tbt.providers import shared_budget
+
+    monkeypatch.setattr(function_app, "_live_worker_token_ok", lambda req: True)
+    instant = datetime(2026, 10, 25, 16, 0, tzinfo=timezone.utc)
+    budget = shared_budget._summary([], shared_budget._now_slot(instant))
+    monkeypatch.setattr(function_app, "shared_api_budget_status", lambda: budget)
+    monkeypatch.setattr(
+        function_app, "load_live_worker_status",
+        lambda: {"scanned_at": datetime.now(timezone.utc).isoformat(),
+                 "last_success_at": datetime.now(timezone.utc).isoformat()},
+    )
+    response = function_app.internal_live_radar_status(WorkerRequest())
+    data = body(response)
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["budget"]["global_limit"] == 14700
+    assert data["budget"]["reserved_provider_headroom"] == 300
+    assert data["budget"]["next_reset_utc"] == "2026-10-25T17:09:00+00:00"
+    assert data["budget"]["next_reset_bratislava_time"] == "18:09"
+    assert data["budget"]["next_reset_bratislava_zone"] == "CET"
+
+
+def test_live_radar_status_rejects_stale_quota_contract(monkeypatch):
+    from tbt.providers import shared_budget
+
+    monkeypatch.setattr(function_app, "_live_worker_token_ok", lambda req: True)
+    monkeypatch.setattr(
+        function_app, "load_live_worker_status",
+        lambda: {"scanned_at": datetime.now(timezone.utc).isoformat(),
+                 "last_success_at": datetime.now(timezone.utc).isoformat()},
+    )
+    good = shared_budget._summary([], shared_budget._now_slot(
+        datetime(2026, 10, 25, 16, 0, tzinfo=timezone.utc)
+    ))
+    monkeypatch.setattr(function_app, "shared_api_budget_status",
+                        lambda: {**good, "global_limit": 14500})
+    response = function_app.internal_live_radar_status(WorkerRequest())
+    assert response.status_code == 503
+    assert body(response)["error"] == "api_budget_invalid"
