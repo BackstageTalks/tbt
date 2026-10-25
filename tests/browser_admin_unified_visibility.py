@@ -42,29 +42,38 @@ def inspect(browser,width):
     assert page.locator('[data-admin-display-history]').count()==1
     assert page.locator('[data-admin-detail-section]').count()==3
     assert page.locator('[data-admin-results-plan], [data-admin-level-access], [data-admin-level-hub-field]').count()==0
-    assert page.locator('[data-admin-display-access="comparator"]').is_checked()
-    assert page.locator('[data-admin-display-access="results"]').is_checked()
-    assert page.locator('[data-admin-display-access="detail"]').is_checked()
-
-    # Changing ELITE does not change FREE, PRO or other membership tiers.
-    page.locator('[data-admin-display-access="comparator"]').uncheck()
-    page.locator('[data-admin-display-access="results"]').uncheck()
-    page.locator('[data-admin-display-access="detail"]').uncheck()
+    # Preserve the deployed baseline: lower tiers may already have Results locked.
+    keys=("comparator","results","detail")
+    baseline={key:page.locator(f'[data-admin-display-access="{key}"]').is_checked()
+              for key in keys}
+    for key,old in baseline.items():
+        node=page.locator(f'[data-admin-display-access="{key}"]')
+        if old:
+            node.uncheck()
+        else:
+            node.check()
+        assert node.is_checked() is not old,(width,key)
     page.locator('[data-admin-display-history]').select_option('7d')
-    assert not page.locator('[data-admin-display-access="comparator"]').is_checked()
-    assert not page.locator('[data-admin-display-access="results"]').is_checked()
-    assert not page.locator('[data-admin-display-access="detail"]').is_checked()
     assert page.locator('[data-admin-display-history]').input_value()=='7d'
 
+    # Changes on ELITE never silently propagate to ROOKIE, PRO, or other levels.
     page.locator('[data-admin-plan-chip="rookie"]').click()
-    assert page.locator('[data-admin-display-access="comparator"]').is_checked()
-    assert page.locator('[data-admin-display-access="results"]').is_checked()
-    assert page.locator('[data-admin-display-access="detail"]').is_checked()
-    page.locator('[data-admin-display-access="comparator"]').uncheck()
-    assert page.evaluate('unifiedHarness.state.ui.dashboard.comparator.plans.rookie===false')
-    assert page.evaluate('unifiedHarness.state.ui.dashboard.comparator.plans.trial===false')
+    rookie_before=page.locator('[data-admin-display-access="comparator"]').is_checked()
+    if rookie_before:
+        page.locator('[data-admin-display-access="comparator"]').uncheck()
+    else:
+        page.locator('[data-admin-display-access="comparator"]').check()
+    assert page.evaluate(
+        '(desired)=>unifiedHarness.state.ui.dashboard.comparator.plans.rookie===desired',
+        not rookie_before,
+    )
+    assert page.evaluate(
+        '(desired)=>unifiedHarness.state.ui.dashboard.comparator.plans.trial===desired',
+        not rookie_before,
+    )
     page.locator('[data-admin-plan-chip="elite"]').click()
-    assert not page.locator('[data-admin-display-access="comparator"]').is_checked()
+    for key,old in baseline.items():
+        assert page.locator(f'[data-admin-display-access="{key}"]').is_checked() is not old,(width,key)
     assert page.locator('[data-admin-display-history]').input_value()=='7d'
     assert page.evaluate('unifiedHarness.state.ui.dashboard.results_history_window.elite==="7d"')
     assert page.evaluate('unifiedHarness.state.ui.dashboard.comparator.plans.pro!==false')
