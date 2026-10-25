@@ -90,7 +90,7 @@ def _validate_image_bytes(data: bytes, content_type: str) -> None:
         raise ValueError("Uploaded file is not a valid AVIF")
 
 
-def upload_media(data: bytes, *, content_type: str, original_name: str = "", actor_id: str = "") -> dict:
+def upload_media(data: bytes, *, content_type: str, original_name: str = "", actor_id: str = "", scope: str = "banner") -> dict:
     if not isinstance(data, (bytes, bytearray)) or not data:
         raise ValueError("Upload is empty")
     if len(data) > _MAX_UPLOAD_BYTES:
@@ -102,9 +102,11 @@ def upload_media(data: bytes, *, content_type: str, original_name: str = "", act
     data = bytes(data)
     _validate_image_bytes(data, content_type)
 
+    if scope not in {"banner", "insight"}:
+        raise ValueError("Invalid image scope")
     digest = hashlib.sha256(data).hexdigest()[:12]
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-    media_id = f"banner-{stamp}-{digest}-{uuid.uuid4().hex[:8]}{extension}"
+    media_id = f"{scope}-{stamp}-{digest}-{uuid.uuid4().hex[:8]}{extension}"
     metadata = {
         "uploaded_by": str(actor_id or "")[:128],
         "original_name": re.sub(r"[^A-Za-z0-9._ -]+", "_", str(original_name or ""))[:180],
@@ -125,7 +127,7 @@ def upload_media(data: bytes, *, content_type: str, original_name: str = "", act
     return {
         "ok": True,
         "media_id": media_id,
-        "url": f"/api/v1/media/{media_id}",
+        "url": f"/api/v1/{'insights/media' if scope == 'insight' else 'media'}" + f"/{media_id}",
         "content_type": content_type,
         "size": len(data),
     }
