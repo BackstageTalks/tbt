@@ -132,3 +132,4 @@ def test_failed_rollback_retains_recovery_guard(remote, monkeypatch):
     with pytest.raises(RuntimeError):
         p.release(*args, override=True, cache=path)
     assert (path / 'recovery-required').is_file()
+    assert not (path / 'safe-to-unlock').exists()

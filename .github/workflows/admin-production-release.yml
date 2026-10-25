@@ -56,5 +56,5 @@ jobs:
         with:
           name: production-release-${{ github.run_id }}
           path: .cache/tbt/production-release/outcome.json
-      - if: always() && hashFiles('.cache/tbt/production-release/recovery-required') == ''
+      - if: always() && hashFiles('.cache/tbt/production-release/safe-to-unlock') != ''
         run: python scripts/cdb_global_writer_lock.py release --if-held

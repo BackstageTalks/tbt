@@ -29,6 +29,8 @@ def release(source_tag, source_sha, champion_sha, reason, request_id, *, overrid
     verify(REPO, ROOT / '.cdb-global-writer-lock.json')
     base = Path(cache or ROOT / '.cache/tbt/production-release')
     base.mkdir(parents=True, exist_ok=True)
+    safe_unlock = base / 'safe-to-unlock'
+    safe_unlock.write_text('No production writes started')
     backup_tag = 'tbt-champion-backup-sha256-' + champion_sha
     for tag in (source_tag, PRODUCTION, backup_tag):
         if _run_gh(['api', f'repos/{REPO}/releases/tags/{tag}']).returncode:
@@ -66,6 +68,7 @@ def release(source_tag, source_sha, champion_sha, reason, request_id, *, overrid
         raise ValueError('Invalid production promotion history')
     fresh['promotion_history.json'] = json.dumps(history + [audit], ensure_ascii=False, allow_nan=False).encode()
     verify(REPO, ROOT / '.cdb-global-writer-lock.json')
+    safe_unlock.unlink()
     try:
         checked_publish(production, PRODUCTION, fresh, base / 'readback')
         restored = load_model(str(base / 'readback/model.joblib'))
@@ -85,7 +88,9 @@ def release(source_tag, source_sha, champion_sha, reason, request_id, *, overrid
         except Exception:
             (base / 'recovery-required').write_text('Unverified rollback; retain writer lock for reconciliation')
             raise
+        safe_unlock.write_text('Original production bundle restored and verified')
         raise
+    safe_unlock.write_text('Production release readback verified')
     audit.update(status='VERIFIED_PRODUCTION_RELEASE', remote_readback='VERIFIED')
     # Public workflow artifacts/logs omit the private operator rationale.
     public = {key: value for key, value in audit.items() if key != 'reason'}
