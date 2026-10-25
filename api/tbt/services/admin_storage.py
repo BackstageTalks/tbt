@@ -2156,10 +2156,10 @@ def normalize_insight(payload: object, *, existing: dict | None = None) -> dict:
     base = dict(existing or {})
     title = str(payload.get("title", base.get("title", "")) or "").strip()
     body = str(payload.get("body", base.get("body", "")) or "").strip()
-    if not title or len(title) > 140:
-        raise ValueError("Insight title must contain 1–140 characters")
-    if not body or len(body) > 4000:
-        raise ValueError("Insight body must contain 1–4000 characters")
+    if len(title) > 140:
+        raise ValueError("Insight title must contain at most 140 characters")
+    if len(body) > 4000:
+        raise ValueError("Insight body must contain at most 4000 characters")
     insight_type = str(payload.get("type", base.get("type", "insight")) or "insight").strip().lower()
     priority = str(payload.get("priority", base.get("priority", "normal")) or "normal").strip().lower()
     if insight_type not in _INSIGHT_TYPES:
@@ -2225,6 +2225,8 @@ def normalize_insight(payload: object, *, existing: dict | None = None) -> dict:
         raise ValueError("Invalid private screenshot")
     if len(set(media_ids)) != len(media_ids):
         raise ValueError("Duplicate screenshot")
+    if not title and not body and not media_ids:
+        raise ValueError("Add a title, message or screenshot")
     match_id = str(payload.get("match_id", base.get("match_id", "")) or "").strip()
     if match_id and not _VALID_ID.fullmatch(match_id):
         raise ValueError("Invalid insight match id")
