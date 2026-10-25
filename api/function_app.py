@@ -98,6 +98,10 @@ from tbt.services.admin_storage import (
     membership_levels_from,
     list_live_radar_results,
     delete_live_radar_result,
+    history_retention_settings,
+    save_history_retention,
+    cleanup_history,
+    run_history_retention,
 )
 from tbt.services.content_news import news_pool
 from tbt.services.media_storage import (
@@ -3297,6 +3301,70 @@ def admin_user_payments(req):
         return response({"error": "admin_auth_unavailable"}, 503)
     except AdminStorageUnavailable:
         return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/history-retention", methods=["GET", "PUT", "POST"])
+def admin_history_retention(req):
+    """Administrative storage retention; unlike LIVE member visibility settings."""
+    try:
+        admin, denied = _admin_user(req)
+        if denied:
+            return denied
+        if req.method == "GET":
+            return response({"settings": history_retention_settings()})
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        if not isinstance(payload, dict):
+            return response({"error": "invalid_json"}, 400)
+        kind = str(payload.get("kind") or "").lower()
+        if req.method == "PUT":
+            if set(payload) != {"kind", "retention_hours"}:
+                return response({"error": "invalid_retention_request"}, 400)
+            return response(save_history_retention(
+                kind, payload["retention_hours"], actor_id=str(admin.get("id") or "")
+            ))
+        mode = payload.get("mode")
+        if mode not in {"all", "older_than_24h"}:
+            return response({"error": "invalid_cleanup_mode"}, 400)
+        if set(payload) != {"kind", "mode", "confirmation"}:
+            return response({"error": "invalid_cleanup_request"}, 400)
+        expected = f"DELETE HISTORY {kind.upper()} {mode.upper()}"
+        if payload.get("confirmation") != expected:
+            return response({"error": "confirmation_required"}, 400)
+        result = cleanup_history(
+            kind, delete_all=(mode == "all"),
+            older_than_hours=24 if mode == "older_than_24h" else None,
+            actor_id=str(admin.get("id") or ""),
+        )
+        record_system_event("info", "history", "Admin history cleanup",
+                            details={"kind": kind, "mode": mode, "deleted": result["deleted"],
+                                     "failed": result["failed"]})
+        return response(result, 207 if result["failed"] else 200)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except (AuthUnavailable, AdminStorageUnavailable):
+        return response({"error": "history_management_unavailable"}, 503)
+
+
+@app.route(route="v1/internal/history-retention-worker", methods=["POST"])
+def internal_history_retention_worker(req):
+    """Six-hourly job, separate from RapidAPI budget and LIVE scan."""
+    if not str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip():
+        return response({"error": "worker_not_configured"}, 503)
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    try:
+        result = run_history_retention()
+        # Preserve compatibility with already configured INFO result retention.
+        if info_result_retention_days():
+            result["legacy_info_result_cleanup"] = cleanup_info_results(actor_id="history-worker")
+            result["failed"] += result["legacy_info_result_cleanup"]["failed"]
+        return response({"ok": result["failed"] == 0, **result}, 207 if result["failed"] else 200)
+    except AdminStorageUnavailable:
+        logging.exception("Scheduled history retention could not access storage")
+        return response({"error": "history_retention_storage_unavailable"}, 503)
 
 
 @app.route(route="v1/admin/info-results/manage", methods=["GET", "PUT", "DELETE"])
