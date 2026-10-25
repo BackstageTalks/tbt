@@ -2693,6 +2693,12 @@ def save_history_retention(kind: str, hours: int, *, actor_id: str = "") -> dict
     actual = history_retention_settings()
     if actual[kind] != hours:
         raise AdminStorageUnavailable("History retention read-back mismatch")
+    if kind == "info":
+        # The retired INFO-results-only retention must not silently delete
+        # records after the unified INFO message+result policy is disabled.
+        save_info_result_retention(0, actor_id=actor_id)
+        if info_result_retention_days() != 0:
+            raise AdminStorageUnavailable("Legacy INFO retention did not reset")
     return {"kind": kind, "retention_hours": hours, "settings": actual}
 
 
