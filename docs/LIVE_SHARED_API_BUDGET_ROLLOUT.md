@@ -7,7 +7,11 @@ BlinQ enforces a fail-closed **14,700 request global ceiling** and permanently
 keeps **300 requests (2.00%)** as provider headroom.
 
 The durable ledger is aligned to the verified provider-day reset used by the
-runtime guard: **17:09 UTC** (18:09 winter / 19:09 summer in Bratislava).
+runtime guard: **17:09 UTC**. The Admin and internal read-only budget status
+also expose `next_reset_bratislava` automatically using IANA
+`Europe/Bratislava`: **18:09 SEČ (CET) in winter / 19:09 SELČ (CEST)
+in summer**. UTC remains the accounting source of truth; never hardcode
+local seasonal clock times in the provider-day writer.
 ALL billable TennisAPI requests are blocked at **17:07–17:10 UTC**,
 regardless of priority. A guarded **17:10–17:13 UTC** new provider-day
 statistics startup is limited to a cumulative 3,000 requests.
