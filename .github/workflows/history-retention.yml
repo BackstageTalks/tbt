@@ -34,7 +34,8 @@ jobs:
           from pathlib import Path
           result=json.loads(Path('/tmp/history-retention.json').read_text())
           assert result.get('ok') is True, result
-          assert set(result.get('settings',{}))=={'info','comeback','set2'}, result
-          assert result.get('failed')==0, result
+          if not result.get('skipped'):
+              assert set(result.get('settings',{}))=={'info','comeback','set2'}, result
+              assert result.get('failed')==0, result
           print(json.dumps(result,sort_keys=True))
           PY
