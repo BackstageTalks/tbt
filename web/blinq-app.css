@@ -10761,3 +10761,71 @@ body#blinqPremium.blinq-admin .admin-membership-visibility-link span{
   body#blinqPremium.blinq-admin .admin-display-notification-status button{margin-left:0;width:100%}
   body#blinqPremium.blinq-admin .admin-membership-visibility-link button{width:100%}
 }
+
+/* Admin UX audit 2026-10-25: focused panels and single navigation map. */
+body#blinqPremium.blinq-admin .admin-subnav{
+  display:flex;flex-wrap:wrap;gap:9px;margin:14px 0 16px;padding:9px;
+  border:1px solid #25534a;border-radius:12px;background:#051b1d;min-width:0
+}
+body#blinqPremium.blinq-admin .admin-subnav button{
+  flex:1 1 165px;display:grid;gap:4px;text-align:left;min-width:0;
+  padding:12px 14px;border:1px solid #2c514b;border-radius:9px;
+  background:#071f22;color:#c5e7d9;cursor:pointer;font:inherit
+}
+body#blinqPremium.blinq-admin .admin-subnav button strong{font-size:12px;color:inherit}
+body#blinqPremium.blinq-admin .admin-subnav button small{font-size:10px;color:#8eaea1;line-height:1.4}
+body#blinqPremium.blinq-admin .admin-subnav button.is-active{
+  border-color:#50c99d;background:#0b382d;color:#e9fff3;
+  box-shadow:inset 3px 0 #40e1a6
+}
+body#blinqPremium.blinq-admin .admin-subnav button:disabled{opacity:.5;cursor:not-allowed}
+body#blinqPremium.blinq-admin .admin-subnav button:focus-visible,
+body#blinqPremium.blinq-admin .admin-guide-map button:focus-visible{
+  outline:2px solid #84f0c5;outline-offset:3px
+}
+body#blinqPremium.blinq-admin .admin-subpanel[hidden]{display:none!important}
+body#blinqPremium.blinq-admin .admin-subpanel{min-width:0}
+body#blinqPremium.blinq-admin .admin-subpanel-danger{border-top:1px solid #63453c;padding-top:8px}
+body#blinqPremium.blinq-admin .admin-guide-map{
+  margin-bottom:17px;padding:16px;border:1px solid #30785a;
+  border-radius:13px;background:#061f21;min-width:0
+}
+body#blinqPremium.blinq-admin .admin-guide-map-head strong{font-size:15px;color:#e7f8ef}
+body#blinqPremium.blinq-admin .admin-guide-map-head p{
+  font-size:11px;color:#aacabd;line-height:1.6;margin:7px 0 15px
+}
+body#blinqPremium.blinq-admin .admin-guide-map-grid{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px
+}
+body#blinqPremium.blinq-admin .admin-guide-map-group{
+  display:grid;align-content:start;gap:8px;padding:12px;
+  border:1px solid #265146;border-radius:10px;min-width:0
+}
+body#blinqPremium.blinq-admin .admin-guide-map-group h3{
+  font-size:12px;color:#6de4b3;margin:0 0 4px;font-weight:850
+}
+body#blinqPremium.blinq-admin .admin-guide-map-group button{
+  display:grid;gap:4px;text-align:left;padding:11px;
+  border:1px solid #2d5148;border-radius:8px;
+  background:#06292a;color:#e2f5e9;cursor:pointer;font:inherit
+}
+body#blinqPremium.blinq-admin .admin-guide-map-group button b{font-size:11px}
+body#blinqPremium.blinq-admin .admin-guide-map-group button small{
+  font-size:10px;line-height:1.45;color:#a2c4b4
+}
+body#blinqPremium.blinq-admin .admin-guide-map-group button:hover{
+  border-color:#55cf9f;background:#0e3a2f
+}
+body#blinqPremium.blinq-admin .admin-nav-toolbar [data-admin-guide-toggle]{
+  border-color:#346d58;color:#c9f3de
+}
+@media(max-width:1060px){
+  body#blinqPremium.blinq-admin .admin-guide-map-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:640px){
+  body#blinqPremium.blinq-admin .admin-guide-map{padding:11px}
+  body#blinqPremium.blinq-admin .admin-guide-map-grid{grid-template-columns:1fr}
+  body#blinqPremium.blinq-admin .admin-subnav{padding:6px;gap:7px}
+  body#blinqPremium.blinq-admin .admin-subnav button{flex-basis:130px;padding:10px}
+  body#blinqPremium.blinq-admin .admin-subnav button small{font-size:9px}
+}
