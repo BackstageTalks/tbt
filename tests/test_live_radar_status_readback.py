@@ -67,7 +67,7 @@ def test_stale_heartbeat_and_budget_corruption_fail_closed(monkeypatch):
     age = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
     setup(monkeypatch, {"last_success_at": age, "scanned_at": age})
     assert function_app.internal_live_radar_status(Request()).status_code == 503
-    setup(monkeypatch, shared={**budget(), "global_spent": 14501})
+    setup(monkeypatch, shared={**budget(), "global_spent": 14701})
     assert payload(function_app.internal_live_radar_status(Request()))["error"] == "api_budget_invalid"
 
 
