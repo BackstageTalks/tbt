@@ -3360,11 +3360,7 @@ def internal_history_retention_worker(req):
         result = run_history_retention_guarded()
         if result.get('skipped'):
             return response(result)
-        # Preserve compatibility with already configured INFO result retention.
-        if info_result_retention_days():
-            result["legacy_info_result_cleanup"] = cleanup_info_results(actor_id="history-worker")
-            result["failed"] += result["legacy_info_result_cleanup"]["failed"]
-        return response({"ok": result["failed"] == 0, **result}, 207 if result["failed"] else 200)
+        return response(result)
     except AdminStorageUnavailable:
         logging.exception("Scheduled history retention could not access storage")
         return response({"error": "history_retention_storage_unavailable"}, 503)
