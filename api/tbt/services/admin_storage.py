@@ -1254,10 +1254,15 @@ def validate_ui_config(payload: object) -> dict:
     for tab_id, tab in hub_tabs.items():
         if not isinstance(tab, dict) or not isinstance(tab.get("enabled"), bool):
             raise ValueError(f"Invalid Daily Picks tab: {tab_id}")
-        # Optional for legacy published UI configs; must be an explicit boolean
-        # when provided. Statistics inclusion must never derive from SHOW/HIDE.
-        if tab_id == "prime" and "exclude_from_stats" in tab and not isinstance(tab["exclude_from_stats"], bool):
-            raise ValueError("ACCA exclude_from_stats must be boolean")
+        # Stats exclusion is global for each real publication category, not
+        # per-level SHOW / BLUR / HIDE. Legacy configs may omit the flag.
+        # Derived 'see_all' and retired tabs have no independent STATS source.
+        stats_markets = {"daily", "prime", "value", "ace", "double_faults", "doubles", "games", "sets"}
+        if "exclude_from_stats" in tab:
+            if tab_id not in stats_markets:
+                raise ValueError(f"Unsupported STATS exclusion category: {tab_id}")
+            if not isinstance(tab["exclude_from_stats"], bool):
+                raise ValueError(f"{tab_id} exclude_from_stats must be boolean")
         plan_settings = tab.get("plans") or {}
         for plan_id in ("trial", "expired", "rookie", "pro", "elite", "legend", "goat"):
             rule = plan_settings.get(plan_id)
