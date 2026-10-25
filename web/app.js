@@ -4480,11 +4480,51 @@ function adminActivityRows(){
         :'INFO publikum sa riadi presne levelmi zvolenými pri tejto správe.';
     }
   }
+  function adminInsightTitleParts(raw){
+    // Only leading exact presets are parsed. Legacy arbitrary headings remain editable.
+    const parts=String(raw||'').split(' · '),presets=[];
+    while(parts.length&&['Premium','FREE'].includes(parts[0])&&!presets.includes(parts[0])){
+      presets.push(parts.shift());
+    }
+    return {presets,custom:parts.join(' · ')};
+  }
+  function adminInsightComposeTitle(block){
+    const presets=['Premium','FREE'].filter(value=>
+      [...block.querySelectorAll('[data-insight-title-preset]')].some(node=>node.value===value&&node.checked));
+    const custom=String(block.querySelector('[data-insight-custom-title]')?.value||'').trim();
+    return [...presets,...(custom?[custom]:[])].join(' · ');
+  }
+  function syncAdminInsightTitle(block){
+    if(!block)return;
+    const title=adminInsightComposeTitle(block),input=block.querySelector('[data-insight-title]');
+    if(input)input.value=title;
+    const preview=block.querySelector('[data-insight-title-preview]'),count=block.querySelector('[data-insight-title-count]');
+    if(preview)preview.textContent=title||'Bez nadpisu';
+    if(count){count.textContent=title.length+'/140';count.classList.toggle('is-over-limit',title.length>140);}
+    const custom=block.querySelector('[data-insight-custom-title]');
+    if(custom)custom.setCustomValidity(title.length>140?'Nadpis môže mať najviac 140 znakov.':'');
+    const selected=block.querySelector('[data-insight-title-selected]');
+    if(selected)selected.textContent=['Premium','FREE'].filter(value=>
+      [...block.querySelectorAll('[data-insight-title-preset]')].some(node=>node.value===value&&node.checked)).join(' + ')||'Vybrať';
+  }
   function adminInsightMessageHtml(index,value={}){
-    const n=Number(index)||0;
+    const n=Number(index)||0,title=adminInsightTitleParts(value.title||'');
+    const checked=value=>title.presets.includes(value)?'checked':'';
     return `<div class="admin-insight-message-card" data-insight-message data-insight-media-ids='${escapeHtml(JSON.stringify(Array.isArray(value.media_ids)?value.media_ids:[]))}'>
       <div class="admin-insight-message-head"><div><small>SPRÁVA <b data-insight-message-number>${n+1}</b></small><span>Stačí nadpis, text alebo screenshot. Prázdnu správu nie je možné odoslať.</span></div><button type="button" class="admin-insight-message-remove" data-admin-action="insight-message-remove" aria-label="Odstrániť správu">×</button></div>
-      <label>Nadpis <span>(voliteľné)</span><input data-insight-title maxlength="140" value="${escapeHtml(value.title||'')}"></label>
+      <div class="admin-insight-title-editor">
+        <div class="admin-insight-title-label">Nadpis <span>(voliteľné)</span></div>
+        <details class="admin-insight-title-dropdown" data-insight-title-dropdown>
+          <summary>Vybrať nadpis <span data-insight-title-selected>${escapeHtml(title.presets.join(' + ')||'Vybrať')}</span></summary>
+          <div class="admin-insight-title-options" role="group" aria-label="Predvoľby nadpisu">
+            <label><input type="checkbox" data-insight-title-preset value="Premium" ${checked('Premium')}> Premium</label>
+            <label><input type="checkbox" data-insight-title-preset value="FREE" ${checked('FREE')}> FREE</label>
+          </div>
+        </details>
+        <label class="admin-insight-title-custom">Vlastný text <span>(voliteľné)</span><input data-insight-custom-title maxlength="140" value="${escapeHtml(title.custom)}" placeholder="Napr. dnešný zápas, výsledok…"></label>
+        <input type="hidden" data-insight-title value="${escapeHtml(value.title||'')}">
+        <div class="admin-insight-title-preview" role="status">Výsledný nadpis: <strong data-insight-title-preview>${escapeHtml(value.title||'Bez nadpisu')}</strong><small data-insight-title-count>0/140</small></div>
+      </div>
       <label>Správa <span>(voliteľné)</span><textarea data-insight-body maxlength="4000" rows="5">${escapeHtml(value.body||'')}</textarea></label>
       <label>Event ID / zápas <span>(voliteľné)</span><input data-insight-match-id value="${escapeHtml(value.match_id||'')}"></label>
       ${window.BlinqInsightMedia.markup(value)}
@@ -4494,6 +4534,7 @@ function adminActivityRows(){
     if(!form)return;
     const blocks=[...form.querySelectorAll('[data-insight-message]')];
     blocks.forEach((block,index)=>{
+      syncAdminInsightTitle(block);
       const number=block.querySelector('[data-insight-message-number]');if(number)number.textContent=String(index+1);
       const remove=block.querySelector('[data-admin-action="insight-message-remove"]');if(remove)remove.hidden=blocks.length<=1||form.dataset.editing==='1';
     });
@@ -6124,6 +6165,10 @@ function adminActivityRows(){
       else if(action==='copy-tg-nicks'){const nicks=adminFilteredUsers().map(u=>String(u.telegram_nick||'').trim()).filter(Boolean);const text=nicks.join('\n');if(!text){showStatus('V aktuálnom filtri nie sú žiadne Telegram nicky.');return;}try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}showStatus(`Skopírovaných ${nicks.length} Telegram nickov.`);}catch{showStatus('Telegram nicky sa nepodarilo skopírovať.');}}
     };
     host.onchange=async event=>{
+      if(event.target?.matches('[data-insight-title-preset]')){
+        syncAdminInsightTitle(event.target.closest('[data-insight-message]'));
+        return;
+      }
       if(event.target?.id==='adminTelemetryRetention'){
         const days=Number(event.target.value);
         if(!window.confirm(`Nastaviť uchovávanie prihlásení a obnovení na ${days} dní? Staršie údaje sa hneď odstránia.`)){rerenderAdmin();return;}
@@ -6229,6 +6274,10 @@ function adminActivityRows(){
     host.onkeydown=event=>{if(event.target?.id==='adminTestGoPage'&&event.key==='Enter'){event.preventDefault();adminTestAction('go');}};
     host.oninput=event=>{
       const t=event.target,field=t?.dataset?.simpleBannerField;
+      if(t?.matches('[data-insight-custom-title]')){
+        syncAdminInsightTitle(t.closest('[data-insight-message]'));
+        return;
+      }
       if(t?.id==='adminActivitySearch'){
         state.adminActivitySearch=t.value;
         const events=host.querySelector('.admin-activity-events');
@@ -6340,6 +6389,8 @@ function adminActivityRows(){
             media_ids:window.BlinqInsightMedia.idsFor(block),
             index:index+1,
           }));
+          const tooLong=messages.find(row=>row.title.length>140);
+          if(tooLong)throw new Error(`Správa ${tooLong.index}: nadpis môže mať najviac 140 znakov.`);
           const invalid=messages.find(row=>!row.title&&!row.body&&!row.media_ids.length&&!(blocks[row.index-1]?._pendingScreenshots||[]).length);
           if(invalid)throw new Error(`Správa ${invalid.index}: pridaj nadpis, text alebo obrázok.`);
           for(const row of messages){
