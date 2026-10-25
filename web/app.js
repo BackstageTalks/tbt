@@ -4763,7 +4763,7 @@ function adminActivityRows(){
       ${state.adminHistoryRetentionLoading?'<div class="admin-note">Načítavam pravidlá uchovávania…</div>':historyPanels}
     </section>`;
     const infoManagement=`<section class="admin-info-management" aria-label="Vyhodnotenie INFO betov">
-      <p class="admin-live-delete-help">Správy aj výsledky INFO spravuje samostatná karta <strong>Uchovávanie a čistenie histórie</strong> vyššie. Tu môžeš skontrolovať a samostatne vymazať jednotlivé vyhodnotenia.</p>
+      <p class="admin-live-delete-help">Správy aj výsledky INFO spravuje samostatný pohľad <strong>História & mazanie</strong>. Tu môžeš skontrolovať a samostatne vymazať jednotlivé vyhodnotenia.</p>
       <details class="admin-info-results-collapsible" ${state.adminInfoResultsExpanded?'open':''}><summary>Vyhodnotené INFO bety · ${infoResults.length} výsledkov <span>Rozbaliť / zbaliť</span></summary>
       <div class="admin-subsection-heading"><div><strong>Vyhodnotené INFO bety</strong><span>${state.adminInfoResultsLoading?'Načítavam…':infoResults.length+' výsledkov'}</span></div></div>
       <p class="admin-live-delete-help">Pri publikovanej INFO správe klikni WIN, LOSS alebo VOID. Výsledok sa uloží samostatne a zostane v histórii aj po zmazaní alebo expirácii pôvodnej správy.</p>
@@ -4810,11 +4810,16 @@ function adminActivityRows(){
     const audiencePresets=[['all','VŠETCI'],['pro+','PRO+'],['elite+','ELITE+'],['legend+','LEGEND+'],['goat','GOAT']].map(([value,label])=>`<button type="button" class="btn btn-ghost" data-admin-action="insight-audience-preset" data-audience-preset="${value}">${label}</button>`).join('');
     const composerMessages=adminInsightMessageHtml(0,{title:item.title||'',body:item.body||'',match_id:item.match_id||'',media_ids:item.media_ids||[]});
     const addMessage=item.id?'':`<div class="admin-insight-batch-add"><button type="button" class="btn btn-ghost" data-admin-action="insight-message-add">+ Pridať ďalšiu správu</button><span data-insight-message-count>1/5</span></div>`;
+    const view=['messages','audience','results','retention'].includes(state.adminInsightsView)?state.adminInsightsView:'messages';
     return `<section class="admin-ux-section admin-insights-section">
       <div class="admin-ux-heading"><div><small>SPRÁVY & LIVE</small><h2>Info & Comeback LIVE</h2><p>LIVE má globálne minimum prístupu. INFO má publikum pri každej správe samostatne.</p></div><button type="button" class="btn btn-ghost" data-admin-action="insight-new">Nová správa</button></div>
       ${state.adminInsightsError?`<div class="admin-runtime-note is-error"><strong>Feed nie je dostupný</strong><span>${escapeHtml(state.adminInsightsError)}</span></div>`:''}
+      ${adminSubnav('insights',view,[['messages','Správy','Napísať · publikované INFO'],['audience','Publikum & radar','Prístup · LIVE scan'],['results','Vyhodnotenia','INFO & LIVE výsledky'],['retention','História & mazanie','Trvalé vymazanie údajov']])}
+      <div class="admin-subpanel" data-admin-subpanel="insights:audience"${adminSubpanelHidden('insights','audience',view)}>
       <div class="admin-notification-access-grid"><div class="admin-live-access-rule"><div><small>PREDVOLENÉ INFO PUBLIKUM</small><strong>Predvolené INFO od ${escapeHtml(infoLabel)}</strong><span>Toto nastaví predvolený rozsah pri novej INFO správe. Konkrétne publikum môžeš potom vybrať ručne vrátane FREE.</span></div><label><span>Predvolene od levelu</span><select id="adminInfoMinLevel">${infoOptions}</select></label><button class="btn btn-primary" type="button" data-admin-action="save-info-access">Uložiť INFO predvoľbu</button></div><div class="admin-live-access-rule"><div><small>PRÍSTUP K LIVE</small><strong>Comeback LIVE od ${escapeHtml(liveLabel)}</strong><span>Automatický radar, ručné LIVE správy aj zámok v headeri používajú toto pravidlo. ADMIN má vždy plný prístup.</span></div><label><span>Minimálny level</span><select id="adminLiveMinLevel">${liveOptions}</select></label><button class="btn btn-primary" type="button" data-admin-action="save-live-access">Uložiť LIVE pravidlo</button></div></div>
       <div class="admin-live-radar-card${radarTone}"><div><small>COMEBACK LIVE RADAR</small><strong>PRIME pool → prehratý 1. set → potvrdený návrat</strong><span>${escapeHtml(radarText)}</span></div><button type="button" class="btn btn-ghost" data-admin-action="live-radar-scan" ${state.adminLiveRadarLoading?'disabled':''}>${state.adminLiveRadarLoading?'Skenujem…':'Scan LIVE teraz'}</button></div>
+      </div>
+      <div class="admin-subpanel" data-admin-subpanel="insights:messages"${adminSubpanelHidden('insights','messages',view)}>
       <div class="admin-insights-grid"><form id="adminInsightForm" class="admin-insight-composer" data-editing="${item.id?'1':'0'}"><div class="admin-insight-composer-head"><div><small>${item.id?'UPRAVIŤ':'NOVÁ SPRÁVA'}</small><h3>${item.id?escapeHtml(item.title):'Napíš naraz až 5 INFO / LIVE správ'}</h3></div><span>${escapeHtml(insightAudienceText([...selectedLevels]))}</span></div>
         <div class="admin-insight-message-list">${composerMessages}</div>${addMessage}
         <div class="admin-insight-shared-title"><div><small>SPOLOČNÉ NASTAVENIA</small><strong>Platia pre všetky správy v tejto dávke</strong></div></div>
@@ -4825,7 +4830,13 @@ function adminActivityRows(){
         <div class="admin-insight-actions"><button id="adminInsightSubmit" class="btn btn-primary" type="submit">${item.id?'Uložiť':'Publikovať'}</button>${item.id?'<button class="btn btn-ghost" type="button" data-admin-action="insight-new">Zrušiť</button>':''}<span id="adminInsightMessage"></span></div>
       </form>
       <div class="admin-insight-list"><div class="admin-subsection-heading"><div><strong>Publikované</strong><span>${state.adminInsightsLoading?'Načítavam…':`${infoEntries.length} správ`}</span></div></div>${state.adminInsightsLoading?'<div class="admin-note"><strong>Načítavam…</strong></div>':rows||'<div class="admin-note"><strong>Zatiaľ žiadne INFO správy.</strong></div>'}</div></div>
-      ${historyManagement}${infoManagement}${liveManagement}
+      </div>
+      <div class="admin-subpanel" data-admin-subpanel="insights:results"${adminSubpanelHidden('insights','results',view)}>
+        ${infoManagement}${liveManagement}
+      </div>
+      <div class="admin-subpanel admin-subpanel-danger" data-admin-subpanel="insights:retention"${adminSubpanelHidden('insights','retention',view)}>
+        ${historyManagement}
+      </div>
     </section>`;
   }
   function auditDiffLabel(item){
