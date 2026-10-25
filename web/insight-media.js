@@ -19,6 +19,15 @@
     if(!img?.isConnected||img.dataset.mediaLoading)return;
     const id=img.dataset.privateInsightImage;if(!idValid(id))return;
     img.dataset.mediaLoading='1';
+    img.onerror=()=>{
+      img.closest('button')?.classList.add('is-error');
+      img.alt='Screenshot sa nepodarilo zobraziť. Ťukni pre opakovanie.';
+      img.title='Ťukni pre opätovné načítanie';
+    };
+    img.onload=()=>{
+      img.closest('button')?.classList.remove('is-error');
+      img.removeAttribute('title');
+    };
     const identity=scope;
     if(!cache.has(id))cache.set(id,window.BlinqAuth.insightMedia(id).then(blob=>URL.createObjectURL(blob)));
     cache.get(id).then(url=>{
@@ -47,7 +56,18 @@
     ).join('')+'</div>';
   }
   function open(button){
-    const source=button?.querySelector('img');if(!source?.src)return;
+    const source=button?.querySelector('img');
+    if(!source)return;
+    if(!source.src||source.complete&&source.naturalWidth===0){
+      const id=source.dataset.privateInsightImage;
+      if(idValid(id)){
+        cache.delete(id);
+        source.removeAttribute('src');
+        delete source.dataset.mediaLoading;
+        loadOne(source);
+      }
+      return;
+    }
     const layer=document.createElement('div');layer.className='insight-screenshot-lightbox';
     layer.setAttribute('role','dialog');layer.setAttribute('aria-modal','true');layer.setAttribute('aria-label','Náhľad obrázka');
     const close=document.createElement('button');close.type='button';close.className='insight-screenshot-close';
