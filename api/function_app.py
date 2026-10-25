@@ -596,6 +596,9 @@ def comparator_compare(req):
 def public_media(req):
     try:
         media_id = str((req.route_params or {}).get("media_id") or "")
+        # Uploaded INFO/LIVE screenshots must never be exposed by the public banner proxy.
+        if media_id.startswith("insight-"):
+            return response({"error": "media_not_found"}, 404)
         data, content_type, etag = download_media(media_id)
         headers = {
             "Cache-Control": "public, max-age=31536000, immutable",
@@ -611,6 +614,43 @@ def public_media(req):
         return response({"error": "media_not_found"}, 404)
     except MediaStorageUnavailable:
         return response({"error": "media_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/insights/media/{media_id}", methods=["GET"])
+def private_insight_media(req):
+    """Serve a screenshot only to an admin or a currently entitled feed recipient."""
+    try:
+        media_id = str((req.route_params or {}).get("media_id") or "")
+        if not re.fullmatch(r"insight-[A-Za-z0-9._-]{6,175}", media_id):
+            return response({"error": "media_not_found"}, 404)
+        admin, denied = _admin_user(req)
+        if denied:
+            user = _verified_user(req)
+            if not user:
+                return response({"error": "unauthorized"}, 401)
+            if not bool(user.get("email_verified", False)) or is_suspended(user):
+                return response({"error": "forbidden"}, 403)
+            plan = _insight_plan_for_user(user)
+            if plan == "expired":
+                return response({"error": "forbidden"}, 403)
+            visible = list_insights(plan=plan, user_id=str(user.get("id") or ""), include_inactive=False, limit=250)
+            if not any(media_id in (item.get("media_ids") or []) for item in visible["items"]):
+                return response({"error": "forbidden"}, 403)
+        data, content_type, etag = download_media(media_id)
+        headers = {
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+            "X-BlinQ-Release": RELEASE,
+        }
+        if etag:
+            headers["ETag"] = f'"{etag}"'
+        return func.HttpResponse(body=data, status_code=200, mimetype=content_type, headers=headers)
+    except FileNotFoundError:
+        return response({"error": "media_not_found"}, 404)
+    except (ValueError, AuthUnavailable):
+        return response({"error": "unauthorized"}, 401)
+    except (AdminStorageUnavailable, MediaStorageUnavailable):
+        return response({"error": "media_unavailable"}, 503)
 
 
 @app.route(route="v1/auth/config", methods=["GET"])
@@ -3712,6 +3752,7 @@ def admin_media_upload(req):
             content_type=content_type,
             original_name=filename,
             actor_id=str(actor.get("id") or ""),
+            scope="insight" if str(req.headers.get("X-Blinq-Media-Scope") or "").strip().lower() == "insight" else "banner",
         ), 201)
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
