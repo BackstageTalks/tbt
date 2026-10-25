@@ -87,3 +87,17 @@ synchronized with those runtime constants.
 - If an external/manual caller uses the provider key outside the shared guard,
   its requests are not visible to BlinQ. Keep the provider reserve intact and
   reconcile against the provider dashboard when investigating quota mismatch.
+
+## Auxiliary safety layers
+
+Local history reservation helpers and the SQLite counter now use the same
+**17:09 UTC** provider-day boundary, the **17:07–17:10 UTC** hard stop,
+and a maximum of **14,700** calls. Previous-day local reservations expire
+at the provider-day boundary, not at midnight or after an arbitrary rolling
+24-hour period. The shared ETag ledger and actual provider remaining-call
+response headers are still required for paid work.
+
+The historical one-night optimizer may recheck the provider only after
+**17:11 UTC**, verifying the provider's actual remaining-call header instead
+of assuming midnight or a successful reset. API jobs are not re-enabled
+by these code changes.
