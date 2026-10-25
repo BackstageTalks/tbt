@@ -2816,8 +2816,13 @@ def run_history_retention(*, actor_id: str = "history-worker") -> dict:
             per_kind[kind] = cleanup_history(kind, older_than_hours=hours, actor_id=actor_id)
         else:
             per_kind[kind] = {"kind": kind, "skipped": True, "retention_hours": 0}
-    return {"settings": settings, "results": per_kind,
-            "failed": sum(int(row.get("failed") or 0) for row in per_kind.values())}
+    result = {"settings": settings, "results": per_kind,
+              "failed": sum(int(row.get("failed") or 0) for row in per_kind.values())}
+    legacy = info_result_retention_days()
+    if legacy:
+        result["legacy_info_result_cleanup"] = cleanup_info_results(actor_id=actor_id)
+        result["failed"] += result["legacy_info_result_cleanup"]["failed"]
+    return result
 
 
 
