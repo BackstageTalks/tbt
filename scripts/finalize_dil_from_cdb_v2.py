@@ -90,6 +90,30 @@ def eligible_new(c):
     return None
 
 
+def context_null_only_merge(existing, incoming):
+    """Add absent provider-context keys; preserve all populated DIL values.
+
+    Returns (merged object, sourced additions, incompatible existing values).
+    Paths are dotted field names for private provenance/audit, never exported.
+    """
+    if not isinstance(existing,dict) or not isinstance(incoming,dict):
+        raise ValueError('Provider context must be a JSON object')
+    out=json.loads(json.dumps(existing,allow_nan=False))
+    added={};conflicts={}
+    def walk(dst,src,path):
+        for key,value in src.items():
+            field=path+'.'+str(key) if path else str(key)
+            if value is None or isinstance(value,str) and miss(value):continue
+            if key not in dst or dst[key] is None or isinstance(dst[key],str) and miss(dst[key]):
+                dst[key]=value;added[field]=value
+            elif isinstance(dst[key],dict) and isinstance(value,dict):
+                walk(dst[key],value,field)
+            elif not comparable_equal(dst[key],value):
+                conflicts[field]=(dst[key],value)
+    walk(out,incoming,'provider_context_json')
+    return out,added,conflicts
+
+
 def bootstrap(db):
     db.executescript('''
     CREATE TABLE IF NOT EXISTS dil_cdb_finalize_review (
@@ -107,6 +131,11 @@ def bootstrap(db):
       match_id TEXT NOT NULL, metric_key TEXT NOT NULL, existing_json TEXT NOT NULL,
       incoming_json TEXT NOT NULL, source_sha256 TEXT NOT NULL,
       PRIMARY KEY(match_id,metric_key)
+    ) WITHOUT ROWID;
+    CREATE TABLE IF NOT EXISTS dil_cdb_finalize_metadata_conflicts (
+      match_id TEXT NOT NULL, field_name TEXT NOT NULL, existing_json TEXT NOT NULL,
+      incoming_json TEXT NOT NULL, source_sha256 TEXT NOT NULL,
+      PRIMARY KEY(match_id,field_name)
     ) WITHOUT ROWID;
     CREATE TABLE IF NOT EXISTS dil_cdb_finalize_receipts (key TEXT PRIMARY KEY,value TEXT NOT NULL) WITHOUT ROWID;
     ''')
@@ -165,7 +194,7 @@ def reconcile(dil,cdb,dest,expected_cdb_sha256,release_manifest_sha256,quick_che
         db.execute('BEGIN IMMEDIATE')
         provenance_before=db.execute('SELECT count(*) FROM dil_cdb_finalize_provenance').fetchone()[0]
         counts=dict(rows_cdb=0,matched=0,new_matches=0,noncompleted_new_matches=0,metadata_fields_filled=0,stat_cells_filled=0,stats_conflicts=0,duplicate_event_review=0,
-                    identity_review=0,new_identity_review=0,preexisting_stat_cells_preserved=0)
+                    identity_review=0,new_identity_review=0,metadata_conflicts=0,preexisting_stat_cells_preserved=0)
         readback_ids=[]
         # The output is an ISOLATED copy; an index prevents O(new_rows*N) scans.
         # Used only for vetoing alternate-ID duplicates, never for guessing links.
@@ -213,13 +242,29 @@ def reconcile(dil,cdb,dest,expected_cdb_sha256,release_manifest_sha256,quick_che
                 db.execute('INSERT OR REPLACE INTO dil_cdb_finalize_review VALUES(?,?,?)',(mid,'CANONICAL_CORE_CONFLICT:'+','.join(diffs),json.dumps({'cdb':c,'dil_core':{k:d[k] for k in CORE}},ensure_ascii=False,sort_keys=True,default=str)))
                 counts['identity_review']+=1;continue
             counts['matched']+=1
-            metadata_additions={k:c.get(k) for k in METADATA if k in c and miss(d.get(k)) and not miss(c.get(k))}
+            metadata_additions={k:c.get(k) for k in METADATA if k!='provider_context_json' and k in c and miss(d.get(k)) and not miss(c.get(k))}
             if metadata_additions:
                 db.execute('UPDATE canonical_matches SET '+','.join('\"'+k+'\"=?' for k in metadata_additions)+' WHERE match_id=?',[*metadata_additions.values(),mid])
                 for k,v in metadata_additions.items():
                     db.execute('INSERT INTO dil_cdb_finalize_metadata_provenance VALUES(?,?,?,?)',
                                (mid,k,json.dumps(v,default=str,ensure_ascii=False),actual))
                 counts['metadata_fields_filled']+=len(metadata_additions)
+            if 'provider_context_json' in c:
+                merged,provider_additions,provider_conflicts=context_null_only_merge(
+                    json_obj(d.get('provider_context_json')),
+                    json_obj(c.get('provider_context_json')))
+                if provider_additions:
+                    db.execute('UPDATE canonical_matches SET provider_context_json=? WHERE match_id=?',
+                        (json.dumps(merged,ensure_ascii=False,sort_keys=True,allow_nan=False),mid))
+                    for key,value in provider_additions.items():
+                        db.execute('INSERT INTO dil_cdb_finalize_metadata_provenance VALUES(?,?,?,?)',
+                            (mid,key,json.dumps(value,ensure_ascii=False,allow_nan=False),actual))
+                    counts['metadata_fields_filled']+=len(provider_additions)
+                for key,(existing,incoming) in provider_conflicts.items():
+                    db.execute('INSERT OR REPLACE INTO dil_cdb_finalize_metadata_conflicts VALUES(?,?,?,?,?)',
+                        (mid,key,json.dumps(existing,ensure_ascii=False,default=str),
+                         json.dumps(incoming,ensure_ascii=False,default=str),actual))
+                    counts['metadata_conflicts']+=1
             a=json_obj(d['stats_json']); b=json_obj(c['stats_json']); overlay={}
             if has_overlay:
                 x=db.execute('SELECT json_metrics FROM dil_enrichment_compact WHERE match_id=?',(mid,)).fetchone()
@@ -277,7 +322,7 @@ def reconcile(dil,cdb,dest,expected_cdb_sha256,release_manifest_sha256,quick_che
         report={'schema':'BLINQ_DIL_CDB_ISOLATED_RECONCILIATION_V1','status':'ISOLATED_VERIFIED_NOT_PRODUCTION',
                 'source_cdb_sha256':actual,'source_release_manifest_sha256':release_manifest_sha256,
                 'timestamp_contract':'CDB signed UTC seconds; DIL signed UTC nanoseconds',
-                'data_gate':('BLOCKED_REVIEW_REQUIRED' if (counts['identity_review'] or counts['new_identity_review'] or counts['stats_conflicts'] or dil_only) else ('BLOCKED_UNATTESTED_CDB_EXPORT' if not attested else 'ISOLATED_PARITY_IMPORT_PASS_PENDING_REVALIDATION')),
+                'data_gate':('BLOCKED_REVIEW_REQUIRED' if (counts['identity_review'] or counts['new_identity_review'] or counts['metadata_conflicts'] or counts['stats_conflicts'] or dil_only) else ('BLOCKED_UNATTESTED_CDB_EXPORT' if not attested else 'ISOLATED_PARITY_IMPORT_PASS_PENDING_REVALIDATION')),
                 'source_dil_sha256':sha256(dil),
                 'source_export_attested':attested,'source_export_receipt_sha256':receipt_sha256,'result_dil_sha256':sha256(dest),
                 'canonical_matches_before':n_before,'canonical_matches_after':after,'counts':counts,
