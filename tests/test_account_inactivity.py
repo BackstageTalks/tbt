@@ -327,9 +327,8 @@ def test_paid_notice_scheduled_event_precedes_transport(monkeypatch):
     monkeypatch.setattr(lifecycle, "record_account_event", lambda **kwargs: activity.append(kwargs))
     result = lifecycle.run_inactivity_review(cfg(), {"account_inactivity": {}}, now=NOW)
     pending = [row for row in activity if row["action"] == "account_email_delivery"]
-    assert len(pending) == 1
-    assert pending[0]["outcome"] == "pending"
-    assert pending[0]["target_id"] == user["id"]
+    assert [entry["outcome"] for entry in pending] == ["pending", "sent"]
+    assert all(entry["target_id"] == user["id"] for entry in pending)
     assert "7 dní" in pending[0]["after"]["subject"]
     assert result["subscription_7"] == 1
 
@@ -374,3 +373,35 @@ def test_rookie_inactivity_uses_latest_access_change_or_actual_activity(monkeypa
     # A later real login takes priority over the transition timestamp.
     user["last_sign_in_at"] = (NOW - timedelta(days=2)).isoformat()
     assert lifecycle._last_seen(user, meta) == NOW - timedelta(days=2)
+
+
+def test_inactivity_smtp_rejection_is_audited_and_retryable(monkeypatch):
+    user = rookie(23)
+    setup(monkeypatch, [user])
+    activity = []
+    markers = []
+    monkeypatch.setattr(lifecycle, "record_account_event", lambda **kw: activity.append(kw))
+    monkeypatch.setattr(lifecycle, "save_inactivity_state", lambda uid, **kw: markers.append((uid, kw)) or {})
+    monkeypatch.setattr(lifecycle, "send_blinq_transactional_email", lambda *_a, **_kw: False)
+    result = lifecycle.run_inactivity_review(cfg(), {"account_inactivity": {}}, now=NOW)
+    assert result["warnings"] == 0
+    assert result["mail_failures"] == 1
+    assert [e["outcome"] for e in activity] == ["pending", "failed"]
+    assert [state["warning_status"] for _, state in markers] == ["pending", "failed"]
+
+
+def test_inactivity_uncertain_smtp_exception_keeps_pending_to_prevent_spam(monkeypatch):
+    user = rookie(23)
+    setup(monkeypatch, [user])
+    activity = []
+    markers = []
+    monkeypatch.setattr(lifecycle, "record_account_event", lambda **kw: activity.append(kw))
+    monkeypatch.setattr(lifecycle, "save_inactivity_state", lambda uid, **kw: markers.append((uid, kw)) or {})
+    def lost_smtp_response(*_a, **_kw):
+        raise RuntimeError("SMTP response ambiguous")
+    monkeypatch.setattr(lifecycle, "send_blinq_transactional_email", lost_smtp_response)
+    result = lifecycle.run_inactivity_review(cfg(), {"account_inactivity": {}}, now=NOW)
+    assert result["warnings"] == 0
+    assert result["mail_failures"] == 1
+    assert [e["outcome"] for e in activity] == ["pending"]
+    assert [state["warning_status"] for _, state in markers] == ["pending"]
