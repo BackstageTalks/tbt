@@ -37,6 +37,12 @@
       }
     },
     {
+      "route": "/insight-media.js",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
+    },
+    {
       "route": "/responsive.js",
       "headers": {
         "Cache-Control": "no-store, max-age=0, must-revalidate"
