@@ -84,6 +84,8 @@ def main():
                         root.innerHTML=window.BlinqInsightMedia.gallery([id]);
                         root.querySelector('img').style.cssText='display:block;width:100px;height:90px';
                         window.BlinqInsightMedia.loadImages(root);
+                        // Main app wires this delegated click handler; reproduce it in the isolated CSP harness.
+                        root.querySelector('[data-insight-image-open]').onclick=e=>window.BlinqInsightMedia.open(e.currentTarget);
                     }""",
                     SCREENSHOT_ID,
                 )
