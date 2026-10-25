@@ -10583,3 +10583,29 @@ body#blinqPremium .insight-feed-icon.is-blinq-info .insight-feed-brand{
   display:block;width:100%;height:100%;object-fit:contain;
   border-radius:5px;
 }
+
+
+/* Admin INFO / Comeback / 2. set storage-retention manager */
+body#blinqPremium .admin-history-management{
+  display:grid;gap:14px;padding:16px;border:1px solid rgba(51,127,111,.55);
+  border-radius:14px;background:rgba(2,24,28,.74);min-width:0;margin:16px 0;
+}
+body#blinqPremium .admin-history-scope{
+  display:grid;grid-template-columns:minmax(190px,1fr) minmax(170px,240px);
+  gap:12px 20px;padding:14px;border:1px solid rgba(55,112,131,.5);
+  border-radius:12px;background:#051923;align-items:center;min-width:0;
+}
+body#blinqPremium .admin-history-scope>div:first-child{display:grid;gap:5px}
+body#blinqPremium .admin-history-scope strong{color:#e4faf1;font-size:14px}
+body#blinqPremium .admin-history-scope small{color:#9eb7b3;font-size:12px;line-height:1.45}
+body#blinqPremium .admin-history-scope label{display:grid;gap:6px;color:#c1ddd1;font-size:12px}
+body#blinqPremium .admin-history-scope select{width:100%;min-height:44px;border-radius:9px;border:1px solid #326d7a;background:#071c26;color:#f0fff9;padding:10px}
+body#blinqPremium .admin-history-actions{display:flex;flex-wrap:wrap;gap:8px;grid-column:1/-1}
+body#blinqPremium .admin-history-actions button{min-height:42px;white-space:normal;text-align:center}
+@media(max-width:680px){
+  body#blinqPremium .admin-history-management{padding:12px}
+  body#blinqPremium .admin-history-scope{grid-template-columns:minmax(0,1fr)}
+  body#blinqPremium .admin-history-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  body#blinqPremium .admin-history-actions button{width:100%;min-width:0;font-size:12px}
+  body#blinqPremium .admin-history-actions button:last-child{grid-column:1/-1}
+}
