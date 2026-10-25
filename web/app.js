@@ -1849,7 +1849,7 @@
       return;
     }
     if(!rows.length){const set2Empty=channel==='live'&&state.liveRadarTab==='set2';const msg=filter==='unread'?lcopy('You have read everything.','Všetko máš prečítané.','Všechno máš přečtené.'):filter==='pinned'?lcopy('No pinned messages yet.','Zatiaľ nemáš pripnuté správy.','Zatím nemáš připnuté zprávy.'):set2Empty?lcopy('No eligible set-2 candidate is active right now.','Momentálne nie je aktívny žiadny kvalifikovaný kandidát pre 2. set.','Momentálně není aktivní žádný kvalifikovaný kandidát pro 2. set.'):channel==='live'?lcopy('No LIVE signal is active right now.','Momentálne nie je aktívny žiadny LIVE signál.','Momentálně není aktivní žádný LIVE signál.'):channel==='project'?lcopy('No project messages yet.','V tejto projektovej skupine zatiaľ nie sú žiadne správy.','V této projektové skupině zatím nejsou žádné zprávy.'):lcopy('No messages for your membership yet.','Pre tvoju úroveň zatiaľ nie sú žiadne správy.','Pro tvoji úroveň zatím nejsou žádné zprávy.');const emptyDetail=set2Empty?lcopy('The set-2 radar waits for an eligible ACCA candidate after a lost first set; a real live set-2 price is shown when the provider offers it.','Radar 2. setu čaká na kvalifikovaného ACCA kandidáta po prehratom 1. sete; reálny LIVE kurz na 2. set zobrazí, keď ho provider ponúkne.','Radar 2. setu čeká na kvalifikovaného ACCA kandidáta po prohraném 1. setu; reálný LIVE kurz na 2. set zobrazí, když ho provider nabídne.'):channel==='live'?lcopy('WATCH candidates and confirmed comeback signals will appear here.','WATCH kandidáti a potvrdené comeback signály sa zobrazia tu.','WATCH kandidáti a potvrzené comeback signály se zobrazí zde.'):lcopy('Important BlinQ updates and private member notes will appear here.','Dôležité BlinQ informácie a súkromné správy pre členov sa zobrazia tu.','Důležité BlinQ informace a soukromé zprávy pro členy se zobrazí zde.');list.innerHTML=radarPanel+`<div class="insight-feed-empty"><i>✦</i><strong>${escapeHtml(msg)}</strong><p>${escapeHtml(emptyDetail)}</p></div>`;return;}
-    list.innerHTML=radarPanel+rows.map(item=>`<article class="insight-feed-item ${item.read?'is-read':'is-unread'} priority-${escapeHtml(item.priority||'normal')}" data-insight-id="${escapeHtml(item.id)}"><div class="insight-feed-icon type-${escapeHtml(item.type||'insight')}">${escapeHtml(insightTypeIcon(item.type))}</div><div class="insight-feed-content"><header><div><span>${escapeHtml(insightTypeLabel(item.type))}</span>${item.pinned?'<b>PRIPNUTÉ</b>':''}${!item.read?'<em>NEW</em>':''}</div><time>${escapeHtml(item.created_at?fmtDate(item.created_at)+' · '+fmtTime(item.created_at):'')}</time></header><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.body)}</p>${window.BlinqInsightMedia.gallery(item.media_ids)}<footer><small>${escapeHtml(insightAudienceText(item.levels))}</small>${item.match_id?`<button type="button" data-insight-match="${escapeHtml(item.match_id)}">${escapeHtml(item.link_label||lcopy('Open match','Otvoriť zápas','Otevřít zápas'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></button>`:item.link?`<a href="${escapeHtml(item.link)}" ${isExternalLink(item.link)?'target="_blank" rel="noopener"':''}>${escapeHtml(item.link_label||lcopy('Open','Otvoriť','Otevřít'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></a>`:''}</footer></div></article>`).join('');
+    list.innerHTML=radarPanel+rows.map(item=>`<article class="insight-feed-item ${item.read?'is-read':'is-unread'} priority-${escapeHtml(item.priority||'normal')}" data-insight-id="${escapeHtml(item.id)}"><div class="insight-feed-icon type-${escapeHtml(item.type||'insight')}">${escapeHtml(insightTypeIcon(item.type))}</div><div class="insight-feed-content"><header><div><span>${escapeHtml(insightTypeLabel(item.type))}</span>${item.pinned?'<b>PRIPNUTÉ</b>':''}${!item.read?'<em>NEW</em>':''}</div><time>${escapeHtml(item.created_at?fmtDate(item.created_at)+' · '+fmtTime(item.created_at):'')}</time></header>${item.title?`<h3>${escapeHtml(item.title)}</h3>`:''}${item.body?`<p>${escapeHtml(item.body)}</p>`:''}${window.BlinqInsightMedia.gallery(item.media_ids)}<footer><small>${escapeHtml(insightAudienceText(item.levels))}</small>${item.match_id?`<button type="button" data-insight-match="${escapeHtml(item.match_id)}">${escapeHtml(item.link_label||lcopy('Open match','Otvoriť zápas','Otevřít zápas'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></button>`:item.link?`<a href="${escapeHtml(item.link)}" ${isExternalLink(item.link)?'target="_blank" rel="noopener"':''}>${escapeHtml(item.link_label||lcopy('Open','Otvoriť','Otevřít'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></a>`:''}</footer></div></article>`).join('');
     window.BlinqInsightMedia.loadImages(list);
   }
   async function loadInsights(force=false){
@@ -4422,9 +4422,9 @@ function adminActivityRows(){
   function adminInsightMessageHtml(index,value={}){
     const n=Number(index)||0;
     return `<div class="admin-insight-message-card" data-insight-message data-insight-media-ids='${escapeHtml(JSON.stringify(Array.isArray(value.media_ids)?value.media_ids:[]))}'>
-      <div class="admin-insight-message-head"><div><small>SPRÁVA <b data-insight-message-number>${n+1}</b></small><span>Nadpis + text sa odošlú ako samostatná INFO/LIVE správa.</span></div><button type="button" class="admin-insight-message-remove" data-admin-action="insight-message-remove" aria-label="Odstrániť správu">×</button></div>
-      <label>Nadpis<input data-insight-title maxlength="140" required value="${escapeHtml(value.title||'')}"></label>
-      <label>Správa<textarea data-insight-body maxlength="4000" required rows="5">${escapeHtml(value.body||'')}</textarea></label>
+      <div class="admin-insight-message-head"><div><small>SPRÁVA <b data-insight-message-number>${n+1}</b></small><span>Stačí nadpis, text alebo screenshot. Prázdnu správu nie je možné odoslať.</span></div><button type="button" class="admin-insight-message-remove" data-admin-action="insight-message-remove" aria-label="Odstrániť správu">×</button></div>
+      <label>Nadpis <span>(voliteľné)</span><input data-insight-title maxlength="140" value="${escapeHtml(value.title||'')}"></label>
+      <label>Správa <span>(voliteľné)</span><textarea data-insight-body maxlength="4000" rows="5">${escapeHtml(value.body||'')}</textarea></label>
       <label>Event ID / zápas <span>(voliteľné)</span><input data-insight-match-id value="${escapeHtml(value.match_id||'')}"></label>
       ${window.BlinqInsightMedia.markup(value)}
     </div>`;
@@ -4588,7 +4588,7 @@ function adminActivityRows(){
       </div>`:'';
       return `<article class="admin-insight-row ${row.active===false?'is-inactive':''} priority-${escapeHtml(row.priority||'normal')}">
         <div><span>${escapeHtml(insightTypeLabel(row.type))}${row.pinned?' · PIN':''}${outcome?' · '+outcomeText(outcome):''}</span>
-          <strong>${escapeHtml(row.title)}</strong><p>${escapeHtml(row.body)}</p>
+          <strong>${escapeHtml(row.title||row.body||((row.media_ids||[]).length?'📷 Screenshot':'BlinQ Info'))}</strong>${row.title&&row.body?`<p>${escapeHtml(row.body)}</p>`:''}
           <small>${escapeHtml(insightAudienceText(row.levels))} · ${escapeHtml(row.created_at?fmtDate(row.created_at)+' '+fmtTime(row.created_at):'')} · ${Number(row.read_count)||0} prečítaní</small>
         </div>
         <div class="admin-insight-row-actions">${evaluation}
@@ -6210,8 +6210,8 @@ function adminActivityRows(){
             media_ids:window.BlinqInsightMedia.idsFor(block),
             index:index+1,
           }));
-          const invalid=messages.find(row=>!row.title||!row.body);
-          if(invalid)throw new Error(`Správa ${invalid.index}: doplň nadpis aj text.`);
+          const invalid=messages.find(row=>!row.title&&!row.body&&!row.media_ids.length&&!(blocks[row.index-1]?._pendingScreenshots||[]).length);
+          if(invalid)throw new Error(`Správa ${invalid.index}: pridaj nadpis, text alebo obrázok.`);
           for(const row of messages){
             const block=blocks[row.index-1];
             row.media_ids=await window.BlinqInsightMedia.upload(block,number=>{
