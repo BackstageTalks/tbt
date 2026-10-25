@@ -61,6 +61,8 @@ def release(source_tag, source_sha, champion_sha, reason, request_id, *, overrid
                  source_sha256=source_sha, previous_sha256=champion_sha,
                  rollback_tag=backup_tag, calibration_override=True, reason=reason.strip(),
                  quality_status='OPERATOR_WAIVED_NOT_VERIFIED',
+                 promotion_requested=True, decision='operator_calibration_override',
+                 holdout_fingerprint=report['evaluation_governance']['holdout_fingerprint'],
                  created_at=datetime.now(timezone.utc).isoformat(),
                  run_id=os.environ.get('GITHUB_RUN_ID'), code_sha=os.environ.get('GITHUB_SHA'))
     history = json.loads(old['promotion_history.json'])
