@@ -3339,9 +3339,12 @@ def admin_history_retention(req):
             older_than_hours=24 if mode == "older_than_24h" else None,
             actor_id=str(admin.get("id") or ""),
         )
-        record_system_event("info", "history", "Admin history cleanup",
-                            details={"kind": kind, "mode": mode, "deleted": result["deleted"],
-                                     "failed": result["failed"]})
+        try:
+            record_system_event("info", "history", "Admin history cleanup",
+                                details={"kind": kind, "mode": mode, "deleted": result["deleted"],
+                                         "failed": result["failed"]})
+        except Exception:
+            logging.warning("History cleanup audit notification unavailable")
         return response(result, 207 if result["failed"] else 200)
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
