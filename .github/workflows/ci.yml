@@ -335,6 +335,49 @@ jobs:
           output_location: ''
           skip_app_build: true
 
+      - name: Verify live TennisAPI budget contract (read-only)
+        env:
+          BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+          WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$WORKER_TOKEN" || { echo "::error::Missing readback token"; exit 1; }
+          for attempt in 1 2 3 4 5 6 7 8; do
+            if curl -fsSL --connect-timeout 4 --max-time 20 \
+              -H "X-Blinq-Worker-Token: $WORKER_TOKEN" \
+              "$BUDGET_URL" -o /tmp/blinq-budget-readback.json &&
+              python - <<'PYBUDGET'
+          import json
+          from datetime import datetime, timezone
+          response = json.load(open("/tmp/blinq-budget-readback.json", encoding="utf-8"))
+          budget = response.get("budget") if isinstance(response, dict) else None
+          assert response.get("ok") is True and isinstance(budget, dict)
+          assert budget.get("schema") == 2
+          assert budget.get("window") == "provider_day_17_09_utc"
+          assert budget.get("provider_plan_limit") == 15000
+          assert budget.get("global_limit") == 14700
+          assert budget.get("reserved_provider_headroom") == 300
+          spent = budget.get("global_spent")
+          remaining = budget.get("global_remaining")
+          assert type(spent) is int and 0 <= spent <= 14700
+          assert type(remaining) is int and remaining == 14700 - spent
+          reset = datetime.fromisoformat(budget["next_reset_utc"].replace("Z", "+00:00"))
+          reset = reset.astimezone(timezone.utc)
+          assert (reset.hour, reset.minute, reset.second) == (17, 9, 0)
+          assert reset > datetime.now(timezone.utc)
+          print(f"Deployed TennisAPI readback PASS: spent={spent}, remaining={remaining}, reset={reset.isoformat()}")
+          PYBUDGET
+            then
+              break
+            fi
+            if [[ "$attempt" == "8" ]]; then
+              echo "::error::Live TennisAPI budget contract readback did not converge"
+              exit 1
+            fi
+            sleep $((attempt * 2))
+          done
+
       - name: Verify deployed frontend release
         if: ${{ vars.TBT_PRODUCTION_URL != '' }}
         env:

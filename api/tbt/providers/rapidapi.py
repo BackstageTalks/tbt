@@ -29,14 +29,14 @@ from ..utils import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PROVIDER_REQUEST_RESERVE = 500
+DEFAULT_PROVIDER_REQUEST_RESERVE = 300
 
 
 def _enforce_provider_day_hard_stop() -> None:
-    """No paid TennisAPI request from 19:08 to 19:10 Europe/Bratislava."""
-    local = datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Bratislava"))
-    if local.hour == 19 and 8 <= local.minute < 10:
-        raise RequestBudgetExceeded("Provider daily hard stop: 19:08–19:10 Bratislava")
+    """No paid TennisAPI request from 17:07 to 17:10 UTC."""
+    now = datetime.now(timezone.utc)
+    if now.hour == 17 and 7 <= now.minute < 10:
+        raise RequestBudgetExceeded("Provider rollover safety stop: 17:07–17:10 UTC")
 
 
 def _provider_request_reserve() -> int:
@@ -50,7 +50,7 @@ def _provider_request_reserve() -> int:
         raise ConfigurationError(
             "BLINQ_PROVIDER_REQUEST_RESERVE must be an integer"
         ) from exc
-    # Never let a workflow variable weaken the production 500-request safety margin.
+    # Never let a workflow variable weaken the production 300-request safety margin.
     if reserve < DEFAULT_PROVIDER_REQUEST_RESERVE or reserve >= 15000:
         raise ConfigurationError(
             f"BLINQ_PROVIDER_REQUEST_RESERVE must be in "

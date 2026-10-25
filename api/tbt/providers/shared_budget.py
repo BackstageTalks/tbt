@@ -1,9 +1,10 @@
 """Shared Tennis RapidAPI budget aligned to the provider subscription day.
 
-The provider allowance resets at 19:10 Europe/Bratislava. One ETag-protected
+The provider allowance resets at 17:09 UTC (19:09 summer / 18:09 winter Bratislava).
+One ETag-protected
 Azure Table row coordinates every BlinQ TennisAPI caller. Reserve BEFORE every
 billable attempt, including retries; never refund an ambiguous network failure.
-A 500-request provider reserve is kept untouched, so BlinQ hard-stops at 14,500 of 15,000.
+A 300-request provider reserve is kept untouched, so BlinQ hard-stops at 14,700 of 15,000.
 This guard is production-critical and must be deployed before provider work resumes.
 """
 from __future__ import annotations
@@ -18,13 +19,15 @@ from zoneinfo import ZoneInfo
 from .budget import RequestBudgetExceeded
 
 SLOT_SECONDS = 300
+# Reset-aligned bucket slots; schema-1 entries migrate without quota undercount.
+SLOT_OFFSET_SECONDS = 240
 PROVIDER_PLAN_LIMIT = 15000
-PROVIDER_RESERVE = 500
+PROVIDER_RESERVE = 300
 GLOBAL_CEILING = PROVIDER_PLAN_LIMIT - PROVIDER_RESERVE
-RESET_TIMEZONE = ZoneInfo("Europe/Bratislava")
-RESET_HOUR = 19
-RESET_MINUTE = 10
-DAILY_STOP_MINUTE = 8  # Hard stop 19:08–19:10 even for high-priority calls
+RESET_TIMEZONE = timezone.utc
+RESET_HOUR = 17
+RESET_MINUTE = 9
+DAILY_STOP_MINUTE = 7  # 17:07–17:10 UTC: guard reset and one-minute rollover
 # Runtime classes retain bounded allocations. History/backfill may opportunistically
 # use any provider-day capacity that is still available, but GLOBAL_CEILING remains
 # authoritative and always preserves the 500-request provider reserve.
@@ -53,23 +56,23 @@ def _now_slot(now: datetime | None = None) -> int:
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise ValueError("Budget times must be timezone-aware")
-    return int(now.timestamp()) // SLOT_SECONDS
+    return int(now.timestamp() - SLOT_OFFSET_SECONDS) // SLOT_SECONDS
 
 
 def _provider_day_start_slot(slot: int) -> int:
-    now_utc = datetime.fromtimestamp(slot * SLOT_SECONDS, tz=timezone.utc)
+    now_utc = datetime.fromtimestamp(slot * SLOT_SECONDS + SLOT_OFFSET_SECONDS, tz=timezone.utc)
     local = now_utc.astimezone(RESET_TIMEZONE)
     start_local = local.replace(
         hour=RESET_HOUR, minute=RESET_MINUTE, second=0, microsecond=0
     )
     if local < start_local:
         start_local -= timedelta(days=1)
-    return int(start_local.astimezone(timezone.utc).timestamp()) // SLOT_SECONDS
+    return _now_slot(start_local.astimezone(timezone.utc))
 
 
 def _provider_day_next_reset(slot: int) -> datetime:
     start_utc = datetime.fromtimestamp(
-        _provider_day_start_slot(slot) * SLOT_SECONDS, tz=timezone.utc
+        _provider_day_start_slot(slot) * SLOT_SECONDS + SLOT_OFFSET_SECONDS, tz=timezone.utc
     )
     start_local = start_utc.astimezone(RESET_TIMEZONE)
     next_local = (start_local + timedelta(days=1)).replace(
@@ -81,7 +84,7 @@ def _provider_day_next_reset(slot: int) -> datetime:
 def _normalized(raw: object, slot: int) -> list[list[int]]:
     if raw is None:
         return []
-    if not isinstance(raw, dict) or raw.get("schema") != 1:
+    if not isinstance(raw, dict) or raw.get("schema") not in (1, 2):
         raise SharedBudgetUnavailable("Unknown API budget ledger schema")
     buckets = raw.get("buckets", [])
     if not isinstance(buckets, list):
@@ -93,6 +96,22 @@ def _normalized(raw: object, slot: int) -> list[list[int]]:
             raise SharedBudgetUnavailable("Invalid budget bucket")
         numbers = [int(v) for v in entry]
         minute_slot = numbers[0]
+        if raw["schema"] == 1:
+            # Count an old bucket through its end to conservatively preserve
+            # spend if the 17:05–17:10 bucket straddles the 17:09 UTC reset.
+            legacy_start = minute_slot * SLOT_SECONDS
+            current_start = slot * SLOT_SECONDS + SLOT_OFFSET_SECONDS
+            # During a rolling deploy, an old writer can legitimately place
+            # its 17:10 bucket inside the new 17:09–17:14 slot.
+            if legacy_start >= current_start + SLOT_SECONDS:
+                raise SharedBudgetUnavailable("Future-dated legacy budget bucket")
+            legacy_end = datetime.fromtimestamp(
+                legacy_start + SLOT_SECONDS - 1, tz=timezone.utc
+            )
+            # The ongoing legacy bucket might not have ended yet; it is still
+            # already spent, so include it in the current new-provider slot.
+            minute_slot = min(_now_slot(legacy_end), slot)
+            numbers[0] = minute_slot
         if any(v < 0 for v in numbers[1:]) or minute_slot > slot:
             raise SharedBudgetUnavailable("Corrupt or future-dated budget bucket")
         if minute_slot >= start_slot:
@@ -108,8 +127,8 @@ def _summary(buckets: list[list[int]], slot: int) -> dict[str, Any]:
     total = sum(spent.values())
     global_remaining = max(0, GLOBAL_CEILING - total)
     return {
-        "schema": 1,
-        "window": "provider_day_19_10_europe_bratislava",
+        "schema": 2,
+        "window": "provider_day_17_09_utc",
         "updated_slot": slot,
         "provider_day_start_slot": _provider_day_start_slot(slot),
         "next_reset_utc": _provider_day_next_reset(slot).isoformat(),
@@ -132,8 +151,8 @@ def calculate(ledger: dict | None, purpose: str, requested: int = 1,
     if instant.tzinfo is None:
         raise ValueError("Budget times must be timezone-aware")
     local = instant.astimezone(RESET_TIMEZONE)
-    if local.hour == RESET_HOUR and DAILY_STOP_MINUTE <= local.minute < RESET_MINUTE:
-        raise SharedBudgetExhausted("Provider daily hard stop: 19:08–19:10 Bratislava")
+    if local.hour == RESET_HOUR and DAILY_STOP_MINUTE <= local.minute <= RESET_MINUTE:
+        raise SharedBudgetExhausted("Provider rollover safety stop: 17:07–17:10 UTC")
     if purpose not in PURPOSE_CAPS:
         raise ValueError("Unknown budget purpose")
     if isinstance(requested, bool) or not isinstance(requested, int) or not 1 <= requested <= 3000:
@@ -148,7 +167,7 @@ def calculate(ledger: dict | None, purpose: str, requested: int = 1,
         buckets.append([slot, 0, 0, 0, 0])
     buckets[-1][PURPOSE_INDEX[purpose]] += requested
     after = _summary(buckets, slot)
-    return {"schema": 1, "buckets": buckets}, after
+    return {"schema": 2, "buckets": buckets}, after
 
 
 def _conflict(exc: Exception) -> bool:
@@ -283,7 +302,7 @@ class HttpReservation:
             payload = response.json()
             budget = payload.get("budget") if isinstance(payload, dict) else None
             if (payload.get("ok") is not True or not isinstance(budget, dict)
-                    or budget.get("window") != "provider_day_19_10_europe_bratislava"
+                    or budget.get("window") != "provider_day_17_09_utc"
                     or type(budget.get("provider_plan_limit")) is not int
                     or budget["provider_plan_limit"] != PROVIDER_PLAN_LIMIT
                     or type(budget.get("global_limit")) is not int
@@ -293,7 +312,8 @@ class HttpReservation:
                     or type(budget.get("global_spent")) is not int
                     or not 1 <= budget["global_spent"] <= GLOBAL_CEILING
                     or type(budget.get("global_remaining")) is not int
-                    or budget["global_remaining"] != GLOBAL_CEILING - budget["global_spent"]):
+                    or budget["global_remaining"] != GLOBAL_CEILING - budget["global_spent"]
+                    or budget.get("schema") != 2):
                 # A stale Azure runtime may still use an older, looser limit.
                 # Fail closed rather than trusting only a successful HTTP status.
                 raise SharedBudgetUnavailable("Shared API budget contract mismatch")

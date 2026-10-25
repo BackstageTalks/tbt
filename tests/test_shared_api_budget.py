@@ -14,7 +14,7 @@ from tbt.providers.rapidapi import RapidTennisClient
 NOW = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
 
 
-def test_all_purposes_share_provider_day_pool_with_500_call_reserve():
+def test_all_purposes_share_provider_day_pool_with_300_call_reserve():
     ledger = None
     for purpose, amount in (
         ("live", 3000),
@@ -22,15 +22,15 @@ def test_all_purposes_share_provider_day_pool_with_500_call_reserve():
         ("refresh", 2500),
         ("match", 2500),
         ("history", 2500),
-        ("history", 1000),
+        ("history", 1200),
     ):
         ledger, result = shared_budget.calculate(ledger, purpose, amount, now=NOW)
 
     assert result["provider_plan_limit"] == 15000
-    assert result["global_limit"] == 14500
-    assert result["global_spent"] == 14500
+    assert result["global_limit"] == 14700
+    assert result["global_spent"] == 14700
     assert result["global_remaining"] == 0
-    assert result["reserved_provider_headroom"] == 500
+    assert result["reserved_provider_headroom"] == 300
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "refresh", 1, now=NOW)
 
@@ -38,39 +38,38 @@ def test_all_purposes_share_provider_day_pool_with_500_call_reserve():
 def test_history_can_use_global_headroom_but_never_cross_provider_ceiling():
     ledger = None
     result = None
-    for amount in (3000, 3000, 3000, 3000, 1500, 1000):
+    for amount in (3000, 3000, 3000, 3000, 1500, 1200):
         ledger, result = shared_budget.calculate(ledger, "history", amount, now=NOW)
-    assert result["spent"]["history"] == 14500
-    assert result["global_spent"] == 14500
+    assert result["spent"]["history"] == 14700
+    assert result["global_spent"] == 14700
     assert result["global_remaining"] == 0
-    assert result["reserved_provider_headroom"] == 500
+    assert result["reserved_provider_headroom"] == 300
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "history", 1, now=NOW)
 
-def test_absolute_provider_hard_stop_between_1908_and_1910():
-    # 2026-09-27 in Bratislava is UTC+2.
-    for minute in (8, 9):
-        with pytest.raises(shared_budget.SharedBudgetExhausted, match="19:08"):
+def test_absolute_provider_hard_stop_between_1707_and_1710():
+    for minute in (7, 8, 9):
+        with pytest.raises(shared_budget.SharedBudgetExhausted, match="17:07"):
             shared_budget.calculate(None, "live", 1,
                                     now=datetime(2026, 9, 27, 17, minute, tzinfo=timezone.utc))
     _, result = shared_budget.calculate(None, "live", 1,
                                         now=datetime(2026, 9, 27, 17, 10, tzinfo=timezone.utc))
     assert result["global_spent"] == 1
-    assert result["global_remaining"] == 14499
+    assert result["global_remaining"] == 14699
 
 
-def test_provider_day_resets_at_1910_bratislava():
-    # 2026-09-27 is CEST, so 19:10 Europe/Bratislava == 17:10 UTC.
-    before_reset = datetime(2026, 9, 27, 17, 7, tzinfo=timezone.utc)
-    at_reset = datetime(2026, 9, 27, 17, 10, tzinfo=timezone.utc)
+@pytest.mark.parametrize("day", [(2026, 9, 27), (2026, 10, 25)])
+def test_provider_day_resets_at_1709_utc(day):
+    before_reset = datetime(*day, 17, 6, tzinfo=timezone.utc)
+    at_reset = datetime(*day, 17, 10, tzinfo=timezone.utc)
 
     ledger, result = shared_budget.calculate(None, "refresh", 1000, now=before_reset)
     assert result["global_spent"] == 1000
 
     ledger, result = shared_budget.calculate(ledger, "refresh", 1000, now=at_reset)
     assert result["global_spent"] == 1000
-    assert result["global_remaining"] == 13500
-    assert result["window"] == "provider_day_19_10_europe_bratislava"
+    assert result["global_remaining"] == 13700
+    assert result["window"] == "provider_day_17_09_utc"
 
 
 def test_corrupt_ledger_and_bad_request_fail_closed():
@@ -266,13 +265,13 @@ def test_provider_header_guard_fails_closed_when_remaining_header_missing(monkey
         client.close()
 
 
-def test_refresh_can_use_available_shared_pool_up_to_14500():
+def test_refresh_can_use_available_shared_pool_up_to_14700():
     ledger = None
-    for amount in (3000, 3000, 3000, 3000, 2500):
+    for amount in (3000, 3000, 3000, 3000, 2700):
         ledger, result = shared_budget.calculate(ledger, "refresh", amount, now=NOW)
-    assert result["global_spent"] == 14500
+    assert result["global_spent"] == 14700
     assert result["remaining"]["refresh"] == 0
-    assert result["reserved_provider_headroom"] == 500
+    assert result["reserved_provider_headroom"] == 300
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "history", 1, now=NOW)
 
@@ -292,18 +291,18 @@ def test_real_environment_rapidapi_key_cannot_start_without_shared_ledger(monkey
     client.close()
 
 
-@pytest.mark.parametrize("override", ["0", "450", "499", "-1", "15000"])
+@pytest.mark.parametrize("override", ["0", "250", "299", "-1", "15000"])
 def test_provider_reserve_cannot_be_weakened_with_environment_override(monkeypatch, override):
     from tbt.providers.rapidapi import _provider_request_reserve
     monkeypatch.setenv("BLINQ_PROVIDER_REQUEST_RESERVE", override)
-    with pytest.raises(ConfigurationError, match="500"):
+    with pytest.raises(ConfigurationError, match="300"):
         _provider_request_reserve()
 
 
 def test_provider_reserve_can_be_stricter_but_not_looser(monkeypatch):
     from tbt.providers.rapidapi import _provider_request_reserve
-    monkeypatch.setenv("BLINQ_PROVIDER_REQUEST_RESERVE", "500")
-    assert _provider_request_reserve() == 500
+    monkeypatch.setenv("BLINQ_PROVIDER_REQUEST_RESERVE", "300")
+    assert _provider_request_reserve() == 300
     monkeypatch.setenv("BLINQ_PROVIDER_REQUEST_RESERVE", "1500")
     assert _provider_request_reserve() == 1500
 
@@ -343,20 +342,20 @@ def test_binary_image_provider_request_requires_quota_header(monkeypatch):
         client.close()
 
 
-def test_remote_budget_receipt_must_confirm_live_500_reserve_contract(monkeypatch):
+def test_remote_budget_receipt_must_confirm_live_300_reserve_contract(monkeypatch):
     from tbt.providers.shared_budget import HttpReservation
     current = {
-        "schema": 1,
-        "window": "provider_day_19_10_europe_bratislava",
+        "schema": 2,
+        "window": "provider_day_17_09_utc",
         "provider_plan_limit": 15000,
-        "global_limit": 14500,
-        "reserved_provider_headroom": 500,
+        "global_limit": 14700,
+        "reserved_provider_headroom": 300,
         "global_spent": 12835,
-        "global_remaining": 1665,
+        "global_remaining": 1865,
     }
     responses = [
         {"ok": True},  # An old API that says only "ok" is not safe.
-        {"ok": True, "budget": {**current, "global_limit": 14250}},
+        {"ok": True, "budget": {**current, "global_limit": 14450}},
         {"ok": True, "budget": {**current, "reserved_provider_headroom": 750}},
         {"ok": True, "budget": {**current, "global_remaining": 1700}},
         {"ok": True, "budget": current},
@@ -392,8 +391,8 @@ def test_live_and_batch_workflows_enforce_identical_daily_limits():
     live = (root / ".github/workflows/live-radar.yml").read_text()
     data = (root / ".github/workflows/data.yml").read_text()
     history = (root / ".github/workflows/player-enrichment.yml").read_text()
-    assert "budget['global_spent'] <= 14500 == budget['global_limit']" in live
-    assert "budget['reserved_provider_headroom'] == 500" in live
+    assert "budget['global_spent'] <= 14700 == budget['global_limit']" in live
+    assert "budget['reserved_provider_headroom'] == 300" in live
     assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'" in data
     assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'" in history
     assert "unset BLINQ_SHARED_API_BUDGET_URL" not in data
@@ -466,7 +465,7 @@ def test_guarded_research_http_stops_on_provider_reserve(monkeypatch):
     def handler(request):
         calls.append(request)
         return httpx.Response(200, headers={
-            "x-ratelimit-requests-remaining": "500"
+            "x-ratelimit-requests-remaining": "300"
         }, json={})
     monkeypatch.setattr(httpx, "Client", lambda *a, **k:
                         RealClient(transport=httpx.MockTransport(handler)))
@@ -481,3 +480,24 @@ def test_guarded_research_http_stops_on_provider_reserve(monkeypatch):
             client.get("https://tennisapi1.p.rapidapi.com/api/tennis/live")
         assert quota.count == 1
         assert client.attempts == len(calls) == 1
+
+def test_schema1_rolling_bucket_migration_at_new_1709_boundary():
+    legacy = int(datetime(2026, 10, 25, 17, 5, tzinfo=timezone.utc).timestamp()) // 300
+    ledger = {"schema": 1, "buckets": [[legacy, 30, 0, 0, 0]]}
+    for now in (datetime(2026, 10, 25, 17, 10, 0, tzinfo=timezone.utc),
+                datetime(2026, 10, 25, 17, 10, 50, tzinfo=timezone.utc)):
+        migrated, status = shared_budget.calculate(ledger, "refresh", 1, now=now)
+        assert migrated["schema"] == status["schema"] == 2
+        assert status["global_spent"] == 31
+        assert status["next_reset_utc"] == "2026-10-26T17:09:00+00:00"
+
+
+def test_dst_local_clock_has_the_same_utc_provider_reset():
+    from zoneinfo import ZoneInfo
+    zone = ZoneInfo("Europe/Bratislava")
+    for moment, expected in (
+        (datetime(2026, 9, 27, 17, 9, tzinfo=timezone.utc), "19:09"),
+        (datetime(2026, 10, 25, 17, 9, tzinfo=timezone.utc), "18:09"),
+    ):
+        assert moment.astimezone(zone).strftime("%H:%M") == expected
+        assert shared_budget._provider_day_next_reset(shared_budget._now_slot(moment)) == moment + timedelta(days=1)

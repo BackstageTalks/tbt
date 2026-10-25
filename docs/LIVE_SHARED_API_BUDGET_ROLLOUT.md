@@ -3,13 +3,14 @@
 ## Capacity and scope
 
 The provider plan is treated as **15,000 requests per provider billing day**.
-BlinQ enforces a fail-closed **14,500 request global ceiling** and permanently
-keeps **500 requests (3.33%)** as provider headroom.
+BlinQ enforces a fail-closed **14,700 request global ceiling** and permanently
+keeps **300 requests (2.00%)** as provider headroom.
 
 The durable ledger is aligned to the verified provider-day reset used by the
-runtime guard: **19:10 Europe/Bratislava**. ALL billable TennisAPI requests
-are blocked at 19:08–19:10 Europe/Bratislava, regardless of priority. A guarded
-19:11 new provider-day statistics startup is limited to 3,000 requests.
+runtime guard: **17:09 UTC** (18:09 winter / 19:09 summer in Bratislava).
+ALL billable TennisAPI requests are blocked at **17:07–17:10 UTC**,
+regardless of priority. A guarded **17:10–17:13 UTC** new provider-day
+statistics startup is limited to a cumulative 3,000 requests.
 Usage is stored in five-minute buckets, but the accounting window is the
 current provider day, not a generic rolling 24-hour window.
 
@@ -17,16 +18,16 @@ current provider day, not a generic rolling 24-hour window.
 | --- | ---: |
 | LIVE Radar | 3,000 |
 | Match Status | 2,500 |
-| Refresh (including presentation enrichment) | 14,500 |
-| History/backfill opportunistic ceiling | 14,500 |
-| **Combined, hard** | **14,500** |
-| **Provider reserve kept untouched** | **500** |
+| Refresh (including presentation enrichment) | 14,700 |
+| History/backfill opportunistic ceiling | 14,700 |
+| **Combined, hard** | **14,700** |
+| **Provider reserve kept untouched** | **300** |
 | **Provider plan** | **15,000** |
 
 LIVE and Match Status retain bounded purpose allocations. Refresh and
 history/backfill may each use remaining provider-day capacity up to the same
-14,500 global ceiling. The global ceiling is always authoritative, so the
-500 provider reserve remains untouched.
+14,700 global ceiling. The global ceiling is always authoritative, so the
+300 provider reserve remains untouched.
 
 An API request is reserved **before every billable upstream attempt, including
 retries**. Cancelled, timed-out or ambiguous requests are never refunded:
@@ -35,7 +36,7 @@ request.
 
 The ledger protects only callers instrumented through the BlinQ shared budget
 guard. Direct/manual use of the same RapidAPI key outside BlinQ is not visible to
-this ledger, which is why the 500-request provider reserve remains mandatory.
+this ledger, which is why the 300-request provider reserve remains mandatory.
 
 ## Runtime source of truth
 
@@ -43,11 +44,11 @@ The authoritative values live in
 `api/tbt/providers/shared_budget.py`:
 
 - `PROVIDER_PLAN_LIMIT = 15000`
-- `PROVIDER_RESERVE = 500`
-- `GLOBAL_CEILING = 14500`
-- reset: `19:10 Europe/Bratislava`
-- `PURPOSE_CAPS = {live: 3000, match: 2500, refresh: 14500, history: 14500}`
-  (`history` is opportunistic; the shared 14,500 global ceiling still applies)
+- `PROVIDER_RESERVE = 300`
+- `GLOBAL_CEILING = 14700`
+- reset: `17:09 UTC (18:09 winter / 19:09 summer in Bratislava)`
+- `PURPOSE_CAPS = {live: 3000, match: 2500, refresh: 14700, history: 14700}`
+  (`history` is opportunistic; the shared 14,700 global ceiling still applies)
 
 CI contains a documentation contract test so future edits must keep this file
 synchronized with those runtime constants.
@@ -66,7 +67,7 @@ synchronized with those runtime constants.
    allocation.
 5. Refresh jobs use the **refresh** allocation. History/statistics/autofill jobs
    use the **history** class, which can consume otherwise-unused global headroom
-   but can never exceed the 14,500 global ceiling.
+   but can never exceed the 14,700 global ceiling.
 6. The Ops journal records 80% and 96.67% threshold crossings for both the global
    budget and the active purpose cap.
 
@@ -77,7 +78,7 @@ synchronized with those runtime constants.
 - Purpose cap or global ceiling exhausted: stop the paid workload and preserve
   the last verified production state.
 - A timeout after reservation may overcount usage. Do not automatically refund.
-- The next provider day starts at **19:10 Europe/Bratislava** and old buckets are
+- The next provider day starts at **17:09 UTC (18:09 winter / 19:09 summer in Bratislava)** and old buckets are
   excluded automatically.
 - If an external/manual caller uses the provider key outside the shared guard,
   its requests are not visible to BlinQ. Keep the provider reserve intact and
