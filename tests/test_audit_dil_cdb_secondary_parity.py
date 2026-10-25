@@ -60,6 +60,27 @@ class SecondaryParityTests(unittest.TestCase):
         with sqlite3.connect(self.dil) as db:db.execute('UPDATE canonical_matches SET stats_json=?',(json.dumps({'p1_aces':12,'p2_aces':2}),))
         r=self.check()
         self.assertEqual(r['counts']['cdb_stat_cells_conflicting_effective_dil'],1)
+    def test_cdb_metadata_missing_blocks(self):
+        with sqlite3.connect(self.dil) as db:
+            db.execute('UPDATE canonical_matches SET tournament=NULL')
+        r=self.check(full_integrity=True)
+        self.assertEqual(r['counts']['cdb_metadata_missing_fields'],1)
+        self.assertFalse(r['secondary_promotion_allowed'])
+    def test_cdb_metadata_conflict_blocks(self):
+        with sqlite3.connect(self.dil) as db:
+            db.execute("UPDATE canonical_matches SET tournament='Wrong tournament'")
+        r=self.check(full_integrity=True)
+        self.assertEqual(r['counts']['cdb_metadata_conflicting_fields'],1)
+    def test_extra_dil_provider_context_is_allowed(self):
+        with sqlite3.connect(self.cdb) as db:
+            db.execute('UPDATE cdb_matches SET provider_context_json=?',(json.dumps({'venue':{'city':'Paris'}}),))
+        with sqlite3.connect(self.dil) as db:
+            db.execute('UPDATE canonical_matches SET provider_context_json=?',
+                       (json.dumps({'venue':{'city':'Paris','floor':'1'},'dil_only_source':'ok'}),))
+        self.sha=audit.file_sha256(self.cdb)
+        rc=json.loads(self.receipt.read_text());rc['export_sqlite_sha256']=self.sha
+        self.receipt.write_text(json.dumps(rc))
+        self.assertTrue(self.check(full_integrity=True)['secondary_promotion_allowed'])
     def test_core_mismatch_blocks(self):
         with sqlite3.connect(self.dil) as db:db.execute("UPDATE canonical_matches SET surface='clay'")
         self.assertEqual(self.check()['counts']['core_mismatched_matches'],1)
