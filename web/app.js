@@ -4652,7 +4652,7 @@ function adminActivityRows(){
           <button type="button" class="btn btn-ghost danger" data-admin-action="history-delete-all" data-history-kind="${kind}" ${!state.adminHistoryRetention?'disabled':''}>Vymazať všetko</button>
         </div></div>`;
     }).join('');
-    const historyManagement=`<section class="admin-history-management" aria-label="Správa uchovávania INFO a LIVE histórie"><div class="admin-subsection-heading"><div><strong>Uchovávanie a čistenie histórie</strong><span>INFO · Comeback · 2. set</span></div></div><p class="admin-live-delete-help">Doba uchovávania reálne maže uložené správy aj vyhodnotenia v pravidelnom 6-hodinovom behu. Nastavenie viditeľnosti LIVE histórie pre členov je samostatné. Manuálne mazanie začne okamžite a nemožno ho vrátiť.</p>
+    const historyManagement=`<section class="admin-history-management" aria-label="Správa uchovávania INFO a LIVE histórie"><div class="admin-subsection-heading"><div><strong>Uchovávanie a čistenie histórie</strong><span>INFO · Comeback · 2. set</span></div></div><p class="admin-live-delete-help">Doba uchovávania reálne maže správy aj vyhodnotenia. Čistenie spúšťa existujúci externý LIVE worker najviac raz za 6 hodín. Nastavenie viditeľnosti LIVE histórie pre členov je samostatné. Manuálne mazanie začne okamžite a nemožno ho vrátiť.</p>
       ${state.adminHistoryRetentionError?`<div class="admin-runtime-note is-error">${escapeHtml(state.adminHistoryRetentionError)}</div>`:''}
       ${state.adminHistoryRetentionLoading?'<div class="admin-note">Načítavam pravidlá uchovávania…</div>':historyPanels}
     </section>`;
@@ -4682,7 +4682,7 @@ function adminActivityRows(){
       <div class="admin-subsection-heading"><div><strong>LIVE zápisy · Comeback a 2. set</strong><span>${state.adminInsightsLoading?'Načítavam…':liveEntries.length+' správ'}</span></div></div>
       <p class="admin-live-delete-help">Zmaže upozornenie z LIVE panela. Automaticky vytvorený zápis sa po vymazaní už neobnoví ďalším scanom.</p>
       ${state.adminInsightsLoading?'<div class="admin-note">Načítavam LIVE zápisy…</div>':liveRows||'<div class="admin-note">Žiadne LIVE zápisy.</div>'}
-      <div class="admin-subsection-heading"><div><strong>Prístup k vyhodnotenej histórii</strong><span>0 / 24 / 48 / 72 h</span></div></div>
+      <div class="admin-subsection-heading"><div><strong>Viditeľnosť histórie pre členov · bez mazania</strong><span>0 / 24 / 48 / 72 h</span></div></div>
       ${liveHistoryAccess}
       <div class="admin-subsection-heading"><div><strong>Vyhodnotené LIVE výsledky</strong><span>${state.adminLiveResultsLoading?'Načítavam…':results.length+' výsledkov'}</span></div></div>
       <p class="admin-live-delete-help">Výsledky Comeback a 2. setu sa mažú samostatne od správ. Vymazané výsledky sa pri opakovanom vyhodnocovaní neobnovia.</p>
@@ -5933,7 +5933,7 @@ function adminActivityRows(){
           const checked=await BlinqAuth.adminHistoryRetention();
           if(saved?.retention_hours!==hours||checked?.settings?.[kind]!==hours)throw new Error('Nastavenie sa neuložilo alebo sa nedá overiť.');
           state.adminHistoryRetention=checked.settings;
-          showStatus('Uchovávanie '+kind.toUpperCase()+' je uložené a overené. Automatické čistenie beží každých 6 hodín.');
+          showStatus('Uchovávanie '+kind.toUpperCase()+' je uložené a overené. Automatické čistenie kontroluje externý LIVE worker (najviac raz za 6 hodín).');
           rerenderAdmin();
         }catch(error){showStatus(error.message||'Nepodarilo sa uložiť uchovávanie.');actionNode.disabled=false;}
         return;
