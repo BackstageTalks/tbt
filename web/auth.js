@@ -707,7 +707,7 @@
   async function pushUnsubscribe(endpoint) {
     return apiWithSession('/api/v1/push/subscription', {method: 'DELETE', body: JSON.stringify({endpoint: String(endpoint || '')})});
   }
-  async function adminUploadMedia(file) {
+  async function adminUploadMedia(file, scope = 'banner') {
     const s = await restore();
     if (!s) throw new Error('Sign in again.');
     if (!(file instanceof Blob)) throw new Error('Choose an image first.');
@@ -716,6 +716,7 @@
       'X-Blinq-Access-Token': s.access_token,
       'Content-Type': file.type || 'application/octet-stream',
       'X-Blinq-Filename': encodeURIComponent(file.name || 'banner-image').slice(0, 480),
+      ...(scope === 'insight' ? {'X-Blinq-Media-Scope': 'insight'} : {}),
     };
     const timeoutSignal = safeTimeout(45000);
     const response = await fetch('/api/v1/admin/media', {method: 'POST', headers, body: file, cache: 'no-store', signal: timeoutSignal});
@@ -726,6 +727,21 @@
       throw error;
     }
     return data;
+  }
+
+  async function adminUploadInsightMedia(file) {
+    return adminUploadMedia(file, 'insight');
+  }
+  async function insightMedia(mediaId) {
+    if (!/^insight-[A-Za-z0-9._-]{6,175}$/.test(String(mediaId || ''))) throw new Error('Invalid screenshot ID');
+    const s = await restore();
+    if (!s) throw new Error('Sign in again.');
+    const response = await fetch('/api/v1/insights/media/' + encodeURIComponent(mediaId), {
+      headers: {'X-Blinq-Access-Token': s.access_token, Accept: 'image/*'},
+      cache: 'no-store', signal: safeTimeout(45000),
+    });
+    if (!response.ok) throw new Error(response.status === 403 ? 'K obrázku nemáš prístup.' : 'Obrázok sa nepodarilo načítať.');
+    return response.blob();
   }
 
   // One observation for each genuine browser reload (not SPA routing or token renewal).
@@ -762,7 +778,7 @@
     adminResultTestExclusions, adminSetResultTestExclusions,
     adminDiagnostics, adminModelCalibration, adminModelLab, adminModelTraining, adminUsers, adminAccountAudit, adminAccountTelemetry, adminSetTelemetryRetention, adminClearTelemetry, adminSetAccountActivityRetention, adminClearAccountActivity, adminConfirmTelegramCleanup, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews, comparatorPlayers, comparatorCompare,
-    bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
+    bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, adminUploadInsightMedia, insightMedia, clear,
     sessionStorageKeys, sessionEpochKey,
   };
 })();
