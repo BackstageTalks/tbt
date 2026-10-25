@@ -2788,7 +2788,6 @@ def cleanup_history(
                         result = delete_insight(identifier, actor_id=actor_id)
                         if not result.get("deleted"):
                             raise AdminStorageUnavailable("LIVE message not deleted")
-                    deleted_messages += 1
                 else:
                     if kind == "info":
                         client.delete_entity(partition_key="info-results", row_key=identifier)
@@ -2796,6 +2795,19 @@ def cleanup_history(
                         result = delete_live_radar_result(identifier, actor_id=actor_id)
                         if not result.get("deleted"):
                             raise AdminStorageUnavailable("LIVE result not deleted")
+                # Independent read-back: no-op responses must never be counted
+                # as successful physical deletions.
+                target = "insights" if row_type == "message" else ("info-results" if kind == "info" else "live-results")
+                try:
+                    client.get_entity(partition_key=target, row_key=identifier)
+                except Exception as exc:
+                    if not _is_missing_entity(exc):
+                        raise AdminStorageUnavailable("History deletion read-back unavailable") from exc
+                else:
+                    raise AdminStorageUnavailable("History row remains after deletion")
+                if row_type == "message":
+                    deleted_messages += 1
+                else:
                     deleted_results += 1
             except Exception:
                 failed += 1
