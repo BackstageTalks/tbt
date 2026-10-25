@@ -54,8 +54,8 @@ def test_r31_match_detail_tier_config_is_valid_and_admin_editable():
         "history": "legend",
     }
     assert validate_ui_config(UI) is UI
-    assert 'data-admin-detail-plan="${escapeHtml(id)}"' in APP
-    assert 'data-admin-detail-section="${escapeHtml(section)}"' in APP
+    assert "toggle('detail'" in APP and "data-admin-display-access" in APP
+    assert 'data-admin-detail-section="${key}"' in APP
     assert "Dostupné od: ${required}" in APP
 
 
@@ -81,7 +81,7 @@ def test_results_default_to_legend_plus_and_keep_admin_visibility_toggle():
     assert '"legend": None' in entitlements
     block = APP[APP.index("function resultsHistoryHours"):APP.index("function renderResultsFilters")]
     assert "results_history_hours" in block
-    assert 'data-admin-results-plan="${escapeHtml(id)}"' in APP
+    assert "toggle('results'" in APP and "data-admin-display-access" in APP
     assert "SIDEBAR_RESULTS" in APP
     assert 'data-ui-element="SIDEBAR_RESULTS"' in INDEX
 
