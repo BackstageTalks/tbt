@@ -8382,6 +8382,29 @@ body#blinqPremium.blinq-admin .admin-insight-message-card>label{
   display:grid;gap:5px;color:#7593a5;font-size:8px;font-weight:800;
 }
 body#blinqPremium.blinq-admin .admin-insight-message-card>label>span{font-weight:650;color:#587887}
+/* INFO/LIVE heading presets: accessible multi-select + optional custom title. */
+body#blinqPremium.blinq-admin .admin-insight-title-editor{display:grid;gap:9px;min-width:0}
+body#blinqPremium.blinq-admin .admin-insight-title-label{color:#a3c8bf;font-size:11px;font-weight:800}
+body#blinqPremium.blinq-admin .admin-insight-title-label span,
+body#blinqPremium.blinq-admin .admin-insight-title-custom>span{font-size:10px;font-weight:500;color:#92aaa7}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown{position:relative;border:1px solid #356458;border-radius:10px;background:#071f23;min-width:0}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown[open]{border-color:#53d5ac}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown summary{display:flex;gap:8px;align-items:center;justify-content:space-between;cursor:pointer;list-style:none;padding:11px 13px;font-size:12px;font-weight:800;color:#eef8f4}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown summary::-webkit-details-marker{display:none}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown summary::after{content:'⌄';color:#78d9b1;margin-left:auto;font-size:17px}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown[open] summary::after{content:'⌃'}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown summary span{font-weight:650;color:#77e9bd;overflow-wrap:anywhere;text-align:right}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown summary:focus-visible{outline:2px solid #79eabd;outline-offset:3px}
+body#blinqPremium.blinq-admin .admin-insight-title-options{display:flex;gap:10px;flex-wrap:wrap;padding:10px 13px 13px;border-top:1px solid #24564a}
+body#blinqPremium.blinq-admin .admin-insight-title-options label{display:inline-flex;align-items:center;gap:8px;padding:8px 13px;border:1px solid #346d58;border-radius:8px;background:#092f28;color:#e8f9f1;font-size:12px;font-weight:850;cursor:pointer}
+body#blinqPremium.blinq-admin .admin-insight-title-options input{width:16px;height:16px;margin:0;accent-color:#3bd39b}
+body#blinqPremium.blinq-admin .admin-insight-title-custom{display:grid;gap:6px;font-size:11px;font-weight:700;color:#a3c8bf}
+body#blinqPremium.blinq-admin .admin-insight-title-custom input{width:100%;min-width:0}
+body#blinqPremium.blinq-admin .admin-insight-title-preview{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;padding:8px 10px;border:1px solid #214f46;border-radius:8px;background:#06221f;color:#98b9ac;font-size:10px}
+body#blinqPremium.blinq-admin .admin-insight-title-preview strong{color:#d4f9e7;font-size:12px;overflow-wrap:anywhere}
+body#blinqPremium.blinq-admin .admin-insight-title-preview small{margin-left:auto;color:#8bbbaa;font-variant-numeric:tabular-nums}
+body#blinqPremium.blinq-admin .admin-insight-title-preview small.is-over-limit{color:#ffb6a5;font-weight:850}
+@media(max-width:600px){body#blinqPremium.blinq-admin .admin-insight-title-options{flex-direction:column}body#blinqPremium.blinq-admin .admin-insight-title-options label{width:100%}}
 body#blinqPremium.blinq-admin .admin-insight-message-head{
   display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:7px;
   border-bottom:1px solid rgba(67,121,116,.2);
