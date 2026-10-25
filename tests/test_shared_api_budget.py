@@ -55,7 +55,7 @@ def test_absolute_provider_hard_stop_between_1707_and_1709():
     _, result = shared_budget.calculate(None, "live", 1,
                                         now=datetime(2026, 9, 27, 17, 9, tzinfo=timezone.utc))
     assert result["global_spent"] == 1
-    assert result["global_remaining"] == 14499
+    assert result["global_remaining"] == 14699
 
 
 @pytest.mark.parametrize("day", [(2026, 9, 27), (2026, 10, 25)])
@@ -68,7 +68,7 @@ def test_provider_day_resets_at_1709_utc(day):
 
     ledger, result = shared_budget.calculate(ledger, "refresh", 1000, now=at_reset)
     assert result["global_spent"] == 1000
-    assert result["global_remaining"] == 13500
+    assert result["global_remaining"] == 13700
     assert result["window"] == "provider_day_17_09_utc"
 
 
