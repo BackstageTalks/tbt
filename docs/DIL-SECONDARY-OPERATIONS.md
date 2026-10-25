@@ -14,7 +14,7 @@
 
 1. `build_current_cdb_compare.py`: overený 78-part export z autoritatívnej CDB, s manifestom a SHA-256, do izolovaného `cdb-compare.sqlite`.
 2. `finalize_dil_from_cdb_v2.py`: fyzická **kópia** DIL; presné ID/čas/tour/surface/status, doplnenie chýbajúcich polí, karanténa konfliktov, proveniencia, idempotencia. Zdrojové databázy sa nemenia.
-3. `audit_dil_cdb_secondary_parity.py`: nezávislé porovnanie *každého* kanonického zápasu a vyplnenej štatistickej bunky CDB oproti DIL vrátane obohatených overlay hodnôt. Kontrola plného SQLite integrity a FK je **povinná** na schválenie sekundárneho vydania. Výnimky, konflikty alebo neoverený zdroj znamenajú fail-closed.
+3. `audit_dil_cdb_secondary_parity.py`: nezávislé porovnanie *každého* kanonického zápasu, vyplneného metadátového poľa a štatistickej bunky CDB oproti DIL vrátane obohatených overlay hodnôt. Kontrola plného SQLite integrity a FK je **povinná** na schválenie sekundárneho vydania. Výnimky, konflikty alebo neoverený zdroj znamenajú fail-closed.
 4. `refresh_dil_secondary.py`: jeden kontrolovaný `CDB → DIL` import v oprávnenom privátnom Linux prostredí, bez verejných artefaktov. Pred/po prečíta GitHub Release metadata, stiahne všetkých 78 Parquet súborov, skontroluje SHA, vyrobí novú verziu a nezávisle overí paritu. Vytvorí novú nemennú sekundárnu verziu; starú nikdy neprepíše.
 5. `--activate-secondary` zmení **iba lokálny sekundárny JSON pointer** `current-secondary.json`, nie nastavenie produkčnej služby. `previous-secondary.json` zachová posledný sekundárny odkaz. Bez parametra vznikne len overená nezapnutá kandidátna sekundárna verzia. Nejde o zálohu do iného fyzického umiestnenia.
 
@@ -46,6 +46,7 @@ Nespúšťajte viacero príkazov súčasne na rovnaký sekundárny adresár. Loc
 - Nemenný release `tbt-data-v1`: 78/78 Parquet častí fyzicky dostupných a ich SHA-256 zhodné s metadátami release, ročným i bundle manifestom, pred/po rovnaké release metadáta.
 - CDB 100 % obsahu porovnávaného exportu; počty sú v súlade s jeho podpísaným a znovu prečítaným receiptom.
 - CDB-only ID v DIL = **0**; DIL-only kanonické ID = **0**; konflikty jadrových polí = **0**.
+- Každé vyplnené metadátové pole CDB je prítomné a zhodné v DIL; pre vnorené provider-context platí podmnožinová zhoda bez prepísania existujúcich DIL hodnôt: chýbajúce = **0**, konflikty = **0**.
 - Každá neprázdna CDB štatistika má vo výslednej DIL rovnakú efektívnu hodnotu vrátane overlay: chýbajúce hodnoty = **0**, konflikty = **0**.
 - `PRAGMA integrity_check` pre oba vstupy = `ok`; úplný `PRAGMA foreign_key_check` = **0**; neoverený full-integrity stav nikdy nie je schválený.
 - Importný audit má `ISOLATED_PARITY_IMPORT_PASS_PENDING_REVALIDATION`; následný nezávislý audit má `VERIFIED_CURRENT_CDB_PARITY`; metadata release sa nezmenili ani do konca behu.
