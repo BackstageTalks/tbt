@@ -177,6 +177,7 @@ def test_admin_history_endpoint_fails_closed_without_confirmation(monkeypatch):
             return self.payload
 
     monkeypatch.setattr(api,"_admin_user",lambda req: ({"id":"admin-test"},None))
+    monkeypatch.setattr(api,"record_system_event",lambda *args,**kwargs: None)
     monkeypatch.setattr(api,"history_retention_settings",lambda: {"info":0,"comeback":72,"set2":168})
     calls=[]
     monkeypatch.setattr(api,"cleanup_history",lambda kind,**kwargs: calls.append((kind,kwargs)) or {
