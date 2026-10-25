@@ -15,5 +15,5 @@ def test_shared_admin_backdrop_and_dark_data_surfaces():
     assert ".route-panel" in section
     assert "admin-backdrop=1" in html
     assert "tab-order=1" in html
-    assert "account-activity=2" in html
+    assert "account-activity=3" in html
     assert "blinq-mobile.css?v=7360&mobile=20261009-43" in html
