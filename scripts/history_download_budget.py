@@ -42,7 +42,8 @@ def reserve_allocation(ledger, requested, now=None, run_id="local", purpose="his
         raise ValueError("Unknown reservation purpose")
     if isinstance(requested, bool) or not isinstance(requested, int) or not 1 <= requested <= GLOBAL_CEILING:
         raise ValueError(f"Request allocation must be 1..{GLOBAL_CEILING}")
-    if ledger is None:
+    if ledger is None or ledger == {}:
+        # Legacy callers use {} for a pristine local reservation ledger.
         ledger = {"schema": 1, "reservations": []}
     if not isinstance(ledger, dict) or ledger.get("schema") != 1:
         raise ValueError("Unsupported request ledger schema")
