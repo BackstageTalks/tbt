@@ -10571,3 +10571,15 @@ body#blinqPremium .insight-screenshot-lightbox img{display:block;max-width:100%;
 body#blinqPremium .insight-screenshot-close{position:absolute;right:calc(12px + env(safe-area-inset-right,0px));top:calc(9px + env(safe-area-inset-top,0px));min-width:46px;min-height:46px;border:1px solid rgba(219,255,239,.45);border-radius:13px;background:#123c32;color:#fff;font-size:30px;cursor:pointer}
 body#blinqPremium .insight-screenshot-open:focus-visible,body#blinqPremium .admin-insight-thumb>button:focus-visible,body#blinqPremium .insight-screenshot-close:focus-visible{outline:2px solid #94fbd3;outline-offset:2px}
 
+
+/* INFO / project message marker: a calm brand mark instead of the purple diamond. */
+body#blinqPremium .insight-feed-icon.is-blinq-info{
+  background:rgba(6,45,35,.68)!important;
+  border-color:rgba(56,147,105,.34)!important;
+  color:#a7f4d5!important;
+  padding:3px;
+}
+body#blinqPremium .insight-feed-icon.is-blinq-info .insight-feed-brand{
+  display:block;width:100%;height:100%;object-fit:contain;
+  border-radius:5px;
+}
