@@ -5775,7 +5775,18 @@ function adminActivityRows(){
 
 
   function rerenderAdmin(){ if(state.route!=='admin')return; const host=$('routePanel');host.innerHTML=renderAdminRoute();wireAdmin(); }
-  function saveDraft(){ applyV6514AdminCleanup(); localStorage.setItem(draftKey(),JSON.stringify(state.ui)); showStatus('Admin koncept bol uložený v tomto prehliadači.'); }
+  function saveDraft(){
+    if(!state.ui){showStatus('Koncept nie je načítaný, nič sa neuložilo.');return false;}
+    try{
+      applyV6514AdminCleanup();
+      localStorage.setItem(draftKey(),JSON.stringify(state.ui));
+      showStatus('Admin koncept bol uložený iba v tomto prehliadači; živý web sa nezmenil.');
+      return true;
+    }catch{
+      showStatus('Koncept sa nepodarilo uložiť do prehliadača. Zmeny sa nepublikovali.');
+      return false;
+    }
+  }
   async function publishUiConfig(){
     if(!state.ui)return false;
     if(state.uiStorageAvailable!==true){
