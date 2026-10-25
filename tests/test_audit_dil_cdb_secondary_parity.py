@@ -68,6 +68,19 @@ class SecondaryParityTests(unittest.TestCase):
         rc=json.loads(self.receipt.read_text());rc['export_sqlite_sha256']=self.sha
         self.receipt.write_text(json.dumps(rc))
         self.assertTrue(self.check(full_integrity=True)['secondary_promotion_allowed'])
+    def test_invalid_dil_only_rate_blocks_even_when_cdb_cells_match(self):
+        with sqlite3.connect(self.dil) as db:
+            db.execute('UPDATE canonical_matches SET stats_json=?',
+                       (json.dumps({'p1_aces':4,'p2_aces':2,'p1_service_points_won':70}),))
+        r=self.check(full_integrity=True)
+        self.assertEqual(r['counts']['invalid_dil_canonical_metric_cells'],1)
+        self.assertFalse(r['secondary_promotion_allowed'])
+    def test_nonfinite_dil_overlay_blocks(self):
+        with sqlite3.connect(self.dil) as db:
+            db.execute('INSERT INTO dil_enrichment_compact VALUES (?,?)',
+                       (self.one['match_id'],json.dumps({'p2_double_faults':float('nan')})))
+        r=self.check(full_integrity=True)
+        self.assertEqual(r['counts']['invalid_dil_overlay_metric_cells'],1)
     def test_cdb_metadata_missing_blocks(self):
         with sqlite3.connect(self.dil) as db:
             db.execute('UPDATE canonical_matches SET tournament=NULL')
