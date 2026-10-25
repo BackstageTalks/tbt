@@ -372,7 +372,7 @@ jobs:
           assert local_reset.astimezone(timezone.utc) == reset
           assert local_reset.isoformat() == reset.astimezone(bratislava).isoformat()
           assert budget.get("display_timezone") == "Europe/Bratislava"
-          expected_clock = "19:09" if local_reset.dst().total_seconds() else "18:09"
+          expected_clock = "19:09" if reset.astimezone(bratislava).dst().total_seconds() else "18:09"
           assert budget.get("next_reset_bratislava_time") == expected_clock
           assert budget.get("next_reset_bratislava_zone") == reset.astimezone(bratislava).tzname()
           print(f"Deployed TennisAPI readback PASS: spent={spent}, remaining={remaining}, "
