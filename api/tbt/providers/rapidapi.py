@@ -33,10 +33,10 @@ DEFAULT_PROVIDER_REQUEST_RESERVE = 300
 
 
 def _enforce_provider_day_hard_stop() -> None:
-    """No paid TennisAPI request from 17:07 to 17:09 UTC."""
+    """No paid TennisAPI request from 17:07 to 17:10 UTC."""
     now = datetime.now(timezone.utc)
-    if now.hour == 17 and 7 <= now.minute < 9:
-        raise RequestBudgetExceeded("Provider daily hard stop: 17:07–17:09 UTC")
+    if now.hour == 17 and 7 <= now.minute < 10:
+        raise RequestBudgetExceeded("Provider rollover safety stop: 17:07–17:10 UTC")
 
 
 def _provider_request_reserve() -> int:
