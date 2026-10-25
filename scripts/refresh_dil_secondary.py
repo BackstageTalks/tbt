@@ -12,6 +12,7 @@ from contextlib import contextmanager
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -154,12 +155,25 @@ def refresh(base_dil, work_dir, secondary_dir, *, activate=False):
         published=secondary_dir/name
         if published.exists():raise FileExistsError('Version already exists; preserve immutable release')
         os.replace(staged,published)
+        # Independently re-read published bytes before changing any active pointer.
+        if importer.sha256(published) != result['result_dil_sha256']:
+            raise ValueError('Published secondary SQLite SHA readback mismatch')
+        importer_receipt=Path(str(staged)+'.audit.json')
+        if not importer_receipt.is_file():
+            raise ValueError('Missing immutable importer audit receipt')
+        preserved_receipt=secondary_dir/(name+'.import.json')
+        if preserved_receipt.exists():raise FileExistsError('Importer audit already exists')
+        shutil.copyfile(importer_receipt,preserved_receipt)
+        if parity.file_sha256(importer_receipt)!=parity.file_sha256(preserved_receipt):
+            raise ValueError('Importer audit readback mismatch')
         audit_path=secondary_dir/(name+'.parity.json')
+        if audit_path.exists():raise FileExistsError('Secondary parity report already exists')
         audit_path.write_text(json.dumps(audit,indent=2,sort_keys=True)+'\n')
         if activate:
             activate_secondary_pointer(secondary_dir,published,audit)
         return {'status':'SECONDARY_ACTIVATED_VERIFIED' if activate else 'SECONDARY_SNAPSHOT_VERIFIED_NOT_ACTIVATED',
                 'secondary_artifact':str(published),
+                'importer_report':str(preserved_receipt),
                 'parity_report':str(audit_path),
                 'cdb_release_manifest_sha256':release_sha,
                 'cdb_mutated':False,'production_switched':False,'model_training':False}
