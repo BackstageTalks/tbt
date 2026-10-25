@@ -2647,6 +2647,233 @@ def delete_info_result(result_id: str, *, actor_id: str = "") -> dict:
         "deleted_by": str(actor_id or "")[:256],
     }
 
+
+# Admin-configurable storage retention (distinct from member history visibility).
+# Each scope owns only its messages and settled results. Project-group INFO
+# and manually created non-Comeback LIVE alerts are deliberately excluded.
+_HISTORY_RETENTION_TABLE = "BlinQHistoryRetention"
+_HISTORY_KINDS = ("info", "comeback", "set2")
+_HISTORY_RETENTION_OPTIONS = frozenset({0, 24, 48, 72, 168, 336, 720})
+
+
+def history_retention_settings() -> dict:
+    client = _table(_HISTORY_RETENTION_TABLE)
+    settings = {}
+    for kind in _HISTORY_KINDS:
+        try:
+            entity = client.get_entity(partition_key="settings", row_key=kind)
+        except Exception as exc:
+            if _is_missing_entity(exc):
+                settings[kind] = 0
+                continue
+            raise AdminStorageUnavailable("Unable to load history retention") from exc
+        try:
+            hours = int(entity.get("retention_hours") or 0)
+        except (TypeError, ValueError):
+            hours = 0
+        settings[kind] = hours if hours in _HISTORY_RETENTION_OPTIONS else 0
+    return settings
+
+
+def save_history_retention(kind: str, hours: int, *, actor_id: str = "") -> dict:
+    kind = str(kind or "").lower()
+    if kind not in _HISTORY_KINDS:
+        raise ValueError("Unknown history scope")
+    if isinstance(hours, bool) or not isinstance(hours, int) or hours not in _HISTORY_RETENTION_OPTIONS:
+        raise ValueError("Unsupported retention hours")
+    try:
+        _table(_HISTORY_RETENTION_TABLE).upsert_entity({
+            "PartitionKey": "settings", "RowKey": kind,
+            "retention_hours": hours,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": str(actor_id or "")[:256],
+        }, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save history retention") from exc
+    actual = history_retention_settings()
+    if actual[kind] != hours:
+        raise AdminStorageUnavailable("History retention read-back mismatch")
+    if kind == "info":
+        # The retired INFO-results-only retention must not silently delete
+        # records after the unified INFO message+result policy is disabled.
+        save_info_result_retention(0, actor_id=actor_id)
+        if info_result_retention_days() != 0:
+            raise AdminStorageUnavailable("Legacy INFO retention did not reset")
+    return {"kind": kind, "retention_hours": hours, "settings": actual}
+
+
+def _history_message_kind(row: dict) -> str:
+    if str(row.get("audience_mode") or "levels").lower() == "groups":
+        return ""  # Project INFO history has independent ownership.
+    key = str(row.get("RowKey") or "")
+    category = str(row.get("type") or "").lower()
+    if key.startswith("live-set2-"):
+        return "set2"
+    if key.startswith(("live-comeback-", "live-watch-")):
+        return "comeback"
+    if category in {"alert", "live_watch", "set2"}:
+        return ""  # Never purge unrelated manually created LIVE alerts.
+    return "info"
+
+
+def _history_timestamp(raw: object) -> datetime | None:
+    try:
+        value = datetime.fromisoformat(str(raw or "").replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def cleanup_history(
+    kind: str, *, older_than_hours: int | None = None, delete_all: bool = False,
+    actor_id: str = "", now: datetime | None = None,
+) -> dict:
+    """Scoped complete-partition cleanup. LIVE deletion tombstones prohibit replay.
+
+    Never remove rows with missing or corrupt timestamps in age-based mode.
+    A failed tombstone is a failed delete, not a successful cleanup.
+    """
+    kind = str(kind or "").lower()
+    if kind not in _HISTORY_KINDS:
+        raise ValueError("Unknown history scope")
+    if not delete_all and (isinstance(older_than_hours, bool)
+                           or not isinstance(older_than_hours, int)
+                           or older_than_hours < 1 or older_than_hours > 8760):
+        raise ValueError("Invalid history age cutoff")
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    cutoff = current.astimezone(timezone.utc) - timedelta(hours=older_than_hours or 0)
+    client = _table(INSIGHTS_TABLE)
+    try:
+        messages = list(client.query_entities(query_filter="PartitionKey eq 'insights'"))
+        partition = "info-results" if kind == "info" else "live-results"
+        results = list(client.query_entities(query_filter=f"PartitionKey eq '{partition}'"))
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to scan history") from exc
+
+    deleted_messages = deleted_results = failed = eligible = invalid_dates = 0
+    for row_type, entries in (("message", messages), ("result", results)):
+        for entity in entries:
+            identifier = str(entity.get("RowKey") or "")
+            if not identifier or not _VALID_ID.fullmatch(identifier):
+                continue
+            if row_type == "message":
+                if _history_message_kind(entity) != kind:
+                    continue
+                stamp = entity.get("created_at")
+            else:
+                if kind == "info":
+                    if str(entity.get("audience_mode") or "levels").lower() == "groups":
+                        continue
+                elif str(entity.get("kind") or "").lower() != kind:
+                    continue
+                stamp = entity.get("settled_at")
+            if not delete_all:
+                parsed = _history_timestamp(stamp)
+                if parsed is None:
+                    invalid_dates += 1
+                    continue
+                if parsed > cutoff:
+                    continue
+            eligible += 1
+            try:
+                if row_type == "message":
+                    if kind == "info":
+                        client.delete_entity(partition_key="insights", row_key=identifier)
+                    else:
+                        # Existing deletion path persists anti-replay tombstone first.
+                        result = delete_insight(identifier, actor_id=actor_id)
+                        if not result.get("deleted"):
+                            raise AdminStorageUnavailable("LIVE message not deleted")
+                else:
+                    if kind == "info":
+                        client.delete_entity(partition_key="info-results", row_key=identifier)
+                    else:
+                        result = delete_live_radar_result(identifier, actor_id=actor_id)
+                        if not result.get("deleted"):
+                            raise AdminStorageUnavailable("LIVE result not deleted")
+                # Independent read-back: no-op responses must never be counted
+                # as successful physical deletions.
+                target = "insights" if row_type == "message" else ("info-results" if kind == "info" else "live-results")
+                try:
+                    client.get_entity(partition_key=target, row_key=identifier)
+                except Exception as exc:
+                    if not _is_missing_entity(exc):
+                        raise AdminStorageUnavailable("History deletion read-back unavailable") from exc
+                else:
+                    raise AdminStorageUnavailable("History row remains after deletion")
+                if row_type == "message":
+                    deleted_messages += 1
+                else:
+                    deleted_results += 1
+            except Exception:
+                failed += 1
+    return {
+        "kind": kind, "deleted_messages": deleted_messages,
+        "deleted_results": deleted_results, "deleted": deleted_messages + deleted_results,
+        "failed": failed, "eligible": eligible, "unknown_age_skipped": invalid_dates,
+        "scanned_messages": len(messages), "scanned_results": len(results),
+        "older_than_hours": None if delete_all else older_than_hours,
+    }
+
+
+def run_history_retention(*, actor_id: str = "history-worker") -> dict:
+    settings = history_retention_settings()
+    per_kind = {}
+    for kind, hours in settings.items():
+        if hours:
+            per_kind[kind] = cleanup_history(kind, older_than_hours=hours, actor_id=actor_id)
+        else:
+            per_kind[kind] = {"kind": kind, "skipped": True, "retention_hours": 0}
+    result = {"settings": settings, "results": per_kind,
+              "failed": sum(int(row.get("failed") or 0) for row in per_kind.values())}
+    legacy = info_result_retention_days()
+    if legacy:
+        result["legacy_info_result_cleanup"] = cleanup_info_results(actor_id=actor_id)
+        result["failed"] += result["legacy_info_result_cleanup"]["failed"]
+    return result
+
+
+
+def run_history_retention_guarded(*, actor_id: str = "history-worker", now: datetime | None = None) -> dict:
+    """At most one cleanup per UTC six-hour bucket across parallel LIVE workers.
+
+    An incomplete sweep releases its reservation so the next externally
+    dispatched worker can retry. Azure Table create_entity is atomic.
+    """
+    clock = now or datetime.now(timezone.utc)
+    if clock.tzinfo is None:
+        clock = clock.replace(tzinfo=timezone.utc)
+    clock = clock.astimezone(timezone.utc)
+    bucket = clock.strftime("%Y%m%d") + "-" + str(clock.hour // 6)
+    table = _table(_HISTORY_RETENTION_TABLE)
+    lease = {"PartitionKey": "worker-runs", "RowKey": bucket,
+             "started_at": clock.isoformat(), "actor": str(actor_id or "")[:128]}
+    try:
+        table.create_entity(lease)
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        name = type(exc).__name__.lower()
+        if status == 409 or "exists" in name or "conflict" in name:
+            return {"ok": True, "skipped": True, "bucket": bucket, "reason": "already_claimed"}
+        raise AdminStorageUnavailable("Unable to reserve history cleanup run") from exc
+    try:
+        result = run_history_retention(actor_id=actor_id)
+        if result["failed"]:
+            raise AdminStorageUnavailable("History cleanup was only partially successful")
+        return {"ok": True, "bucket": bucket, **result}
+    except Exception:
+        try:
+            table.delete_entity(partition_key="worker-runs", row_key=bucket)
+        except Exception:
+            pass
+        raise
+
+
+
 _INFO_RETENTION_TABLE = "BlinQInfoRetention"
 
 
