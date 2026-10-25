@@ -163,3 +163,50 @@ def test_frontend_and_scheduled_job_contract():
     live=(root/".github/workflows/live-radar.yml").read_text(encoding="utf-8")
     assert "/api/v1/internal/history-retention-worker" in live
     assert "run_history_retention_guarded" in api
+
+
+def test_admin_history_endpoint_fails_closed_without_confirmation(monkeypatch):
+    import function_app as api
+    import json
+
+    class Req:
+        def __init__(self,method,payload=None):
+            self.method=method
+            self.payload=payload
+        def get_json(self):
+            return self.payload
+
+    monkeypatch.setattr(api,"_admin_user",lambda req: ({"id":"admin-test"},None))
+    monkeypatch.setattr(api,"history_retention_settings",lambda: {"info":0,"comeback":72,"set2":168})
+    calls=[]
+    monkeypatch.setattr(api,"cleanup_history",lambda kind,**kwargs: calls.append((kind,kwargs)) or {
+        "kind":kind,"deleted":2,"deleted_messages":1,"deleted_results":1,"failed":0
+    })
+    response=api.admin_history_retention(Req("POST",{
+        "kind":"comeback","mode":"all","confirmation":"NO",
+    }))
+    assert response.status_code==400 and not calls
+    response=api.admin_history_retention(Req("POST",{
+        "kind":"comeback","mode":"older_than_24h",
+        "confirmation":"DELETE HISTORY COMEBACK OLDER_THAN_24H",
+    }))
+    assert response.status_code==200
+    assert json.loads(response.get_body())["deleted"]==2
+    assert len(calls)==1 and calls[0][0]=="comeback"
+    assert calls[0][1]["older_than_hours"]==24
+    assert calls[0][1]["delete_all"] is False
+
+
+def test_history_worker_is_secret_guarded(monkeypatch):
+    import function_app as api
+
+    class Req:
+        method="POST"
+    calls=[]
+    monkeypatch.delenv("BLINQ_LIVE_WORKER_TOKEN",raising=False)
+    monkeypatch.setattr(api,"run_history_retention_guarded",lambda: calls.append(True))
+    assert api.internal_history_retention_worker(Req()).status_code==503
+    monkeypatch.setenv("BLINQ_LIVE_WORKER_TOKEN","secret")
+    monkeypatch.setattr(api,"_live_worker_token_ok",lambda req: False)
+    assert api.internal_history_retention_worker(Req()).status_code==403
+    assert not calls
