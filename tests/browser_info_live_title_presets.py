@@ -28,6 +28,7 @@ def test_width(browser,width):
     page.evaluate("""() => {
       document.querySelector('#bootSplash')?.remove();
       document.querySelector('#cookieConsent')?.remove();
+      document.querySelectorAll('dialog[open]').forEach(d=>d.close());
       const shell=document.getElementById('appShell');
       const host=document.getElementById('routePanel');
       shell.hidden=false;host.hidden=false;
