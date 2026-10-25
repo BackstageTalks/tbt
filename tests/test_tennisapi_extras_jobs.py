@@ -175,10 +175,10 @@ def test_hourly_scheduler_keeps_bounded_extras_and_same_writer():
     root = Path(__file__).resolve().parents[1]
     hourly = (root / ".github/workflows/data-hourly-quota-gapfill.yml").read_text()
     data = (root / ".github/workflows/data.yml").read_text()
-    assert "extras_slot = local.hour in (14, 17)" in hourly
+    assert "extras_slot = stage_hour in (14, 17)" in hourly
     assert "proposed = min(proposed, 450)" in hourly
     assert 'payload["inputs"]["mode"] = "extras"' in hourly
-    assert "BLINQ_PROVIDER_REQUEST_RESERVE=500" in data
+    assert "BLINQ_PROVIDER_REQUEST_RESERVE=300" in data
     assert "BLINQ_RAPIDAPI_MAX_RPS=6" in data
     assert "python scripts/cdb_global_writer_lock.py acquire" in data
     assert "python scripts/verify_tennisapi_extras.py" in data
@@ -394,16 +394,16 @@ def test_daily_extras_prefers_2026_before_older_verified_years(match_factory):
 
 
 def test_daily_extras_slots_keep_2026_first_and_share_provider_budget():
-    """Daily extras run twice without disabling normal statistics or 3% reserve."""
+    """Daily extras run twice without disabling normal statistics or 2% reserve."""
     root = Path(__file__).resolve().parents[1]
     dispatch = (root / ".github/workflows/data-hourly-quota-gapfill.yml").read_text()
     source = (root / "scripts/download_tennis_history.py").read_text()
 
-    assert "extras_slot = local.hour in (14, 17)" in dispatch
+    assert "extras_slot = stage_hour in (14, 17)" in dispatch
     assert "proposed = min(proposed, 450)" in dispatch
     assert 'payload["inputs"]["mode"] = "extras"' in dispatch
     assert '"start": "2022-01-01"' in dispatch
-    assert "14500" in dispatch and "reserved_provider_headroom" in dispatch
+    assert "14700" in dispatch and "reserved_provider_headroom" in dispatch
     assert "newest_season_first_then_verified_identity" in source
     assert 'report["extras_candidate_rows_by_year"]' in source
     assert 'output_report["extras_processed_by_year"]' in source
