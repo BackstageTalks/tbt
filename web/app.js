@@ -3474,25 +3474,35 @@
     }
     return allowed;
   }
-  function accaExcludedFromStats(){
-    const prime=state.ui?.dashboard?.daily_hub?.tabs?.prime;
-    // Global ACCA OFF also disables the STATS feed. The separate exclusion
-    // checkbox remains effective while ACCA is ON. Results history is immutable.
-    return prime?.enabled===false||prime?.exclude_from_stats===true;
+  const STATS_MARKET_TABS={daily:'top_daily',prime:'prime',value:'value',ace:'ace',
+    double_faults:'double_faults',doubles:'doubles',games:'games',sets:'sets'};
+  function statsExcludedSections(){
+    const tabs=state.ui?.dashboard?.daily_hub?.tabs||{};
+    return new Set(Object.entries(STATS_MARKET_TABS).filter(([tab])=>{
+      const cfg=tabs[tab];
+      return cfg?.enabled===false||cfg?.exclude_from_stats===true;
+    }).map(([,section])=>section));
   }
+  function resultPublicationStatsSection(p){
+    const section=String(p?.section||'').trim().toLowerCase();
+    const market=String(p?.market||'').trim().toLowerCase();
+    return section||({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'}[market]||'');
+  }
+  function statsHaveExcludedMarkets(){return statsExcludedSections().size>0;}
   function settledPublishedEntries(rows,category='all',filters=null,statsOnly=false){
     const specific=String(category).includes(',')||['top200','prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
     const unique=new Map();
     const cohort=memberResultCohort(filters?.membership);
     const now=Date.now();
     const todayKeys=String(filters?.window||'all')==='today'?currentBettingDayPublishedKeys(now):null;
+    const excluded=statsOnly?statsExcludedSections():null;
     (rows||[]).forEach(row=>{
       const pubs=publicResultPublications(row)
         .filter(p=>!filters||resultPublicationMatchesWindow(row,p,filters,now,todayKeys))
         .filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category))
-        // Keep ACCA in immutable Results history. Exclude it only from STATS,
-        // before cross-section deduplication so a separate TOP bet is retained.
-        .filter(p=>!statsOnly||!accaExcludedFromStats()||String(p.section||'').toLowerCase()!=='prime')
+        // Exclude opted-out categories only for STATS, before deduplication;
+        // the immutable Results table continues to show every publication.
+        .filter(p=>!excluded||!excluded.has(resultPublicationStatsSection(p)))
         .filter(p=>category!=='winners'||String(row?.prediction_family||'').toLowerCase()!=='doubles')
         .filter(p=>publicationOutcome(p).kind!=='pending');
       pubs.forEach((publication,index)=>{
@@ -3534,9 +3544,9 @@
   }
   function localResultMetrics(rows,category,filters=null){
     const entries=settledPublishedEntries(rows,category,filters);
-    // Preserve the normal Results sample when ACCA is included. If disabled,
-    // reselect *before* deduplication so an overlapping TOP bet stays counted.
-    const metricEntries=accaExcludedFromStats()?settledPublishedEntries(rows,category,filters,true):entries;
+    // Preserve the full Results sample, and recompute STATS before deduplication
+    // when any market is globally OFF or independently excluded from STATS.
+    const metricEntries=statsHaveExcludedMarkets()?settledPublishedEntries(rows,category,filters,true):entries;
     const graded=metricEntries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
     const wins=graded.filter(({publication})=>publicationOutcome(publication).kind==='win').length;
     const voids=metricEntries.filter(({publication})=>publicationOutcome(publication).kind==='void').length;
@@ -3831,15 +3841,18 @@
       const tc=hub.tabs?.[tab]||{},rule=tc.plans?.[state.adminPlan]||{},globalOn=tc.enabled!==false;
       const visible=String(rule.visible_rows??0).toUpperCase(),display=String(rule.display_state||((rule.tab_enabled!==false)?'active':'hidden'));
       const selection=String(rule.selection_mode||'first'),overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};
-      const accaStatsToggle=tab==='prime'
-        ?`<label class="admin-acca-stats-toggle"><input type="checkbox" data-admin-acca-exclude-stats ${tc.exclude_from_stats===true||!globalOn?'checked':''} ${!globalOn?'disabled':''}><span><strong>Vylúčiť ACCA zo STATS</strong><small>Globálne vypnutie ACCA automaticky zastaví aj jej prísun do STATS. Týmto nezávislým prepínačom ju môžeš vylúčiť aj pri zapnutej ACCA. História tipov zostane zachovaná; platí pre všetky levely.</small></span></label>`
+      const statsSource=Object.hasOwn(STATS_MARKET_TABS,tab);
+      const statsOff=tc.exclude_from_stats===true||!globalOn;
+      const marketName=dailyHubTabLabel(tab);
+      const statsToggle=statsSource
+        ?`<label class="admin-market-stats-toggle"><input type="checkbox" data-admin-market-exclude-stats="${tab}" ${statsOff?'checked':''} ${!globalOn?'disabled':''}><span><strong>Vylúčiť ${escapeHtml(marketName)} zo STATS</strong><small>Globálne vypnutie kategórie ju automaticky vyradí zo STATS. Toto nastavenie ju môže vyradiť aj keď zostane na webe. Platí pre všetky levely, bez mazania historických výsledkov.</small></span></label>`
         :'';
       const rowOverrides=[1,2,3,4,5,6,7,8,9,10].map(position=>{const mode=String(overrides[position]||'active');return `<label><span>${position}</span><select data-admin-hub-row-state="${position}" data-admin-hub-tab="${tab}"><option value="active"${mode==='active'?' selected':''}>SHOW</option><option value="blurred"${mode==='blurred'?' selected':''}>BLUR</option><option value="hidden"${mode==='hidden'?' selected':''}>HIDE</option></select></label>`;}).join('');
       return `<div class="admin-daily-matrix-row${globalOn?'':' is-global-off'}${display==='hidden'?' is-level-off':''}" data-admin-hub-tab-card="${tab}">
-        <div class="admin-daily-category"><strong>${escapeHtml(dailyHubTabLabel(tab))}</strong><small>${tab==='prime'?(globalOn?(tc.exclude_from_stats===true?'Web zapnutý · STATS vypnuté':'Web + STATS zapnuté'):'Web + STATS vypnuté'):(globalOn?'Na webe':'Globálne vypnuté')}</small></div>
+        <div class="admin-daily-category"><strong>${escapeHtml(marketName)}</strong><small>${!statsSource?(globalOn?'Súhrnný pohľad · bez vlastného STATS zdroja':'Globálne vypnuté'):(globalOn?(tc.exclude_from_stats===true?'Web zapnutý · STATS vypnuté':'Web + STATS zapnuté'):'Web + STATS vypnuté')}</small></div>
         <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-global-field="enabled" data-admin-hub-tab="${tab}" ${globalOn?'checked':''}><span>${tab==='prime'?'ACCA aktívna':'Na webe'}</span></label>
         <label class="admin-daily-row-count"><span>Prístup pre ${escapeHtml(levelLabel)}</span><select data-admin-hub-field="display_state" data-admin-hub-tab="${tab}" ${!globalOn?'disabled':''}><option value="active"${display==='active'?' selected':''}>ZOBRAZIŤ</option><option value="blurred"${display==='blurred'?' selected':''}>ZAMKNÚŤ</option><option value="hidden"${display==='hidden'?' selected':''}>SKRYŤ</option></select></label>
-        <label class="admin-daily-row-count"><span>Odomknuté riadky</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}>${[0,1,2,3,4,5,6,7,8,9,10,'ALL'].map(v=>`<option value="${v}"${visible===String(v).toUpperCase()?' selected':''}>${String(v).toUpperCase()==='ALL'?'VŠETKY':v}</option>`).join('')}</select></label><label class="admin-daily-row-count"><span>Výber</span><select data-admin-hub-field="selection_mode" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}><option value="first"${selection==='first'?' selected':''}>PRVÉ</option><option value="stable_random"${selection==='stable_random'?' selected':''}>NÁHODNÉ / DEŇ</option></select></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''} ${!globalOn||display==='hidden'?'disabled':''}><span>Zamknúť zvyšok</span></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''} ${!globalOn||display!=='active'?'disabled':''}><span>Celá ponuka</span></label><details class="admin-row-overrides admin-row-advanced"><summary><span>Pokročilé nastavenia</span><small>Ručné pravidlá pre jednotlivé pozície</small></summary><div class="admin-row-advanced-body"><strong>Riadky 1–10 · SHOW / BLUR / HIDE</strong><div>${rowOverrides}</div><small>BLUR a HIDE neposielajú citlivý obsah do prehliadača. Pri NÁHODNÉ / DEŇ zostáva výber stabilný celý deň pre konkrétny účet.</small>${accaStatsToggle}</div></details>
+        <label class="admin-daily-row-count"><span>Odomknuté riadky</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}>${[0,1,2,3,4,5,6,7,8,9,10,'ALL'].map(v=>`<option value="${v}"${visible===String(v).toUpperCase()?' selected':''}>${String(v).toUpperCase()==='ALL'?'VŠETKY':v}</option>`).join('')}</select></label><label class="admin-daily-row-count"><span>Výber</span><select data-admin-hub-field="selection_mode" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}><option value="first"${selection==='first'?' selected':''}>PRVÉ</option><option value="stable_random"${selection==='stable_random'?' selected':''}>NÁHODNÉ / DEŇ</option></select></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''} ${!globalOn||display==='hidden'?'disabled':''}><span>Zamknúť zvyšok</span></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''} ${!globalOn||display!=='active'?'disabled':''}><span>Celá ponuka</span></label><details class="admin-row-overrides admin-row-advanced"><summary><span>Pokročilé nastavenia</span><small>Ručné pravidlá pre jednotlivé pozície</small></summary><div class="admin-row-advanced-body"><strong>Riadky 1–10 · SHOW / BLUR / HIDE</strong><div>${rowOverrides}</div><small>BLUR a HIDE neposielajú citlivý obsah do prehliadača. Pri NÁHODNÉ / DEŇ zostáva výber stabilný celý deň pre konkrétny účet.</small>${statsToggle}</div></details>
       </div>`;
     }).join('');
     return `<section class="admin-ux-section admin-daily-settings-v687">
@@ -6333,13 +6346,14 @@ function adminActivityRows(){
         return;
       }
       if(t.dataset.dashboardGlobalField){state.ui.dashboard=state.ui.dashboard||{};let value=t.type==='checkbox'?t.checked:Number(t.value);state.ui.dashboard[t.dataset.dashboardGlobalField]=value;state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();return;}
-      if(t.dataset.adminAccaExcludeStats!==undefined){
-        const tabs=state.ui?.dashboard?.daily_hub?.tabs;
-        if(!tabs?.prime)return;
-        tabs.prime.exclude_from_stats=Boolean(t.checked);
-        renderAllUiContent();
-        rerenderAdmin();
-        showStatus(`ACCA · ${t.checked?'vylúčené zo STATS':'zahrnuté do STATS'} · klikni Publikovať.`);
+      if(t.dataset.adminMarketExcludeStats!==undefined){
+        const tab=String(t.dataset.adminMarketExcludeStats||'');
+        if(!Object.hasOwn(STATS_MARKET_TABS,tab))return;
+        const cfg=state.ui?.dashboard?.daily_hub?.tabs?.[tab];
+        if(!cfg||cfg.enabled===false)return;
+        cfg.exclude_from_stats=Boolean(t.checked);
+        renderAllUiContent();rerenderAdmin();
+        showStatus(`${dailyHubTabLabel(tab)} · ${t.checked?'vylúčené zo STATS':'zahrnuté do STATS'} · platí pre všetky levely po Publikovať.`);
         return;
       }
       if(t.dataset.adminHubGlobalField){
@@ -6732,7 +6746,7 @@ function adminActivityRows(){
   function renderDashboardResultsPreview(){
     const host=$('resultsPreviewContent');if(!host)return;
     const filters={category:'all',tour:'',surface:'',window:'today',dateFrom:'',dateTo:'',bettingDay:true};
-    const rows=filteredResults(filters),m=localResultMetrics(rows,'all',filters),total=accaExcludedFromStats()?null:todayPublishedPickCount();
+    const rows=filteredResults(filters),m=localResultMetrics(rows,'all',filters),total=statsHaveExcludedMarkets()?null:todayPublishedPickCount();
     host.innerHTML=`<div class="results-preview-metrics"><span><small>${escapeHtml(publicText('Record'))}</small><strong>${m.wins}-${m.losses}</strong></span><span><small>${escapeHtml(publicText('Hit rate'))}</small><strong>${m.hit==null?'—':pct(m.hit)}</strong></span><span><small>ROI</small><strong>${m.roi==null?'—':pct(m.roi)}</strong></span><span><small>${escapeHtml(publicText('Units'))}</small><strong>${m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—'}</strong></span></div>`;
     const progress=total==null?`${m.sample}`:`${m.sample}/${total}`;
     const progressText=lcopy(`${progress} settled today`,`${progress} vyhodnotených dnes`,`${progress} vyhodnocených dnes`);
@@ -6742,7 +6756,7 @@ function adminActivityRows(){
 
   function resultsSummary(){
     const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',m=localResultMetrics(rows,category,filters);
-    const todayTotal=filters.window==='today'&&category==='all'&&!accaExcludedFromStats()?todayPublishedPickCount():null;
+    const todayTotal=filters.window==='today'&&category==='all'&&!statsHaveExcludedMarkets()?todayPublishedPickCount():null;
     const sampleValue=todayTotal==null?String(m.sample):`${m.sample}/${todayTotal}`;
     const sampleNote=todayTotal==null
       ?lcopy('settled published rows','vyhodnotené publikované záznamy','vyhodnocené publikované záznamy')

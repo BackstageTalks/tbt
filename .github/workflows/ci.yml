@@ -232,6 +232,7 @@ jobs:
           python tests/browser_admin_account_filters.py
           python tests/browser_admin_account_activity_tabs.py
           python tests/browser_admin_unified_visibility.py
+          python tests/browser_all_market_stats_exclusion.py
           python tests/browser_admin_dashboard_setting.py
           python tests/browser_info_sg_detail.py
           python tests/browser_admin_live_delete.py
