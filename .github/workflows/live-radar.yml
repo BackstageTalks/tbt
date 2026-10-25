@@ -59,3 +59,28 @@ jobs:
                             'global_spent':budget['global_spent'],
                             'live_spent':budget['live_spent']},sort_keys=True))
           PY
+
+      - name: Retire expired INFO and LIVE history (six-hour server lease)
+        env:
+          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          curl --fail-with-body --silent --show-error --max-time 240 \
+            -X POST -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN" \
+            "${BLINQ_BASE_URL%/}/api/v1/internal/history-retention-worker" \
+            -o /tmp/blinq-history-cleanup.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result=json.loads(Path('/tmp/blinq-history-cleanup.json').read_text())
+          assert result.get('ok') is True, result
+          print(json.dumps({
+            'history_readback':'PASS',
+            'bucket':result.get('bucket'),
+            'skipped':result.get('skipped',False),
+            'deleted':sum(row.get('deleted',0) for row in result.get('results',{}).values()),
+          }, sort_keys=True))
+          PY
