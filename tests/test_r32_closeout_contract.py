@@ -49,8 +49,8 @@ def test_r32_results_are_public_categories_only_and_admin_window_is_configurable
     assert '"model"' not in engine.split("PUBLIC_RESULT_SECTIONS =", 1)[1].split("\n", 1)[0]
     for value in ('"24h": 24', '"48h": 48', '"3d": 72', '"7d": 168', '"14d": 336', '"30d": 720', '"all": None'):
         assert value in entitlements
-    assert "data-admin-results-window" in APP
-    assert "24H · 48H · 3D · 7D · 14D · 30D · ALL" in APP
+    assert "data-admin-display-history" in APP
+    assert "['24h','24H'],['48h','48H']" in APP
     assert "function resultsLockedCard()" in APP
     assert "firstResultsUnlockPlan()" in APP
     assert "restrictedResultsRoute" in APP
@@ -58,7 +58,7 @@ def test_r32_results_are_public_categories_only_and_admin_window_is_configurable
 
 def test_r32_detail_info_live_and_visual_cleanup_contract():
     validate_ui_config(UI)
-    assert "data-admin-detail-plan" in APP
+    assert "toggle('detail'" in APP and "data-admin-display-access" in APP
     assert "data-admin-detail-section" in APP
     assert "match-detail-lock-icon" in CSS
     assert "Ranking trend" not in APP and "Trend rebríčka" not in APP
