@@ -73,15 +73,18 @@ def release(source_tag, source_sha, champion_sha, reason, request_id, *, overrid
             raise ValueError('Production model readback failed')
     except Exception:
         # Restore all serving members even if publication failed part way through.
-        checked_publish(production, PRODUCTION, old, base / 'restored')
-        # upload_bundle commits a fresh manifest timestamp. Compare all payload
-        # bytes and inference, while independently validating the new manifest.
-        verify_complete_bundle(base / 'restored')
-        recovered = load_model(str(base / 'restored/model.joblib'))
-        frame = reference_frame(champion.feature_names)
-        if (recovered.version != champion.version or not recovered.fitted
-                or not np.allclose(champion.predict_proba(frame), recovered.predict_proba(frame), rtol=0, atol=1e-12)):
-            raise RuntimeError('Rollback inference parity failed; manual recovery required')
+        try:
+            checked_publish(production, PRODUCTION, old, base / 'restored')
+            # A committed manifest has a fresh timestamp; validate its payload.
+            verify_complete_bundle(base / 'restored')
+            recovered = load_model(str(base / 'restored/model.joblib'))
+            frame = reference_frame(champion.feature_names)
+            if (recovered.version != champion.version or not recovered.fitted
+                    or not np.allclose(champion.predict_proba(frame), recovered.predict_proba(frame), rtol=0, atol=1e-12)):
+                raise RuntimeError('Rollback inference parity failed')
+        except Exception:
+            (base / 'recovery-required').write_text('Unverified rollback; retain writer lock for reconciliation')
+            raise
         raise
     audit.update(status='VERIFIED_PRODUCTION_RELEASE', remote_readback='VERIFIED')
     # Public workflow artifacts/logs omit the private operator rationale.

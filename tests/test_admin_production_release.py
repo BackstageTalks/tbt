@@ -124,3 +124,11 @@ def test_restore_failure_blocks_before_publication(remote, monkeypatch):
     with pytest.raises(ValueError, match='parity'):
         p.release(*args, override=True, cache=path)
     assert writes == []
+
+
+def test_failed_rollback_retains_recovery_guard(remote, monkeypatch):
+    _, _, args, path, _ = remote
+    monkeypatch.setattr(p, 'checked_publish', Mock(side_effect=RuntimeError('Transport unavailable')))
+    with pytest.raises(RuntimeError):
+        p.release(*args, override=True, cache=path)
+    assert (path / 'recovery-required').is_file()
