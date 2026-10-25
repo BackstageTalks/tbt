@@ -5754,9 +5754,9 @@ function adminActivityRows(){
     const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,testresults:renderAdminTestList,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,calibration:()=>renderAdminModelLab()+renderAdminCalibration(),system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
     const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],projects:['Projektové skupiny','Samostatné skupiny bez ohľadu na level, ich INFO kanál a vyhodnotenia.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard setting','Nastavenie troch hlavných metrík bez zmeny grafiky.'],testresults:['Výsledky','Manuálne vylúčenie testovacích predikcií.'],layout:['Zobrazenie','Všetky prístupy levelov, história výsledkov, panely a denné riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],calibration:['Kalibrácia modelu','Shadow výsledky, chýbajúce zápasy a porovnanie s produkciou.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
     let contextual='';
-    if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov sa aplikujú okamžite</div>';
-    else if(state.adminTab==='projects')contextual='<div class="admin-account-direct-note"><span></span>Skupiny a správy sa ukladajú okamžite</div>';
-    else if(state.adminTab==='insights')contextual='<div class="admin-account-direct-note"><span></span>Správy sa publikujú okamžite</div>';
+    if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov ulož tlačidlom Uložiť · bez globálneho Publikovať</div>';
+    else if(state.adminTab==='projects')contextual='<div class="admin-account-direct-note"><span></span>Projektové operácie majú vlastné uloženie · bez globálneho Publikovať</div>';
+    else if(state.adminTab==='insights')contextual='<div class="admin-account-direct-note"><span></span>Správy, publikum a história: samostatné tlačidlá Uložiť / Publikovať</div>';
     else if(state.adminTab==='testresults')contextual='<div class="admin-account-direct-note"><span></span>Výber sa ukladá po potvrdení</div>';
     else if(state.adminTab==='calibration')contextual='<div class="admin-account-direct-note"><span></span>Model Lab · riadené operácie a súkromný audit bez automatickej produkčnej aktivácie</div>';
     else if(state.adminTab==='system')contextual='<div class="admin-account-direct-note"><span></span>Kontrola je len čítacia diagnostika</div>';
@@ -5765,11 +5765,12 @@ function adminActivityRows(){
       ?'<div class="admin-runtime-note is-error" role="alert"><strong>Publikovanie konfigurácie je pozastavené</strong><span>'+escapeHtml(state.uiRuntimeNotice||'Azure konfigurácia je nedostupná.')+' Zobrazené nastavenia môžu byť iba posledná overená kópia alebo predvolené hodnoty. Nemeň živé bannery ani odkazy, kým sa spojenie neobnoví.</span></div>'
       :'';
     const editable=Boolean(state.adminNavEditing),expanded=Boolean(state.adminNavExpanded||editable),tabById=Object.fromEntries(tabs.map(row=>[row[0],row]));
+    const guideMap=state.adminGuideOpen?adminGuideHtml():'';
     const nav=orderedAdminTabs(valid).map((id,index,order)=>{
       const [,label,hint]=tabById[id];
       return `<div class="admin-nav-entry${id===state.adminTab?' is-active':''}${editable?' is-reordering':''}" data-admin-order-item="${id}" draggable="${editable}"><button type="button" class="${state.adminTab===id?'active':''}" data-admin-tab="${id}" ${state.adminTab===id?'aria-current="page"':''}><span class="admin-nav-mark"></span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(hint)}</small></span></button>${editable?`<div class="admin-nav-order-actions"><button type="button" data-admin-nav-step="-1" data-admin-nav-id="${id}" aria-label="Presunúť ${escapeHtml(label)} doľava alebo vyššie" ${index===0?'disabled':''}>↑</button><button type="button" data-admin-nav-step="1" data-admin-nav-id="${id}" aria-label="Presunúť ${escapeHtml(label)} doprava alebo nižšie" ${index===order.length-1?'disabled':''}>↓</button></div>`:''}</div>`;
     }).join('');
-    return `<div class="admin-console admin-console-v685 admin-console-v687 lean-admin-console"><aside class="admin-side-nav"><div class="admin-side-brand"><span>BLINQ CONTROL</span><strong>Admin</strong><small>Účty · obsah · LIVE</small></div><div class="admin-nav-toolbar"><strong>Sekcie</strong><button type="button" data-admin-nav-expand aria-expanded="${expanded?'true':'false'}">${expanded?'Zbaliť sekcie':'Zobraziť sekcie'}</button><button type="button" data-admin-nav-edit aria-pressed="${editable?'true':'false'}">${editable?'✓ Dokončiť':'↕ Upraviť poradie'}</button>${editable?'<button type="button" data-admin-nav-reset>Predvolené poradie</button>':''}</div><nav class="admin-tabs admin-tabs-v685${expanded?' is-expanded':' is-collapsed'}" aria-label="Admin navigácia"><div class="admin-nav-group"><span>SPRÁVA</span>${nav}</div></nav><div class="admin-side-foot"><a href="#predictions" data-route="predictions"><svg viewBox="0 0 20 20"><path d="M4 10h12M9 5l-5 5 5 5"></path></svg><span>Späť na web</span></a></div></aside><section class="admin-workarea"><header class="admin-workarea-head admin-control-toolbar"><div><small>ADMIN / ${escapeHtml(state.adminTab.toUpperCase())}</small><h2>${escapeHtml(info[0])}</h2><p>${escapeHtml(info[1])}</p></div><div class="admin-global-actions">${contextual}</div></header><div class="admin-panel admin-panel-v685">${uiWarning}${uiHistoryPanel}${panel}</div></section></div>`;
+    return `<div class="admin-console admin-console-v685 admin-console-v687 lean-admin-console"><aside class="admin-side-nav"><div class="admin-side-brand"><span>BLINQ CONTROL</span><strong>Admin</strong><small>Účty · obsah · LIVE</small></div><div class="admin-nav-toolbar"><strong>Sekcie</strong><button type="button" data-admin-guide-toggle aria-expanded="${state.adminGuideOpen?'true':'false'}">Kde čo nastavím</button><button type="button" data-admin-nav-expand aria-expanded="${expanded?'true':'false'}">${expanded?'Zbaliť sekcie':'Zobraziť sekcie'}</button><button type="button" data-admin-nav-edit aria-pressed="${editable?'true':'false'}">${editable?'✓ Dokončiť':'↕ Upraviť poradie'}</button>${editable?'<button type="button" data-admin-nav-reset>Predvolené poradie</button>':''}</div><nav class="admin-tabs admin-tabs-v685${expanded?' is-expanded':' is-collapsed'}" aria-label="Admin navigácia"><div class="admin-nav-group"><span>SPRÁVA</span>${nav}</div></nav><div class="admin-side-foot"><a href="#predictions" data-route="predictions"><svg viewBox="0 0 20 20"><path d="M4 10h12M9 5l-5 5 5 5"></path></svg><span>Späť na web</span></a></div></aside><section class="admin-workarea"><header class="admin-workarea-head admin-control-toolbar"><div><small>ADMIN / ${escapeHtml(state.adminTab.toUpperCase())}</small><h2>${escapeHtml(info[0])}</h2><p>${escapeHtml(info[1])}</p></div><div class="admin-global-actions">${contextual}</div></header><div class="admin-panel admin-panel-v685">${uiWarning}${guideMap}${uiHistoryPanel}${panel}</div></section></div>`;
   }
 
 
@@ -5976,6 +5977,27 @@ function adminActivityRows(){
       if(picture){window.BlinqInsightMedia.open(picture);return;}
       const infoSummary=event.target.closest('.admin-info-results-collapsible > summary');
       if(infoSummary){state.adminInfoResultsExpanded=!infoSummary.parentElement.open;}
+      const guideToggle=event.target.closest('[data-admin-guide-toggle]');
+      if(guideToggle){state.adminGuideOpen=!state.adminGuideOpen;rerenderAdmin();return;}
+      const subtab=event.target.closest('[data-admin-subtab]');
+      if(subtab){
+        const pair=String(subtab.dataset.adminSubtab||'').split(':');
+        if(pair.length!==2)return;
+        const [kind,id]=pair,valid=kind==='layout'?['access','daily','order']:kind==='insights'?['messages','audience','results','retention']:[];
+        if(!valid.includes(id)||subtab.disabled)return;
+        if(kind==='layout')state.adminLayoutView=id;else state.adminInsightsView=id;
+        host.querySelectorAll('[data-admin-subpanel]').forEach(panel=>{
+          if(!String(panel.dataset.adminSubpanel||'').startsWith(kind+':'))return;
+          panel.hidden=panel.dataset.adminSubpanel!==kind+':'+id;
+        });
+        host.querySelectorAll('[data-admin-subtab]').forEach(button=>{
+          if(!String(button.dataset.adminSubtab||'').startsWith(kind+':'))return;
+          const active=button.dataset.adminSubtab===kind+':'+id;
+          button.classList.toggle('is-active',active);
+          button.setAttribute('aria-pressed',String(active));
+        });
+        return;
+      }
       const navExpand=event.target.closest('[data-admin-nav-expand]');
       if(navExpand){state.adminNavExpanded=!state.adminNavExpanded;rerenderAdmin();return;}
       const navEdit=event.target.closest('[data-admin-nav-edit]');
@@ -6015,18 +6037,18 @@ function adminActivityRows(){
         }
         return;
       }
-      const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;if(!state.adminNavEditing)state.adminNavExpanded=false;rerenderAdmin();if(state.adminTab==='accounts'){loadAdminUsers();loadAdminAccountActivity();loadAdminTelemetry();}if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='insights'){loadAdminInsights();loadAdminInfoResults();loadAdminLiveResults();loadAdminHistoryRetention();}if(state.adminTab==='system')loadAdminDiagnostics(true);if(state.adminTab==='calibration')loadAdminCalibration();if(state.adminTab==='testresults')loadAdminTestList();return;}
+      const tab=event.target.closest('[data-admin-tab],[data-admin-guide-tab]');if(tab){state.adminTab=tab.dataset.adminTab||tab.dataset.adminGuideTab;state.adminGuideOpen=false;if(!state.adminNavEditing)state.adminNavExpanded=false;rerenderAdmin();if(state.adminTab==='accounts'){loadAdminUsers();loadAdminAccountActivity();loadAdminTelemetry();}if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='insights'){loadAdminInsights();loadAdminInfoResults();loadAdminLiveResults();loadAdminHistoryRetention();}if(state.adminTab==='system')loadAdminDiagnostics(true);if(state.adminTab==='calibration')loadAdminCalibration();if(state.adminTab==='testresults')loadAdminTestList();return;}
       const tgAction=event.target.closest('[data-admin-action="tg-add"],[data-admin-action="tg-remove"]');if(tgAction){const cfg=state.ui.telegram_groups=state.ui.telegram_groups||{schema:1,enabled:true,groups:[]};cfg.groups=Array.isArray(cfg.groups)?cfg.groups:[];if(tgAction.dataset.adminAction==='tg-add'){cfg.groups.push({id:`group_${Date.now()}`,enabled:true,badge:'KOMUNITA',title:'Telegram skupina',description:'',cta:'Otvoriť Telegram',url:'',min_plan:'rookie'});}else{const index=Number(tgAction.dataset.tgIndex);if(Number.isInteger(index)&&index>=0)cfg.groups.splice(index,1);}renderTelegramGroupsPanel();rerenderAdmin();return;}
       const openLevelDisplay=event.target.closest('[data-admin-open-level-display]');
       if(openLevelDisplay){
         const level=String(openLevelDisplay.dataset.adminOpenLevelDisplay||'').toLowerCase();
         if(!membershipHierarchy.includes(level))return;
-        state.adminPlan=level;state.adminTab='layout';state.adminNavExpanded=false;
+        state.adminPlan=level;state.adminTab='layout';state.adminLayoutView='access';state.adminNavExpanded=false;
         rerenderAdmin();host.querySelector('.admin-display-access-panel')?.scrollIntoView({block:'nearest'});
         return;
       }
       if(event.target.closest('[data-admin-open-info-access]')){
-        state.adminTab='insights';state.adminNavExpanded=false;rerenderAdmin();
+        state.adminTab='insights';state.adminInsightsView='audience';state.adminNavExpanded=false;rerenderAdmin();
         loadAdminInsights();loadAdminInfoResults();loadAdminLiveResults();loadAdminHistoryRetention();
         return;
       }
@@ -6227,8 +6249,8 @@ function adminActivityRows(){
         }catch(error){showStatus(error.message||'INFO výsledok sa nepodarilo odstrániť.');actionNode.disabled=false;}
         return;
       }
-      if(action==='insight-new'){state.adminInsightEditingId='';rerenderAdmin();return;}
-      if(action==='insight-edit'){state.adminInsightEditingId=String(actionNode.dataset.insightId||'');rerenderAdmin();return;}
+      if(action==='insight-new'){state.adminInsightEditingId='';state.adminInsightsView='messages';rerenderAdmin();return;}
+      if(action==='insight-edit'){state.adminInsightEditingId=String(actionNode.dataset.insightId||'');state.adminInsightsView='messages';rerenderAdmin();return;}
       if(action==='insight-delete'){
         const id=String(actionNode.dataset.insightId||'');
         if(!id)return;
