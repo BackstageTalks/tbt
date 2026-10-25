@@ -102,7 +102,9 @@ def _normalized(raw: object, slot: int) -> list[list[int]]:
             legacy_end = datetime.fromtimestamp(
                 (minute_slot + 1) * SLOT_SECONDS - 1, tz=timezone.utc
             )
-            minute_slot = _now_slot(legacy_end)
+            # An in-progress legacy 5-minute bucket may end after "now".
+            # Keep all of its recorded spend rather than failing or dropping it.
+            minute_slot = min(_now_slot(legacy_end), slot)
             numbers[0] = minute_slot
         if any(v < 0 for v in numbers[1:]) or minute_slot > slot:
             raise SharedBudgetUnavailable("Corrupt or future-dated budget bucket")
