@@ -50,7 +50,7 @@ def _provider_request_reserve() -> int:
         raise ConfigurationError(
             "BLINQ_PROVIDER_REQUEST_RESERVE must be an integer"
         ) from exc
-    # Never let a workflow variable weaken the production 500-request safety margin.
+    # Never let a workflow variable weaken the production 300-request safety margin.
     if reserve < DEFAULT_PROVIDER_REQUEST_RESERVE or reserve >= 15000:
         raise ConfigurationError(
             f"BLINQ_PROVIDER_REQUEST_RESERVE must be in "
