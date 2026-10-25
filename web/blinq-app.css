@@ -10609,3 +10609,8 @@ body#blinqPremium .admin-history-actions button{min-height:42px;white-space:norm
   body#blinqPremium .admin-history-actions button{width:100%;min-width:0;font-size:12px}
   body#blinqPremium .admin-history-actions button:last-child{grid-column:1/-1}
 }
+/* Model Factory: factual stage states, no estimated completion percentage. */
+.model-factory-progress { margin: 14px 0; padding-left: 20px; }
+.model-factory-progress li { padding: 6px 0; border-bottom: 1px solid rgba(120,180,200,.15); }
+.model-factory-progress li strong { display: block; color: #80e8c9; font-size: 11px; }
+.model-factory-sync { color: #a6bdc8; font-size: 12px; line-height: 1.5; }

@@ -4,7 +4,7 @@ on:
   # match-status completions (every 30 minutes), not to an additional timer.
   workflow_dispatch:
   workflow_run:
-    workflows: [Test and deploy, Prediction fixture schedule and match status, Hourly prediction match status, Tennis data and predictions, BlinQ protected frozen-CDB candidate training, CDB Drive Inbox - guarded external file import, BlinQ read-only champion vs challenger shadow audit, BlinQ private model calibration monitor, Activate verified 7.2.1 shadow candidate]
+    workflows: [Test and deploy, Prediction fixture schedule and match status, Hourly prediction match status, Tennis data and predictions, BlinQ protected frozen-CDB candidate training, BlinQ Model Factory source preflight, CDB Drive Inbox - guarded external file import, BlinQ read-only champion vs challenger shadow audit, BlinQ private model calibration monitor, Activate verified 7.2.1 shadow candidate]
     types: [completed]
     branches: [main]
 permissions:
@@ -36,4 +36,5 @@ jobs:
       - name: Synchronize queued protected candidate training
         run: python scripts/admin_training_worker.py
       - name: Synchronize Model Lab and dispatch at most one guarded operation
+        if: ${{ !cancelled() }}
         run: python scripts/admin_model_lab_worker.py

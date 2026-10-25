@@ -215,6 +215,7 @@ jobs:
           node tests/test_admin_diagnostics_view.js
           node tests/test_admin_training_panel.js
           node tests/test_admin_model_lab_panel.js
+          node tests/test_admin_factory_poll.js
 
       - name: Run real-browser runtime contract
         run: |

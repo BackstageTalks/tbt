@@ -1,6 +1,9 @@
 """Admin-only bridge to the existing protected training workflow."""
 import json
 import os
+import subprocess
+import tempfile
+from pathlib import Path
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
@@ -59,13 +62,62 @@ def inspect(read=github):
             "reason": "Tréning už beží alebo čaká." if busy else "Dátový zámok je obsadený. Po zlyhaní vyžaduje overenie vlastníka." if locked else "Pripravené na nový tréning."}
 
 
+def _read_shadow_outcome(run):
+    """Worker-only readback of this exact run attempt, never a browser claim."""
+    name = f"model-factory-outcome-{run['id']}-{run['run_attempt']}"
+    inventory = github(f"{APP}/actions/runs/{run['id']}/artifacts?per_page=100")
+    found = [a for a in inventory.get("artifacts", [])
+             if a.get("name") == name and a.get("expired") is False]
+    if not found:
+        return None  # Older workflows did not publish this report.
+    if len(found) != 1:
+        raise TrainingUnavailable("Nejednoznačný výsledok shadow aktivácie.")
+    with tempfile.TemporaryDirectory(prefix="blinq-training-outcome-") as directory:
+        env = dict(os.environ, GH_TOKEN=os.environ.get("BLINQ_TRAINING_GITHUB_TOKEN", ""))
+        proc = subprocess.run(["gh", "run", "download", str(run["id"]), "-R", APP,
+                               "-n", name, "-D", directory],
+                              env=env, capture_output=True, text=True, timeout=120)
+        path = Path(directory) / "model-factory-outcome.json"
+        if proc.returncode or not path.is_file() or path.stat().st_size > 32768:
+            raise TrainingUnavailable("Výsledok shadow aktivácie sa nepodarilo nezávisle overiť.")
+        result = json.loads(path.read_text(encoding="utf-8"))
+    if (not isinstance(result, dict) or result.get("schema") != 1
+            or str(result.get("run_id")) != str(run["id"])
+            or str(result.get("run_attempt")) != str(run["run_attempt"])
+            or result.get("code_sha") != run["head_sha"]
+            or result.get("candidate_tag") != f"blinq-candidate-frozen-{run['id']}-{run['run_attempt']}"
+            or result.get("state") not in {"SHADOW_ACTIVE", "SHADOW_BLOCKED"}
+            or result.get("production_mutated") is not False
+            or not isinstance(result.get("reasons"), list)
+            or any(not isinstance(r, str) or len(r) > 200 for r in result["reasons"])):
+        raise TrainingUnavailable("Výsledok nepatrí tomuto tréningu.")
+    if result["state"] == "SHADOW_ACTIVE" and (result.get("remote_readback") != "VERIFIED" or result["reasons"]):
+        raise TrainingUnavailable("Shadow aktivácia nemá potvrdený readback.")
+    return result
+
+
 def collect_status():
     result = inspect()
     if result["runs"]:
         run = result["runs"][0]
-        jobs = github(f"{APP}/actions/runs/{run['id']}/jobs?per_page=100")
+        detail = github(f"{APP}/actions/runs/{run['id']}")
+        run["run_attempt"] = detail["run_attempt"]
+        jobs = github(f"{APP}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100")
+        if jobs.get("total_count") != len(jobs.get("jobs", [])):
+            raise TrainingUnavailable("Priebeh tréningu nie je úplný.")
+        result["steps"] = [{"name": step["name"], "status": step.get("status"),
+                            "conclusion": step.get("conclusion")}
+                           for job in jobs.get("jobs", []) for step in job.get("steps", [])]
+        result["failed_steps"] = [s["name"] for s in result["steps"]
+                                  if s["conclusion"] in {"failure", "timed_out", "cancelled"}]
         result["active_steps"] = [step["name"] for job in jobs.get("jobs", [])
                                   for step in job.get("steps", []) if step.get("status") == "in_progress"]
+        if run.get("status") == "completed" and run.get("conclusion") == "success":
+            try:
+                result["shadow_outcome"] = _read_shadow_outcome(run)
+            except (TrainingUnavailable, ValueError, OSError, subprocess.TimeoutExpired):
+                result["shadow_outcome"] = None
+                result["outcome_warning"] = "Tréning skončil; výsledok shadow aktivácie zatiaľ nie je overený."
     rows = github(f"{DATA}/releases?per_page=100")
     result["candidates"] = []
     for row in rows:
@@ -74,6 +126,7 @@ def collect_status():
         assets = {a["name"] for a in row.get("assets", []) if a.get("size", 0) > 0}
         present = {"model.joblib", "training_report.json", "_tbt_bundle_manifest.json"} <= assets
         result["candidates"].append({"tag": row["tag_name"], "url": row["html_url"],
+                                     "complete": present,
                                      "label": "Model uložený · kvalita neoverená" if present else "Nedokončený tréning"})
     result["candidate_scope"] = "Kandidáti z posledných 100 releases"
     return result

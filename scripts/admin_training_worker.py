@@ -23,7 +23,10 @@ def main():
     state = collect_status()
     response = sync(state, claim=True)
     if response.get("claim_blocked"):
-        raise RuntimeError("Request already claimed or storage uncertain; operator reconciliation required")
+        # A durable claim is normal while GitHub is still publishing the run.
+        # Never redispatch it, but keep the independent Lab sync operational.
+        print("Training request already claimed; waiting for run confirmation, no redispatch")
+        return
     pending = response.get("pending")
     if pending:
         current = inspect()

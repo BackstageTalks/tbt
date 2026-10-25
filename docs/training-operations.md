@@ -1,8 +1,22 @@
 # Protected training in one command
 
-## Administracia BlinQ (implementacia pripravena, vyzaduje nasadenie)
+## Samostatný tréning tlačidlami v administrácii
 
-V **Administracia → Kalibracia modelu → Trening kandidatov** vyber profil a klikni **Natrenovat kandidata**. Panel zobrazuje posledne behy, aktualny krok a ulozene modely. **Obnovit stav** nacita aktualny vysledok. Trening pouziva hlavnu vetvu `main`; zmenu logiky najprv otestuj a zluc do nej. Nove data musia byt importovane do CDB. Produkcny model sa neaktivuje.
+V **Administrácia → Kalibrácia modelu** postupuj zľava doprava:
+
+1. **Pripraviť a skontrolovať dáta** vykoná kontrolu aktuálnej CDB. Po dokončení sa zobrazí overený report ATP/WTA. Príprava nemení CDB; nové súbory na Drive najprv importuj cez Pokročilé operácie. Audit platí 24 hodín a samotný tréning vstupy znova zmrazí a overí.
+2. **Natrénovať a spustiť shadow** uloží jednu požiadavku. Worker ju prevezme pri existujúcej kontrole, bežne do 30 minút. Kartu môžeš zavrieť. Pri otvorenej karte sa serverový stav obnovuje každých 30 sekúnd; toto obnovovanie samo nespúšťa tréning. Sleduj fázy čakania, zálohy, kontroly dát, tréningu, porovnania a shadow aktivácie.
+3. Úspešný tréning nemusí znamenať shadow aktiváciu. **Model uložený, shadow neaktivovaný** vypíše dôvody nesplnených kontrol. **Vyhodnotiť shadow výsledky** spustí nezávislý audit existujúceho shadow kandidáta. **Synchronizovať výsledky** v pokročilých operáciách obnoví kalibračný report; tieto tlačidlá nevyžadujú nový offline model.
+
+Pri zlyhanom tréningu panel zobrazí zastavenú fázu. Keď je dátový zámok voľný a príprava platná, **Zopakovať tréning a kontroly** vytvorí nový chránený pokus. Pri zlyhanom read-only audite alebo neoveriteľnom reporte prípravy najprv použi **Potvrdiť zlyhanie read-only auditu**, potom prípravu zopakuj. Tlačidlo nikdy neodstraňuje globálny dátový zámok.
+
+Nejasný výsledok odoslania požiadavky sa automaticky neopakuje. Čiastočne vykonaný import alebo zápis modelu stále vyžaduje nezávislú rekonciliáciu. Fronta sa v týchto prípadoch nesmie odblokovať len na základe času.
+
+**Nasadiť do produkcie** zostáva zablokované: bezpečný produkčný prepínač nie je súčasťou tohto tréningového ovládania. Panel ukazuje chýbajúce shadow podmienky; ich splnenie nenahrádza TOP/VALUE kontrolu, rollback ani explicitné schválenie konkrétneho modelu. Tréning a shadow nemenia produkčného championa.
+
+## Technická prevádzka
+
+Tréning používa hlavnú vetvu `main`; zmenu logiky najprv otestuj a zlúč do nej. Nové dáta musia byť importované do CDB. Výsledok shadow aktivácie sa prenáša cez samostatný artifact viazaný na ID behu, pokus, commit a kandidátsky tag. Chýbajúci alebo neoveriteľný artifact sa nevydáva za úspešnú aktiváciu.
 
 Server nepotrebuje novy GitHub token. Existujuci `BLINQ_LIVE_WORKER_TOKEN` overuje internu synchronizaciu. GitHub workflow `admin-training-worker.yml` cita stav cez existujuci `TBT_DATA_GH_TOKEN`; na dispatch pouziva kratkodoby `github.token` s Actions write. Kontrola nadvazuje na existujuci externe spustany Match Status worker (pozorovana kadencia 30 minut) a na dokoncenie treningu. Novy GitHub cron sa nepridava. Manualne **Run workflow** v admin-training-worker vynuti okamzitu synchronizaciu.
 

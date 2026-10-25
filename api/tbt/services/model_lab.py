@@ -227,6 +227,7 @@ def _operation_view(request, snapshot):
         "id": marker, "action": action, "source_tag": request.get("source_tag"),
         "created_at": request["created_at"],
         "state": ("RUNNING" if selected and selected.get("status") != "completed"
+                  else "FAILED_NEEDS_REVIEW" if selected and selected.get("conclusion") != "success"
                   else "COMPLETED_PENDING_VERIFICATION" if selected
                   else "DISPATCH_UNCONFIRMED" if claimed else "QUEUED"),
         "run": selected,
@@ -304,6 +305,9 @@ def _finalize(request, run, snapshot):
     if (request["action"] == "prepare_inputs" and
             (run.get("artifact_verified") is not True or
              not isinstance(run.get("preflight_report"), dict))):
+        _put("last", {"id": request["id"], "action": request["action"],
+                      "state": "VERIFICATION_FAILED", "run": run,
+                      "note": "Beh skončil, ale report dát nie je nezávisle overený. Potvrď zlyhanie auditu a zopakuj prípravu dát."})
         raise TrainingBlocked("Preflight report was not independently retained as a GitHub artifact")
     if request["action"] == "activate_shadow":
         expected = request["source_sha256"]
@@ -406,18 +410,24 @@ def acknowledge_failed(payload):
         raise ValueError("Invalid acknowledgement")
     active = _json("active")
     last = _json("last")
-    if not active or not last or active["id"] != payload["id"] or last.get("id") != payload["id"] or last.get("state") != "FAILED_NEEDS_REVIEW":
+    if not active or not last or active["id"] != payload["id"] or last.get("id") != payload["id"] or last.get("state") not in {"FAILED_NEEDS_REVIEW", "VERIFICATION_FAILED"}:
         raise TrainingBlocked("No independently verified failed operation")
     # An importer or shadow activation may have failed after a partial write.
     # Browser acknowledgement is safe only for read-only refreshes.
     if active["action"] not in {"prepare_inputs", "refresh_tests", "audit_shadow"}:
         raise TrainingBlocked("Import alebo shadow zápis vyžaduje nezávislé overenie a ručnú rekonciliáciu.")
     snapshot = status()
+    if not -60 <= _age(snapshot.get("observed_at")) <= 5400:
+        raise TrainingBlocked("Najprv počkaj na čerstvú synchronizáciu stavu auditu.")
     run = _find_run(active, snapshot)
-    if not run or run.get("status") != "completed" or run.get("conclusion") == "success":
+    verification_failed = (active["action"] == "prepare_inputs" and last.get("state") == "VERIFICATION_FAILED"
+                           and run and run.get("artifact_verified") is not True)
+    if not run or run.get("status") != "completed" or (run.get("conclusion") == "success" and not verification_failed):
         raise TrainingBlocked("Run is not a verified failure")
     try:
         _table(UI_TABLE).delete_entity(partition_key=PARTITION, row_key="active")
     except Exception as exc:
         raise AdminStorageUnavailable("Cannot acknowledge failed operation") from exc
+    if _row("active"):
+        raise AdminStorageUnavailable("Failed operation guard was not removed")
     return {"state": "FAILED_ACKNOWLEDGED", "message": "Neúspešný beh bol potvrdený; pred opakovaním skontroluj jeho dôvod."}
