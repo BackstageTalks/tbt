@@ -350,6 +350,7 @@ jobs:
               python - <<'PYBUDGET'
           import json
           from datetime import datetime, timezone
+          from zoneinfo import ZoneInfo
           response = json.load(open("/tmp/blinq-budget-readback.json", encoding="utf-8"))
           budget = response.get("budget") if isinstance(response, dict) else None
           assert response.get("ok") is True and isinstance(budget, dict)
@@ -366,7 +367,16 @@ jobs:
           reset = reset.astimezone(timezone.utc)
           assert (reset.hour, reset.minute, reset.second) == (17, 9, 0)
           assert reset > datetime.now(timezone.utc)
-          print(f"Deployed TennisAPI readback PASS: spent={spent}, remaining={remaining}, reset={reset.isoformat()}")
+          bratislava = ZoneInfo("Europe/Bratislava")
+          local_reset = datetime.fromisoformat(budget["next_reset_bratislava"])
+          assert local_reset.astimezone(timezone.utc) == reset
+          assert local_reset.isoformat() == reset.astimezone(bratislava).isoformat()
+          assert budget.get("display_timezone") == "Europe/Bratislava"
+          expected_clock = "19:09" if local_reset.dst().total_seconds() else "18:09"
+          assert budget.get("next_reset_bratislava_time") == expected_clock
+          assert budget.get("next_reset_bratislava_zone") == local_reset.tzname()
+          print(f"Deployed TennisAPI readback PASS: spent={spent}, remaining={remaining}, "
+                f"reset_utc={reset.isoformat()}, reset_bratislava={local_reset.isoformat()}")
           PYBUDGET
             then
               break
