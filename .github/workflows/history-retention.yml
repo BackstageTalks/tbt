@@ -1,0 +1,42 @@
+name: BlinQ INFO and LIVE history retention
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-history-retention-worker
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Apply persistent INFO / Comeback / Set-2 retention
+        env:
+          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN" || { echo 'Missing worker token'; exit 1; }
+          base="${BLINQ_BASE_URL%/}"
+          curl --fail-with-body --silent --show-error \
+            --retry 2 --retry-all-errors --retry-delay 3 --max-time 240 \
+            -X POST -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN" \
+            "$base/api/v1/internal/history-retention-worker" \
+            -o /tmp/history-retention.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result=json.loads(Path('/tmp/history-retention.json').read_text())
+          assert result.get('ok') is True, result
+          assert set(result.get('settings',{}))=={'info','comeback','set2'}, result
+          assert result.get('failed')==0, result
+          print(json.dumps(result,sort_keys=True))
+          PY
