@@ -10648,3 +10648,111 @@ body#blinqPremium .admin-history-actions button{min-height:42px;white-space:norm
   body#blinqPremium .admin-history-actions button{width:100%;min-width:0;font-size:12px}
   body#blinqPremium .admin-history-actions button:last-child{grid-column:1/-1}
 }
+
+
+/* Admin: single editor for every membership level's visibility and access. */
+body#blinqPremium.blinq-admin .admin-display-access-panel{
+  margin:12px 0 16px;padding:20px;border:1px solid #286a53;border-radius:14px;
+  background:linear-gradient(155deg,#06251e,#051c21 75%);min-width:0
+}
+body#blinqPremium.blinq-admin .admin-display-access-panel>header{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-bottom:15px}
+body#blinqPremium.blinq-admin .admin-display-access-panel>header small{
+  color:#6ff0bc;font-size:9px;font-weight:850;letter-spacing:.1em
+}
+body#blinqPremium.blinq-admin .admin-display-access-panel>header h3{margin:5px 0;font-size:17px;color:#eef9f4}
+body#blinqPremium.blinq-admin .admin-display-access-panel>header p{margin:0;color:#9bbfb2;font-size:11px;line-height:1.5}
+body#blinqPremium.blinq-admin .admin-display-access-grid{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px
+}
+body#blinqPremium.blinq-admin .admin-display-access-toggle,
+body#blinqPremium.blinq-admin .admin-display-access-history{
+  display:flex;align-items:flex-start;gap:11px;min-width:0;padding:14px;
+  border:1px solid #225044;border-radius:11px;background:#041c20;color:#d7f2e6
+}
+body#blinqPremium.blinq-admin .admin-display-access-toggle{cursor:pointer}
+body#blinqPremium.blinq-admin .admin-display-access-toggle:has(input:checked){border-color:#398b6c;background:#062b24}
+body#blinqPremium.blinq-admin .admin-display-access-toggle>input{
+  flex:0 0 auto;width:17px;height:17px;accent-color:#26daa0;margin:2px 0 0
+}
+body#blinqPremium.blinq-admin .admin-display-access-toggle>span{display:grid;gap:6px;min-width:0}
+body#blinqPremium.blinq-admin .admin-display-access-toggle strong{
+  font-size:12px;line-height:1.25;color:#ecf9f3
+}
+body#blinqPremium.blinq-admin .admin-display-access-toggle small,
+body#blinqPremium.blinq-admin .admin-display-access-history small{
+  font-size:10px;color:#93b3ab;line-height:1.45
+}
+body#blinqPremium.blinq-admin .admin-display-access-history{display:grid;gap:6px}
+body#blinqPremium.blinq-admin .admin-display-access-history>span{font-weight:800;font-size:12px}
+body#blinqPremium.blinq-admin .admin-display-access-history select,
+body#blinqPremium.blinq-admin .admin-display-detail-grid select{
+  width:100%;min-width:0;padding:9px;border:1px solid #34745d;
+  border-radius:8px;background:#051a24;color:#e5faf3;font:inherit;font-size:12px
+}
+body#blinqPremium.blinq-admin .admin-display-global-detail{
+  margin-top:12px;border:1px solid #20463e;border-radius:10px;background:#041b20
+}
+body#blinqPremium.blinq-admin .admin-display-global-detail>summary{
+  cursor:pointer;padding:12px 14px;color:#cfeddf;font-size:12px;font-weight:800
+}
+body#blinqPremium.blinq-admin .admin-display-global-detail>p{
+  margin:0 14px 10px;color:#99b6ac;font-size:10px
+}
+body#blinqPremium.blinq-admin .admin-display-detail-grid{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:0 14px 14px
+}
+body#blinqPremium.blinq-admin .admin-display-detail-grid label{
+  display:grid;gap:6px;color:#bcd6cb;font-size:11px;font-weight:750;min-width:0
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status{
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:12px 2px 0;margin-top:13px;border-top:1px solid #204b3f
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status>div{
+  display:grid;gap:4px;min-width:105px
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status small{
+  font-size:9px;color:#8caea2;font-weight:750
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status strong{
+  color:#e0faed;font-size:12px
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status span{
+  color:#9cbbb1;font-size:10px
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status button,
+body#blinqPremium.blinq-admin .admin-membership-visibility-link button{
+  border:1px solid #317c63;border-radius:9px;padding:10px 12px;
+  background:#0b3c30;color:#e9fff5;font:inherit;font-size:11px;font-weight:800;cursor:pointer
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status button{margin-left:auto}
+body#blinqPremium.blinq-admin .admin-display-notification-status button:hover,
+body#blinqPremium.blinq-admin .admin-membership-visibility-link button:hover{
+  border-color:#60e4b7;background:#12523e
+}
+body#blinqPremium.blinq-admin .admin-display-access-panel :is(button,input,select,summary):focus-visible,
+body#blinqPremium.blinq-admin .admin-membership-visibility-link button:focus-visible{
+  outline:2px solid #7ff0c0;outline-offset:3px
+}
+body#blinqPremium.blinq-admin .admin-membership-visibility-link{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;
+  margin:18px 0 6px;padding:16px;border:1px solid #24654e;
+  border-radius:12px;background:#082720
+}
+body#blinqPremium.blinq-admin .admin-membership-visibility-link>div{
+  display:grid;gap:6px;flex:1;min-width:160px
+}
+body#blinqPremium.blinq-admin .admin-membership-visibility-link strong{color:#e7f9ee;font-size:12px}
+body#blinqPremium.blinq-admin .admin-membership-visibility-link span{
+  color:#a2c2b4;font-size:11px;line-height:1.5
+}
+@media(max-width:1100px){
+  body#blinqPremium.blinq-admin .admin-display-access-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:600px){
+  body#blinqPremium.blinq-admin .admin-display-access-panel{padding:13px}
+  body#blinqPremium.blinq-admin .admin-display-access-grid{grid-template-columns:1fr}
+  body#blinqPremium.blinq-admin .admin-display-detail-grid{grid-template-columns:1fr}
+  body#blinqPremium.blinq-admin .admin-display-notification-status button{margin-left:0;width:100%}
+  body#blinqPremium.blinq-admin .admin-membership-visibility-link button{width:100%}
+}
