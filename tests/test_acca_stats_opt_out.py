@@ -23,9 +23,9 @@ def _pub(section: str, *, won: bool, selection: str, odds: float) -> dict:
     }
 
 
-def _ui(exclude: bool) -> dict:
+def _ui(exclude: bool, *, enabled: bool = True) -> dict:
     return {"dashboard": {
-        "daily_hub": {"tabs": {"prime": {"enabled": True, "exclude_from_stats": exclude}}},
+        "daily_hub": {"tabs": {"prime": {"enabled": enabled, "exclude_from_stats": exclude}}},
         "kpi_cards": [
             {"metric": "results_success", "period": "all"},
             {"metric": "results_avg_odds", "period": "all"},
@@ -89,3 +89,54 @@ def test_admin_ui_statistics_toggle_only_filters_metrics_not_results_table():
     assert 'const metricEntries=accaExcludedFromStats()?settledPublishedEntries(rows,category,filters,true):entries;' in app
     assert 'const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||\'all\',entries=settledPublishedEntries(rows,category,filters);' in app
     assert ".filter(p=>!statsOnly||!accaExcludedFromStats()" in app
+
+
+def test_global_acca_off_blocks_stats_flow_even_when_standalone_opt_out_is_unchecked():
+    # ACCA ON + exclude OFF counts an ACCA entry. Turning the global category
+    # OFF must stop its contribution to every Results-based KPI automatically.
+    acca = _pub("prime", won=True, selection="a", odds=1.08)
+    top = _pub("top_daily", won=False, selection="a", odds=2.00)
+    top["issued_at"] = "2026-10-23T10:00:00Z"
+    value = _pub("value", won=True, selection="b", odds=1.80)
+    feed = {"results": [
+        {"event_id": "same", "scheduled_at": NOW.isoformat(),
+         "market_publications": [acca, top]},
+        {"event_id": "another", "scheduled_at": NOW.isoformat(),
+         "market_publications": [value]},
+    ]}
+    original = deepcopy(feed)
+    normal = selected_dashboard_cards(feed, _ui(False, enabled=True), now=NOW)
+    global_off = selected_dashboard_cards(feed, _ui(False, enabled=False), now=NOW)
+    explicit_off = selected_dashboard_cards(feed, _ui(True, enabled=True), now=NOW)
+    assert normal[0]["value"] == 1.0
+    assert [c["value"] for c in global_off] == [c["value"] for c in explicit_off]
+    assert global_off[0]["value"] == .5
+    assert global_off[1]["value"] == pytest.approx(1.9)
+    assert global_off[2]["value"] == pytest.approx(-.2)
+    assert feed == original  # Keeps ACCA publications in historical Results.
+
+
+def test_global_acca_off_does_not_hide_non_acca_publications_in_the_same_match():
+    feed = {"results": [{
+        "event_id": "same", "scheduled_at": NOW.isoformat(),
+        "market_publications": [
+            _pub("prime", won=True, selection="a", odds=1.05),
+            _pub("top_daily", won=False, selection="a", odds=2.0),
+        ],
+    }]}
+    cards = selected_dashboard_cards(feed, _ui(False, enabled=False), now=NOW)
+    assert cards[0]["value"] == 0
+    assert cards[1]["value"] == 2.0
+    assert len(feed["results"][0]["market_publications"]) == 2
+
+
+def test_global_acca_off_is_a_server_and_client_stats_gate_not_a_visibility_only_flag():
+    app = (ROOT / "web/app.js").read_text(encoding="utf-8")
+    from tbt.services import dashboard_kpis
+    from inspect import getsource
+    assert "prime?.enabled===false||prime?.exclude_from_stats===true" in app
+    server = getsource(dashboard_kpis.selected_dashboard_cards)
+    assert 'prime.get("enabled") is False' in server
+    assert 'prime.get("exclude_from_stats") is True' in server
+    assert "ACCA aktívna" in app
+    assert "záložka aj prísun ACCA zápasov do STATS" in app

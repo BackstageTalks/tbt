@@ -1,0 +1,49 @@
+name: DIL secondary CDB full source read-only SHA preflight
+
+'on':
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dil-secondary-cdb-source-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dil-secondary-cdb-source-preflight-readonly
+  cancel-in-progress: false
+
+jobs:
+  private-source-preflight:
+    # Never run with private credentials on pull requests or untrusted refs.
+    if: github.repository == 'BackstageTalks/tbt' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prove isolated read-only fail-closed snapshot contract
+        env:
+          PYTHONPATH: scripts
+        run: |
+          set -euo pipefail
+          python -m unittest discover -q -s tests -p 'test_probe_dil_secondary_live_cdb.py'
+      - name: Verify all 78 live private CDB Parquet source parts and manifests
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          PYTHONPATH: scripts
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'BLOCKED_PRIVATE_READ_TOKEN_MISSING'; exit 1; }
+          python scripts/probe_dil_secondary_live_cdb.py --scratch .cache/dil-cdb-live-source-only
+          echo 'DIL_CDB_SOURCE_FULL_78_PARTS_CHECKED_NO_DIL_PARITY_CLAIM' >> "$GITHUB_STEP_SUMMARY"
+      - name: Erase all private CDB files on this ephemeral runner
+        if: always()
+        run: |
+          rm -rf .cache/dil-cdb-live-source-only
+          echo 'PRIVATE_SOURCE_SCRATCH_ERASED' >> "$GITHUB_STEP_SUMMARY"

@@ -222,6 +222,7 @@ jobs:
           python -m pip install playwright==1.57.0
           python -m playwright install chromium
           python tests/browser_private_info_screenshots.py
+          python tests/browser_info_live_title_presets.py
           python tests/browser_comparator_search.py
           python tests/browser_runtime_r43.py
           python tests/browser_daily_hub_zero_allocation.py
@@ -229,6 +230,8 @@ jobs:
           python tests/browser_preproduction_r61.py
           python tests/browser_banner_editor_r62.py
           python tests/browser_admin_account_filters.py
+          python tests/browser_admin_account_activity_tabs.py
+          python tests/browser_admin_unified_visibility.py
           python tests/browser_admin_dashboard_setting.py
           python tests/browser_info_sg_detail.py
           python tests/browser_admin_live_delete.py

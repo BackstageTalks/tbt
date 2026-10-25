@@ -8382,6 +8382,29 @@ body#blinqPremium.blinq-admin .admin-insight-message-card>label{
   display:grid;gap:5px;color:#7593a5;font-size:8px;font-weight:800;
 }
 body#blinqPremium.blinq-admin .admin-insight-message-card>label>span{font-weight:650;color:#587887}
+/* INFO/LIVE heading presets: accessible multi-select + optional custom title. */
+body#blinqPremium.blinq-admin .admin-insight-title-editor{display:grid;gap:9px;min-width:0}
+body#blinqPremium.blinq-admin .admin-insight-title-label{color:#a3c8bf;font-size:11px;font-weight:800}
+body#blinqPremium.blinq-admin .admin-insight-title-label span,
+body#blinqPremium.blinq-admin .admin-insight-title-custom>span{font-size:10px;font-weight:500;color:#92aaa7}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown{position:relative;border:1px solid #356458;border-radius:10px;background:#071f23;min-width:0}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown[open]{border-color:#53d5ac}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown summary{display:flex;gap:8px;align-items:center;justify-content:space-between;cursor:pointer;list-style:none;padding:11px 13px;font-size:12px;font-weight:800;color:#eef8f4}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown summary::-webkit-details-marker{display:none}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown summary::after{content:'⌄';color:#78d9b1;margin-left:auto;font-size:17px}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown[open] summary::after{content:'⌃'}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown summary span{font-weight:650;color:#77e9bd;overflow-wrap:anywhere;text-align:right}
+body#blinqPremium.blinq-admin .admin-insight-title-dropdown summary:focus-visible{outline:2px solid #79eabd;outline-offset:3px}
+body#blinqPremium.blinq-admin .admin-insight-title-options{display:flex;gap:10px;flex-wrap:wrap;padding:10px 13px 13px;border-top:1px solid #24564a}
+body#blinqPremium.blinq-admin .admin-insight-title-options label{display:inline-flex;align-items:center;gap:8px;padding:8px 13px;border:1px solid #346d58;border-radius:8px;background:#092f28;color:#e8f9f1;font-size:12px;font-weight:850;cursor:pointer}
+body#blinqPremium.blinq-admin .admin-insight-title-options input{width:16px;height:16px;margin:0;accent-color:#3bd39b}
+body#blinqPremium.blinq-admin .admin-insight-title-custom{display:grid;gap:6px;font-size:11px;font-weight:700;color:#a3c8bf}
+body#blinqPremium.blinq-admin .admin-insight-title-custom input{width:100%;min-width:0}
+body#blinqPremium.blinq-admin .admin-insight-title-preview{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;padding:8px 10px;border:1px solid #214f46;border-radius:8px;background:#06221f;color:#98b9ac;font-size:10px}
+body#blinqPremium.blinq-admin .admin-insight-title-preview strong{color:#d4f9e7;font-size:12px;overflow-wrap:anywhere}
+body#blinqPremium.blinq-admin .admin-insight-title-preview small{margin-left:auto;color:#8bbbaa;font-variant-numeric:tabular-nums}
+body#blinqPremium.blinq-admin .admin-insight-title-preview small.is-over-limit{color:#ffb6a5;font-weight:850}
+@media(max-width:600px){body#blinqPremium.blinq-admin .admin-insight-title-options{flex-direction:column}body#blinqPremium.blinq-admin .admin-insight-title-options label{width:100%}}
 body#blinqPremium.blinq-admin .admin-insight-message-head{
   display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:7px;
   border-bottom:1px solid rgba(67,121,116,.2);
@@ -10304,14 +10327,30 @@ body#blinqPremium .admin-activity-head-actions{display:flex;gap:8px;flex-wrap:wr
 body#blinqPremium .admin-activity-head-actions button{min-height:37px;white-space:nowrap}
 body#blinqPremium .admin-activity-body{padding:0 20px 20px}
 body#blinqPremium .admin-activity-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
-body#blinqPremium .admin-activity-stats article{
-  padding:14px 15px;min-height:85px;border-radius:10px;background:#05251f;border:1px solid #1a4b3d;display:flex;flex-direction:column;gap:7px
+body#blinqPremium .admin-activity-stats button{
+  padding:14px 15px;min-height:85px;border-radius:10px;background:#05251f;border:1px solid #1a4b3d;display:flex;flex-direction:column;gap:7px;
+  appearance:none;font:inherit;text-align:left;cursor:pointer;min-width:0;transition:border-color .15s,background .15s
 }
-body#blinqPremium .admin-activity-stats article.is-attention{border-color:#a87327;background:#302214}
+body#blinqPremium .admin-activity-stats button:hover{border-color:#45b994;background:#08372e}
+body#blinqPremium .admin-activity-stats button.is-selected{border-color:#56edbd;box-shadow:inset 0 0 0 1px #56edbd;background:#0c3530}
+body#blinqPremium .admin-activity-stats button.is-attention.is-selected{border-color:#efb25b;background:#382817;box-shadow:inset 0 0 0 1px #efb25b}
+body#blinqPremium .admin-activity-stats button:focus-visible,
+body#blinqPremium .admin-activity-other:focus-visible{outline:2px solid #7aebc5;outline-offset:3px}
+body#blinqPremium .admin-activity-stats button.is-attention{border-color:#a87327;background:#302214}
 body#blinqPremium .admin-activity-stats span{color:#9ebeb4;font-size:11px}
 body#blinqPremium .admin-activity-stats strong{font-size:26px;color:#e4f7ef;font-variant-numeric:tabular-nums}
+body#blinqPremium .admin-activity-view-switch{display:flex;justify-content:flex-end;padding-top:11px}
+body#blinqPremium .admin-activity-other{background:none;border:0;color:#9bcdb9;cursor:pointer;padding:6px 2px;font-size:11px;font-weight:750;text-decoration:underline;text-underline-offset:3px}
+body#blinqPremium .admin-activity-other strong{color:#ecf8f4;margin-left:4px}
+body#blinqPremium .admin-activity-other.is-selected{color:#65edc1}
+body#blinqPremium .admin-activity-management{margin-top:17px;border:1px solid #204c42;border-radius:10px;background:#051d1e}
+body#blinqPremium .admin-activity-management summary{padding:12px 15px;color:#b7d8ca;font-size:12px;font-weight:750;cursor:pointer}
+body#blinqPremium .admin-activity-management summary:focus-visible{outline:2px solid #7aebc5;outline-offset:2px}
+body#blinqPremium .admin-activity-management-body{padding:0 15px 15px}
+body#blinqPremium .admin-activity-management-body>p{color:#90aca7;font-size:11px;line-height:1.5}
+body#blinqPremium .admin-activity-current{min-height:88px}
 body#blinqPremium .admin-tg-cleanup{
-  margin-top:20px;border:1px solid #93692f;border-radius:12px;padding:16px;
+  margin-top:9px;border:1px solid #93692f;border-radius:12px;padding:16px;
   background:linear-gradient(90deg,rgba(137,92,34,.14),rgba(2,21,22,.6))
 }
 body#blinqPremium .admin-tg-cleanup header{margin-bottom:12px}
@@ -10614,3 +10653,111 @@ body#blinqPremium .admin-history-actions button{min-height:42px;white-space:norm
 .model-factory-progress li { padding: 6px 0; border-bottom: 1px solid rgba(120,180,200,.15); }
 .model-factory-progress li strong { display: block; color: #80e8c9; font-size: 11px; }
 .model-factory-sync { color: #a6bdc8; font-size: 12px; line-height: 1.5; }
+
+
+/* Admin: single editor for every membership level's visibility and access. */
+body#blinqPremium.blinq-admin .admin-display-access-panel{
+  margin:12px 0 16px;padding:20px;border:1px solid #286a53;border-radius:14px;
+  background:linear-gradient(155deg,#06251e,#051c21 75%);min-width:0
+}
+body#blinqPremium.blinq-admin .admin-display-access-panel>header{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-bottom:15px}
+body#blinqPremium.blinq-admin .admin-display-access-panel>header small{
+  color:#6ff0bc;font-size:9px;font-weight:850;letter-spacing:.1em
+}
+body#blinqPremium.blinq-admin .admin-display-access-panel>header h3{margin:5px 0;font-size:17px;color:#eef9f4}
+body#blinqPremium.blinq-admin .admin-display-access-panel>header p{margin:0;color:#9bbfb2;font-size:11px;line-height:1.5}
+body#blinqPremium.blinq-admin .admin-display-access-grid{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px
+}
+body#blinqPremium.blinq-admin .admin-display-access-toggle,
+body#blinqPremium.blinq-admin .admin-display-access-history{
+  display:flex;align-items:flex-start;gap:11px;min-width:0;padding:14px;
+  border:1px solid #225044;border-radius:11px;background:#041c20;color:#d7f2e6
+}
+body#blinqPremium.blinq-admin .admin-display-access-toggle{cursor:pointer}
+body#blinqPremium.blinq-admin .admin-display-access-toggle:has(input:checked){border-color:#398b6c;background:#062b24}
+body#blinqPremium.blinq-admin .admin-display-access-toggle>input{
+  flex:0 0 auto;width:17px;height:17px;accent-color:#26daa0;margin:2px 0 0
+}
+body#blinqPremium.blinq-admin .admin-display-access-toggle>span{display:grid;gap:6px;min-width:0}
+body#blinqPremium.blinq-admin .admin-display-access-toggle strong{
+  font-size:12px;line-height:1.25;color:#ecf9f3
+}
+body#blinqPremium.blinq-admin .admin-display-access-toggle small,
+body#blinqPremium.blinq-admin .admin-display-access-history small{
+  font-size:10px;color:#93b3ab;line-height:1.45
+}
+body#blinqPremium.blinq-admin .admin-display-access-history{display:grid;gap:6px}
+body#blinqPremium.blinq-admin .admin-display-access-history>span{font-weight:800;font-size:12px}
+body#blinqPremium.blinq-admin .admin-display-access-history select,
+body#blinqPremium.blinq-admin .admin-display-detail-grid select{
+  width:100%;min-width:0;padding:9px;border:1px solid #34745d;
+  border-radius:8px;background:#051a24;color:#e5faf3;font:inherit;font-size:12px
+}
+body#blinqPremium.blinq-admin .admin-display-global-detail{
+  margin-top:12px;border:1px solid #20463e;border-radius:10px;background:#041b20
+}
+body#blinqPremium.blinq-admin .admin-display-global-detail>summary{
+  cursor:pointer;padding:12px 14px;color:#cfeddf;font-size:12px;font-weight:800
+}
+body#blinqPremium.blinq-admin .admin-display-global-detail>p{
+  margin:0 14px 10px;color:#99b6ac;font-size:10px
+}
+body#blinqPremium.blinq-admin .admin-display-detail-grid{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:0 14px 14px
+}
+body#blinqPremium.blinq-admin .admin-display-detail-grid label{
+  display:grid;gap:6px;color:#bcd6cb;font-size:11px;font-weight:750;min-width:0
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status{
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:12px 2px 0;margin-top:13px;border-top:1px solid #204b3f
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status>div{
+  display:grid;gap:4px;min-width:105px
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status small{
+  font-size:9px;color:#8caea2;font-weight:750
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status strong{
+  color:#e0faed;font-size:12px
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status span{
+  color:#9cbbb1;font-size:10px
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status button,
+body#blinqPremium.blinq-admin .admin-membership-visibility-link button{
+  border:1px solid #317c63;border-radius:9px;padding:10px 12px;
+  background:#0b3c30;color:#e9fff5;font:inherit;font-size:11px;font-weight:800;cursor:pointer
+}
+body#blinqPremium.blinq-admin .admin-display-notification-status button{margin-left:auto}
+body#blinqPremium.blinq-admin .admin-display-notification-status button:hover,
+body#blinqPremium.blinq-admin .admin-membership-visibility-link button:hover{
+  border-color:#60e4b7;background:#12523e
+}
+body#blinqPremium.blinq-admin .admin-display-access-panel :is(button,input,select,summary):focus-visible,
+body#blinqPremium.blinq-admin .admin-membership-visibility-link button:focus-visible{
+  outline:2px solid #7ff0c0;outline-offset:3px
+}
+body#blinqPremium.blinq-admin .admin-membership-visibility-link{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;
+  margin:18px 0 6px;padding:16px;border:1px solid #24654e;
+  border-radius:12px;background:#082720
+}
+body#blinqPremium.blinq-admin .admin-membership-visibility-link>div{
+  display:grid;gap:6px;flex:1;min-width:160px
+}
+body#blinqPremium.blinq-admin .admin-membership-visibility-link strong{color:#e7f9ee;font-size:12px}
+body#blinqPremium.blinq-admin .admin-membership-visibility-link span{
+  color:#a2c2b4;font-size:11px;line-height:1.5
+}
+@media(max-width:1100px){
+  body#blinqPremium.blinq-admin .admin-display-access-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:600px){
+  body#blinqPremium.blinq-admin .admin-display-access-panel{padding:13px}
+  body#blinqPremium.blinq-admin .admin-display-access-grid{grid-template-columns:1fr}
+  body#blinqPremium.blinq-admin .admin-display-detail-grid{grid-template-columns:1fr}
+  body#blinqPremium.blinq-admin .admin-display-notification-status button{margin-left:0;width:100%}
+  body#blinqPremium.blinq-admin .admin-membership-visibility-link button{width:100%}
+}

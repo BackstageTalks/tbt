@@ -405,3 +405,70 @@ def test_inactivity_uncertain_smtp_exception_keeps_pending_to_prevent_spam(monke
     assert result["mail_failures"] == 1
     assert [e["outcome"] for e in activity] == ["pending"]
     assert [state["warning_status"] for _, state in markers] == ["pending"]
+
+
+def test_paid_tiers_never_receive_inactivity_warnings_for_old_logins(monkeypatch):
+    """Only active ROOKIE members are subject to inactivity, regardless of login age."""
+    for plan in ("pro", "elite", "legend", "goat"):
+        account = paid(45, plan)
+        account["last_sign_in_at"] = (NOW - timedelta(days=250)).isoformat()
+        account["created_at"] = (NOW - timedelta(days=300)).isoformat()
+        historical_rookie_warning = (NOW - timedelta(days=200)).isoformat()
+        sent, inactivity_writes, paid_writes, access_writes = setup(
+            monkeypatch,
+            [account],
+            {account["id"]: {
+                "last_activity_at": (NOW - timedelta(days=250)).isoformat(),
+                "inactivity_deactivation_warning_sent_at": historical_rookie_warning,
+                "inactivity_warning_for": (NOW - timedelta(days=250)).isoformat(),
+                "inactivity_warning_status": "sent",
+            }},
+        )
+        summary = lifecycle.run_inactivity_review(
+            cfg(), {"account_inactivity": {"enabled": True, "inactive_days": 30, "warning_days": 7}},
+            now=NOW,
+        )
+        assert summary["inactive"] == summary["warnings"] == summary["expired"] == 0, plan
+        assert summary["paid_downgraded"] == 0, plan
+        assert inactivity_writes == access_writes == paid_writes == [], plan
+        assert not any(recipient == account["email"] for recipient, _ in sent), plan
+
+
+def test_paid_expiry_reminders_are_not_inactivity_notices(monkeypatch):
+    """An old paid login must not suppress legitimate 7/3-day membership-expiry emails."""
+    for plan, days in (("pro", 7), ("elite", 3), ("legend", 7), ("goat", 3)):
+        account = paid(days, plan)
+        account["last_sign_in_at"] = (NOW - timedelta(days=250)).isoformat()
+        sent, inactivity_writes, paid_writes, access_writes = setup(monkeypatch, [account])
+        summary = lifecycle.run_inactivity_review(
+            cfg(), {"account_inactivity": {"enabled": True, "inactive_days": 30, "warning_days": 7}},
+            now=NOW,
+        )
+        assert summary["inactive"] == summary["warnings"] == summary["expired"] == 0, plan
+        assert summary[f"subscription_{days}"] == 1, plan
+        assert len(paid_writes) == 2, plan
+        assert inactivity_writes == access_writes == [], plan
+        recipient_mails = [mail for recipient, mail in sent if recipient == account["email"]]
+        assert len(recipient_mails) == 1, plan
+        assert f"{days} dní" in recipient_mails[0]["subject"], plan
+        assert "neaktivitu" not in recipient_mails[0]["subject"].lower(), plan
+
+
+def test_downgrade_never_triggers_same_run_inactivity_even_after_long_paid_absence(monkeypatch):
+    """A just-ended paid plan is downgraded once, without mailing or expiring ROOKIE."""
+    for plan in ("pro", "elite", "legend", "goat"):
+        account = paid(0, plan)
+        account["last_sign_in_at"] = (NOW - timedelta(days=250)).isoformat()
+        account["created_at"] = (NOW - timedelta(days=300)).isoformat()
+        sent, inactivity_writes, paid_writes, access_writes = setup(monkeypatch, [account])
+        monkeypatch.setattr(lifecycle, "sync_push_access", lambda **_kwargs: None)
+        summary = lifecycle.run_inactivity_review(
+            cfg(), {"account_inactivity": {"enabled": True, "inactive_days": 30, "warning_days": 7}},
+            now=NOW,
+        )
+        assert summary["paid_downgraded"] == 1, plan
+        assert summary["inactive"] == summary["warnings"] == summary["expired"] == 0, plan
+        assert inactivity_writes == paid_writes == [], plan
+        assert len(access_writes) == 1 and access_writes[0][1]["plan"] == "rookie", plan
+        assert access_writes[0][1]["status"] == "active", plan
+        assert not any(recipient == account["email"] for recipient, _ in sent), plan
