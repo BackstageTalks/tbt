@@ -75,6 +75,9 @@ def main():
                     document.querySelector('#routePanel').innerHTML=h.renderAdminRoute();
                     h.wireAdmin();
                 }""")
+                # LIVE posts/results now live under the dedicated Vyhodnotenia view.
+                page.locator('[data-admin-subtab="insights:results"]').click()
+                assert page.locator(".admin-live-management").is_visible()
                 assert page.locator(".admin-live-management").count() == 1
                 assert page.locator(".admin-live-management [data-admin-action='insight-delete']").count() == 2
                 assert page.locator(".admin-live-management [data-admin-action='live-result-delete']").count() == 2
