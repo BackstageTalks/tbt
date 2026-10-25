@@ -1,7 +1,7 @@
 """Mandatory fail-closed adapter for one-off HTTP calls to RapidAPI providers.
 
 Use this for probes that do not fit RapidTennisClient's fixed endpoint schema.
-It shares the SAME provider-day atomic reservation ledger and minimum 500-call
+It shares the SAME provider-day atomic reservation ledger and minimum 300-call
 headroom as the canonical TennisAPI client. No direct request is permitted.
 """
 from __future__ import annotations
