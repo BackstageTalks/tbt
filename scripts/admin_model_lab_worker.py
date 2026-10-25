@@ -67,7 +67,7 @@ def dispatch(pending):
                    for c in current["candidates"]):
             raise TrainingBlocked("Production source changed after approval")
         inputs.update({key: pending[key] for key in (
-            "source_tag", "source_sha256", "expected_champion_sha256", "reason")})
+            "source_tag", "source_sha256", "expected_champion_sha256")})
         inputs["calibration_override"] = "true"
     # refresh_tests is the existing read-only Admin calibration monitor.
     github(f"{APP}/actions/workflows/{WORKFLOWS[operation]}/dispatches",

@@ -19,9 +19,6 @@ on:
         type: boolean
         required: true
         default: false
-      reason:
-        type: string
-        required: true
 permissions:
   contents: read
 concurrency:
@@ -39,7 +36,8 @@ jobs:
       SOURCE_SHA: ${{ inputs.source_sha256 }}
       CHAMPION_SHA: ${{ inputs.expected_champion_sha256 }}
       REQUEST_ID: ${{ inputs.request_id }}
-      OVERRIDE_REASON: ${{ inputs.reason }}
+      # The operator's free-text reason stays in private Admin approval storage.
+      OVERRIDE_REASON: Explicit Admin calibration waiver; see private approval record
       CALIBRATION_OVERRIDE: ${{ inputs.calibration_override }}
     steps:
       - uses: actions/checkout@v4
