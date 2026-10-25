@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       max_requests:
-        description: Tennis RapidAPI max requests (1-14500; shared daily budget stops earlier)
+        description: Tennis RapidAPI max requests (1-14700; shared daily budget stops earlier)
         type: number
         required: false
-        default: 14500
+        default: 14700
       force:
         description: Explicit manual override of the once-per-Bratislava-day guard
         type: boolean
@@ -32,15 +32,15 @@ jobs:
     timeout-minutes: 240
     env:
       GH_TOKEN: ${{ github.token }}
-      MORNING_MAX_REQUESTS: ${{ inputs.max_requests || '14500' }}
+      MORNING_MAX_REQUESTS: ${{ inputs.max_requests || '14700' }}
     steps:
       - name: Validate daily request cap
         shell: bash
         run: |
           set -euo pipefail
           if ! [[ "$MORNING_MAX_REQUESTS" =~ ^[0-9]+$ ]] ||
-             (( 10#$MORNING_MAX_REQUESTS < 1 || 10#$MORNING_MAX_REQUESTS > 14500 )); then
-            echo "::error::Morning max_requests must be an integer from 1 to 14500."
+             (( 10#$MORNING_MAX_REQUESTS < 1 || 10#$MORNING_MAX_REQUESTS > 14700 )); then
+            echo "::error::Morning max_requests must be an integer from 1 to 14700."
             exit 1
           fi
 
