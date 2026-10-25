@@ -45,6 +45,8 @@ def test_width(browser, width):
       s.route='admin';s.adminTab='layout';s.adminPlan='elite';s.uiStorageAvailable=false;
       host.innerHTML=h.renderAdminRoute();h.wireAdmin();
     }""")
+    if page.locator('[data-admin-subtab="layout:daily"]').count():
+        page.locator('[data-admin-subtab="layout:daily"]').click()
     assert page.locator("[data-admin-market-exclude-stats]").count() == 8
     assert page.locator('[data-admin-hub-tab-card="see_all"] [data-admin-market-exclude-stats]').count() == 0
 

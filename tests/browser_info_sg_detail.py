@@ -62,7 +62,11 @@ def main():
                     h.wireAdmin();
                 }""")
                 assert page.locator("#adminInsightForm").count() == 1
-                assert "Predvolené INFO od" in page.locator(".admin-insights-section").inner_text()
+                # Audience settings now live in their own focused Admin view.
+                page.locator('[data-admin-subtab="insights:audience"]').click()
+                assert "Predvolené INFO od" in page.locator('.admin-subpanel[data-admin-subpanel="insights:audience"]').inner_text()
+                page.locator('[data-admin-subtab="insights:messages"]').click()
+                assert page.locator("#adminInsightForm").is_visible()
                 assert page.locator('input[name="insight_level"][value="rookie"]').is_checked()
                 assert page.locator('input[name="insight_level"][value="rookie"]').is_enabled()
                 page.locator("[data-insight-custom-title]").fill("Krátka správa pre členov")
