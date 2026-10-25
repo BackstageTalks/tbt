@@ -179,6 +179,24 @@ def _format_expiry_date(value: datetime) -> tuple[str, str]:
     return f"{local.day}. {local.month}. {local.year}", local.strftime("%d %b %Y")
 
 
+def _record_delivery_result(user_id: str, *, email: str, subject: str, outcome: str,
+                            expires_at: str = "", error_type: str = "") -> None:
+    """Audit SMTP acceptance/failure separately from the pre-send claim.
+
+    'sent' means the SMTP sender accepted the message, NOT inbox delivery.
+    An ambiguous transport exception keeps its pending claim for review.
+    """
+    try:
+        record_account_event(
+            actor_id="account-lifecycle-worker", target_id=user_id,
+            action="account_email_delivery", outcome=outcome,
+            after={"email": email, "subject": subject, "expired_at": expires_at,
+                   "error_type": error_type},
+        )
+    except AdminStorageUnavailable:
+        logging.exception("Account email outcome could not be written to activity audit")
+
+
 def _planned_inactivity_expiry(last_seen: datetime, policy: dict, *, warning_sent_at: datetime | None = None) -> datetime:
     """Return the exact FREE expiry moment for the current inactivity cycle.
 
@@ -508,6 +526,9 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                             )
                             row = {"id": uid, "email": email, "plan": plan.upper(), "expires_at": exact_expiry}
                             (paid3 if due == 3 else paid7).append(row)
+                            _record_delivery_result(uid, email=email,
+                                subject=f"Upozornenie na členstvo · {due} dní",
+                                outcome="sent", expires_at=exact_expiry)
                         else:
                             save_subscription_notice_state(
                                 uid, days=due, expires_for=exact_expiry,
@@ -515,6 +536,10 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                             )
                             summary["mail_failures"] += 1
                             failures.append(f"{email or uid} · paid {due}d · mail not accepted")
+                            _record_delivery_result(uid, email=email,
+                                subject=f"Upozornenie na členstvo · {due} dní",
+                                outcome="failed", expires_at=exact_expiry,
+                                error_type="smtp_not_accepted")
                     except Exception as exc:
                         # An SMTP exception can follow acceptance (lost reply).
                         # Preserve the claim for operator review, never resend
@@ -586,17 +611,23 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                     warning_sent_at = now
                     warning_already_sent = True
                     new_warnings.append(row)
+                    _record_delivery_result(uid, email=email,
+                        subject="Upozornenie na neaktivitu", outcome="sent",
+                        expires_at=planned_expiry.isoformat())
+                else:
+                    # An explicit SMTP rejection is safe to retry next run.
+                    save_inactivity_state(uid, warning_for=cycle_key,
+                        warning_status="failed", warning_pending_at=now.isoformat())
+                    _record_delivery_result(uid, email=email,
+                        subject="Upozornenie na neaktivitu", outcome="failed",
+                        expires_at=planned_expiry.isoformat(),
+                        error_type="smtp_not_accepted")
+                    summary["mail_failures"] += 1
+                    failures.append(f"{email or uid} · inactivity warning · mail not accepted")
             except Exception as exc:
-                if not delivered:
-                    try:
-                        save_inactivity_state(
-                            uid,
-                            warning_for=cycle_key,
-                            warning_status="failed",
-                            warning_pending_at=now.isoformat(),
-                        )
-                    except Exception:
-                        pass
+                # Do not convert an uncertain SMTP exception to a retryable
+                # failed claim: the provider may already have accepted it.
+                # Keeping "pending" prevents duplicate notices until reviewed.
                 summary["mail_failures"] += 1
                 failures.append(f"{email or uid} · inactivity warning · {exc.__class__.__name__}")
 
