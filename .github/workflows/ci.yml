@@ -223,6 +223,7 @@ jobs:
           python tests/browser_private_info_screenshots.py
           python tests/browser_comparator_search.py
           python tests/browser_runtime_r43.py
+          python tests/browser_daily_hub_zero_allocation.py
           python tests/browser_access_odds.py
           python tests/browser_preproduction_r61.py
           python tests/browser_banner_editor_r62.py

@@ -2041,7 +2041,7 @@
     const plans=membershipHierarchy.filter(id=>state.ui?.plans?.[id]?.enabled!==false);
     // A blurred random slot must never tell an active FREE user to buy FREE.
     // The next unlock tier must be strictly above the actual membership.
-    const currentIndex=state.previewPlan?-1:membershipHierarchy.indexOf(accountPlan());
+    const currentIndex=membershipHierarchy.indexOf(accountPlan());
     for(const plan of plans){
       if(currentIndex>=0&&membershipHierarchy.indexOf(plan)<=currentIndex)continue;
       const rule=cfg?.plans?.[plan]||{};const display=String(rule.display_state||((rule.tab_enabled===false)?'hidden':'active')).toLowerCase();
@@ -2055,6 +2055,30 @@
       const raw=rule.visible_rows??'ALL';if(String(raw).toUpperCase()==='ALL'||Number(raw)>index)return plan;
     }
     return 'goat';
+  }
+  function dailyHubHasAllocatedRows(ent){
+    const visible=String(ent?.visible_picks??'').toUpperCase();
+    return visible==='ALL'||Number(visible)>0
+      ||Object.values(ent?.row_overrides||{}).some(value=>String(value).toLowerCase()==='active')
+      ||(Array.isArray(ent?.slot_states)&&ent.slot_states.includes('active'));
+  }
+  function dailyHubIncludedButUnavailable(tab,ent,sourceCount){
+    if(!ent||ent.enabled===false||String(ent.display_state||'active').toLowerCase()!=='active')return false;
+    if(!membershipHierarchy.includes(accountPlan()))return false;
+    return dailyHubHasAllocatedRows(ent)&&(Number(ent.returned||0)===0||sourceCount===0);
+  }
+  function dailyHubAccessLocked(tab,ent,sourceCount){
+    if(!ent||ent.enabled===false||String(ent.display_state||'active').toLowerCase()==='hidden'
+      ||Number(ent.returned||0)>0||dailyHubIncludedButUnavailable(tab,ent,sourceCount))return false;
+    const display=String(ent.display_state||'active').toLowerCase();
+    // A zero-row, BLUR-remaining rule is a paid access boundary regardless
+    // of whether this category happened to get any provider picks today.
+    // A category with >0 allocated rows but no picks is availability, not paywall.
+    const raw=String(ent.visible_picks??'').toUpperCase();
+    const zeroAllocation=raw!==''&&raw!=='ALL'&&Number(raw)===0
+      &&ent.blur_remaining!==false&&!dailyHubHasAllocatedRows(ent);
+    return zeroAllocation||Number(ent.locked_count||0)>0||display==='blurred'
+      ||(Array.isArray(ent.slot_states)&&ent.slot_states.includes('blurred'));
   }
   function dailyHubEntitlement(tab){
     // ADMIN is unrestricted outside explicit Admin preview mode. Ignore any
@@ -2713,8 +2737,7 @@
       let count='';
       if(coming)count='<em>COMING SOON</em>';
       else {const total=Number(ent.total);const rows=dailyHubRows(tab);const n=Number.isFinite(total)?total:rows.length;count=n?`<b>${n}</b>`:'';}
-      const entitledButUnavailable=!state.previewPlan&&membershipHierarchy.includes(plan)&&ent.enabled!==false&&String(ent.display_state||'active').toLowerCase()==='active'&&(String(ent.visible_picks||'').toUpperCase()==='ALL'||Number(ent.visible_picks)>0)&&Number(ent.total||0)>0&&Number(ent.returned||0)===0;
-      const locked=!entitledButUnavailable&&!coming&&ent.enabled!==false&&Number(ent.returned||0)===0&&(Number(ent.locked_count||0)>0||String(ent.display_state||'').toLowerCase()==='blurred'||(Array.isArray(ent.slot_states)&&ent.slot_states.some(value=>value==='blurred')));
+      const locked=!coming&&dailyHubAccessLocked(tab,ent,dailyHubRows(tab).length);
       const requiredPlan=locked?firstDailyHubUnlockPlan(tab,0,tab==='see_all'):'';
       const requiredLabel=requiredPlan?String(upgradePlanLabel(requiredPlan)||requiredPlan).replace(/^BlinQ\s+/i,'').toUpperCase():'';
       const accessAttrs=locked?` data-upgrade-plan="${escapeHtml(requiredPlan)}" data-upgrade-section="${escapeHtml(dailyHubTabLabel(tab))}" title="${escapeHtml(lcopy(`Available from ${requiredLabel}`,`Dostupné od ${requiredLabel}`,`Dostupné od ${requiredLabel}`))}"`:'';
@@ -2731,7 +2754,7 @@
     }
     if(tournamentSelect)tournamentSelect.parentElement.hidden=false;
     const sourceRows=dailyHubRows(tab),rows=dashboardFilteredRows(sourceRows),ent=dailyHubEntitlement(tab);
-    const includedButUnavailable=!state.previewPlan&&membershipHierarchy.includes(plan)&&ent.enabled!==false&&String(ent.display_state||'active').toLowerCase()==='active'&&(String(ent.visible_picks||'').toUpperCase()==='ALL'||Number(ent.visible_picks)>0)&&Number(ent.total||0)>0&&(Number(ent.returned||0)===0||sourceRows.length===0);
+    const includedButUnavailable=dailyHubIncludedButUnavailable(tab,ent,sourceRows.length);
     const preview=Math.max(1,Number(cfg.preview_rows)||10);
     const allCount=tab==='see_all'?Math.max(Number(ent.total)||0,rows.length):Math.max(Number(ent.total)||0,rows.length);
     const canExpand=ent.see_all===true&&allCount>preview;
@@ -2765,7 +2788,7 @@
         });
       }else if(!includedButUnavailable)for(let i=0;i<limit;i++){if(i<rows.length)out.push(dailyHubRow(rows[i],tab,false,i));}
       const nextIndex=Math.max(slotStates.length,rows.length);
-      if(!out.length&&ent.blur_remaining!==false&&!includedButUnavailable)out.push(dailyHubLockedRow(tab,0,firstDailyHubUnlockPlan(tab,0,false)));
+      if(!out.length&&dailyHubAccessLocked(tab,ent,sourceRows.length))out.push(dailyHubLockedRow(tab,0,firstDailyHubUnlockPlan(tab,0,false)));
       else if(out.length&&(Number(ent.total)||0)>nextIndex&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,nextIndex,firstDailyHubUnlockPlan(tab,nextIndex,false)));
     }
     body.innerHTML=out.join('');
