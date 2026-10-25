@@ -1154,3 +1154,18 @@ body#blinqPremium#blinqPremium .site-header .header-top > .brand.brand-menu-trig
 body#blinqPremium#blinqPremium.bqm-unified-menu #bqm-dialog[open] nav > :is(.bqm-account-switch,.bqm-navigation-switch) {
   color:#f5fbf8!important;
 }
+
+
+/* Touch friendly INFO screenshots on narrow phones */
+@media(max-width:600px){
+ body#blinqPremium .admin-insight-upload{padding:12px 10px;gap:10px}
+ body#blinqPremium .admin-insight-upload-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ body#blinqPremium .admin-insight-upload-button{min-width:0;width:100%;min-height:50px;padding:12px 8px;font-size:14px}
+ body#blinqPremium .admin-insight-upload-actions>small{grid-column:1/-1;margin:0;text-align:right}
+ body#blinqPremium .admin-insight-upload-hint{font-size:12px}
+ body#blinqPremium .admin-insight-thumbnails,body#blinqPremium .insight-screenshot-gallery{gap:7px}
+ body#blinqPremium .admin-insight-thumb>button:first-child,body#blinqPremium .insight-screenshot-open{min-height:76px}
+ body#blinqPremium .admin-insight-message-card>label{font-size:12px}
+ body#blinqPremium .admin-insight-message-card input,body#blinqPremium .admin-insight-message-card textarea{font-size:16px;min-height:44px}
+}
+
