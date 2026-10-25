@@ -1,0 +1,62 @@
+name: BlinQ explicit admin production release
+run-name: "Model Lab production release ${{ inputs.request_id }}"
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        type: string
+        required: true
+      source_tag:
+        type: string
+        required: true
+      source_sha256:
+        type: string
+        required: true
+      expected_champion_sha256:
+        type: string
+        required: true
+      calibration_override:
+        type: boolean
+        required: true
+        default: false
+      reason:
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: blinq-model-backup-single-writer
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'BackstageTalks/tbt' && github.ref == 'refs/heads/main' && inputs.calibration_override
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      SOURCE_TAG: ${{ inputs.source_tag }}
+      SOURCE_SHA: ${{ inputs.source_sha256 }}
+      CHAMPION_SHA: ${{ inputs.expected_champion_sha256 }}
+      REQUEST_ID: ${{ inputs.request_id }}
+      OVERRIDE_REASON: ${{ inputs.reason }}
+      CALIBRATION_OVERRIDE: ${{ inputs.calibration_override }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r api/requirements-train.txt pytest
+      - run: python -m pytest -q tests/test_admin_production_release.py
+      - run: python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1800
+      - name: Verify rollback and publish explicitly approved model
+        run: python scripts/admin_production_release.py
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-release-${{ github.run_id }}
+          path: .cache/tbt/production-release/outcome.json
+      - if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held

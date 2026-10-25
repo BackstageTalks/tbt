@@ -64,7 +64,7 @@ state.adminCalibration={production_version:'v201',
 html=ctx.renderAdminModelLab();
 assert.doesNotMatch(html,/data-model-lab-operation="activate_shadow" disabled/);
 assert.match(html,/Nezávislý offline holdout overený/);
-assert.match(html,/data-admin-action="model-factory-promote" disabled/);
+assert.doesNotMatch(html,/data-admin-action="model-factory-promote" disabled/);
 state.adminModelLab.operation={
   id:'a'.repeat(24),action:'activate_shadow',state:'RUNNING',
   run:{id:123,html_url:'javascript:alert(1)',status:'in_progress'},

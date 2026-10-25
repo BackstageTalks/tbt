@@ -12,7 +12,7 @@ Pri zlyhanom tréningu panel zobrazí zastavenú fázu. Keď je dátový zámok 
 
 Nejasný výsledok odoslania požiadavky sa automaticky neopakuje. Čiastočne vykonaný import alebo zápis modelu stále vyžaduje nezávislú rekonciliáciu. Fronta sa v týchto prípadoch nesmie odblokovať len na základe času.
 
-**Nasadiť do produkcie** zostáva zablokované: bezpečný produkčný prepínač nie je súčasťou tohto tréningového ovládania. Panel ukazuje chýbajúce shadow podmienky; ich splnenie nenahrádza TOP/VALUE kontrolu, rollback ani explicitné schválenie konkrétneho modelu. Tréning a shadow nemenia produkčného championa.
+**Nasadiť s výnimkou kalibrácie** umožňuje manuálny produkčný release aj bez splnených shadow a kalibračných podmienok. Vyber presný uložený model, zadaj dôvod (10–500 znakov) a potvrď `RELEASE <tag>`. Výnimka sa uloží s administrátorom a konkrétnymi SHA modelu aj championa. Nie je to potvrdenie kvality. Worker vyžaduje existujúcu SHA-adresovanú zálohu celého championa, overí jej obnovu a predikčnú zhodu, schému a inferenciu kandidáta, globálny zámok a výsledný vzdialený zápis. Ak zápis zlyhá, obnoví pôvodný bundle a nezávisle ho overí. Nejasná operácia zostáva zablokovaná na rekonciliáciu. Nové predikcie začnú používať model pri ďalšom výpočte; už vydané predikcie sa neprepisujú. Tréning a shadow nikdy samy nespúšťajú produkčný release.
 
 ## Technická prevádzka
 

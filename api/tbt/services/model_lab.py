@@ -25,6 +25,7 @@ WORKFLOWS = {
     "refresh_tests": "model-calibration-monitor.yml",
     "audit_shadow": "model-shadow-evaluation-readonly.yml",
     "activate_shadow": "activate-shadow-candidate.yml",
+    "promote_production": "admin-production-release.yml",
 }
 REQUIRED_ASSETS = {"model.joblib", "training_report.json", "_tbt_bundle_manifest.json"}
 CANDIDATE_TAG = re.compile(r"blinq-candidate-frozen-[0-9]+-[0-9]+\Z")
@@ -251,13 +252,21 @@ def status():
 
 
 def start(payload, actor):
-    if not isinstance(payload, dict) or set(payload) - {"action", "source_tag"}:
+    if not isinstance(payload, dict) or set(payload) - {"action", "source_tag", "calibration_override", "reason", "confirmation"}:
         raise ValueError("Nepodporovaná operácia.")
     action = payload.get("action")
     if action not in WORKFLOWS:
         raise ValueError("Nepovolená operácia.")
-    if action != "activate_shadow" and "source_tag" in payload:
+    if action not in {"activate_shadow", "promote_production"} and "source_tag" in payload:
         raise ValueError("Tag modelu sa pri tejto operácii nesmie zadávať.")
+    if action == "promote_production":
+        if (payload.get("calibration_override") is not True
+                or payload.get("confirmation") != "RELEASE " + str(payload.get("source_tag"))
+                or not isinstance(payload.get("reason"), str)
+                or not 10 <= len(payload["reason"].strip()) <= 500):
+            raise ValueError("Potvrď konkrétny release a dôvod výnimky kalibrácie (10–500 znakov).")
+    elif set(payload) & {"calibration_override", "reason", "confirmation"}:
+        raise ValueError("Výnimka je povolená iba pre výslovný produkčný release.")
     current = status()
     training = training_status()
     if not training.get("can_start"):
@@ -266,7 +275,7 @@ def start(payload, actor):
         raise TrainingBlocked(current["reason"])
     tag = None
     digest = None
-    if action == "activate_shadow":
+    if action in {"activate_shadow", "promote_production"}:
         tag = payload.get("source_tag")
         if not isinstance(tag, str) or not CANDIDATE_TAG.fullmatch(tag):
             raise ValueError("Vyber existujúceho zmrazeného kandidáta.")
@@ -274,8 +283,10 @@ def start(payload, actor):
         if model is None:
             raise ValueError("Kandidát nie je v overenom zozname modelov.")
         digest = model["sha256"]
-        if digest == current["active_sha256"]:
+        if action == "activate_shadow" and digest == current["active_sha256"]:
             raise TrainingBlocked("Tento model už môže byť aktívnym kandidátom. Skontroluj shadow report.")
+        if action == "promote_production" and digest == current["champion_sha256"]:
+            raise TrainingBlocked("Tento model už je v produkcii.")
     request = {
         "id": secrets.token_hex(12), "action": action,
         "actor": str(actor)[:128], "created_at": _utcnow().isoformat(),
@@ -284,6 +295,11 @@ def start(payload, actor):
         "expected_champion_sha256": current["champion_sha256"],
         "snapshot_at": current["observed_at"],
     }
+    if action == "promote_production":
+        request.update(calibration_override=True, reason=payload["reason"].strip(),
+                       confirmation=payload["confirmation"])
+        # Keep approval identity and rationale after the transient guard is cleared.
+        _put("approval-" + request["id"], request)
     _create("active", request)
     return {"state": "QUEUED", "id": request["id"],
             "message": "Požiadavka je uložená. Worker ju spustí raz; priebeh sleduj v Model Lab."}
@@ -317,8 +333,12 @@ def _finalize(request, run, snapshot):
             raise TrainingBlocked("Candidate readback checksum mismatch; manual reconciliation required")
         if snapshot["champion_sha256"] != request["expected_champion_sha256"]:
             raise TrainingBlocked("Production changed unexpectedly; manual reconciliation required")
+    if request["action"] == "promote_production":
+        if snapshot["champion_sha256"] != request["source_sha256"]:
+            raise TrainingBlocked("Production release readback mismatch; manual reconciliation required")
     result = {
         "id": request["id"], "action": request["action"],
+        "approval": {key: request.get(key) for key in ("actor", "source_tag", "source_sha256", "expected_champion_sha256", "calibration_override", "reason")},
         "state": "WORKFLOW_VERIFIED", "run": run,
         "verified_at": _utcnow().isoformat(),
         # A successful bounded import run is not proof that new eligible rows existed.
@@ -328,6 +348,8 @@ def _finalize(request, run, snapshot):
                  if request["action"] == "prepare_inputs" else
                  "Zápis kandidáta a kontrola produkcie boli overené."
                  if request["action"] == "activate_shadow" else
+                 "Produkčný model bol overený. Release s výnimkou kalibrácie; nejde o potvrdenie kvality modelu."
+                 if request["action"] == "promote_production" else
                  "Testovací snapshot bol synchronizovaný."),
     }
     _put("last", result)
@@ -368,7 +390,7 @@ def sync(snapshot):
             and not _find_run(active, snapshot)
             and training_status().get("can_start")
         )
-        if ready and active["action"] == "activate_shadow":
+        if ready and active["action"] in {"activate_shadow", "promote_production"}:
             ready = any(c["tag"] == active["source_tag"] and c["sha256"] == active["source_sha256"]
                         for c in snapshot["candidates"])
         return {"stored": True, "pending": None, "dispatch_ready": ready}
@@ -393,7 +415,7 @@ def sync(snapshot):
         return {"stored": True, "pending": None}
     if active["expected_champion_sha256"] != snapshot["champion_sha256"]:
         return {"stored": True, "pending": None}
-    if active["action"] == "activate_shadow":
+    if active["action"] in {"activate_shadow", "promote_production"}:
         source = next((c for c in snapshot["candidates"]
                        if c["tag"] == active["source_tag"]
                        and c["sha256"] == active["source_sha256"]), None)
