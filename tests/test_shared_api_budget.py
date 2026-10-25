@@ -501,3 +501,34 @@ def test_dst_local_clock_has_the_same_utc_provider_reset():
     ):
         assert moment.astimezone(zone).strftime("%H:%M") == expected
         assert shared_budget._provider_day_next_reset(shared_budget._now_slot(moment)) == moment + timedelta(days=1)
+
+@pytest.mark.parametrize(
+    "before_reset, local_time, zone_name, utc_offset",
+    [
+        (datetime(2026, 7, 15, 17, 0, tzinfo=timezone.utc), "19:09", "CEST", "+02:00"),
+        (datetime(2026, 10, 25, 17, 0, tzinfo=timezone.utc), "18:09", "CET", "+01:00"),
+        (datetime(2027, 3, 28, 17, 0, tzinfo=timezone.utc), "19:09", "CEST", "+02:00"),
+        (datetime(2027, 10, 31, 17, 0, tzinfo=timezone.utc), "18:09", "CET", "+01:00"),
+    ],
+)
+def test_provider_budget_exposes_bratislava_dst_display_without_changing_utc(
+    before_reset, local_time, zone_name, utc_offset
+):
+    snap = shared_budget._summary([], shared_budget._now_slot(before_reset))
+    assert snap["next_reset_utc"] == before_reset.replace(minute=9).isoformat()
+    assert snap["next_reset_bratislava_time"] == local_time
+    assert snap["next_reset_bratislava_zone"] == zone_name
+    assert snap["next_reset_bratislava"].endswith(utc_offset)
+    assert snap["display_timezone"] == "Europe/Bratislava"
+    assert snap["global_limit"] == 14700
+    assert snap["reserved_provider_headroom"] == 300
+
+
+def test_provider_budget_local_reset_date_rolls_over_without_drift():
+    for before, expected_utc in (
+        (datetime(2026, 7, 15, 17, 11, tzinfo=timezone.utc), "2026-07-16T17:09:00+00:00"),
+        (datetime(2026, 10, 25, 17, 11, tzinfo=timezone.utc), "2026-10-26T17:09:00+00:00"),
+    ):
+        snap = shared_budget._summary([], shared_budget._now_slot(before))
+        assert snap["next_reset_utc"] == expected_utc
+        assert datetime.fromisoformat(snap["next_reset_bratislava"]).astimezone(timezone.utc).isoformat() == expected_utc

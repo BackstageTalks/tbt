@@ -78,8 +78,10 @@ jobs:
           # Runner start and writer resumption both recompute UTC-relative slots.
           final_topup = 7 * 60 <= until_reset <= 35 * 60 + 59
           new_day_start = now.hour == 17 and 10 <= now.minute <= 13
-          print(f"Bratislava time: {local.isoformat()}; UTC reset: "
-                f"{expected_reset.isoformat()}; dry_run={DRY_RUN}", flush=True)
+          reset_local = expected_reset.astimezone(ZONE)
+          print(f"Bratislava time: {local.isoformat()}; next API reset: "
+                f"{reset_local.strftime('%Y-%m-%d %H:%M %Z')} "
+                f"(UTC {expected_reset.isoformat()}); dry_run={DRY_RUN}", flush=True)
           if stage_hour not in caps and not final_topup and not new_day_start and not DRY_RUN:
               print("Outside permitted API dispatch slots; skipping.")
               sys.exit(0)

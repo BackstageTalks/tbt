@@ -123,6 +123,9 @@ from tbt.providers.shared_budget import (
     reserve as reserve_shared_api_budget,
     status as shared_api_budget_status,
     PURPOSE_CAPS,
+    PROVIDER_PLAN_LIMIT,
+    PROVIDER_RESERVE,
+    GLOBAL_CEILING,
     SharedBudgetExhausted,
     SharedBudgetUnavailable,
 )
@@ -1847,11 +1850,14 @@ def internal_live_radar_status(req):
         # Fail closed on durable budget schema mismatch instead of guessing.
         valid_budget = (
             isinstance(budget, dict)
-            and budget.get("provider_plan_limit") == 15000
-            and budget.get("reserved_provider_headroom") == 500
-            and budget.get("global_limit") == 14500
+            and budget.get("schema") == 2
+            and budget.get("window") == "provider_day_17_09_utc"
+            and budget.get("provider_plan_limit") == PROVIDER_PLAN_LIMIT
+            and budget.get("reserved_provider_headroom") == PROVIDER_RESERVE
+            and budget.get("global_limit") == GLOBAL_CEILING
             and isinstance(budget.get("global_spent"), int)
-            and 0 <= budget["global_spent"] <= 14500
+            and 0 <= budget["global_spent"] <= GLOBAL_CEILING
+            and budget.get("global_remaining") == GLOBAL_CEILING - budget["global_spent"]
             and isinstance(budget.get("spent"), dict)
             and isinstance(budget.get("purpose_limits"), dict)
             and budget["purpose_limits"].get("live") == 3000
@@ -1872,6 +1878,9 @@ def internal_live_radar_status(req):
                 "live_limit": budget["purpose_limits"]["live"],
                 "live_spent": budget["spent"]["live"],
                 "next_reset_utc": budget.get("next_reset_utc"),
+                "next_reset_bratislava": budget.get("next_reset_bratislava"),
+                "next_reset_bratislava_time": budget.get("next_reset_bratislava_time"),
+                "next_reset_bratislava_zone": budget.get("next_reset_bratislava_zone"),
             },
         }, status)
     except (AdminStorageUnavailable, SharedBudgetUnavailable):
