@@ -75,6 +75,24 @@ def test_private_media_denied_if_not_attached_to_entitled_feed(monkeypatch):
     assert result.status_code == 403
 
 
+def test_authorized_recipient_can_open_private_screenshot(monkeypatch):
+    import function_app as api
+
+    class Req:
+        route_params = {"media_id": PRIVATE_ID}
+
+    monkeypatch.setattr(api, "_admin_user", lambda request: (None, True))
+    monkeypatch.setattr(api, "_verified_user", lambda request: {"id": "member-1", "email_verified": True})
+    monkeypatch.setattr(api, "is_suspended", lambda user: False)
+    monkeypatch.setattr(api, "_insight_plan_for_user", lambda user: "pro")
+    monkeypatch.setattr(api, "list_insights", lambda **kwargs: {"items": [{"id": "msg-1", "media_ids": [PRIVATE_ID]}]})
+    monkeypatch.setattr(api, "download_media", lambda _: (b"image-bytes", "image/png", "etag"))
+    result = api.private_insight_media(Req())
+    assert result.status_code == 200
+    assert result.get_body() == b"image-bytes"
+    assert result.headers.get("Cache-Control") == "private, no-store"
+
+
 def test_mobile_gallery_is_wired_before_application_and_stays_private():
     index = (ROOT / "web/index.html").read_text(encoding="utf-8")
     auth = (ROOT / "web/auth.js").read_text(encoding="utf-8")
