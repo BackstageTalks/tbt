@@ -95,6 +95,7 @@ jobs:
           python -m pytest -q \
             tests/test_immutable_training_backup.py \
             tests/test_immutable_backup_upload_recovery.py \
+            tests/test_immutable_backup_download_recovery.py \
             tests/test_candidate_training_requires_backup.py \
             tests/test_champion_rollback_rehearsal.py \
             tests/test_training_inputs.py \
