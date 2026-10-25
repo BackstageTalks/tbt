@@ -11,7 +11,7 @@ def test_telegram_panel_has_json_and_admin_editor():
     assert cfg['schema']==1 and isinstance(cfg['groups'],list)
     assert 'telegramGroupsPanel' in INDEX
     assert 'function renderTelegramGroupsPanel' in APP
-    assert "['telegram','Telegram','Skupiny · odkazy']" in APP
+    assert "['telegram','Telegram skupiny','Skupiny · odkazy']" in APP
     assert 'function renderAdminTelegram' in APP
     assert 'data-tg-group-field' in APP
 
