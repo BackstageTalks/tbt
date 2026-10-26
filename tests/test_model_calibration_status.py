@@ -80,6 +80,31 @@ class TestModelCalibrationStatus(unittest.TestCase):
         self.assertFalse(normalized["candidate_active"])
         self.assertFalse(normalized["shadow"]["gate"]["ready_for_promotion_review"])
 
+    def test_offline_receipt_does_not_block_promoted_champion(self):
+        import io
+        import json
+        from unittest.mock import patch
+        from publish_model_calibration_status import publish
+
+        snapshot = {
+            "production_version": "v7.2.1-new",
+            "candidate_version": "",
+            "offline_candidate": {
+                "champion_version": "old-champion",
+                "candidate_version": "v7.2.1-new",
+            },
+        }
+        receipt = {
+            "stored": True, "production_version": "v7.2.1-new",
+            "candidate_version": None, "offline_candidate_version": None,
+        }
+        with patch("publish_model_calibration_status.urlopen",
+                   return_value=io.BytesIO(json.dumps(receipt).encode("utf-8"))):
+            self.assertEqual(
+                publish(snapshot, "https://agreeable-sky-011a7fe10.7.azurestaticapps.net", "test-token"),
+                receipt,
+            )
+
     def test_current_shadow_pair_keeps_actual_issued_metrics(self):
         from publish_model_calibration_status import build_snapshot
         source = fixture()
