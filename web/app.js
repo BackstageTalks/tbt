@@ -5597,7 +5597,9 @@ function adminActivityRows(){
     }).join('');
     const decision=d.last_decision||{};
     const pairDecision=decision.same_pair===true;
-    const status=decision.status==='rejected'&&pairDecision?'Posledný kandidát zamietnutý':
+    const shadowAwaitingPair=d.shadow_pair_state==='awaiting_new_pair';
+    const status=shadowAwaitingPair?'Nový produkčný champion · čaká sa na jeho shadow porovnanie':
+      decision.status==='rejected'&&pairDecision?'Posledný kandidát zamietnutý':
       gate.ready_for_promotion_review&&active?'Pripravený na odborné posúdenie':
       active?'V shadow testovaní': 'Čakáme na nový kandidátsky model';
     const incomplete=!active||!Number(shadow.settled);
@@ -5643,6 +5645,7 @@ function adminActivityRows(){
     </article>`:`<article class="admin-calibration-panel"><h3>Model 7.1.1 · čaká na tréning</h3><p>Čakáme na úspešný zálohovaný tréning a nezávisle overený offline holdout. Starý Shadow test zostáva dostupný vyššie.</p></article>`;
     return `<section class="admin-ux-section admin-calibration">${head}
       <div class="admin-calibration-status${d.stale?' is-stale':''}" role="status"><strong>${escapeHtml(status)}</strong><span>${d.stale?'Údaje synchronizácie sú staršie než 8 hodín.':''} Synchronizácia: ${escapeHtml(fmtStamp(d.updated_at))} · Shadow report: ${escapeHtml(fmtStamp(d.shadow_generated_at))}</span></div>
+      ${shadowAwaitingPair?'<p role="status" class="admin-calibration-foot">Produkčný model bol zmenený. Staré shadow metriky a počty predchádzajúceho páru sa nezapočítavajú do nového championa. Historický pár: '+escapeHtml(String(d.historical_shadow_pair?.production_version||'—'))+' / '+escapeHtml(String(d.historical_shadow_pair?.candidate_version||'—'))+'.</p>':''}
       <div class="admin-calibration-grid">
         ${card('Aktívny champion',String(d.production_version||'—'),'Produkčná verzia')}
         ${card('Nový kandidát',shadowModel711?'BlinQ 7.1.1':String(d.candidate_version||'—'),shadowModel711?'Shadow · ID: '+String(d.candidate_version):active?'Shadow – bez automatického nasadenia':'Čaká na vytvorenie')}

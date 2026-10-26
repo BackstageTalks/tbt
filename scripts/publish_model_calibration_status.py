@@ -11,6 +11,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -49,12 +50,56 @@ def _release_json(repository: str, tag: str, asset: str, folder: Path) -> dict:
         raise RuntimeError(f"Invalid private {asset} asset")
     return report
 
+def verify_current_production_digest(repository: str, readiness: dict) -> None:
+    """Fail closed if the model changed between readiness and Admin publishing."""
+    sha = str(readiness.get("production_model_sha256") or "")
+    if not re.fullmatch(r"[0-9a-f]{64}", sha):
+        raise ValueError("Readiness has no SHA-pinned production model")
+    version = str(readiness.get("production_version") or "").strip()
+    if not version:
+        raise ValueError("Readiness has no production model version")
+    stamp = datetime.fromisoformat(str(readiness["generated_at_utc"]).replace("Z", "+00:00"))
+    if stamp.tzinfo is None or abs((datetime.now(timezone.utc) - stamp).total_seconds()) > 3600:
+        raise ValueError("Readiness evidence is not current")
+    release = json.loads(_run("gh", "api", f"repos/{repository}/releases/tags/tbt-model-production-v1"))
+    assets = [a for a in release.get("assets", []) if a.get("name") == "model.joblib"]
+    if len(assets) != 1 or assets[0].get("digest") != "sha256:" + sha:
+        raise ValueError("Production release changed after readiness read-back")
+
+
+def _current_shadow_pair(shadow: dict, production_version: str) -> tuple[dict, str, dict | None]:
+    """A shadow report for the former champion is historical, not a live cohort."""
+    old = str(shadow.get("production_model_version") or "").strip()
+    if not old:
+        raise ValueError("Missing shadow source champion")
+    if old == production_version:
+        return shadow, "current", None
+    history = {
+        "production_version": old,
+        "candidate_version": str(shadow.get("challenger_model_version") or "").strip(),
+    }
+    # No new pair has been evaluated. Never transfer 441 old observations,
+    # the stale challenger identity or its gates to the promoted champion.
+    reset = {
+        "production_model_version": production_version,
+        "challenger_model_version": "",
+        "cohort": {
+            "captured": 0, "settled": 0, "pending": 0,
+            "settled_utc_days": 0, "minimum_for_review": 200,
+        },
+        "gate": {}, "production": {}, "challenger": {},
+    }
+    return reset, "awaiting_new_pair", history
+
 
 def build_snapshot(shadow: dict, readiness: dict, promotion: dict, *, timestamp: str, offline_candidate: dict | None = None) -> dict:
-    champion = str(shadow.get("production_model_version") or "").strip()
-    candidate = str(shadow.get("challenger_model_version") or "").strip()
+    # Authoritative: readiness just loaded model.joblib from production,
+    # not the historical shadow release (which can remain on the old pair).
+    champion = str(readiness.get("production_version") or "").strip()
     if not champion:
-        raise ValueError("No active production model in shadow report")
+        raise ValueError("No verified production model in readiness")
+    shadow, pair_state, historical_pair = _current_shadow_pair(shadow, champion)
+    candidate = str(shadow.get("challenger_model_version") or "").strip()
     decision = promotion.get("decision")
     decision = decision if isinstance(decision, dict) else {}
     return {
@@ -63,6 +108,8 @@ def build_snapshot(shadow: dict, readiness: dict, promotion: dict, *, timestamp:
         "production_version": champion,
         "candidate_version": candidate,
         "shadow": shadow,
+        "shadow_pair_state": pair_state,
+        "historical_shadow_pair": historical_pair,
         "offline_candidate": offline_candidate,
         "readiness": readiness,
         "last_decision": {
@@ -144,6 +191,9 @@ def main() -> int:
         args.data_repository, "audit/model-shadow-promotion-latest.json",
         required=False,
     )
+    # Validate the live release a second time after the readiness scanner's
+    # independent binary read-back; never publish a snapshot from a race.
+    verify_current_production_digest(args.data_repository, readiness)
     # Independently evaluated offline candidate does not replace the active
     # shadow challenger; it occupies a separate admin comparison section.
     offline_candidate = _json_content(

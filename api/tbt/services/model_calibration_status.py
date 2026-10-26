@@ -139,6 +139,20 @@ def normalize_model_calibration_snapshot(raw: object) -> dict:
     days = _nonnegative(cohort.get("settled_utc_days"), "settled_utc_days")
     if settled > captured or pending > captured or settled + pending > captured:
         raise ValueError("Impossible shadow cohort counters")
+    pair_state = raw.get("shadow_pair_state", "current")
+    if pair_state not in ("current", "awaiting_new_pair"):
+        raise ValueError("Invalid shadow-pair state")
+    historic = raw.get("historical_shadow_pair")
+    if pair_state == "awaiting_new_pair":
+        if (candidate or any((captured, settled, pending, days))
+                or not isinstance(historic, dict)
+                or not _bounded_text(historic.get("production_version"))
+                or _bounded_text(historic.get("production_version")) == production):
+            raise ValueError("Promoted champion cannot inherit stale shadow cohort")
+        if shadow.get("production") or shadow.get("challenger"):
+            raise ValueError("Promoted champion cannot inherit old shadow metrics")
+    else:
+        historic = None
     gate = shadow.get("gate") if isinstance(shadow.get("gate"), dict) else {}
     readiness = raw.get("readiness") if isinstance(raw.get("readiness"), dict) else {}
     # The readiness audit has a different timeline from the shadow cohort.
@@ -173,6 +187,11 @@ def normalize_model_calibration_snapshot(raw: object) -> dict:
         "production_version": production,
         "candidate_version": candidate or None,
         "candidate_active": bool(candidate and candidate != production),
+        "shadow_pair_state": pair_state,
+        "historical_shadow_pair": ({
+            "production_version": _bounded_text(historic.get("production_version")),
+            "candidate_version": _bounded_text(historic.get("candidate_version")),
+        } if historic is not None else None),
         "research_branch": MODEL_CALIBRATION_BRANCH,
         "research_branch_url": MODEL_CALIBRATION_BRANCH_URL,
         "shadow": {

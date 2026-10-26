@@ -8,6 +8,7 @@ all previously consumed promotion-decision holdouts.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from collections import Counter
@@ -191,6 +192,12 @@ def main() -> None:
         target_rows=args.target_rows,
         minimum_days=args.minimum_days,
     )
+    # Bind this readiness snapshot to the exact model binary read from the
+    # production release. The calibration publisher checks the remote digest
+    # again before it is allowed to update Azure Admin.
+    report["production_model_sha256"] = hashlib.sha256(
+        (ROOT / ".cache/tbt/readiness-production/model.joblib").read_bytes()
+    ).hexdigest()
     target = Path(args.out)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
