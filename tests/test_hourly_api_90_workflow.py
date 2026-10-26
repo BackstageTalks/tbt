@@ -73,3 +73,17 @@ def test_utc_closeout_window_and_restart_season_independent():
             exec(closeout_line + "\n" + fresh_line, {}, scope)
             assert not scope["final_topup"]
             assert scope["new_day_start"] is (mins_after <= 4)
+
+def test_refresh_pipeline_and_standing_contract_use_shared_14700_ceiling():
+    # Prevent the workflow accepting 14,700 while the inner parser rejects it.
+    pipeline = (ROOT / "scripts/pipeline.py").read_text(encoding="utf-8")
+    assert 'parser.add_argument("--max-requests", type=int, default=14700)' in pipeline
+    assert 'if not 1 <= args.max_requests <= 14700:' in pipeline
+    assert 'parser.error("refresh allowance must be 1..14700")' in pipeline
+    assert "14500" not in pipeline
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "**14,700 global BlinQ ceiling**" in agents
+    assert "**300 reserved**" in agents
+    assert "**17:09 UTC**" in agents
+    assert "**14,550 global BlinQ ceiling**" not in agents
+
