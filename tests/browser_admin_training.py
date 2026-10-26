@@ -56,6 +56,7 @@ def main():
                 # Confirm the one-click protected build/test path. A successful
                 # POST is always followed by durable Admin status GET.
                 button.click()
+                page.get_by_role("button",name="Potvrdiť a pokračovať",exact=True).click()
                 page.wait_for_function('trainingCalls.length===2 && !adminTestUi.state.adminTrainingBusy')
                 assert page.evaluate('trainingCalls[0].profile')=='top-7.2.1'
                 assert page.evaluate('trainingCalls[0].auto_shadow') is True
@@ -80,16 +81,18 @@ def main():
                 }""")
                 promote=page.locator('[data-admin-action="model-factory-promote"]')
                 assert promote.is_enabled()
-                page.remove_listener('dialog', initial_dialog)
-                dismiss_dialog = lambda dialog: dialog.dismiss()
-                page.on('dialog', dismiss_dialog)
+                # Native dialogs are unavailable in some embedded browsers.
+                page.evaluate("window.prompt=()=>null;window.confirm=()=>false")
                 promote.click()
+                page.get_by_role('button',name='Zrušiť',exact=True).click()
                 assert page.evaluate('releaseCalls.length')==0
-                page.remove_listener('dialog', dismiss_dialog)
-                page.on('dialog', lambda dialog: dialog.accept(
-                    'RELEASE blinq-candidate-frozen-123-1' if 'napíš presne' in dialog.message
-                    else 'Owner accepts incomplete calibration'))
                 promote.click()
+                page.get_by_label('Dôvod výnimky kalibrácie',exact=True).fill('Owner accepts incomplete calibration')
+                page.get_by_label('Napíš RELEASE blinq-candidate-frozen-123-1',exact=True).fill('wrong')
+                page.get_by_role('button',name='Potvrdiť produkčný release',exact=True).click()
+                assert page.evaluate('releaseCalls.length')==0
+                page.get_by_label('Napíš RELEASE blinq-candidate-frozen-123-1',exact=True).fill('RELEASE blinq-candidate-frozen-123-1')
+                page.get_by_role('button',name='Potvrdiť produkčný release',exact=True).click()
                 page.wait_for_function('releaseCalls.length===1 && !adminTestUi.state.adminModelLabBusy')
                 request=page.evaluate('releaseCalls[0]')
                 assert request['action']=='promote_production'
