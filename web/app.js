@@ -5366,6 +5366,10 @@ function adminActivityRows(){
     const canActivate=canBuild&&verifiedCandidates.length>0;
     const options=verifiedCandidates.slice(0,30).map(c=>
       '<option value="'+escapeHtml(c.tag)+'">'+escapeHtml(c.tag)+'</option>').join('');
+    const releaseCandidates=(d?.candidates||[]).filter(c=>/^blinq-candidate-frozen-[0-9]+-[0-9]+$/.test(c.tag)&&
+      /^[0-9a-f]{64}$/.test(c.sha256)&&c.sha256!==d?.champion_sha256);
+    const canPromote=canBuild&&releaseCandidates.length>0;
+    const releaseOptions=releaseCandidates.slice(0,30).map(c=>'<option value="'+escapeHtml(c.tag)+'">'+escapeHtml(c.tag)+'</option>').join('');
     const stateLabels={QUEUED:'Čaká na bezpečné spustenie',DISPATCH_UNCONFIRMED:'Spustenie nepotvrdené – nespúšťaj znova',RUNNING:'Prebieha',COMPLETED_PENDING_VERIFICATION:'Dokončené – čaká na kontrolu',WORKFLOW_VERIFIED:'Overené',FAILED_NEEDS_REVIEW:'Zlyhanie – vyžaduje kontrolu',VERIFICATION_FAILED:'Report sa nepodarilo overiť'};
     const fmtRun=record=>record?(' '+safeLink(record.html_url,'GitHub beh #'+record.id)+' · '+escapeHtml(String(record.conclusion||record.status||''))):'';
     const activeText=operation?('<strong>'+escapeHtml(stateLabels[operation.state]||operation.state)+'</strong> · '+escapeHtml(operation.action)+' · '+escapeHtml(operation.id)+fmtRun(operation.run)):'Bez rozpracovanej Model Factory operácie.';
@@ -5450,9 +5454,10 @@ function adminActivityRows(){
       timeline+outcomeText+
       '<p role="status">'+escapeHtml(shadowText)+'</p></article>'+
       '<article class="admin-calibration-panel"><small>FÁZA 3 · SCHVÁLENIE</small><h3>3 · Nasadiť do produkcie</h3>'+
-      '<p>Sprístupní sa až po nezávislom forward shadow vyhodnotení, kontrole TOP/VALUE, overenom rollbacku a výslovnom potvrdení konkrétneho modelu.</p>'+
-      '<button type="button" class="btn btn-primary" data-admin-action="model-factory-promote" disabled>Nasadiť do produkcie</button>'+
-      '<p role="status">Zatiaľ zablokované. Produkčný prepínač nemá implementovanú schválenú bezpečnú cestu; žiadna akcia nemení championa.</p>'+
+      '<p>Manuálny release je možný aj bez splnenej kalibrácie a shadow podmienok. Ide o vedomú výnimku, nie potvrdenie kvality. Overenie modelu, aktuálneho championa a existujúcej zálohy na návrat zostáva povinné.</p>'+
+      '<label>Model pre produkčný release <select id="admin-production-candidate" '+(canPromote?'':'disabled')+'>'+releaseOptions+'</select></label>'+
+      '<button type="button" class="btn btn-primary" data-admin-action="model-factory-promote" '+(canPromote?'':'disabled')+'>Nasadiť s výnimkou kalibrácie</button>'+
+      '<p role="status">Pred odoslaním potvrdíš presný model a dôvod. Worker overí obnovu championa a výsledný zápis; pri chybe obnoví pôvodný model. Nové predikcie použijú model pri najbližšom výpočte, staré sa neprepisujú.</p>'+
       '<p><strong>Chýbajúce shadow podmienky:</strong></p>'+(missingShadow?'<ul>'+missingShadow+'</ul>':'<p>Základné shadow metriky splnené. Nasadenie ešte vyžaduje kontrolu TOP/VALUE, rollbacku a samostatné schválenie.</p>')+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(canBuild?'':'disabled')+'>Vyhodnotiť shadow výsledky</button>'+
       '<p><strong>Posledný uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article></div>'+
@@ -5471,7 +5476,7 @@ function adminActivityRows(){
       '<p>Úplný priebeh tréningu a uložené kandidáty možno overiť v GitHub Actions a súkromnom dátovom repozitári. Produkcia sa pri tréningu ani pri shadow aktivácii nepovyšuje.</p>'+
       '</details></section>';
   }
-  async function loadAdminModelLab(startOperation='', acknowledge=false){
+  async function loadAdminModelLab(startOperation='', acknowledge=false, releasePayload=null){
     if(state.adminModelLabBusy)return;
     state.adminFactoryRevision=(state.adminFactoryRevision||0)+1;
     const generation=feedGeneration;
@@ -5480,7 +5485,7 @@ function adminActivityRows(){
     try{
       let payload;
       if(acknowledge)payload={action:'acknowledge_failed',id:state.adminModelLab?.operation?.id||''};
-      else if(startOperation)payload={action:startOperation,...(startOperation==='activate_shadow'?{source_tag:tag}:{})};
+      else if(startOperation)payload={action:startOperation,...(startOperation==='activate_shadow'?{source_tag:tag}:{}),...(releasePayload||{})};
       const result=await BlinqAuth.adminModelLab(payload);
       if(generation!==feedGeneration)return;
       if(startOperation||acknowledge){
@@ -6326,6 +6331,16 @@ function adminActivityRows(){
       if(action==='live-radar-scan'){if(state.adminLiveRadarLoading)return;state.adminLiveRadarLoading=true;state.adminLiveRadarStatus=null;rerenderAdmin();try{const result=await BlinqAuth.adminLiveRadar(true,true);state.adminLiveRadarStatus={...result,ok:true,new_alerts:Number(result?.created)||0};state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);showStatus(`LIVE Radar: ${Number(result?.signals?.length??result?.signals)||0} signálov · ${Number(result?.created)||0} nových upozornení.`);}catch(error){state.adminLiveRadarStatus={error:error.message||'LIVE Radar sa nepodarilo spustiť.'};showStatus(state.adminLiveRadarStatus.error);}finally{state.adminLiveRadarLoading=false;rerenderAdmin();}return;}
       if(action==='calibration-refresh'){loadAdminCalibration(true);return;}
       if(action==='model-lab-refresh'){loadAdminModelLab();return;}
+      if(action==='model-factory-promote'){
+        const source_tag=document.getElementById('admin-production-candidate')?.value||'';
+        if(!source_tag)return;
+        const reason=window.prompt('Dôvod produkčného release bez splnenej kalibrácie (10–500 znakov):','');
+        if(reason===null)return;
+        if(reason.trim().length<10||reason.trim().length>500){showStatus('Dôvod musí mať 10 až 500 znakov.');return;}
+        const confirmation=window.prompt('Tento krok zmení produkčný model na '+source_tag+'. Kvalita kalibrácie a shadow nie je podmienkou. Na potvrdenie napíš presne: RELEASE '+source_tag,'');
+        if(confirmation!=='RELEASE '+source_tag)return;
+        loadAdminModelLab('promote_production',false,{source_tag,reason:reason.trim(),confirmation,calibration_override:true});return;
+      }
       if(action==='model-lab-start'){
         const operation=String(actionNode.dataset.modelLabOperation||'');
         if(!['prepare_inputs','import_drive','refresh_tests','audit_shadow','activate_shadow'].includes(operation))return;

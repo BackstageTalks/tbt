@@ -15,7 +15,8 @@ def main():
                 page = context.new_page()
                 errors = []
                 page.on("pageerror", lambda e: errors.append(str(e)))
-                page.on("dialog", lambda dialog: dialog.accept())
+                initial_dialog = lambda dialog: dialog.accept()
+                page.on("dialog", initial_dialog)
                 page.route("**/*", route_request)
                 page.goto(ORIGIN + "/index.html?lang=sk", wait_until="networkidle")
                 page.wait_for_function("window.adminTestUi && adminTestUi.state.ui")
@@ -63,6 +64,37 @@ def main():
                 assert page.get_by_text('Požiadavka uložená.', exact=True).is_visible()
                 assert page.locator('[data-model-lab-operation="activate_shadow"]').is_disabled()
                 assert page.locator('[data-model-lab-operation="import_drive"]').count()==1
+                page.evaluate("""() => {
+                    const s=adminTestUi.state;
+                    s.adminTraining={can_start:true,runs:[],candidates:[]};
+                    s.adminModelLab.can_start=true;
+                    s.adminModelLab.candidates=[{tag:'blinq-candidate-frozen-123-1',sha256:'b'.repeat(64)}];
+                    s.adminCalibration=null; // Incomplete calibration must allow explicit waiver.
+                    window.releaseCalls=[];
+                    BlinqAuth.adminModelLab=async payload=>{
+                        if(payload){releaseCalls.push(payload);return {message:'Release queued'};}
+                        return s.adminModelLab;
+                    };
+                    document.getElementById('routePanel').innerHTML=adminTestUi.renderAdminRoute();
+                    adminTestUi.wireAdmin();
+                }""")
+                promote=page.locator('[data-admin-action="model-factory-promote"]')
+                assert promote.is_enabled()
+                page.remove_listener('dialog', initial_dialog)
+                dismiss_dialog = lambda dialog: dialog.dismiss()
+                page.on('dialog', dismiss_dialog)
+                promote.click()
+                assert page.evaluate('releaseCalls.length')==0
+                page.remove_listener('dialog', dismiss_dialog)
+                page.on('dialog', lambda dialog: dialog.accept(
+                    'RELEASE blinq-candidate-frozen-123-1' if 'napíš presne' in dialog.message
+                    else 'Owner accepts incomplete calibration'))
+                promote.click()
+                page.wait_for_function('releaseCalls.length===1 && !adminTestUi.state.adminModelLabBusy')
+                request=page.evaluate('releaseCalls[0]')
+                assert request['action']=='promote_production'
+                assert request['calibration_override'] is True
+                assert request['confirmation']=='RELEASE blinq-candidate-frozen-123-1'
                 assert not errors, errors
                 context.close()
         finally:

@@ -163,5 +163,5 @@ def test_production_never_dispatched_from_model_factory_automation():
     assert "auto_shadow" in workflow
     assert "scripts/auto_shadow_candidate.py" in workflow
     assert '"auto_shadow": "true"' in worker
-    assert "data-admin-action=\"model-factory-promote\" disabled" in frontend
+    assert "confirmation!=='RELEASE '+source_tag" in frontend
     assert "scripts/auto_promote_production" not in workflow
