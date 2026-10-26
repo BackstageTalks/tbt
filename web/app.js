@@ -5476,6 +5476,33 @@ function adminActivityRows(){
       '<p>Úplný priebeh tréningu a uložené kandidáty možno overiť v GitHub Actions a súkromnom dátovom repozitári. Produkcia sa pri tréningu ani pri shadow aktivácii nepovyšuje.</p>'+
       '</details></section>';
   }
+  function confirmAdminModelOperation(message, sourceTag=''){
+    if(document.getElementById('adminModelConfirmDialog'))return Promise.resolve(null);
+    return new Promise(resolve=>{
+      const dialog=document.createElement('dialog');
+      dialog.id='adminModelConfirmDialog';dialog.className='admin-model-confirm';
+      dialog.setAttribute('aria-labelledby','adminModelConfirmTitle');
+      dialog.innerHTML='<form><h2 id="adminModelConfirmTitle">'+(sourceTag?'Potvrdiť produkčný release':'Potvrdiť operáciu')+'</h2>'+
+        '<p>'+escapeHtml(message)+'</p>'+(sourceTag?
+        '<p><strong>'+escapeHtml(sourceTag)+'</strong></p><label>Dôvod výnimky kalibrácie<textarea name="reason" required minlength="10" maxlength="500" rows="3"></textarea></label>'+
+        '<label>Napíš RELEASE '+escapeHtml(sourceTag)+'<input name="confirmation" required autocomplete="off" /></label>':'')+
+        '<p class="admin-model-confirm-error" role="alert"></p><div class="admin-model-confirm-actions"><button type="button" class="btn btn-ghost" data-cancel>Zrušiť</button><button type="submit" class="btn btn-primary">'+
+        (sourceTag?'Potvrdiť produkčný release':'Potvrdiť a pokračovať')+'</button></div></form>';
+      const finish=value=>{dialog.close();dialog.remove();resolve(value);};
+      dialog.addEventListener('cancel',event=>{event.preventDefault();finish(null);});
+      dialog.querySelector('[data-cancel]').addEventListener('click',()=>finish(null));
+      dialog.querySelector('form').addEventListener('submit',event=>{
+        event.preventDefault();
+        const reason=dialog.querySelector('[name="reason"]')?.value.trim()||'';
+        const confirmation=dialog.querySelector('[name="confirmation"]')?.value||'';
+        if(sourceTag&&(reason.length<10||reason.length>500||confirmation!=='RELEASE '+sourceTag)){
+          dialog.querySelector('[role="alert"]').textContent='Zadaj dôvod (10–500 znakov) a presné potvrdenie RELEASE s názvom modelu.';return;
+        }
+        finish({reason,confirmation});
+      });
+      document.body.appendChild(dialog);dialog.showModal();
+    });
+  }
   async function loadAdminModelLab(startOperation='', acknowledge=false, releasePayload=null){
     if(state.adminModelLabBusy)return;
     state.adminFactoryRevision=(state.adminFactoryRevision||0)+1;
@@ -6334,28 +6361,25 @@ function adminActivityRows(){
       if(action==='model-factory-promote'){
         const source_tag=document.getElementById('admin-production-candidate')?.value||'';
         if(!source_tag)return;
-        const reason=window.prompt('Dôvod produkčného release bez splnenej kalibrácie (10–500 znakov):','');
-        if(reason===null)return;
-        if(reason.trim().length<10||reason.trim().length>500){showStatus('Dôvod musí mať 10 až 500 znakov.');return;}
-        const confirmation=window.prompt('Tento krok zmení produkčný model na '+source_tag+'. Kvalita kalibrácie a shadow nie je podmienkou. Na potvrdenie napíš presne: RELEASE '+source_tag,'');
-        if(confirmation!=='RELEASE '+source_tag)return;
-        loadAdminModelLab('promote_production',false,{source_tag,reason:reason.trim(),confirmation,calibration_override:true});return;
+        const approval=await confirmAdminModelOperation('Tento krok zmení produkčný model. Kalibrácia a shadow podmienky sa môžu preskočiť; kontrola modelu a návratu zostáva povinná.',source_tag);
+        if(!approval)return;
+        loadAdminModelLab('promote_production',false,{source_tag,...approval,calibration_override:true});return;
       }
       if(action==='model-lab-start'){
         const operation=String(actionNode.dataset.modelLabOperation||'');
         if(!['prepare_inputs','import_drive','refresh_tests','audit_shadow','activate_shadow'].includes(operation))return;
-        if(operation==='prepare_inputs'&&!window.confirm('Spustiť read-only kontrolu zdrojových ATP/WTA dát? Nevytvorí produkčný model ani CDB import.'))return;
-        if(operation==='activate_shadow'&&!window.confirm('Aktivovať vybraný model iba v shadow režime? Produkčný champion zostane nezmenený.'))return;
-        if(operation==='import_drive'&&!window.confirm('Spustiť jednu ohraničenú dávku existujúceho Drive importu do CDB?'))return;
+        if(operation==='prepare_inputs'&&!await confirmAdminModelOperation('Spustiť read-only kontrolu zdrojových ATP/WTA dát? Nevytvorí produkčný model ani CDB import.'))return;
+        if(operation==='activate_shadow'&&!await confirmAdminModelOperation('Aktivovať vybraný model iba v shadow režime? Produkčný champion zostane nezmenený.'))return;
+        if(operation==='import_drive'&&!await confirmAdminModelOperation('Spustiť jednu ohraničenú dávku existujúceho Drive importu do CDB?'))return;
         loadAdminModelLab(operation);return;
       }
       if(action==='model-lab-acknowledge'){
-        if(!window.confirm('Potvrdiť ukončený neúspešný audit a uvoľniť jeho frontu? Potom ho môžeš spustiť znova. Tento krok nemení dáta ani model.'))return;
+        if(!await confirmAdminModelOperation('Potvrdiť ukončený neúspešný audit a uvoľniť jeho frontu? Potom ho môžeš spustiť znova. Tento krok nemení dáta ani model.'))return;
         loadAdminModelLab('',true);return;
       }
       if(action==='training-refresh'){loadAdminTraining();return;}
       if(action==='training-start'){
-        if(!window.confirm('Natrénovať kandidáta 7.2.1 a po úspešných nezávislých kontrolách ho automaticky aktivovať iba v shadow? Produkčný champion sa nemení.'))return;
+        if(!await confirmAdminModelOperation('Natrénovať kandidáta 7.2.1 a po úspešných nezávislých kontrolách ho automaticky aktivovať iba v shadow? Produkčný champion sa nemení.'))return;
         loadAdminTraining(true);return;
       }
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}

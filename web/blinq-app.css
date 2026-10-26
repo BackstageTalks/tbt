@@ -10829,3 +10829,12 @@ body#blinqPremium.blinq-admin .admin-nav-toolbar [data-admin-guide-toggle]{
   body#blinqPremium.blinq-admin .admin-subnav button{flex-basis:130px;padding:10px}
   body#blinqPremium.blinq-admin .admin-subnav button small{font-size:9px}
 }
+
+/* Model operations must work in embedded browsers without native JS dialogs. */
+.admin-model-confirm{width:min(560px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:24px;border:1px solid #285366;border-radius:16px;background:#081e2a;color:#e6f2f7;box-sizing:border-box}
+.admin-model-confirm::backdrop{background:rgba(0,10,15,.78)}
+.admin-model-confirm label{display:grid;gap:8px;margin:16px 0}
+.admin-model-confirm input,.admin-model-confirm textarea{width:100%;box-sizing:border-box;padding:12px;border:1px solid #3c6475;border-radius:8px;background:#06151e;color:#fff;font:inherit}
+.admin-model-confirm p,.admin-model-confirm label{overflow-wrap:anywhere}
+.admin-model-confirm-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.admin-model-confirm-error{color:#ff9a9a}
