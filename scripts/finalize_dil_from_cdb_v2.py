@@ -6,7 +6,7 @@ CDB export schema: `cdb_matches`; DIL schema: `canonical_matches`, optional `dil
 Uses exact UTC-second CDB vs UTC-nanosecond DIL time identities; pre-existing DIL metric values and overlays always win. Completion status stays separate from training eligibility.
 """
 from __future__ import annotations
-import argparse, datetime as dt, hashlib, json, math, os, pathlib, sqlite3, sys, time
+import argparse, datetime as dt, hashlib, json, math, os, pathlib, sqlite3, sys, time, unicodedata
 
 FIELDS = ['match_id','tour','scheduled_at','player1_id','player1_name','player2_id','player2_name','surface',
           'tournament','tournament_id','tournament_level','round_name','player1_rank','player2_rank',
@@ -26,6 +26,28 @@ def sha256(path):
 
 
 def miss(v): return v is None or isinstance(v,str) and v.strip().lower() in MISSING
+
+
+def normalized_metadata_text(value):
+    """Only representation-level normalization; never infer synonyms or identities."""
+    return ' '.join(unicodedata.normalize('NFC', str(value)).split())
+
+
+def metadata_value_equal(field, existing, incoming):
+    if field in ('player1_rank', 'player2_rank', 'best_of', 'indoor'):
+        return comparable_equal(existing, incoming)
+    return normalized_metadata_text(existing) == normalized_metadata_text(incoming)
+
+
+def context_value_equal(existing, incoming):
+    """Do not treat booleans as zero/one or numeric strings as numeric JSON values."""
+    if isinstance(existing, bool) or isinstance(incoming, bool):
+        return type(existing) is type(incoming) and existing == incoming
+    if isinstance(existing, (int, float)) and isinstance(incoming, (int, float)):
+        return comparable_equal(existing, incoming)
+    if isinstance(existing, str) and isinstance(incoming, str):
+        return normalized_metadata_text(existing) == normalized_metadata_text(incoming)
+    return existing == incoming
 
 
 def json_obj(v):
@@ -108,7 +130,7 @@ def context_null_only_merge(existing, incoming):
                 dst[key]=value;added[field]=value
             elif isinstance(dst[key],dict) and isinstance(value,dict):
                 walk(dst[key],value,field)
-            elif not comparable_equal(dst[key],value):
+            elif not context_value_equal(dst[key],value):
                 conflicts[field]=(dst[key],value)
     walk(out,incoming,'provider_context_json')
     return out,added,conflicts
@@ -249,6 +271,18 @@ def reconcile(dil,cdb,dest,expected_cdb_sha256,release_manifest_sha256,quick_che
                     db.execute('INSERT INTO dil_cdb_finalize_metadata_provenance VALUES(?,?,?,?)',
                                (mid,k,json.dumps(v,default=str,ensure_ascii=False),actual))
                 counts['metadata_fields_filled']+=len(metadata_additions)
+            # Record populated scalar CDB/DIL disagreements without overwriting
+            # original DIL metadata. The source version and both values remain
+            # private for a provenance-aware resolution; promotion stays blocked.
+            for field in METADATA:
+                if field == 'provider_context_json' or field not in c:
+                    continue
+                current, canonical = d.get(field), c[field]
+                if not miss(current) and not miss(canonical) and not metadata_value_equal(field, current, canonical):
+                    db.execute('INSERT OR REPLACE INTO dil_cdb_finalize_metadata_conflicts VALUES(?,?,?,?,?)',
+                        (mid, field, json.dumps(current, ensure_ascii=False, default=str),
+                         json.dumps(canonical, ensure_ascii=False, default=str), actual))
+                    counts['metadata_conflicts'] += 1
             if 'provider_context_json' in c:
                 merged,provider_additions,provider_conflicts=context_null_only_merge(
                     json_obj(d.get('provider_context_json')),
