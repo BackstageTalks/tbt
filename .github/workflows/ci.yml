@@ -577,15 +577,8 @@ jobs:
           PYSMOKE
 
 
-      - name: Seed private calibration Admin snapshot
-        # Only after Azure deployment and health checks succeed; no tennis API
-        # quota use and no model promotion. Scheduled monitor keeps it current.
-        env:
-          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
-          TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
-          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
-          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
-          PYTHONPATH: api:scripts
-        run: |
-          set -euo pipefail
-          python scripts/publish_model_calibration_status.py
+      # Calibration snapshots are published by model-calibration-monitor.yml
+      # only after it loads the current production model, checks its SHA-256,
+      # and freshly audits unseen rows. Never send stale readiness to Admin
+      # from a generic UI deploy. The dedicated push-triggered monitor handles
+      # model-calibration source changes; external cadence handles later ticks.
