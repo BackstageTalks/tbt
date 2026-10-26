@@ -138,6 +138,41 @@ class ReconciliationTests(unittest.TestCase):
         with sqlite3.connect(self.out) as db:
             self.assertEqual(json.loads(db.execute('SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
                 ('known-2026-id-abcde',)).fetchone()[0])['venue']['city'],'Bratislava')
+    def test_scalar_metadata_disagreement_is_retained_and_blocks(self):
+        with sqlite3.connect(self.cdb) as db:
+            db.execute("UPDATE cdb_matches SET tournament='Authoritative CDB' WHERE match_id='known-2026-id-abcde'")
+        report=f.reconcile(self.dil,self.cdb,self.out,f.sha256(self.cdb),M)
+        self.assertEqual(report['counts']['metadata_conflicts'],1)
+        self.assertEqual(report['data_gate'],'BLOCKED_REVIEW_REQUIRED')
+        with sqlite3.connect(self.out) as db:
+            current=db.execute("SELECT tournament FROM canonical_matches WHERE match_id='known-2026-id-abcde'").fetchone()[0]
+            stored=db.execute("SELECT existing_json,incoming_json,source_sha256 FROM dil_cdb_finalize_metadata_conflicts WHERE match_id='known-2026-id-abcde' AND field_name='tournament'").fetchone()
+        self.assertEqual(current,'T')
+        self.assertEqual(json.loads(stored[0]),'T')
+        self.assertEqual(json.loads(stored[1]),'Authoritative CDB')
+        self.assertEqual(stored[2],f.sha256(self.cdb))
+
+    def test_provider_context_numeric_string_is_not_silently_equal(self):
+        mid='known-2026-id-abcde'
+        with sqlite3.connect(self.dil) as db:
+            db.execute('UPDATE canonical_matches SET provider_context_json=? WHERE match_id=?', (json.dumps({'round_number':'3'}),mid))
+        with sqlite3.connect(self.cdb) as db:
+            db.execute('UPDATE cdb_matches SET provider_context_json=? WHERE match_id=?', (json.dumps({'round_number':3}),mid))
+        r=f.reconcile(self.dil,self.cdb,self.out,f.sha256(self.cdb),M)
+        self.assertEqual(r['counts']['metadata_conflicts'],1)
+        self.assertEqual(r['data_gate'],'BLOCKED_REVIEW_REQUIRED')
+
+    def test_metadata_unicode_whitespace_equivalence_is_non_destructive(self):
+        with sqlite3.connect(self.dil) as db:
+            db.execute("UPDATE canonical_matches SET tournament='Cafe\\u0301   Open' WHERE match_id='known-2026-id-abcde'")
+        with sqlite3.connect(self.cdb) as db:
+            db.execute("UPDATE cdb_matches SET tournament='Café Open' WHERE match_id='known-2026-id-abcde'")
+        report=f.reconcile(self.dil,self.cdb,self.out,f.sha256(self.cdb),M)
+        self.assertEqual(report['counts']['metadata_conflicts'],0)
+        with sqlite3.connect(self.out) as db:
+            val=db.execute("SELECT tournament FROM canonical_matches WHERE match_id='known-2026-id-abcde'").fetchone()[0]
+        self.assertEqual(val,'Cafe\\u0301   Open')
+
     def test_refuse_wrong_cdb_sha(self):
         with self.assertRaises(ValueError): f.reconcile(self.dil,self.cdb,self.out,'9'*64,M)
         self.assertFalse(self.out.exists())
