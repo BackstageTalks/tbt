@@ -5385,6 +5385,18 @@ function adminActivityRows(){
     const hint=state.adminTrainingMessage||state.adminModelLabMessage||
       (d?.can_start===false?d.reason:training?.reason)||d?.reason||'Načítavam aktuálny stav…';
     const latestCandidate=training?.candidates?.find(c=>c.complete===true)?.tag||'Zatiaľ bez dokončeného modelu';
+    const productionVersion=String(state.adminCalibration?.production_version||'');
+    const productionName=/^v7\.2\.1(?:-|$)/.test(productionVersion)?'BlinQ 7.2.1':productionVersion||'Čaká sa na overenie verzie';
+    const productionDigest=/^[0-9a-f]{64}$/.test(String(d?.champion_sha256||''))
+      ?String(d.champion_sha256):'';
+    const calibrationStale=state.adminCalibration?.stale===true;
+    const productionSummary='<div class="admin-model-production" role="status">'+
+      '<div><small>PRODUKČNÝ CHAMPION · MODEL LAB</small><strong>'+escapeHtml(productionName)+'</strong>'+
+      (productionVersion?'<span>Nemenné ID: '+escapeHtml(productionVersion)+'</span>':'<span>Overenie modelu čaká na synchronizáciu.</span>')+
+      (productionDigest?'<span>Produkčný SHA-256: <code>'+escapeHtml(productionDigest)+'</code></span>':'')+'</div>'+
+      '<div class="admin-model-production-side"><strong>'+escapeHtml(calibrationStale?'Údaje vyžadujú obnovenie':productionVersion?'Produkčná verzia načítaná':'Verzia sa načítava')+'</strong>'+
+      '<span>Model Lab a kalibrácia používajú oddelené overované snapshoty.</span>'+
+      (state.adminCalibration?.shadow_pair_state==='awaiting_new_pair'?'<span>Staré shadow výsledky zostávajú iba v histórii.</span>':'')+'</div></div>';
     const stepLabels=[
       ['Observe global CDB writer idle','Čakanie na voľné dáta'],
       ['Freeze ALL current source inputs','Zmrazenie dát a overenie obnovy zálohy'],
@@ -5436,6 +5448,7 @@ function adminActivityRows(){
       '<div class="admin-ux-heading"><div><small>MODEL FACTORY · 3 FÁZY</small><h2>Od dát po produkčný model</h2>'+
       '<p>Jeden postup: príprava dát → tréning a shadow → schválené produkčné nasadenie. Champion zostáva nedotknutý až do samostatne schváleného prepnutia.</p></div>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="calibration-refresh" '+(busy?'disabled':'')+'>Obnoviť celý stav</button></div>'+
+      productionSummary+
       '<p role="status">'+escapeHtml(hint)+'</p>'+
       '<p class="model-factory-sync">Stav sa obnovuje každých 30 sekúnd počas otvorenia tejto karty. Posledná synchronizácia workerom: '+escapeHtml(stamp)+'. Požiadavku prevezme existujúci worker, bežne do 30 minút; kartu môžeš zavrieť.</p>'+
       '<div class="admin-calibration-grid model-factory-three-steps">'+
@@ -5598,7 +5611,7 @@ function adminActivityRows(){
     const decision=d.last_decision||{};
     const pairDecision=decision.same_pair===true;
     const shadowAwaitingPair=d.shadow_pair_state==='awaiting_new_pair';
-    const status=shadowAwaitingPair?'Nový produkčný champion · čaká sa na jeho shadow porovnanie':
+    const status=shadowAwaitingPair?'Produkčný model aktivovaný · čaká sa na nový shadow pár':
       decision.status==='rejected'&&pairDecision?'Posledný kandidát zamietnutý':
       gate.ready_for_promotion_review&&active?'Pripravený na odborné posúdenie':
       active?'V shadow testovaní': 'Čakáme na nový kandidátsky model';
@@ -5626,6 +5639,9 @@ function adminActivityRows(){
       &&String(offline.production_version||'')===String(d.production_version||''));
     const shadowModel711=model711&&String(d.candidate_version||'')===String(offline.candidate_version||'');
     const newCandidateTitle=model711?'BlinQ 7.1.1':'Nový kandidát na aktuálnej CDB';
+    const productionVersion=String(d.production_version||'');
+    const productionName=/^v7\.2\.1(?:-|$)/.test(productionVersion)?'BlinQ 7.2.1':productionVersion||'—';
+    const productionHint=productionName!==productionVersion?'Nemenné ID: '+productionVersion:'Produkčná verzia';
     const offlinePanel=offline&&offlineRows?`<article class="admin-calibration-panel" aria-label="Nový kandidát na CDB – oddelený offline holdout">
       <h3>${escapeHtml(newCandidateTitle)} · offline holdout</h3>
       <p>Vyhodnotenie rovnakých ${numberOrDash(offline.n)} historických zápasov, ktoré neboli použité v rozhodovacom holdoute. Nie je to Shadow ani živá predikcia. Produkčný model zostáva nezmenený.</p>
@@ -5642,12 +5658,12 @@ function adminActivityRows(){
         <p>Záloha tréningových vstupov: <code>${escapeHtml(String(offline.backup_tag||'—'))}</code></p>
         <p>GitHub tréning: <code>${escapeHtml(String(offline.run_id||'—'))}</code></p>
       </details>
-    </article>`:`<article class="admin-calibration-panel"><h3>Model 7.1.1 · čaká na tréning</h3><p>Čakáme na úspešný zálohovaný tréning a nezávisle overený offline holdout. Starý Shadow test zostáva dostupný vyššie.</p></article>`;
+    </article>`:`<article class="admin-calibration-panel admin-calibration-empty"><h3>Ďalší model · čaká na vyhodnotenie</h3><p>Aktuálny champion je ${escapeHtml(productionName)}. Nový kandidát sa zobrazí až po nezávislom tréningu a overení holdoutu. Historické shadow porovnanie sa nezapočítava do nového páru.</p></article>`;
     return `<section class="admin-ux-section admin-calibration">${head}
       <div class="admin-calibration-status${d.stale?' is-stale':''}" role="status"><strong>${escapeHtml(status)}</strong><span>${d.stale?'Údaje synchronizácie sú staršie než 8 hodín.':''} Synchronizácia: ${escapeHtml(fmtStamp(d.updated_at))} · Shadow report: ${escapeHtml(fmtStamp(d.shadow_generated_at))}</span></div>
       ${shadowAwaitingPair?'<p role="status" class="admin-calibration-foot">Produkčný model bol zmenený. Staré shadow metriky a počty predchádzajúceho páru sa nezapočítavajú do nového championa. Historický pár: '+escapeHtml(String(d.historical_shadow_pair?.production_version||'—'))+' / '+escapeHtml(String(d.historical_shadow_pair?.candidate_version||'—'))+'.</p>':''}
       <div class="admin-calibration-grid">
-        ${card('Aktívny champion',String(d.production_version||'—'),'Produkčná verzia')}
+        ${card('Aktívny champion',productionName,productionHint)}
         ${card('Nový kandidát',shadowModel711?'BlinQ 7.1.1':String(d.candidate_version||'—'),shadowModel711?'Shadow · ID: '+String(d.candidate_version):active?'Shadow – bez automatického nasadenia':'Čaká na vytvorenie')}
         ${card('Vyhodnotené v shadow',numberOrDash(shadow.settled),'z '+numberOrDash(shadow.captured)+' zaznamenaných')}
         ${card('Čakajú na výsledok',numberOrDash(shadow.pending),'Predzápasové nemenné snapshoty')}
@@ -5660,7 +5676,7 @@ function adminActivityRows(){
       <div class="admin-calibration-split">
         <article class="admin-calibration-panel"><h3>Nový model vs produkčný</h3>
           <p>Rovnaké zápasy, skutočné výsledky, zmrazené pravdepodobnosti pred štartom. Počet: ${numberOrDash(shadow.settled)} · dni: ${numberOrDash(shadow.settled_utc_days)}</p>
-          <div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Metrika</th><th>Champion</th><th>Kandidát</th><th>Rozdiel</th></tr></thead><tbody>${rows}</tbody></table></div>
+          ${shadowAwaitingPair?'<p class="admin-calibration-empty" role="status">Pre nový produkčný model zatiaľ neexistuje porovnateľná shadow vzorka. Staré metriky sú historické; nové budú dostupné po zachytení a vyhodnotení predzápasových predikcií.</p>':`<div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Metrika</th><th>Champion</th><th>Kandidát</th><th>Rozdiel</th></tr></thead><tbody>${rows}</tbody></table></div>`}
           <p class="admin-calibration-foot">${incomplete?'Zatiaľ nie je dostatočná aktívna porovnateľná vzorka.':'Zelený rozdiel je lepší; pri log loss, Brier a ECE je lepšia nižšia hodnota.'} Žiadne automatické povýšenie modelu.</p>
         </article>
         <article class="admin-calibration-panel"><h3>Brána kalibrácie</h3><div class="admin-calibration-gates">
@@ -5911,7 +5927,10 @@ function adminActivityRows(){
       else state.adminModelLabMessage='';
       state.adminCalibrationError=results[2].status==='rejected'?'Kalibračný snapshot sa nepodarilo obnoviť.':'';
       const details=document.querySelector('.admin-model-factory-advanced');
-      const opened=!!details?.open, selected=document.getElementById('admin-model-lab-candidate')?.value;
+      const opened=!!details?.open;
+      const selected=document.getElementById('admin-model-lab-candidate')?.value;
+      const productionSelected=document.getElementById('admin-production-candidate')?.value;
+      const workareaScroll=document.querySelector('.admin-workarea')?.scrollTop||0;
       // Avoid disrupting a keyboard user while they operate a control.
       if(document.activeElement?.matches('select,input,textarea'))return;
       rerenderAdmin();
@@ -5919,6 +5938,11 @@ function adminActivityRows(){
       if(restored)restored.open=opened;
       const select=document.getElementById('admin-model-lab-candidate');
       if(select&&selected&&[...select.options].some(o=>o.value===selected))select.value=selected;
+      const productionSelect=document.getElementById('admin-production-candidate');
+      if(productionSelect&&productionSelected&&[...productionSelect.options].some(o=>o.value===productionSelected))
+        productionSelect.value=productionSelected;
+      const workarea=document.querySelector('.admin-workarea');
+      if(workarea)workarea.scrollTop=workareaScroll;
     }finally{if(generation===feedGeneration)state.adminFactoryPolling=false;}
   }
   async function loadAdminDiagnostics(force=false){
