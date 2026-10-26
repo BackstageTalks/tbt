@@ -8,6 +8,15 @@ class AggregatePrivacyTests(unittest.TestCase):
     'counts':{'cdb_matches':2,'a_hidden_identifier':'LEAK','dil_matches':1}}
   x=summarize(source)
   self.assertNotIn('LEAK',str(x));self.assertEqual(x['counts']['cdb_matches'],2)
+ def test_only_known_metadata_fields_survive(self):
+  source={'schema':'DIL_SECONDARY_STRICT_CURRENT_CDB_PARITY_V1','status':'BLOCKED_CURRENT_CDB_PARITY',
+          'counts':{'cdb_metadata_conflicting_field_tournament':17,
+                    'cdb_metadata_conflicting_field_private_player_id':'PRIVATE_VALUE',
+                    'cdb_metadata_casefold_candidate_round_name':3}}
+  result=summarize(source)['counts']
+  self.assertEqual(result['cdb_metadata_conflicting_field_tournament'],17)
+  self.assertEqual(result['cdb_metadata_casefold_candidate_round_name'],3)
+  self.assertNotIn('PRIVATE_VALUE',str(result))
  def test_rejects_wrong_schema(self):
   with self.assertRaises(ValueError):summarize({'schema':'other','counts':{}})
  def test_rejects_invalid_counts(self):
