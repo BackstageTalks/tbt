@@ -58,6 +58,52 @@ def fixture():
 
 
 class TestModelCalibrationStatus(unittest.TestCase):
+    def test_after_promotion_readiness_controls_current_champion(self):
+        # A verified production release can precede regeneration of the shadow
+        # report. In that case its old 441 observations are historical only.
+        from publish_model_calibration_status import build_snapshot
+        old = fixture()
+        report = build_snapshot(
+            old["shadow"],
+            {**old["readiness"], "production_version": "v7.2.1-v201-new"},
+            old["last_decision"],
+            timestamp="2026-10-26T06:45:00Z",
+        )
+        normalized = normalize_model_calibration_snapshot(report)
+        self.assertEqual(normalized["production_version"], "v7.2.1-v201-new")
+        self.assertIsNone(normalized["candidate_version"])
+        self.assertEqual(normalized["shadow_pair_state"], "awaiting_new_pair")
+        self.assertEqual(normalized["historical_shadow_pair"]["production_version"], "champion-v1")
+        self.assertEqual(normalized["shadow"]["settled"], 0)
+        self.assertEqual(normalized["shadow"]["captured"], 0)
+        self.assertEqual(normalized["unseen"]["eligible_rows"], 29)
+        self.assertFalse(normalized["candidate_active"])
+        self.assertFalse(normalized["shadow"]["gate"]["ready_for_promotion_review"])
+
+    def test_current_shadow_pair_keeps_actual_issued_metrics(self):
+        from publish_model_calibration_status import build_snapshot
+        source = fixture()
+        report = build_snapshot(
+            source["shadow"], source["readiness"], source["last_decision"],
+            timestamp="2026-10-26T06:45:00Z",
+        )
+        normalized = normalize_model_calibration_snapshot(report)
+        self.assertEqual(normalized["shadow_pair_state"], "current")
+        self.assertIsNone(normalized["historical_shadow_pair"])
+        self.assertEqual(normalized["shadow"]["settled"], 105)
+
+    def test_promoted_pair_refuses_inherited_metrics(self):
+        from publish_model_calibration_status import build_snapshot
+        source = fixture()
+        report = build_snapshot(
+            source["shadow"],
+            {**source["readiness"], "production_version": "new-champion"},
+            source["last_decision"], timestamp="2026-10-26T06:45:00Z",
+        )
+        report["shadow"]["cohort"]["settled"] = 105
+        with self.assertRaises(ValueError):
+            normalize_model_calibration_snapshot(report)
+
     def test_progress_separates_shadow_and_unseen_samples(self):
         report = normalize_model_calibration_snapshot(fixture())
         self.assertEqual(report["shadow"]["settled"], 105)
