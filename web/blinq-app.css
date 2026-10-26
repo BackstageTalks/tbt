@@ -10838,3 +10838,58 @@ body#blinqPremium.blinq-admin .admin-nav-toolbar [data-admin-guide-toggle]{
 .admin-model-confirm p,.admin-model-confirm label{overflow-wrap:anywhere}
 .admin-model-confirm-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end}
 .admin-model-confirm-error{color:#ff9a9a}
+
+
+/* Admin Model Lab: clear production identity, restrained contrast, mobile parity. */
+body#blinqPremium.blinq-admin .admin-model-production{
+  display:grid;grid-template-columns:minmax(0,1.4fr) minmax(200px,1fr);
+  gap:16px;align-items:center;margin:10px 0 16px;padding:17px 20px;
+  border:1px solid #326b78;border-radius:14px;
+  background:linear-gradient(115deg,#0a2734,#071b28);color:#d6e8ee
+}
+body#blinqPremium.blinq-admin .admin-model-production>div{min-width:0;display:grid;gap:6px}
+body#blinqPremium.blinq-admin .admin-model-production small{
+  color:#86b8c8;font-size:10px;letter-spacing:.09em;font-weight:800
+}
+body#blinqPremium.blinq-admin .admin-model-production strong{
+  color:#effafa;font-size:19px;line-height:1.25;overflow-wrap:anywhere
+}
+body#blinqPremium.blinq-admin .admin-model-production span{
+  color:#a4c1cc;font-size:12px;line-height:1.55;overflow-wrap:anywhere
+}
+body#blinqPremium.blinq-admin .admin-model-production code{
+  color:#c8dfe5;font-size:11px;overflow-wrap:anywhere
+}
+body#blinqPremium.blinq-admin .admin-model-production-side{
+  border-left:1px solid #29505f;padding-left:16px
+}
+body#blinqPremium.blinq-admin .admin-model-production-side strong{
+  font-size:13px;color:#a6ead9
+}
+body#blinqPremium.blinq-admin .admin-calibration-empty{
+  padding:14px 16px;border:1px solid #2b5365;border-radius:11px;
+  background:#092331;color:#bdd2dc;font-size:12px;line-height:1.6
+}
+body#blinqPremium.blinq-admin .admin-calibration-panel.admin-calibration-empty{
+  display:block
+}
+body#blinqPremium.blinq-admin .admin-calibration-empty h3{
+  color:#e5f1f5;margin:0 0 6px;font-size:15px
+}
+body#blinqPremium.blinq-admin .admin-calibration-empty p{margin:0}
+body#blinqPremium.blinq-admin .admin-model-lab button:focus-visible,
+body#blinqPremium.blinq-admin .admin-calibration button:focus-visible,
+body#blinqPremium.blinq-admin .admin-model-confirm button:focus-visible,
+body#blinqPremium.blinq-admin .admin-model-lab select:focus-visible{
+  outline:2px solid #99e8dc;outline-offset:3px
+}
+@media(max-width:760px){
+  body#blinqPremium.blinq-admin .admin-model-production{
+    grid-template-columns:minmax(0,1fr);padding:14px;gap:12px
+  }
+  body#blinqPremium.blinq-admin .admin-model-production-side{
+    border-left:0;border-top:1px solid #29505f;padding:12px 0 0
+  }
+  body#blinqPremium.blinq-admin .admin-model-production strong{font-size:17px}
+  body#blinqPremium.blinq-admin .admin-calibration-progress-head{flex-wrap:wrap}
+}
