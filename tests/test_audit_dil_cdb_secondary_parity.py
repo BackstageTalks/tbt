@@ -118,7 +118,7 @@ class SecondaryParityTests(unittest.TestCase):
         with sqlite3.connect(self.cdb) as db:
             db.execute("UPDATE cdb_matches SET tournament='Café Open'")
         with sqlite3.connect(self.dil) as db:
-            db.execute("UPDATE canonical_matches SET tournament='Cafe\\u0301  Open'")
+            db.execute("UPDATE canonical_matches SET tournament='Cafe\u0301  Open'")
         self.sha=audit.file_sha256(self.cdb)
         rc=json.loads(self.receipt.read_text());rc['export_sqlite_sha256']=self.sha
         self.receipt.write_text(json.dumps(rc))
