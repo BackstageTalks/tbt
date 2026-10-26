@@ -38,6 +38,7 @@ const state = {
 };
 const ctx = {state, escapeHtml};
 vm.createContext(ctx);
+vm.runInContext(src.slice(src.indexOf('  function renderAdminTrainingProfile('),src.indexOf('  function renderAdminTraining()')),ctx);
 const renderCalibrationStart = src.indexOf('  function renderAdminCalibration(){');
 const renderCalibrationEnd = src.indexOf('  function adminTestFilter(){', renderCalibrationStart);
 assert(renderCalibrationStart > 0 && renderCalibrationEnd > renderCalibrationStart);
@@ -85,7 +86,7 @@ html=ctx.renderAdminModelLab();
 assert.match(html,/Údaje vyžadujú obnovenie/);
 state.adminCalibration.production_version='different-version';
 html=ctx.renderAdminModelLab();
-assert.doesNotMatch(html,/BlinQ 7\.2\.1/);
+assert.doesNotMatch(html.split('class="admin-model-production-side"')[0],/BlinQ 7\.2\.1/);
 assert.match(html,/different-version/);
 assert.match(src,/productionSelect\.value=productionSelected/);
 assert.match(src,/workarea\.scrollTop=workareaScroll/);

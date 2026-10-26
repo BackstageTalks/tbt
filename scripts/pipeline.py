@@ -760,7 +760,7 @@ def main():
         help="Prepare the upcoming local betting day before 06:00 and wait until 06:01 to publish",
     )
     parser.add_argument("--promote", action="store_true")
-    parser.add_argument("--training-profile", choices=["standard", "top-7.2.1"], default="standard")
+    parser.add_argument("--training-profile", choices=["standard", "top-7.2.1", "accuracy-7.2.2"], default="standard")
     parser.add_argument("--verified-feature-cache", default=None,
                         help="Same-run SHA-sealed frame produced by the protected leakage audit")
     parser.add_argument("--frozen-backed-compute", action="store_true",
@@ -990,7 +990,7 @@ def main():
                 eligible = False
                 gate_reasons.append("reused_holdout_fingerprint")
 
-        if args.training_profile == "top-7.2.1":
+        if args.training_profile in {"top-7.2.1", "accuracy-7.2.2"}:
             eligible = False
             gate_reasons.append("top_market_validation_required")
 

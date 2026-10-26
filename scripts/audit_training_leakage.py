@@ -55,12 +55,12 @@ def audit(history_dir: Path, *, training_profile: str = "standard",
         if (m.player1_rank is not None or m.player2_rank is not None)
         and not _verified_rank_provenance(m)
     ]
-    if training_profile not in {"standard", "top-7.2.1"}:
+    if training_profile not in {"standard", "top-7.2.1", "accuracy-7.2.2"}:
         raise ValueError("Unknown training profile")
     builder = FeatureBuilder(
-        independent_serve_return=training_profile == "top-7.2.1",
-        independent_direct_rates=training_profile == "top-7.2.1",
-        point_weighted_quality=training_profile == "top-7.2.1",
+        independent_serve_return=training_profile in {"top-7.2.1", "accuracy-7.2.2"},
+        independent_direct_rates=training_profile in {"top-7.2.1", "accuracy-7.2.2"},
+        point_weighted_quality=training_profile in {"top-7.2.1", "accuracy-7.2.2"},
     )
     frame = builder.build_training_frame(cleaned).sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
 
@@ -141,7 +141,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--history-dir", default=".cache/tbt/history")
     parser.add_argument("--report", default=".cache/tbt/production/leakage_audit_report.json")
-    parser.add_argument("--training-profile", choices=("standard", "top-7.2.1"),
+    parser.add_argument("--training-profile", choices=("standard", "top-7.2.1", "accuracy-7.2.2"),
                         default="standard")
     parser.add_argument("--feature-cache", type=Path)
     args = parser.parse_args()

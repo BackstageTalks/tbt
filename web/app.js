@@ -5458,7 +5458,8 @@ function adminActivityRows(){
       '<p role="status">'+preflightText+'</p>'+tourSummary('atp')+tourSummary('wta')+'</article>'+
       '<article class="admin-calibration-panel"><small>FÁZA 2 · KANDIDÁT / SHADOW</small><h3>2 · Natrénovať a aktivovať kandidáta</h3>'+
       '<p>Chránený tréning zmrazí overené vstupy, otestuje modely ATP/WTA proti championovi a uloží kandidáta. Shadow sa aktivuje automaticky len pri splnení ďalších offline kvalitatívnych brán.</p>'+
-      '<p><strong>Nový tréning 7.2.1: zápasy od 1. 1. 2024 (UTC).</strong> Staršia história slúži na výpočet predzápasových vstupov. Dni z obdobia 2024+ sa chronologicky rozdelia: 70 % učenie, 15 % kalibrácia a 15 % test. Skutočné obdobia a počty uvádza report tréningu; už použité testovacie zápasy nie sú novým nezávislým overením. Toto nastavenie nemení už aktívny model.</p>'+
+      '<p><strong>Nový tréning 7.2.1 / 7.2.2: zápasy od 1. 1. 2024 (UTC).</strong> Staršia história slúži na výpočet predzápasových vstupov. Dni z obdobia 2024+ sa chronologicky rozdelia: 70 % učenie, 15 % kalibrácia a 15 % test. Skutočné obdobia a počty uvádza report tréningu; už použité testovacie zápasy nie sú novým nezávislým overením. Toto nastavenie nemení už aktívny model.</p>'+
+      renderAdminTrainingProfile(busy)+'<p>7.2.2: overený výber váh podľa úspešnosti a hladká kalibrácia. Zlepšenie musí potvrdiť report; produkcia sa nemení.</p>'+
       '<button type="button" class="btn btn-primary" data-admin-action="training-start" '+(canTrain?'':'disabled')+'>'+(['failure','timed_out','cancelled'].includes(trainRun?.conclusion)?'Zopakovať tréning a kontroly':'Natrénovať a spustiť shadow')+'</button>'+
       (!canTrain?'<p role="status">'+escapeHtml(!preflightFresh?'Najprv dokonči prípravu dát v kroku 1.':d?.can_start===false?d.reason:training?.reason||'Čaká sa na overený stav.')+'</p>':'')+
       '<p><strong>Tréning:</strong> '+trainingText+'</p>'+
@@ -5543,6 +5544,11 @@ function adminActivityRows(){
       if(generation===feedGeneration){state.adminModelLabBusy=false;rerenderAdmin();}
     }
   }
+  function renderAdminTrainingProfile(disabled=false){
+    const selected=state.adminTrainingProfile||'accuracy-7.2.2';
+    const options=[['accuracy-7.2.2','BlinQ 7.2.2 · presnosť'],['top-7.2.1','BlinQ 7.2.1 · porovnávací tréning'],['standard','Štandardný']];
+    return '<label>Profil kandidáta <select id="admin-training-profile" '+(disabled?'disabled':'')+'>'+options.map(([value,label])=>'<option value="'+value+'" '+(value===selected?'selected':'')+'>'+label+'</option>').join('')+'</select></label>';
+  }
   function renderAdminTraining(){
     const d=state.adminTraining, busy=state.adminTrainingBusy;
     const link=(url,label)=>/^https:\/\/github\.com\/BackstageTalks\/(tbt|tbt-data)\//.test(String(url||''))?`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`:escapeHtml(label);
@@ -5550,20 +5556,20 @@ function adminActivityRows(){
     const candidates=(d?.candidates||[]).slice(0,10).map(c=>`<li>${link(c.url,c.tag)} · ${escapeHtml(c.label)}</li>`).join('');
     return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>MODEL LAB</small><h2>Tréning kandidátov</h2><p>Nový kandidát použije aktuálne dáta CDB a poslednú schválenú logiku. Produkčný model sa tréningom nemení.</p></div><button type="button" class="btn btn-ghost" data-admin-action="training-refresh" ${busy?'disabled':''}>Obnoviť stav</button></div>
       <p role="status">${escapeHtml(state.adminTrainingMessage||d?.reason||'Načítavam stav tréningu…')}</p>
-      <label>Profil <select id="admin-training-profile" ${busy?'disabled':''}><option value="top-7.2.1">BlinQ 7.2.1</option><option value="standard">Štandardný</option></select></label>
+      ${renderAdminTrainingProfile(busy)}
       <button type="button" class="btn btn-primary" data-admin-action="training-start" ${busy||!d?.can_start?'disabled':''}>${busy?'Spracúvam…':'Natrénovať kandidáta'}</button>
       <p>Po doplnení dát dokonči ich import. Zmeny logiky musia byť uložené v hlavnej verzii aplikácie.</p>
       <h3>Posledné tréningy</h3><p>${escapeHtml((d?.active_steps||[]).join(' · '))}</p><ul>${rows||'<li>Zatiaľ bez dostupného behu.</li>'}</ul>
       <h3>Uložené kandidáty</h3><p>Uložený model ešte neznamená schválenie na produkciu. Odkazy na súbory vyžadujú prístup do súkromného úložiska.</p><ul>${candidates||'<li>Zatiaľ bez dostupného kandidáta.</li>'}</ul></section>`;
   }
-  async function loadAdminTraining(start=false){
+  async function loadAdminTraining(start=false, selectedProfile=null){
     if(state.adminTrainingBusy)return;
     state.adminFactoryRevision=(state.adminFactoryRevision||0)+1;
     const generation=feedGeneration;
-    const profile=document.getElementById('admin-training-profile')?.value||'top-7.2.1';
+    const profile=selectedProfile||state.adminTrainingProfile||'accuracy-7.2.2';
     state.adminTrainingBusy=true;state.adminTrainingMessage='';rerenderAdmin();
     try{
-      const result=await BlinqAuth.adminModelTraining(start?{profile,auto_shadow:profile==='top-7.2.1'}:undefined);
+      const result=await BlinqAuth.adminModelTraining(start?{profile,auto_shadow:['top-7.2.1','accuracy-7.2.2'].includes(profile)}:undefined);
       if(generation!==feedGeneration)return;
       if(start){
         state.adminTrainingMessage=result.message||'Tréning bol uložený do ochrannej fronty.';
@@ -6406,8 +6412,10 @@ function adminActivityRows(){
       }
       if(action==='training-refresh'){loadAdminTraining();return;}
       if(action==='training-start'){
-        if(!await confirmAdminModelOperation('Natrénovať kandidáta 7.2.1 a po úspešných nezávislých kontrolách ho automaticky aktivovať iba v shadow? Produkčný champion sa nemení.'))return;
-        loadAdminTraining(true);return;
+        const profile=document.getElementById('admin-training-profile')?.value||state.adminTrainingProfile||'accuracy-7.2.2';
+        const label=profile==='accuracy-7.2.2'?'7.2.2':profile==='top-7.2.1'?'7.2.1':'štandardný';
+        if(!await confirmAdminModelOperation('Natrénovať kandidáta '+label+'? '+(profile==='standard'?'Model sa uloží bez aktivácie.':'Po úspešných nezávislých kontrolách sa aktivuje iba v shadow.')+' Produkčný champion sa nemení.'))return;
+        loadAdminTraining(true,profile);return;
       }
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
       if(action==='copy-diagnostics'){
@@ -6441,6 +6449,7 @@ function adminActivityRows(){
       else if(action==='copy-tg-nicks'){const nicks=adminFilteredUsers().map(u=>String(u.telegram_nick||'').trim()).filter(Boolean);const text=nicks.join('\n');if(!text){showStatus('V aktuálnom filtri nie sú žiadne Telegram nicky.');return;}try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}showStatus(`Skopírovaných ${nicks.length} Telegram nickov.`);}catch{showStatus('Telegram nicky sa nepodarilo skopírovať.');}}
     };
     host.onchange=async event=>{
+      if(event.target?.id==='admin-training-profile'){state.adminTrainingProfile=event.target.value;return;}
       if(event.target?.matches('[data-insight-title-preset]')){
         syncAdminInsightTitle(event.target.closest('[data-insight-message]'));
         return;

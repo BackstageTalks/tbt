@@ -32,10 +32,10 @@ def main():
         current = inspect()
         if not current["can_start"] or current["base"] != pending["base"]:
             raise RuntimeError("Training changed after claim; no dispatch, manual reconciliation required")
-        if pending["profile"] not in {"standard", "top-7.2.1"}:
+        if pending["profile"] not in {"standard", "top-7.2.1", "accuracy-7.2.2"}:
             raise RuntimeError("Invalid requested profile")
         github(f"{APP}/actions/workflows/{WORKFLOW}/dispatches", {
-            "ref": "main", "inputs": {"training_profile": pending["profile"], "auto_shadow": "true" if pending.get("auto_shadow") is True and pending["profile"] == "top-7.2.1" else "false"}})
+            "ref": "main", "inputs": {"training_profile": pending["profile"], "auto_shadow": "true" if pending.get("auto_shadow") is True and pending["profile"] in {"top-7.2.1", "accuracy-7.2.2"} else "false"}})
         print("One protected training dispatch accepted; actual run will be verified on next sync")
     else:
         print("Admin snapshot persisted and read back; no new request dispatched")

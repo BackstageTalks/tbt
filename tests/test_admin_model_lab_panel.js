@@ -10,6 +10,7 @@ const escapeHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')
   .replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 const ctx={state,escapeHtml};
 vm.createContext(ctx);
+vm.runInContext(src.slice(src.indexOf('  function renderAdminTrainingProfile('),src.indexOf('  function renderAdminTraining()')),ctx);
 vm.runInContext(src.slice(begin,end),ctx);
 
 let html=ctx.renderAdminModelLab();
@@ -82,7 +83,8 @@ assert.match(html,/data-model-lab-operation="prepare_inputs" disabled/);
 assert.match(src,/if\(action==='model-lab-start'\)/);
 assert.match(src,/if\(action==='model-lab-acknowledge'\)/);
 assert.match(src,/state\.adminTraining=await BlinqAuth\.adminModelTraining\(\);/);
-assert.match(src,/Natrénovať kandidáta 7\.2\.1 a po úspešných nezávislých kontrolách/);
+assert.match(src,/loadAdminTraining\(true,profile\)/);
+assert.match(html,/id="admin-training-profile"/);
 console.log('Model Factory: guarded 3 phases, preflight artifact, training, shadow, production lock, XSS passed');
 
 // Preparation/import/read-only audits must not require an offline candidate.
