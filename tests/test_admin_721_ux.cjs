@@ -46,7 +46,7 @@ let html=ctx.renderAdminCalibration();
 assert.match(html,/BlinQ 7\.2\.1/);
 assert.match(html,/Nemenné ID: v7\.2\.1-v201-20261022T134742452543Z/);
 assert.match(html,/Staré shadow metriky/);
-assert.match(html,/Nové predzápasové/);
+assert.match(html,/Pre nový produkčný model zatiaľ neexistuje porovnateľná shadow vzorka/);
 assert.match(html,/10\s*446/);
 assert.match(html,/Ďalší model · čaká na vyhodnotenie/);
 assert.doesNotMatch(html,/Model 7\.1\.1 · čaká na tréning/);
