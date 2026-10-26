@@ -9,6 +9,10 @@ name: DIL secondary - private full current CDB parity
       - 'tests/test_stage_dil_from_google_drive.py'
       - 'scripts/summarize_dil_secondary_private_audit.py'
       - 'tests/test_summarize_dil_secondary_private_audit.py'
+      - 'scripts/finalize_dil_from_cdb_v2.py'
+      - 'scripts/audit_dil_cdb_secondary_parity.py'
+      - 'tests/test_finalize_dil_from_cdb_v2.py'
+      - 'tests/test_audit_dil_cdb_secondary_parity.py'
   workflow_dispatch:
 
 permissions:
@@ -48,6 +52,7 @@ jobs:
           python -m unittest discover -q -s tests -p 'test_summarize_dil_secondary_private_audit.py'
           python -m unittest discover -q -s tests -p 'test_refresh_dil_secondary.py'
           python -m unittest discover -q -s tests -p 'test_audit_dil_cdb_secondary_parity.py'
+          python -m unittest discover -q -s tests -p 'test_finalize_dil_from_cdb_v2.py'
       - name: Install canonical Parquet and private Drive read dependencies
         run: |
           set -euo pipefail

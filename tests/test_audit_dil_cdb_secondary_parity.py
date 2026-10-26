@@ -92,6 +92,40 @@ class SecondaryParityTests(unittest.TestCase):
             db.execute("UPDATE canonical_matches SET tournament='Wrong tournament'")
         r=self.check(full_integrity=True)
         self.assertEqual(r['counts']['cdb_metadata_conflicting_fields'],1)
+    def test_per_field_conflict_accounting_without_private_values(self):
+        with sqlite3.connect(self.dil) as db:
+            db.execute("UPDATE canonical_matches SET tournament='t',round_name='Wrong round'")
+        r=self.check(full_integrity=True)
+        self.assertEqual(r['counts']['cdb_metadata_conflicting_fields'],2)
+        self.assertEqual(r['counts']['cdb_metadata_conflicting_field_tournament'],1)
+        self.assertEqual(r['counts']['cdb_metadata_conflicting_field_round_name'],1)
+        self.assertEqual(r['counts']['cdb_metadata_casefold_candidate_tournament'],1)
+        self.assertFalse(r['secondary_promotion_allowed'])
+
+    def test_provider_context_bool_and_zero_do_not_compare_equal(self):
+        with sqlite3.connect(self.cdb) as db:
+            db.execute('UPDATE cdb_matches SET provider_context_json=?',(json.dumps({'venue':{'indoor':False}}),))
+        with sqlite3.connect(self.dil) as db:
+            db.execute('UPDATE canonical_matches SET provider_context_json=?',(json.dumps({'venue':{'indoor':0}}),))
+        self.sha=audit.file_sha256(self.cdb)
+        rc=json.loads(self.receipt.read_text());rc['export_sqlite_sha256']=self.sha
+        self.receipt.write_text(json.dumps(rc))
+        r=self.check(full_integrity=True)
+        self.assertEqual(r['counts']['cdb_metadata_conflicting_field_provider_context_json'],1)
+        self.assertFalse(r['secondary_promotion_allowed'])
+
+    def test_unicode_and_space_normalization_is_equivalent(self):
+        with sqlite3.connect(self.cdb) as db:
+            db.execute("UPDATE cdb_matches SET tournament='Café Open'")
+        with sqlite3.connect(self.dil) as db:
+            db.execute("UPDATE canonical_matches SET tournament='Cafe\u0301  Open'")
+        self.sha=audit.file_sha256(self.cdb)
+        rc=json.loads(self.receipt.read_text());rc['export_sqlite_sha256']=self.sha
+        self.receipt.write_text(json.dumps(rc))
+        r=self.check(full_integrity=True)
+        self.assertEqual(r['counts'].get('cdb_metadata_conflicting_fields',0),0)
+        self.assertEqual(r['counts']['cdb_metadata_normalized_equal_field_tournament'],1)
+
     def test_extra_dil_provider_context_is_allowed(self):
         with sqlite3.connect(self.cdb) as db:
             db.execute('UPDATE cdb_matches SET provider_context_json=?',(json.dumps({'venue':{'city':'Paris'}}),))

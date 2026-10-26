@@ -11,6 +11,13 @@ ALLOWED={
  'cdb_sqlite_check_failures','dil_sqlite_check_failures',
  'cdb_foreign_key_failures','dil_foreign_key_failures',
 }
+# Field names are a fixed source-reviewed schema allowlist, never taken from input.
+METADATA_FIELDS = ('player1_name','player2_name','tournament','tournament_id',
+                   'tournament_level','round_name','player1_rank','player2_rank',
+                   'best_of','indoor','provider_context_json')
+ALLOWED.update('cdb_metadata_conflicting_field_'+field for field in METADATA_FIELDS)
+ALLOWED.update('cdb_metadata_casefold_candidate_'+field for field in METADATA_FIELDS)
+ALLOWED.update('cdb_metadata_normalized_equal_field_'+field for field in METADATA_FIELDS)
 
 def summarize(report):
     if report.get('schema')!='DIL_SECONDARY_STRICT_CURRENT_CDB_PARITY_V1':
