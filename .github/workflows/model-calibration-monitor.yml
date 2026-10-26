@@ -10,6 +10,15 @@ on:
         type: string
         required: false
         default: ''
+  # Synchronize the corrected production-source contract immediately after
+  # this change lands; routine six-hour dispatch remains external.
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/publish_model_calibration_status.py'
+      - 'scripts/model_promotion_readiness.py'
+      - 'api/tbt/services/model_calibration_status.py'
+      - '.github/workflows/model-calibration-monitor.yml'
 
 # External scheduler owns the Match Status cadence. The existing status job
 # dispatches this read-only monitor every six hours; repository cron is banned.
