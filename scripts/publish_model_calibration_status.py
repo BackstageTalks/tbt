@@ -154,8 +154,16 @@ def publish(payload: dict, base_url: str, worker_token: str) -> dict:
         raise RuntimeError("Persisted production version differs from source")
     if result.get("candidate_version") != (payload["candidate_version"] or None):
         raise RuntimeError("Persisted candidate version differs from source")
-    expected_offline = ((payload.get("offline_candidate") or {})
-                        .get("candidate_version"))
+    # A frozen comparison against the *previous* champion remains historical.
+    # The API correctly discards it after production promotion, so its receipt
+    # must be null rather than the old candidate version.
+    offline = payload.get("offline_candidate")
+    expected_offline = (
+        offline.get("candidate_version")
+        if isinstance(offline, dict) and
+        offline.get("champion_version") == payload.get("production_version")
+        else None
+    )
     if result.get("offline_candidate_version") != expected_offline:
         raise RuntimeError("Admin backend did not independently confirm offline candidate")
     return result
