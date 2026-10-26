@@ -18,7 +18,8 @@ import sqlite3
 import sys
 
 from finalize_dil_from_cdb_v2 import (
-    CORE, FIELDS, METADATA, comparable_equal, core_difference, json_obj, miss,
+    CORE, FIELDS, METADATA, comparable_equal, core_difference, context_value_equal,
+    json_obj, metadata_value_equal, normalized_metadata_text, miss,
 )
 
 
@@ -64,9 +65,7 @@ def nested_subset(actual, expected):
         )
     if isinstance(expected, list):
         return isinstance(actual, list) and actual == expected
-    return comparable_equal(actual, expected) if (
-        isinstance(actual, (int, float)) and isinstance(expected, (int, float))
-    ) else actual == expected
+    return context_value_equal(actual, expected)
 
 
 def populated_context(data):
@@ -95,9 +94,7 @@ def metadata_comparison(field, present, canonical):
         return 'not_required'
     if miss(present):
         return 'missing'
-    if field in ('player1_rank', 'player2_rank', 'best_of', 'indoor'):
-        return 'matched' if comparable_equal(present, canonical) else 'conflicting'
-    return 'matched' if str(present).strip() == str(canonical).strip() else 'conflicting'
+    return 'matched' if metadata_value_equal(field, present, canonical) else 'conflicting'
 
 
 def audit(cdb_path, dil_path, cdb_sha256, *, full_integrity=False, attest=None):
@@ -160,6 +157,15 @@ def audit(cdb_path, dil_path, cdb_sha256, *, full_integrity=False, attest=None):
                 if relation != 'not_required':
                     counts['cdb_populated_metadata_fields'] += 1
                     counts['cdb_metadata_'+relation+'_fields'] += 1
+                    if relation == 'conflicting':
+                        counts['cdb_metadata_conflicting_field_'+field] += 1
+                        if (field not in ('provider_context_json', 'player1_rank', 'player2_rank', 'best_of', 'indoor')
+                                and isinstance(m[field], str) and isinstance(source[field], str)
+                                and normalized_metadata_text(m[field]).casefold() == normalized_metadata_text(source[field]).casefold()):
+                            counts['cdb_metadata_casefold_candidate_'+field] += 1
+                    elif relation == 'matched' and field not in ('provider_context_json', 'player1_rank', 'player2_rank', 'best_of', 'indoor'):
+                        if str(m[field]) != str(source[field]):
+                            counts['cdb_metadata_normalized_equal_field_'+field] += 1
             stats_dil = json_obj(m['stats_json'])
             stats_cdb = json_obj(source['stats_json'])
             overlay = {}
