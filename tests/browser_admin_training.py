@@ -25,7 +25,22 @@ def main():
                     s.feed.account={is_admin:true,role:'admin',plan:'admin'};
                     s.route='admin';s.adminTab='calibration';
                     s.adminTraining={can_start:true,reason:'Ready',runs:[],candidates:[]};
-                    s.adminModelLab={can_start:true,reason:'Ready',active_sha256:'a'.repeat(64),candidates:[],operation:null,last_operation:null,
+                    // A promoted model must be the visible champion while the
+                    // former shadow comparison stays historical.
+                    s.adminCalibration={
+                        production_version:'v7.2.1-v201-20261022T134742452543Z',
+                        shadow_pair_state:'awaiting_new_pair',
+                        historical_shadow_pair:{production_version:'v201-20260925T204608601094Z',
+                            candidate_version:'v7.2.1-v201-20261022T134742452543Z'},
+                        candidate_version:null,candidate_active:false,stale:false,
+                        updated_at:'2026-10-26T06:25:06Z',
+                        shadow:{captured:0,settled:0,pending:0,settled_utc_days:0,
+                            target_for_tracking:1000,remaining_to_target:1000,
+                            minimum_for_review:200,production:{},candidate:{},gate:{}},
+                        unseen:{available:true,eligible_rows:10446,target_for_retrain:1000,
+                            minimum_for_review:200,remaining_to_target:0,remaining_to_review:0},
+                    };
+                    s.adminModelLab={can_start:true,reason:'Ready',champion_sha256:'c'.repeat(64),active_sha256:'a'.repeat(64),candidates:[],operation:null,last_operation:null,
                         last_preflight:{state:'WORKFLOW_VERIFIED',verified_at:new Date().toISOString(),
                             run:{id:123,status:'completed',conclusion:'success',artifact_verified:true,
                                  html_url:'https://github.com/BackstageTalks/tbt/actions/runs/123',
@@ -44,6 +59,10 @@ def main():
                     const host=document.getElementById('routePanel');host.hidden=false;
                     host.innerHTML=adminTestUi.renderAdminRoute();adminTestUi.wireAdmin();
                 }""")
+                assert page.locator('.admin-model-production').get_by_text('BlinQ 7.2.1').is_visible()
+                assert page.locator('.admin-calibration-card').first.get_by_text('BlinQ 7.2.1').is_visible()
+                assert page.get_by_text('Pre nový produkčný model zatiaľ neexistuje porovnateľná shadow vzorka', exact=False).is_visible()
+                assert page.get_by_text('Ďalší model · čaká na vyhodnotenie').is_visible()
                 button=page.locator('[data-admin-action="training-start"]')
                 assert button.is_enabled(), 'New Model Factory must allow a ready guarded training'
                 assert page.get_by_text('Natrénovať a spustiť shadow').is_visible()
