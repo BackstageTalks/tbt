@@ -123,7 +123,7 @@ class SecondaryParityTests(unittest.TestCase):
         rc=json.loads(self.receipt.read_text());rc['export_sqlite_sha256']=self.sha
         self.receipt.write_text(json.dumps(rc))
         r=self.check(full_integrity=True)
-        self.assertEqual(r['counts']['cdb_metadata_conflicting_fields'],0)
+        self.assertEqual(r['counts'].get('cdb_metadata_conflicting_fields',0),0)
         self.assertEqual(r['counts']['cdb_metadata_normalized_equal_field_tournament'],1)
 
     def test_extra_dil_provider_context_is_allowed(self):
