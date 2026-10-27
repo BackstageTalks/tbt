@@ -31,13 +31,12 @@ class AdaptiveStatisticsQueue:
     LOW_YIELD_MIN_REQUESTS = 32
     LOW_YIELD_MIN_MATCHES = 20
     LOW_YIELD_SAMPLE_EVERY = 8
-    BASELINE_SCAN_LIMIT = 64
 
     def __init__(self, candidates, bucket_coverage=None):
-        self._baseline = deque()
+        self._order = {}
         self._pending = defaultdict(deque)
         self._populated = set()
-        for match in candidates:
+        for position, match in enumerate(candidates):
             identity = id(match)
             if identity in self._populated:
                 raise ValueError("Duplicate statistics queue object")
@@ -48,7 +47,7 @@ class AdaptiveStatisticsQueue:
             kind = ("ace_df" if _quality_ready(stats, "p1")
                     and _quality_ready(stats, "p2") else "serve_return")
             group = f"{tour}:{year}:{kind}"
-            self._baseline.append((group, match))
+            self._order[identity] = position
             self._pending[group].append(match)
         self._remaining = len(candidates)
         self._active = {}
@@ -98,46 +97,29 @@ class AdaptiveStatisticsQueue:
         )
 
     def _baseline_pick(self):
-        # Preserve the group-local FIFO (and identity invariant) while
-        # bypassing a recent, repeatedly empty cohort. Do not discard its
-        # candidates: every eighth baseline selection is a recovery probe.
-        while self._baseline and id(self._baseline[0][1]) in self._selected:
-            self._baseline.popleft()
-        if not self._baseline:
+        # Adaptive choices remove rows from per-cohort FIFOs. Finding the
+        # next baseline choice by scanning the original global deque would
+        # repeatedly walk stale adaptive selections and could accidentally
+        # let a weak cohort consume the entire baseline share. Select the
+        # lowest original-rank *current cohort head* instead (O(cohorts)).
+        heads = sorted(
+            (self._order[id(rows[0])], group, rows[0])
+            for group, rows in self._pending.items() if rows
+        )
+        if not heads:
             raise RuntimeError("Adaptive queue exhausted before its declared count")
         probe = self._baseline_draws % self.LOW_YIELD_SAMPLE_EVERY == (
             self.LOW_YIELD_SAMPLE_EVERY - 1
         )
-        index = fallback = None
-        deferred = False
-        for i, (group, match) in enumerate(self._baseline):
-            if i >= self.BASELINE_SCAN_LIMIT:
-                break
-            if id(match) in self._selected:
-                continue
-            # An earlier pending match in the same cohort may have been
-            # postponed. Do not jump over that match and invert FIFO.
-            if not self._pending[group] or self._pending[group][0] is not match:
-                continue
-            if fallback is None:
-                fallback = i
-            if self._low_yield(group) and not probe:
-                deferred = True
-                continue
-            index = i
-            break
-        if index is None:
-            # Make forward progress when every available cohort is weak,
-            # or the bounded probe window contains only deferred entries.
-            index = fallback
-        if index is None:
-            raise RuntimeError("Statistics baseline has no selectable pending match")
-        group, match = self._baseline[index]
-        del self._baseline[index]
-        if not self._pending[group] or self._pending[group][0] is not match:
-            raise RuntimeError("Statistics queue identity/order mismatch")
-        if deferred and index != fallback:
+        selected = heads[0]
+        if not probe and self._low_yield(selected[1]):
+            selected = next(
+                (item for item in heads if not self._low_yield(item[1])),
+                selected,
+            )
+        if selected != heads[0]:
             self._low_yield_deferrals += 1
+        _, group, match = selected
         if self._low_yield(group):
             self._low_yield_samples += 1
         self._baseline_draws += 1
