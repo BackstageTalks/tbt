@@ -25,7 +25,8 @@ def select_accuracy_blend(linear, boost, elo, labels, tours, split, baseline):
     fit = np.arange(len(labels)) < split
     validation = ~fit
     evidence = {"status": "INSUFFICIENT_DATA", "holdout_used": False,
-                "minimum_accuracy_gain": .002, "baseline_weights": list(baseline)}
+                "minimum_accuracy_gain": .002, "baseline_weights": list(baseline),
+                "fit_log_loss_tolerance": .005, "fit_brier_tolerance": .002}
     if fit.sum() < 500 or validation.sum() < 250:
         return None, evidence
     masks = {"all": validation, "atp": validation & (tours == 1),
@@ -41,7 +42,11 @@ def select_accuracy_blend(linear, boost, elo, labels, tours, split, baseline):
     eligible = []
     for weights in grid:
         score = metrics(predict(weights), fit)
-        if score['log_loss'] <= base_fit['log_loss'] + 1e-12 and score['brier'] <= base_fit['brier'] + 1e-12:
+        # Baseline already minimizes early log loss on this grid. Requiring
+        # strict early non-regression would leave only that baseline, making
+        # accuracy optimization inert. Permit a bounded FIT-only tradeoff;
+        # the disjoint later validation still requires strict non-regression.
+        if score['log_loss'] <= base_fit['log_loss'] + .005 and score['brier'] <= base_fit['brier'] + .002:
             eligible.append((weights, score))
     chosen, _ = min(eligible, key=lambda item: (-item[1]['accuracy'], item[1]['log_loss'],
                                                item[0] != tuple(baseline)))

@@ -10,7 +10,8 @@ The `accuracy-7.2.2` profile retains 7.2.1 point-in-time features and the 2024+
 learning window, with chronological 70/15/15 whole-day partitions. It adds:
 
 - A small blend search ranked by accuracy on early calibration days. Candidates
-  must not worsen log loss or Brier there. One selected blend is accepted only
+  may trade at most 0.005 log loss and 0.002 Brier on this fitting slice for
+  higher accuracy. One selected blend is accepted only
   when later calibration days improve pooled accuracy by at least 0.2 percentage
   points and do not regress accuracy, log loss or Brier overall or on ATP/WTA.
   Insufficient groups or failed validation retain the log-loss baseline.
