@@ -200,7 +200,7 @@ def test_audit_empty_provider_cohort_is_throttled_but_revisited():
     # Preserve both tour/year exploration and cohort-local FIFO without
     # spending the fixed 25% baseline share on proven zero-value results.
     rows = []
-    for i in range(320):
+    for i in range(600):
         rows.extend((
             _match(f"empty-{i}", "WTA", 2026),
             _match(f"productive-{i}", "ATP", 2024),
