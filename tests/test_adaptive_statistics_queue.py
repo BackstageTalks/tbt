@@ -193,3 +193,58 @@ def test_recency_factor_never_bypasses_api_guard_or_paid_yield_warmup():
     assert q.summary()["observed_paid_requests"] == 0
     assert q.summary()["adaptive_choices"] == 0
     assert q.summary()["baseline_choices"] == 80
+
+
+def test_audit_empty_provider_cohort_is_throttled_but_revisited():
+    # The 26-27 Oct audit found repeated empty 2026 provider responses.
+    # Preserve both tour/year exploration and cohort-local FIFO without
+    # spending the fixed 25% baseline share on proven zero-value results.
+    rows = []
+    for i in range(320):
+        rows.extend((
+            _match(f"empty-{i}", "WTA", 2026),
+            _match(f"productive-{i}", "ATP", 2024),
+        ))
+    q = AdaptiveStatisticsQueue(rows)
+    seen = []
+    for _ in range(360):
+        row = next(q)
+        seen.append(row.match_id)
+        q.record(row, 1, _gain() if row.tour == "WTA" else _gain(16, 1, 4))
+    report = q.summary()
+    assert report["low_yield_baseline_deferrals"] > 0
+    assert report["low_yield_baseline_samples"] > 0
+    assert report["baseline_choices"] >= 90
+    assert len(seen) == len(set(seen))
+    assert 4 <= sum(x.startswith("empty-") for x in seen[200:360]) < 32
+
+
+def test_low_yield_probe_recovers_when_provider_starts_returning_values():
+    # A previously empty cohort is sampled again and recovers priority
+    # once its 96-match recent evidence becomes productive.
+    rows = [_match(f"empty-{i}", "WTA", 2026) if i % 2 == 0
+            else _match(f"other-{i}", "ATP", 2024) for i in range(800)]
+    q = AdaptiveStatisticsQueue(rows)
+    empty_calls = 0
+    for _ in range(600):
+        row = next(q)
+        if row.tour == "WTA":
+            empty_calls += 1
+            q.record(row, 1, _gain() if empty_calls <= 40 else _gain(12, 1))
+        else:
+            q.record(row, 1, _gain(6))
+    assert empty_calls > 40
+    assert not q._low_yield("wta:2026:serve_return")
+    assert q.summary()["low_yield_baseline_deferrals"] > 0
+
+
+def test_low_yield_does_not_override_zero_paid_call_baseline():
+    rows = [_match(f"a-{i}", "WTA", 2026) if i % 2 else
+            _match(f"b-{i}", "ATP", 2024) for i in range(120)]
+    q = AdaptiveStatisticsQueue(rows)
+    observed = []
+    for row in q:
+        observed.append(row.match_id)
+        q.record(row, 0, _gain())
+    assert observed == [row.match_id for row in rows]
+    assert q.summary()["low_yield_baseline_deferrals"] == 0
