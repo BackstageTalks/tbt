@@ -25,6 +25,13 @@ class AdaptiveStatisticsQueue:
     MIN_COHORT_REQUESTS = 12
     EXPLORE_EVERY = 4
     RECENT_MATCH_WINDOW = 96
+    # A repeated paid provider miss must not consume the fixed exploration
+    # share indefinitely. Require evidence from at least 20 separate matches;
+    # still sample weak cohorts every eighth baseline selection.
+    LOW_YIELD_MIN_REQUESTS = 32
+    LOW_YIELD_MIN_MATCHES = 20
+    LOW_YIELD_SAMPLE_EVERY = 8
+    BASELINE_SCAN_LIMIT = 64
 
     def __init__(self, candidates, bucket_coverage=None):
         self._baseline = deque()
@@ -63,6 +70,9 @@ class AdaptiveStatisticsQueue:
         self._ace_df = Counter()
         self._baseline_choices = Counter()
         self._adaptive_choices = Counter()
+        self._baseline_draws = 0
+        self._low_yield_deferrals = 0
+        self._low_yield_samples = 0
         self._reference_year = max(
             (int(row.scheduled_at.year) for queue in self._pending.values()
              for row in queue), default=2026
@@ -77,14 +87,60 @@ class AdaptiveStatisticsQueue:
     def __iter__(self):
         return self
 
+    def _low_yield(self, group):
+        """Use only recent paid evidence; a recovering cohort resumes normally."""
+        requests = self._recent_requests[group]
+        return (
+            requests >= self.LOW_YIELD_MIN_REQUESTS
+            and len(self._recent[group]) >= self.LOW_YIELD_MIN_MATCHES
+            and self._recent_quality[group] == 0
+            and 4 * self._recent_values[group] <= requests
+        )
+
     def _baseline_pick(self):
+        # Preserve the group-local FIFO (and identity invariant) while
+        # bypassing a recent, repeatedly empty cohort. Do not discard its
+        # candidates: every eighth baseline selection is a recovery probe.
         while self._baseline and id(self._baseline[0][1]) in self._selected:
             self._baseline.popleft()
         if not self._baseline:
             raise RuntimeError("Adaptive queue exhausted before its declared count")
-        group, match = self._baseline.popleft()
+        probe = self._baseline_draws % self.LOW_YIELD_SAMPLE_EVERY == (
+            self.LOW_YIELD_SAMPLE_EVERY - 1
+        )
+        index = fallback = None
+        deferred = False
+        for i, (group, match) in enumerate(self._baseline):
+            if i >= self.BASELINE_SCAN_LIMIT:
+                break
+            if id(match) in self._selected:
+                continue
+            # An earlier pending match in the same cohort may have been
+            # postponed. Do not jump over that match and invert FIFO.
+            if not self._pending[group] or self._pending[group][0] is not match:
+                continue
+            if fallback is None:
+                fallback = i
+            if self._low_yield(group) and not probe:
+                deferred = True
+                continue
+            index = i
+            break
+        if index is None:
+            # Make forward progress when every available cohort is weak,
+            # or the bounded probe window contains only deferred entries.
+            index = fallback
+        if index is None:
+            raise RuntimeError("Statistics baseline has no selectable pending match")
+        group, match = self._baseline[index]
+        del self._baseline[index]
         if not self._pending[group] or self._pending[group][0] is not match:
             raise RuntimeError("Statistics queue identity/order mismatch")
+        if deferred and index != fallback:
+            self._low_yield_deferrals += 1
+        if self._low_yield(group):
+            self._low_yield_samples += 1
+        self._baseline_draws += 1
         self._baseline_choices[group] += 1
         return group, match
 
@@ -170,6 +226,12 @@ class AdaptiveStatisticsQueue:
             "min_paid_requests": self.MIN_TOTAL_REQUESTS,
             "min_cohort_paid_requests": self.MIN_COHORT_REQUESTS,
             "minimum_baseline_exploration_fraction": 1 / self.EXPLORE_EVERY,
+            "low_yield_cohort_policy": "bounded_recent_paid_yield_with_recovery_probes",
+            "low_yield_min_paid_requests": self.LOW_YIELD_MIN_REQUESTS,
+            "low_yield_min_paid_matches": self.LOW_YIELD_MIN_MATCHES,
+            "low_yield_probe_every_baseline_selections": self.LOW_YIELD_SAMPLE_EVERY,
+            "low_yield_baseline_deferrals": self._low_yield_deferrals,
+            "low_yield_baseline_samples": self._low_yield_samples,
             "selection_value_policy": "quality_ready_and_new_fields_recent_paid_window",
             "recency_score_policy": "bounded_latest_three_seasons_after_paid_yield",
             "recency_reference_year": self._reference_year,
