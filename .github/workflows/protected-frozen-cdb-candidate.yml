@@ -12,7 +12,7 @@ on:
       training_profile:
         description: Candidate probability optimization profile
         type: choice
-        options: [standard, top-7.2.1]
+        options: [standard, top-7.2.1, accuracy-7.2.2]
         default: top-7.2.1
       auto_shadow:
         description: Only for explicit Model Factory phase 2; never promotes production
@@ -99,7 +99,9 @@ jobs:
             tests/test_candidate_training_requires_backup.py \
             tests/test_champion_rollback_rehearsal.py \
             tests/test_training_inputs.py \
-            tests/test_verified_training_frame.py
+            tests/test_verified_training_frame.py \
+            tests/test_candidate_722_accuracy.py \
+            tests/test_candidate_learning_window.py
       - name: Acquire global private canonical writer lock
         run: |
           set -euo pipefail

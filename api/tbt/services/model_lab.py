@@ -230,7 +230,9 @@ def _operation_view(request, snapshot):
         "state": ("RUNNING" if selected and selected.get("status") != "completed"
                   else "FAILED_NEEDS_REVIEW" if selected and selected.get("conclusion") != "success"
                   else "COMPLETED_PENDING_VERIFICATION" if selected
-                  else "DISPATCH_UNCONFIRMED" if claimed else "QUEUED"),
+                  else "DISPATCH_UNCONFIRMED" if claimed
+                  else "EXPIRED_UNCLAIMED" if _expired_unclaimed_readonly(request, snapshot)
+                  else "QUEUED"),
         "run": selected,
     }
 
@@ -312,6 +314,24 @@ def _find_run(request, snapshot):
                 None)
 
 
+def _expired_unclaimed_readonly(request, snapshot):
+    """The dispatch gate permanently refuses a snapshot older than 90 minutes.
+
+    Only an unclaimed read-only request can be released without run recovery.
+    Never infer safe cancellation of a writer or an ambiguous dispatch from age.
+    """
+    try:
+        stamp = datetime.fromisoformat(request["snapshot_at"].replace("Z", "+00:00"))
+        if stamp.tzinfo is None:
+            return False
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return False
+    return bool(request and request.get("action") in {"prepare_inputs", "refresh_tests", "audit_shadow"}
+                and _age(request.get("snapshot_at")) > 5400
+                and _json("claim-" + request["id"]) is None
+                and _find_run(request, snapshot) is None)
+
+
 def _finalize(request, run, snapshot):
     if run.get("conclusion") != "success":
         # Unknown or failed write must not silently reopen the queue.
@@ -384,6 +404,7 @@ def sync(snapshot):
         ready = bool(
             active and active.get("id") == dispatch_id
             and _json("claim-" + dispatch_id)
+            and not _json("claim-" + dispatch_id).get("cancelled")
             and snapshot["can_start"]
             and active["expected_candidate_sha256"] == snapshot["active_sha256"]
             and active["expected_champion_sha256"] == snapshot["champion_sha256"]
@@ -431,6 +452,20 @@ def acknowledge_failed(payload):
     if not isinstance(payload, dict) or set(payload) != {"action", "id"} or payload["action"] != "acknowledge_failed":
         raise ValueError("Invalid acknowledgement")
     active = _json("active")
+    if active and active.get("id") == payload["id"]:
+        snapshot = status()
+        if (_expired_unclaimed_readonly(active, snapshot)
+                and -60 <= _age(snapshot.get("observed_at")) <= 5400):
+            # Compete for the same atomic claim as the worker. If it won the
+            # race, fail closed; if cancellation wins, dispatch is forbidden.
+            _create("claim-" + active["id"], {"created_at": _utcnow().isoformat(), "cancelled": True})
+            _put("last", {"id": active["id"], "action": active["action"],
+                          "state": "EXPIRED_UNCLAIMED_CANCELLED",
+                          "note": "Expirovaná read-only požiadavka nebola prevzatá ani odoslaná; môžeš vytvoriť novú."})
+            _table(UI_TABLE).delete_entity(partition_key=PARTITION, row_key="active")
+            if _row("active"):
+                raise AdminStorageUnavailable("Expired request guard was not removed")
+            return {"state": "EXPIRED_UNCLAIMED_CANCELLED", "message": "Neodoslaná požiadavka zrušená. Spusti prípravu dát znova."}
     last = _json("last")
     if not active or not last or active["id"] != payload["id"] or last.get("id") != payload["id"] or last.get("state") not in {"FAILED_NEEDS_REVIEW", "VERIFICATION_FAILED"}:
         raise TrainingBlocked("No independently verified failed operation")

@@ -10,6 +10,7 @@ const escapeHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')
   .replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 const ctx={state,escapeHtml};
 vm.createContext(ctx);
+vm.runInContext(src.slice(src.indexOf('  function renderAdminTrainingProfile('),src.indexOf('  function renderAdminTraining()')),ctx);
 vm.runInContext(src.slice(begin,end),ctx);
 
 let html=ctx.renderAdminModelLab();
@@ -82,7 +83,8 @@ assert.match(html,/data-model-lab-operation="prepare_inputs" disabled/);
 assert.match(src,/if\(action==='model-lab-start'\)/);
 assert.match(src,/if\(action==='model-lab-acknowledge'\)/);
 assert.match(src,/state\.adminTraining=await BlinqAuth\.adminModelTraining\(\);/);
-assert.match(src,/Natrénovať kandidáta 7\.2\.1 a po úspešných nezávislých kontrolách/);
+assert.match(src,/loadAdminTraining\(true,profile\)/);
+assert.match(html,/id="admin-training-profile"/);
 console.log('Model Factory: guarded 3 phases, preflight artifact, training, shadow, production lock, XSS passed');
 
 // Preparation/import/read-only audits must not require an offline candidate.
@@ -113,3 +115,8 @@ assert.match(html,/Chýba nezávislé overenie na predzápasových kurzoch/);
 assert.match(html,/Posledný uložený model:<\/strong> complete-model/);
 assert(!html.includes('<script>'));
 console.log('Model Factory recovery, independent actions, progress and shadow outcome: passed');
+state.adminModelLab.operation={id:'e'.repeat(24),action:'prepare_inputs',state:'EXPIRED_UNCLAIMED'};
+state.adminModelLab.last_operation=null;
+html=ctx.renderAdminModelLab();
+assert.match(html,/Zrušiť neodoslanú požiadavku/);
+assert.match(html,/data-admin-action="model-lab-acknowledge"/);

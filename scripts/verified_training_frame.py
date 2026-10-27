@@ -16,7 +16,7 @@ import pandas as pd
 from guarded_candidate_backup import validate_certificate
 from tbt.services.data_quality import audit_history
 
-PROFILES = {"standard", "top-7.2.1"}
+PROFILES = {"standard", "top-7.2.1", "accuracy-7.2.2"}
 REQUIRED = {"match_id", "scheduled_at", "target", "tour_atp"}
 
 

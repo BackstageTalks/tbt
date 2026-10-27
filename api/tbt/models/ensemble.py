@@ -370,6 +370,14 @@ class TennisEnsemble:
                     score = (-accuracy, loss) if self.objective == "accuracy" else (loss, -accuracy)
                     choices.append((score, float(weight), elo_weight))
             _, self.blend_weight, self.elo_weight = min(choices, key=lambda item: item[0])
+            if getattr(self, "accuracy_blend_selection", False):
+                from .accuracy_blend import select_accuracy_blend
+                selected, evidence = select_accuracy_blend(
+                    linear, boost, elo, y_cal, cal["tour_atp"].to_numpy(dtype=float),
+                    split, (self.blend_weight, self.elo_weight))
+                if selected is not None:
+                    self.blend_weight, self.elo_weight = selected
+                self.metadata["accuracy_blend_validation"] = evidence
             # Nonpromoting ATP/WTA research report on disjoint calibration days.
             # Never changes blended probabilities, the accepted ATP weights,
             # calibration choice, final holdout, or frozen serving parameters.
@@ -392,18 +400,23 @@ class TennisEnsemble:
                 self.metadata["atp_blend_validation"] = evidence
             raw = self._raw(cal)
             kinds = ["identity", "platt"]
-            if split >= 350 and len(np.unique(np.round(raw[:split], 3))) >= 20:
+            if (not getattr(self, "accuracy_blend_selection", False)
+                    and split >= 350 and len(np.unique(np.round(raw[:split], 3))) >= 20):
                 kinds.append("isotonic")
             candidates = []
             for kind in kinds:
                 calibrator = self._fit_calibrator(kind, raw[:split], y_cal[:split])
+                if (getattr(self, "accuracy_blend_selection", False) and kind == "platt"
+                        and calibrator.model.coef_[0, 0] <= 0):
+                    continue
                 p = self._calibrated(calibrator, raw[split:])
                 candidates.append((float(log_loss(y_cal[split:], p, labels=[0, 1])), kind))
             _, kind = min(candidates, key=lambda item: item[0])
             # Use the same disjoint selection slice to choose a subgroup
             # calibrator; never optimize against the final test outcomes.
             global_selected = self._fit_calibrator(kind, raw[:split], y_cal[:split])
-            if (self.objective == "log_loss" and "tour_atp" in cal.columns
+            if (not getattr(self, "accuracy_blend_selection", False)
+                    and self.objective == "log_loss" and "tour_atp" in cal.columns
                     and len(cal) >= 500):
                 self.tour_calibrators, tour_evidence = self._choose_tour_calibrators(
                     raw, y_cal, cal["tour_atp"].to_numpy(dtype=float),
@@ -411,6 +424,9 @@ class TennisEnsemble:
                 )
                 self.metadata["tour_calibration_validation"] = tour_evidence
             self.calibrator = self._fit_calibrator(kind, raw, y_cal)
+            if (getattr(self, "accuracy_blend_selection", False) and kind == "platt"
+                    and self.calibrator.model.coef_[0, 0] <= 0):
+                self.calibrator = ProbabilityCalibrator()
             self.metadata.update({"calibrator_fit_matches": split,
                                   "calibrator_selection_matches": len(cal) - split,
                                   "calibration_candidates": dict((k, v) for v, k in candidates)})

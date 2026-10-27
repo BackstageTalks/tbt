@@ -3,11 +3,12 @@ import pytest
 from tbt.services.training import _candidate_learning_window, _split_by_date
 
 
-def test_recent_window_preserves_features_and_disjoint_days():
+@pytest.mark.parametrize("profile", ["top-7.2.1", "accuracy-7.2.2"])
+def test_recent_window_preserves_features_and_disjoint_days(profile):
     dates = pd.date_range('2023-12-01', periods=200, tz='UTC')
     frame = pd.DataFrame({'scheduled_at': dates, 'match_id': range(200),
                           'elo_probability': [.73]*200})
-    recent = _candidate_learning_window(frame, 'top-7.2.1')
+    recent = _candidate_learning_window(frame, profile)
     assert recent.scheduled_at.min() == pd.Timestamp('2024-01-01', tz='UTC')
     assert (recent.elo_probability == .73).all()
     assert len(frame) == 200

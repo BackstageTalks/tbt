@@ -70,7 +70,7 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     start_parser = commands.add_parser("start", help="Dispatch a new protected candidate; never promote")
     start_parser.add_argument("--ref", default="main", help="Pushed branch or immutable tag; local edits are not uploaded")
-    start_parser.add_argument("--profile", choices=["standard", "top-7.2.1"], default="top-7.2.1")
+    start_parser.add_argument("--profile", choices=["standard", "top-7.2.1", "accuracy-7.2.2"], default="top-7.2.1")
     status = commands.add_parser("status")
     status.add_argument("--run", type=int)
     commands.add_parser("list", help="List private frozen candidates, including incomplete attempts")

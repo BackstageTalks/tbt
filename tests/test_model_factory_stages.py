@@ -1,5 +1,5 @@
 """Stage 1 persisted evidence, and stage 2 automatic shadow gates."""
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from unittest.mock import patch
 import sys
@@ -43,6 +43,54 @@ def source_snapshot():
         "candidates": [],
         "runs": {action: [] for action in lab.WORKFLOWS},
     }
+
+
+@pytest.mark.parametrize('action', ['prepare_inputs', 'refresh_tests', 'audit_shadow'])
+def test_expired_unclaimed_readonly_request_can_be_cancelled(action):
+    table = Table()
+    old = (datetime.now(timezone.utc)-timedelta(hours=3)).isoformat()
+    request = {'id': 'e'*24, 'action': action, 'snapshot_at': old, 'created_at': old}
+    with patch.object(lab, '_table', return_value=table):
+        lab._put('active', request)
+        lab._put('snapshot', source_snapshot())
+        assert lab.status()['operation']['state'] == 'EXPIRED_UNCLAIMED'
+        outcome = lab.acknowledge_failed({'action': 'acknowledge_failed', 'id': request['id']})
+        assert outcome['state'] == 'EXPIRED_UNCLAIMED_CANCELLED'
+        assert lab._json('active') is None
+        assert lab._json('claim-'+request['id'])['cancelled'] is True
+        assert lab._json('last')['id'] == request['id']
+
+
+@pytest.mark.parametrize('condition', ['claimed', 'fresh', 'writer', 'stale_snapshot', 'invalid_time'])
+def test_expired_cancel_never_releases_unverified_or_writer_operation(condition):
+    table = Table()
+    old = (datetime.now(timezone.utc)-timedelta(hours=3)).isoformat()
+    request = {'id': 'e'*24, 'action': 'prepare_inputs', 'snapshot_at': old, 'created_at': old}
+    snapshot = source_snapshot()
+    if condition == 'fresh': request['snapshot_at'] = snapshot['observed_at']
+    if condition == 'writer': request['action'] = 'promote_production'
+    if condition == 'stale_snapshot': snapshot['observed_at'] = old
+    if condition == 'invalid_time': request['snapshot_at'] = 'unknown'
+    with patch.object(lab, '_table', return_value=table):
+        lab._put('active', request)
+        lab._put('snapshot', snapshot)
+        if condition == 'claimed': lab._create('claim-'+request['id'], {'created_at': old})
+        with pytest.raises(model_training.TrainingBlocked):
+            lab.acknowledge_failed({'action': 'acknowledge_failed', 'id': request['id']})
+        assert lab._json('active') == request
+
+
+def test_cancel_loses_atomic_claim_race_and_keeps_operation():
+    table = Table()
+    old = (datetime.now(timezone.utc)-timedelta(hours=3)).isoformat()
+    request = {'id': 'e'*24, 'action': 'prepare_inputs', 'snapshot_at': old, 'created_at': old}
+    with patch.object(lab, '_table', return_value=table):
+        lab._put('active', request)
+        lab._put('snapshot', source_snapshot())
+        with patch.object(lab, '_create', side_effect=model_training.TrainingBlocked('worker won')):
+            with pytest.raises(model_training.TrainingBlocked):
+                lab.acknowledge_failed({'action': 'acknowledge_failed', 'id': request['id']})
+        assert lab._json('active') == request
 
 
 def test_stage1_preflight_is_queued_once_and_requires_remote_artifact():

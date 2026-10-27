@@ -174,10 +174,10 @@ def start(payload, actor):
     if not isinstance(payload, dict) or set(payload) - {"profile", "auto_shadow"}:
         raise ValueError("Neplatná požiadavka na tréning.")
     profile = payload.get("profile", "top-7.2.1")
-    if profile not in {"standard", "top-7.2.1"}:
+    if profile not in {"standard", "top-7.2.1", "accuracy-7.2.2"}:
         raise ValueError("Neplatný tréningový profil.")
     auto_shadow = payload.get("auto_shadow", False)
-    if not isinstance(auto_shadow, bool) or (auto_shadow and profile != "top-7.2.1"):
+    if not isinstance(auto_shadow, bool) or (auto_shadow and profile not in {"top-7.2.1", "accuracy-7.2.2"}):
         raise ValueError("Neplatná požiadavka na shadow tréning.")
     # Both Admin entrypoints share the same queue guard. A candidate training
     # request must not leapfrog an active Drive import or shadow activation.

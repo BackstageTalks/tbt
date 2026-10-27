@@ -122,7 +122,7 @@ class TrainingResult:
 
 def _candidate_learning_window(frame, training_profile):
     """Keep historical replay context, but fit 7.2.1 only on 2024+ labels."""
-    if training_profile != "top-7.2.1":
+    if training_profile not in {"top-7.2.1", "accuracy-7.2.2"}:
         return frame
     timestamps = pd.to_datetime(frame["scheduled_at"], utc=True)
     recent = frame.loc[timestamps >= pd.Timestamp("2024-01-01", tz="UTC")].copy()
@@ -864,7 +864,7 @@ def train_from_matches(
     training_profile="standard",
     verified_frame: pd.DataFrame | None = None,
 ) -> TrainingResult:
-    if training_profile not in {"standard", "top-7.2.1"}:
+    if training_profile not in {"standard", "top-7.2.1", "accuracy-7.2.2"}:
         raise ValueError("Unknown training profile")
     # Do not allow future rows to become eligible while the lengthy protected
     # feature replay is running; use exactly the audit cutoff sealed at freeze.
@@ -883,9 +883,9 @@ def train_from_matches(
     # 7.2.1 uses independent serve and return availability. The champion
     # retains the original joint semantics via artifact metadata in serving.
     builder = FeatureBuilder(
-        independent_serve_return=(training_profile == "top-7.2.1"),
-        independent_direct_rates=(training_profile == "top-7.2.1"),
-        point_weighted_quality=(training_profile == "top-7.2.1"),
+        independent_serve_return=(training_profile in {"top-7.2.1", "accuracy-7.2.2"}),
+        independent_direct_rates=(training_profile in {"top-7.2.1", "accuracy-7.2.2"}),
+        point_weighted_quality=(training_profile in {"top-7.2.1", "accuracy-7.2.2"}),
     )
 
     if verified_frame is None:
@@ -963,8 +963,8 @@ def train_from_matches(
     holdout_fingerprint = _holdout_fingerprint(test) if len(test) else ""
 
     diagnostics = None
-    objective = "log_loss" if training_profile == "top-7.2.1" else "accuracy"
-    if training_profile == "top-7.2.1":
+    objective = "log_loss" if training_profile in {"top-7.2.1", "accuracy-7.2.2"} else "accuracy"
+    if training_profile in {"top-7.2.1", "accuracy-7.2.2"}:
         from .training_inputs import input_diagnostics, require_informative_inputs
         names = _candidate_feature_names(
             atp_leaderboards=atp_leaderboards, atp_rank_history=atp_rank_history,
@@ -983,7 +983,7 @@ def train_from_matches(
                     atp_rank_history=atp_rank_history,
                     wta_rank_history=wta_rank_history,
                     wta_season_stats=wta_season_stats,
-                    atp_surface_opponent_form=(training_profile == "top-7.2.1"),
+                    atp_surface_opponent_form=(training_profile in {"top-7.2.1", "accuracy-7.2.2"}),
                 ), objective=objective,
             )
             if (
@@ -991,18 +991,19 @@ def train_from_matches(
                 or atp_rank_history is not None
                 or wta_rank_history is not None
                 or wta_season_stats is not None
-                or training_profile == 'top-7.2.1'
+                or training_profile in {"top-7.2.1", "accuracy-7.2.2"}
             )
             else _new_production_ensemble(objective=objective)
         )
     )
     # Enabled only for new 7.2.1 research; standard and legacy fits are unchanged.
-    evaluation_model.atp_blend_specialization = training_profile == "top-7.2.1"
+    evaluation_model.atp_blend_specialization = training_profile in {"top-7.2.1", "accuracy-7.2.2"}
+    evaluation_model.accuracy_blend_selection = training_profile == "accuracy-7.2.2"
     evaluation_model.fit(train, calibration)
 
     _training_progress("fit_estimators_complete", len(train))
-    if training_profile == "top-7.2.1":
-        evaluation_model.version = "v7.2.1-" + evaluation_model.version
+    if training_profile in {"top-7.2.1", "accuracy-7.2.2"}:
+        evaluation_model.version = ("v7.2.2-" if training_profile == "accuracy-7.2.2" else "v7.2.1-") + evaluation_model.version
 
     test_p = (
         evaluation_model
@@ -1098,7 +1099,7 @@ def train_from_matches(
     report = {
         "training_profile": training_profile,
         "learning_window": {
-            "start_inclusive_utc": "2024-01-01T00:00:00Z" if training_profile == "top-7.2.1" else None,
+            "start_inclusive_utc": "2024-01-01T00:00:00Z" if training_profile in {"top-7.2.1", "accuracy-7.2.2"} else None,
             "historical_replay_rows": replay_rows,
             "eligible_learning_rows": len(frame),
             "context_only_rows": replay_rows - len(frame),
@@ -1229,6 +1230,8 @@ def train_from_matches(
         ),
         "subgroups": subgroup_report(test, test_p),
         "evaluation_model": {
+            "accuracy_blend_validation": (evaluation_model.metadata or {}).get("accuracy_blend_validation"),
+            "smooth_calibration_only": training_profile == "accuracy-7.2.2",
             "tour_blend_experiment": (
                 (evaluation_model.metadata or {}).get("tour_blend_experiment")
             ),
@@ -1286,9 +1289,9 @@ def train_from_matches(
         "evaluation_end": _period(test)["end"],
         "holdout_fingerprint": holdout_fingerprint,
         "rank_provenance": rank_provenance,
-        "independent_serve_return": training_profile == "top-7.2.1",
-        "independent_direct_rates": training_profile == "top-7.2.1",
-        "point_weighted_quality": training_profile == "top-7.2.1",
+        "independent_serve_return": training_profile in {"top-7.2.1", "accuracy-7.2.2"},
+        "independent_direct_rates": training_profile in {"top-7.2.1", "accuracy-7.2.2"},
+        "point_weighted_quality": training_profile in {"top-7.2.1", "accuracy-7.2.2"},
         "holdout_metrics": (
             holdout_metrics
         ),

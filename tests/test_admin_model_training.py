@@ -51,6 +51,18 @@ class TrainingTests(unittest.TestCase):
             self.assertEqual(table.return_value.create_entity.call_args.args[0]["profile"], "standard")
             gh.assert_not_called()
 
+    def test_722_profile_is_durably_queued_without_production_write(self):
+        with patch.object(m, "status", return_value={"can_start": True, "base": "8"}), patch.object(m, "_table") as table, patch.object(m, "github") as gh:
+            self.assertEqual(m.start({"profile": "accuracy-7.2.2"}, "admin")["state"], "QUEUED")
+            self.assertEqual(table.return_value.create_entity.call_args.args[0]["profile"], "accuracy-7.2.2")
+            gh.assert_not_called()
+
+    def test_722_shadow_requires_verified_preflight(self):
+        with patch.object(model_lab, "_json", return_value=None), patch.object(m, "_table") as table:
+            with self.assertRaises(m.TrainingBlocked):
+                m.start({"profile": "accuracy-7.2.2", "auto_shadow": True}, "admin")
+            table.assert_not_called()
+
     def test_claim_is_returned_only_once(self):
         import json
         records = {"request-7": {"base": "7", "profile": "standard"}}
