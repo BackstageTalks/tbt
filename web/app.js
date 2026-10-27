@@ -5370,7 +5370,7 @@ function adminActivityRows(){
       /^[0-9a-f]{64}$/.test(c.sha256)&&c.sha256!==d?.champion_sha256);
     const canPromote=canBuild&&releaseCandidates.length>0;
     const releaseOptions=releaseCandidates.slice(0,30).map(c=>'<option value="'+escapeHtml(c.tag)+'">'+escapeHtml(c.tag)+'</option>').join('');
-    const stateLabels={QUEUED:'Čaká na bezpečné spustenie',DISPATCH_UNCONFIRMED:'Spustenie nepotvrdené – nespúšťaj znova',RUNNING:'Prebieha',COMPLETED_PENDING_VERIFICATION:'Dokončené – čaká na kontrolu',WORKFLOW_VERIFIED:'Overené',FAILED_NEEDS_REVIEW:'Zlyhanie – vyžaduje kontrolu',VERIFICATION_FAILED:'Report sa nepodarilo overiť'};
+    const stateLabels={EXPIRED_UNCLAIMED:'Príprava nebola odoslaná · požiadavka vypršala',EXPIRED_UNCLAIMED_CANCELLED:'Neodoslaná požiadavka zrušená',QUEUED:'Čaká na bezpečné spustenie',DISPATCH_UNCONFIRMED:'Spustenie nepotvrdené – nespúšťaj znova',RUNNING:'Prebieha',COMPLETED_PENDING_VERIFICATION:'Dokončené – čaká na kontrolu',WORKFLOW_VERIFIED:'Overené',FAILED_NEEDS_REVIEW:'Zlyhanie – vyžaduje kontrolu',VERIFICATION_FAILED:'Report sa nepodarilo overiť'};
     const fmtRun=record=>record?(' '+safeLink(record.html_url,'GitHub beh #'+record.id)+' · '+escapeHtml(String(record.conclusion||record.status||''))):'';
     const activeText=operation?('<strong>'+escapeHtml(stateLabels[operation.state]||operation.state)+'</strong> · '+escapeHtml(operation.action)+' · '+escapeHtml(operation.id)+fmtRun(operation.run)):'Bez rozpracovanej Model Factory operácie.';
     const lastText=last?('<strong>'+escapeHtml(stateLabels[last.state]||last.state)+'</strong> · '+escapeHtml(last.action||'')+fmtRun(last.run)):'Zatiaľ bez ukončenej operácie.';
@@ -5477,6 +5477,7 @@ function adminActivityRows(){
       '<p><strong>Posledný uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article></div>'+
       '<div class="admin-calibration-bottom"><div><strong>Rozpracovaná operácia</strong><span>'+activeText+'</span></div><div><strong>Posledná kontrola</strong><span>'+lastText+'</span></div></div>'+
       (last?.note?'<p role="status">'+escapeHtml(last.note)+'</p>':'')+
+      (operation?.state==='EXPIRED_UNCLAIMED'?'<p role="status">Požiadavku worker neprevzal v platnom čase. Zruš ju a zopakuj prípravu dát.</p><button type="button" class="btn btn-ghost" data-admin-action="model-lab-acknowledge" '+(busy?'disabled':'')+'>Zrušiť neodoslanú požiadavku</button>':'')+
       (failed&&!unsafeFailure?'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-acknowledge" '+(busy?'disabled':'')+'>Potvrdiť zlyhanie read-only auditu</button>':'')+
       (unsafeFailure?'<p role="alert">Zápis sa mohol vykonať čiastočne. Pred ďalším krokom je nutná nezávislá ručná kontrola CDB/release.</p>':'')+
       '<details class="admin-model-factory-advanced"><summary>Pokročilé operácie a história</summary>'+
@@ -6407,7 +6408,7 @@ function adminActivityRows(){
         loadAdminModelLab(operation);return;
       }
       if(action==='model-lab-acknowledge'){
-        if(!await confirmAdminModelOperation('Potvrdiť ukončený neúspešný audit a uvoľniť jeho frontu? Potom ho môžeš spustiť znova. Tento krok nemení dáta ani model.'))return;
+        if(!await confirmAdminModelOperation(state.adminModelLab?.operation?.state==='EXPIRED_UNCLAIMED'?'Zrušiť expirovanú read-only požiadavku, ktorú worker neprevzal? Potom môžeš spustiť novú prípravu dát.':'Potvrdiť ukončený neúspešný audit a uvoľniť jeho frontu? Potom ho môžeš spustiť znova. Tento krok nemení dáta ani model.'))return;
         loadAdminModelLab('',true);return;
       }
       if(action==='training-refresh'){loadAdminTraining();return;}

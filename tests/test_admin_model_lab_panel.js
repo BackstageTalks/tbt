@@ -115,3 +115,8 @@ assert.match(html,/Chýba nezávislé overenie na predzápasových kurzoch/);
 assert.match(html,/Posledný uložený model:<\/strong> complete-model/);
 assert(!html.includes('<script>'));
 console.log('Model Factory recovery, independent actions, progress and shadow outcome: passed');
+state.adminModelLab.operation={id:'e'.repeat(24),action:'prepare_inputs',state:'EXPIRED_UNCLAIMED'};
+state.adminModelLab.last_operation=null;
+html=ctx.renderAdminModelLab();
+assert.match(html,/Zrušiť neodoslanú požiadavku/);
+assert.match(html,/data-admin-action="model-lab-acknowledge"/);
