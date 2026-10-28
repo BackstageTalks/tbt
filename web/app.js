@@ -7305,7 +7305,7 @@ function adminActivityRows(){
     if(route==='compare'){
       if(comparatorPlanAllowed()){host.innerHTML=renderComparatorRoute();wireComparator();}
       else{
-        const minPlan=firstComparatorUnlockPlan(),required=String(upgradePlanLabel(minPlan)||minPlan).replace(/^BlinQ\\s+/i,'').toUpperCase();
+        const minPlan=firstComparatorUnlockPlan(),required=String(upgradePlanLabel(minPlan)||minPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
         // Compact direct-link fallback; the nav icon exposes the Live-style hint.
         host.innerHTML=`<button type="button" class="comparator-locked-inline" data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Match Comparator','Porovnávač','Porovnávač'))}" aria-label="${escapeHtml(lcopy(`Comparator available from ${required}`,`Porovnávač dostupný od úrovne ${required}`,`Porovnávač dostupný od úrovně ${required}`))}"><span aria-hidden="true">🔒</span><span>${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od úrovne ${required}`,`Dostupné od úrovně ${required}`))}</span></button>`;
       }
