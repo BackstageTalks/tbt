@@ -264,12 +264,15 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None):
                 ids = [str((captured_players.get(side) or {}).get("id") or "")
                        for side in ("player1", "player2")]
                 selection = str(pub.get("selection_id") or "")
+                current_row_ids = [str((row.get(side) or {}).get("id") or "")
+                                   for side in ("player1", "player2")]
                 market = snap.get("two_way_match_winner") or {}
                 price_key = "player1_odds" if selection == ids[0] else (
                     "player2_odds" if selection == ids[1] else None)
                 public_odds = number(pub.get("odds"))
                 quote_odds = number(market.get(price_key)) if price_key else None
-                if (not all(ids) or ids[0] == ids[1] or public_odds is None
+                if (not all(ids) or ids[0] == ids[1] or current_row_ids != ids
+                        or public_odds is None
                         or quote_odds is None or not math.isclose(
                             public_odds, quote_odds, rel_tol=0, abs_tol=1e-4)):
                     diagnostics["unverified_current_model_selected_price"] += 1
