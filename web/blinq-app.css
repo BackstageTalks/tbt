@@ -10893,3 +10893,49 @@ body#blinqPremium.blinq-admin .admin-model-lab select:focus-visible{
   body#blinqPremium.blinq-admin .admin-model-production strong{font-size:17px}
   body#blinqPremium.blinq-admin .admin-calibration-progress-head{flex-wrap:wrap}
 }
+
+
+/* Comparator access: Live-style nav lock and compact deep-link notice. */
+body#blinqPremium .reference-navigation a.comparator-nav-locked,
+body#blinqPremium .mobile-icon-nav a.comparator-nav-locked{
+  position:relative!important;
+  color:#c8aa63!important;
+  opacity:1!important;
+}
+body#blinqPremium .reference-navigation a.comparator-nav-locked::after,
+body#blinqPremium .mobile-icon-nav a.comparator-nav-locked::after{
+  content:"🔒";
+  position:absolute;
+  top:-3px;
+  right:-3px;
+  width:15px;
+  height:15px;
+  display:grid;
+  place-items:center;
+  font-size:9px;
+  line-height:1;
+  border:1px solid rgba(216,178,95,.36);
+  border-radius:5px;
+  background:#0a211a;
+  pointer-events:none;
+}
+body#blinqPremium .comparator-locked-inline{
+  display:inline-flex;
+  align-items:center;
+  gap:9px;
+  min-height:35px;
+  margin:8px 0;
+  padding:8px 12px;
+  border:1px solid rgba(216,178,95,.23);
+  border-radius:10px;
+  background:rgba(10,32,25,.5);
+  color:#d5bd7e;
+  font-size:12px;
+  font-weight:700;
+  cursor:help;
+}
+body#blinqPremium .comparator-locked-inline:hover,
+body#blinqPremium .comparator-locked-inline:focus-visible{
+  border-color:rgba(216,178,95,.56);
+  outline-offset:3px;
+}
