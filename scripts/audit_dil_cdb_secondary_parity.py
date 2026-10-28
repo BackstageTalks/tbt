@@ -64,7 +64,8 @@ def nested_subset(actual, expected):
             for key, value in expected.items()
         )
     if isinstance(expected, list):
-        return isinstance(actual, list) and actual == expected
+        return (isinstance(actual, list) and len(actual) == len(expected)
+                and all(nested_subset(a, b) for a, b in zip(actual, expected)))
     return context_value_equal(actual, expected)
 
 
