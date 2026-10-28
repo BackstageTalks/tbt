@@ -179,6 +179,26 @@ class SecondaryParityTests(unittest.TestCase):
         self.assertEqual(report2['counts']['provider_context_matches_shadowed'],0)
         self.assertTrue(audit.audit(self.cdb,second,self.sha,
                                    attest=self.receipt,full_integrity=True)['secondary_promotion_allowed'])
+        # Simulate tomorrow's authoritative source release: old shadows must
+        # still be verified against their immutable historical snapshot.
+        with sqlite3.connect(self.cdb) as db:
+            db.execute('UPDATE cdb_matches SET provider_context_json=?',
+                (json.dumps({'venue':{'city':'Žilina'}}),))
+        self.sha=audit.file_sha256(self.cdb)
+        rc=json.loads(self.receipt.read_text())
+        rc['export_sqlite_sha256']=self.sha
+        self.receipt.write_text(json.dumps(rc))
+        third=self.dil.parent/'third-secondary.sqlite'
+        report3=reconcile(second,self.cdb,third,self.sha,'1'*64,export_receipt=self.receipt)
+        self.assertEqual(report3['counts']['provider_context_matches_shadowed'],1)
+        with sqlite3.connect(third) as db:
+            versions=db.execute('SELECT COUNT(*) FROM dil_cdb_provider_context_shadow').fetchone()[0]
+            current3=json.loads(db.execute('SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
+                              (mid,)).fetchone()[0])
+        self.assertEqual(versions,2)
+        self.assertEqual(current3['venue']['city'],'Žilina')
+        self.assertTrue(audit.audit(self.cdb,third,self.sha,
+                                    attest=self.receipt,full_integrity=True)['secondary_promotion_allowed'])
         with sqlite3.connect(second) as db:
             current=json.loads(db.execute('SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
                                         (mid,)).fetchone()[0])
