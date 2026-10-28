@@ -144,6 +144,19 @@ def context_null_only_merge(existing, incoming):
     return out,added,conflicts
 
 
+def populated_source_context(value):
+    """Only populated CDB leaves are authoritative; empty objects/lists are not."""
+    if isinstance(value, dict):
+        cleaned = {key: leaf for key, raw in value.items()
+                   if (leaf := populated_source_context(raw)) is not None}
+        return cleaned or None
+    if value is None or isinstance(value, str) and miss(value):
+        return None
+    if isinstance(value, (dict, list)) and not value:
+        return None
+    return value
+
+
 def context_cdb_authoritative_merge(existing, incoming):
     """Canonicalize populated CDB leaves; keep independent DIL keys.
 
@@ -154,6 +167,7 @@ def context_cdb_authoritative_merge(existing, incoming):
     if not isinstance(existing, dict) or not isinstance(incoming, dict):
         raise ValueError('Provider context must be a JSON object')
     out = json.loads(json.dumps(existing, allow_nan=False))
+    incoming = populated_source_context(incoming) or {}
     added, conflicts = {}, {}
     def walk(dst, src, path):
         for key, value in src.items():
@@ -396,16 +410,18 @@ def reconcile(dil,cdb,dest,expected_cdb_sha256,release_manifest_sha256,quick_che
         db.commit()
         # Independent SQL read-back of all overwritten canonical leaves and
         # original-context checksums before declaring any release eligibility.
-        shadows = db.execute('''SELECT s.original_context_json,s.original_context_sha256,
-            s.merged_context_sha256,m.provider_context_json
-            FROM dil_cdb_provider_context_shadow s
-            JOIN canonical_matches m ON s.match_id=m.match_id
-            WHERE s.source_sha256=?''',(actual,)).fetchall()
-        if len(shadows) != counts['provider_context_matches_shadowed']:
-            raise AssertionError('Missing or duplicate provider-context shadows')
-        for old, old_sha, merged_sha, current in shadows:
-            if shadow_hash(old) != old_sha or shadow_hash(current) != merged_sha:
+        shadow_count = 0
+        for old, old_sha, merged_sha, current in db.execute('''SELECT
+                s.original_context_json,s.original_context_sha256,
+                s.merged_context_sha256,m.provider_context_json
+                FROM dil_cdb_provider_context_shadow s
+                JOIN canonical_matches m ON s.match_id=m.match_id
+                WHERE s.source_sha256=?''',(actual,)):
+            shadow_count += 1
+            if shadow_hash(old) != old_sha or current is None or shadow_hash(current) != merged_sha:
                 raise AssertionError('Provider-context shadow read-back mismatch')
+        if shadow_count != counts['provider_context_matches_shadowed']:
+            raise AssertionError('Missing or duplicate provider-context shadows')
         after=db.execute('SELECT count(*) FROM canonical_matches').fetchone()[0]
         # A DIL-only canonical ID requires review, not destructive deletion.
         dil_only=db.execute('''SELECT count(*) FROM canonical_matches d
