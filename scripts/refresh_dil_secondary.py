@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import shutil
+import sqlite3
 from pathlib import Path
 import subprocess
 import sys
@@ -107,6 +108,27 @@ def activate_secondary_pointer(folder, artifact, report):
     return check
 
 
+def verify_shadow_matches_original(base_dil, staged, source_sha256):
+    """Independent source read-back, never modifying either SQLite input."""
+    original = sqlite3.connect(Path(base_dil).resolve().as_uri() + '?mode=ro', uri=True)
+    candidate = sqlite3.connect(Path(staged).resolve().as_uri() + '?mode=ro', uri=True)
+    try:
+        matches = 0
+        for mid, old in candidate.execute('''SELECT match_id, original_context_json
+                FROM dil_cdb_provider_context_shadow WHERE source_sha256=?''',
+                (source_sha256,)):
+            source_row = original.execute(
+                'SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
+                (mid,)).fetchone()
+            if source_row is None or source_row[0] != json.loads(old):
+                raise AssertionError('Private provider-context original source proof mismatch')
+            matches += 1
+        return matches
+    finally:
+        candidate.close()
+        original.close()
+
+
 def refresh(base_dil, work_dir, secondary_dir, *, activate=False):
     work_dir=Path(work_dir).resolve()
     secondary_dir=Path(secondary_dir).resolve()
@@ -140,6 +162,9 @@ def refresh(base_dil, work_dir, secondary_dir, *, activate=False):
         staged=work_dir/'staged-secondary.sqlite'
         result=importer.reconcile(base_dil,cdb_file,staged,source_sha,release_sha,
                                   quick_check=True, export_receipt=Path(str(cdb_file)+'.receipt.json'))
+        shadow_matches=verify_shadow_matches_original(base_dil,staged,source_sha)
+        if shadow_matches!=result['counts']['provider_context_matches_shadowed']:
+            raise AssertionError('DIL provider-context source preservation count mismatch')
         audit=parity.audit(cdb_file,staged,source_sha,full_integrity=True,
                            attest=Path(str(cdb_file)+'.receipt.json'))
         (work_dir/'secondary-parity.json').write_text(json.dumps(audit,indent=2,sort_keys=True)+'\n')
