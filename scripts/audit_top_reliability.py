@@ -235,10 +235,12 @@ def summarize(entries):
     return result
 
 
-def analyze(ledger, *, now=None, window_days=90):
+def analyze(ledger, *, now=None, window_days=90, model_version=None):
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise ValueError("now must include timezone")
+    if model_version is not None and (not isinstance(model_version, str) or not model_version.strip()):
+        raise ValueError("Current model audit requires a nonempty binary-derived version")
     start = now - timedelta(days=window_days)
     entries, used = [], set()
     daily_publications = defaultdict(int)
@@ -249,6 +251,32 @@ def analyze(ledger, *, now=None, window_days=90):
         for pub in row.get("market_publications") or []:
             if not isinstance(pub, dict) or pub.get("section") != "top_daily" or pub.get("market") != "match_winner":
                 continue
+            if model_version is not None:
+                # Do not mix legacy champion predictions with the current
+                # production artifact. A mutable event row is not issuance proof.
+                snap = issued_snapshot(pub)
+                if (snap is None or snap.get("source") != "pre_deploy_feed_confirmed"
+                        or snap.get("model_version") != model_version
+                        or pub.get("model_version") != model_version):
+                    diagnostics["missing_or_other_model_issued_proof"] += 1
+                    continue
+                captured_players = snap.get("players") or {}
+                ids = [str((captured_players.get(side) or {}).get("id") or "")
+                       for side in ("player1", "player2")]
+                selection = str(pub.get("selection_id") or "")
+                current_row_ids = [str((row.get(side) or {}).get("id") or "")
+                                   for side in ("player1", "player2")]
+                market = snap.get("two_way_match_winner") or {}
+                price_key = "player1_odds" if selection == ids[0] else (
+                    "player2_odds" if selection == ids[1] else None)
+                public_odds = number(pub.get("odds"))
+                quote_odds = number(market.get(price_key)) if price_key else None
+                if (not all(ids) or ids[0] == ids[1] or current_row_ids != ids
+                        or public_odds is None
+                        or quote_odds is None or not math.isclose(
+                            public_odds, quote_odds, rel_tol=0, abs_tol=1e-4)):
+                    diagnostics["unverified_current_model_selected_price"] += 1
+                    continue
             issued = timestamp(pub.get("issued_at"))
             scheduled = timestamp((pub.get("result") or {}).get("scheduled_at") or row.get("scheduled_at"))
             if not issued or not scheduled or not start <= scheduled < now:
@@ -322,6 +350,7 @@ def analyze(ledger, *, now=None, window_days=90):
                 "scheduled_at": scheduled.isoformat(),
             })
     report = {"window_days": window_days, "window_start": start.isoformat(),
+              "model_version_scope": model_version,
               "window_end": now.isoformat(), "diagnostics": dict(diagnostics),
               "overall": summarize(entries), "subgroups": {},
               "coverage": {
