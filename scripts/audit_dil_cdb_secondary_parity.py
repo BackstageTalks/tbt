@@ -195,13 +195,15 @@ def audit(cdb_path, dil_path, cdb_sha256, *, full_integrity=False, attest=None):
         if has_shadow:
             shadow_rows = dil.execute('''SELECT s.match_id,s.source_sha256,
                 s.original_context_json,s.original_context_sha256,
-                s.cdb_context_json,s.merged_context_sha256,m.provider_context_json
+                s.cdb_context_json,s.merged_context_json,s.merged_context_sha256,
+                m.provider_context_json
                 FROM dil_cdb_provider_context_shadow s
                 LEFT JOIN canonical_matches m ON m.match_id=s.match_id''')
-            for mid, source_sha, original, old_sha, cdb_raw, merged_sha, current in shadow_rows:
+            for mid, source_sha, original, old_sha, cdb_raw, merged_json, merged_sha, current in shadow_rows:
                 try:
                     if (not isinstance(old_sha, str) or shadow_hash(original) != old_sha
-                            or current is None or shadow_hash(current) != merged_sha):
+                            or shadow_hash(merged_json) != merged_sha or current is None
+                            or (source_sha == cdb_sha256 and shadow_hash(current) != merged_sha)):
                         raise ValueError('Bad private shadow checksum')
                     # Stored originals are JSON encodings of the original SQL
                     # value. Parsing confirms they were not truncated.
