@@ -23,21 +23,21 @@ from tbt.data.history_safety import sanitize_history_identities
 from tbt.data.history_snapshot import load_partitions
 from tbt.models.artifact import load_model
 from tbt.services.data_quality import audit_history
-from tbt.services.training import _parse_provenance_datetime
+from tbt.services.training import _parse_provenance_datetime, _promotion_evaluation_cutoff
 
 
 def _decision_cutoff(history) -> datetime | None:
     values = []
     for row in history if isinstance(history, list) else []:
         if not isinstance(row, dict):
-            continue
-        period = row.get("holdout_period") or {}
+            raise ValueError("Previous promotion decision cutoff unknown")
         # A preview (promote=false) is not a promotion decision.
         if row.get("promotion_requested") is False and row.get("decision") == "not_requested":
             continue
-        value = _parse_provenance_datetime(period.get("end"))
-        if value is not None:
-            values.append(value)
+        value = _promotion_evaluation_cutoff(row)
+        if value is None:
+            raise ValueError("Previous promotion decision cutoff unknown")
+        values.append(value)
     return max(values) if values else None
 
 

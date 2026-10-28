@@ -650,6 +650,28 @@ def _holdout_fingerprint(frame: pd.DataFrame) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _promotion_evaluation_cutoff(decision):
+    if not isinstance(decision, dict):
+        return None
+    period = decision.get("holdout_period") or {}
+    cutoff = _parse_provenance_datetime(period.get("end"))
+    if cutoff is not None:
+        return cutoff
+    # Legacy manual releases recorded their execution time, not a test period.
+    # Exclude the entire release day and everything earlier: never revive an
+    # old holdout merely because a calibration waiver lacks holdout_period.
+    if (decision.get("decision") == "operator_calibration_override"
+            and decision.get("promotion_requested") is True
+            and decision.get("quality_status") == "OPERATOR_WAIVED_NOT_VERIFIED"):
+        try:
+            value = datetime.fromisoformat(str(decision.get("created_at", "")).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if value.tzinfo is not None:
+            return value.astimezone(timezone.utc)
+    return None
+
+
 def _eligible_evaluation(test, production_model=None, promotion_history=(), *, as_of=None):
     """Only completed whole UTC days unseen by the champion and decisions."""
     today_utc = pd.Timestamp(as_of if as_of is not None else pd.Timestamp.now(tz="UTC"))
@@ -669,8 +691,7 @@ def _eligible_evaluation(test, production_model=None, promotion_history=(), *, a
                 and decision.get("promotion_requested") is False
                 and decision.get("decision") == "not_requested"):
             continue
-        period = decision.get("holdout_period") if isinstance(decision, dict) else None
-        cutoff = _parse_provenance_datetime((period or {}).get("end"))
+        cutoff = _promotion_evaluation_cutoff(decision)
         if cutoff is None:
             return test.iloc[:0].copy(), "previous_decision_cutoff_unknown"
         cutoffs.append(pd.Timestamp(cutoff).normalize())

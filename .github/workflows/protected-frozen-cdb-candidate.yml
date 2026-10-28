@@ -136,13 +136,14 @@ jobs:
             --frozen-backed-compute
           python scripts/guarded_candidate_backup.py verify
       - name: Independently persist champion-versus-candidate offline holdout
+        id: comparison
         if: success()
         run: |
           set -euo pipefail
           python scripts/publish_frozen_candidate_evidence.py
           test -s .cache/tbt/training-backup/frozen-candidate-evaluation.json
       - name: Update signed Admin model comparison without activation
-        if: success()
+        if: ${{ success() && steps.comparison.outputs.evaluated == 'true' }}
         env:
           BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
           BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
