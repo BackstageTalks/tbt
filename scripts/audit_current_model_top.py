@@ -47,6 +47,9 @@ def current_report(repo: str = DATA_REPOSITORY, *, directory: Path | None = None
         raise ValueError("Production model read-back invalid")
 
     result = analyze(ledger, model_version=active.version, window_days=30)
+    value_result = analyze(
+        ledger, model_version=active.version, window_days=30, section="value"
+    )
     summary = result["overall"]
     return {
         "schema": 1,
@@ -57,6 +60,18 @@ def current_report(repo: str = DATA_REPOSITORY, *, directory: Path | None = None
         "publication_ledger_sha256": _sha(path),
         "window_days": 30,
         "overall": summary,
+        "value": {
+            "status": ("DESCRIPTIVE_ISSUED_COHORT" if value_result["overall"]["settled"] >= 30
+                       else "INSUFFICIENT_CURRENT_MODEL_SETTLED_VALUE"),
+            "overall": value_result["overall"],
+            "diagnostics": value_result["diagnostics"],
+            "coverage": value_result["coverage"],
+            "subgroups": {
+                "competition": value_result["subgroups"]["competition"],
+                "confidence_band": value_result["subgroups"]["confidence_band"],
+                "surface_evidence": value_result["subgroups"]["surface_evidence"],
+            },
+        },
         "diagnostics": result["diagnostics"],
         "coverage": result["coverage"],
         "subgroups": {
@@ -65,7 +80,7 @@ def current_report(repo: str = DATA_REPOSITORY, *, directory: Path | None = None
             "surface_evidence": result["subgroups"]["surface_evidence"],
         },
         "limits": [
-            "Only original TOP publications whose model version is independently "
+            "Only original TOP and VALUE publications whose model version is independently "
             "confirmed against the active production model binary.",
             "Exact two-way quoted bookmaker odds and saved pre-deploy issuance required.",
             "Published selections are unchanged. No historical counterfactual or "
@@ -99,6 +114,17 @@ def main():
         "hit_rate": result["overall"]["hit_rate"],
         "brier": result["overall"]["brier"],
         "yield_flat_stake": result["overall"]["yield_flat_stake"],
+        "value": {
+            "status": result["value"]["status"],
+            "settled": result["value"]["overall"]["settled"],
+            "published": result["value"]["overall"]["published"],
+            "wins": result["value"]["overall"]["wins"],
+            "losses": result["value"]["overall"]["losses"],
+            "hit_rate": result["value"]["overall"]["hit_rate"],
+            "brier": result["value"]["overall"]["brier"],
+            "yield_flat_stake": result["value"]["overall"]["yield_flat_stake"],
+            "diagnostics": result["value"]["diagnostics"],
+        },
         "diagnostics": result["diagnostics"],
         "provider_requests": 0,
         "CDB_mutated": False,
