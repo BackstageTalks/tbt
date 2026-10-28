@@ -68,3 +68,24 @@ def test_candidate_evidence_fails_closed(monkeypatch, failure, message):
     _stub(monkeypatch, **failure)
     with pytest.raises(RuntimeError, match=message):
         evidence.persist_verified({"run_id": 123})
+
+
+def test_empty_governed_holdout_is_deferred_not_fabricated(tmp_path):
+    binary = tmp_path / "model.joblib"
+    binary.write_bytes(b"candidate")
+    cert = {"champion_version": "old", "candidate_tag": "blinq-candidate-frozen-1-1"}
+    report = {"production_holdout": {}, "holdout": {}, "data": {"holdout": 0},
+              "promotion_decision": {"promotion_requested": False, "eligible": False,
+                                     "production_version": "old", "candidate_version": "new"},
+              "evaluation_governance": {"eligibility_reason": "previous_decision_cutoff_unknown",
+                                        "holdout_fingerprint": ""}}
+    result = evidence.make_evidence(cert, report, binary)
+    assert result["status"] == "EVALUATION_DEFERRED"
+    assert result["comparison"] == {"sample_size": 0}
+    assert result["model_promoted"] is False
+    report["evaluation_governance"]["eligibility_reason"] = "unexpected_corruption"
+    with pytest.raises(ValueError):
+        evidence.make_evidence(cert, report, binary)
+    report["promotion_decision"]["production_version"] = "wrong"
+    with pytest.raises(ValueError, match="champion"):
+        evidence.make_evidence(cert, report, binary)

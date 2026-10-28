@@ -41,10 +41,6 @@ def score(block):
 
 
 def make_evidence(cert, report, candidate_binary):
-    old=score(report.get("production_holdout"))
-    new=score(report.get("holdout"))
-    if old["n"]!=new["n"]:
-        raise ValueError("Candidate and champion were not scored on same holdout")
     decision=report.get("promotion_decision") or {}
     if decision.get("promotion_requested") is not False:
         raise ValueError("A nonpromoting candidate is required")
@@ -54,6 +50,25 @@ def make_evidence(cert, report, candidate_binary):
     if not isinstance(version,str) or not version.strip():
         raise ValueError("No fitted candidate model version in training report")
     gov=report.get("evaluation_governance") or {}
+    deferred = (gov.get("eligibility_reason") in {
+        "previous_decision_cutoff_unknown", "production_history_cutoff_unknown",
+        "no_eligible_unseen_evaluation_rows"}
+        and (report.get("data") or {}).get("holdout") == 0
+        and report.get("holdout") == {} and report.get("production_holdout") == {}
+        and decision.get("eligible") is False and not gov.get("holdout_fingerprint"))
+    if deferred:
+        raw = candidate_binary.read_bytes()
+        if not raw or not cert["candidate_tag"].startswith("blinq-candidate-frozen-"):
+            raise ValueError("Missing frozen candidate")
+        return {"status": "EVALUATION_DEFERRED", "candidate_version": version,
+                "candidate_sha256": hashlib.sha256(raw).hexdigest(),
+                "candidate_release_tag": cert["candidate_tag"],
+                "reason": gov["eligibility_reason"], "comparison": {"sample_size": 0},
+                "model_promoted": False, "promotion_requested": False}
+    old=score(report.get("production_holdout"))
+    new=score(report.get("holdout"))
+    if old["n"]!=new["n"]:
+        raise ValueError("Candidate and champion were not scored on same holdout")
     if not gov.get("holdout_fingerprint"):
         raise ValueError("No untouched holdout fingerprint")
     assert cert["candidate_tag"].startswith("blinq-candidate-frozen-")
@@ -145,12 +160,18 @@ def main():
     if not loaded.fitted or loaded.version!=evidence["candidate_version"]:
         raise RuntimeError("Published candidate model is unfitted or has wrong version")
     evidence["candidate_remote_readback_verified"]=True
-    digest=persist_verified(evidence)
+    evaluated = evidence["status"] == "EVALUATED_NOT_DEPLOYED"
+    # An unavailable comparison must never replace independently scored evidence.
+    # Keep the verified candidate and let the normal shadow gate record BLOCKED.
+    digest=persist_verified(evidence) if evaluated else None
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+            output.write(f"evaluated={'true' if evaluated else 'false'}\n")
     out=base/"training-backup/frozen-candidate-evaluation.json"
     out.write_text(json.dumps(evidence,ensure_ascii=False,indent=2,allow_nan=False))
-    print(json.dumps({"status":"EVALUATED_NOT_DEPLOYED",
+    print(json.dumps({"status":evidence["status"],
                       "candidate":evidence["candidate_version"],
-                      "champion":evidence["champion_version"],
+                      "champion":cert["champion_version"],
                       "holdout_n":evidence["comparison"]["sample_size"],
                       "evidence_sha256":digest}))
 

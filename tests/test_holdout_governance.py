@@ -130,3 +130,20 @@ def test_pipeline_persists_only_requested_real_holdout_decisions():
     assert "if args.promote and fingerprint and not deferred:" in source
     assert 'report["promotion_decision"] = decision' in source
     assert 'promotion_history.append(decision)' in source
+
+
+def test_manual_waiver_conservatively_excludes_release_day():
+    from model_promotion_readiness import _decision_cutoff
+    waiver = {"decision": "operator_calibration_override", "promotion_requested": True,
+              "quality_status": "OPERATOR_WAIVED_NOT_VERIFIED",
+              "created_at": "2026-10-04T23:59:00Z"}
+    eligible, reason = _eligible_evaluation(_frame(4, 5, 6, 7, 8), Champion(), [waiver], as_of=CLOCK)
+    assert reason is None
+    assert list(eligible.match_id) == ["m-5", "m-6", "m-7"]
+    assert _decision_cutoff([waiver]).day == 4
+    for bad in ({**waiver, "created_at": "2026-10-04T23:59:00"}, {},
+                {**waiver, "decision": "unknown"}):
+        assert _eligible_evaluation(_frame(5, 6, 7), Champion(), [bad], as_of=CLOCK)[0].empty
+        import pytest
+        with pytest.raises(ValueError, match="cutoff unknown"):
+            _decision_cutoff([bad])
