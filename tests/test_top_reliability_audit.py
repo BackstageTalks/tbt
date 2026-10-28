@@ -183,3 +183,63 @@ def test_issuance_snapshot_refuses_rewritten_or_mismatched_public_evidence():
     assert audit["diagnostics"].get("exact_issued_evidence", 0) == 0
     assert abs(audit["overall"]["mean_confidence"] - .82) < 1e-12
     assert audit["subgroups"]["picked_rank"]["pick_top_500"]["wins"] == 1
+
+
+def _with_confirmed_model_quote(row, version="v7.2.1-test"):
+    """Real two-way bookmaker and model version frozen before issuance."""
+    row = deepcopy(row)
+    pub = row["market_publications"][0]
+    issued = datetime.fromisoformat(pub["issued_at"])
+    prepared = {
+        "schema": 2, "source": "pre_deploy_feed",
+        "model_version": version,
+        "model_probability": pub["model_probability"],
+        "blinq_probability": row["blinq_probability"],
+        "players": {"player1": deepcopy(row["player1"]),
+                    "player2": deepcopy(row["player2"])},
+        "prepared_at": pub["issued_at"],
+        "market_captured_at": (issued - timedelta(minutes=5)).isoformat(),
+        "two_way_match_winner": {"player1_odds": pub["odds"],
+                                "player2_odds": 2.50},
+    }
+    pub["model_version"] = version
+    pub["prepared_snapshot"] = prepared
+    pub["issued_snapshot"] = {
+        **prepared, "source": "pre_deploy_feed_confirmed",
+        "confirmed_at": pub["issued_at"],
+    }
+    return row
+
+
+def test_current_model_top_audit_uses_only_exact_binary_version_and_quoted_price():
+    current = _with_confirmed_model_quote(fixture("current"))
+    previous = _with_confirmed_model_quote(fixture("previous"), "v201-previous")
+    absent = fixture("unverified-legacy")
+    report = analyze([current, previous, absent], now=NOW, model_version="v7.2.1-test")
+    assert report["model_version_scope"] == "v7.2.1-test"
+    assert report["overall"]["published"] == 1
+    assert report["overall"]["settled"] == 1
+    assert report["overall"]["wins"] == 1
+    assert report["diagnostics"]["missing_or_other_model_issued_proof"] == 2
+    assert report["overall"]["average_odds"] == 1.6
+
+    forged_quote = deepcopy(current)
+    forged_quote["market_publications"][0]["odds"] = 1.70
+    report = analyze([forged_quote], now=NOW, model_version="v7.2.1-test")
+    assert report["overall"]["published"] == 0
+    assert report["diagnostics"]["unverified_current_model_selected_price"] == 1
+
+    forged_version = deepcopy(current)
+    forged_version["market_publications"][0]["issued_snapshot"]["model_version"] = "new-label"
+    report = analyze([forged_version], now=NOW, model_version="v7.2.1-test")
+    assert report["overall"]["published"] == 0
+    assert report["diagnostics"]["missing_or_other_model_issued_proof"] == 1
+
+
+def test_current_model_scope_rejects_blank_version_and_does_not_change_legacy_audit():
+    row = fixture("legacy")
+    assert analyze([row], now=NOW)["overall"]["published"] == 1
+    import pytest
+    with pytest.raises(ValueError, match="nonempty"):
+        analyze([row], now=NOW, model_version="")
+    assert analyze([row], now=NOW, model_version="v7.2.1-test")["overall"]["published"] == 0
