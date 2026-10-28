@@ -1,0 +1,79 @@
+name: BlinQ 7.2.1 identity mismatch root cause (read-only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/diagnose_frozen_721_settlement.py'
+      - '.github/workflows/721-identity-probe-readonly.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 721-private-identity-readonly
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      BLINQ_RAPIDAPI_MAX_RPS: '0'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify private read-only access and newest main
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test -z "${RAPIDAPI_KEY:-}"
+          test -z "${PROPLINE_API_KEY:-}"
+          git fetch origin main --depth=1
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+      - name: Install existing private offline runtime
+        run: python -m pip install -r api/requirements-train.txt pytest
+      - name: Test safe matching and read-only invariants
+        run: |
+          python -m pytest -q \
+            tests/test_settle_frozen_721_shadow.py \
+            tests/test_diagnose_frozen_721_settlement.py
+      - name: Examine only independently verified private CDB and prediction history
+        run: |
+          python scripts/diagnose_frozen_721_settlement.py \
+            --out .cache/tbt/721-identity-probe/report.json
+      - name: Assert diagnostics never published or mutated source
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('.cache/tbt/721-identity-probe/report.json').read_text())
+          assert r['status']=='READ_ONLY_IDENTITY_DIAGNOSTICS'
+          assert r['provider_requests']==0
+          assert r['CDB_mutated'] is False
+          assert r['shadow_mutated'] is False
+          assert r['production_mutated'] is False
+          assert r['model_promoted'] is False
+          m=r['canonical_matching']
+          assert m['matched_exact_candidates']+m['matched_alias_candidates']==m['matched_canonical_rows']
+          assert sum(m['alias_identity_categories'].values())==m['matched_alias_candidates']
+          assert r['eligible_for_separate_strict_settlement']<=r['ledger_pending']
+          print('Read-only canonical identity diagnostic: VERIFIED')
+          PY
+      - name: Store aggregate diagnostic report only
+        uses: actions/upload-artifact@v4
+        with:
+          name: 721-readonly-identity-reasons-${{ github.run_id }}
+          path: .cache/tbt/721-identity-probe/report.json
+          retention-days: 7
+          if-no-files-found: error
