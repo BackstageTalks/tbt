@@ -218,7 +218,8 @@ def bootstrap(db):
     CREATE TABLE IF NOT EXISTS dil_cdb_provider_context_shadow (
       match_id TEXT NOT NULL, source_sha256 TEXT NOT NULL,
       original_context_json TEXT NOT NULL, original_context_sha256 TEXT NOT NULL,
-      cdb_context_json TEXT NOT NULL, merged_context_sha256 TEXT NOT NULL,
+      cdb_context_json TEXT NOT NULL, merged_context_json TEXT NOT NULL,
+      merged_context_sha256 TEXT NOT NULL,
       PRIMARY KEY(match_id,source_sha256)
     ) WITHOUT ROWID;
     CREATE TABLE IF NOT EXISTS dil_cdb_finalize_receipts (key TEXT PRIMARY KEY,value TEXT NOT NULL) WITHOUT ROWID;
@@ -355,9 +356,9 @@ def reconcile(dil,cdb,dest,expected_cdb_sha256,release_manifest_sha256,quick_che
                     original_raw = json.dumps(d.get('provider_context_json'), ensure_ascii=False, allow_nan=False)
                     cdb_raw = json.dumps(c.get('provider_context_json'), ensure_ascii=False, allow_nan=False)
                     merged_raw = json.dumps(merged, ensure_ascii=False, sort_keys=True, allow_nan=False)
-                    db.execute('INSERT INTO dil_cdb_provider_context_shadow VALUES(?,?,?,?,?,?)',
+                    db.execute('INSERT INTO dil_cdb_provider_context_shadow VALUES(?,?,?,?,?,?,?)',
                         (mid, actual, original_raw, shadow_hash(original_raw),
-                         cdb_raw, shadow_hash(merged_raw)))
+                         cdb_raw, merged_raw, shadow_hash(merged_raw)))
                     counts['provider_context_matches_shadowed'] += 1
                     counts['provider_context_conflicts_preserved'] += len(provider_conflicts)
                     for key, (existing, incoming) in provider_conflicts.items():
@@ -411,14 +412,15 @@ def reconcile(dil,cdb,dest,expected_cdb_sha256,release_manifest_sha256,quick_che
         # Independent SQL read-back of all overwritten canonical leaves and
         # original-context checksums before declaring any release eligibility.
         shadow_count = 0
-        for old, old_sha, merged_sha, current in db.execute('''SELECT
+        for old, old_sha, merged_json, merged_sha, current in db.execute('''SELECT
                 s.original_context_json,s.original_context_sha256,
-                s.merged_context_sha256,m.provider_context_json
+                s.merged_context_json,s.merged_context_sha256,m.provider_context_json
                 FROM dil_cdb_provider_context_shadow s
                 JOIN canonical_matches m ON s.match_id=m.match_id
                 WHERE s.source_sha256=?''',(actual,)):
             shadow_count += 1
-            if shadow_hash(old) != old_sha or current is None or shadow_hash(current) != merged_sha:
+            if (shadow_hash(old) != old_sha or shadow_hash(merged_json) != merged_sha
+                    or current is None or shadow_hash(current) != merged_sha):
                 raise AssertionError('Provider-context shadow read-back mismatch')
         if shadow_count != counts['provider_context_matches_shadowed']:
             raise AssertionError('Missing or duplicate provider-context shadows')
