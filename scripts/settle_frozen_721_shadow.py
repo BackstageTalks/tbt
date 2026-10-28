@@ -81,6 +81,20 @@ def preliminary_scoreboard(rows):
     }
 
 
+MAX_VERIFIED_LATER_POSTPONEMENT_SECONDS = 72 * 3600
+
+
+def _alias_schedule_safe(source, match):
+    """Accept ordinary <=24h corrections or witnessed later shifts <=72h.
+
+    This predicate is NEVER sufficient on its own: the caller must prove the
+    unique native event, exact native participant witness, tour and prestart
+    chronology. Earlier shifts beyond 24h are deliberately not accepted.
+    """
+    delta = (match.scheduled_at - _utc(source["scheduled_at"])).total_seconds()
+    return -86400 <= delta <= MAX_VERIFIED_LATER_POSTPONEMENT_SECONDS
+
+
 def _alias_identity_category(source, match, event, now):
     """Classify one provider-event alias without accepting or rewriting its identity.
 
@@ -103,14 +117,18 @@ def _alias_identity_category(source, match, event, now):
         return "captured_canonical_player_id_conflict"
     if str(match.tour or "").upper() != str(source.get("tour") or "").upper():
         return "tour_conflict"
-    if abs((match.scheduled_at - _utc(source["scheduled_at"])).total_seconds()) > 86400:
-        return "schedule_drift_over_24h"
-    if _utc(source["captured_at"]) >= match.scheduled_at:
+    delta = (match.scheduled_at - _utc(source["scheduled_at"])).total_seconds()
+    if not _alias_schedule_safe(source, match):
+        return "schedule_outside_witnessed_postponement_window"
+    if (_utc(source["captured_at"]) >= match.scheduled_at
+            or _utc(source["captured_at"]) >= _utc(source["scheduled_at"])):
         return "capture_not_before_canonical_start"
     if match.scheduled_at >= now or _utc(source["scheduled_at"]) >= now:
         return "not_yet_played"
     if not match.is_completed:
         return "canonical_not_completed"
+    if delta > 86400:
+        return "verified_later_postponement_24_72h"
     return "strict_alias_eligible"
 
 
@@ -178,7 +196,8 @@ def completed_matches_for_pending(rows, matches, now):
                     or str(identity.get("event_id") or "") != event
                     or {str(identity.get("home") or ""), str(identity.get("away") or "")} != players
                     or identity.get("status") != "finished"
-                    or abs((match.scheduled_at - _utc(source["scheduled_at"])).total_seconds()) > 86400):
+                    or not _alias_schedule_safe(source, match)
+                    or _utc(source["captured_at"]) >= _utc(source["scheduled_at"])):
                 audit["identity_mismatch"] += 1
                 continue
         if match.scheduled_at >= now or _utc(source["scheduled_at"]) >= now:
@@ -195,7 +214,9 @@ def completed_matches_for_pending(rows, matches, now):
             audit["provider_alias_evidence"][original_id] = {
                 "canonical_match_id": str(match.match_id), "provider_event_id": event,
                 "canonical_scheduled_at": match.scheduled_at.isoformat(),
-                "method": "exact_verified_provider_event_and_players",
+                "method": ("exact_verified_provider_event_and_players_later_postponed_72h"
+                           if (match.scheduled_at - _utc(source["scheduled_at"])).total_seconds() > 86400
+                           else "exact_verified_provider_event_and_players"),
             }
             match = replace(match, match_id=original_id)
         accepted.append(match)
