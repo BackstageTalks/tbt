@@ -278,6 +278,7 @@ def reconcile(dil,cdb,dest,expected_cdb_sha256,release_manifest_sha256,quick_che
         db.commit()
         db.execute('BEGIN IMMEDIATE')
         provenance_before=db.execute('SELECT count(*) FROM dil_cdb_finalize_provenance').fetchone()[0]
+        context_shadow_before=db.execute('SELECT count(*) FROM dil_cdb_provider_context_shadow WHERE source_sha256=?',(actual,)).fetchone()[0]
         counts=dict(rows_cdb=0,matched=0,new_matches=0,noncompleted_new_matches=0,metadata_fields_filled=0,stat_cells_filled=0,stats_conflicts=0,duplicate_event_review=0,
                     identity_review=0,new_identity_review=0,metadata_conflicts=0,provider_context_conflicts_preserved=0,provider_context_matches_shadowed=0,preexisting_stat_cells_preserved=0)
         readback_ids=[]
@@ -422,7 +423,7 @@ def reconcile(dil,cdb,dest,expected_cdb_sha256,release_manifest_sha256,quick_che
             if (shadow_hash(old) != old_sha or shadow_hash(merged_json) != merged_sha
                     or current is None or shadow_hash(current) != merged_sha):
                 raise AssertionError('Provider-context shadow read-back mismatch')
-        if shadow_count != counts['provider_context_matches_shadowed']:
+        if shadow_count != context_shadow_before + counts['provider_context_matches_shadowed']:
             raise AssertionError('Missing or duplicate provider-context shadows')
         after=db.execute('SELECT count(*) FROM canonical_matches').fetchone()[0]
         # A DIL-only canonical ID requires review, not destructive deletion.
