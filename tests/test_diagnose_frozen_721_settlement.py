@@ -86,3 +86,54 @@ def test_read_only_probe_rejects_unexpected_repository_or_naive_timestamp(tmp_pa
         probe.diagnose(repo="different/private", workdir=tmp_path)
     with pytest.raises(ValueError, match="timezone"):
         probe.diagnose(now=datetime(2026, 10, 28), workdir=tmp_path)
+
+
+def test_verified_schedule_drift_histogram_uses_only_exact_witness_and_tracks_real_start():
+    from dataclasses import replace
+    now = datetime(2026, 10, 28, tzinfo=timezone.utc)
+    recorded = now - timedelta(days=8)
+    row = {
+        "status": "pending", "match_id": "captured-hash", "event_id": "event-100",
+        "tour": "ATP", "player1_id": "a", "player2_id": "b",
+        "scheduled_at": recorded.isoformat(),
+        "captured_at": (recorded - timedelta(days=2)).isoformat(),
+    }
+    matching = MatchRecord(
+        match_id="canonical-hash", tour="atp",
+        scheduled_at=recorded + timedelta(days=3),
+        player1_id="a", player1_name="A", player2_id="b", player2_name="B",
+        winner_id="a", status="finished",
+        provider_payload={
+            "_tbt_provider_event_id": "event-100",
+            "_tbt_event_identity": {
+                "event_id": "event-100", "home": "a", "away": "b",
+                "status": "finished",
+            },
+        },
+    )
+    result = probe.verified_schedule_shift_distribution([row], [matching])
+    assert result["strict_witnessed_shift_over_24h"] == 1
+    assert result["direction_and_duration"] == {"later_2_7d": 1}
+    assert result["capture_before_canonical_start"] == 1
+    assert result["capture_at_or_after_canonical_start"] == 0
+    assert result["smallest_abs_hours"] == result["largest_abs_hours"] == 72
+    assert result["settlement_automatically_authorized"] is False
+
+    earlier = replace(matching, scheduled_at=recorded - timedelta(days=3))
+    result = probe.verified_schedule_shift_distribution([row], [earlier])
+    assert result["direction_and_duration"] == {"earlier_2_7d": 1}
+    assert result["capture_at_or_after_canonical_start"] == 1
+
+    unverified = replace(matching, provider_payload={
+        "_tbt_provider_event_id": "event-100",
+        "_tbt_event_identity": {
+            "event_id": "event-100", "home": "somebody-else",
+            "away": "b", "status": "finished",
+        },
+    })
+    assert probe.verified_schedule_shift_distribution([row], [unverified])[
+        "strict_witnessed_shift_over_24h"
+    ] == 0
+    assert probe.verified_schedule_shift_distribution(
+        [row], [matching, replace(matching, match_id="duplicate")]
+    )["strict_witnessed_shift_over_24h"] == 0
