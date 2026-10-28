@@ -249,3 +249,36 @@ def test_current_model_scope_rejects_blank_version_and_does_not_change_legacy_au
     with pytest.raises(ValueError, match="nonempty"):
         analyze([row], now=NOW, model_version="")
     assert analyze([row], now=NOW, model_version="v7.2.1-test")["overall"]["published"] == 0
+
+
+def test_value_exact_issued_scope_is_independent_of_top_and_old_versions():
+    top = _with_confirmed_model_quote(fixture("top-current"))
+    active_value = _with_confirmed_model_quote(
+        fixture("value-current", section="value", result=False)
+    )
+    old_value = _with_confirmed_model_quote(
+        fixture("value-legacy", section="value", result=True), "older"
+    )
+    missing_value = fixture("value-missing", section="value")
+    rows = [top, active_value, old_value, missing_value]
+    scoped_value = analyze(rows, now=NOW, model_version="v7.2.1-test", section="value")
+    scoped_top = analyze(rows, now=NOW, model_version="v7.2.1-test")
+    assert scoped_value["section"] == "value"
+    assert scoped_value["overall"]["published"] == 1
+    assert scoped_value["overall"]["settled"] == 1
+    assert scoped_value["overall"]["wins"] == 0
+    assert scoped_value["overall"]["losses"] == 1
+    assert scoped_value["diagnostics"]["missing_or_other_model_issued_proof"] == 2
+    assert scoped_top["section"] == "top_daily"
+    assert scoped_top["overall"]["published"] == 1
+    assert scoped_top["overall"]["wins"] == 1
+
+    forged_value = deepcopy(active_value)
+    forged_value["market_publications"][0]["issued_snapshot"]["two_way_match_winner"]["player1_odds"] = 4.50
+    result = analyze([forged_value], now=NOW, model_version="v7.2.1-test", section="value")
+    assert result["overall"]["published"] == 0
+    assert result["diagnostics"]["unverified_current_model_selected_price"] == 1
+
+    import pytest
+    with pytest.raises(ValueError, match="TOP and VALUE"):
+        analyze(rows, now=NOW, section="prime")
