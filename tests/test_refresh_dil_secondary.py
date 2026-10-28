@@ -101,6 +101,7 @@ class SecondaryOperatorTests(unittest.TestCase):
                     db.execute('INSERT INTO dil_cdb_provider_context_shadow VALUES(?,?,?)',
                         ('match-00001','a'*64,json.dumps('{"venue":"old"}')))
         self.assertEqual(op.verify_shadow_matches_original(source,candidate,'a'*64),1)
+        self.assertEqual(op.verify_shadow_matches_original(candidate,candidate,'a'*64),0)
         with sqlite3.connect(source) as db:
             db.execute("UPDATE canonical_matches SET provider_context_json='{\"venue\":\"different\"}'")
         with self.assertRaisesRegex(AssertionError,'source proof mismatch'):
