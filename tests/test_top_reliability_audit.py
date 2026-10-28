@@ -229,6 +229,12 @@ def test_current_model_top_audit_uses_only_exact_binary_version_and_quoted_price
     assert report["overall"]["published"] == 0
     assert report["diagnostics"]["unverified_current_model_selected_price"] == 1
 
+    drifted_player = deepcopy(current)
+    drifted_player["player1"]["id"] = "foreign-player"
+    report = analyze([drifted_player], now=NOW, model_version="v7.2.1-test")
+    assert report["overall"]["published"] == 0
+    assert report["diagnostics"]["unverified_current_model_selected_price"] == 1
+
     forged_version = deepcopy(current)
     forged_version["market_publications"][0]["issued_snapshot"]["model_version"] = "new-label"
     report = analyze([forged_version], now=NOW, model_version="v7.2.1-test")
