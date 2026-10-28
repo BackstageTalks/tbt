@@ -11,6 +11,9 @@ name: DIL secondary - private full current CDB parity
       - 'tests/test_summarize_dil_secondary_private_audit.py'
       - 'scripts/finalize_dil_from_cdb_v2.py'
       - 'scripts/audit_dil_cdb_secondary_parity.py'
+      - 'scripts/refresh_dil_secondary.py'
+      - 'scripts/check_dil_secondary_health.py'
+      - 'tests/test_refresh_dil_secondary.py'
       - 'tests/test_finalize_dil_from_cdb_v2.py'
       - 'tests/test_audit_dil_cdb_secondary_parity.py'
   workflow_dispatch:
