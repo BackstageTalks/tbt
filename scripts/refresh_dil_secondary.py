@@ -109,21 +109,37 @@ def activate_secondary_pointer(folder, artifact, report):
 
 
 def verify_shadow_matches_original(base_dil, staged, source_sha256):
-    """Independent source read-back, never modifying either SQLite input."""
+    """Prove every new shadow against original DIL; keep prior rows unchanged."""
     original = sqlite3.connect(Path(base_dil).resolve().as_uri() + '?mode=ro', uri=True)
     candidate = sqlite3.connect(Path(staged).resolve().as_uri() + '?mode=ro', uri=True)
     try:
-        matches = 0
-        for mid, old in candidate.execute('''SELECT match_id, original_context_json
+        prior_shadow = original.execute("""SELECT 1 FROM sqlite_master
+            WHERE type='table' AND name='dil_cdb_provider_context_shadow'""").fetchone()
+        new_matches = 0
+        for row in candidate.execute('''SELECT match_id,original_context_json,
+                source_sha256,original_context_sha256,cdb_context_json,
+                merged_context_json,merged_context_sha256
                 FROM dil_cdb_provider_context_shadow WHERE source_sha256=?''',
                 (source_sha256,)):
+            mid, old, source_sha, old_sha, cdb_raw, merged_raw, merged_sha = row
+            if prior_shadow:
+                previous = original.execute('''SELECT match_id,original_context_json,
+                    source_sha256,original_context_sha256,cdb_context_json,
+                    merged_context_json,merged_context_sha256
+                    FROM dil_cdb_provider_context_shadow
+                    WHERE match_id=? AND source_sha256=?''',
+                    (mid, source_sha)).fetchone()
+                if previous is not None:
+                    if previous != row:
+                        raise AssertionError('Prior provider-context shadow was modified')
+                    continue
             source_row = original.execute(
                 'SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
                 (mid,)).fetchone()
             if source_row is None or source_row[0] != json.loads(old):
                 raise AssertionError('Private provider-context original source proof mismatch')
-            matches += 1
-        return matches
+            new_matches += 1
+        return new_matches
     finally:
         candidate.close()
         original.close()
