@@ -142,7 +142,7 @@ class ReconciliationTests(unittest.TestCase):
             canonical=json.loads(db.execute(
                 'SELECT provider_context_json FROM canonical_matches WHERE match_id=?',(mid,)).fetchone()[0])
             saved=db.execute('''SELECT original_context_json,original_context_sha256,
-                        cdb_context_json,merged_context_sha256 FROM dil_cdb_provider_context_shadow
+                        cdb_context_json,merged_context_json,merged_context_sha256 FROM dil_cdb_provider_context_shadow
                         WHERE match_id=? AND source_sha256=?''',(mid,source_sha)).fetchone()
             ledger=db.execute('''SELECT existing_json,incoming_json FROM
                 dil_cdb_finalize_metadata_conflicts WHERE match_id=? AND
@@ -152,7 +152,8 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual(json.loads(saved[0]),original)
         self.assertEqual(saved[1],f.shadow_hash(saved[0]))
         self.assertEqual(json.loads(saved[2]),authoritative)
-        self.assertEqual(saved[3],f.shadow_hash(json.dumps(canonical,ensure_ascii=False,sort_keys=True,allow_nan=False)))
+        self.assertEqual(json.loads(saved[3]),canonical)
+        self.assertEqual(saved[4],f.shadow_hash(saved[3]))
         self.assertEqual(json.loads(ledger[0]),'Bratislava')
         self.assertEqual(json.loads(ledger[1]),'Trnava')
         with sqlite3.connect(self.dil) as db:
