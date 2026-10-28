@@ -81,7 +81,7 @@ def preliminary_scoreboard(rows):
     }
 
 
-def _alias_identity_category(source, match, event):
+def _alias_identity_category(source, match, event, now):
     """Classify one provider-event alias without accepting or rewriting its identity.
 
     A native event ID alone is not proof that the captured players are the
@@ -107,6 +107,8 @@ def _alias_identity_category(source, match, event):
         return "schedule_drift_over_24h"
     if _utc(source["captured_at"]) >= match.scheduled_at:
         return "capture_not_before_canonical_start"
+    if match.scheduled_at >= now or _utc(source["scheduled_at"]) >= now:
+        return "not_yet_played"
     if not match.is_completed:
         return "canonical_not_completed"
     return "strict_alias_eligible"
@@ -157,7 +159,7 @@ def completed_matches_for_pending(rows, matches, now):
         source_players = {str(source["player1_id"]), str(source["player2_id"])}
         if alias:
             audit["matched_alias_candidates"] += 1
-            category = _alias_identity_category(source, match, event)
+            category = _alias_identity_category(source, match, event, now)
             categories = audit["alias_identity_categories"]
             categories[category] = categories.get(category, 0) + 1
         else:
