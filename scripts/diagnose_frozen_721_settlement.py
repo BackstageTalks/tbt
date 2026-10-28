@@ -22,6 +22,66 @@ from tbt.services.frozen_721_research import (
 )
 
 
+def verified_schedule_shift_distribution(pending, canonical):
+    """Only count independently witnessed, uniquely identified native events.
+
+    Descriptive timing histogram; this does NOT promote a match to settlement.
+    """
+    from collections import Counter, defaultdict
+
+    by_event = defaultdict(list)
+    for match in canonical:
+        raw = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+        evidence = raw.get("_tbt_event_identity")
+        if not isinstance(evidence, dict):
+            continue
+        event = str(raw.get("_tbt_provider_event_id") or "")
+        if event and str(evidence.get("event_id") or "") == event:
+            by_event[event].append(match)
+
+    shifts = Counter()
+    before_real_start = after_real_start = 0
+    min_abs_hours = max_abs_hours = None
+    for row in pending:
+        event = str(row.get("event_id") or "")
+        matches = by_event.get(event, [])
+        if len(matches) != 1:
+            continue
+        match = matches[0]
+        raw = match.provider_payload or {}
+        witness = raw.get("_tbt_event_identity") or {}
+        canonical_players = {str(match.player1_id), str(match.player2_id)}
+        if (witness.get("status") != "finished"
+                or {str(witness.get("home") or ""), str(witness.get("away") or "")} != canonical_players
+                or {str(row.get("player1_id") or ""), str(row.get("player2_id") or "")} != canonical_players
+                or str(row.get("tour") or "").upper() != str(match.tour or "").upper()):
+            continue
+        delta_h = (match.scheduled_at - _utc(row["scheduled_at"])).total_seconds() / 3600
+        abs_h = abs(delta_h)
+        if abs_h <= 24:
+            continue
+        direction = "later" if delta_h > 0 else "earlier"
+        band = ("24_48h" if abs_h <= 48 else
+                "2_7d" if abs_h <= 168 else
+                "7_30d" if abs_h <= 720 else "over_30d")
+        shifts[f"{direction}_{band}"] += 1
+        if _utc(row["captured_at"]) < match.scheduled_at:
+            before_real_start += 1
+        else:
+            after_real_start += 1
+        min_abs_hours = abs_h if min_abs_hours is None else min(min_abs_hours, abs_h)
+        max_abs_hours = abs_h if max_abs_hours is None else max(max_abs_hours, abs_h)
+    return {
+        "strict_witnessed_shift_over_24h": sum(shifts.values()),
+        "direction_and_duration": dict(sorted(shifts.items())),
+        "capture_before_canonical_start": before_real_start,
+        "capture_at_or_after_canonical_start": after_real_start,
+        "smallest_abs_hours": round(min_abs_hours, 2) if min_abs_hours is not None else None,
+        "largest_abs_hours": round(max_abs_hours, 2) if max_abs_hours is not None else None,
+        "settlement_automatically_authorized": False,
+    }
+
+
 def diagnose(*, repo=DATA_REPO, workdir=None, now=None):
     if repo != DATA_REPO:
         raise ValueError("Unexpected canonical data repository")
@@ -47,6 +107,7 @@ def diagnose(*, repo=DATA_REPO, workdir=None, now=None):
     canonical, provenance = download_verified_years(repo, root / "canonical", years)
     eligible, categories = completed_matches_for_pending(rows, canonical, now)
     pending_counts = pending_schedule_diagnostics(rows, canonical, now)
+    shift_distribution = verified_schedule_shift_distribution(pending, canonical)
     # The accepted matches are counted only. No settlement of them is performed.
     safe = {k: v for k, v in categories.items() if k != "provider_alias_evidence"}
     return {
@@ -56,6 +117,7 @@ def diagnose(*, repo=DATA_REPO, workdir=None, now=None):
         "ledger_settled_unchanged": before["settled"],
         "eligible_for_separate_strict_settlement": len(eligible),
         "canonical_matching": safe,
+        "verified_schedule_shift_distribution": shift_distribution,
         "pending_diagnostics": pending_counts,
         "canonical_provenance": provenance,
         "provider_requests": 0,
