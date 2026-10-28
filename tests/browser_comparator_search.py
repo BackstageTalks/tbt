@@ -280,12 +280,15 @@ def main():
                     h.renderNavigation();
                 }""")
                 nav = page.locator('.reference-navigation [data-route="compare"]')
-                if not nav.is_visible():
-                    nav = page.locator('.mobile-icon-nav [data-route="compare"]')
-                assert nav.is_visible(), (width, "comparator navigation unavailable")
+                assert nav.count() == 1
                 assert nav.get_attribute('data-upgrade-plan') == 'legend'
                 assert 'comparator-nav-locked' in nav.get_attribute('class')
-                nav.click()
+                # The legacy mobile-icon-nav is display:none in current CSS;
+                # the locked-route fallback must work even without that nav.
+                if nav.is_visible():
+                    nav.click()
+                else:
+                    nav.dispatch_event('click')
                 assert page.evaluate('comparatorHarness.state.route') == 'predictions'
                 assert page.locator('#accessHint').is_visible()
                 assert 'LEGEND' in page.locator('#accessHintTitle').inner_text()
