@@ -31,7 +31,7 @@ PARITY_FAILURES = (
     'cdb_stat_cells_conflicting_effective_dil', 'cdb_sqlite_check_failures',
     'dil_sqlite_check_failures', 'invalid_dil_canonical_metric_cells',
     'invalid_dil_overlay_metric_cells', 'cdb_foreign_key_failures',
-    'dil_foreign_key_failures',
+    'dil_foreign_key_failures', 'provider_context_shadow_invalid_rows',
 )
 
 
