@@ -81,6 +81,13 @@ def main():
                         row('sets',[publication('sets','sets','over:2.5')]),
                         row('games',[publication('games','games','over:20.5')])
                     ];
+                    // Match the configurable category tabs shown on the home page.
+                    s.ui=s.ui||{};
+                    s.ui.dashboard=s.ui.dashboard||{};
+                    s.ui.dashboard.daily_hub=s.ui.dashboard.daily_hub||{};
+                    s.ui.dashboard.daily_hub.tab_order=[
+                        'daily','value','ace','double_faults','sets','doubles','games','prime','see_all'
+                    ];
                     s.resultsFilters={category:'all',tour:'',surface:'',window:'1',
                                       dateFrom:'',dateTo:'',bettingDay:true};
                     s.resultsPage=0;
@@ -98,6 +105,17 @@ def main():
                 }""")
                 table = page.locator(".results-table tbody tr")
                 assert table.count() == 7, (scenario, table.count())
+                expected_order = ['all', 'top_daily', 'value', 'ace', 'double_faults',
+                                  'sets', 'doubles', 'games', 'prime']
+                rendered_order = page.locator('.results-category-picker [data-result-category]').evaluate_all(
+                    '(nodes) => nodes.map(node => node.dataset.resultCategory)'
+                )
+                assert rendered_order == expected_order, (scenario, rendered_order)
+                select_order = page.locator('#resultsCategory option').evaluate_all(
+                    '(nodes) => nodes.map(node => node.value)'
+                )
+                assert select_order == expected_order, (scenario, select_order)
+
                 drawer = page.locator("[data-results-filter-toggle]")
                 if android_desktop_site:
                     assert not drawer.is_visible(), scenario
@@ -129,13 +147,17 @@ def main():
                 page.locator('input[data-result-category="doubles"]').check()
                 assert table.count() == 6, (scenario, "including doubles")
                 assert "Štvorhra" in page.locator(".results-table tbody .result-tag").all_inner_texts(), scenario
+                assert page.locator('.results-category-picker summary').inner_text() == (
+                    'TOP, Value, Esá, Dvojchyby, Sety, Štvorhra, Gamy'
+                ), scenario
+
                 # Simulate the reported mismatch: boxes visually remain
                 # checked, but the previously serialized category is stale.
                 # A checkbox change must recompute the union from the DOM.
                 page.evaluate("resultsMultiTest.state.resultsFilters.category='top_daily'")
                 page.locator('input[data-result-category="top_daily"]').uncheck()
                 assert page.evaluate("resultsMultiTest.state.resultsFilters.category") == (
-                    'value,ace,double_faults,sets,games,doubles'
+                    'value,ace,double_faults,sets,doubles,games'
                 ), scenario
                 assert table.count() == 6
                 assert page.locator(".results-table tbody tr .result-tag").all_inner_texts().count("TOP") == 0

@@ -1995,6 +1995,11 @@
     const order=Array.isArray(saved)?saved.filter((id,i)=>DAILY_HUB_TABS.includes(id)&&saved.indexOf(id)===i):[];
     return [...order,...DAILY_HUB_TABS.filter(id=>!order.includes(id))];
   }
+  // Results filters follow the configurable home tab order, including admin changes.
+  const RESULT_CATEGORY_BY_TAB={daily:'top_daily',prime:'prime',value:'value',ace:'ace',double_faults:'double_faults',sets:'sets',doubles:'doubles',games:'games'};
+  function orderedResultCategories(){
+    return ['all',...orderedDailyHubTabs().map(tab=>RESULT_CATEGORY_BY_TAB[tab]).filter(Boolean)];
+  }
   function moveDailyHubTab(source,target){
     const order=orderedDailyHubTabs(),from=order.indexOf(source),to=order.indexOf(target);
     if(from<0||to<0||from===to)return false;
@@ -3201,7 +3206,14 @@
     }
     return primary;
   }
-  function resultCategoryLabel(value){if(String(value).includes(','))return String(value).split(',').map(resultCategoryLabel).join(', ');const en=({all:'All published',top200:'TOP200',prime:'ACCA',top_daily:'TOP',value:'Value',doubles:'Doubles',ace:'Aces',aces:'Aces',double_faults:'Double Faults',sg:'Sets & Games',sets:'Sets',games:'Games',model:'Model'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP':'TOP','Doubles':'Štvorhra','Aces':'Esá','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP':'TOP','Doubles':'Čtyřhra','Aces':'Esa','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;return en;}
+  function resultCategoryLabel(value){if(String(value).includes(',')){
+    const order=orderedResultCategories();
+    return String(value).split(',').sort((a,b)=>{
+      const aIndex=order.indexOf(a),bIndex=order.indexOf(b);
+      return (aIndex<0?order.length:aIndex)-(bIndex<0?order.length:bIndex);
+    }).map(resultCategoryLabel).join(', ');
+  }
+  const en=({all:'All published',top200:'TOP200',prime:'ACCA',top_daily:'TOP',value:'Value',doubles:'Doubles',ace:'Aces',aces:'Aces',double_faults:'Double Faults',sg:'Sets & Games',sets:'Sets',games:'Games',model:'Model'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP':'TOP','Doubles':'Štvorhra','Aces':'Esá','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP':'TOP','Doubles':'Čtyřhra','Aces':'Esa','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;return en;}
   function resultPublication(row,category='all'){
     const pubs=publicResultPublications(row);
     const filtered=['top200','prime','top_daily','value','doubles','ace','double_faults','sg','sets','games'].includes(category)?pubs.filter(p=>publicationMatchesResultCategory(p,category)):pubs;
@@ -3407,7 +3419,7 @@
         <span class="results-mobile-filter-current">${escapeHtml(mobileFilterLabel)}<i aria-hidden="true"></i></span>
       </button>
       <div class="results-filter-bar results-filter-bar-v683">
-      <div class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory" class="results-category-compat">${['all','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><details class="results-category-picker"><summary>${escapeHtml(resultCategoryLabel(filters.category||'all'))}</summary><div class="results-category-options">${['all','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>`<label><input type="checkbox" data-result-category="${v}" ${String(filters.category||'all').split(',').includes(v)?'checked':''}><span>${escapeHtml(resultCategoryLabel(v))}</span></label>`).join('')}</div></details></span></div>
+      <div class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory" class="results-category-compat">${orderedResultCategories().map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><details class="results-category-picker"><summary>${escapeHtml(resultCategoryLabel(filters.category||'all'))}</summary><div class="results-category-options">${orderedResultCategories().map(v=>`<label><input type="checkbox" data-result-category="${v}" ${String(filters.category||'all').split(',').includes(v)?'checked':''}><span>${escapeHtml(resultCategoryLabel(v))}</span></label>`).join('')}</div></details></span></div>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow">${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
