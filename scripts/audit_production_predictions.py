@@ -9,6 +9,8 @@ from pathlib import Path
 from _bootstrap import ROOT
 from download_tennis_history import read_json, write_json
 from release_store import ReleaseStore
+from audit_top_reliability import analyze as analyze_top_reliability
+from tbt.models.artifact import load_model
 from tbt.data.history_snapshot import load_partitions
 from tbt.services.ace_selection import build_ace_market_calibration
 
@@ -78,6 +80,23 @@ def main():
     if not isinstance(feed, dict) or not isinstance(ledger, list):
         raise ValueError("Invalid production feed/ledger")
 
+    # Read the exact binary actually published in the production release.
+    # Metadata from an old shadow pair or mutable public feed is not authority.
+    production = ReleaseStore(
+        args.data_repository, "tbt-model-production-v1",
+        cache / "production-audit/current-model",
+    )
+    production.download(
+        extra_names=("model.joblib",), required_names=("model.joblib",),
+        require_bundle_manifest=True,
+    )
+    active_model = load_model(str(production.directory / "model.joblib"))
+    if not active_model.fitted or not active_model.version:
+        raise ValueError("Unverified active production model")
+    active_top = analyze_top_reliability(
+        ledger, model_version=active_model.version, window_days=30,
+    )
+
     entries = []
     for row in ledger:
         if not isinstance(row, dict):
@@ -127,6 +146,7 @@ def main():
         "issued_settled_publications": len(entries),
         "results_meta": feed.get("results_meta") or {},
         "performance_window_summary": feed.get("performance_window_summary") or {},
+        "current_production_top_exact_issued": active_top,
         "sections": sections,
         "markets": markets,
         "failure_slices": {"tour": tours, "surface": surfaces, "confidence_band": confidence},
@@ -136,6 +156,7 @@ def main():
         "diagnostic_limits": [
             "Breakdowns are descriptive; small groups are not treated as causal evidence.",
             "Deleted historical issuance cannot be recreated without immutable publication evidence.",
+            "Current production TOP uses only exact pre-deploy confirmed model-version and two-way bookmaker quote; it is not all-match accuracy or a causal estimate of alternative picks.",
         ],
     }
     out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True); write_json(out, report)
@@ -151,7 +172,14 @@ def main():
     ]
     for market in ("aces", "double_faults", "sets", "games"):
         lines.append(f"- {market}: selected {selected[market]}, published {published[market]}")
-    lines += ["", "## Issued performance by section"]
+    current_top = active_top["overall"]
+    lines += ["", "## Current production model — exact TOP issuance (30 days)",
+              f"Version: {active_model.version}",
+              f"Published: {current_top['published']} · Settled: {current_top['settled']} · W: {current_top['wins']} / L: {current_top['losses']}",
+              f"Hit rate: {current_top['hit_rate']} · Brier: {current_top['brier']} · Flat-stake yield: {current_top['yield_flat_stake']}",
+              "Exact-issuance exclusions: " + json.dumps(active_top["diagnostics"], sort_keys=True),
+              "This group excludes old model versions, unverified quotes and absent issuance snapshots.",
+              "", "## Issued performance by section"]
     for section, metric in sections.items():
         rate = metric.get("hit_rate")
         rate_text = "—" if rate is None else f"{rate*100:.1f}%"
