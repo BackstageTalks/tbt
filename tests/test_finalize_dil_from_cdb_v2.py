@@ -125,19 +125,56 @@ class ReconciliationTests(unittest.TestCase):
             obj=json.loads(db.execute('SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
                                       ('known-2026-id-abcde',)).fetchone()[0])
             self.assertEqual(obj['venue'],{'city':'Bratislava','country':'SK','court':'Center'})
-    def test_provider_context_conflict_does_not_overwrite(self):
+    def test_provider_context_conflict_is_losslessly_shadowed(self):
+        mid='known-2026-id-abcde'
+        original=json.dumps({'venue':{'city':'Bratislava','court':'Centre'},'dil_only':'retained'})
+        authoritative=json.dumps({'venue':{'city':'Trnava','surface':None}})
         with sqlite3.connect(self.dil) as db:
-            db.execute('UPDATE canonical_matches SET provider_context_json=? WHERE match_id=?',
-                (json.dumps({'venue':{'city':'Bratislava'}}),'known-2026-id-abcde'))
+            db.execute('UPDATE canonical_matches SET provider_context_json=? WHERE match_id=?',(original,mid))
         with sqlite3.connect(self.cdb) as db:
-            db.execute('UPDATE cdb_matches SET provider_context_json=? WHERE match_id=?',
-                (json.dumps({'venue':{'city':'Trnava'}}),'known-2026-id-abcde'))
-        r=f.reconcile(self.dil,self.cdb,self.out,f.sha256(self.cdb),M)
-        self.assertEqual(r['counts']['metadata_conflicts'],1)
-        self.assertEqual(r['data_gate'],'BLOCKED_REVIEW_REQUIRED')
+            db.execute('UPDATE cdb_matches SET provider_context_json=? WHERE match_id=?',(authoritative,mid))
+        source_sha=f.sha256(self.cdb)
+        r=f.reconcile(self.dil,self.cdb,self.out,source_sha,M)
+        self.assertEqual(r['counts']['metadata_conflicts'],0)
+        self.assertEqual(r['counts']['provider_context_conflicts_preserved'],1)
+        self.assertEqual(r['counts']['provider_context_matches_shadowed'],1)
         with sqlite3.connect(self.out) as db:
-            self.assertEqual(json.loads(db.execute('SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
-                ('known-2026-id-abcde',)).fetchone()[0])['venue']['city'],'Bratislava')
+            canonical=json.loads(db.execute(
+                'SELECT provider_context_json FROM canonical_matches WHERE match_id=?',(mid,)).fetchone()[0])
+            saved=db.execute('''SELECT original_context_json,original_context_sha256,
+                        cdb_context_json,merged_context_sha256 FROM dil_cdb_provider_context_shadow
+                        WHERE match_id=? AND source_sha256=?''',(mid,source_sha)).fetchone()
+            ledger=db.execute('''SELECT existing_json,incoming_json FROM
+                dil_cdb_finalize_metadata_conflicts WHERE match_id=? AND
+                field_name='provider_context_json.venue.city' ''',(mid,)).fetchone()
+        self.assertEqual(canonical['venue'],{'city':'Trnava','court':'Centre'})
+        self.assertEqual(canonical['dil_only'],'retained')
+        self.assertEqual(json.loads(saved[0]),original)
+        self.assertEqual(saved[1],f.shadow_hash(saved[0]))
+        self.assertEqual(json.loads(saved[2]),authoritative)
+        self.assertEqual(saved[3],f.shadow_hash(json.dumps(canonical,ensure_ascii=False,sort_keys=True,allow_nan=False)))
+        self.assertEqual(json.loads(ledger[0]),'Bratislava')
+        self.assertEqual(json.loads(ledger[1]),'Trnava')
+        with sqlite3.connect(self.dil) as db:
+            self.assertEqual(db.execute('SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
+                                        (mid,)).fetchone()[0],original)
+        self.assertEqual(r['data_gate'],'ISOLATED_PARITY_IMPORT_PASS_PENDING_REVALIDATION')
+
+    def test_empty_cdb_context_never_erases_existing_details(self):
+        mid='known-2026-id-abcde'
+        original=json.dumps({'venue':{'city':'Bratislava','court':'Centre'},'other':[1,2]})
+        incoming=json.dumps({'venue':{'city':None},'other':[]})
+        with sqlite3.connect(self.dil) as db:
+            db.execute('UPDATE canonical_matches SET provider_context_json=? WHERE match_id=?',(original,mid))
+        with sqlite3.connect(self.cdb) as db:
+            db.execute('UPDATE cdb_matches SET provider_context_json=? WHERE match_id=?',(incoming,mid))
+        r=f.reconcile(self.dil,self.cdb,self.out,f.sha256(self.cdb),M)
+        with sqlite3.connect(self.out) as db:
+            current=json.loads(db.execute('SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
+                (mid,)).fetchone()[0])
+        self.assertEqual(current,json.loads(original))
+        self.assertEqual(r['counts']['provider_context_conflicts_preserved'],0)
+
     def test_scalar_metadata_disagreement_is_retained_and_blocks(self):
         with sqlite3.connect(self.cdb) as db:
             db.execute("UPDATE cdb_matches SET tournament='Authoritative CDB' WHERE match_id='known-2026-id-abcde'")
@@ -159,8 +196,9 @@ class ReconciliationTests(unittest.TestCase):
         with sqlite3.connect(self.cdb) as db:
             db.execute('UPDATE cdb_matches SET provider_context_json=? WHERE match_id=?', (json.dumps({'round_number':3}),mid))
         r=f.reconcile(self.dil,self.cdb,self.out,f.sha256(self.cdb),M)
-        self.assertEqual(r['counts']['metadata_conflicts'],1)
-        self.assertEqual(r['data_gate'],'BLOCKED_REVIEW_REQUIRED')
+        self.assertEqual(r['counts']['metadata_conflicts'],0)
+        self.assertEqual(r['counts']['provider_context_conflicts_preserved'],1)
+        self.assertEqual(r['data_gate'],'ISOLATED_PARITY_IMPORT_PASS_PENDING_REVALIDATION')
 
     def test_metadata_unicode_whitespace_equivalence_is_non_destructive(self):
         with sqlite3.connect(self.dil) as db:
