@@ -101,3 +101,42 @@ def test_existing_probabilities_never_overwritten():
     with pytest.raises(ValueError, match='Conflicting'):
         a.combine_rows([row], [row | {'challenger_player1_probability': .8}])
     assert a.combine_rows([row], [row]) == [row]
+
+
+def test_prospective_research_requires_exact_hash_and_provenance(remote, monkeypatch):
+    tag, data, writes, path, expected = remote
+    report = json.loads(data[tag]['training_report.json'])
+    report['promotion_decision']['candidate_version'] = 'v7.2.2-new'
+    original_load = a.load_model
+    def load(path):
+        model = original_load(path)
+        if model.version == 'v7.2.1-new':
+            model.version = 'v7.2.2-new'
+        return model
+    monkeypatch.setattr(a, 'load_model', load)
+    report.update(holdout={}, production_holdout={}, evaluation_governance={},
+                  immutable_training_backup={'tag': tag.replace('candidate-frozen', 'full-training-backup'),
+                      'candidate_tag': tag, 'asset_count': 99,
+                      'champion_sha256': hashlib.sha256(b'champ').hexdigest()})
+    data[tag]['training_report.json'] = json.dumps(report).encode()
+    with pytest.raises(ValueError, match='holdout'):
+        a.activate(tag, expected, cache=path)
+    with pytest.raises(ValueError, match='exact source'):
+        a.activate(tag, expected, cache=path, prospective_only=True, expected_source_sha='0'*64)
+    assert not writes
+    result = a.activate(tag, expected, cache=path, prospective_only=True,
+                        expected_source_sha=hashlib.sha256(b'new').hexdigest())
+    assert result['remote_readback'] == 'VERIFIED'
+    shadow = json.loads(data[a.SHADOW]['shadow_report.json'])
+    assert shadow['candidate_activation']['quality_status'] == 'UNVERIFIED_RESEARCH'
+    assert shadow['candidate_activation']['imported_prospective_rows'] == 0
+    assert shadow['gate']['automatic_promotion'] is False
+    assert data[a.PRODUCTION]['model.joblib'] == b'champ'
+
+
+def test_prospective_backup_mismatch_never_writes(remote):
+    tag, data, writes, path, expected = remote
+    with pytest.raises(ValueError, match='backup provenance'):
+        a.activate(tag, expected, cache=path, prospective_only=True,
+                   expected_source_sha=hashlib.sha256(b'new').hexdigest())
+    assert not writes
