@@ -1,0 +1,77 @@
+name: BlinQ current production TOP exact issuance (read-only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/audit_current_model_top.py'
+      - 'scripts/audit_top_reliability.py'
+      - 'scripts/audit_production_predictions.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: current-top-readonly
+  cancel-in-progress: false
+
+jobs:
+  exact-current-top:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      BLINQ_RAPIDAPI_MAX_RPS: '0'
+      TBT_DATA_REPOSITORY: BackstageTalks/tbt-data
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Enforce read-only source and newest main
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$TBT_DATA_REPOSITORY" = BackstageTalks/tbt-data
+          test -z "${RAPIDAPI_KEY:-}"
+          test -z "${PROPLINE_API_KEY:-}"
+          git fetch origin main --depth=1
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+      - name: Install offline read-only analysis
+        run: python -m pip install -r api/requirements-train.txt pytest
+      - name: Verify exact issuance and model-version tests
+        run: python -m pytest -q tests/test_top_reliability_audit.py
+      - name: Inspect original TOP offers for actual production binary
+        run: |
+          python scripts/audit_current_model_top.py \
+            --out .cache/tbt/current-production-top/report.json
+      - name: Verify aggregate-only contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path('.cache/tbt/current-production-top/report.json').read_text())
+          assert r['provider_requests'] == 0
+          assert r['CDB_mutated'] is False
+          assert r['production_mutated'] is False
+          assert r['model_promoted'] is False
+          assert len(r['production_model_sha256']) == 64
+          assert len(r['publication_ledger_sha256']) == 64
+          assert r['overall']['wins'] + r['overall']['losses'] == r['overall']['settled']
+          assert r['overall']['settled'] <= r['overall']['published']
+          print('Current production exact TOP audit:', r['status'], 'n=', r['overall']['settled'])
+          PY
+      - name: Save aggregate-only evidence (no event/player IDs)
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-current-production-top-${{ github.run_id }}
+          path: .cache/tbt/current-production-top/report.json
+          retention-days: 7
+          if-no-files-found: error
