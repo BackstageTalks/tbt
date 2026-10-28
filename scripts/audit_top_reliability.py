@@ -235,10 +235,12 @@ def summarize(entries):
     return result
 
 
-def analyze(ledger, *, now=None, window_days=90, model_version=None):
+def analyze(ledger, *, now=None, window_days=90, model_version=None, section="top_daily"):
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise ValueError("now must include timezone")
+    if section not in {"top_daily", "value"}:
+        raise ValueError("Only TOP and VALUE match-winner publication sections may be evaluated")
     if model_version is not None and (not isinstance(model_version, str) or not model_version.strip()):
         raise ValueError("Current model audit requires a nonempty binary-derived version")
     start = now - timedelta(days=window_days)
@@ -249,7 +251,7 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None):
         if not isinstance(row, dict):
             continue
         for pub in row.get("market_publications") or []:
-            if not isinstance(pub, dict) or pub.get("section") != "top_daily" or pub.get("market") != "match_winner":
+            if not isinstance(pub, dict) or pub.get("section") != section or pub.get("market") != "match_winner":
                 continue
             if model_version is not None:
                 # Do not mix legacy champion predictions with the current
@@ -349,7 +351,7 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None):
                 "issued_at": issued.isoformat(),
                 "scheduled_at": scheduled.isoformat(),
             })
-    report = {"window_days": window_days, "window_start": start.isoformat(),
+    report = {"section": section, "window_days": window_days, "window_start": start.isoformat(),
               "model_version_scope": model_version,
               "window_end": now.isoformat(), "diagnostics": dict(diagnostics),
               "overall": summarize(entries), "subgroups": {},
