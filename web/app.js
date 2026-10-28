@@ -858,6 +858,26 @@
         node.setAttribute('aria-label',lcopy('Results','Výsledky','Výsledky'));
       }
     };
+    const comparatorLocked=!comparatorPlanAllowed();
+    const comparatorPlan=comparatorLocked?firstComparatorUnlockPlan():'';
+    const decorateComparatorAccess=node=>{
+      if(!node)return;
+      node.classList.toggle('comparator-nav-locked',comparatorLocked);
+      if(comparatorLocked){
+        node.dataset.upgradePlan=comparatorPlan;
+        node.dataset.upgradeSection=lcopy('Match Comparator','Porovnávač','Porovnávač');
+        node.setAttribute('aria-label',`${lcopy('Match Comparator','Porovnávač','Porovnávač')} · ${accessHintDetails(comparatorPlan,'').title}`);
+      }else{
+        delete node.dataset.upgradePlan;
+        delete node.dataset.upgradeSection;
+        node.setAttribute('aria-label',lcopy('Match Comparator','Porovnávač','Porovnávač'));
+      }
+      // Prevent the generic tooltip from overlapping the access hint.
+      if(node.classList.contains('nav-icon-compare')){
+        if(comparatorLocked)node.removeAttribute('data-nav-tooltip');
+        else node.dataset.navTooltip=lcopy('Match Comparator','Porovnávač','Porovnávač');
+      }
+    };
     const syncRouteIcons=host=>{
       if(!host)return;
       host.querySelectorAll('[data-route]').forEach(node=>{
@@ -866,12 +886,14 @@
         if(active)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');
       });
       decorateResultsAccess(host.querySelector('[data-route="results"]'));
+      decorateComparatorAccess(host.querySelector('[data-route="compare"]'));
     };
     if(referenceNav){
       syncRouteIcons(referenceNav);
     }
     document.querySelectorAll('.mobile-icon-nav').forEach(syncRouteIcons);
     document.querySelectorAll('#mobileTabs [data-route="results"]').forEach(decorateResultsAccess);
+    document.querySelectorAll('#mobileTabs [data-route="compare"]').forEach(decorateComparatorAccess);
     const profileAdmin=$('profileAdminLink');if(profileAdmin)profileAdmin.hidden=!isAdminAccount();
   }
 
@@ -7283,9 +7305,9 @@ function adminActivityRows(){
     if(route==='compare'){
       if(comparatorPlanAllowed()){host.innerHTML=renderComparatorRoute();wireComparator();}
       else{
-        const minPlan=firstComparatorUnlockPlan(),required=String(upgradePlanLabel(minPlan)||minPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
-        host.innerHTML=`<section class="comparator-shell"><div class="match-detail-lock-card comparator-route-lock" data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Match Comparator','Porovnávač','Porovnávač'))}"><span class="match-detail-lock-icon" aria-hidden="true">🔒</span><div><small>${escapeHtml(lcopy('LOCKED SECTION','UZAMKNUTÁ SEKCIA','UZAMČENÁ SEKCE'))}</small><strong>${escapeHtml(lcopy('Match Comparator','Porovnávač','Porovnávač'))}</strong><p>${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od: ${required}`,`Dostupné od: ${required}`))}</p></div></div></section>`;
-        applyAccessStates(host);
+        const minPlan=firstComparatorUnlockPlan(),required=String(upgradePlanLabel(minPlan)||minPlan).replace(/^BlinQ\\s+/i,'').toUpperCase();
+        // Compact direct-link fallback; the nav icon exposes the Live-style hint.
+        host.innerHTML=`<button type="button" class="comparator-locked-inline" data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Match Comparator','Porovnávač','Porovnávač'))}" aria-label="${escapeHtml(lcopy(`Comparator available from ${required}`,`Porovnávač dostupný od úrovne ${required}`,`Porovnávač dostupný od úrovně ${required}`))}"><span aria-hidden="true">🔒</span><span>${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od úrovne ${required}`,`Dostupné od úrovně ${required}`))}</span></button>`;
       }
       return;
     }
