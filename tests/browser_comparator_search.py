@@ -14,7 +14,7 @@ def route_request(route):
         assert source.count(marker) == 1
         source = source.replace(
             marker,
-            "  window.comparatorHarness={state,renderComparatorRoute,wireComparator};\n"
+            "  window.comparatorHarness={state,renderComparatorRoute,wireComparator,renderRoute,renderNavigation};\n"
             + marker,
         )
         route.fulfill(content_type="application/javascript", body=source)
@@ -266,6 +266,49 @@ def main():
                     const rect=panel.getBoundingClientRect();
                     return rect.left< -2 || rect.right>innerWidth+2;
                 }"""), (width, "analysis result overflows viewport")
+                # The comparator lock mirrors LIVE: compact nav badge with a
+                # shared upgrade popover, not a large nested lock panel.
+                page.evaluate("""() => {
+                    const h=comparatorHarness;
+                    h.state.feed.account={plan:'elite',status:'active',
+                                          is_admin:false,role:'member'};
+                    h.state.ui.dashboard=h.state.ui.dashboard||{};
+                    h.state.ui.dashboard.comparator={
+                        plans:{rookie:false,pro:false,elite:false,legend:true,goat:true}
+                    };
+                    h.state.route='predictions';
+                    h.renderNavigation();
+                }""")
+                nav = page.locator('.reference-navigation [data-route="compare"]')
+                if not nav.is_visible():
+                    nav = page.locator('.mobile-icon-nav [data-route="compare"]')
+                assert nav.is_visible(), (width, "comparator navigation unavailable")
+                assert nav.get_attribute('data-upgrade-plan') == 'legend'
+                assert 'comparator-nav-locked' in nav.get_attribute('class')
+                nav.click()
+                assert page.evaluate('comparatorHarness.state.route') == 'predictions'
+                assert page.locator('#accessHint').is_visible()
+                assert 'LEGEND' in page.locator('#accessHintTitle').inner_text()
+                page.evaluate("""() => {
+                    const h=comparatorHarness;
+                    h.state.route='compare';
+                    h.renderRoute('compare');
+                }""")
+                assert page.locator('.comparator-shell').count() == 0
+                assert page.locator('.comparator-route-lock').count() == 0
+                assert page.locator('.comparator-locked-inline').count() == 1
+                page.locator('.comparator-locked-inline').click()
+                assert 'LEGEND' in page.locator('#accessHintTitle').inner_text()
+                page.evaluate("""() => {
+                    const h=comparatorHarness;
+                    h.state.feed.account.plan='legend';
+                    h.renderNavigation();
+                    h.renderRoute('compare');
+                }""")
+                assert page.locator('.comparator-shell #comparatorForm').count() == 1
+                assert page.locator('.comparator-locked-inline').count() == 0
+                assert nav.get_attribute('data-upgrade-plan') is None
+                assert 'comparator-nav-locked' not in nav.get_attribute('class')
                 assert not errors, (width, errors)
                 page.close()
 
