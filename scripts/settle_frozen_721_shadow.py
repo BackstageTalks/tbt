@@ -133,8 +133,6 @@ def _alias_identity_category(source, match, event, now):
 
 
 def completed_matches_for_pending(rows, matches, now):
-# end of aggregate classification
-
     """Join exact internal IDs or independently recorded provider event IDs.
 
     Alias lookup requires both stored provider IDs, the provider's player IDs,
