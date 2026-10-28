@@ -30,9 +30,12 @@ def test_sets_are_total_match_sets_not_direction_probability():
 
 
 def test_results_only_expose_separate_sets_and_games_filters():
-    visible_filter = "['all','top_daily','prime','value','ace','double_faults','sets','games','doubles']"
-    assert visible_filter in APP
-    assert "['all','top_daily','prime','value','ace','double_faults','sets','games','sg','doubles']" not in APP
+    # The UI now derives category order from the configurable home tabs.
+    mapping = APP.split('const RESULT_CATEGORY_BY_TAB=', 1)[1].split(';', 1)[0]
+    assert "sets:'sets'" in mapping
+    assert "games:'games'" in mapping
+    assert 'sg:' not in mapping
+    assert APP.count('orderedResultCategories().map(v=>') == 2
 
 
 def test_doubles_ev_is_analysis_only_not_publication_gate():
