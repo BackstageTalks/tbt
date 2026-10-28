@@ -356,3 +356,88 @@ def test_exact_identity_breakdown_and_strict_verified_alias_are_separate():
     assert audit["matched_alias_candidates"] == 1
     assert audit["alias_identity_categories"] == {"strict_alias_eligible": 1}
     assert audit["verified_provider_event_aliases"] == 1
+
+
+@pytest.mark.parametrize(
+    "later_hours,expected",
+    [(24.01, True), (48, True), (53.83, True), (72, True),
+     (72.01, False), (240, False), (-24.01, False)],
+)
+def test_verified_postponement_settlement_is_bounded_and_immutable(later_hours, expected):
+    from dataclasses import replace
+    now, payload, match = fixture()
+    before = json.dumps(payload, sort_keys=True)
+    shifted = replace(
+        match,
+        match_id="canonical-postponed-id",
+        scheduled_at=match.scheduled_at + timedelta(hours=later_hours),
+        provider_payload={
+            "_tbt_provider_event_id": "event1",
+            "_tbt_event_identity": {
+                "event_id": "event1", "home": "a", "away": "b",
+                "status": "finished",
+            },
+        },
+    )
+    inspected_at = now + timedelta(days=20)
+    accepted, audit = service.completed_matches_for_pending(
+        payload["rows"], [shifted], inspected_at
+    )
+    assert bool(accepted) is expected
+    assert audit["matched_alias_candidates"] == 1
+    if expected:
+        assert accepted[0].match_id == payload["rows"][0]["match_id"]
+        assert audit["verified_provider_event_aliases"] == 1
+        assert audit["provider_alias_evidence"][payload["rows"][0]["match_id"]]["method"] == (
+            "exact_verified_provider_event_and_players_later_postponed_72h"
+        )
+        assert audit["alias_identity_categories"] == {
+            "verified_later_postponement_24_72h": 1
+        }
+    else:
+        assert audit["identity_mismatch"] == 1
+        assert audit["verified_provider_event_aliases"] == 0
+    assert json.dumps(payload, sort_keys=True) == before
+
+
+def test_postponement_still_rejects_late_capture_false_witness_and_ambiguous_event():
+    from dataclasses import replace
+    now, payload, match = fixture()
+    shifted = replace(
+        match,
+        match_id="canonical-postponed-id",
+        scheduled_at=match.scheduled_at + timedelta(hours=54),
+        provider_payload={
+            "_tbt_provider_event_id": "event1",
+            "_tbt_event_identity": {
+                "event_id": "event1", "home": "a", "away": "b",
+                "status": "finished",
+            },
+        },
+    )
+    inspected = now + timedelta(days=4)
+    # A market capture after its *original* published start is not
+    # a legitimate prospective prediction, even if rescheduled later.
+    late = {**payload["rows"][0],
+            "captured_at": (match.scheduled_at + timedelta(hours=3)).isoformat()}
+    accepted, audit = service.completed_matches_for_pending([late], [shifted], inspected)
+    assert accepted == [] and audit["verified_provider_event_aliases"] == 0
+
+    false_witness = replace(shifted, provider_payload={
+        "_tbt_provider_event_id": "event1",
+        "_tbt_event_identity": {
+            "event_id": "event1", "home": "a",
+            "away": "different", "status": "finished",
+        },
+    })
+    accepted, audit = service.completed_matches_for_pending(
+        payload["rows"], [false_witness], inspected
+    )
+    assert accepted == [] and audit["identity_mismatch"] == 1
+    assert audit["verified_provider_event_aliases"] == 0
+
+    other = replace(shifted, match_id="separate-canonical-claim")
+    accepted, audit = service.completed_matches_for_pending(
+        payload["rows"], [shifted, other], inspected
+    )
+    assert accepted == [] and audit["ambiguous_provider_events"] == 1
