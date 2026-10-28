@@ -294,3 +294,65 @@ def test_duplicate_provider_event_keeps_earliest_prediction_and_audit_rows():
     later['player2_id'] = 'different'
     with pytest.raises(ValueError, match='Conflicting provider event'):
         service.exclude_repeated_events(originals)
+
+
+def test_alias_mismatch_report_identifies_captured_vs_canonical_identity_without_settling():
+    """Same native event ID is insufficient when the captured player IDs differ."""
+    from dataclasses import replace
+    now, payload, match = fixture()
+    payload["rows"][0]["player2_id"] = "unverified-player"
+    canonical = replace(match, match_id="canonical-new-hash", provider_payload={
+        "_tbt_provider_event_id": "event1", "_tbt_event_identity": {
+            "event_id": "event1", "home": "a", "away": "b", "status": "finished"
+        },
+    })
+    accepted, audit = service.completed_matches_for_pending(payload["rows"], [canonical], now)
+    assert accepted == []
+    assert audit["identity_mismatch"] == 1
+    assert audit["matched_alias_candidates"] == 1
+    assert audit["matched_exact_candidates"] == 0
+    assert audit["verified_provider_event_aliases"] == 0
+    assert audit["alias_identity_categories"] == {"captured_canonical_player_id_conflict": 1}
+    assert "unverified-player" not in json.dumps(audit)
+    assert "canonical-new-hash" not in json.dumps(audit)
+
+
+def test_alias_mismatch_report_separates_false_event_witness_from_player_namespace():
+    from dataclasses import replace
+    now, payload, match = fixture()
+    raw = {"_tbt_provider_event_id": "event1", "_tbt_event_identity": {
+        "event_id": "event1", "home": "unexpected", "away": "b", "status": "finished"
+    }}
+    canonical = replace(match, match_id="canonical-new-hash", provider_payload=raw)
+    accepted, audit = service.completed_matches_for_pending(payload["rows"], [canonical], now)
+    assert accepted == []
+    assert audit["identity_mismatch"] == 1
+    assert audit["alias_identity_categories"] == {"provider_witness_canonical_player_conflict": 1}
+    raw["_tbt_event_identity"]["event_id"] = "wrong-event"
+    accepted, audit = service.completed_matches_for_pending(payload["rows"], [canonical], now)
+    assert accepted == []
+    assert audit["alias_identity_categories"] == {"unverified_native_event_witness": 1}
+
+
+def test_exact_identity_breakdown_and_strict_verified_alias_are_separate():
+    from dataclasses import replace
+    now, payload, match = fixture()
+    bad = replace(match, player2_id="different", player2_name="C")
+    accepted, audit = service.completed_matches_for_pending(payload["rows"], [bad], now)
+    assert accepted == []
+    assert audit["matched_exact_candidates"] == 1
+    assert audit["exact_player_or_tour_conflicts"] == 1
+    assert audit["matched_alias_candidates"] == 0
+    assert audit["alias_identity_categories"] == {}
+
+    good_alias = replace(match, match_id="canonical-other-hash", provider_payload={
+        "_tbt_provider_event_id": "event1", "_tbt_event_identity": {
+            "event_id": "event1", "home": "a", "away": "b", "status": "finished"
+        }
+    })
+    accepted, audit = service.completed_matches_for_pending(payload["rows"], [good_alias], now)
+    assert len(accepted) == 1
+    assert accepted[0].match_id == "fixture-721-1"
+    assert audit["matched_alias_candidates"] == 1
+    assert audit["alias_identity_categories"] == {"strict_alias_eligible": 1}
+    assert audit["verified_provider_event_aliases"] == 1

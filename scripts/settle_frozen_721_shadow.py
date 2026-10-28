@@ -81,6 +81,39 @@ def preliminary_scoreboard(rows):
     }
 
 
+def _alias_identity_category(source, match, event, now):
+    """Classify one provider-event alias without accepting or rewriting its identity.
+
+    A native event ID alone is not proof that the captured players are the
+    canonical players. Only aggregate reason codes may leave the private run.
+    """
+    raw = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+    identity = raw.get("_tbt_event_identity")
+    identity = identity if isinstance(identity, dict) else {}
+    if (str(raw.get("_tbt_provider_event_id") or "") != event
+            or str(identity.get("event_id") or "") != event
+            or identity.get("status") != "finished"):
+        return "unverified_native_event_witness"
+    canonical_pair = {str(match.player1_id), str(match.player2_id)}
+    witnessed_pair = {str(identity.get("home") or ""), str(identity.get("away") or "")}
+    captured_pair = {str(source.get("player1_id") or ""), str(source.get("player2_id") or "")}
+    if witnessed_pair != canonical_pair:
+        return "provider_witness_canonical_player_conflict"
+    if captured_pair != canonical_pair:
+        return "captured_canonical_player_id_conflict"
+    if str(match.tour or "").upper() != str(source.get("tour") or "").upper():
+        return "tour_conflict"
+    if abs((match.scheduled_at - _utc(source["scheduled_at"])).total_seconds()) > 86400:
+        return "schedule_drift_over_24h"
+    if _utc(source["captured_at"]) >= match.scheduled_at:
+        return "capture_not_before_canonical_start"
+    if match.scheduled_at >= now or _utc(source["scheduled_at"]) >= now:
+        return "not_yet_played"
+    if not match.is_completed:
+        return "canonical_not_completed"
+    return "strict_alias_eligible"
+
+
 def completed_matches_for_pending(rows, matches, now):
     """Join exact internal IDs or independently recorded provider event IDs.
 
@@ -103,7 +136,9 @@ def completed_matches_for_pending(rows, matches, now):
     audit = {"identity_mismatch": 0, "not_yet_played": 0,
              "not_canonically_completed": 0, "matched_canonical_rows": 0,
              "verified_provider_event_aliases": 0, "ambiguous_provider_events": 0,
-             "capture_not_before_canonical_start": 0, "provider_alias_evidence": {}}
+             "capture_not_before_canonical_start": 0, "provider_alias_evidence": {},
+             "matched_exact_candidates": 0, "matched_alias_candidates": 0,
+             "exact_player_or_tour_conflicts": 0, "alias_identity_categories": {}}
     for source in rows:
         if source.get("status") != "pending":
             continue
@@ -121,8 +156,19 @@ def completed_matches_for_pending(rows, matches, now):
         match = candidates[0]
         audit["matched_canonical_rows"] += 1
         players = {str(match.player1_id), str(match.player2_id)}
+        source_players = {str(source["player1_id"]), str(source["player2_id"])}
+        if alias:
+            audit["matched_alias_candidates"] += 1
+            category = _alias_identity_category(source, match, event, now)
+            categories = audit["alias_identity_categories"]
+            categories[category] = categories.get(category, 0) + 1
+        else:
+            audit["matched_exact_candidates"] += 1
+            if (str(match.tour or "").upper() != str(source["tour"]).upper()
+                    or players != source_players):
+                audit["exact_player_or_tour_conflicts"] += 1
         if (str(match.tour or "").upper() != str(source["tour"]).upper()
-                or players != {str(source["player1_id"]), str(source["player2_id"])}):
+                or players != source_players):
             audit["identity_mismatch"] += 1
             continue
         if alias:
