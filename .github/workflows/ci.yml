@@ -251,6 +251,13 @@ jobs:
           python tests/browser_results_betting_day.py
           python tests/browser_profile_chip_fit.py
 
+      - name: Capture live Azure mobile screenshots (audit PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          BLINQ_PUBLIC_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          BLINQ_SCREENSHOTS: ${{ runner.temp }}/blinq-mobile-visual-evidence
+        run: python tests/browser_live_production_visual_audit.py
+
       - name: Publish actual mobile Chromium screenshots (PR evidence)
         if: ${{ always() && github.event_name == 'pull_request' }}
         uses: actions/upload-artifact@v4
