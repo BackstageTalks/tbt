@@ -157,7 +157,9 @@ def main():
                 if width > 900:
                     assert report["projectChips"] and all(chip["width"] > 20 for chip in report["projectChips"]), (label, report)
                 else:
-                    assert page.locator('#bqm-projects').is_visible(), (label, report)
+                    # Projects moved from the compact header into the governed More menu.
+                    assert page.locator('#bqm-projects').is_hidden(), (label, report)
+                    assert page.locator('#mobileTabs #bqm-more').is_visible(), (label, report)
                 actions = [x["r"] for x in report["actions"]]
                 for i, a in enumerate(actions):
                     assert a["left"] >= -1 and a["right"] <= width + 1, (label, report)
@@ -172,7 +174,7 @@ def main():
                 if report["status"] and report["langs"] and width > 480:
                     assert not overlap(report["status"], report["langs"]), (label, report)
                 if width <= 900:
-                    assert not report["navVisible"], (label, report)
+                    assert report["navVisible"], (label, report)
                     assert report["nav"]["left"] >= 0 and report["nav"]["right"] <= width, (label, report)
                     assert report["hint"]["bottom"] <= report["viewport"]["height"], (label, report)
                     assert report["lockTop"] != "50%", (label, report)

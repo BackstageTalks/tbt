@@ -148,7 +148,9 @@ def main():
                 assert report["profile"]["right"]<=width+2,(width,report)
                 assert report["brand"]["right"]<=report["profile"]["left"]+2,(width,report)
                 if width<=900:
-                    assert not report["navVisible"],(width,report)
+                    assert report["navVisible"],(width,report)
+                    assert page.locator("#mobileTabs #bqm-more").is_visible(),width
+                    assert page.locator("#mobileTabs").get_by_text("Viac").is_visible(),width
                     assert report["filterToggleVisible"],(width,report)
                     assert report["filterBarDisplay"]=="none",(width,report)
                     assert report["cardClass"],(width,report)
@@ -164,14 +166,14 @@ def main():
                     assert report["whiteSpace"]=="normal",(width,report)
                     assert report["clamp"]=="2",(width,report)
                     assert report["appOverflow"]<=2,(width,report)
-                    # The pager remains reachable after removing the bottom nav.
+                    # The pager must remain reachable above the approved fixed bottom nav.
                     page.evaluate("window.scrollTo(0,document.documentElement.scrollHeight)")
                     page.wait_for_timeout(60)
                     bottom=page.evaluate("""() => ({
                       pager:document.querySelector('.results-pagination').getBoundingClientRect().bottom,
                       nav:document.querySelector('.mobile-tabs').getBoundingClientRect().top
                     })""")
-                    assert bottom["pager"]<=820+2,(width,bottom)
+                    assert bottom["pager"]<=bottom["nav"]+2,(width,bottom)
                 else:
                     assert not report["navVisible"],(width,report)
                     assert report["minWidth"]!="0px",(width,report)

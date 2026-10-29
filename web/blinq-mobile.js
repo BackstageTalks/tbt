@@ -395,5 +395,18 @@
   new MutationObserver(() => {
     if (document.body.classList.contains('bqm-enabled') !== enabled()) sync();
   }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  // Reuse the governed menu and its original controls; no duplicated access logic.
+  const mobileAccount = document.querySelector('#mobileTabs [data-route="account"]');
+  if (mobileAccount) {
+    const more = button('Viac', () => openMenu('root', false, more));
+    more.id = 'bqm-more';
+    more.setAttribute('aria-haspopup', 'dialog');
+    more.setAttribute('aria-controls', 'bqm-dialog');
+    more.setAttribute('aria-expanded', 'false');
+    more.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg><span>Viac</span>';
+    mobileAccount.replaceWith(more);
+    new MutationObserver(() => more.setAttribute('aria-expanded', String(dialog.open && lastOpener === more)))
+      .observe(dialog, {attributes:true, attributeFilter:['open']});
+  }
   sync();
 })();
