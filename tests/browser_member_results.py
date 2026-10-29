@@ -7,7 +7,7 @@ from browser_runtime_r43 import WEB, ORIGIN, static_route, browser_path
 def route_request(route):
     if urlparse(route.request.url).path == "/app.js":
         source=(WEB/"app.js").read_text(encoding="utf-8")
-        source=source.replace("  boot();", "  window.memberTest={state,memberResultCohort,settledPublishedEntries,localResultMetrics,renderResultsFilters,wireResultsFilters};\n  boot();")
+        source=source.replace("  boot();", "  window.memberTest={state,memberResultCohort,settledPublishedEntries,localResultMetrics,renderResultsFilters,wireResultsFilters,resultsSummary,bratislavaBettingDayKey};\n  boot();")
         route.fulfill(content_type="application/javascript",body=source)
     else: static_route(route)
 
@@ -48,7 +48,39 @@ def main():
               return {count:multi.length,expected:top.length+prime.length,checkboxes:html.includes('data-result-category')};
             }""")
             assert combined['count']==combined['expected'] and combined['checkboxes'],combined
-            print("Admin membership cohort, pending slots, per-day limits and ROI: PASS")
+            denominators=page.evaluate("""() => {
+              const t=memberTest,s=t.state;
+              const day=t.bratislavaBettingDayKey(Date.now(),6);
+              const yesterday=t.bratislavaBettingDayKey(Date.now()-86400000,6);
+              const row=(id,betDay,pos,correct)=>({
+                event_id:id,scheduled_at:betDay+'T12:00:00Z',
+                market_publications:[{
+                  section:'top_daily',market:'match_winner',selection_id:'p1',
+                  betting_day:betDay,issued_at:betDay+'T07:00:00Z',offer_position:pos,
+                  odds:2,price_status:'priced',
+                  result:correct===null?{}:{correct,staked_units:1,profit_units:correct?1:-1}
+                }]
+              });
+              s.feed={
+                account:{is_admin:true},entitlements:{daily_pick_count:58},
+                results:[row('pending',day,1,null),row('hit',day,2,true),
+                         row('unselected',day,3,true),row('previous',yesterday,1,true)],
+                member_result_rules:{
+                  elite:{daily:{enabled:true,display_state:'active',visible_picks:2,selection_mode:'first'}},
+                  pro:{daily:{enabled:true,display_state:'active',visible_picks:1,selection_mode:'first'}}
+                }
+              };
+              s.resultsFilters={category:'all',tour:'',surface:'',window:'today',bettingDay:true,membership:'elite'};
+              const elite=t.resultsSummary();
+              s.resultsFilters.membership='pro';
+              const pro=t.resultsSummary();
+              s.resultsFilters.membership='';
+              const all=t.resultsSummary();
+              return {elite:elite.includes('1/2'),pro:pro.includes('0/1'),
+                      all:all.includes('2/58')};
+            }""")
+            assert all(denominators.values()),denominators
+            print("Admin membership cohort, daily denominators and ROI: PASS")
         finally: browser.close()
 if __name__=="__main__":main()
 
