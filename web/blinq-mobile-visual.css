@@ -1,4 +1,5 @@
 /* Mobile visual pass: existing routes, permissions and KPI contents are preserved. */
+/* Surface polish uses restrained gradients and optical depth; layout, values and loader stay untouched. */
 @media (max-width: 900px) {
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .header-top {
     display:flex!important; justify-content:space-between!important;
@@ -22,8 +23,8 @@
     display:grid!important; grid-template-columns:repeat(3,minmax(0,1fr))!important;
     position:fixed!important; inset:auto 0 0!important; z-index:80!important;
     padding:6px 12px calc(6px + env(safe-area-inset-bottom,0px))!important;
-    gap:8px!important; background:rgba(4,24,21,.98)!important;
-    border-top:1px solid #23483e!important; box-shadow:0 -8px 24px #0003!important;
+    gap:8px!important; background:linear-gradient(180deg,rgba(8,29,25,.985),rgba(5,20,18,.995))!important;
+    border-top:1px solid rgba(160,214,183,.17)!important; box-shadow:0 -10px 28px rgba(0,0,0,.24)!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs :is(a,button) {
     display:flex!important; flex-direction:column!important; align-items:center!important; justify-content:center!important;
@@ -31,7 +32,8 @@
     color:#b3ccc1!important; font-size:12px!important; line-height:1.2!important; text-decoration:none!important; border:0!important; background:transparent!important; font:inherit; cursor:pointer;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs :is(a,button).active {
-    background:#123d31!important; color:#42e8b1!important;
+    background:linear-gradient(160deg,#184638,#10312a)!important; color:#70e5b7!important;
+    box-shadow:inset 0 1px 0 rgba(241,255,248,.11),0 2px 10px rgba(0,0,0,.14)!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs svg {
     width:22px!important; height:22px!important; fill:none!important; stroke:currentColor!important; stroke-width:1.7!important;
@@ -48,6 +50,11 @@
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero h2 {
     font-size:19px!important; line-height:1.2!important; margin:5px 0!important;
+  }
+  /* The managed banner sets headline size on nested strong/span too. Keep mobile copy inside the existing 128px hero. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero-copy h2 :is(strong,span),
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .hero-copy h2 :is(strong,span) {
+    font-size:inherit!important; line-height:inherit!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis {
     padding:12px!important; gap:8px!important;
@@ -75,17 +82,21 @@
 
 @media(max-width:900px){
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin){
-    background-color:#061916!important; color:#f0f6f3!important;
+    background-color:#071815!important; color:#f0f6f3!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)::before{
-    background:radial-gradient(ellipse at 90% 0%,#123d3133,transparent 55%)!important;
+    background:radial-gradient(ellipse at 90% 0%,rgba(52,131,94,.10),transparent 55%)!important;
     opacity:1!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) :is(.daily-hub-table tbody tr,.results-card-row,.metric-card,.dashboard-kpi){
-    background:#102a24!important; border:1px solid #23463c!important; box-shadow:none!important;
+    background:linear-gradient(155deg,#152d26 0%,#0c221d 100%)!important;
+    border:1px solid rgba(171,216,188,.15)!important;
+    box-shadow:inset 0 1px 0 rgba(242,255,248,.05),0 8px 24px rgba(0,0,0,.15)!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .site-header{
-    background:#061916!important; border-bottom:1px solid #23463c!important;
+    background:linear-gradient(180deg,#0b211b,#071815)!important;
+    border-bottom:1px solid rgba(170,215,190,.13)!important;
+    box-shadow:0 6px 22px rgba(0,0,0,.12)!important;
   }
 }
 

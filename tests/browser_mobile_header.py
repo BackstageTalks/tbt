@@ -66,6 +66,22 @@ def main():
                     assert 'is-access-locked' in (live.get_attribute('class') or ''), width
                     assert page.locator('#insightShortcut .live-access-lock').is_visible(), width
                     if width == 390:
+                        # Managed hero h2 children may carry independent font-size!important.
+                        # Verify the real computed headline fits within the compact banner.
+                        hero_fit = page.evaluate("""() => {
+                          const hero=document.querySelector('#dashboardHero');
+                          const title=hero?.querySelector('.dashboard-hero-copy h2, .hero-copy h2');
+                          if (!hero || !title) return null;
+                          const h=hero.getBoundingClientRect(),t=title.getBoundingClientRect();
+                          return {heroTop:h.top,heroBottom:h.bottom,titleTop:t.top,titleBottom:t.bottom};
+                        }""")
+                        assert hero_fit is not None, (width, 'missing banner title')
+                        assert hero_fit['titleTop'] >= hero_fit['heroTop']-2, (width, hero_fit)
+                        assert hero_fit['titleBottom'] <= hero_fit['heroBottom']+2, (width, hero_fit)
+                        if os.getenv('BLINQ_SCREENSHOTS'):
+                            out = Path(os.environ['BLINQ_SCREENSHOTS'])
+                            out.mkdir(parents=True, exist_ok=True)
+                            page.screenshot(path=str(out / 'mobile-predictions-review.png'), full_page=True)
                         assert page.locator('#insightShortcut svg').first.evaluate(
                             "(n)=>getComputedStyle(n).animationName"
                         ) == 'blinq-live-breathe'
