@@ -269,12 +269,32 @@ def main():
                 };
                 const eliteCount=t.todayPublishedPickCount('elite');
                 const eliteHtml=t.resultsSummary();
+                const sampleOf=html=>{
+                  const host=document.createElement('div');
+                  host.innerHTML=html;
+                  return [...host.querySelectorAll('.metric-card strong')].at(-1)?.textContent.trim();
+                };
+                // Matching the current 06:00 betting day by date must not
+                // drop the published ELITE denominator from Today.
+                s.resultsFilters={...s.resultsFilters,window:'custom',
+                  dateFrom:day,dateTo:day};
+                const eliteCustomSample=sampleOf(t.resultsSummary());
+                s.resultsFilters.dateFrom=previous;
+                s.resultsFilters.dateTo=previous;
+                const historicalSample=sampleOf(t.resultsSummary());
+                s.resultsFilters.dateFrom=day;
+                s.resultsFilters.dateTo=day;
+                s.resultsFilters.bettingDay=false;
+                const calendarSample=sampleOf(t.resultsSummary());
+                s.resultsFilters={...s.resultsFilters,window:'today',
+                  dateFrom:'',dateTo:'',bettingDay:true};
                 const proCount=t.todayPublishedPickCount('pro');
                 s.resultsFilters.membership='';
                 const allCount=t.todayPublishedPickCount();
                 const allHtml=t.resultsSummary();
                 return {
                   eliteCount,proCount,allCount,
+                  eliteCustomSample,historicalSample,calendarSample,
                   eliteFraction:eliteHtml.includes('2/3'),
                   eliteDescription:eliteHtml.includes('dnešných ELITE pickov'),
                   eliteNoGlobal:!eliteHtml.includes('2/58'),
@@ -283,6 +303,8 @@ def main():
             }""")
             assert membership == {
                 "eliteCount":3,"proCount":1,"allCount":58,
+                "eliteCustomSample":"2/3","historicalSample":"1",
+                "calendarSample":"2",
                 "eliteFraction":True,"eliteDescription":True,
                 "eliteNoGlobal":True,"allFraction":True
             },membership
