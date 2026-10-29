@@ -6958,7 +6958,15 @@ function adminActivityRows(){
 
   function resultsSummary(){
     const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',m=localResultMetrics(rows,category,filters);
-    const todayTotal=filters.window==='today'&&category==='all'&&!statsHaveExcludedMarkets()?todayPublishedPickCount(filters.membership):null;
+    // A custom range covering exactly today's 06:00–06:00 betting day is
+    // the same published cohort as the Today preset. Historical ranges have
+    // no authoritative all-published total in this results payload.
+    const currentDay=bratislavaBettingDayKey(Date.now(),6);
+    const exactCurrentBettingDay=filters.window==='custom'&&filters.bettingDay!==false
+      &&filters.dateFrom===currentDay&&(filters.dateTo||filters.dateFrom)===currentDay
+      &&!filters.tour&&!filters.surface;
+    const todayTotal=(filters.window==='today'||exactCurrentBettingDay)
+      &&category==='all'&&!statsHaveExcludedMarkets()?todayPublishedPickCount(filters.membership):null;
     const sampleValue=todayTotal==null?String(m.sample):`${m.sample}/${todayTotal}`;
     const memberName=filters.membership?String(filters.membership).toUpperCase():'';
     const sampleNote=todayTotal==null
