@@ -51,6 +51,11 @@
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero h2 {
     font-size:19px!important; line-height:1.2!important; margin:5px 0!important;
   }
+  /* The managed banner sets headline size on nested strong/span too. Keep mobile copy inside the existing 128px hero. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero-copy h2 :is(strong,span),
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .hero-copy h2 :is(strong,span) {
+    font-size:inherit!important; line-height:inherit!important;
+  }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis {
     padding:12px!important; gap:8px!important;
   }
