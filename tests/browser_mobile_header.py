@@ -66,6 +66,10 @@ def main():
                     assert 'is-access-locked' in (live.get_attribute('class') or ''), width
                     assert page.locator('#insightShortcut .live-access-lock').is_visible(), width
                     if width == 390:
+                        if os.getenv('BLINQ_SCREENSHOTS'):
+                            out = Path(os.environ['BLINQ_SCREENSHOTS'])
+                            out.mkdir(parents=True, exist_ok=True)
+                            page.screenshot(path=str(out / 'mobile-predictions-review.png'), full_page=True)
                         assert page.locator('#insightShortcut svg').first.evaluate(
                             "(n)=>getComputedStyle(n).animationName"
                         ) == 'blinq-live-breathe'
