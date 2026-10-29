@@ -16,7 +16,7 @@
     display:flex!important; width:auto!important; gap:6px!important; margin:0!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) :is(#insightBell,#insightShortcut,#topUpgradeButton,#profileShell,#profileButton) {
-    width:44px!important; min-width:44px!important; height:44px!important;
+    width:44px!important; min-width:44px!important; height:44px!important; min-height:44px!important; max-height:44px!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs {
     display:grid!important; grid-template-columns:repeat(3,minmax(0,1fr))!important;
