@@ -3472,7 +3472,7 @@
     if((scheduled||players)&&selection)return `${scheduled}::${players}::${market}::${scope}::${metric}::${selection}${totalContract}`;
     return String(publication?.selection_key||publication?.publication_key||`${scheduled}::${players}::${publication?.section||''}::${selection||index}`);
   }
-  function memberResultCohort(plan){
+  function memberResultCohort(plan,bettingDay=''){
     // Select from the full daily pool before settlement, time and category filters.
     // Current membership rules model historical access; they are not user allocations.
     if(!isAdminAccount()||!plan)return null;
@@ -3495,6 +3495,7 @@
     const allowed=new Set();
     const hash=text=>{let h=2166136261;for(const ch of text){h^=ch.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;};
     for(const pool of groups.values()){
+      if(bettingDay&&pool[0].day!==bettingDay)continue;
       const rule=rules[pool[0].tab];
       if(!rule.enabled||rule.display_state!=='active')continue;
       pool.sort((a,b)=>(Date.parse(a.p.issued_at)||Infinity)-(Date.parse(b.p.issued_at)||Infinity)||(Number(a.p.offer_position)||Infinity)-(Number(b.p.offer_position)||Infinity)||a.key.localeCompare(b.key));
@@ -6956,7 +6957,11 @@ function adminActivityRows(){
 
   function resultsSummary(){
     const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',m=localResultMetrics(rows,category,filters);
-    const todayTotal=filters.window==='today'&&category==='all'&&!statsHaveExcludedMarkets()?todayPublishedPickCount():null;
+    const todayTotal=filters.window==='today'&&category==='all'&&!statsHaveExcludedMarkets()
+      ?(filters.membership
+        ?(filters.bettingDay===false?null:memberResultCohort(filters.membership,bratislavaBettingDayKey(Date.now(),6)).size)
+        :todayPublishedPickCount())
+      :null;
     const sampleValue=todayTotal==null?String(m.sample):`${m.sample}/${todayTotal}`;
     const sampleNote=todayTotal==null
       ?lcopy('settled published rows','vyhodnotené publikované záznamy','vyhodnocené publikované záznamy')
