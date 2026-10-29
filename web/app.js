@@ -3472,7 +3472,7 @@
     if((scheduled||players)&&selection)return `${scheduled}::${players}::${market}::${scope}::${metric}::${selection}${totalContract}`;
     return String(publication?.selection_key||publication?.publication_key||`${scheduled}::${players}::${publication?.section||''}::${selection||index}`);
   }
-  function memberResultCohort(plan){
+  function memberResultCohort(plan,bettingDayFilter=''){
     // Select from the full daily pool before settlement, time and category filters.
     // Current membership rules model historical access; they are not user allocations.
     if(!isAdminAccount()||!plan)return null;
@@ -3484,6 +3484,7 @@
       const tab=section==='top_daily'?'daily':section;
       const day=resultPublicationBettingDay(row,p),key=canonicalResultPublicationKey(row,p);
       if(!day||!key||!rules[tab])return;
+      if(bettingDayFilter&&(day!==bettingDayFilter||bratislavaBettingDayKey(row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0,6)!==bettingDayFilter))return;
       const identity=day+'|'+tab+'|'+key;if(seen.has(identity))return;seen.add(identity);
       const group=day+'|'+tab;if(!groups.has(group))groups.set(group,[]);
       groups.get(group).push({key,p,tab,day});
@@ -6939,7 +6940,8 @@ function adminActivityRows(){
     }).join('');
     return `<div class="admin-table-wrap picks-table-wrap"><table class="admin-analytics-table picks-table"><thead><tr><th>Date</th><th>Match</th><th>Tournament</th><th>Prediction</th><th>Probability</th><th>Odds</th></tr></thead><tbody>${body}</tbody></table></div>`;
   }
-  function todayPublishedPickCount(){
+  function todayPublishedPickCount(membership=''){
+    if(membership&&isAdminAccount())return memberResultCohort(membership,bratislavaBettingDayKey(Date.now(),6)).size;
     const n=Number(state.feed?.entitlements?.daily_pick_count);
     return Number.isFinite(n)&&n>=0?Math.trunc(n):null;
   }
@@ -6956,11 +6958,14 @@ function adminActivityRows(){
 
   function resultsSummary(){
     const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',m=localResultMetrics(rows,category,filters);
-    const todayTotal=filters.window==='today'&&category==='all'&&!statsHaveExcludedMarkets()?todayPublishedPickCount():null;
+    const todayTotal=filters.window==='today'&&category==='all'&&!statsHaveExcludedMarkets()?todayPublishedPickCount(filters.membership):null;
     const sampleValue=todayTotal==null?String(m.sample):`${m.sample}/${todayTotal}`;
+    const memberName=filters.membership?String(filters.membership).toUpperCase():'';
     const sampleNote=todayTotal==null
       ?lcopy('settled published rows','vyhodnotené publikované záznamy','vyhodnocené publikované záznamy')
-      :lcopy(`settled from ${todayTotal} published picks in the current betting day`,`vyhodnotené z ${todayTotal} dnešných publikovaných pickov`,`vyhodnocené z ${todayTotal} dnešních publikovaných tipů`);
+      :memberName
+        ?lcopy(`settled from ${todayTotal} ${memberName} picks published today`,`vyhodnotené z ${todayTotal} dnešných ${memberName} pickov`,`vyhodnocené z ${todayTotal} dnešních ${memberName} tipů`)
+        :lcopy(`settled from ${todayTotal} published picks in the current betting day`,`vyhodnotené z ${todayTotal} dnešných publikovaných pickov`,`vyhodnocené z ${todayTotal} dnešních publikovaných tipů`);
     return metricCards([
       [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
