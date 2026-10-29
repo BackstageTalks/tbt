@@ -7373,7 +7373,7 @@ body#blinqPremium .boot-tennis-card.boot-tennis-card-source .blinq-loader-captio
   color:#00dca3!important;font-weight:700!important;
 }
 
-/* BlinQ runtime patch 7.3.6-r61: shared content edges and readable dashboard components. */
+/* BlinQ runtime patch 7.3.6-r62: shared content edges and readable dashboard components. */
 body#blinqPremium:not(.blinq-admin) .app-shell:not([hidden])::after{content:none!important;display:none!important}
 body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero-copy{
   left:48px!important;padding-inline:0!important;
