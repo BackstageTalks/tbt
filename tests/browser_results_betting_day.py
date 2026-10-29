@@ -14,7 +14,7 @@ def route_request(route):
         assert source.count(marker) == 1
         source = source.replace(
             marker,
-            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow};\n"
+            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,todayPublishedPickCount,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow};\n"
             + marker,
         )
         route.fulfill(content_type="application/javascript", body=source)
@@ -217,6 +217,75 @@ def main():
                     selector:document.querySelector('#resultsWindow')?.value};
             }""")
             assert empty_today=={'period':'today','rows':0,'empty':True,'selector':'today'},empty_today
+
+            # A membership selection must scope today's published denominator
+            # to the member cohort, not the entire 50-80 pick daily offer.
+            membership = page.evaluate("""() => {
+                const t=bettingDayTest,s=t.state;
+                const day=t.bratislavaBettingDayKey(Date.now(),6);
+                const previous=t.bratislavaBettingDayKey(Date.now()-86400000,6);
+                const row=(id,dayKey,section,correct,position,scheduled=dayKey+'T12:00:00Z')=>({
+                  event_id:id,tour:'ATP',surface:'hard',scheduled_at:scheduled,
+                  market_publications:[{
+                    section,market:'match_winner',selection_id:'p1',
+                    selection:'Player A',issued_at:dayKey+'T07:00:00Z',
+                    betting_day:dayKey,offer_position:position,
+                    odds:2,price_status:'priced',
+                    result:correct===null?{}:{
+                      correct,status:correct?'hit':'miss',staked_units:1,
+                      profit_units:correct?1:-1
+                    }
+                  }]
+                });
+                s.feed={
+                  account:{is_admin:true,role:'admin',plan:'admin'},
+                  entitlements:{daily_pick_count:58},
+                  member_result_rules:{
+                    elite:{
+                      daily:{enabled:true,display_state:'active',visible_picks:2,selection_mode:'first'},
+                      prime:{enabled:true,display_state:'active',visible_picks:1,selection_mode:'first'}
+                    },
+                    pro:{
+                      daily:{enabled:true,display_state:'active',visible_picks:1,selection_mode:'first'}
+                    }
+                  },
+                  results:[
+                    row('pending',day,'top_daily',null,1),
+                    row('won',day,'top_daily',true,2),
+                    row('not-allocated',day,'top_daily',true,3),
+                    row('prime',day,'prime',false,1),
+                    row('old',previous,'top_daily',true,1),
+                    row('stale-timestamp',day,'top_daily',true,4,previous+'T12:00:00Z')
+                  ]
+                };
+                s.feed.top_daily_picks=[{
+                  ...s.feed.results[0],market:'match_winner',selection_id:'p1',
+                  betting:{selection_id:'p1'},issued_at:day+'T07:00:00Z'
+                }];
+                s.ui.dashboard.daily_hub.tabs={};
+                s.resultsFilters={
+                  category:'all',tour:'',surface:'',window:'today',
+                  dateFrom:'',dateTo:'',bettingDay:true,membership:'elite'
+                };
+                const eliteCount=t.todayPublishedPickCount('elite');
+                const eliteHtml=t.resultsSummary();
+                const proCount=t.todayPublishedPickCount('pro');
+                s.resultsFilters.membership='';
+                const allCount=t.todayPublishedPickCount();
+                const allHtml=t.resultsSummary();
+                return {
+                  eliteCount,proCount,allCount,
+                  eliteFraction:eliteHtml.includes('2/3'),
+                  eliteDescription:eliteHtml.includes('dnešných ELITE pickov'),
+                  eliteNoGlobal:!eliteHtml.includes('2/58'),
+                  allFraction:allHtml.includes('3/58')
+                };
+            }""")
+            assert membership == {
+                "eliteCount":3,"proCount":1,"allCount":58,
+                "eliteFraction":True,"eliteDescription":True,
+                "eliteNoGlobal":True,"allFraction":True
+            },membership
             assert not errors, errors
             print("Results current betting-day cohort + 06:00 custom filter contract: PASS")
         finally:
