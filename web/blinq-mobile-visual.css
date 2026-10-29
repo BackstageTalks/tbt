@@ -1,0 +1,100 @@
+/* Mobile visual pass: existing routes, permissions and KPI contents are preserved. */
+@media (max-width: 900px) {
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .header-top {
+    display:flex!important; justify-content:space-between!important;
+    gap:8px!important; padding:8px 12px!important; min-height:64px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .header-top > .brand {
+    width:88px!important; min-width:88px!important; height:44px!important; margin:0!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .brand img.brand-source-logo {
+    width:80px!important; height:40px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .header-top > .reference-navigation,
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .header-actions > :not(#insightBell):not(#insightShortcut):not(#topUpgradeButton):not(#profileShell) { display:none!important; }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .header-actions {
+    display:flex!important; width:auto!important; gap:6px!important; margin:0!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) :is(#insightBell,#insightShortcut,#topUpgradeButton,#profileShell,#profileButton) {
+    width:44px!important; min-width:44px!important; height:44px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs {
+    display:grid!important; grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    position:fixed!important; inset:auto 0 0!important; z-index:80!important;
+    padding:6px 12px calc(6px + env(safe-area-inset-bottom,0px))!important;
+    gap:8px!important; background:rgba(4,24,21,.98)!important;
+    border-top:1px solid #23483e!important; box-shadow:0 -8px 24px #0003!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs :is(a,button) {
+    display:flex!important; flex-direction:column!important; align-items:center!important; justify-content:center!important;
+    gap:4px!important; min-height:52px!important; padding:6px!important; border-radius:12px!important;
+    color:#b3ccc1!important; font-size:12px!important; line-height:1.2!important; text-decoration:none!important; border:0!important; background:transparent!important; font:inherit; cursor:pointer;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs :is(a,button).active {
+    background:#123d31!important; color:#42e8b1!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs svg {
+    width:22px!important; height:22px!important; fill:none!important; stroke:currentColor!important; stroke-width:1.7!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .site-main {
+    padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero,
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero {
+    height:128px!important; min-height:128px!important; max-height:128px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero-copy {
+    padding:14px 18px!important; max-width:75%!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero h2 {
+    font-size:19px!important; line-height:1.2!important; margin:5px 0!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis {
+    padding:12px!important; gap:8px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .daily-panel-head {
+    padding:12px 0 8px!important; margin:0!important; min-height:0!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .daily-tabs-row { padding-bottom:10px!important; }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHubTabs {
+    scrollbar-width:thin!important; scrollbar-color:#36715c transparent!important; padding-bottom:5px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .daily-hub-table tbody tr {
+    border-radius:16px!important; border-color:#285044!important; margin-bottom:12px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .daily-hub-table .hub-match-player {
+    font-size:14px!important; line-height:1.4!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .daily-hub-table button {
+    min-height:44px!important; min-width:64px!important; border-radius:10px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs :is(a,button):focus-visible {
+    outline:2px solid #42e8b1!important; outline-offset:2px!important;
+  }
+}
+
+@media(max-width:900px){
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin){
+    background:#061916!important; color:#f0f6f3!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)::before{
+    background:radial-gradient(ellipse at 90% 0%,#123d3133,transparent 55%)!important;
+    opacity:1!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) :is(.daily-hub-table tbody tr,.results-card-row,.metric-card,.dashboard-kpi){
+    background:#102a24!important; border:1px solid #23463c!important; box-shadow:none!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .site-header{
+    background:#061916!important; border-bottom:1px solid #23463c!important;
+  }
+}
+
+@media(max-width:900px){
+ body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #insightShortcut svg {animation:blinq-live-breathe 3s ease-in-out infinite;}
+ body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) :is(#topUpgradeButton,#insightShortcut)>span {display:none!important;}
+ body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #profileMenuToggle {display:none!important;}
+}
+@keyframes blinq-live-breathe {0%,100%{opacity:.65}50%{opacity:1}}
+@media(prefers-reduced-motion:reduce){
+ body#blinqPremium#blinqPremium#blinqPremium #insightShortcut svg {animation:none!important;}
+}
