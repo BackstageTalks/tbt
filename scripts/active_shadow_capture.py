@@ -10,7 +10,7 @@ def update_active_shadow(ledger, **kwargs):
     legacy = []
     for row in ledger:
         version = str(row.get('challenger_model_version') or '')
-        if version.startswith('v7.2.1-'):
+        if version.startswith(('v7.2.1-', 'v7.2.2-')):
             groups[(row['production_model_version'], version)].append(row)
         else:
             legacy.append(row)
@@ -32,7 +32,7 @@ def update_active_shadow(ledger, **kwargs):
     result = []
     for row in captured:
         version = str(row.get('challenger_model_version') or '')
-        if version.startswith('v7.2.1-'):
+        if version.startswith(('v7.2.1-', 'v7.2.2-')):
             groups[(row['production_model_version'], version)].append(row)
         else:
             result.append(row)

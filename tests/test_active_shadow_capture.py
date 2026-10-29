@@ -1,12 +1,14 @@
+import pytest
 from datetime import timedelta
 from dataclasses import replace
 from test_settle_frozen_721_shadow import fixture
 from active_shadow_capture import update_active_shadow
 
 
-def test_active_721_resolves_verified_alias_once_and_retains_711():
+@pytest.mark.parametrize("version", ["v7.2.1-test", "v7.2.2-test"])
+def test_active_721_resolves_verified_alias_once_and_retains_711(version):
     now, payload, match = fixture()
-    row = payload['rows'][0]
+    row = dict(payload['rows'][0], challenger_model_version=version)
     duplicate = dict(row, match_id='later', captured_at=(now-timedelta(hours=4)).isoformat())
     legacy = dict(row, match_id='legacy', challenger_model_version='711')
     match = replace(match, match_id='canonical', provider_payload={
