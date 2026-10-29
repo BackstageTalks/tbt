@@ -97,9 +97,15 @@ class SecondaryOperatorTests(unittest.TestCase):
                 db.execute('INSERT INTO canonical_matches VALUES (?,?)',('match-00001','{"venue":"old"}'))
                 if file==candidate:
                     db.execute('''CREATE TABLE dil_cdb_provider_context_shadow(
-                        match_id TEXT,source_sha256 TEXT,original_context_json TEXT)''')
-                    db.execute('INSERT INTO dil_cdb_provider_context_shadow VALUES(?,?,?)',
-                        ('match-00001','a'*64,json.dumps('{"venue":"old"}')))
+                        match_id TEXT,source_sha256 TEXT,original_context_json TEXT,
+                        original_context_sha256 TEXT,cdb_context_json TEXT,
+                        merged_context_json TEXT,merged_context_sha256 TEXT)''')
+                    original=json.dumps('{"venue":"old"}')
+                    merged='{"venue":"new"}'
+                    db.execute('INSERT INTO dil_cdb_provider_context_shadow VALUES(?,?,?,?,?,?,?)',
+                        ('match-00001','a'*64,original,
+                         hashlib.sha256(original.encode()).hexdigest(),
+                         json.dumps(merged),merged,hashlib.sha256(merged.encode()).hexdigest()))
         self.assertEqual(op.verify_shadow_matches_original(source,candidate,'a'*64),1)
         self.assertEqual(op.verify_shadow_matches_original(candidate,candidate,'a'*64),0)
         with sqlite3.connect(source) as db:
