@@ -21,17 +21,40 @@ def audit(page, width):
     response = page.goto(URL, wait_until="domcontentloaded", timeout=60000)
     if response is None or response.status >= 400:
         raise AssertionError(("production SPA route failed", width, response.status if response else None))
-    page.wait_for_function(
-        """() => {
-          const shell=document.querySelector('#appShell');
-          const nav=document.querySelector('#mobileTabs');
-          const hero=document.querySelector('#dashboardHero');
-          return shell && !shell.hidden && nav && getComputedStyle(nav).display!=='none'
-                 && hero && hero.getBoundingClientRect().height>30;
-        }""",
-        timeout=60000,
-    )
-    page.wait_for_timeout(1800)
+    # Capture what a public, non-authenticated browser actually sees first,
+    # even if the app never exposes its shell. Never fabricate a signed-in state.
+    OUTPUT.mkdir(parents=True, exist_ok=True)
+    page.wait_for_timeout(12000)
+    diagnostic = page.evaluate("""() => ({
+        url: location.href,
+        title: document.title,
+        readyState: document.readyState,
+        appShell: !!document.querySelector('#appShell'),
+        appShellHidden: document.querySelector('#appShell')?.hidden ?? null,
+        mobileTabs: !!document.querySelector('#mobileTabs'),
+        mobileTabsDisplay: document.querySelector('#mobileTabs') ? getComputedStyle(document.querySelector('#mobileTabs')).display : null,
+        hero: !!document.querySelector('#dashboardHero'),
+        heroHeight: document.querySelector('#dashboardHero')?.getBoundingClientRect().height ?? null,
+        bodyClasses: document.body.className,
+        bodyText: document.body.innerText.slice(0, 600)
+    })""")
+    (OUTPUT / f"production-diagnostic-{width}.json").write_text(json.dumps(diagnostic, indent=2, ensure_ascii=False), encoding="utf-8")
+    page.screenshot(path=str(OUTPUT / f"production-diagnostic-{width}.png"), full_page=True, animations="disabled")
+    print("Live public session diagnostic:", json.dumps(diagnostic, ensure_ascii=False), flush=True)
+    try:
+        page.wait_for_function(
+            """() => {
+              const shell=document.querySelector('#appShell');
+              const nav=document.querySelector('#mobileTabs');
+              const hero=document.querySelector('#dashboardHero');
+              return shell && !shell.hidden && nav && getComputedStyle(nav).display!=='none'
+                     && hero && hero.getBoundingClientRect().height>30;
+            }""",
+            timeout=15000,
+        )
+    except Exception as error:
+        raise AssertionError(("Production public session did not render mobile shell; see production-diagnostic screenshot", width, diagnostic)) from error
+    page.wait_for_timeout(1200)
     result = page.evaluate("""() => {
         const rect=el=>{const b=el.getBoundingClientRect();return {top:b.top,bottom:b.bottom,left:b.left,right:b.right,width:b.width,height:b.height}};
         const hero=document.querySelector('#dashboardHero');
