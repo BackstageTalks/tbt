@@ -90,8 +90,8 @@
 }
 
 @media(max-width:900px){
- body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #insightShortcut svg {animation:blinq-live-breathe 3s ease-in-out infinite;}
- body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) :is(#topUpgradeButton,#insightShortcut)>span {display:none!important;}
+ body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #insightShortcut > svg {animation:blinq-live-breathe 3s ease-in-out infinite;}
+ body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) :is(#topUpgradeLabel,.insight-shortcut-live,#insightShortcutLabel) {display:none!important;}
  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #profileMenuToggle {display:none!important;}
 }
 @keyframes blinq-live-breathe {0%,100%{opacity:.65}50%{opacity:1}}
