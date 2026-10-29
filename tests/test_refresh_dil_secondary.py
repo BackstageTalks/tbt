@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import hashlib
+import sqlite3
 from pathlib import Path
 import tempfile
 import unittest
@@ -47,7 +48,8 @@ class SecondaryOperatorTests(unittest.TestCase):
             Path(out).write_bytes(b'synthetic-new-dil')
             Path(str(out)+'.audit.json').write_text('\"import-checked\"')
             return {'result_dil_sha256':dilhash,
-                    'data_gate':'ISOLATED_PARITY_IMPORT_PASS_PENDING_REVALIDATION'}
+                    'data_gate':'ISOLATED_PARITY_IMPORT_PASS_PENDING_REVALIDATION',
+                    'counts':{'provider_context_matches_shadowed':0}}
         def fake_audit(*a,**kw):
             return {'status':'VERIFIED_CURRENT_CDB_PARITY','secondary_promotion_allowed':True,
                     'source_release_manifest_sha256':'f'*64,'source_cdb_sha256':sha}
@@ -55,7 +57,8 @@ class SecondaryOperatorTests(unittest.TestCase):
              patch.object(op,'download_full_release',side_effect=fake_download),\
              patch.object(op.exporter,'build',side_effect=fake_export),\
              patch.object(op.importer,'reconcile',side_effect=fake_import),\
-             patch.object(op.parity,'audit',side_effect=fake_audit):
+             patch.object(op.parity,'audit',side_effect=fake_audit),\
+             patch.object(op,'verify_shadow_matches_original',return_value=0):
             result=op.refresh(source,self.root/'work',self.folder,activate=True)
         self.assertEqual(result['status'],'SECONDARY_ACTIVATED_VERIFIED')
         self.assertEqual((self.folder/'current-secondary.json').is_file(),True)
@@ -71,18 +74,45 @@ class SecondaryOperatorTests(unittest.TestCase):
             return {'export_sqlite_sha256':'e'*64,'source_release_manifest_sha256':'f'*64}
         def fake_import(base,cdb,out,*args,**kw):
             Path(out).write_bytes(b'new');return {'result_dil_sha256':'d'*64,
-                'data_gate':'BLOCKED_REVIEW_REQUIRED'}
+                'data_gate':'BLOCKED_REVIEW_REQUIRED',
+                'counts':{'provider_context_matches_shadowed':0}}
         bad={'status':'BLOCKED_CURRENT_CDB_PARITY','secondary_promotion_allowed':False,
              'source_release_manifest_sha256':'f'*64,'source_cdb_sha256':'e'*64}
         with patch.object(op,'snapshot_metadata',return_value=frozen),\
              patch.object(op,'download_full_release',side_effect=fake_download),\
              patch.object(op.exporter,'build',side_effect=fake_export),\
              patch.object(op.importer,'reconcile',side_effect=fake_import),\
-             patch.object(op.parity,'audit',return_value=bad):
+             patch.object(op.parity,'audit',return_value=bad),\
+             patch.object(op,'verify_shadow_matches_original',return_value=0):
             with self.assertRaisesRegex(ValueError,'DATA PARITY BLOCKED'):
                 op.refresh(source,self.root/'failed-work',self.folder,activate=True)
         self.assertEqual(json.loads((self.folder/'current-secondary.json').read_text())['filename'],'one.sqlite')
         self.assertEqual(sorted(x.name for x in self.folder.glob('*.sqlite')),['one.sqlite','two.sqlite'])
+    def test_new_shadow_provenance_must_match_original_source(self):
+        source=self.root/'source-real.sqlite'
+        candidate=self.root/'candidate-real.sqlite'
+        for file in (source,candidate):
+            with sqlite3.connect(file) as db:
+                db.execute('CREATE TABLE canonical_matches(match_id TEXT PRIMARY KEY, provider_context_json TEXT)')
+                db.execute('INSERT INTO canonical_matches VALUES (?,?)',('match-00001','{"venue":"old"}'))
+                if file==candidate:
+                    db.execute('''CREATE TABLE dil_cdb_provider_context_shadow(
+                        match_id TEXT,source_sha256 TEXT,original_context_json TEXT,
+                        original_context_sha256 TEXT,cdb_context_json TEXT,
+                        merged_context_json TEXT,merged_context_sha256 TEXT)''')
+                    original=json.dumps('{"venue":"old"}')
+                    merged='{"venue":"new"}'
+                    db.execute('INSERT INTO dil_cdb_provider_context_shadow VALUES(?,?,?,?,?,?,?)',
+                        ('match-00001','a'*64,original,
+                         hashlib.sha256(original.encode()).hexdigest(),
+                         json.dumps(merged),merged,hashlib.sha256(merged.encode()).hexdigest()))
+        self.assertEqual(op.verify_shadow_matches_original(source,candidate,'a'*64),1)
+        self.assertEqual(op.verify_shadow_matches_original(candidate,candidate,'a'*64),0)
+        with sqlite3.connect(source) as db:
+            db.execute("UPDATE canonical_matches SET provider_context_json='{\"venue\":\"different\"}'")
+        with self.assertRaisesRegex(AssertionError,'source proof mismatch'):
+            op.verify_shadow_matches_original(source,candidate,'a'*64)
+
     def test_no_pointer_to_outside_file(self):
         outsider=self.root/'elsewhere.sqlite';outsider.write_bytes(b'foo')
         with self.assertRaises(ValueError):op.activate_secondary_pointer(self.folder,outsider,self.verified)

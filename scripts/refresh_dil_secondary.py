@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import shutil
+import sqlite3
 from pathlib import Path
 import subprocess
 import sys
@@ -107,6 +108,43 @@ def activate_secondary_pointer(folder, artifact, report):
     return check
 
 
+def verify_shadow_matches_original(base_dil, staged, source_sha256):
+    """Prove every new shadow against original DIL; keep prior rows unchanged."""
+    original = sqlite3.connect(Path(base_dil).resolve().as_uri() + '?mode=ro', uri=True)
+    candidate = sqlite3.connect(Path(staged).resolve().as_uri() + '?mode=ro', uri=True)
+    try:
+        prior_shadow = original.execute("""SELECT 1 FROM sqlite_master
+            WHERE type='table' AND name='dil_cdb_provider_context_shadow'""").fetchone()
+        new_matches = 0
+        for row in candidate.execute('''SELECT match_id,original_context_json,
+                source_sha256,original_context_sha256,cdb_context_json,
+                merged_context_json,merged_context_sha256
+                FROM dil_cdb_provider_context_shadow WHERE source_sha256=?''',
+                (source_sha256,)):
+            mid, old, source_sha, old_sha, cdb_raw, merged_raw, merged_sha = row
+            if prior_shadow:
+                previous = original.execute('''SELECT match_id,original_context_json,
+                    source_sha256,original_context_sha256,cdb_context_json,
+                    merged_context_json,merged_context_sha256
+                    FROM dil_cdb_provider_context_shadow
+                    WHERE match_id=? AND source_sha256=?''',
+                    (mid, source_sha)).fetchone()
+                if previous is not None:
+                    if previous != row:
+                        raise AssertionError('Prior provider-context shadow was modified')
+                    continue
+            source_row = original.execute(
+                'SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
+                (mid,)).fetchone()
+            if source_row is None or source_row[0] != json.loads(old):
+                raise AssertionError('Private provider-context original source proof mismatch')
+            new_matches += 1
+        return new_matches
+    finally:
+        candidate.close()
+        original.close()
+
+
 def refresh(base_dil, work_dir, secondary_dir, *, activate=False):
     work_dir=Path(work_dir).resolve()
     secondary_dir=Path(secondary_dir).resolve()
@@ -140,6 +178,9 @@ def refresh(base_dil, work_dir, secondary_dir, *, activate=False):
         staged=work_dir/'staged-secondary.sqlite'
         result=importer.reconcile(base_dil,cdb_file,staged,source_sha,release_sha,
                                   quick_check=True, export_receipt=Path(str(cdb_file)+'.receipt.json'))
+        shadow_matches=verify_shadow_matches_original(base_dil,staged,source_sha)
+        if shadow_matches!=result['counts']['provider_context_matches_shadowed']:
+            raise AssertionError('DIL provider-context source preservation count mismatch')
         audit=parity.audit(cdb_file,staged,source_sha,full_integrity=True,
                            attest=Path(str(cdb_file)+'.receipt.json'))
         (work_dir/'secondary-parity.json').write_text(json.dumps(audit,indent=2,sort_keys=True)+'\n')

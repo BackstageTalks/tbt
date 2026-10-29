@@ -12,7 +12,7 @@ for pkg in (HERE, HERE.parent/'scripts'):
         sys.path.insert(0,str(pkg))
         break
 import audit_dil_cdb_secondary_parity as audit
-from finalize_dil_from_cdb_v2 import FIELDS
+from finalize_dil_from_cdb_v2 import FIELDS, reconcile
 from build_current_cdb_compare import SCHEMA
 
 class SecondaryParityTests(unittest.TestCase):
@@ -153,6 +153,63 @@ class SecondaryParityTests(unittest.TestCase):
         self.assertFalse(r['secondary_promotion_allowed'])
     def test_hash_tamper_fails_closed(self):
         with self.assertRaises(ValueError):audit.audit(self.cdb,self.dil,'f'*64,attest=self.receipt)
+    def test_lossless_context_resolution_passes_independent_full_parity_and_second_sync(self):
+        mid=self.one['match_id']
+        with sqlite3.connect(self.dil) as db:
+            db.execute('UPDATE canonical_matches SET provider_context_json=?',
+                (json.dumps({'venue':{'city':'Bratislava','centre_court':'yes'},'dil_only':'KEEP'}),))
+        with sqlite3.connect(self.cdb) as db:
+            db.execute('UPDATE cdb_matches SET provider_context_json=?',
+                (json.dumps({'venue':{'city':'Trnava','unpopulated':None}}),))
+        self.sha=audit.file_sha256(self.cdb)
+        rc=json.loads(self.receipt.read_text())
+        rc.update({'export_sqlite_sha256':self.sha,'export_timestamp_unit':'UTC unix seconds',
+                   'cdb_mutated':False})
+        self.receipt.write_text(json.dumps(rc))
+        candidate=self.dil.parent/'new-secondary.sqlite'
+        report=reconcile(self.dil,self.cdb,candidate,self.sha,'1'*64,export_receipt=self.receipt)
+        self.assertEqual(report['counts']['provider_context_matches_shadowed'],1)
+        self.assertEqual(report['counts']['metadata_conflicts'],0)
+        verified=audit.audit(self.cdb,candidate,self.sha,attest=self.receipt,full_integrity=True)
+        self.assertTrue(verified['secondary_promotion_allowed'])
+        self.assertEqual(verified['counts']['provider_context_shadows_verified'],1)
+        self.assertEqual(verified['counts']['provider_context_current_source_shadows_verified'],1)
+        second=self.dil.parent/'second-secondary.sqlite'
+        report2=reconcile(candidate,self.cdb,second,self.sha,'1'*64,export_receipt=self.receipt)
+        self.assertEqual(report2['counts']['provider_context_matches_shadowed'],0)
+        self.assertTrue(audit.audit(self.cdb,second,self.sha,
+                                   attest=self.receipt,full_integrity=True)['secondary_promotion_allowed'])
+        # Simulate tomorrow's authoritative source release: old shadows must
+        # still be verified against their immutable historical snapshot.
+        with sqlite3.connect(self.cdb) as db:
+            db.execute('UPDATE cdb_matches SET provider_context_json=?',
+                (json.dumps({'venue':{'city':'Žilina'}}),))
+        self.sha=audit.file_sha256(self.cdb)
+        rc=json.loads(self.receipt.read_text())
+        rc['export_sqlite_sha256']=self.sha
+        self.receipt.write_text(json.dumps(rc))
+        third=self.dil.parent/'third-secondary.sqlite'
+        report3=reconcile(second,self.cdb,third,self.sha,'1'*64,export_receipt=self.receipt)
+        self.assertEqual(report3['counts']['provider_context_matches_shadowed'],1)
+        with sqlite3.connect(third) as db:
+            versions=db.execute('SELECT COUNT(*) FROM dil_cdb_provider_context_shadow').fetchone()[0]
+            current3=json.loads(db.execute('SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
+                              (mid,)).fetchone()[0])
+        self.assertEqual(versions,2)
+        self.assertEqual(current3['venue']['city'],'Žilina')
+        self.assertTrue(audit.audit(self.cdb,third,self.sha,
+                                    attest=self.receipt,full_integrity=True)['secondary_promotion_allowed'])
+        with sqlite3.connect(second) as db:
+            current=json.loads(db.execute('SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
+                                        (mid,)).fetchone()[0])
+            self.assertEqual(current['venue']['city'],'Trnava')
+            self.assertEqual(current['venue']['centre_court'],'yes')
+            self.assertEqual(current['dil_only'],'KEEP')
+            db.execute("UPDATE dil_cdb_provider_context_shadow SET original_context_json='tampered'")
+        rejected=audit.audit(self.cdb,second,self.sha,attest=self.receipt,full_integrity=True)
+        self.assertFalse(rejected['secondary_promotion_allowed'])
+        self.assertEqual(rejected['counts']['provider_context_shadow_invalid_rows'],1)
+
     def test_no_unattested_parity(self):
         with self.assertRaises(ValueError):audit.audit(self.cdb,self.dil,self.sha)
 

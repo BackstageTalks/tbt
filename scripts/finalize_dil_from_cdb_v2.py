@@ -41,6 +41,14 @@ def metadata_value_equal(field, existing, incoming):
 
 def context_value_equal(existing, incoming):
     """Do not treat booleans as zero/one or numeric strings as numeric JSON values."""
+    if isinstance(existing, list) or isinstance(incoming, list):
+        return (isinstance(existing, list) and isinstance(incoming, list)
+                and len(existing) == len(incoming)
+                and all(context_value_equal(x, y) for x, y in zip(existing, incoming)))
+    if isinstance(existing, dict) or isinstance(incoming, dict):
+        return (isinstance(existing, dict) and isinstance(incoming, dict)
+                and existing.keys() == incoming.keys()
+                and all(context_value_equal(existing[k], incoming[k]) for k in existing))
     if isinstance(existing, bool) or isinstance(incoming, bool):
         return type(existing) is type(incoming) and existing == incoming
     if isinstance(existing, (int, float)) and isinstance(incoming, (int, float)):
@@ -136,6 +144,54 @@ def context_null_only_merge(existing, incoming):
     return out,added,conflicts
 
 
+def populated_source_context(value):
+    """Only populated CDB leaves are authoritative; empty objects/lists are not."""
+    if isinstance(value, dict):
+        cleaned = {key: leaf for key, raw in value.items()
+                   if (leaf := populated_source_context(raw)) is not None}
+        return cleaned or None
+    if value is None or isinstance(value, str) and miss(value):
+        return None
+    if isinstance(value, (dict, list)) and not value:
+        return None
+    return value
+
+
+def context_cdb_authoritative_merge(existing, incoming):
+    """Canonicalize populated CDB leaves; keep independent DIL keys.
+
+    Returns (canonical_context, additions, overridden_conflicts). The caller
+    MUST durably shadow the original whole DIL value before any override.
+    This is NOT a permission to overwrite the original DIL database.
+    """
+    if not isinstance(existing, dict) or not isinstance(incoming, dict):
+        raise ValueError('Provider context must be a JSON object')
+    out = json.loads(json.dumps(existing, allow_nan=False))
+    incoming = populated_source_context(incoming) or {}
+    added, conflicts = {}, {}
+    def walk(dst, src, path):
+        for key, value in src.items():
+            field = path + '.' + str(key) if path else str(key)
+            if value is None or isinstance(value, str) and miss(value):
+                continue
+            old_missing = key not in dst or dst[key] is None or (
+                isinstance(dst[key], str) and miss(dst[key]))
+            if old_missing:
+                dst[key] = value
+                added[field] = value
+            elif isinstance(dst[key], dict) and isinstance(value, dict):
+                walk(dst[key], value, field)
+            elif not context_value_equal(dst[key], value):
+                conflicts[field] = (dst[key], value)
+                dst[key] = value
+    walk(out, incoming, 'provider_context_json')
+    return out, added, conflicts
+
+
+def shadow_hash(value):
+    return hashlib.sha256(value.encode('utf-8')).hexdigest()
+
+
 def bootstrap(db):
     db.executescript('''
     CREATE TABLE IF NOT EXISTS dil_cdb_finalize_review (
@@ -158,6 +214,13 @@ def bootstrap(db):
       match_id TEXT NOT NULL, field_name TEXT NOT NULL, existing_json TEXT NOT NULL,
       incoming_json TEXT NOT NULL, source_sha256 TEXT NOT NULL,
       PRIMARY KEY(match_id,field_name)
+    ) WITHOUT ROWID;
+    CREATE TABLE IF NOT EXISTS dil_cdb_provider_context_shadow (
+      match_id TEXT NOT NULL, source_sha256 TEXT NOT NULL,
+      original_context_json TEXT NOT NULL, original_context_sha256 TEXT NOT NULL,
+      cdb_context_json TEXT NOT NULL, merged_context_json TEXT NOT NULL,
+      merged_context_sha256 TEXT NOT NULL,
+      PRIMARY KEY(match_id,source_sha256)
     ) WITHOUT ROWID;
     CREATE TABLE IF NOT EXISTS dil_cdb_finalize_receipts (key TEXT PRIMARY KEY,value TEXT NOT NULL) WITHOUT ROWID;
     ''')
@@ -215,8 +278,9 @@ def reconcile(dil,cdb,dest,expected_cdb_sha256,release_manifest_sha256,quick_che
         db.commit()
         db.execute('BEGIN IMMEDIATE')
         provenance_before=db.execute('SELECT count(*) FROM dil_cdb_finalize_provenance').fetchone()[0]
+        context_shadow_before=db.execute('SELECT count(*) FROM dil_cdb_provider_context_shadow WHERE source_sha256=?',(actual,)).fetchone()[0]
         counts=dict(rows_cdb=0,matched=0,new_matches=0,noncompleted_new_matches=0,metadata_fields_filled=0,stat_cells_filled=0,stats_conflicts=0,duplicate_event_review=0,
-                    identity_review=0,new_identity_review=0,metadata_conflicts=0,preexisting_stat_cells_preserved=0)
+                    identity_review=0,new_identity_review=0,metadata_conflicts=0,provider_context_conflicts_preserved=0,provider_context_matches_shadowed=0,preexisting_stat_cells_preserved=0)
         readback_ids=[]
         # The output is an ISOLATED copy; an index prevents O(new_rows*N) scans.
         # Used only for vetoing alternate-ID duplicates, never for guessing links.
@@ -284,21 +348,32 @@ def reconcile(dil,cdb,dest,expected_cdb_sha256,release_manifest_sha256,quick_che
                          json.dumps(canonical, ensure_ascii=False, default=str), actual))
                     counts['metadata_conflicts'] += 1
             if 'provider_context_json' in c:
-                merged,provider_additions,provider_conflicts=context_null_only_merge(
+                merged, provider_additions, provider_conflicts = context_cdb_authoritative_merge(
                     json_obj(d.get('provider_context_json')),
                     json_obj(c.get('provider_context_json')))
-                if provider_additions:
+                if provider_conflicts:
+                    # Lossless reconciliation: full original DIL JSON (including
+                    # conflicting leaves and DIL-only extras) survives separately.
+                    original_raw = json.dumps(d.get('provider_context_json'), ensure_ascii=False, allow_nan=False)
+                    cdb_raw = json.dumps(c.get('provider_context_json'), ensure_ascii=False, allow_nan=False)
+                    merged_raw = json.dumps(merged, ensure_ascii=False, sort_keys=True, allow_nan=False)
+                    db.execute('INSERT INTO dil_cdb_provider_context_shadow VALUES(?,?,?,?,?,?,?)',
+                        (mid, actual, original_raw, shadow_hash(original_raw),
+                         cdb_raw, merged_raw, shadow_hash(merged_raw)))
+                    counts['provider_context_matches_shadowed'] += 1
+                    counts['provider_context_conflicts_preserved'] += len(provider_conflicts)
+                    for key, (existing, incoming) in provider_conflicts.items():
+                        db.execute('INSERT OR REPLACE INTO dil_cdb_finalize_metadata_conflicts VALUES(?,?,?,?,?)',
+                            (mid, key, json.dumps(existing, ensure_ascii=False, allow_nan=False),
+                             json.dumps(incoming, ensure_ascii=False, allow_nan=False), actual))
+                if provider_additions or provider_conflicts:
+                    merged_raw = json.dumps(merged, ensure_ascii=False, sort_keys=True, allow_nan=False)
                     db.execute('UPDATE canonical_matches SET provider_context_json=? WHERE match_id=?',
-                        (json.dumps(merged,ensure_ascii=False,sort_keys=True,allow_nan=False),mid))
-                    for key,value in provider_additions.items():
+                        (merged_raw, mid))
+                    for key, value in provider_additions.items():
                         db.execute('INSERT INTO dil_cdb_finalize_metadata_provenance VALUES(?,?,?,?)',
-                            (mid,key,json.dumps(value,ensure_ascii=False,allow_nan=False),actual))
-                    counts['metadata_fields_filled']+=len(provider_additions)
-                for key,(existing,incoming) in provider_conflicts.items():
-                    db.execute('INSERT OR REPLACE INTO dil_cdb_finalize_metadata_conflicts VALUES(?,?,?,?,?)',
-                        (mid,key,json.dumps(existing,ensure_ascii=False,default=str),
-                         json.dumps(incoming,ensure_ascii=False,default=str),actual))
-                    counts['metadata_conflicts']+=1
+                            (mid, key, json.dumps(value, ensure_ascii=False, allow_nan=False), actual))
+                    counts['metadata_fields_filled'] += len(provider_additions)
             a=json_obj(d['stats_json']); b=json_obj(c['stats_json']); overlay={}
             if has_overlay:
                 x=db.execute('SELECT json_metrics FROM dil_enrichment_compact WHERE match_id=?',(mid,)).fetchone()
@@ -335,6 +410,21 @@ def reconcile(dil,cdb,dest,expected_cdb_sha256,release_manifest_sha256,quick_che
         db.execute('INSERT OR REPLACE INTO dil_cdb_finalize_receipts VALUES(?,?)',('canonical_matches_after',str(n_before+counts['new_matches'])))
         db.execute('INSERT OR REPLACE INTO dil_cdb_finalize_receipts VALUES(?,?)',('import_status','ISOLATED_SOURCE_RECONCILED_NOT_PRODUCTION'))
         db.commit()
+        # Independent SQL read-back of all overwritten canonical leaves and
+        # original-context checksums before declaring any release eligibility.
+        shadow_count = 0
+        for old, old_sha, merged_json, merged_sha, current in db.execute('''SELECT
+                s.original_context_json,s.original_context_sha256,
+                s.merged_context_json,s.merged_context_sha256,m.provider_context_json
+                FROM dil_cdb_provider_context_shadow s
+                JOIN canonical_matches m ON s.match_id=m.match_id
+                WHERE s.source_sha256=?''',(actual,)):
+            shadow_count += 1
+            if (shadow_hash(old) != old_sha or shadow_hash(merged_json) != merged_sha
+                    or current is None or shadow_hash(current) != merged_sha):
+                raise AssertionError('Provider-context shadow read-back mismatch')
+        if shadow_count != context_shadow_before + counts['provider_context_matches_shadowed']:
+            raise AssertionError('Missing or duplicate provider-context shadows')
         after=db.execute('SELECT count(*) FROM canonical_matches').fetchone()[0]
         # A DIL-only canonical ID requires review, not destructive deletion.
         dil_only=db.execute('''SELECT count(*) FROM canonical_matches d

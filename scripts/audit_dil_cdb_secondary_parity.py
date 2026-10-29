@@ -19,7 +19,7 @@ import sys
 
 from finalize_dil_from_cdb_v2 import (
     CORE, FIELDS, METADATA, comparable_equal, core_difference, context_value_equal,
-    json_obj, metadata_value_equal, normalized_metadata_text, miss,
+    json_obj, metadata_value_equal, normalized_metadata_text, miss, shadow_hash,
 )
 
 
@@ -64,7 +64,8 @@ def nested_subset(actual, expected):
             for key, value in expected.items()
         )
     if isinstance(expected, list):
-        return isinstance(actual, list) and actual == expected
+        return (isinstance(actual, list) and len(actual) == len(expected)
+                and all(nested_subset(a, b) for a, b in zip(actual, expected)))
     return context_value_equal(actual, expected)
 
 
@@ -187,6 +188,45 @@ def audit(cdb_path, dil_path, cdb_sha256, *, full_integrity=False, attest=None):
                     counts['cdb_stat_cells_conflicting_effective_dil'] += 1
                 else:
                     counts['cdb_stat_cells_matched'] += 1
+        # Shadow records are private, immutable provenance for all non-destructive
+        # CDB-authoritative context overrides. Fail closed on missing/tampered
+        # originals, altered resolved contexts or wrong source snapshots.
+        has_shadow = dil.execute("""SELECT 1 FROM sqlite_master WHERE type='table'
+            AND name='dil_cdb_provider_context_shadow'""").fetchone() is not None
+        if has_shadow:
+            shadow_rows = dil.execute('''SELECT s.match_id,s.source_sha256,
+                s.original_context_json,s.original_context_sha256,
+                s.cdb_context_json,s.merged_context_json,s.merged_context_sha256,
+                m.provider_context_json
+                FROM dil_cdb_provider_context_shadow s
+                LEFT JOIN canonical_matches m ON m.match_id=s.match_id''')
+            for mid, source_sha, original, old_sha, cdb_raw, merged_json, merged_sha, current in shadow_rows:
+                try:
+                    if (not isinstance(old_sha, str) or shadow_hash(original) != old_sha
+                            or shadow_hash(merged_json) != merged_sha or current is None
+                            or (source_sha == cdb_sha256 and shadow_hash(current) != merged_sha)):
+                        raise ValueError('Bad private shadow checksum')
+                    # Stored originals are JSON encodings of the original SQL
+                    # value. Parsing confirms they were not truncated.
+                    json.loads(original)
+                    if source_sha == cdb_sha256:
+                        row_cdb = query_cdb.execute(
+                            'SELECT provider_context_json FROM cdb_matches WHERE match_id=?',
+                            (mid,)).fetchone()
+                        if row_cdb is None:
+                            raise ValueError('Shadow references absent current CDB match')
+                        snapshot_context = json_obj(json.loads(cdb_raw))
+                        canonical_context = json_obj(row_cdb[0])
+                        if not context_value_equal(snapshot_context, canonical_context):
+                            raise ValueError('Shadow current-source metadata mismatch')
+                        source_context = populated_context(canonical_context)
+                        if source_context is not None and not nested_subset(
+                                json_obj(current), source_context):
+                            raise ValueError('Shadow canonical context differs from CDB')
+                        counts['provider_context_current_source_shadows_verified'] += 1
+                    counts['provider_context_shadows_verified'] += 1
+                except (ValueError, TypeError, OverflowError, AttributeError):
+                    counts['provider_context_shadow_invalid_rows'] += 1
         expected_count = receipt['source_matches']
         real_count = cdb.execute('SELECT count(*) FROM cdb_matches').fetchone()[0]
         counts['cdb_matches'] = real_count
@@ -206,7 +246,8 @@ def audit(cdb_path, dil_path, cdb_sha256, *, full_integrity=False, attest=None):
                 'cdb_metadata_conflicting_fields', 'cdb_stat_cells_missing_effective_dil',
                 'cdb_stat_cells_conflicting_effective_dil', 'cdb_sqlite_check_failures',
                 'dil_sqlite_check_failures', 'invalid_dil_canonical_metric_cells',
-                'invalid_dil_overlay_metric_cells', 'cdb_foreign_key_failures', 'dil_foreign_key_failures')
+                'invalid_dil_overlay_metric_cells', 'cdb_foreign_key_failures', 'dil_foreign_key_failures',
+                 'provider_context_shadow_invalid_rows')
     passed = full_integrity and all(counts.get(x, 0) == 0 for x in failures)
     return {'schema': 'DIL_SECONDARY_STRICT_CURRENT_CDB_PARITY_V1',
             'status': ('VERIFIED_CURRENT_CDB_PARITY' if passed else

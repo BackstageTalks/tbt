@@ -10,6 +10,8 @@ ALLOWED={
  'invalid_dil_canonical_metric_cells','invalid_dil_overlay_metric_cells',
  'cdb_sqlite_check_failures','dil_sqlite_check_failures',
  'cdb_foreign_key_failures','dil_foreign_key_failures',
+ 'provider_context_shadow_invalid_rows','provider_context_shadows_verified',
+ 'provider_context_current_source_shadows_verified',
 }
 # Field names are a fixed source-reviewed schema allowlist, never taken from input.
 METADATA_FIELDS = ('player1_name','player2_name','tournament','tournament_id',
