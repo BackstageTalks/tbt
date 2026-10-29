@@ -159,7 +159,7 @@ class ReconciliationTests(unittest.TestCase):
         with sqlite3.connect(self.dil) as db:
             self.assertEqual(db.execute('SELECT provider_context_json FROM canonical_matches WHERE match_id=?',
                                         (mid,)).fetchone()[0],original)
-        self.assertEqual(r['data_gate'],'ISOLATED_PARITY_IMPORT_PASS_PENDING_REVALIDATION')
+        self.assertEqual(r['data_gate'],'BLOCKED_UNATTESTED_CDB_EXPORT')
 
     def test_empty_cdb_context_never_erases_existing_details(self):
         mid='known-2026-id-abcde'
@@ -199,7 +199,7 @@ class ReconciliationTests(unittest.TestCase):
         r=f.reconcile(self.dil,self.cdb,self.out,f.sha256(self.cdb),M)
         self.assertEqual(r['counts']['metadata_conflicts'],0)
         self.assertEqual(r['counts']['provider_context_conflicts_preserved'],1)
-        self.assertEqual(r['data_gate'],'ISOLATED_PARITY_IMPORT_PASS_PENDING_REVALIDATION')
+        self.assertEqual(r['data_gate'],'BLOCKED_UNATTESTED_CDB_EXPORT')
 
     def test_metadata_unicode_whitespace_equivalence_is_non_destructive(self):
         with sqlite3.connect(self.dil) as db:
