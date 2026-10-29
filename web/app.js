@@ -1007,12 +1007,33 @@
   function clearHeroRotation(){
     if(state.heroTimer){clearInterval(state.heroTimer);state.heroTimer=null;}
   }
+  // Keep editor-chosen copy placement unless it would clip the public mobile banner.
+  // A fixed 128px hero and per-banner mobile Y values can otherwise cut off text.
+  function fitMobileHeroCopy(slide){
+    const copy=slide?.querySelector('.dashboard-hero-copy');
+    if(!copy)return;
+    // Re-evaluate from the published editor position after a resize or slide change.
+    copy.style.removeProperty('top');
+    if(!window.matchMedia('(max-width: 900px)').matches)return;
+    const frame=slide.getBoundingClientRect(),block=copy.getBoundingClientRect();
+    const inset=8;
+    if(!frame.height||!block.height||block.height>frame.height-inset*2)return;
+    let shift=0;
+    if(block.top<frame.top+inset)shift=frame.top+inset-block.top;
+    if(block.bottom+shift>frame.bottom-inset)shift+=frame.bottom-inset-(block.bottom+shift);
+    if(Math.abs(shift)<0.5)return;
+    const currentTop=parseFloat(getComputedStyle(copy).top);
+    if(Number.isFinite(currentTop)){
+      copy.style.setProperty('top',`${Math.round((currentTop+shift)*10)/10}px`,'important');
+    }
+  }
   function setHeroSlide(index,restart=false){
     const host=$('dashboardHero'),slides=[...(host?.querySelectorAll('.hero-slide')||[])];
     if(!slides.length)return;
     state.heroIndex=((Number(index)||0)%slides.length+slides.length)%slides.length;
     slides.forEach((slide,i)=>{const active=i===state.heroIndex;slide.classList.toggle('is-active',active);slide.setAttribute('aria-hidden',active?'false':'true');slide.tabIndex=active?0:-1;});
     [...host.querySelectorAll('[data-hero-dot]')].forEach((dot,i)=>{const active=i===state.heroIndex;dot.classList.toggle('is-active',active);dot.setAttribute('aria-current',active?'true':'false');});
+    requestAnimationFrame(()=>fitMobileHeroCopy(slides[state.heroIndex]));
     if(restart)startHeroRotation();
   }
   function startHeroRotation(){
@@ -1034,6 +1055,12 @@
     host.onmouseleave=()=>{state.heroPaused=false;};
     host.querySelectorAll('[data-hero-dot]').forEach(dot=>dot.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();setHeroSlide(Number(dot.dataset.heroDot)||0,true);}));
     setHeroSlide(state.heroIndex,false);
+    if(!state.heroCopyFitResizeBound){
+      state.heroCopyFitResizeBound=true;
+      window.addEventListener('resize',()=>{
+        requestAnimationFrame(()=>fitMobileHeroCopy($('dashboardHero')?.querySelector('.hero-slide.is-active')));
+      });
+    }
     installBannerTracking(host);
     startHeroRotation();
   }
