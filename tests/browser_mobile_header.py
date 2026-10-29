@@ -42,6 +42,47 @@ def main():
                     document.getElementById('projectGroupBar').onclick=e=>{const b=e.target.closest('[data-project-group-open]');if(b)groupCalls.push(b.dataset.projectGroupOpen);};
                 }''')
                 page.wait_for_timeout(200)
+                if width <= 900:
+                    # Approved mobile shell deliberately moves the three primary
+                    # routes out of the header and into the bottom navigation.
+                    page.wait_for_function("document.body.classList.contains('bqm-enabled')")
+                    assert page.locator('.header-top .reference-navigation .nav-icon-link:visible').count() == 0, width
+                    assert page.locator('.mobile-icon-nav').is_hidden(), width
+                    assert page.locator('#bqm-toggle').is_hidden(), width
+                    assert page.locator('.header-top > .brand img.brand-source-logo').get_attribute('src') == '/assets/blinq_logo.svg'
+                    assert page.locator('#mobileTabs').is_visible(), width
+                    labels = page.locator('#mobileTabs').inner_text()
+                    assert all(label in labels for label in ('Predikcie', 'Výsledky', 'Viac')), (width, labels)
+                    assert page.locator('#mobileTabs #bqm-more').is_visible(), width
+                    for control in ('#insightShortcut', '#topUpgradeButton', '#insightBell', '#profileButton'):
+                        node = page.locator(control)
+                        if node.is_visible():
+                            box = node.bounding_box()
+                            assert box and box['width'] >= 43 and box['height'] >= 43, (width, control, box)
+                            assert 0 <= box['x'] and box['x']+box['width'] <= width+1, (width, control, box)
+                    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 2'), width
+                    live = page.locator('#insightShortcut')
+                    assert live.get_attribute('data-upgrade-plan') == 'elite', width
+                    assert 'is-access-locked' in (live.get_attribute('class') or ''), width
+                    assert page.locator('#insightShortcut .live-access-lock').is_visible(), width
+                    if width == 390:
+                        assert page.locator('#insightShortcut svg').first.evaluate(
+                            "(n)=>getComputedStyle(n).animationName"
+                        ) == 'blinq-live-breathe'
+                        page.locator('#bqm-more').click()
+                        menu = page.locator('#bqm-dialog')
+                        assert menu.is_visible()
+                        assert menu.get_by_role('button', name='Porovnávač', exact=True).is_visible()
+                        assert menu.get_by_role('button', name='Moje skupiny', exact=False).count() > 0
+                        assert menu.get_by_role('button', name='Môj účet', exact=True).is_visible()
+                        page.get_by_role('button', name='Zavrieť menu').click()
+                        page.locator('#profileButton').click()
+                        assert page.locator('#bqm-account-panel').is_visible()
+                        page.get_by_role('button', name='Zavrieť menu').click()
+                    assert not errors, (width, errors)
+                    print(f'Approved mobile header and bottom navigation at {width}px: PASS')
+                    page.close()
+                    continue
                 # LIVE lock reflects actual member access; no change to icon size.
                 live=page.locator('#insightShortcut')
                 lock=page.locator('#insightShortcut .live-access-lock')
