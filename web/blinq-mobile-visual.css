@@ -75,7 +75,7 @@
 
 @media(max-width:900px){
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin){
-    background:#061916!important; color:#f0f6f3!important;
+    background-color:#061916!important; color:#f0f6f3!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)::before{
     background:radial-gradient(ellipse at 90% 0%,#123d3133,transparent 55%)!important;
