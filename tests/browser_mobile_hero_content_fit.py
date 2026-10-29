@@ -71,13 +71,14 @@ def main():
                 page=browser.new_page(viewport={"width":width,"height":844})
                 page.route("**/*",route_request)
                 page.goto(ORIGIN+"/index.html?lang=sk",wait_until="networkidle")
-                page.wait_for_function("window.bannerFitTest && bannerFitTest.state.ui && document.body.classList.contains('bqm-enabled')")
+                page.wait_for_function("window.bannerFitTest && bannerFitTest.state.ui")
                 page.evaluate("""() => {
                     document.querySelector('#bootSplash')?.remove();
                     document.querySelector('#cookieConsent')?.remove();
                     document.querySelectorAll('dialog[open]').forEach(el=>el.close());
                     document.querySelector('#appShell').hidden=false;
                 }""")
+                page.wait_for_function("document.body.classList.contains('bqm-enabled')")
                 for y in (0,50,95):
                     check(page,y,width)
                 page.close()
