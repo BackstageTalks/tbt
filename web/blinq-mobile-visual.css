@@ -174,3 +174,165 @@
     box-shadow:inset 0 1px 0 rgba(220,255,236,.09),0 3px 11px rgba(0,0,0,.14)!important;
   }
 }
+
+
+/* Sports Intelligence mobile v1 — implemented UI, not a concept render.
+   Retain published KPI sources, entitlement locks, every market, banner and loader. */
+@media (max-width:900px) {
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) {
+    --bq-si-bg:#031511;
+    --bq-si-panel:#0b231e;
+    --bq-si-stroke:rgba(120,205,169,.17);
+    --bq-si-mint:#50e7aa;
+    --bq-si-muted:#b0c6bc;
+  }
+  /* Existing admin-selected KPI icons and values — tighter editorial hierarchy. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis {
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:8px!important;padding:12px 12px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi {
+    box-sizing:border-box!important;min-width:0!important;min-height:104px!important;height:auto!important;
+    display:flex!important;flex-direction:column!important;justify-content:space-between!important;align-items:stretch!important;
+    position:relative!important;gap:7px!important;padding:12px 10px 11px!important;
+    border-radius:14px!important;border:1px solid var(--bq-si-stroke)!important;
+    background:radial-gradient(ellipse at 92% 0%,rgba(51,151,112,.13),transparent 68%),linear-gradient(155deg,#0e2922,#061c19)!important;
+    box-shadow:inset 0 1px 0 rgba(232,255,243,.065),0 10px 25px rgba(0,0,0,.15)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi::before {
+    content:none!important;display:none!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi>span {
+    position:absolute!important;right:9px!important;top:9px!important;
+    display:grid!important;place-items:center!important;flex:none!important;
+    width:24px!important;min-width:24px!important;height:24px!important;min-height:24px!important;
+    border:1px solid rgba(90,193,146,.18)!important;border-radius:7px!important;
+    background:rgba(32,104,73,.14)!important;opacity:.78!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi>span svg {
+    width:16px!important;height:16px!important;min-width:16px!important;min-height:16px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi>div {
+    display:flex!important;min-width:0!important;flex:1!important;flex-direction:column!important;
+    justify-content:space-between!important;gap:8px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi small {
+    display:block!important;max-width:calc(100% - 17px)!important;
+    color:var(--bq-si-muted)!important;letter-spacing:.035em!important;
+    font-size:clamp(9px,2.35vw,10.5px)!important;line-height:1.26!important;
+    font-weight:650!important;overflow-wrap:normal!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi strong {
+    display:block!important;margin:0!important;min-width:0!important;
+    font-variant-numeric:tabular-nums!important;font-size:clamp(23px,6.1vw,30px)!important;
+    line-height:1.06!important;letter-spacing:-.045em!important;font-weight:670!important;
+    color:#f3fff9!important;text-shadow:none!important;
+  }
+  /* Selected category: a clean luminous rule rather than a filled tab. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab.active {
+    color:#f2fff9!important;background:transparent!important;box-shadow:none!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab.active::after {
+    left:50%!important;right:auto!important;bottom:0!important;transform:translateX(-50%)!important;
+    width:min(44px,70%)!important;height:3px!important;border-radius:3px!important;
+    background:#56eab1!important;box-shadow:0 0 12px rgba(76,230,166,.22)!important;
+  }
+  /* Match content stays in the real table; only visual surfaces/spacing change. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked) {
+    border:1px solid rgba(118,194,161,.20)!important;border-radius:17px!important;
+    background:radial-gradient(ellipse at 0% 0%,rgba(40,103,77,.09),transparent 60%),linear-gradient(150deg,#102c25,#071e19)!important;
+    box-shadow:inset 0 1px 0 rgba(222,250,235,.06),0 12px 27px rgba(0,0,0,.16)!important;
+    padding:12px 11px!important;gap:9px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-tournament-copy>b {
+    color:#ecf9f1!important;font-weight:710!important;
+    font-size:clamp(12px,3.05vw,14px)!important;line-height:1.28!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-match-player b {
+    color:#e6f4ed!important;font-size:clamp(12px,3vw,14px)!important;font-weight:640!important;
+    line-height:1.32!important;letter-spacing:-.012em!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-match-player.is-pick b {
+    color:#f3fff9!important;font-weight:750!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub :is(.hub-pick,.hub-odds.hub-number-cell) {
+    background:rgba(19,75,53,.34)!important;
+    border-color:rgba(93,186,136,.15)!important;
+    box-shadow:inset 0 1px 0 rgba(226,255,239,.04)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-pick {
+    border-left:3px solid #3ddb9f!important;border-radius:11px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-pick-stack strong {
+    color:#f3fff8!important;font-size:clamp(12px,3.3vw,15px)!important;
+    font-weight:720!important;line-height:1.24!important;
+    -webkit-line-clamp:unset!important;overflow-wrap:anywhere!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-number-stack strong {
+    color:#65f0b6!important;font-size:clamp(15px,4.5vw,19px)!important;
+    font-weight:740!important;font-variant-numeric:tabular-nums!important;letter-spacing:-.03em!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-confidence strong {
+    color:#52e7aa!important;font-size:clamp(19px,5vw,24px)!important;
+    font-weight:750!important;font-variant-numeric:tabular-nums!important;letter-spacing:-.025em!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-confidence>i {
+    display:block!important;overflow:hidden!important;width:100%!important;
+    max-width:156px!important;height:4px!important;border-radius:8px!important;
+    background:rgba(137,193,166,.17)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-confidence>i>b {
+    display:block!important;height:100%!important;border-radius:8px!important;
+    background:linear-gradient(90deg,#36ce91,#66efb7)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-detail:not(.is-locked) {
+    color:#e7fff2!important;background:linear-gradient(145deg,#1a513d,#10382e)!important;
+    border:1px solid #3caa7b!important;border-radius:11px!important;
+    box-shadow:inset 0 1px 0 rgba(216,255,234,.09)!important;
+  }
+  /* The standard TOP/VALUE selection uses a single two-column prediction/odds
+     row; each original semantic cell (rank, players, confidence, action) stays
+     in the document and entitlement logic is untouched. Other markets keep
+     their specialized projections/layouts. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) {
+    grid-template-columns:24px minmax(0,1fr) minmax(76px,26%)!important;
+    grid-template-areas:"rank tournament time" "match match match" "pick pick number" "confidence confidence action"!important;
+    align-items:center!important;gap:9px 10px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-pick {
+    min-width:0!important;width:100%!important;height:100%!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-odds {
+    grid-area:number!important;min-width:0!important;align-self:stretch!important;
+    display:flex!important;justify-content:center!important;align-items:center!important;
+    width:100%!important;padding:7px 5px!important;border-radius:10px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-confidence-cell {
+    justify-self:stretch!important;text-align:left!important;min-width:0!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-confidence {
+    justify-items:start!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-action-cell {
+    align-self:center!important;justify-self:end!important;min-width:0!important;
+  }
+  /* Existing three routes and lock badges remain unchanged. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs :is(a,button).active {
+    position:relative!important;background:transparent!important;
+    color:#64e9b0!important;box-shadow:none!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs :is(a,button).active:not(.access-nav-locked)::after {
+    content:""!important;position:absolute!important;left:50%!important;right:auto!important;
+    bottom:1px!important;transform:translateX(-50%)!important;
+    width:36px!important;height:2px!important;border:0!important;border-radius:2px!important;
+    background:#55e7aa!important;box-shadow:0 0 10px rgba(75,235,166,.22)!important;
+  }
+}
+@media (max-width:360px) {
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi {
+    padding:10px 8px!important;min-height:110px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi>span {
+    width:20px!important;min-width:20px!important;height:20px!important;min-height:20px!important;right:6px!important;top:6px!important;
+  }
+}

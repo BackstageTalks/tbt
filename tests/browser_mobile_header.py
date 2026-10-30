@@ -37,6 +37,7 @@ def main():
                     h.state.ui.notifications={enabled:true,live_min_level:'elite'};h.renderInsightBell();h.renderProjectGroupBar();
                     const row={event_id:'test',scheduled_at:new Date(Date.now()+3600000).toISOString(),tour:'ATP',tournament:'Beijing, China',surface:'hard',player1:{id:'one',name:'Andrey Rublev',rank:26},player2:{id:'two',name:'Roman Safiullin',rank:102},pick:'Andrey Rublev',model_probability:.703,odds:1.67};
                     document.getElementById('dailyHubBody').innerHTML=h.dailyHubRow(row,'daily',false,0);
+                    document.getElementById('dailyHub').dataset.tab='daily';
                     document.getElementById('dailyHubEmpty').hidden=true;
                     window.groupCalls=[];
                     document.getElementById('projectGroupBar').onclick=e=>{const b=e.target.closest('[data-project-group-open]');if(b)groupCalls.push(b.dataset.projectGroupOpen);};
@@ -88,20 +89,54 @@ def main():
                           const wasActive=active?.classList.contains('active');
                           if(active && !wasActive)active.classList.add('active');
                           const navBg=active?getComputedStyle(active).backgroundImage:null;
+                          const navLine=active?getComputedStyle(active,'::after').backgroundColor:null;
                           if(active && !wasActive)active.classList.remove('active');
+                          const cards=[...document.querySelectorAll('#dashboardKpis .dashboard-kpi')];
+                          const pick=row?.querySelector('.hub-pick-stack strong');
+                          const odds=row?.querySelector('.hub-odds .hub-number-stack strong');
+                          const pbar=row?.querySelector('.hub-confidence>i');
+                          const rect=el=>el?el.getBoundingClientRect():null;
                           return {css:css?.href||'',kpiBg:k?getComputedStyle(k).backgroundImage:null,
-                            kpiAccent:k?getComputedStyle(k,'::before').backgroundImage:null,
+                            kpiAccent:k?getComputedStyle(k,'::before').content:null,
                             kpiRadius:k?getComputedStyle(k).borderRadius:null,
                             kpiValueSize:k?.querySelector('strong')?getComputedStyle(k.querySelector('strong')).fontSize:null,
-                            rowBg:row?getComputedStyle(row).backgroundImage:null,navBg};
+                            kpiIconSize:k?.querySelector('span svg')?getComputedStyle(k.querySelector('span svg')).width:null,
+                            cards:cards.map(n=>({left:rect(n).left,right:rect(n).right,top:rect(n).top,bottom:rect(n).bottom})),
+                            pickSize:pick?getComputedStyle(pick).fontSize:null,
+                            oddsColor:odds?getComputedStyle(odds).color:null,
+                            confidenceBar:pbar?getComputedStyle(pbar).display:null,
+                            rowBg:row?getComputedStyle(row).backgroundImage:null,navBg,navLine};
                         }""")
-                        assert 'premium-detail=20261030' in premium['css'], premium
-                        assert premium['rowBg'] and 'rgb(20, 47, 38)' in premium['rowBg'], premium
-                        assert premium['navBg'] and 'rgb(26, 80, 61)' in premium['navBg'], premium
-                        assert premium['kpiBg'] and 'rgb(16, 38, 32)' in premium['kpiBg'], premium
-                        assert premium['kpiAccent'] and 'linear-gradient' in premium['kpiAccent'], premium
+                        assert 'sports-intelligence=20261030-1' in premium['css'], premium
+                        assert premium['rowBg'] and 'rgb(16, 44, 37)' in premium['rowBg'], premium
+                        assert premium['navBg'] == 'none', premium
+                        assert premium['navLine'] == 'rgb(85, 231, 170)', premium
+                        assert premium['kpiBg'] and 'rgb(14, 41, 34)' in premium['kpiBg'], premium
+                        assert premium['kpiAccent'] == 'none', premium
                         assert premium['kpiRadius'] == '14px', premium
-                        assert 24 <= float(premium['kpiValueSize'].replace('px','')) <= 29, premium
+                        assert 23 <= float(premium['kpiValueSize'].replace('px','')) <= 31, premium
+                        assert premium['kpiIconSize'] == '16px', premium
+                        assert len(premium['cards']) == 3, premium
+                        assert all(0<=c['left']<c['right']<=390+1 for c in premium['cards']), premium
+                        assert premium['confidenceBar'] == 'block', premium
+                        assert float(premium['pickSize'].replace('px','')) >= 12, premium
+                        grid_fit = page.evaluate("""() => {
+                          const hub=document.querySelector('#dailyHub'),row=document.querySelector('#dailyHubBody tr:not(.hub-row-locked)');
+                          if(!hub || !row)return null;
+                          const previous=hub.dataset.tab;hub.dataset.tab='daily';
+                          const rect=selector=>{const node=row.querySelector(selector),r=node?.getBoundingClientRect();return r?{left:r.left,right:r.right,top:r.top,bottom:r.bottom}:null};
+                          const result={areas:getComputedStyle(row).gridTemplateAreas,
+                            pick:rect('.hub-pick'),odds:rect('.hub-odds'),
+                            confidence:rect('.hub-confidence-cell'),action:rect('.hub-action-cell')};
+                          if(previous === undefined)delete hub.dataset.tab;else hub.dataset.tab=previous;
+                          return result;
+                        }""")
+                        assert grid_fit and all(grid_fit[k] for k in ('pick','odds','confidence','action')),grid_fit
+                        assert 'pick pick number' in grid_fit['areas'],grid_fit
+                        assert abs(grid_fit['pick']['top']-grid_fit['odds']['top']) <= 2,grid_fit
+                        assert grid_fit['pick']['right'] <= grid_fit['odds']['left']+2,grid_fit
+                        assert grid_fit['odds']['right'] <= 391,grid_fit
+                        assert grid_fit['confidence']['top'] >= grid_fit['pick']['bottom']-2,grid_fit
                         if os.getenv('BLINQ_SCREENSHOTS'):
                             out = Path(os.environ['BLINQ_SCREENSHOTS'])
                             out.mkdir(parents=True, exist_ok=True)
