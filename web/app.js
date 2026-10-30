@@ -4109,7 +4109,7 @@
       <div class="admin-form-section admin-banner-image-editor admin-banner-workbench"><div class="admin-form-section-title"><strong>Banner štúdio · Banner ${escapeHtml(selectedId.split('_').pop())}</strong><span>Upravuj PC a mobil pohodlne vedľa seba. Polohy X/Y sa prejavujú okamžite v živom náhľade nad týmto panelom.</span></div><div class="admin-form-grid">
         <div class="admin-banner-media-urls span-2">
         <label class="admin-banner-media-url">Desktop hero · odporúčaný export 1920×313 (≈6.13:1)<input data-simple-banner-field="image_url" value="${escapeHtml(c.image_url||'')}" placeholder="/assets/hero.webp"></label>
-        <label class="admin-banner-media-url">Mobilný hero · odporúčaný export 1080×493 (≈2.19:1)<input data-simple-banner-field="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="/assets/hero-mobile.webp"></label>
+        <label class="admin-banner-media-url">Mobilný hero · odporúčaný export 1080×384 (≈2.81:1)<input data-simple-banner-field="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="/assets/hero-mobile.webp"></label>
         </div>
         <div class="admin-banner-layout-grid span-2">
           <section class="admin-banner-device-panel admin-banner-device-desktop" aria-label="Nastavenia PC bannera">
@@ -4127,7 +4127,7 @@
           <fieldset><legend>Mobil · ľavý tieň</legend><label>Intenzita (0 = vypnutý)<input type="number" min="0" max="10" step="1" data-simple-banner-field="mobile_shadow_strength" value="${c.mobile_shadow_strength==null?10:Math.max(0,Math.min(10,Number(c.mobile_shadow_strength)||0))}"></label></fieldset>
           </section>
         </div>
-        <p class="admin-banner-layout-help span-2">X = vodorovne, Y = zvisle. Polohy sa nastavujú v % rozmeru bannera, oddelene pre PC a mobil. Šírka textu riadi zalomenie.</p>
+        <p class="admin-banner-layout-help span-2">Mobilný banner sa zobrazuje vo výške 128 px; šírka sa prispôsobuje displeju (napr. 360×128 px). Export 1080×384 px je odporúčanie pre bežný telefón, nie pevný rozmer zobrazenia. Obrázok vypĺňa plochu orezaním; dôležitý motív drž pri strede a text pridaj cez polia bannera. Na iných šírkach sa orez mení. X = vodorovne, Y = zvisle, v % plochy; šírka textu riadi zalomenie. Skontroluj mobilný náhľad aj živú stránku.</p>
         <label class="admin-toggle-line admin-banner-copy-toggle span-2"><input type="checkbox" data-simple-banner-field="show_copy" ${c.show_copy!==false?'checked':''}><span>Zobraziť text nad obrázkom</span></label>
       </div></div>
       <div class="admin-hero-selected-head"><div><small>UPRAVUJEŠ</small><strong>${escapeHtml(item.label||selectedId)}</strong></div><span>${Number(selectedId.split('_').pop())<=activeCount?'V rotácii':'Neaktívny banner'}</span></div>
