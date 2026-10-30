@@ -126,23 +126,23 @@
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi{
     position:relative!important;overflow:hidden!important;
     border-radius:14px!important;
-    background:radial-gradient(ellipse at 100% 0%,rgba(67,172,121,.10),transparent 62%),linear-gradient(155deg,#132822 0%,#0a1d19 100%)!important;
-    border:1px solid rgba(146,199,170,.18)!important;
-    box-shadow:inset 0 1px 0 rgba(248,255,250,.07),inset 0 -1px 0 rgba(0,0,0,.14),0 9px 22px rgba(0,0,0,.13)!important;
+    background:radial-gradient(ellipse at 105% -10%,rgba(77,168,123,.11),transparent 64%),linear-gradient(155deg,#102620 0%,#081b18 100%)!important;
+    border:1px solid rgba(137,194,163,.12)!important;
+    box-shadow:inset 0 1px 0 rgba(237,255,246,.065),0 12px 27px rgba(0,0,0,.17)!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi::before{
-    content:"";position:absolute;inset:0 18px auto 18px;height:1px;pointer-events:none;
-    background:linear-gradient(90deg,transparent,rgba(131,236,183,.40),transparent);
+    content:"";position:absolute;top:0;left:16px;width:32px;height:2px;pointer-events:none;
+    background:linear-gradient(90deg,rgba(85,228,167,.78),rgba(85,228,167,.16));border-radius:0 0 2px 2px;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi small{
-    color:#abc8b9!important;letter-spacing:.07em!important;
-    font-weight:650!important;font-size:10px!important;line-height:1.35!important;
+    color:#a8c4b7!important;letter-spacing:.055em!important;
+    font-weight:570!important;font-size:10px!important;line-height:1.4!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi strong{
     font-variant-numeric:tabular-nums!important;
-    font-size:clamp(23px,6.1vw,27px)!important;font-weight:640!important;
-    letter-spacing:-.042em!important;line-height:1.12!important;
-    color:#f4fbf7!important;text-shadow:none!important;
+    font-size:clamp(24px,6.4vw,28px)!important;font-weight:580!important;
+    letter-spacing:-.055em!important;line-height:1.1!important;
+    color:#f4faf6!important;text-shadow:none!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab.active{
     background:linear-gradient(180deg,rgba(43,157,114,.105),rgba(21,76,57,.024))!important;
