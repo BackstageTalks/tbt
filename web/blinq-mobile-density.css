@@ -235,7 +235,7 @@
     grid-area: action !important;
     align-self: stretch !important;
     justify-self: stretch !important;
-    display: flex !important;
+    display: block !important;
     width: 100% !important;
     min-width: 0 !important;
   }
