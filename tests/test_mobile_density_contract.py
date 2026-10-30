@@ -18,7 +18,7 @@ def test_density_is_phone_only_and_public_only():
     assert "@media (min-width:" not in css
     assert css.count("body#blinqPremium") == css.count(":not(.blinq-admin)")
     assert "bqm-enabled:not(.blinq-admin)" in css
-    assert ".hub-row-locked) {" not in css
+    assert "tbody tr.hub-row-locked {" not in css
     assert "grid-template-areas" not in css
     assert "display: none" not in css
     assert "font-size:" not in css
