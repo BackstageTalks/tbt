@@ -116,7 +116,11 @@ def main():
                         assert premium['kpiRadius'] == '10px', premium
                         assert 23 <= float(premium['kpiValueSize'].replace('px','')) <= 31, premium
                         assert premium['kpiIconSize'] == '16px', premium
-                        assert len(premium['cards']) == 3, premium
+                        assert len(premium['cards']) == 4, premium
+                        # Responsive four-slot layout: two equal cards in each row.
+                        k=premium['cards']
+                        assert abs(k[0]['top']-k[1]['top'])<=1 and abs(k[2]['top']-k[3]['top'])<=1, premium
+                        assert k[2]['top']>k[0]['top'], premium
                         assert all(0<=c['left']<c['right']<=390+1 for c in premium['cards']), premium
                         assert premium['confidenceBar'] == 'block', premium
                         assert float(premium['pickSize'].replace('px','')) >= 12, premium
