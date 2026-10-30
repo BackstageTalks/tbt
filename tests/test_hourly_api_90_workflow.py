@@ -87,3 +87,18 @@ def test_refresh_pipeline_and_standing_contract_use_shared_14700_ceiling():
     assert "**17:09 UTC**" in agents
     assert "**14,550 global BlinQ ceiling**" not in agents
 
+
+
+def test_paid_hourly_dispatch_requires_complete_history_release():
+    # A successful scheduler dispatch must not be mistaken for a usable
+    # canonical history release. Check GitHub metadata before paid work.
+    preflight = HOURLY.index("History release preflight blocked paid dispatch")
+    dispatch = HOURLY.index("actions/workflows/data.yml/dispatches")
+    assert preflight < dispatch
+    assert "api.github.com/repos/BackstageTalks/tbt-data/releases/tags/tbt-data-v1" in HOURLY
+    assert '"history_manifest.json" not in asset_names' in HOURLY
+    assert '"_tbt_bundle_manifest.json" not in asset_names' in HOURLY
+    assert "or len(assets) >= 100" in HOURLY
+    assert "missing history partitions" in HOURLY
+    # Releasing or rebuilding an invalid bundle is a separate guarded action.
+    assert '"mode": "statistics"' in HOURLY
