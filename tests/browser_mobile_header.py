@@ -98,10 +98,10 @@ def main():
                         assert 'premium-detail=20261030' in premium['css'], premium
                         assert premium['rowBg'] and 'rgb(20, 47, 38)' in premium['rowBg'], premium
                         assert premium['navBg'] and 'rgb(26, 80, 61)' in premium['navBg'], premium
-                        assert premium['kpiBg'] and 'rgb(19, 40, 34)' in premium['kpiBg'], premium
+                        assert premium['kpiBg'] and 'rgb(16, 38, 32)' in premium['kpiBg'], premium
                         assert premium['kpiAccent'] and 'linear-gradient' in premium['kpiAccent'], premium
                         assert premium['kpiRadius'] == '14px', premium
-                        assert 23 <= float(premium['kpiValueSize'].replace('px','')) <= 28, premium
+                        assert 24 <= float(premium['kpiValueSize'].replace('px','')) <= 29, premium
                         if os.getenv('BLINQ_SCREENSHOTS'):
                             out = Path(os.environ['BLINQ_SCREENSHOTS'])
                             out.mkdir(parents=True, exist_ok=True)
