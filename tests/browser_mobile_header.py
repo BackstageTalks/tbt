@@ -90,13 +90,18 @@ def main():
                           const navBg=active?getComputedStyle(active).backgroundImage:null;
                           if(active && !wasActive)active.classList.remove('active');
                           return {css:css?.href||'',kpiBg:k?getComputedStyle(k).backgroundImage:null,
+                            kpiAccent:k?getComputedStyle(k,'::before').backgroundImage:null,
+                            kpiRadius:k?getComputedStyle(k).borderRadius:null,
+                            kpiValueSize:k?.querySelector('strong')?getComputedStyle(k.querySelector('strong')).fontSize:null,
                             rowBg:row?getComputedStyle(row).backgroundImage:null,navBg};
                         }""")
                         assert 'premium-detail=20261030' in premium['css'], premium
                         assert premium['rowBg'] and 'rgb(20, 47, 38)' in premium['rowBg'], premium
                         assert premium['navBg'] and 'rgb(26, 80, 61)' in premium['navBg'], premium
-                        if premium['kpiBg']:
-                            assert 'rgb(23, 57, 46)' in premium['kpiBg'], premium
+                        assert premium['kpiBg'] and 'rgb(19, 40, 34)' in premium['kpiBg'], premium
+                        assert premium['kpiAccent'] and 'linear-gradient' in premium['kpiAccent'], premium
+                        assert premium['kpiRadius'] == '14px', premium
+                        assert 23 <= float(premium['kpiValueSize'].replace('px','')) <= 28, premium
                         if os.getenv('BLINQ_SCREENSHOTS'):
                             out = Path(os.environ['BLINQ_SCREENSHOTS'])
                             out.mkdir(parents=True, exist_ok=True)
