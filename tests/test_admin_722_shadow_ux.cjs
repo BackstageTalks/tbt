@@ -44,9 +44,9 @@ assert.match(html,/BlinQ 7\.2\.1/);
 assert.match(html,/BlinQ 7\.2\.2/);
 assert.match(html,/v7\.2\.2-v201-20261027T185121317295Z/);
 assert.match(html,/Shadow aktívny · čaká na výsledky zápasov/);
-assert.match(html,/Shadow – zachytené predzápasové páry<\/strong><span>190 \/ 1 000/);
+assert.match(html,/Shadow – zachytené predzápasové páry<\/strong><span>190 \/ 1\s*000/);
 assert.match(html,/Shadow – minimum vyhodnotených zápasov<\/strong><span>0 \/ 200/);
-assert.match(html,/Nové nezávislé zápasy – ďalší tréning<\/strong><span>1 300 \/ 1 000/);
+assert.match(html,/Nové nezávislé zápasy – ďalší tréning<\/strong><span>1\s*300 \/ 1\s*000/);
 assert.match(html,/190 predzápasových snapshotov čaká na výsledok/);
 assert.match(html,/BlinQ 7\.2\.2 · offline kvalita zatiaľ neoverená/);
 assert.match(html,/čaká na výsledky zápasov/);
@@ -70,7 +70,7 @@ state.adminCalibration.shadow = {
   },
 };
 html=ctx.renderAdminCalibration();
-assert.match(html,/Shadow – zachytené predzápasové páry<\/strong><span>330 \/ 1 000/);
+assert.match(html,/Shadow – zachytené predzápasové páry<\/strong><span>330 \/ 1\s*000/);
 assert.match(html,/Shadow – minimum vyhodnotených zápasov<\/strong><span>215 \/ 200/);
 assert.match(html,/title="Nesplnené"/);
 assert.doesNotMatch(html,/čaká na výsledky zápasov/);
