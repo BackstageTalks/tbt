@@ -88,20 +88,37 @@ def main():
                           const wasActive=active?.classList.contains('active');
                           if(active && !wasActive)active.classList.add('active');
                           const navBg=active?getComputedStyle(active).backgroundImage:null;
+                          const navLine=active?getComputedStyle(active,'::after').backgroundColor:null;
                           if(active && !wasActive)active.classList.remove('active');
+                          const cards=[...document.querySelectorAll('#dashboardKpis .dashboard-kpi')];
+                          const pick=row?.querySelector('.hub-pick-stack strong');
+                          const odds=row?.querySelector('.hub-odds .hub-number-stack strong');
+                          const pbar=row?.querySelector('.hub-confidence>i');
+                          const rect=el=>el?el.getBoundingClientRect():null;
                           return {css:css?.href||'',kpiBg:k?getComputedStyle(k).backgroundImage:null,
-                            kpiAccent:k?getComputedStyle(k,'::before').backgroundImage:null,
+                            kpiAccent:k?getComputedStyle(k,'::before').content:null,
                             kpiRadius:k?getComputedStyle(k).borderRadius:null,
                             kpiValueSize:k?.querySelector('strong')?getComputedStyle(k.querySelector('strong')).fontSize:null,
-                            rowBg:row?getComputedStyle(row).backgroundImage:null,navBg};
+                            kpiIconSize:k?.querySelector('span svg')?getComputedStyle(k.querySelector('span svg')).width:null,
+                            cards:cards.map(n=>({left:rect(n).left,right:rect(n).right,top:rect(n).top,bottom:rect(n).bottom})),
+                            pickSize:pick?getComputedStyle(pick).fontSize:null,
+                            oddsColor:odds?getComputedStyle(odds).color:null,
+                            confidenceBar:pbar?getComputedStyle(pbar).display:null,
+                            rowBg:row?getComputedStyle(row).backgroundImage:null,navBg,navLine};
                         }""")
-                        assert 'premium-detail=20261030' in premium['css'], premium
-                        assert premium['rowBg'] and 'rgb(20, 47, 38)' in premium['rowBg'], premium
-                        assert premium['navBg'] and 'rgb(26, 80, 61)' in premium['navBg'], premium
-                        assert premium['kpiBg'] and 'rgb(16, 38, 32)' in premium['kpiBg'], premium
-                        assert premium['kpiAccent'] and 'linear-gradient' in premium['kpiAccent'], premium
+                        assert 'sports-intelligence=20261030-1' in premium['css'], premium
+                        assert premium['rowBg'] and 'rgb(16, 44, 37)' in premium['rowBg'], premium
+                        assert premium['navBg'] == 'none', premium
+                        assert premium['navLine'] == 'rgb(85, 231, 170)', premium
+                        assert premium['kpiBg'] and 'rgb(14, 41, 34)' in premium['kpiBg'], premium
+                        assert premium['kpiAccent'] == 'none', premium
                         assert premium['kpiRadius'] == '14px', premium
-                        assert 24 <= float(premium['kpiValueSize'].replace('px','')) <= 29, premium
+                        assert 23 <= float(premium['kpiValueSize'].replace('px','')) <= 31, premium
+                        assert premium['kpiIconSize'] == '16px', premium
+                        assert len(premium['cards']) == 3, premium
+                        assert all(0<=c['left']<c['right']<=390+1 for c in premium['cards']), premium
+                        assert premium['confidenceBar'] == 'block', premium
+                        assert float(premium['pickSize'].replace('px','')) >= 12, premium
                         if os.getenv('BLINQ_SCREENSHOTS'):
                             out = Path(os.environ['BLINQ_SCREENSHOTS'])
                             out.mkdir(parents=True, exist_ok=True)
