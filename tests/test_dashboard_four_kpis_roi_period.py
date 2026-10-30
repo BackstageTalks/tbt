@@ -73,6 +73,8 @@ def test_mobile_and_desktop_tiles_show_selected_roi_period():
     assert "grid-template-columns:repeat(2,minmax(0,1fr))!important" in mobile
     assert "body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) #dashboardKpis" in cascade
     assert "max-width:1100px" in cascade
+    assert '#dashboardKpis[data-kpi-count="4"]' in cascade
+    assert '.bqm-enabled:not(.blinq-admin)' in cascade
 
 
 def test_optional_fourth_kpi_card_and_roi_caption_settings():

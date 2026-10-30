@@ -400,3 +400,19 @@ body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) #dashboardKpis[dat
     grid-column:auto!important;
   }
 }
+
+/* Explicit premium/mobile class beats older 3-ID bqm rules at tablet widths. */
+body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis[data-kpi-count="4"]{
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+}
+@media(max-width:1100px){
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis[data-kpi-count="4"]{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis[data-kpi-count="3"]{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis[data-kpi-count="4"]>.dashboard-kpi{
+    grid-column:auto!important;
+  }
+}
