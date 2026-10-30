@@ -5543,7 +5543,7 @@ function adminActivityRows(){
       '<label>Model pre produkčný release <select id="admin-production-candidate" '+(canPromote?'':'disabled')+'>'+releaseOptions+'</select></label>'+
       '<button type="button" class="btn btn-primary" data-admin-action="model-factory-promote" '+(canPromote?'':'disabled')+'>Nasadiť s výnimkou kalibrácie</button>'+
       '<p role="status">Pred odoslaním potvrdíš presný model a dôvod. Worker overí obnovu championa a výsledný zápis; pri chybe obnoví pôvodný model. Nové predikcie použijú model pri najbližšom výpočte, staré sa neprepisujú.</p>'+
-      '<p><strong>Chýbajúce shadow podmienky:</strong></p>'+(missingShadow?'<ul>'+missingShadow+'</ul>':'<p>Základné shadow metriky splnené. Nasadenie ešte vyžaduje kontrolu TOP/VALUE, rollbacku a samostatné schválenie.</p>')+
+      '<p><strong>Shadow podmienky na posúdenie:</strong></p>'+(missingShadow?'<ul>'+missingShadow+'</ul>':'<p>Základné shadow metriky splnené. Nasadenie ešte vyžaduje kontrolu TOP/VALUE, rollbacku a samostatné schválenie.</p>')+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(canBuild?'':'disabled')+'>Vyhodnotiť shadow výsledky</button>'+
       '<p><strong>Posledný uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article></div>'+
       '<div class="admin-calibration-bottom"><div><strong>Rozpracovaná operácia</strong><span>'+activeText+'</span></div><div><strong>Posledná kontrola</strong><span>'+lastText+'</span></div></div>'+
