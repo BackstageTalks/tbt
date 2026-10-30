@@ -372,3 +372,18 @@ body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #daily
 body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-confidence-cell{padding:4px 5px!important;}
 body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-odds{padding:4px 5px!important;}
 }
+
+/* Four-slot dashboard: final cascade authority across desktop, tablet and mobile.
+   Prior legacy rules use repeated body IDs and override simpler grid selectors. */
+body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) #dashboardKpis{
+  display:grid!important;
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+}
+@media(max-width:1100px){
+  body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) #dashboardKpis{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) #dashboardKpis>.dashboard-kpi{
+    grid-column:auto!important;min-width:0!important;
+  }
+}

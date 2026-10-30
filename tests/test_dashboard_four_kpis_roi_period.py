@@ -62,6 +62,7 @@ def test_mobile_and_desktop_tiles_show_selected_roi_period():
     app = (ROOT / "web/app.js").read_text(encoding="utf-8")
     css = (ROOT / "web/blinq-app.css").read_text(encoding="utf-8")
     mobile = (ROOT / "web/blinq-mobile-visual.css").read_text(encoding="utf-8")
+    cascade = (ROOT / "web/blinq-mobile-unified-cards.css").read_text(encoding="utf-8")
     assert "{metric:'results_roi',period:'30'}" in app
     assert "dashboardKpiDefaults.length" in app
     assert "snapshot?.selected_period" in app
@@ -70,3 +71,5 @@ def test_mobile_and_desktop_tiles_show_selected_roi_period():
     assert "Obdobie ROI:" in app
     assert "grid-template-columns:repeat(4,minmax(0,1fr))!important" in css
     assert "grid-template-columns:repeat(2,minmax(0,1fr))!important" in mobile
+    assert "body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) #dashboardKpis" in cascade
+    assert "max-width:1100px" in cascade
