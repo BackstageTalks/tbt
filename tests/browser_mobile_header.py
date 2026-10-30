@@ -78,6 +78,20 @@ def main():
                         assert hero_fit is not None, (width, 'missing banner title')
                         assert hero_fit['titleTop'] >= hero_fit['heroTop']-2, (width, hero_fit)
                         assert hero_fit['titleBottom'] <= hero_fit['heroBottom']+2, (width, hero_fit)
+                        premium = page.evaluate("""() => {
+                          const css=[...document.querySelectorAll('link[rel="stylesheet"]')].find(n=>n.href.includes('blinq-mobile-visual.css'));
+                          const k=document.querySelector('.dashboard-kpi');
+                          const row=document.querySelector('#dailyHub .daily-hub-table tbody tr:not(.hub-row-locked)');
+                          const active=document.querySelector('#mobileTabs .active');
+                          return {css:css?.href||'',kpiBg:k?getComputedStyle(k).backgroundImage:null,
+                            rowBg:row?getComputedStyle(row).backgroundImage:null,
+                            navBg:active?getComputedStyle(active).backgroundImage:null};
+                        }""")
+                        assert 'premium-detail=20261030' in premium['css'], premium
+                        assert premium['rowBg'] and 'rgb(20, 47, 38)' in premium['rowBg'], premium
+                        assert premium['navBg'] and 'rgb(26, 80, 61)' in premium['navBg'], premium
+                        if premium['kpiBg']:
+                            assert 'rgb(23, 57, 46)' in premium['kpiBg'], premium
                         if os.getenv('BLINQ_SCREENSHOTS'):
                             out = Path(os.environ['BLINQ_SCREENSHOTS'])
                             out.mkdir(parents=True, exist_ok=True)
