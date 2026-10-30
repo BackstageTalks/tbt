@@ -133,7 +133,7 @@ class TestModelCalibrationStatus(unittest.TestCase):
         report = normalize_model_calibration_snapshot(fixture())
         self.assertEqual(report["shadow"]["settled"], 105)
         self.assertEqual(report["shadow"]["remaining_to_review"], 95)
-        self.assertEqual(report["shadow"]["remaining_to_target"], 895)
+        self.assertEqual(report["shadow"]["remaining_to_target"], 860)  # 1,000 - 140 captures, not 105 settlements
         self.assertEqual(report["unseen"]["eligible_rows"], 29)
         self.assertEqual(report["unseen"]["remaining_to_review"], 171)
         self.assertEqual(report["unseen"]["remaining_to_target"], 971)
