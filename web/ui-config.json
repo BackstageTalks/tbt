@@ -998,7 +998,7 @@
       ],
       "requires_odds": true,
       "objective": "confidence_first",
-      "min_probability": 0.70,
+      "min_probability": 0.7,
       "min_data_depth": 0.8,
       "min_surface_matches": 5,
       "min_odds": 1.5,
@@ -1022,7 +1022,7 @@
         0.7
       ],
       "minimum_dashboard_count": 3,
-      "fallback_min_probability": 0.70,
+      "fallback_min_probability": 0.7,
       "fallback_only_if_core_count_below": 3,
       "fallback_min_odds": 1.5,
       "dynamic_fallback_tiers": [
@@ -1035,7 +1035,7 @@
           "min_odds": 1.5
         },
         {
-          "min_probability": 0.70,
+          "min_probability": 0.7,
           "min_odds": 1.5
         }
       ]
@@ -1166,6 +1166,10 @@
       {
         "metric": "avg_odds",
         "period": "today"
+      },
+      {
+        "metric": "results_roi",
+        "period": "30"
       }
     ],
     "sections": {
@@ -1615,7 +1619,17 @@
     "daily_hub": {
       "enabled": true,
       "default_tab": "top200",
-      "tab_order": ["daily", "prime", "value", "ace", "double_faults", "doubles", "games", "sets", "see_all"],
+      "tab_order": [
+        "daily",
+        "prime",
+        "value",
+        "ace",
+        "double_faults",
+        "doubles",
+        "games",
+        "sets",
+        "see_all"
+      ],
       "preview_rows": 10,
       "expand_rows": 20,
       "tabs": {

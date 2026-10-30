@@ -1164,11 +1164,11 @@ def validate_ui_config(payload: object) -> dict:
 
     dashboard = payload.get("dashboard") or {}
     kpi_cards = dashboard.get("kpi_cards")
-    # Existing saved Azure configs may not have this field yet. New changes
-    # must be exactly three supported cards with individually valid periods.
+    # Existing Azure configs may contain three legacy cards. New public
+    # settings use four slots; both variants have strict per-slot validation.
     if kpi_cards is not None:
-        if not isinstance(kpi_cards, list) or len(kpi_cards) != 3:
-            raise ValueError("Dashboard setting requires exactly three cards")
+        if not isinstance(kpi_cards, list) or len(kpi_cards) not in (3, 4):
+            raise ValueError("Dashboard setting requires three legacy or four cards")
         for index, card in enumerate(kpi_cards):
             if not isinstance(card, dict) or set(card) != {"metric", "period"}:
                 raise ValueError(f"Invalid Dashboard setting card {index + 1}")

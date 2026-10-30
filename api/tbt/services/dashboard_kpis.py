@@ -1,6 +1,6 @@
 """Admin-selected public dashboard scalars, without exposing private result windows.
 
-These three global marketing cards are configured by an admin. Only the values
+These four global marketing cards are configured by an admin. Only the values
 of the selected cards are sent to lower access tiers; raw historical windows,
 result rows and alternative KPI values remain subject to existing entitlements.
 The live current-day bet count and current accessible TOP odds stay per account
@@ -19,6 +19,7 @@ DEFAULT_CARDS = (
     {"metric": "today_picks", "period": "today"},
     {"metric": "model_success", "period": "auto"},
     {"metric": "avg_odds", "period": "today"},
+    {"metric": "results_roi", "period": "30"},
 )
 ALLOWED_PERIODS = {
     "today_picks": {"today"},
@@ -45,10 +46,13 @@ def normalize_cards(ui_config: dict | None) -> list[dict[str, str]]:
     """Tolerate absent legacy runtime config; never trust unrecognized metrics."""
     dashboard = ui_config.get("dashboard") if isinstance(ui_config, dict) else None
     supplied = dashboard.get("kpi_cards") if isinstance(dashboard, dict) else None
-    if not isinstance(supplied, list) or len(supplied) != 3:
+    # Published Azure settings may still contain the historical three slots.
+    # Preserve those choices and append the fourth default without resetting UI.
+    if not isinstance(supplied, list) or len(supplied) not in (3, 4):
         return [dict(card) for card in DEFAULT_CARDS]
     result = []
-    for slot, raw in enumerate(supplied):
+    for slot in range(len(DEFAULT_CARDS)):
+        raw = supplied[slot] if slot < len(supplied) else None
         metric = raw.get("metric") if isinstance(raw, dict) else None
         period = str(raw.get("period") or "") if isinstance(raw, dict) else ""
         if not isinstance(metric, str) or metric not in ALLOWED_PERIODS or period not in ALLOWED_PERIODS[metric]:
@@ -350,7 +354,7 @@ def _excluded_stats_sections(ui_config: dict | None) -> set[str]:
 
 
 def selected_dashboard_cards(feed: dict, ui_config: dict | None, *, now: datetime | None = None) -> list[dict]:
-    """Return three configured scalar values.
+    """Return four configured scalar values (including legacy 3-slot settings).
 
     Each market's independent STATS exclusion (or global OFF) gates its
     publications *before* cross-market deduplication. This changes only the

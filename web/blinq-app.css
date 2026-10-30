@@ -10939,3 +10939,28 @@ body#blinqPremium .comparator-locked-inline:focus-visible{
   border-color:rgba(216,178,95,.56);
   outline-offset:3px;
 }
+
+/* Four dashboard KPIs: balanced desktop row, tablet and phone 2x2. */
+body#blinqPremium:not(.blinq-admin) #dashboardKpis{
+  display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:10px!important;
+}
+body#blinqPremium:not(.blinq-admin) #dashboardKpis .dashboard-kpi{min-width:0!important;height:auto!important;min-height:88px!important}
+body#blinqPremium:not(.blinq-admin) #dashboardKpis .dashboard-kpi>div{min-width:0}
+body#blinqPremium:not(.blinq-admin) #dashboardKpis .dashboard-kpi p{
+  white-space:normal!important;overflow:visible!important;text-overflow:clip!important;
+  line-height:1.35!important;margin-top:5px!important;font-size:11px!important;
+}
+@media(max-width:1100px){
+  body#blinqPremium:not(.blinq-admin) #dashboardKpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:760px){
+  body#blinqPremium:not(.blinq-admin) #dashboardKpis{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardKpis>.dashboard-kpi:last-child{grid-column:auto!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardKpis .dashboard-kpi{min-height:102px!important;padding:11px 10px!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardKpis .dashboard-kpi p{font-size:10px!important}
+}
+@media(max-width:360px){
+  body#blinqPremium:not(.blinq-admin) #dashboardKpis{gap:6px!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardKpis .dashboard-kpi{padding:10px 8px!important}
+}

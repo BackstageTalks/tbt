@@ -1459,12 +1459,13 @@
     const rows=dailyHubRows('daily');
     return Array.isArray(rows)?rows:[];
   }
-  // Three globally admin-managed KPI slots. Old Azure UI configs keep the
-  // existing public cards unchanged until the admin explicitly publishes.
+  // Four globally admin-managed KPI slots. Legacy three-card Azure configs
+  // retain their original selections and receive a new fourth default.
   const dashboardKpiDefaults=[
     {metric:'today_picks',period:'today'},
     {metric:'model_success',period:'auto'},
-    {metric:'avg_odds',period:'today'}
+    {metric:'avg_odds',period:'today'},
+    {metric:'results_roi',period:'30'}
   ];
   const dashboardKpiPeriodChoices=['3','7','14','30','180','365'];
   const dashboardKpiAllowed={
@@ -1522,7 +1523,7 @@
       target:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#35efa0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/><path d="M17 7l3-3M17 4h3v3"/></svg>',
       chart:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#35efa0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18l5-5 4 3 7-9"/><path d="M15 7h5v5"/></svg>'
     };
-    // The server releases only the three admin-selected historical scalars,
+    // The server releases only the four admin-selected historical scalars,
     // not the private rolling windows of accounts with limited Results access.
     // TODAY is always derived from this user's current authorized feed.
     const served=state.feed?.dashboard_kpi_cards;
@@ -1564,7 +1565,16 @@
         label='YIELD';
         value=historical==null?'—':`${historical>0?'+':''}${historical.toFixed(2)}u`;
       }
-      return [icon,label,value,'',''];
+      const isRoi=['roi','winner_roi','results_roi','auto_roi'].includes(metric);
+      const effectivePeriod=period==='auto'?(matching?String(snapshot?.selected_period||''):''):period;
+      const note=isRoi
+        ?effectivePeriod==='all'
+          ?lcopy('All available history','Celé dostupné obdobie','Celé dostupné období')
+          :dashboardKpiPeriodChoices.includes(effectivePeriod)
+            ?lcopy('Last '+effectivePeriod+' days','Za '+effectivePeriod+' dní','Za '+effectivePeriod+' dní')
+            :lcopy('Period unavailable','Obdobie nie je dostupné','Období není dostupné')
+        :'';
+      return [icon,label,value,note,''];
     });
     host.innerHTML=cards.map(([icon,label,value,note,trend])=>`<article class="dashboard-kpi"><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}${trend?`<em class="kpi-trend">↗ ${escapeHtml(trend)}</em>`:''}</strong>${note?`<p>${escapeHtml(note)}</p>`:''}</div></article>`).join('');
   }
@@ -5102,8 +5112,8 @@ function adminActivityRows(){
   }
 
   // Admin-only draft preview. Full rolling windows are present only in the
-  // authorized admin feed; ordinary accounts still receive only the three
-  // already-published KPI scalars. This never changes public dashboard markup.
+  // authorized admin feed; ordinary accounts receive only four
+  // admin-selected KPI scalars, not unrestricted results history.
   function adminKpiWindowMetric(card, period){
     const feed=state.feed||{}, windows=feed.performance_windows||{};
     const window=windows?.[period]||{}, betting=window.betting||{}, overall=betting.overall||{};
@@ -5221,9 +5231,13 @@ function adminActivityRows(){
     if(result===null)return {text:'—',available:false};
     const sourceText=selectedSource?
       (selectedSource==='model_success'||selectedSource.startsWith('winner_')?'víťazi':'výsledky'):null;
+    const isRoi=['roi','winner_roi','results_roi','auto_roi'].includes(card.metric);
+    const effectivePeriod=period==='auto'?selectedPeriod:period;
     const meta=period==='auto'&&selectedPeriod
       ?`Vybrané: ${sourceText?sourceText+' · ':''}${selectedPeriod==='all'?'celé obdobie':selectedPeriod+' dní'} · vzorka ${sample}`
-      :null;
+      :isRoi&&effectivePeriod
+        ?`Obdobie ROI: ${effectivePeriod==='all'?'celé dostupné obdobie':effectivePeriod+' dní'}`
+        :null;
     if(['model_success','results_success','results_top_success','auto_success'].includes(card.metric))
       return {text:pct(result),available:true,meta};
     if(['roi','winner_roi','results_roi','auto_roi'].includes(card.metric))
@@ -5324,7 +5338,7 @@ function adminActivityRows(){
     }).join('');
     return `<section class="admin-ux-section admin-dashboard-setting">
       <div class="admin-detail-access-card admin-dashboard-setting-card">
-        <header><div><small>DASHBOARD</small><h3>Dashboard setting</h3><p>Vyber nezávisle obsah troch existujúcich kariet a obdobie výpočtu. Verejný vzhľad, rozloženie a model zostávajú bez zmeny.</p></div></header>
+        <header><div><small>DASHBOARD</small><h3>Dashboard setting</h3><p>Vyber nezávisle obsah štyroch kariet a obdobie výpočtu. Verejný vzhľad, rozloženie a model zostávajú bez zmeny.</p></div></header>
         <div class="admin-dashboard-slot-list">${slots}</div>
         ${adminResultsRoiAudit()}
         <small class="admin-detail-help">Štyri ukazovatele majú vždy oddelený výpočet pre víťazov dvojhry a všetky publikované Výsledky. Priemerný kurz víťazov zahŕňa skutočné kurzy vyhodnotených tipov na víťaza dvojhry. Automatické položky porovnajú obe tieto metódy v obdobiach 3, 7, 14, 30, 180 a 365 dní (pri Výsledkoch aj celé dostupné obdobie) a vyberú najvyššiu dostupnú hodnotu. V administrátorskom náhľade vidíš zdroj, obdobie a počet záznamov. Aj krátka vzorka môže mať najvyššiu hodnotu. ROI a Yield zahŕňajú iba reálne vyhodnotené vklady bez ACCA; vrátené SKREČ/VOID sú neutrálne. Pôvodné publikované nastavenia zostanú zachované, kým nezvolíš nové a neklikneš na Publikovať. </small>
@@ -6564,7 +6578,7 @@ function adminActivityRows(){
       if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};const field=t.dataset.simpleBannerField;item.content[field]=t.type==='checkbox'?t.checked:/_shadow_strength$/.test(field)?Math.max(0,Math.min(10,Number(t.value)||0)):/((?:_size|_x|_y|_width))$/.test(field)?Number(t.value):t.value;state.adminPreviewPinnedId=id;state.adminPreviewPaused=true;renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.adminKpiIndex!==undefined&&t.dataset.adminKpiField){
         const index=Number(t.dataset.adminKpiIndex),field=t.dataset.adminKpiField;
-        if(!Number.isInteger(index)||index<0||index>=3)return;
+        if(!Number.isInteger(index)||index<0||index>=dashboardKpiDefaults.length)return;
         const cards=dashboardKpiSettings();
         const current=cards[index];
         if(field==='metric'&&dashboardKpiAllowed[t.value]){
