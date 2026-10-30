@@ -118,3 +118,49 @@
  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero-copy{padding:8px 18px!important;}
  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero-copy p{margin:4px 0 0!important;line-height:1.3!important;}
 }
+
+/* Optical polish 2026-10-30: restrained material depth and information hierarchy.
+   No geometry, KPI, banner positioning, routes, permissions or loader changes. */
+@media(max-width:900px){
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .dashboard-kpi{
+    background:linear-gradient(155deg,#17392e 0%,#102b24 53%,#0b231e 100%)!important;
+    border-color:rgba(155,219,181,.21)!important;
+    box-shadow:inset 0 1px 0 rgba(237,255,245,.09),0 10px 26px rgba(0,0,0,.17)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .dashboard-kpi small{
+    color:#b8d3c5!important;letter-spacing:.075em!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .dashboard-kpi strong{
+    font-variant-numeric:tabular-nums!important;letter-spacing:-.035em!important;
+    color:#f3fff9!important;text-shadow:0 1px 14px rgba(192,255,224,.07)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab.active{
+    background:linear-gradient(180deg,rgba(43,157,114,.105),rgba(21,76,57,.024))!important;
+    color:#f1fff8!important;
+    box-shadow:inset 0 1px 0 rgba(220,255,234,.055)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked){
+    background:linear-gradient(155deg,#142f26 0%,#0b241e 100%)!important;
+    border-color:rgba(145,205,171,.19)!important;
+    box-shadow:inset 0 1px 0 rgba(240,255,247,.055),0 11px 26px rgba(0,0,0,.14)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-pick{
+    background:linear-gradient(145deg,rgba(22,72,53,.97),rgba(16,55,42,.98))!important;
+    border-color:rgba(99,213,156,.19)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-pick-stack strong{
+    color:#f1fff6!important;font-weight:740!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-number-stack strong{
+    font-variant-numeric:tabular-nums!important;
+    color:#f1fff8!important;letter-spacing:-.025em!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-match-player.is-pick b{
+    color:#ebfff4!important;font-weight:730!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs :is(a,button).active{
+    background:linear-gradient(160deg,#1a503d,#113429)!important;
+    color:#7bf0bd!important;
+    box-shadow:inset 0 1px 0 rgba(220,255,236,.09),0 3px 11px rgba(0,0,0,.14)!important;
+  }
+}
