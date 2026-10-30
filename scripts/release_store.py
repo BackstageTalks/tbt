@@ -463,7 +463,16 @@ class ReleaseStore:
             },
         }
 
-        self.upload(files)
+        # Never clobber the authoritative history inventory in the same GitHub
+        # upload as the larger parquet payloads. A transient GitHub 5xx can
+        # fail a multi-asset --clobber halfway through, leaving the manifest
+        # deleted even though an earlier version had been readable.
+        history_inventory = [p for p in files if p.name == "history_manifest.json"]
+        payload_files = [p for p in files if p.name != "history_manifest.json"]
+        if payload_files:
+            self.upload(payload_files)
+        if history_inventory:
+            self.upload(history_inventory)
 
         manifest_path = self.directory / self.BUNDLE_MANIFEST
         temporary = manifest_path.with_suffix(manifest_path.suffix + ".tmp")
