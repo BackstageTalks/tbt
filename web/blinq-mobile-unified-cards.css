@@ -136,7 +136,7 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-action-cell {
-    grid-area:action!important;display:flex!important;align-self:stretch!important;
+    grid-area:action!important;display:block!important;align-self:stretch!important;
     justify-self:stretch!important;justify-content:stretch!important;align-items:stretch!important;
     padding:0!important;width:100%!important;min-width:0!important;
     background:transparent!important;
@@ -182,7 +182,7 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
   .daily-hub-table tbody tr:not(.hub-row-locked) > td:nth-child(9).hub-mobile-only {
-    grid-area:action!important;display:flex!important;min-height:44px!important;
+    grid-area:action!important;display:block!important;min-height:44px!important;
   }
 }
 
