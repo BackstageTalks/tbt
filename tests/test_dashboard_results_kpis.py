@@ -106,11 +106,12 @@ def test_three_public_scalars_from_results_while_existing_financial_window_uncha
         {"metric": "results_avg_odds", "period": "3"},
     ]}}
     served = selected_dashboard_cards(feed, ui, now=NOW)
-    assert served == [
+    assert served[:3] == [
         {"metric": "results_success", "period": "3", "value": 5 / 8},
         {"metric": "results_top_success", "period": "7", "value": .5},
         {"metric": "results_avg_odds", "period": "3", "value": pytest.approx(1.856)},
     ]
+    assert served[3]["metric"] == "results_roi" and served[3]["period"] == "30"
     assert feed["performance_windows"]["3"]["betting"]["overall"]["hit_rate"] == .99
 
 
@@ -123,7 +124,7 @@ def test_all_time_selector_no_data_and_reject_incompatible_periods():
     ]
     assert validate_ui_config(deepcopy(ui)) is not None
     assert ALLOWED_PERIODS["results_success"] == {"auto", "all", "3", "7", "14", "30", "180", "365"}
-    assert [row["value"] for row in selected_dashboard_cards({}, ui, now=NOW)] == [None] * 3
+    assert [row["value"] for row in selected_dashboard_cards({}, ui, now=NOW)] == [None] * 4
     ui["dashboard"]["kpi_cards"][0]["period"] = "today"
     with pytest.raises(ValueError, match="Dashboard setting"):
         validate_ui_config(ui)

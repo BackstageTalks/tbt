@@ -48,7 +48,7 @@ def main():
                     host.innerHTML=t.renderAdminRoute();
                     t.wireAdmin();
                 }""")
-                assert page.locator(".admin-dashboard-slot").count() == 3
+                assert page.locator(".admin-dashboard-slot").count() == 4
                 assert page.get_by_text("Dashboard setting").count() >= 1
                 page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="metric"]').select_option("roi")
                 page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="period"]').select_option("30")
@@ -56,7 +56,7 @@ def main():
                 page.locator('[data-admin-kpi-index="2"][data-admin-kpi-field="metric"]').select_option("yield_units")
                 page.locator('[data-admin-kpi-index="2"][data-admin-kpi-field="period"]').select_option("365")
                 settings = page.evaluate("dashboardHarness.state.ui.dashboard.kpi_cards")
-                assert settings == [
+                assert settings[:3] == [
                     {"metric": "roi", "period": "30"},
                     {"metric": "model_success", "period": "180"},
                     {"metric": "yield_units", "period": "365"},
@@ -113,7 +113,7 @@ def main():
                     h.renderDashboardKpis();
                 }""")
                 values = page.locator("[data-admin-kpi-preview]")
-                assert [v.inner_text() for v in values.all()] == [
+                assert [v.inner_text() for v in values.all()[:3]] == [
                     "12.5%", "70.3%", "+5.75u"
                 ]
                 # Unsaved choices must preview a different period immediately;
@@ -194,15 +194,15 @@ def main():
                   h.renderDashboardKpis();
                 }""")
                 cards = page.locator("#dashboardKpis .dashboard-kpi")
-                assert [c.locator("strong").inner_text() for c in cards.all()] == [
+                assert [c.locator("strong").inner_text() for c in cards.all()[:3]] == [
                     "75.0%", "100.0%", "1.85"
                 ]
                 # Admin differentiates sources; public banner retains simple
                 # labels without appending Results to its existing layout.
-                assert [c.locator("small").inner_text() for c in cards.all()] == [
+                assert [c.locator("small").inner_text() for c in cards.all()[:3]] == [
                     "ÚSPEŠNOSŤ", "ÚSPEŠNOSŤ", "PRIEMERNÝ KURZ"
                 ]
-                assert page.locator("#dashboardKpis .dashboard-kpi p").count() == 0
+                assert page.locator("#dashboardKpis .dashboard-kpi p").count() >= 1
                 assert page.locator("#dashboardKpis .dashboard-kpi[title]").count() == 0
                 # Restore original published settings: unsaved draft was inert.
                 page.evaluate("""() => {
@@ -220,11 +220,11 @@ def main():
                   h.renderDashboardKpis();
                 }""")
                 cards = page.locator("#dashboardKpis .dashboard-kpi")
-                assert cards.count() == 3
-                assert [c.locator("strong").inner_text() for c in cards.all()] == [
+                assert cards.count() == 4
+                assert [c.locator("strong").inner_text() for c in cards.all()[:3]] == [
                     "12.5%", "70.3%", "+5.75u"
                 ]
-                assert page.locator("#dashboardKpis .dashboard-kpi p").count() == 0
+                assert page.locator("#dashboardKpis .dashboard-kpi p").count() >= 1
                 assert page.locator("#dashboardKpis .dashboard-kpi[title]").count() == 0
                 # Unpublished configuration is not the new global default.
                 page.evaluate("""() => {
@@ -243,10 +243,10 @@ def main():
                     const host=document.getElementById('routePanel');
                     host.innerHTML=h.renderAdminRoute();h.wireAdmin();
                 }""")
-                assert [c.locator("strong").inner_text() for c in cards.all()] == [
+                assert [c.locator("strong").inner_text() for c in cards.all()[:3]] == [
                     "58", "70.3%", "1.86"
                 ]
-                assert [v.inner_text() for v in page.locator("[data-admin-kpi-preview]").all()] == [
+                assert [v.inner_text() for v in page.locator("[data-admin-kpi-preview]").all()[:3]] == [
                     "58", "70.3%", "1.86"
                 ]
                 # Reproduce the reported 3-0 / 100% / 1.52 / 52% ROI case
@@ -334,7 +334,7 @@ def main():
                   document.getElementById('routePanel').innerHTML=h.renderAdminRoute();
                   h.wireAdmin();
                 }""")
-                assert [x.inner_text() for x in page.locator("[data-admin-kpi-preview]").all()] == [
+                assert [x.inner_text() for x in page.locator("[data-admin-kpi-preview]").all()[:3]] == [
                     "0.0%", "80.0%", "+3.20u"
                 ]
                 choice = page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="metric"]')
@@ -367,8 +367,8 @@ def main():
                   ];
                   h.renderDashboardKpis();
                 }""")
-                assert page.locator("#dashboardKpis .dashboard-kpi").count() == 3
-                assert [c.locator("strong").inner_text() for c in page.locator("#dashboardKpis .dashboard-kpi").all()] == [
+                assert page.locator("#dashboardKpis .dashboard-kpi").count() == 4
+                assert [c.locator("strong").inner_text() for c in page.locator("#dashboardKpis .dashboard-kpi").all()[:3]] == [
                     "0.0%", "80.0%", "+3.20u"
                 ]
                 # AUTO now compares the two separate calculation sources,
@@ -384,7 +384,7 @@ def main():
                   document.getElementById('routePanel').innerHTML=h.renderAdminRoute();
                   h.wireAdmin();
                 }""")
-                previews = page.locator("[data-admin-kpi-preview]").all_inner_texts()
+                previews = page.locator("[data-admin-kpi-preview]").all_inner_texts()[:3]
                 assert previews == ["81.0%", "2.25", "80.0%"], previews
                 slot_text = [x.inner_text() for x in page.locator(".admin-dashboard-slot").all()]
                 assert "víťazi" in slot_text[0] and "14 dní" in slot_text[0]
@@ -402,14 +402,15 @@ def main():
                   ];
                   h.renderDashboardKpis();
                 }""")
-                assert [c.locator("strong").inner_text() for c in page.locator("#dashboardKpis .dashboard-kpi").all()] == [
+                assert [c.locator("strong").inner_text() for c in page.locator("#dashboardKpis .dashboard-kpi").all()[:3]] == [
                     "81.0%", "2.25", "80.0%"
                 ]
-                assert page.locator("#dashboardKpis .dashboard-kpi p").count() == 0
+                assert page.locator("#dashboardKpis .dashboard-kpi p").count() >= 1
                 assert page.locator("#dashboardKpis .dashboard-kpi[title]").count() == 0
+                assert page.locator("#dashboardKpis .dashboard-kpi").count() == 4
                 assert not errors, (width, errors)
                 page.close()
-            print("Admin Dashboard setting and unchanged public three-card runtime: PASS")
+            print("Admin Dashboard setting and four-card public runtime: PASS")
         finally:
             browser.close()
 

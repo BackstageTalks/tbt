@@ -1,4 +1,4 @@
-"""Admin-only Dashboard setting: three scalar cards, no model or visual rewrite."""
+"""Admin-only Dashboard setting: four scalar cards, no model or visual rewrite."""
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
@@ -42,12 +42,12 @@ def _feed_with_all_three_market_categories():
             "performance_windows": windows, "performance_window_summary": summary}
 
 
-def test_three_defaults_preserve_existing_public_dashboard():
+def test_four_defaults_preserve_existing_public_dashboard():
     ui = json.loads((ROOT / "web/ui-config.json").read_text(encoding="utf-8"))
     assert ui["dashboard"]["kpi_cards"] == list(DEFAULT_CARDS)
     assert normalize_cards({}) == list(DEFAULT_CARDS)
     assert normalize_cards({"dashboard": {"kpi_cards": [1, {"metric": "roi", "period": "30"}, {}]}}) == [
-        DEFAULT_CARDS[0], {"metric": "roi", "period": "30"}, DEFAULT_CARDS[2],
+        DEFAULT_CARDS[0], {"metric": "roi", "period": "30"}, DEFAULT_CARDS[2], DEFAULT_CARDS[3],
     ]
     assert normalize_cards({"dashboard": {"kpi_cards": [{"metric": [], "period": "7"}, {}, {}]}}) == list(DEFAULT_CARDS)
     assert validate_ui_config(deepcopy(ui)) is not None
@@ -61,7 +61,8 @@ def test_selected_three_scalars_use_correct_sources_and_exclude_short_odds_units
         {"metric": "yield_units", "period": "7"},
     ]}}
     result = selected_dashboard_cards(feed, ui)
-    assert [x["metric"] for x in result] == ["avg_odds", "roi", "yield_units"]
+    assert [x["metric"] for x in result[:3]] == ["avg_odds", "roi", "yield_units"]
+    assert result[3]["metric"] == "results_roi" and result[3]["period"] == "30"
     assert abs(result[0]["value"] - 1.8) < 1e-12  # historical TOP only
     assert abs(result[1]["value"] - (-.1)) < 1e-12  # (.8-1.0) / two genuine units
     assert abs(result[2]["value"] - (-.2)) < 1e-12
