@@ -79,6 +79,8 @@ def test_mobile_market_cards():
                     assert g['row']['w']<=width,(width,market,g)
                     assert g['row']['h']<530,(width,market,'over-tall card',g)
                     assert g['pick']['w']>=100,(width,market,'collapsed prediction',g)
+                    if width <= 600 and market in ('daily','value'):
+                        assert 'match confidence' in g['areas'] and 'pick action' in g['areas'],(width,market,g)
                     if width<=600:
                         for name in ('time','confidence','odds','action'):
                             assert g[name]['r']<=g['row']['r']+1,(width,market,name,g)
