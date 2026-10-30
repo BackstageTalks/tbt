@@ -2745,7 +2745,13 @@
       :uncertain
       ?`<span class="hub-time-stack"><strong>${escapeHtml(fmtTime(scheduled))}</strong><small>${escapeHtml(fmtCompactDate(scheduled))}</small><em class="hub-offer-status">${escapeHtml(lcopy('TIME UNCONFIRMED','ČAS SA OVERUJE','ČAS SE OVĚŘUJE'))}</em></span>`
       :timeDateHtml(scheduled);
-    const leading=`<td class="hub-rank">${index+1}</td><td class="hub-time">${timeHtml}</td><td class="hub-tournament-cell">${tournament}</td><td class="hub-match-cell">${dailyHubMatch(row)}</td>`;
+    // The mobile tournament metadata mirrors the provider-verified status.
+    // The desktop time cell keeps its existing status; no clock-derived STARTED state.
+    const mobileStatus=started
+      ?`<span class="hub-mobile-started is-started">${escapeHtml(lcopy('STARTED','ZAČATÉ','ZAHÁJENO'))}</span>`
+      :uncertain?`<span class="hub-mobile-started is-uncertain">${escapeHtml(lcopy('CHECKING TIME','OVERUJE SA','OVĚŘUJE SE'))}</span>`:'';
+    const mobileTournament=mobileStatus?tournament.replace('</small>',mobileStatus+'</small>'):tournament;
+    const leading=`<td class="hub-rank">${index+1}</td><td class="hub-time">${timeHtml}</td><td class="hub-tournament-cell">${mobileTournament}</td><td class="hub-match-cell">${dailyHubMatch(row)}</td>`;
     if(sourceTab==='games'||sourceTab==='sets'){
       const confidence=Number(row?.projection_confidence),rawProjection=Number(row?.projection),projection=sourceTab==='sets'?setsTotalProjectionValue(row):rawProjection,pick=projectionPickText(row,sourceTab);
       const projectionText=Number.isFinite(projection)?(sourceTab==='sets'?projection.toFixed(2):projection.toFixed(1)):'—';
@@ -2754,7 +2760,7 @@
       if(tab==='see_all'){
         return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-seeall-model-cell">${hubSeeAllProjectionHtml(projectionText,projectionUnit,confidence,row)}</td><td class="hub-action-cell hub-optional-action"><button class="hub-detail hub-projection-detail" type="button" data-sg-projection aria-label="${escapeHtml(lcopy('Projection details','Detail projekcie','Detail projekce'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}</button></td></tr>`;
       }
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td></tr>`;
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td><td class="hub-action-cell hub-mobile-only"><button class="hub-detail hub-projection-detail" type="button" data-sg-projection aria-label="${escapeHtml(lcopy('Projection details','Detail projekcie','Detail projekce'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}</button></td></tr>`;
     }
     if(sourceTab==='ace'||sourceTab==='double_faults'){
       const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=projectionPickText(row,sourceTab),market=aceMarketName(row);
@@ -2763,7 +2769,7 @@
       if(tab==='see_all'){
         return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-seeall-model-cell">${hubSeeAllProjectionHtml(projectionText,projectionUnit,confidence,row)}</td><td class="hub-action-cell hub-optional-action">${action}</td></tr>`;
       }
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td></tr>`;
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td><td class="hub-action-cell hub-mobile-only">${action}</td></tr>`;
     }
     const probability=marketProbability(row),odds=Number(row?.odds??row?.betting?.odds),pick=modelPickName(row);
     const base=`${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick)}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(probability,row)}</td>`;
