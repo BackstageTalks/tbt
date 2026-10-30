@@ -21,7 +21,7 @@ def test_density_is_phone_only_and_public_only():
     assert "tbody tr.hub-row-locked {" not in css
     assert "grid-template-areas" in css
     assert "#dailyHub:is([data-tab=\"daily\"],[data-tab=\"value\"])" in css
-    assert "display: none" not in css
+    assert "display: none !important;" in css  # Only the duplicated td::before label is suppressed
     assert ".hub-pick-stack small::before" in css
     assert "PREDIKCIA · " in css
     assert "td.hub-pick::before" in css
@@ -29,6 +29,6 @@ def test_density_is_phone_only_and_public_only():
 
 def test_touch_targets_and_managed_banner_preserved():
     css = (WEB / "blinq-mobile-density.css").read_text(encoding="utf-8")
-    assert "min-height: 44px" not in css
+    assert "min-height: 44px !important;" in css  # Preserve Detail touch targets
     assert "#dashboardHero" not in css
     assert "#mobileTabs" not in css
