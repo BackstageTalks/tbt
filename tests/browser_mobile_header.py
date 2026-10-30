@@ -108,12 +108,12 @@ def main():
                             rowBg:row?getComputedStyle(row).backgroundImage:null,navBg,navLine};
                         }""")
                         assert 'sports-intelligence=20261030-1' in premium['css'], premium
-                        assert premium['rowBg'] and 'rgb(16, 44, 37)' in premium['rowBg'], premium
+                        assert premium['rowBg'] and 'rgb(16, 38, 33)' in premium['rowBg'], premium
                         assert premium['navBg'] == 'none', premium
                         assert premium['navLine'] == 'rgb(85, 231, 170)', premium
-                        assert premium['kpiBg'] and 'rgb(14, 41, 34)' in premium['kpiBg'], premium
+                        assert premium['kpiBg'] and 'rgb(17, 41, 35)' in premium['kpiBg'], premium
                         assert premium['kpiAccent'] == 'none', premium
-                        assert premium['kpiRadius'] == '14px', premium
+                        assert premium['kpiRadius'] == '10px', premium
                         assert 23 <= float(premium['kpiValueSize'].replace('px','')) <= 31, premium
                         assert premium['kpiIconSize'] == '16px', premium
                         assert len(premium['cards']) == 3, premium
@@ -132,7 +132,7 @@ def main():
                           return result;
                         }""")
                         assert grid_fit and all(grid_fit[k] for k in ('pick','odds','confidence','action')),grid_fit
-                        # Approved compact card: player/pick on left, confidence,
+                        # Premium compact card: players on left, metrics on right,
                         # odds and Detail stacked vertically on the right.
                         assert 'match confidence' in grid_fit['areas'],grid_fit
                         assert 'pick action' in grid_fit['areas'],grid_fit
