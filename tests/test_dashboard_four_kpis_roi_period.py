@@ -97,8 +97,27 @@ def test_optional_fourth_kpi_card_and_roi_caption_settings():
         baseline["dashboard"][field] = True
     app = (ROOT / "web/app.js").read_text(encoding="utf-8")
     assert 'data-admin-kpi-toggle="fourth_card_enabled"' in app
-    assert 'data-admin-kpi-toggle="show_roi_period"' in app
+    assert 'data-admin-kpi-period-index="${index}"' in app
     assert "host.dataset.kpiCount" in app
-    assert "showRoiPeriod&&isRoi" in app
+    assert "captionSettings[index]" in app
+    assert "dashboardKpiCaptionSettings()" in app
+    assert "effectivePeriod==='today'" in app
+    assert "Zobraziť obdobie pod kartou" in app
     last = (ROOT / "web/blinq-mobile-unified-cards.css").read_text(encoding="utf-8")
     assert 'data-kpi-count="3"' in last
+
+
+def test_period_caption_is_configured_separately_per_card():
+    ui = json.loads((ROOT / "web/ui-config.json").read_text(encoding="utf-8"))
+    assert ui["dashboard"]["kpi_period_visibility"] == [False, False, False, True]
+    for flags in ([True, False, True, False], [False] * 4, [True] * 4):
+        ui["dashboard"]["kpi_period_visibility"] = flags
+        assert validate_ui_config(deepcopy(ui)) is not None
+    for flags in ([], [True] * 3, [True] * 5, [True, 0, False, True], "true"):
+        ui["dashboard"]["kpi_period_visibility"] = flags
+        try:
+            validate_ui_config(deepcopy(ui))
+        except ValueError as exc:
+            assert "period visibility" in str(exc)
+        else:
+            raise AssertionError(f"Invalid caption visibility accepted: {flags!r}")

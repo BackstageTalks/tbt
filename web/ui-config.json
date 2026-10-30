@@ -2508,7 +2508,8 @@
       }
     },
     "fourth_card_enabled": true,
-    "show_roi_period": true
+    "show_roi_period": true,
+    "kpi_period_visibility": [false, false, false, true]
   },
   "ui_revision": "7.3.6",
   "watermark_presets": {
