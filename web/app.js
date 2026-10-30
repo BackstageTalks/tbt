@@ -5674,7 +5674,7 @@ function adminActivityRows(){
     const progress=(title,count,target,remaining,hint)=>{
       const valid=Number.isSafeInteger(count)&&Number.isSafeInteger(target)&&target>0;
       const filled=valid?Math.max(0,Math.min(100,100*count/target)):0;
-      return `<article class="admin-calibration-progress"><div class="admin-calibration-progress-head"><strong>${escapeHtml(title)}</strong><span>${numberOrDash(count)} / ${numberOrDash(target)}</span></div><div class="admin-calibration-track" role="progressbar" aria-label="${escapeHtml(title)}" aria-valuenow="${valid?count:0}" aria-valuemin="0" aria-valuemax="${valid?target:1}"><div style="width:${filled.toFixed(2)}%"></div></div><p>${escapeHtml(hint)} · Chýba <strong>${numberOrDash(remaining)}</strong></p></article>`;
+      return `<article class="admin-calibration-progress"><div class="admin-calibration-progress-head"><strong>${escapeHtml(title)}</strong><span>${numberOrDash(count)} / ${numberOrDash(target)}</span></div><div class="admin-calibration-track" role="progressbar" aria-label="${escapeHtml(title)}" aria-valuenow="${valid?Math.min(count,target):0}" aria-valuemin="0" aria-valuemax="${valid?target:1}"><div style="width:${filled.toFixed(2)}%"></div></div><p>${escapeHtml(hint)} · Chýba <strong>${numberOrDash(remaining)}</strong></p></article>`;
     };
     const card=(label,value,hint)=>`<article class="admin-calibration-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(hint)}</span></article>`;
     const metrics=[['Úspešnosť','accuracy'],['Log loss','log_loss'],['Brier score','brier_score'],['ECE kalibrácia','ece_10'],['ROC AUC','roc_auc']];
@@ -5777,9 +5777,9 @@ function adminActivityRows(){
             ['Lepší Brier score',gate.brier_better,true],
             ['ECE nie horšia',gate.ece_not_worse,true],
           ].map(([label,pass,metric])=>{
-            const measurable=!metric||(gate.minimum_matches_met===true&&gate.minimum_days_met===true&&settledShadow>0);
-            const verdict=pass?'Splnené':measurable?'Nesplnené':'Čaká na vzorku';
-            return `<div><span>${escapeHtml(label)}</span><strong class="${pass?'is-good':measurable?'is-worse':'is-pending'}" title="${escapeHtml(verdict)}">${pass?'✓':measurable?'✕':'—'}</strong></div>`;
+            const assessed=metric&&gate.minimum_matches_met===true&&gate.minimum_days_met===true&&settledShadow>0;
+            const verdict=pass?'Splnené':assessed?'Nesplnené':metric?'Čaká na vzorku':'Čaká na výsledky';
+            return `<div><span>${escapeHtml(label)}</span><strong class="${pass?'is-good':assessed?'is-worse':'is-pending'}" title="${escapeHtml(verdict)}" aria-label="${escapeHtml(verdict)}">${pass?'✓':assessed?'✕':'Čaká'}</strong></div>`;
           }).join('')}
         </div><p class="admin-calibration-foot">Audit nových zápasov: ${escapeHtml(fmtStamp(unseen.readiness_generated_at))}. ${unseen.available?'Cohort nezávislý od už spotrebovaných rozhodnutí.':'Pozor: audit nových zápasov zatiaľ nepatrí aktuálnemu championovi.'}</p></article>
       </div>
