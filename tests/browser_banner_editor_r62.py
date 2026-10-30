@@ -45,6 +45,24 @@ def main():
             assert first['preview']==0,first
             assert 'Prvý banner' in first['desktop'] and 'Prvý banner' in first['mobile'],first
             assert first['colors']==3,first
+            # The actual 128px public mobile hero is compact. Admin preview must
+            # show the same crop aspect ratio, not the obsolete 370x190 shape.
+            crop=page.evaluate("""() => {
+              const desktop=document.querySelector('[data-admin-preview-card="desktop"] .lean-admin-preview');
+              const mobile=document.querySelector('[data-admin-preview-card="mobile"] .lean-admin-preview');
+              const rect=node=>{const r=node?.getBoundingClientRect();return r?{width:r.width,height:r.height}:null};
+              const image=mobile?.querySelector('img');
+              const help=document.querySelector('.admin-banner-layout-help')?.textContent||'';
+              return {desktop:rect(desktop),mobile:rect(mobile),
+                mobileImageFit:image?getComputedStyle(image).objectFit:null,
+                help,aspect:getComputedStyle(mobile).aspectRatio};
+            }""")
+            assert crop['desktop'] and crop['mobile'],crop
+            assert crop['mobile']['width']>100 and crop['mobile']['height']>20,crop
+            assert abs(crop['mobile']['width']/crop['mobile']['height']-370/128)<0.03,crop
+            assert abs(crop['desktop']['width']/crop['desktop']['height']-1396/203)<0.03,crop
+            assert crop['mobileImageFit']=='cover',crop
+            assert '370×128' in crop['help'],crop
             studio=page.evaluate("""() => {
               const editor=document.querySelector('.admin-banner-workbench');
               const panels=[...editor.querySelectorAll('.admin-banner-device-panel')];
