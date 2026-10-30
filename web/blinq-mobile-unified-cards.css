@@ -1,0 +1,199 @@
+/* Approved BlinQ mobile market cards — 2026-10-30.
+   Additive layout after mobile-density.css. No desktop, tablet, admin,
+   API, membership or projection-value changes. */
+
+body#blinqPremium #dailyHub .hub-mobile-started,
+body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
+
+@media (max-width:600px) {
+  /* All authorized public prediction markets share one compact two-column
+     card. The original eight semantic cells remain in the document. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table tbody tr:not(.hub-row-locked) {
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) minmax(85px, min(28vw,110px))!important;
+    grid-template-areas:"tournament time" "match confidence" "match number" "pick action"!important;
+    grid-template-rows:auto minmax(48px,auto) minmax(46px,auto) auto!important;
+    gap:7px 9px!important;
+    align-items:stretch!important;
+    align-content:start!important;
+    height:auto!important;
+    padding:11px 10px!important;
+    min-width:0!important;
+    margin-bottom:0!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table tbody tr:not(.hub-row-locked) > td {
+    min-width:0!important;
+    max-width:100%!important;
+    box-sizing:border-box!important;
+    margin:0!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-rank {display:none!important;}
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-tournament-cell {
+    grid-area:tournament!important;align-self:center!important;overflow:visible!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-time {
+    grid-area:time!important;align-self:start!important;justify-self:end!important;
+    padding:3px 2px 0!important;text-align:right!important;background:transparent!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-time-stack {
+    justify-items:end!important;gap:3px!important;
+  }
+  /* The status is shown after surface only when supplied by runtime match
+     verification. The time/date stays at upper right without a duplicate. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .hub-time .hub-offer-status {display:none!important;}
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .hub-mobile-started {
+    display:inline-flex!important;align-items:center!important;justify-content:center!important;
+    width:max-content!important;max-width:100%!important;
+    padding:2px 5px!important;border:1px solid rgba(226,184,68,.42)!important;
+    border-radius:100px!important;color:#ead078!important;
+    background:rgba(206,169,59,.08)!important;
+    font-size:8px!important;line-height:1.2!important;font-weight:800!important;
+    white-space:nowrap!important;letter-spacing:0!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .hub-tournament-copy small {
+    display:flex!important;flex-wrap:wrap!important;gap:3px 5px!important;
+    align-items:center!important;min-width:0!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .hub-tournament-copy small > span {max-width:100%!important;}
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-match-cell {
+    grid-area:match!important;align-self:start!important;
+    padding:8px 0 0!important;min-height:0!important;
+    border-top:1px solid rgba(139,202,170,.13)!important;background:transparent!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-match {gap:7px!important;}
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-match-player {min-height:36px!important;}
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-match-player-main {gap:6px!important;}
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-match-player-main b {
+    font-size:clamp(11px,3.1vw,13px)!important;overflow-wrap:anywhere!important;
+  }
+
+  /* Left: the existing prediction surface (not nested extra boxes). */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-pick {
+    grid-area:pick!important;align-self:stretch!important;justify-self:stretch!important;
+    min-height:56px!important;width:100%!important;height:auto!important;
+    padding:10px!important;display:flex!important;align-items:center!important;
+    border-radius:10px!important;
+  }
+  /* Right: BLINQ / confidence, odds and their original functional Detail. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-confidence-cell {
+    grid-area:confidence!important;display:flex!important;flex-direction:column!important;
+    justify-content:center!important;align-items:center!important;align-self:stretch!important;
+    justify-self:stretch!important;text-align:center!important;width:100%!important;
+    min-width:0!important;padding:6px 5px!important;
+    background:rgba(19,75,53,.26)!important;
+    border:1px solid rgba(93,186,136,.13)!important;border-radius:10px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-confidence-cell::before {
+    display:block!important;margin:0 0 3px!important;
+    font-size:9px!important;line-height:1.1!important;text-align:center!important;
+    color:#a1c1b4!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-confidence {
+    display:flex!important;align-items:center!important;justify-content:center!important;
+    flex-direction:column!important;gap:4px!important;width:100%!important;
+    min-width:0!important;text-align:center!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-confidence strong {
+    font-size:clamp(16px,4.4vw,19px)!important;line-height:1.1!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-confidence>i {
+    display:block!important;width:min(100%,78px)!important;max-width:100%!important;
+    height:3px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-odds:nth-child(6) {
+    grid-area:number!important;align-self:stretch!important;justify-self:stretch!important;
+    display:flex!important;align-items:center!important;justify-content:center!important;
+    flex-direction:column!important;width:100%!important;padding:6px 4px!important;
+    border:1px solid rgba(93,186,136,.13)!important;border-radius:10px!important;
+    text-align:center!important;background:rgba(19,75,53,.26)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-number-stack strong {
+    font-size:clamp(15px,4.2vw,18px)!important;line-height:1.1!important;
+    overflow-wrap:anywhere!important;white-space:normal!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-action-cell {
+    grid-area:action!important;display:flex!important;align-self:stretch!important;
+    justify-self:stretch!important;justify-content:stretch!important;align-items:stretch!important;
+    padding:0!important;width:100%!important;min-width:0!important;
+    background:transparent!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-action-cell .hub-detail {
+    display:inline-flex!important;justify-content:center!important;align-items:center!important;
+    width:100%!important;min-width:0!important;max-width:none!important;
+    min-height:44px!important;height:100%!important;padding:6px 4px!important;
+    font-size:11px!important;border-radius:10px!important;
+  }
+  /* Keep membership lock visuals and existing click handlers intact. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-action-cell .hub-detail.is-locked {
+    background:rgba(213,174,88,.055)!important;border-color:rgba(213,174,88,.26)!important;
+    color:#cdb477!important;
+  }
+  /* Data depth is intentionally absent from cards; detail evidence is retained. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub .daily-hub-table :is(.hub-data-depth,.hub-seeall-confidence small) {display:none!important;}
+
+  /* Special markets retain numeric projection separately, never mistake it
+     for the bookmaker odds. A native Detail button is mobile-only. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
+  .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] {
+    grid-template-areas:"tournament time" "match confidence" "match number" "pick action" "projection projection"!important;
+    grid-template-rows:auto minmax(48px,auto) minmax(46px,auto) auto auto!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
+  .daily-hub-table tbody tr:not(.hub-row-locked) > td:nth-child(7) {
+    grid-area:projection!important;display:flex!important;justify-content:flex-start!important;
+    align-items:center!important;min-height:35px!important;width:100%!important;
+    padding:7px 10px!important;border-radius:9px!important;
+    background:rgba(19,75,53,.20)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
+  .daily-hub-table tbody tr:not(.hub-row-locked) > td:nth-child(8) {
+    grid-area:confidence!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
+  .daily-hub-table tbody tr:not(.hub-row-locked) > td:nth-child(9).hub-mobile-only {
+    grid-area:action!important;display:flex!important;min-height:44px!important;
+  }
+}
+
+@media(max-width:360px) {
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .daily-hub-table tbody tr:not(.hub-row-locked) {
+    grid-template-columns:minmax(0,1fr) 85px!important;
+    gap:7px 7px!important;padding:9px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:not([data-tab="see_all"]) .hub-mobile-started {
+    font-size:7px!important;padding:2px 4px!important;
+  }
+}
