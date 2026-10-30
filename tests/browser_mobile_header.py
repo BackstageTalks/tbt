@@ -37,6 +37,7 @@ def main():
                     h.state.ui.notifications={enabled:true,live_min_level:'elite'};h.renderInsightBell();h.renderProjectGroupBar();
                     const row={event_id:'test',scheduled_at:new Date(Date.now()+3600000).toISOString(),tour:'ATP',tournament:'Beijing, China',surface:'hard',player1:{id:'one',name:'Andrey Rublev',rank:26},player2:{id:'two',name:'Roman Safiullin',rank:102},pick:'Andrey Rublev',model_probability:.703,odds:1.67};
                     document.getElementById('dailyHubBody').innerHTML=h.dailyHubRow(row,'daily',false,0);
+                    document.getElementById('dailyHub').dataset.tab='daily';
                     document.getElementById('dailyHubEmpty').hidden=true;
                     window.groupCalls=[];
                     document.getElementById('projectGroupBar').onclick=e=>{const b=e.target.closest('[data-project-group-open]');if(b)groupCalls.push(b.dataset.projectGroupOpen);};
