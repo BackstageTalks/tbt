@@ -73,3 +73,32 @@ def test_mobile_and_desktop_tiles_show_selected_roi_period():
     assert "grid-template-columns:repeat(2,minmax(0,1fr))!important" in mobile
     assert "body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) #dashboardKpis" in cascade
     assert "max-width:1100px" in cascade
+
+
+def test_optional_fourth_kpi_card_and_roi_caption_settings():
+    baseline = json.loads((ROOT / "web/ui-config.json").read_text(encoding="utf-8"))
+    assert baseline["dashboard"]["fourth_card_enabled"] is True
+    assert baseline["dashboard"]["show_roi_period"] is True
+    baseline["dashboard"]["fourth_card_enabled"] = False
+    assert validate_ui_config(deepcopy(baseline)) is not None
+    selected = selected_dashboard_cards({}, baseline, now=NOW)
+    assert len(selected) == 3
+    assert len(normalize_cards(baseline)) == 4
+    baseline["dashboard"]["fourth_card_enabled"] = True
+    assert len(selected_dashboard_cards({}, baseline, now=NOW)) == 4
+    for field in ("fourth_card_enabled", "show_roi_period"):
+        baseline["dashboard"][field] = "false"
+        try:
+            validate_ui_config(deepcopy(baseline))
+        except ValueError as exc:
+            assert "Dashboard setting" in str(exc)
+        else:
+            raise AssertionError(f"Invalid dashboard toggle accepted: {field}")
+        baseline["dashboard"][field] = True
+    app = (ROOT / "web/app.js").read_text(encoding="utf-8")
+    assert 'data-admin-kpi-toggle="fourth_card_enabled"' in app
+    assert 'data-admin-kpi-toggle="show_roi_period"' in app
+    assert "host.dataset.kpiCount" in app
+    assert "showRoiPeriod&&isRoi" in app
+    last = (ROOT / "web/blinq-mobile-unified-cards.css").read_text(encoding="utf-8")
+    assert 'data-kpi-count="3"' in last

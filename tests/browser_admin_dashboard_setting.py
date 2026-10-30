@@ -49,6 +49,17 @@ def main():
                     t.wireAdmin();
                 }""")
                 assert page.locator(".admin-dashboard-slot").count() == 4
+                fourth_switch = page.locator('[data-admin-kpi-toggle="fourth_card_enabled"]')
+                caption_switch = page.locator('[data-admin-kpi-toggle="show_roi_period"]')
+                assert fourth_switch.is_checked() and caption_switch.is_checked()
+                fourth_switch.uncheck()
+                assert page.evaluate("dashboardHarness.state.ui.dashboard.fourth_card_enabled") is False
+                assert page.locator(".admin-dashboard-slot").count() == 4
+                assert page.evaluate("dashboardHarness.state.ui.dashboard.kpi_cards.length") in (3, 4)
+                fourth_switch.check()
+                caption_switch.uncheck()
+                assert page.evaluate("dashboardHarness.state.ui.dashboard.show_roi_period") is False
+                caption_switch.check()
                 assert page.get_by_text("Dashboard setting").count() >= 1
                 page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="metric"]').select_option("roi")
                 page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="period"]').select_option("30")

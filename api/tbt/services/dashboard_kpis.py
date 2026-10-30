@@ -383,7 +383,10 @@ def selected_dashboard_cards(feed: dict, ui_config: dict | None, *, now: datetim
     output = []
     cache: dict[tuple[str, str], dict] = {}
     best = feed.get("dashboard_model_success") or {}
-    for card in normalize_cards(ui_config):
+    dashboard = ui_config.get("dashboard") if isinstance(ui_config, dict) else None
+    fourth_enabled = dashboard.get("fourth_card_enabled") is not False if isinstance(dashboard, dict) else True
+    cards = normalize_cards(ui_config)
+    for card in (cards if fourth_enabled else cards[:3]):
         metric, period = card["metric"], card["period"]
         value = None
         selected_period = None

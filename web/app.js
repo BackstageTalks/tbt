@@ -1498,6 +1498,11 @@
   }
   function renderDashboardKpis(){
     const host=$('dashboardKpis');if(!host)return;
+    const dashboard=state.ui?.dashboard||{};
+    const visibleSettings=dashboard.fourth_card_enabled===false
+      ?dashboardKpiSettings().slice(0,3):dashboardKpiSettings();
+    host.dataset.kpiCount=String(visibleSettings.length);
+    const showRoiPeriod=dashboard.show_roi_period!==false;
     const rows=dashboardDailyRows();
     // A published bet may occur in both TOP / ACCA and again in SEE ALL.
     // Read the server's unique total from all eight actual markets, never
@@ -1527,7 +1532,7 @@
     // not the private rolling windows of accounts with limited Results access.
     // TODAY is always derived from this user's current authorized feed.
     const served=state.feed?.dashboard_kpi_cards;
-    const cards=dashboardKpiSettings().map((config,index)=>{
+    const cards=visibleSettings.map((config,index)=>{
       const {metric,period}=config;
       const snapshot=Array.isArray(served)?served[index]:null;
       const matching=snapshot?.metric===metric&&String(snapshot?.period||'')===period;
@@ -1567,7 +1572,7 @@
       }
       const isRoi=['roi','winner_roi','results_roi','auto_roi'].includes(metric);
       const effectivePeriod=period==='auto'?(matching?String(snapshot?.selected_period||''):''):period;
-      const note=isRoi
+      const note=showRoiPeriod&&isRoi
         ?effectivePeriod==='all'
           ?lcopy('All available history','Celé dostupné obdobie','Celé dostupné období')
           :dashboardKpiPeriodChoices.includes(effectivePeriod)
@@ -5314,6 +5319,8 @@ function adminActivityRows(){
       results_top_success:'Úspešnosť TOP – doterajšie nastavenie'
     };
     const periodNames={today:'Dnes – aktuálne',auto:'Automaticky – najvyššia hodnota',all:'Celé dostupné obdobie'};
+    const fourthEnabled=state.ui?.dashboard?.fourth_card_enabled!==false;
+    const periodVisible=state.ui?.dashboard?.show_roi_period!==false;
     const slots=dashboardKpiSettings().map((card,index)=>{
       const legacy=legacyLabel[card.metric];
       const metricOptions=(legacy
@@ -5325,8 +5332,8 @@ function adminActivityRows(){
       const periods=dashboardKpiAllowed[card.metric]||['today'];
       const periodOptions=periods.map(id=>`<option value="${id}"${card.period===id?' selected':''}>${escapeHtml(periodNames[id]||id+' dní')}</option>`).join('');
       const preview=adminDashboardKpiPreview(card,index);
-      return `<div class="admin-dashboard-slot">
-        <strong>Karta ${index+1}</strong>
+      return `<div class="admin-dashboard-slot${index===3&&!fourthEnabled?' is-hidden-public':''}">
+        <strong>Karta ${index+1}${index===3&&!fourthEnabled?' · skrytá na stránke':''}</strong>
         <label><span>Ukazovateľ</span><select data-admin-kpi-index="${index}" data-admin-kpi-field="metric">${metricOptions}</select></label>
         <label><span>Obdobie</span><select data-admin-kpi-index="${index}" data-admin-kpi-field="period" ${periods.length===1?'disabled':''}>${periodOptions}</select></label>
         <div class="admin-dashboard-slot-preview" aria-live="polite">
@@ -5338,7 +5345,11 @@ function adminActivityRows(){
     }).join('');
     return `<section class="admin-ux-section admin-dashboard-setting">
       <div class="admin-detail-access-card admin-dashboard-setting-card">
-        <header><div><small>DASHBOARD</small><h3>Dashboard setting</h3><p>Vyber nezávisle obsah štyroch kariet a obdobie výpočtu. Verejný vzhľad, rozloženie a model zostávajú bez zmeny.</p></div></header>
+        <header><div><small>DASHBOARD</small><h3>Dashboard setting</h3><p>Nastav obsah štyroch kariet a obdobia výpočtu. Štvrtú kartu aj doplnkový text ROI môžeš samostatne skryť bez straty nastavení.</p></div></header>
+        <div class="admin-dashboard-kpi-switches">
+          <label class="admin-inline-check"><input type="checkbox" data-admin-kpi-toggle="fourth_card_enabled" ${fourthEnabled?'checked':''}> Zobraziť štvrtú kartu (PC aj mobil)</label>
+          <label class="admin-inline-check"><input type="checkbox" data-admin-kpi-toggle="show_roi_period" ${periodVisible?'checked':''}> Zobraziť obdobie pod ROI na kartách</label>
+        </div>
         <div class="admin-dashboard-slot-list">${slots}</div>
         ${adminResultsRoiAudit()}
         <small class="admin-detail-help">Štyri ukazovatele majú vždy oddelený výpočet pre víťazov dvojhry a všetky publikované Výsledky. Priemerný kurz víťazov zahŕňa skutočné kurzy vyhodnotených tipov na víťaza dvojhry. Automatické položky porovnajú obe tieto metódy v obdobiach 3, 7, 14, 30, 180 a 365 dní (pri Výsledkoch aj celé dostupné obdobie) a vyberú najvyššiu dostupnú hodnotu. V administrátorskom náhľade vidíš zdroj, obdobie a počet záznamov. Aj krátka vzorka môže mať najvyššiu hodnotu. ROI a Yield zahŕňajú iba reálne vyhodnotené vklady bez ACCA; vrátené SKREČ/VOID sú neutrálne. Pôvodné publikované nastavenia zostanú zachované, kým nezvolíš nové a neklikneš na Publikovať. </small>
@@ -6576,6 +6587,16 @@ function adminActivityRows(){
       if(t.dataset.adminHeroDots!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.show_dots=t.checked;renderHeroBanner();rerenderAdmin();return;}
       const simpleBanner=t.closest('[data-simple-banner]');
       if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};const field=t.dataset.simpleBannerField;item.content[field]=t.type==='checkbox'?t.checked:/_shadow_strength$/.test(field)?Math.max(0,Math.min(10,Number(t.value)||0)):/((?:_size|_x|_y|_width))$/.test(field)?Number(t.value):t.value;state.adminPreviewPinnedId=id;state.adminPreviewPaused=true;renderAllUiContent();rerenderAdmin();}return;}
+      if(t.dataset.adminKpiToggle){
+        const field=t.dataset.adminKpiToggle;
+        if(!['fourth_card_enabled','show_roi_period'].includes(field))return;
+        state.ui.dashboard=state.ui.dashboard||{};
+        state.ui.dashboard[field]=Boolean(t.checked);
+        renderDashboardKpis();
+        rerenderAdmin();
+        showStatus('Dashboard setting · prepínač je v koncepte. Potvrď tlačidlom Publikovať.');
+        return;
+      }
       if(t.dataset.adminKpiIndex!==undefined&&t.dataset.adminKpiField){
         const index=Number(t.dataset.adminKpiIndex),field=t.dataset.adminKpiField;
         if(!Number.isInteger(index)||index<0||index>=dashboardKpiDefaults.length)return;

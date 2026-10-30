@@ -1164,6 +1164,9 @@ def validate_ui_config(payload: object) -> dict:
 
     dashboard = payload.get("dashboard") or {}
     kpi_cards = dashboard.get("kpi_cards")
+    for flag in ("fourth_card_enabled", "show_roi_period"):
+        if flag in dashboard and type(dashboard[flag]) is not bool:
+            raise ValueError(f"Dashboard setting {flag} must be a boolean")
     # Existing Azure configs may contain three legacy cards. New public
     # settings use four slots; both variants have strict per-slot validation.
     if kpi_cards is not None:

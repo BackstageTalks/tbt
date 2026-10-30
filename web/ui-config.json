@@ -2506,7 +2506,9 @@
         "legend": true,
         "goat": true
       }
-    }
+    },
+    "fourth_card_enabled": true,
+    "show_roi_period": true
   },
   "ui_revision": "7.3.6",
   "watermark_presets": {
