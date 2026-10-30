@@ -290,6 +290,32 @@
     border:1px solid #3caa7b!important;border-radius:11px!important;
     box-shadow:inset 0 1px 0 rgba(216,255,234,.09)!important;
   }
+  /* The standard TOP/VALUE selection uses a single two-column prediction/odds
+     row; each original semantic cell (rank, players, confidence, action) stays
+     in the document and entitlement logic is untouched. Other markets keep
+     their specialized projections/layouts. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) {
+    grid-template-columns:24px minmax(0,1fr) minmax(76px,26%)!important;
+    grid-template-areas:"rank tournament time" "match match match" "pick pick number" "confidence confidence action"!important;
+    align-items:center!important;gap:9px 10px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-pick {
+    min-width:0!important;width:100%!important;height:100%!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-odds {
+    grid-area:number!important;min-width:0!important;align-self:stretch!important;
+    display:flex!important;justify-content:center!important;align-items:center!important;
+    width:100%!important;padding:7px 5px!important;border-radius:10px!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-confidence-cell {
+    justify-self:stretch!important;text-align:left!important;min-width:0!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-confidence {
+    justify-items:start!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-action-cell {
+    align-self:center!important;justify-self:end!important;min-width:0!important;
+  }
   /* Existing three routes and lock badges remain unchanged. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs :is(a,button).active {
     position:relative!important;background:transparent!important;
