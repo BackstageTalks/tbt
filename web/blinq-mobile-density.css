@@ -1,0 +1,75 @@
+/* BlinQ mobile density pass — 2026-10-30.
+   Phones only. Keep the 128px managed hero and its copy, 44px touch targets,
+   market-specific grid areas, prediction values, membership locks and desktop
+   geometry unchanged. This file must load AFTER blinq-mobile-visual.css. */
+@media (max-width: 600px) {
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .dashboard-content-grid {
+    padding-top: 4px !important;
+  }
+
+  /* Three KPI values remain fully visible; trim only unused vertical space. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis {
+    gap: 6px !important;
+    padding: 8px 12px !important;
+    margin-bottom: 4px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi {
+    min-height: 86px !important;
+    height: auto !important;
+    gap: 4px !important;
+    padding: 9px 8px 8px !important;
+    border-radius: 14px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi > div {
+    gap: 5px !important;
+  }
+
+  /* Bring the daily heading, category rail and first match closer together. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .daily-panel-head {
+    padding: 9px 0 5px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .daily-tabs-row {
+    padding-bottom: 5px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHubTabs {
+    gap: 10px !important;
+    padding-bottom: 2px !important;
+  }
+
+  /* Keep each market/locked state in its existing layout; avoid stacked
+     row margins on top of the table body's CSS grid gap. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table tbody {
+    gap: 8px !important;
+    padding: 5px 0 10px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked) {
+    margin-bottom: 0 !important;
+    padding: 10px !important;
+    gap: 7px 9px !important;
+    border-radius: 14px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked) .hub-match-cell {
+    padding-top: 7px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table .hub-match {
+    gap: 8px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked) .hub-pick {
+    padding: 9px 10px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  /* Two-line KPI labels grow naturally rather than clipping. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi {
+    min-height: 88px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked) {
+    padding: 9px !important;
+    gap: 7px 8px !important;
+  }
+}
