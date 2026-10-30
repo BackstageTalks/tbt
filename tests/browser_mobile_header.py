@@ -119,6 +119,23 @@ def main():
                         assert all(0<=c['left']<c['right']<=390+1 for c in premium['cards']), premium
                         assert premium['confidenceBar'] == 'block', premium
                         assert float(premium['pickSize'].replace('px','')) >= 12, premium
+                        grid_fit = page.evaluate("""() => {
+                          const hub=document.querySelector('#dailyHub'),row=document.querySelector('#dailyHubBody tr:not(.hub-row-locked)');
+                          if(!hub || !row)return null;
+                          const previous=hub.dataset.tab;hub.dataset.tab='daily';
+                          const rect=selector=>{const node=row.querySelector(selector),r=node?.getBoundingClientRect();return r?{left:r.left,right:r.right,top:r.top,bottom:r.bottom}:null};
+                          const result={areas:getComputedStyle(row).gridTemplateAreas,
+                            pick:rect('.hub-pick'),odds:rect('.hub-odds'),
+                            confidence:rect('.hub-confidence-cell'),action:rect('.hub-action-cell')};
+                          if(previous === undefined)delete hub.dataset.tab;else hub.dataset.tab=previous;
+                          return result;
+                        }""")
+                        assert grid_fit and all(grid_fit[k] for k in ('pick','odds','confidence','action')),grid_fit
+                        assert 'pick pick number' in grid_fit['areas'],grid_fit
+                        assert abs(grid_fit['pick']['top']-grid_fit['odds']['top']) <= 2,grid_fit
+                        assert grid_fit['pick']['right'] <= grid_fit['odds']['left']+2,grid_fit
+                        assert grid_fit['odds']['right'] <= 391,grid_fit
+                        assert grid_fit['confidence']['top'] >= grid_fit['pick']['bottom']-2,grid_fit
                         if os.getenv('BLINQ_SCREENSHOTS'):
                             out = Path(os.environ['BLINQ_SCREENSHOTS'])
                             out.mkdir(parents=True, exist_ok=True)
