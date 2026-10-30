@@ -229,3 +229,47 @@ def test_checkpoint_remote_manifest_403_still_fails_closed(monkeypatch, tmp_path
     )
     with pytest.raises(RuntimeError, match="HTTP 403"):
         store._remote_bundle_files()
+
+
+def test_history_inventory_is_uploaded_after_parquets_and_before_checksum(
+    monkeypatch, tmp_path,
+):
+    """An interrupted parquet upload must not clobber history_manifest.json."""
+    from pathlib import Path
+    import pytest
+
+    store = _store_for_test(tmp_path)
+    store._remote_bundle_files = lambda: {}
+    parquet = tmp_path / "history-2026.parquet"
+    parquet.write_bytes(b"test parquet payload")
+    inventory = tmp_path / "history_manifest.json"
+    inventory.write_text('{"years": {"2026": {"asset": "history-2026.parquet"}}}')
+    progress = tmp_path / "download_progress.json"
+    progress.write_text('{"schema": 1}')
+    sent = []
+
+    def fake_gh(*args):
+        assert args[:2] == ("release", "upload")
+        names = [Path(p).name for p in args[3:args.index("--repo")]]
+        sent.append(names)
+        return ""
+
+    monkeypatch.setattr(release_store, "gh", fake_gh)
+    store.upload_bundle([parquet, inventory, progress])
+    assert sent == [
+        ["history-2026.parquet", "download_progress.json"],
+        ["history_manifest.json"],
+        ["_tbt_bundle_manifest.json"],
+    ]
+
+    sent.clear()
+
+    def failed_gh(*args):
+        names = [Path(p).name for p in args[3:args.index("--repo")]]
+        sent.append(names)
+        raise RuntimeError("GitHub CLI operation failed: HTTP 500")
+
+    monkeypatch.setattr(release_store, "gh", failed_gh)
+    with pytest.raises(RuntimeError, match="HTTP 500"):
+        store.upload_bundle([parquet, inventory, progress])
+    assert sent == [["history-2026.parquet", "download_progress.json"]]
