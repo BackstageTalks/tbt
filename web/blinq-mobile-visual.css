@@ -109,3 +109,12 @@
 @media(prefers-reduced-motion:reduce){
  body#blinqPremium#blinqPremium#blinqPremium #insightShortcut svg {animation:none!important;}
 }
+
+/* Readability follow-up: preserve geometry and status/access distinctions. */
+@media(max-width:900px){
+ body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked)>:is(.hub-time,.hub-tournament-cell,.hub-match-cell){background:transparent!important;}
+ body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-detail{background:#1c4d3e!important;border:1px solid #398367!important;color:#eafff5!important;font-weight:600!important;}
+ body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #insightShortcut.is-live-enabled:not(:disabled):not(.is-access-locked){color:#54e4b3!important;}
+ body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero-copy{padding:8px 18px!important;}
+ body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero-copy p{margin:4px 0 0!important;line-height:1.3!important;}
+}
