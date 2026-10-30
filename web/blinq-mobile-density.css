@@ -18,7 +18,7 @@
     height: auto !important;
     gap: 4px !important;
     padding: 9px 8px 8px !important;
-    border-radius: 12px !important;
+    border-radius: 14px !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi > div {
     gap: 5px !important;
