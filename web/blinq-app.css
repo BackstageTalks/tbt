@@ -10139,6 +10139,7 @@ body.blinq-compare .footer-system-dot{display:none}
 .admin-calibration-gates strong{border:1px solid #315169;border-radius:8px;min-width:26px;min-height:26px;display:grid;place-items:center}
 .admin-calibration-gates strong.is-good{background:#104938;color:#8affc5;border-color:#25785b}
 .admin-calibration-gates strong.is-pending{color:#a6b4c1}
+.admin-calibration-gates strong.is-worse{color:#ffaaaa;border-color:#805052;background:#39242b}
 .admin-calibration-foot{margin:13px 0 0;color:#8da5b5;font-size:11px;line-height:1.55}
 .admin-calibration-bottom{margin-top:13px;border:1px solid #25465a;border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;gap:15px;flex-wrap:wrap}
 .admin-calibration-bottom>div:first-child{display:grid;gap:3px}

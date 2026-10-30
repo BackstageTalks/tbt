@@ -5487,7 +5487,9 @@ function adminActivityRows(){
       wta_segment_regression:'Výsledok WTA nesplnil podmienky kvality.',
       atp_segment_regression:'Výsledok ATP nesplnil podmienky kvality.',
       holdout_not_independently_eligible:'Testovacie obdobie nie je nezávislé.',
-      unverified_champion_restore:'Obnova produkčného modelu nie je overená.'};
+      unverified_champion_restore:'Obnova produkčného modelu nie je overená.',
+      holdout_n_below_200:'Chýba dostatočný nezávislý offline holdout.',
+      missing_holdout_fingerprint:'Nie je doložený nezávislý offline testovací súbor.'};
     const outcome=training?.shadow_outcome;
     const outcomeText=outcome?.state==='SHADOW_BLOCKED'?'<p role="status"><strong>Model uložený, shadow neaktivovaný.</strong></p><ul>'+outcome.reasons.map(r=>'<li>'+escapeHtml(shadowReasons[r]||r)+'</li>').join('')+'</ul>':
       outcome?.state==='SHADOW_ACTIVE'?'<p role="status"><strong>Shadow aktivácia tohto tréningu bola overená.</strong> '+escapeHtml(outcome.candidate_tag)+'</p>':
@@ -5510,7 +5512,8 @@ function adminActivityRows(){
         ' · podanie '+n(c.serve)+' · return '+n(c.return)+' · break pointy '+n(c.break_points)+'</p>';
     };
     const shadowNow=state.adminCalibration?.candidate_active===true;
-    const shadowText=shadowNow?'Shadow kandidát beží; na produkciu nemá vplyv.':
+    const shadowText=shadowNow?
+      'Podľa posledného uloženého reportu je shadow kandidát aktívny; výsledky sa overujú samostatne. Produkcia sa nemení.':
       'Po úspešnom tréningu, offline porovnaní a kontrolách sa kandidát automaticky aktivuje iba v shadow režime.';
     return '<section class="admin-ux-section admin-model-lab" aria-label="BlinQ Model Factory">'+
       '<div class="admin-ux-heading"><div><small>MODEL FACTORY · 3 FÁZY</small><h2>Od dát po produkčný model</h2>'+
@@ -5540,7 +5543,7 @@ function adminActivityRows(){
       '<label>Model pre produkčný release <select id="admin-production-candidate" '+(canPromote?'':'disabled')+'>'+releaseOptions+'</select></label>'+
       '<button type="button" class="btn btn-primary" data-admin-action="model-factory-promote" '+(canPromote?'':'disabled')+'>Nasadiť s výnimkou kalibrácie</button>'+
       '<p role="status">Pred odoslaním potvrdíš presný model a dôvod. Worker overí obnovu championa a výsledný zápis; pri chybe obnoví pôvodný model. Nové predikcie použijú model pri najbližšom výpočte, staré sa neprepisujú.</p>'+
-      '<p><strong>Chýbajúce shadow podmienky:</strong></p>'+(missingShadow?'<ul>'+missingShadow+'</ul>':'<p>Základné shadow metriky splnené. Nasadenie ešte vyžaduje kontrolu TOP/VALUE, rollbacku a samostatné schválenie.</p>')+
+      '<p><strong>Shadow podmienky na posúdenie:</strong></p>'+(missingShadow?'<ul>'+missingShadow+'</ul>':'<p>Základné shadow metriky splnené. Nasadenie ešte vyžaduje kontrolu TOP/VALUE, rollbacku a samostatné schválenie.</p>')+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(canBuild?'':'disabled')+'>Vyhodnotiť shadow výsledky</button>'+
       '<p><strong>Posledný uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article></div>'+
       '<div class="admin-calibration-bottom"><div><strong>Rozpracovaná operácia</strong><span>'+activeText+'</span></div><div><strong>Posledná kontrola</strong><span>'+lastText+'</span></div></div>'+
@@ -5671,7 +5674,7 @@ function adminActivityRows(){
     const progress=(title,count,target,remaining,hint)=>{
       const valid=Number.isSafeInteger(count)&&Number.isSafeInteger(target)&&target>0;
       const filled=valid?Math.max(0,Math.min(100,100*count/target)):0;
-      return `<article class="admin-calibration-progress"><div class="admin-calibration-progress-head"><strong>${escapeHtml(title)}</strong><span>${numberOrDash(count)} / ${numberOrDash(target)}</span></div><div class="admin-calibration-track" role="progressbar" aria-label="${escapeHtml(title)}" aria-valuenow="${valid?count:0}" aria-valuemin="0" aria-valuemax="${valid?target:1}"><div style="width:${filled.toFixed(2)}%"></div></div><p>${escapeHtml(hint)} · Chýba <strong>${numberOrDash(remaining)}</strong></p></article>`;
+      return `<article class="admin-calibration-progress"><div class="admin-calibration-progress-head"><strong>${escapeHtml(title)}</strong><span>${numberOrDash(count)} / ${numberOrDash(target)}</span></div><div class="admin-calibration-track" role="progressbar" aria-label="${escapeHtml(title)}" aria-valuenow="${valid?Math.min(count,target):0}" aria-valuemin="0" aria-valuemax="${valid?target:1}"><div style="width:${filled.toFixed(2)}%"></div></div><p>${escapeHtml(hint)} · Chýba <strong>${numberOrDash(remaining)}</strong></p></article>`;
     };
     const card=(label,value,hint)=>`<article class="admin-calibration-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(hint)}</span></article>`;
     const metrics=[['Úspešnosť','accuracy'],['Log loss','log_loss'],['Brier score','brier_score'],['ECE kalibrácia','ece_10'],['ROC AUC','roc_auc']];
@@ -5686,11 +5689,21 @@ function adminActivityRows(){
     const decision=d.last_decision||{};
     const pairDecision=decision.same_pair===true;
     const shadowAwaitingPair=d.shadow_pair_state==='awaiting_new_pair';
+    const shadowVersion=String(d.candidate_version||'');
+    const shadow722=/^v7\.2\.2(?:-|$)/.test(shadowVersion);
+    const pendingShadow=Number.isSafeInteger(shadow.pending)?shadow.pending:0;
+    const settledShadow=Number.isSafeInteger(shadow.settled)?shadow.settled:0;
+    const capturedShadow=Number.isSafeInteger(shadow.captured)?shadow.captured:0;
+    const shadowReportAge=Date.now()-Date.parse(d.shadow_generated_at||'');
+    const reportStale=!Number.isFinite(shadowReportAge)||shadowReportAge>8*60*60*1000;
+    const anyStale=d.stale===true||reportStale;
     const status=shadowAwaitingPair?'Produkčný model aktivovaný · čaká sa na nový shadow pár':
       decision.status==='rejected'&&pairDecision?'Posledný kandidát zamietnutý':
-      gate.ready_for_promotion_review&&active?'Pripravený na odborné posúdenie':
+      gate.ready_for_promotion_review&&active&&!anyStale?'Pripravený na odborné posúdenie':
+      active&&anyStale?'Posledný známy stav: shadow testovanie':
+      active&&pendingShadow&&!settledShadow?'Shadow aktívny · čaká na výsledky zápasov':
       active?'V shadow testovaní': 'Čakáme na nový kandidátsky model';
-    const incomplete=!active||!Number(shadow.settled);
+    const incomplete=!active||settledShadow<Number(shadow.minimum_for_review||200)||Number(shadow.settled_utc_days||0)<3;
     // Separate untouched holdout is *not* an issued pre-match Shadow cohort.
     // Never replace the historical shadow candidate or its published metrics.
     const offline=d.offline_candidate;
@@ -5713,6 +5726,7 @@ function adminActivityRows(){
       &&String(offline.candidate_sha256)==='7ac60b0b671091a7f620cca80a7c558b417e20c9448f577878625447e565c141'
       &&String(offline.production_version||'')===String(d.production_version||''));
     const shadowModel711=model711&&String(d.candidate_version||'')===String(offline.candidate_version||'');
+    const shadowCandidateName=shadowModel711?'BlinQ 7.1.1':shadow722?'BlinQ 7.2.2':shadowVersion||'—';
     const newCandidateTitle=model711?'BlinQ 7.1.1':'Nový kandidát na aktuálnej CDB';
     const productionVersion=String(d.production_version||'');
     const productionName=/^v7\.2\.1(?:-|$)/.test(productionVersion)?'BlinQ 7.2.1':productionVersion||'—';
@@ -5733,36 +5747,40 @@ function adminActivityRows(){
         <p>Záloha tréningových vstupov: <code>${escapeHtml(String(offline.backup_tag||'—'))}</code></p>
         <p>GitHub tréning: <code>${escapeHtml(String(offline.run_id||'—'))}</code></p>
       </details>
-    </article>`:`<article class="admin-calibration-panel admin-calibration-empty"><h3>Ďalší model · čaká na vyhodnotenie</h3><p>Aktuálny champion je ${escapeHtml(productionName)}. Nový kandidát sa zobrazí až po nezávislom tréningu a overení holdoutu. Historické shadow porovnanie sa nezapočítava do nového páru.</p></article>`;
+    </article>`:active?`<article class="admin-calibration-panel admin-calibration-empty"><h3>${escapeHtml(shadowCandidateName)} · offline kvalita zatiaľ neoverená</h3><p>Kandidát ${escapeHtml(shadowVersion)} je v uloženom shadow páre, ale nemá dostupné nezávislé offline holdout porovnanie s aktuálnym championom. Tréning ani zachytené predzápasové snapshoty samy nepreukazujú zlepšenie modelu. Po vyhodnotení zápasov sa zobrazia výhradne skutočné výsledky tohto páru.</p></article>`:`<article class="admin-calibration-panel admin-calibration-empty"><h3>Ďalší model · čaká na vyhodnotenie</h3><p>Aktuálny champion je ${escapeHtml(productionName)}. Nový kandidát sa zobrazí až po nezávislom tréningu a overení holdoutu. Historické shadow porovnanie sa nezapočítava do nového páru.</p></article>`;
     return `<section class="admin-ux-section admin-calibration">${head}
-      <div class="admin-calibration-status${d.stale?' is-stale':''}" role="status"><strong>${escapeHtml(status)}</strong><span>${d.stale?'Údaje synchronizácie sú staršie než 8 hodín.':''} Synchronizácia: ${escapeHtml(fmtStamp(d.updated_at))} · Shadow report: ${escapeHtml(fmtStamp(d.shadow_generated_at))}</span></div>
+      <div class="admin-calibration-status${anyStale?' is-stale':''}" role="status"><strong>${escapeHtml(status)}</strong><span>${d.stale?'Synchronizácia z GitHubu je staršia než 8 hodín. ':''}${reportStale?'Zdrojový shadow report je starší než 8 hodín alebo nemá čas. ':''}Uložené v Azure: ${escapeHtml(fmtStamp(d.updated_at))} · Shadow report: ${escapeHtml(fmtStamp(d.shadow_generated_at))}. Tlačidlo Obnoviť načíta uložený stav, nie nové výsledky z GitHubu.</span></div>
       ${shadowAwaitingPair?'<p role="status" class="admin-calibration-foot">Produkčný model bol zmenený. Staré shadow metriky a počty predchádzajúceho páru sa nezapočítavajú do nového championa. Historický pár: '+escapeHtml(String(d.historical_shadow_pair?.production_version||'—'))+' / '+escapeHtml(String(d.historical_shadow_pair?.candidate_version||'—'))+'.</p>':''}
       <div class="admin-calibration-grid">
         ${card('Aktívny champion',productionName,productionHint)}
-        ${card('Nový kandidát',shadowModel711?'BlinQ 7.1.1':String(d.candidate_version||'—'),shadowModel711?'Shadow · ID: '+String(d.candidate_version):active?'Shadow – bez automatického nasadenia':'Čaká na vytvorenie')}
+        ${card('Nový kandidát',shadowCandidateName,active?'Shadow · ID: '+shadowVersion:'Čaká na vytvorenie')}
         ${card('Vyhodnotené v shadow',numberOrDash(shadow.settled),'z '+numberOrDash(shadow.captured)+' zaznamenaných')}
         ${card('Čakajú na výsledok',numberOrDash(shadow.pending),'Predzápasové nemenné snapshoty')}
       </div>
       <div class="admin-calibration-progress-grid">
-        ${progress('Shadow kandidát – cieľ pre sledovanie',shadow.settled,shadow.target_for_tracking,shadow.remaining_to_target,'Aktuálny presný pár modelov')}
-        ${progress('Nové nezávislé zápasy – cieľ pre ďalší tréning',unseen.eligible_rows,unseen.target_for_retrain,unseen.remaining_to_target,'Už raz použité zápasy sa nepočítajú')}
-        ${progress('Nové zápasy – minimum na prehodnotenie',unseen.eligible_rows,unseen.minimum_for_review,unseen.remaining_to_review,'Minimálne '+numberOrDash(shadow.minimum_for_review)+' shadow výsledkov a tri dni')}
+        ${progress('Shadow – zachytené predzápasové páry',shadow.captured,shadow.target_for_tracking,Number.isSafeInteger(shadow.target_for_tracking)?Math.max(0,shadow.target_for_tracking-capturedShadow):null,'Záznamy pred štartom; čakajúce ešte nie sú vyhodnotené')}
+        ${progress('Shadow – minimum vyhodnotených zápasov',shadow.settled,shadow.minimum_for_review,shadow.remaining_to_review,'Výsledky rovnakého páru modelov z aspoň 3 samostatných dní')}
+        ${progress('Nové nezávislé zápasy – ďalší tréning',unseen.eligible_rows,unseen.target_for_retrain,unseen.remaining_to_target,'Samostatný CDB audit; nepočíta sa ako shadow vyhodnotenie')}
       </div>
       <div class="admin-calibration-split">
         <article class="admin-calibration-panel"><h3>Nový model vs produkčný</h3>
           <p>Rovnaké zápasy, skutočné výsledky, zmrazené pravdepodobnosti pred štartom. Počet: ${numberOrDash(shadow.settled)} · dni: ${numberOrDash(shadow.settled_utc_days)}</p>
           ${shadowAwaitingPair?'<p class="admin-calibration-empty" role="status">Pre nový produkčný model zatiaľ neexistuje porovnateľná shadow vzorka. Staré metriky sú historické; nové budú dostupné po zachytení a vyhodnotení predzápasových predikcií.</p>':`<div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Metrika</th><th>Champion</th><th>Kandidát</th><th>Rozdiel</th></tr></thead><tbody>${rows}</tbody></table></div>`}
-          <p class="admin-calibration-foot">${incomplete?'Zatiaľ nie je dostatočná aktívna porovnateľná vzorka.':'Zelený rozdiel je lepší; pri log loss, Brier a ECE je lepšia nižšia hodnota.'} Žiadne automatické povýšenie modelu.</p>
+          <p class="admin-calibration-foot">${incomplete?'Na vyhodnotenie brány zatiaľ iba '+numberOrDash(settledShadow)+' uzavretých zápasov počas '+numberOrDash(shadow.settled_utc_days)+' dní; '+numberOrDash(pendingShadow)+' predzápasových snapshotov čaká na výsledok.':'Zelený rozdiel je lepší; pri log loss, Brier a ECE je lepšia nižšia hodnota.'} Žiadne automatické povýšenie modelu.</p>
         </article>
         <article class="admin-calibration-panel"><h3>Brána kalibrácie</h3><div class="admin-calibration-gates">
           ${[
-            ['200 vyhodnotených zápasov',gate.minimum_matches_met],
-            ['Aspoň 3 samostatné dni',gate.minimum_days_met],
-            ['Úspešnosť nie horšia',gate.accuracy_not_worse],
-            ['Lepší log loss',gate.log_loss_better],
-            ['Lepší Brier score',gate.brier_better],
-            ['ECE nie horšia',gate.ece_not_worse],
-          ].map(([label,pass])=>`<div><span>${escapeHtml(label)}</span><strong class="${pass?'is-good':'is-pending'}">${pass?'✓':'—'}</strong></div>`).join('')}
+            ['200 vyhodnotených zápasov',gate.minimum_matches_met,false],
+            ['Aspoň 3 samostatné dni',gate.minimum_days_met,false],
+            ['Úspešnosť nie horšia',gate.accuracy_not_worse,true],
+            ['Lepší log loss',gate.log_loss_better,true],
+            ['Lepší Brier score',gate.brier_better,true],
+            ['ECE nie horšia',gate.ece_not_worse,true],
+          ].map(([label,pass,metric])=>{
+            const assessed=metric&&gate.minimum_matches_met===true&&gate.minimum_days_met===true&&settledShadow>0;
+            const verdict=pass?'Splnené':assessed?'Nesplnené':metric?'Čaká na vzorku':'Čaká na výsledky';
+            return `<div><span>${escapeHtml(label)}</span><strong class="${pass?'is-good':assessed?'is-worse':'is-pending'}" title="${escapeHtml(verdict)}" aria-label="${escapeHtml(verdict)}">${pass?'✓':assessed?'✕':'Čaká'}</strong></div>`;
+          }).join('')}
         </div><p class="admin-calibration-foot">Audit nových zápasov: ${escapeHtml(fmtStamp(unseen.readiness_generated_at))}. ${unseen.available?'Cohort nezávislý od už spotrebovaných rozhodnutí.':'Pozor: audit nových zápasov zatiaľ nepatrí aktuálnemu championovi.'}</p></article>
       </div>
       ${offlinePanel}
@@ -5973,7 +5991,7 @@ function adminActivityRows(){
       const data=await BlinqAuth.adminModelCalibration();
       if(generation!==feedGeneration)return;
       state.adminCalibration=data;
-      if(force)showStatus('Kalibračné údaje z Azure obnovené.');
+      if(force)showStatus('Načítaný uložený kalibračný stav z Azure. Zdrojový GitHub report sa aktualizuje samostatne.');
     }catch(error){
       if(generation!==feedGeneration)return;
       state.adminCalibrationError=error?.status===503?'Čaká sa na prvú automatickú synchronizáciu z GitHubu':(error?.message||'Kalibračné API nie je dostupné');

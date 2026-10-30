@@ -133,7 +133,7 @@ class TestModelCalibrationStatus(unittest.TestCase):
         report = normalize_model_calibration_snapshot(fixture())
         self.assertEqual(report["shadow"]["settled"], 105)
         self.assertEqual(report["shadow"]["remaining_to_review"], 95)
-        self.assertEqual(report["shadow"]["remaining_to_target"], 895)
+        self.assertEqual(report["shadow"]["remaining_to_target"], 860)  # 1,000 - 140 captures, not 105 settlements
         self.assertEqual(report["unseen"]["eligible_rows"], 29)
         self.assertEqual(report["unseen"]["remaining_to_review"], 171)
         self.assertEqual(report["unseen"]["remaining_to_target"], 971)
@@ -261,8 +261,9 @@ def test_model_711_alias_keeps_unique_model_id_and_is_bound_to_verified_frozen_r
     # Both model areas use the public alias; IDs remain accessible in the audit.
     assert "const newCandidateTitle=model711?'BlinQ 7.1.1'" in ui
     assert "model711?'BlinQ 7.1.1':String(offline.candidate_version||'—')" in ui
-    assert "shadowModel711?'BlinQ 7.1.1':String(d.candidate_version||'—')" in ui
-    assert "shadowModel711?'Shadow · ID: '+String(d.candidate_version)" in ui
+    assert "const shadowCandidateName=shadowModel711?'BlinQ 7.1.1':shadow722?'BlinQ 7.2.2'" in ui
+    assert "card('Nový kandidát',shadowCandidateName" in ui
+    assert "active?'Shadow · ID: '+shadowVersion" in ui
     assert "<summary>Technický pôvod a audit modelu</summary>" in ui
     assert "<details class=\"admin-calibration-audit\">" in ui
     assert "Identifikátor modelu:" in ui

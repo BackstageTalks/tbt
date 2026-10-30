@@ -204,7 +204,9 @@ def normalize_model_calibration_snapshot(raw: object) -> dict:
             "remaining_to_review": max(
                 0, _nonnegative(cohort.get("minimum_for_review"), "minimum_for_review") - settled
             ),
-            "remaining_to_target": max(0, SHADOW_TARGET_MATCHES - settled),
+            # Tracking target counts captured immutable pre-match pairs; review
+            # minimum above counts only genuinely settled results.
+            "remaining_to_target": max(0, SHADOW_TARGET_MATCHES - captured),
             "production": _metric_row(shadow.get("production")),
             "candidate": _metric_row(shadow.get("challenger")),
             "gate": {
