@@ -388,15 +388,15 @@ body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) #dashboardKpis{
   }
 }
 
-/* Optional fourth KPI: restore an even three-card row and expand the mobile last tile. */
+/* Optional fourth KPI: restore the original three-across layout when disabled. */
 body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) #dashboardKpis[data-kpi-count="3"]{
   grid-template-columns:repeat(3,minmax(0,1fr))!important;
 }
 @media(max-width:1100px){
   body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) #dashboardKpis[data-kpi-count="3"]{
-    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) #dashboardKpis[data-kpi-count="3"]>.dashboard-kpi:last-child{
-    grid-column:1/-1!important;
+    grid-column:auto!important;
   }
 }

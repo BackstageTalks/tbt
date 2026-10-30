@@ -105,6 +105,7 @@ def test_optional_fourth_kpi_card_and_roi_caption_settings():
     assert "Zobraziť obdobie pod kartou" in app
     last = (ROOT / "web/blinq-mobile-unified-cards.css").read_text(encoding="utf-8")
     assert 'data-kpi-count="3"' in last
+    assert 'grid-template-columns:repeat(3,minmax(0,1fr))!important' in last
 
 
 def test_period_caption_is_configured_separately_per_card():
