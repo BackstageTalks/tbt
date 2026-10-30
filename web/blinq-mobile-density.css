@@ -10,7 +10,7 @@
   /* Three KPI values remain fully visible; trim only unused vertical space. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis {
     gap: 6px !important;
-    padding: 8px 10px !important;
+    padding: 8px 12px !important;
     margin-bottom: 4px !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi {
