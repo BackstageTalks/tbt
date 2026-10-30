@@ -189,7 +189,7 @@
   /* Existing admin-selected KPI icons and values — tighter editorial hierarchy. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis {
     grid-template-columns:repeat(3,minmax(0,1fr))!important;
-    gap:8px!important;padding:12px 10px!important;
+    gap:8px!important;padding:12px 12px!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi {
     box-sizing:border-box!important;min-width:0!important;min-height:104px!important;height:auto!important;
