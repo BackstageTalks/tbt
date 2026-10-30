@@ -132,11 +132,14 @@ def main():
                           return result;
                         }""")
                         assert grid_fit and all(grid_fit[k] for k in ('pick','odds','confidence','action')),grid_fit
-                        assert 'pick pick number' in grid_fit['areas'],grid_fit
-                        assert abs(grid_fit['pick']['top']-grid_fit['odds']['top']) <= 2,grid_fit
-                        assert grid_fit['pick']['right'] <= grid_fit['odds']['left']+2,grid_fit
+                        # Approved compact card: player/pick on left, confidence,
+                        # odds and Detail stacked vertically on the right.
+                        assert 'match confidence' in grid_fit['areas'],grid_fit
+                        assert 'pick action' in grid_fit['areas'],grid_fit
+                        assert grid_fit['pick']['right'] <= grid_fit['action']['left']+2,grid_fit
                         assert grid_fit['odds']['right'] <= 391,grid_fit
-                        assert grid_fit['confidence']['top'] >= grid_fit['pick']['bottom']-2,grid_fit
+                        assert grid_fit['confidence']['bottom'] <= grid_fit['odds']['top']+2,grid_fit
+                        assert grid_fit['odds']['bottom'] <= grid_fit['action']['top']+2,grid_fit
                         if os.getenv('BLINQ_SCREENSHOTS'):
                             out = Path(os.environ['BLINQ_SCREENSHOTS'])
                             out.mkdir(parents=True, exist_ok=True)
