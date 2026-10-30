@@ -78,6 +78,30 @@ def main():
                         assert hero_fit is not None, (width, 'missing banner title')
                         assert hero_fit['titleTop'] >= hero_fit['heroTop']-2, (width, hero_fit)
                         assert hero_fit['titleBottom'] <= hero_fit['heroBottom']+2, (width, hero_fit)
+                        premium = page.evaluate("""() => {
+                          const css=[...document.querySelectorAll('link[rel="stylesheet"]')].find(n=>n.href.includes('blinq-mobile-visual.css'));
+                          const k=document.querySelector('#dashboardKpis .dashboard-kpi');
+                          const row=document.querySelector('#dailyHub .daily-hub-table tbody tr:not(.hub-row-locked)');
+                          // Authenticated nav selection is mocked in this static fixture;
+                          // isolate its visual class without changing route/access behavior.
+                          const active=document.querySelector('#mobileTabs .active') || document.querySelector('#mobileTabs a');
+                          const wasActive=active?.classList.contains('active');
+                          if(active && !wasActive)active.classList.add('active');
+                          const navBg=active?getComputedStyle(active).backgroundImage:null;
+                          if(active && !wasActive)active.classList.remove('active');
+                          return {css:css?.href||'',kpiBg:k?getComputedStyle(k).backgroundImage:null,
+                            kpiAccent:k?getComputedStyle(k,'::before').backgroundImage:null,
+                            kpiRadius:k?getComputedStyle(k).borderRadius:null,
+                            kpiValueSize:k?.querySelector('strong')?getComputedStyle(k.querySelector('strong')).fontSize:null,
+                            rowBg:row?getComputedStyle(row).backgroundImage:null,navBg};
+                        }""")
+                        assert 'premium-detail=20261030' in premium['css'], premium
+                        assert premium['rowBg'] and 'rgb(20, 47, 38)' in premium['rowBg'], premium
+                        assert premium['navBg'] and 'rgb(26, 80, 61)' in premium['navBg'], premium
+                        assert premium['kpiBg'] and 'rgb(16, 38, 32)' in premium['kpiBg'], premium
+                        assert premium['kpiAccent'] and 'linear-gradient' in premium['kpiAccent'], premium
+                        assert premium['kpiRadius'] == '14px', premium
+                        assert 24 <= float(premium['kpiValueSize'].replace('px','')) <= 29, premium
                         if os.getenv('BLINQ_SCREENSHOTS'):
                             out = Path(os.environ['BLINQ_SCREENSHOTS'])
                             out.mkdir(parents=True, exist_ok=True)

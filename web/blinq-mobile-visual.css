@@ -118,3 +118,59 @@
  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero-copy{padding:8px 18px!important;}
  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero-copy p{margin:4px 0 0!important;line-height:1.3!important;}
 }
+
+/* Optical polish 2026-10-30: restrained material depth and information hierarchy.
+   No geometry, KPI, banner positioning, routes, permissions or loader changes. */
+@media(max-width:900px){
+  /* KPI: quiet obsidian/emerald material, not three bright outlined tiles. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi{
+    position:relative!important;overflow:hidden!important;
+    border-radius:14px!important;
+    background:radial-gradient(ellipse at 105% -10%,rgba(77,168,123,.11),transparent 64%),linear-gradient(155deg,#102620 0%,#081b18 100%)!important;
+    border:1px solid rgba(137,194,163,.12)!important;
+    box-shadow:inset 0 1px 0 rgba(237,255,246,.065),0 12px 27px rgba(0,0,0,.17)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi::before{
+    content:"";position:absolute;top:0;left:16px;width:32px;height:2px;pointer-events:none;
+    background:linear-gradient(90deg,rgba(85,228,167,.78),rgba(85,228,167,.16));border-radius:0 0 2px 2px;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi small{
+    color:#a8c4b7!important;letter-spacing:.055em!important;
+    font-weight:570!important;font-size:10px!important;line-height:1.4!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi strong{
+    font-variant-numeric:tabular-nums!important;
+    font-size:clamp(24px,6.4vw,28px)!important;font-weight:580!important;
+    letter-spacing:-.055em!important;line-height:1.1!important;
+    color:#f4faf6!important;text-shadow:none!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab.active{
+    background:linear-gradient(180deg,rgba(43,157,114,.105),rgba(21,76,57,.024))!important;
+    color:#f1fff8!important;
+    box-shadow:inset 0 1px 0 rgba(220,255,234,.055)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked){
+    background:linear-gradient(155deg,#142f26 0%,#0b241e 100%)!important;
+    border-color:rgba(145,205,171,.19)!important;
+    box-shadow:inset 0 1px 0 rgba(240,255,247,.055),0 11px 26px rgba(0,0,0,.14)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-pick{
+    background:linear-gradient(145deg,rgba(22,72,53,.97),rgba(16,55,42,.98))!important;
+    border-color:rgba(99,213,156,.19)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-pick-stack strong{
+    color:#f1fff6!important;font-weight:740!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-number-stack strong{
+    font-variant-numeric:tabular-nums!important;
+    color:#f1fff8!important;letter-spacing:-.025em!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-match-player.is-pick b{
+    color:#ebfff4!important;font-weight:730!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs :is(a,button).active{
+    background:linear-gradient(160deg,#1a503d,#113429)!important;
+    color:#7bf0bd!important;
+    box-shadow:inset 0 1px 0 rgba(220,255,236,.09),0 3px 11px rgba(0,0,0,.14)!important;
+  }
+}
