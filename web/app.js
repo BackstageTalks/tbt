@@ -5346,8 +5346,10 @@ function adminActivityRows(){
       return `<div class="admin-dashboard-slot${index===3&&!fourthEnabled?' is-hidden-public':''}">
         <strong>Karta ${index+1}${index===3&&!fourthEnabled?' · skrytá na stránke':''}</strong>
         <label><span>Ukazovateľ</span><select data-admin-kpi-index="${index}" data-admin-kpi-field="metric">${metricOptions}</select></label>
-        <label><span>Obdobie</span><select data-admin-kpi-index="${index}" data-admin-kpi-field="period" ${periods.length===1?'disabled':''}>${periodOptions}</select></label>
-        <label class="admin-inline-check"><input type="checkbox" data-admin-kpi-period-index="${index}" ${captionSettings[index]?'checked':''}> Zobraziť obdobie pod kartou</label>
+        <div class="admin-dashboard-period-field">
+          <label><span>Obdobie</span><select data-admin-kpi-index="${index}" data-admin-kpi-field="period" ${periods.length===1?'disabled':''}>${periodOptions}</select></label>
+          <label class="admin-kpi-period-toggle"><input type="checkbox" data-admin-kpi-period-index="${index}" ${captionSettings[index]?'checked':''}> Zobraziť obdobie pod kartou</label>
+        </div>
         <div class="admin-dashboard-slot-preview" aria-live="polite">
           <span>Náhľad hodnoty</span>
           <strong data-admin-kpi-preview="${index}">${escapeHtml(preview.text)}</strong>

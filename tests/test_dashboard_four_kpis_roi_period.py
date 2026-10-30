@@ -103,6 +103,8 @@ def test_optional_fourth_kpi_card_and_roi_caption_settings():
     assert "dashboardKpiCaptionSettings()" in app
     assert "effectivePeriod==='today'" in app
     assert "Zobraziť obdobie pod kartou" in app
+    assert 'class="admin-dashboard-period-field"' in app
+    assert 'class="admin-kpi-period-toggle"' in app
     last = (ROOT / "web/blinq-mobile-unified-cards.css").read_text(encoding="utf-8")
     assert 'data-kpi-count="3"' in last
     assert 'grid-template-columns:repeat(3,minmax(0,1fr))!important' in last

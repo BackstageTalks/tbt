@@ -10964,3 +10964,13 @@ body#blinqPremium:not(.blinq-admin) #dashboardKpis .dashboard-kpi p{
   body#blinqPremium:not(.blinq-admin) #dashboardKpis{gap:6px!important}
   body#blinqPremium:not(.blinq-admin) #dashboardKpis .dashboard-kpi{padding:10px 8px!important}
 }
+
+/* Independent KPI period checkboxes stay inside the period column; no fifth admin grid cell. */
+body#blinqPremium.blinq-admin .admin-dashboard-period-field{display:grid;gap:8px;min-width:0}
+body#blinqPremium.blinq-admin .admin-dashboard-slot .admin-kpi-period-toggle{
+  display:flex;align-items:center;gap:8px;min-width:0;
+  color:#b6d7c8;font-size:11px;line-height:1.35;font-weight:600;cursor:pointer;
+}
+body#blinqPremium.blinq-admin .admin-dashboard-slot .admin-kpi-period-toggle input[type="checkbox"]{
+  flex:none;width:16px;height:16px;min-width:16px;accent-color:#32dca1;cursor:pointer;
+}
