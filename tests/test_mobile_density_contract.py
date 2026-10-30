@@ -7,7 +7,7 @@ WEB = Path(__file__).resolve().parents[1] / "web"
 
 def test_density_css_loaded_after_mobile_visual():
     index = (WEB / "index.html").read_text(encoding="utf-8")
-    assert "/blinq-mobile-density.css?v=20261030-1" in index
+    assert "/blinq-mobile-density.css?v=7360&p=61&density=20261030-1" in index
     assert index.index("/blinq-mobile-visual.css?") < index.index("/blinq-mobile-density.css?")
 
 
