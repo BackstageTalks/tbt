@@ -5703,7 +5703,7 @@ function adminActivityRows(){
       active&&anyStale?'Posledný známy stav: shadow testovanie':
       active&&pendingShadow&&!settledShadow?'Shadow aktívny · čaká na výsledky zápasov':
       active?'V shadow testovaní': 'Čakáme na nový kandidátsky model';
-    const incomplete=!active||!settledShadow;
+    const incomplete=!active||settledShadow<Number(shadow.minimum_for_review||200)||Number(shadow.settled_utc_days||0)<3;
     // Separate untouched holdout is *not* an issued pre-match Shadow cohort.
     // Never replace the historical shadow candidate or its published metrics.
     const offline=d.offline_candidate;
@@ -5766,7 +5766,7 @@ function adminActivityRows(){
         <article class="admin-calibration-panel"><h3>Nový model vs produkčný</h3>
           <p>Rovnaké zápasy, skutočné výsledky, zmrazené pravdepodobnosti pred štartom. Počet: ${numberOrDash(shadow.settled)} · dni: ${numberOrDash(shadow.settled_utc_days)}</p>
           ${shadowAwaitingPair?'<p class="admin-calibration-empty" role="status">Pre nový produkčný model zatiaľ neexistuje porovnateľná shadow vzorka. Staré metriky sú historické; nové budú dostupné po zachytení a vyhodnotení predzápasových predikcií.</p>':`<div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Metrika</th><th>Champion</th><th>Kandidát</th><th>Rozdiel</th></tr></thead><tbody>${rows}</tbody></table></div>`}
-          <p class="admin-calibration-foot">${incomplete?'Zatiaľ bez vyhodnotených výsledkov tohto páru; '+numberOrDash(pendingShadow)+' predzápasových snapshotov čaká na výsledok.':'Zelený rozdiel je lepší; pri log loss, Brier a ECE je lepšia nižšia hodnota.'} Žiadne automatické povýšenie modelu.</p>
+          <p class="admin-calibration-foot">${incomplete?'Na vyhodnotenie brány zatiaľ iba '+numberOrDash(settledShadow)+' uzavretých zápasov počas '+numberOrDash(shadow.settled_utc_days)+' dní; '+numberOrDash(pendingShadow)+' predzápasových snapshotov čaká na výsledok.':'Zelený rozdiel je lepší; pri log loss, Brier a ECE je lepšia nižšia hodnota.'} Žiadne automatické povýšenie modelu.</p>
         </article>
         <article class="admin-calibration-panel"><h3>Brána kalibrácie</h3><div class="admin-calibration-gates">
           ${[
