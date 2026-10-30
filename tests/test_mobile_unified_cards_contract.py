@@ -7,7 +7,7 @@ INDEX=(WEB/"index.html").read_text(encoding="utf-8")
 CSS=(WEB/"blinq-mobile-unified-cards.css").read_text(encoding="utf-8")
 
 def test_mobile_card_styles_loaded_last_and_versioned():
-    assert '/blinq-mobile-unified-cards.css?v=7360&p=61&cards=20261030-1' in INDEX
+    assert '/blinq-mobile-unified-cards.css?v=7360&p=61&cards=20261030-2' in INDEX
     assert INDEX.index('blinq-mobile-density.css?') < INDEX.index('blinq-mobile-unified-cards.css?')
     assert '@media (max-width:600px)' in CSS
     assert ':not(.blinq-admin)' in CSS
@@ -33,3 +33,12 @@ def test_native_details_and_projection_evidence():
     assert '.hub-mobile-only {display:none!important;}' in CSS
     assert 'hub-seeall-model' in APP
     assert ':is(.hub-data-depth,.hub-seeall-confidence small) {display:none!important;}' in CSS
+
+
+def test_results_and_predictions_premium_surface_is_shared():
+    assert 'mobile premium feed v2' in CSS
+    assert '.results-table tbody tr.results-card-row' in CSS
+    assert '.hub-pick-stack small::before' in CSS
+    assert '.results-card-row .result-prediction strong' in CSS
+    assert 'result-loss' in CSS and 'result-void' in CSS
+    assert 'grid-template-areas:"date status"' in CSS
