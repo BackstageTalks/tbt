@@ -73,3 +73,178 @@
     gap: 7px 8px !important;
   }
 }
+
+/* Mobile premium refinement v2 — deliberate geometry change for TOP/VALUE only.
+   Keep the semantic cells, odds, permissions, locked rows and non-winner market
+   grids. Flatten surfaces, sharpen radii, and remove duplicate pick headings. */
+@media (max-width: 600px) {
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) {
+    --bq-si-bg: #071916;
+    --bq-si-panel: #0d231e;
+    --bq-si-mint: #76ddb7;
+    --bq-si-muted: #afc6bc;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi {
+    border-radius: 10px !important;
+    border-color: rgba(125, 189, 163, .21) !important;
+    background: linear-gradient(155deg, #112923, #091d19) !important;
+    box-shadow: inset 0 1px 0 rgba(235,255,245,.04), 0 3px 12px rgba(0,0,0,.09) !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi > span {
+    border-radius: 6px !important;
+    background: rgba(81,174,135,.08) !important;
+    border-color: rgba(105,192,153,.16) !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi strong {
+    color: #f3faf6 !important;
+  }
+
+  /* Crisp outer card, restrained petrol-green instead of several green layers. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked) {
+    border-radius: 10px !important;
+    border-color: rgba(115,180,153,.24) !important;
+    background: linear-gradient(155deg, #102621, #081b18) !important;
+    box-shadow: inset 0 1px 0 rgba(230,255,241,.025), 0 5px 16px rgba(0,0,0,.12) !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table .hub-match-player.is-pick b {
+    color: #f3faf6 !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub :is(.hub-pick,.hub-odds.hub-number-cell) {
+    border-radius: 7px !important;
+    border-color: rgba(95,175,144,.14) !important;
+    background: #112f27 !important;
+    box-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-pick {
+    border-left: 2px solid #69d7ad !important;
+  }
+  /* The table's auto-label 'PREDIKCIA' was appearing beside a separate
+     'TOP' and player name. One caption now owns the whole pick identity. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table td.hub-pick::before {
+    display: none !important;
+    content: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table .hub-pick-stack {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: flex-start !important;
+    gap: 5px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    text-align: left !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-pick-stack small {
+    display: block !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    letter-spacing: .085em !important;
+    line-height: 1.2 !important;
+    color: #8fb6a6 !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="daily"],[data-tab="value"]) .hub-pick-stack small::before {
+    content: "PREDIKCIA · " !important;
+    color: #789f90 !important;
+    font-weight: 600 !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-pick-stack strong {
+    color: #f3faf6 !important;
+    font-size: clamp(13px, 3.6vw, 15px) !important;
+    line-height: 1.28 !important;
+    font-weight: 750 !important;
+    max-width: 100% !important;
+    overflow-wrap: anywhere !important;
+    white-space: normal !important;
+    -webkit-line-clamp: unset !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-number-stack strong,
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-confidence strong {
+    color: #7be0b8 !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-confidence > i > b {
+    background: #72d8b0 !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-detail:not(.is-locked) {
+    min-height: 44px !important;
+    border-radius: 7px !important;
+    border-color: rgba(111,218,170,.58) !important;
+    background: #16473a !important;
+    color: #edfff6 !important;
+    box-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab.active::after {
+    height: 2px !important;
+    box-shadow: none !important;
+    background: #74dbb4 !important;
+  }
+
+  /* Align players against probability and odds; place the well-formed
+     prediction alongside Detail. Do not alter other market grid geometries. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+    #dailyHub:is([data-tab="daily"],[data-tab="value"])
+    .daily-hub-table tbody tr:not(.hub-row-locked) {
+    grid-template-columns: minmax(0, 1fr) minmax(90px, 30%) !important;
+    grid-template-areas: "tournament time" "match confidence" "match number" "pick action" !important;
+    gap: 8px 10px !important;
+    align-items: stretch !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+    #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-match-cell {
+    grid-area: match !important;
+    align-self: stretch !important;
+    display: flex !important;
+    align-items: center !important;
+    min-width: 0 !important;
+    padding-top: 7px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+    #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-pick {
+    grid-area: pick !important;
+    height: auto !important;
+    min-height: 53px !important;
+    align-self: stretch !important;
+    display: flex !important;
+    align-items: center !important;
+    padding: 9px 10px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+    #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-odds {
+    grid-area: number !important;
+    align-self: stretch !important;
+    padding: 7px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+    #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-confidence-cell {
+    grid-area: confidence !important;
+    justify-self: stretch !important;
+    align-self: stretch !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 7px 8px !important;
+    background: #102e26 !important;
+    border: 1px solid rgba(95,175,144,.14) !important;
+    border-radius: 7px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+    #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-confidence > i {
+    width: 100% !important;
+    max-width: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+    #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-action-cell {
+    grid-area: action !important;
+    align-self: stretch !important;
+    justify-self: stretch !important;
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+    #dailyHub:is([data-tab="daily"],[data-tab="value"]) .daily-hub-table tbody tr:not(.hub-row-locked) .hub-action-cell .hub-detail:not(.is-locked) {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    height: auto !important;
+    align-self: stretch !important;
+  }
+}
