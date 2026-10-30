@@ -256,6 +256,32 @@ jobs:
           if now >= cutoff - timedelta(minutes=4):
               print("Less than 4 minutes until provider cutoff; no dispatch")
               sys.exit(0)
+          # Paid-data preflight: never dispatch a downloader against an incomplete
+          # canonical release. This uses GitHub metadata only (zero RapidAPI calls).
+          release = get_json(
+              "https://api.github.com/repos/BackstageTalks/tbt-data/releases/tags/tbt-data-v1",
+              TOKEN,
+          )
+          assets = release.get("assets")
+          if not isinstance(assets, list) or len(assets) >= 100:
+              raise SystemExit("History release inventory unavailable/incomplete; no paid dispatch")
+          asset_names = {str(a.get("name")) for a in assets
+                         if isinstance(a, dict) and a.get("state") == "uploaded"}
+          history_present = any(
+              name.startswith("history-") and name.endswith(".parquet")
+              for name in asset_names
+          )
+          if (not history_present
+                  or "history_manifest.json" not in asset_names
+                  or "_tbt_bundle_manifest.json" not in asset_names):
+              raise SystemExit(
+                  "History release preflight blocked paid dispatch: "
+                  "missing history partitions, history_manifest.json, "
+                  "or checksum bundle; run history-manifest-repair / "
+                  "history-integrity-repair and verify read-back first"
+              )
+          print("History release asset presence preflight passed; "
+                "downloader will still validate checksums before paid calls.", flush=True)
           last_complete = local.date() - timedelta(days=1)
           payload = {
               "ref": "main",
