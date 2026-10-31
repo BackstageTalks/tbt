@@ -1,0 +1,77 @@
+name: CDB restore exactly missing 2022/2023 from frozen private backup
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/cdb-restore-missing-2022-2023.yml
+      - scripts/restore_cdb_missing_2022_2023.py
+      - tests/test_restore_cdb_missing_2022_2023.py
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/cdb-restore-missing-2022-2023.yml
+      - scripts/restore_cdb_missing_2022_2023.py
+      - tests/test_restore_cdb_missing_2022_2023.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cdb-frozen-year-restoration-20221031
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline fail-closed SHA and inventory regression tests
+        run: |
+          set -euo pipefail
+          python -m unittest discover -v -s tests -p test_restore_cdb_missing_2022_2023.py
+          python -m py_compile scripts/restore_cdb_missing_2022_2023.py
+
+  restore:
+    needs: contract
+    if: >-
+      github.repository == 'BackstageTalks/tbt' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[cdb-restore-2022-2023-20261031]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: BackstageTalks/tbt-data
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Confirm private writer eligibility
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view BackstageTalks/tbt-data --json visibility -q .visibility)" = PRIVATE
+          python -m pip install --disable-pip-version-check pyarrow pandas
+      - name: Acquire existing global CDB single-writer lock
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 0
+      - name: Reconcile only absent historical assets and independently read back all years
+        run: |
+          set -euo pipefail
+          python scripts/restore_cdb_missing_2022_2023.py
+      - name: Release only this run's verified writer lock
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
+      - name: Remove private data from ephemeral runner
+        if: always()
+        run: rm -rf .cache/tbt/restore-cdb-2022-2023
