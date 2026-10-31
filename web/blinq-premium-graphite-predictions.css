@@ -164,112 +164,148 @@
 }
 
 /*
- * Premium Graphite v2 — editorial card architecture.
- * Deliberately NOT a dark recolor of nested tiles.
- * Keep the existing mobile grid, spacing, font sizes, accessible controls,
- * calculations, status colors and membership gates exactly as they are.
+ * Premium Graphite — approved reference (31 Oct 2026).
+ * Faithful to the original visual card: #10191C matte graphite,
+ * #2B3839 hairline, #ECF3EF primary copy, #65CDA4 accent.
+ * One flat card; no green neon tiles, gradients or glow.
+ * Existing markup, placement, market grids, data, permissions and tap
+ * targets stay unchanged. Restricted to mobile Predictions only.
  */
 @media (max-width: 600px) {
-  /* No giant frame surrounding a second row of framed match cards. */
+  /* Keep a clean stage around the cards; no second framed panel. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #predictionsView #dailyHub {
     background: transparent !important;
+    background-image: none !important;
     border: 0 !important;
     box-shadow: none !important;
   }
 
-  /* KPI is a single matte surface. The pictogram is not another tile. */
+  /* KPI and prediction cards share exactly the reference surface. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
-  #predictionsView #dashboardKpis .dashboard-kpi {
-    background: #151F23 !important;
-    border: 1px solid rgba(175,193,193,.22) !important;
-    border-radius: 10px !important;
+  #predictionsView #dashboardKpis .dashboard-kpi,
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked) {
+    background: #10191C !important;
+    background-image: none !important;
+    border: 1px solid #2B3839 !important;
+    border-radius: 11px !important;
     box-shadow: none !important;
+    filter: none !important;
   }
+
+  /* No tiny glowing KPI tile inside a second tile. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #predictionsView #dashboardKpis .dashboard-kpi > span {
     background: transparent !important;
-    border: 0 !important;
+    background-image: none !important;
+    border-color: transparent !important;
     box-shadow: none !important;
   }
 
-  /* Tabs become a navigation line, instead of a pill inside a framed tray. */
+  /* Preserve the tab interaction, remove its old green pill/tray. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #predictionsView #dailyHub .daily-tabs-row {
     background: transparent !important;
+    background-image: none !important;
     border: 0 !important;
-    border-bottom: 1px solid var(--bq-graphite-line) !important;
+    border-bottom: 1px solid #2B3839 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
   }
-
-  /* Match data lives on ONE softly elevated graphite sheet. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
-  #predictionsView #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked) {
-    background: #151F23 !important;
+  #predictionsView #dailyHub .daily-hub-tab:is(:hover,.active) {
+    background: transparent !important;
     background-image: none !important;
-    border: 1px solid rgba(175,193,193,.22) !important;
-    border-radius: 10px !important;
+    box-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .daily-hub-tab.active::after {
+    background: #65CDA4 !important;
+    box-shadow: none !important;
+  }
+
+  /* Header has one thin separation; existing tournament and match stay put. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .daily-hub-table :is(.hub-tournament-cell,.hub-time,.hub-match-cell) {
+    background: transparent !important;
+    background-image: none !important;
     box-shadow: none !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #predictionsView #dailyHub .daily-hub-table .hub-match-cell {
-    background: transparent !important;
-    border-top: 1px solid var(--bq-graphite-line) !important;
-    box-shadow: none !important;
+    border-top: 1px solid #2B3839 !important;
   }
 
-  /* The pick is an editorial text section with a hairline, NOT a box. */
+  /* Data are typography and hairline separators, never inset green boxes. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #predictionsView #dailyHub .daily-hub-table .hub-pick {
     background: transparent !important;
     background-image: none !important;
     border: 0 !important;
-    border-top: 1px solid var(--bq-graphite-line) !important;
+    border-top: 1px solid #2B3839 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
   }
-
-  /* Confidence and odds form the quiet right-hand typographic rail. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
-  #predictionsView #dailyHub .daily-hub-table .hub-confidence-cell,
-  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
-  #predictionsView #dailyHub .daily-hub-table .hub-odds:nth-child(6) {
+  #predictionsView #dailyHub .daily-hub-table :is(.hub-confidence-cell,.hub-odds:nth-child(6)) {
     background: transparent !important;
     background-image: none !important;
     border: 0 !important;
-    border-left: 1px solid var(--bq-graphite-line) !important;
+    border-left: 1px solid #2B3839 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
   }
-
-  /* TOP/VALUE places confidence beneath the selection, not in the rail. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #predictionsView #dailyHub:is([data-tab="daily"],[data-tab="value"])
   .daily-hub-table .hub-confidence-cell {
     border-left: 0 !important;
-    border-top: 1px solid var(--bq-graphite-line) !important;
+    border-top: 1px solid #2B3839 !important;
   }
-
-  /* Specialized projections are rows of information, not green subcards. */
+  /* The projection on special markets remains a value, not a green tile. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #predictionsView #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
   .daily-hub-table tbody tr:not(.hub-row-locked) > td:nth-child(7) {
     background: transparent !important;
+    background-image: none !important;
     border: 0 !important;
-    border-top: 1px solid var(--bq-graphite-line) !important;
+    border-top: 1px solid #2B3839 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
   }
 
-  /* Detail is the one intentionally inset, clearly interactive element. */
+  /* Sample's quiet typography — mint only for confidence and active cue. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub :is(.hub-pick-stack small,.hub-number-stack small,
+    .hub-tournament-copy small,.hub-time small,.hub-confidence-cell::before) {
+    color: #A8B8B1 !important;
+    text-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub :is(.hub-pick-stack strong,.hub-number-stack strong,
+    .hub-tournament-copy > b,.hub-match-player-main b) {
+    color: #ECF3EF !important;
+    text-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .hub-confidence strong {
+    color: #65CDA4 !important;
+    text-shadow: none !important;
+  }
+
+  /* Detail is the one subtle inset, exactly like the provided sample. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #predictionsView #dailyHub .hub-detail:not(.is-locked) {
-    background: var(--bq-graphite-inset) !important;
+    background: #1B2A29 !important;
     background-image: none !important;
-    border: 1px solid #38524C !important;
+    border: 1px solid #334B44 !important;
     border-radius: 8px !important;
-    color: var(--bq-graphite-copy) !important;
+    color: #ECF3EF !important;
     box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .hub-detail:not(.is-locked):hover {
+    background: #263735 !important;
   }
 }
