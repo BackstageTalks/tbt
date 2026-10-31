@@ -230,13 +230,14 @@ def test_combined_scorecard_daily_win_loss_void_pending_and_roi():
     assert abs(out["profit_units"]-0.6)<1e-9
     message=out["text"]
     assert message.count("📅")==0  # date lives inside the Results title
-    assert "WIN 2 | ❌ LOSS 1 | 🟪 VOID 1 | ⏳ PENDING 1" in message
-    assert "Úspešnosť 66.7%" in message
-    assert "Zisk +0.60u" in message
-    assert "ROI +20.0%" in message
-    assert "TOP · WIN 1 | LOSS 0 | VOID 1" in message
-    assert "VALUE · WIN 0 | LOSS 1" in message
-    assert "ACES · WIN 1 | LOSS 0 | VOID 0 | PENDING 1" in message
+    assert ("✅ WIN 2 | ❌ LOSS 1\n"
+            "🟪 VOID 1 | ⏳ PENDING 1\n"
+            "🎯 Úspešnosť 66.7%\n"
+            "💰 Zisk +0.60u | 📈 ROI +20.0%") in message
+    assert "📊 Denný súhrn" not in message
+    assert "TOP · WIN" not in message
+    assert "VALUE · WIN" not in message
+    assert "ACES · WIN" not in message
     assert "by BlinQ Stat Engine" in message
     assert tg.telegram_link_entities(message)[0]["url"] == tg.BRAND_URL
     assert "🅃 Surname | 1.80 | +0.80u ✅" in message
