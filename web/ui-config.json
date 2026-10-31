@@ -9,7 +9,8 @@
     "include_started": false,
     "show_probability": true,
     "show_odds": true,
-    "footer": "BlinQ · Tennis Intelligence"
+    "free_top_pick": true,
+    "footer": "ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine"
   },
   "plans": {
     "trial": {
