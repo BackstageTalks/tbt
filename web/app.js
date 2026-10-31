@@ -1304,14 +1304,7 @@
   function filtered(){ const rows=rankedPredictions(),tour=$('tourFilter')?.value||'',tournament=$('tournamentFilter')?.value||'',surface=$('surfaceFilter')?.value||'',confidence=$('confidenceFilter')?.value||'',q=($('searchInput')?.value||'').trim().toLowerCase(); return rows.filter(m=>{ if(tour&&m.tour!==tour)return false;if(tournament&&m.tournament!==tournament)return false;if(surface&&m.surface!==surface)return false;if(confidence&&m.confidence!==confidence)return false;if(q&&!`${m.p1} ${m.p2} ${m.tournament}`.toLowerCase().includes(q))return false;return true; }); }
 
   function authenticLiveProjection(row){
-    // An upcoming projection is a bet only if a corresponding bookmaker
-    // market was actually priced and frozen before publication. Historical
-    // result illustrations and confidence-derived estimates are NOT quotes.
-    const odds=row?.odds==null?NaN:Number(row.odds);
-    return row?.price_status==='priced_projection'
-      &&Number.isFinite(odds)&&odds>=1.50
-      &&Number.isInteger(Number(row?.provider_id))&&Number(row.provider_id)>0
-      &&Boolean(row?.captured_at);
+    return Number.isFinite(verifiedProjectionOdds(row));
   }
   function marketRows(key){
     // TOP200 has been retired. Old feed data must not recreate active picks.
@@ -2725,39 +2718,37 @@
     dialog.classList.remove('ace-projection-dialog');dialog.classList.add('sg-projection-dialog');
     if(!dialog.open)dialog.showModal();
   }
-  // Results-only normalization for legacy Aces / Double Faults rows whose
-  // archived prices are not trustworthy. Current/live cards NEVER use this.
-  // Once the new real-odds API writes the explicit verified contract marker,
-  // that real quote is shown instead. Ledger/ROI/Units remain untouched.
-  function aceDfLegacyResultDisplayOdds(row){
-    const realApiContract=String(row?.odds_contract_version||'')==='ace_df_real_api_v1';
-    const realApiOdds=row?.odds==null?NaN:Number(row.odds);
-    if(realApiContract&&Number.isFinite(realApiOdds)&&realApiOdds>1)return NaN;
-    const market=String(row?.market||row?.projection_metric||'').toLowerCase();
-    if(!['aces','double_faults'].includes(market))return NaN;
-    const identity=[
-      row?.event_id||row?.match_id||row?.id||'',
-      market,
-      row?.publication_key||row?.selection_key||'',
-      row?.selection_id||row?.selection||row?.pick||'',
-      row?.issued_at||row?.scheduled_at||row?.date||''
-    ].join('|');
-    if(!identity.replaceAll('|',''))return NaN;
-    let hash=2166136261;
-    for(let i=0;i<identity.length;i++){
-      hash^=identity.charCodeAt(i);
-      hash=Math.imul(hash,16777619);
+  // A quote is usable only when its independently tradable pre-match market
+  // can be traced to API Pro or a valid PropLine sportsbook. No fantasy
+  // pick'em prices or historical illustrative 1.50–1.70 values enter ROI.
+  function verifiedProjectionOdds(row){
+    const market=String(row?.market||row?.projection_metric||'').trim().toLowerCase();
+    if(!['aces','double_faults','games','sets'].includes(market))return NaN;
+    const odds=row?.odds==null?NaN:Number(row.odds);
+    const provider=Number(row?.provider_id);
+    if(row?.price_status!=='priced_projection'||!Number.isFinite(odds)||odds<1.50||
+      !Number.isInteger(provider)||provider<1||!row?.captured_at)return NaN;
+    const source=String(row?.odds_source||'').trim().toLowerCase();
+    if(market==='aces'||market==='double_faults'){
+      const contract=String(row?.price_contract||'').trim().toLowerCase();
+      if(!['player_superiority','player_total_ou'].includes(contract))return NaN;
+      if(contract==='player_total_ou'){
+        const side=String(row?.ou_side||'').trim().toLowerCase();
+        const line=Number(row?.market_line);
+        if(!['under','over'].includes(side)||!Number.isFinite(line)||line<0)return NaN;
+      }
     }
-    const step=(hash>>>0)%21;
-    return Math.round((1.50+step/100)*100)/100;
+    if(source==='rapidapi')return provider===1?odds:NaN;
+    if(source==='propline'&&provider===2){
+      const book=String(row?.odds_bookmaker||'').trim().toLowerCase();
+      if(!book||/^(prize\s*picks|prizepicks|underdog\s+fantasy)(\b|$)/.test(book))return NaN;
+      return odds;
+    }
+    return NaN;
   }
   function aceDfResultKpiOdds(publication){
     const market=String(publication?.market||publication?.projection_metric||'').toLowerCase();
-    if(!['aces','double_faults'].includes(market))return NaN;
-    const realApi=String(publication?.odds_contract_version||'')==='ace_df_real_api_v1';
-    const actual=publication?.odds==null?NaN:Number(publication.odds);
-    if(realApi&&Number.isFinite(actual)&&actual>1)return actual;
-    return aceDfLegacyResultDisplayOdds(publication);
+    return ['aces','double_faults'].includes(market)?verifiedProjectionOdds(publication):NaN;
   }
 
   // Indicative display quote on the EXACT published projection contract,
@@ -2776,8 +2767,8 @@
     return Math.round(Math.max(1.05,Math.min(2.50,1/(p*1.055)))*100)/100;
   }
   function projectionOddsHtml(row){
-    const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
-    const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
+    const odds=verifiedProjectionOdds(row);
+    const realOddsText=Number.isFinite(odds)?odds.toFixed(2):'—';
     if(authenticLiveProjection(row))return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
     // Current ACES/DF/GAMES/SETS never receive a synthetic display price.
     // Until a verified provider quote exists, show N/A.
@@ -3659,21 +3650,14 @@
     return [...unique.values()].sort((a,b)=>new Date(b.row?.scheduled_at||0)-new Date(a.row?.scheduled_at||0));
   }
   function resultVisibleOdds(publication){
-    const actual=publication?.odds==null?NaN:Number(publication.odds);
-    if(Number.isFinite(actual)&&actual>1)return actual;
-    const synthetic=publication?.historical_display_placeholder_odds==null?NaN:Number(publication.historical_display_placeholder_odds);
-    if(publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
-      &&Number.isFinite(synthetic)&&synthetic>=1.50&&synthetic<=1.70)return synthetic;
-    return projectionIndicativeOdds(publication);
+    return verifiedProjectionOdds(publication);
   }
   function resultVisibleUnits(publication,outcome,odds){
+    if(!Number.isFinite(odds)||odds<1.50)return NaN;
     if(outcome.kind==='void')return 0;
     const stake=publication?.result?.staked_units==null?NaN:Number(publication.result.staked_units);
     const profit=publication?.result?.profit_units==null?NaN:Number(publication.result.profit_units);
-    if(Number.isFinite(stake)&&stake>0&&Number.isFinite(profit))return profit;
-    if(Number.isFinite(odds)&&odds>1&&['win','loss'].includes(outcome.kind))
-      return outcome.kind==='win'?odds-1:-1;
-    return NaN;
+    return Number.isFinite(stake)&&stake>0&&Number.isFinite(profit)?profit:NaN;
   }
   function localResultMetrics(rows,category,filters=null){
     const entries=settledPublishedEntries(rows,category,filters);
@@ -3686,17 +3670,17 @@
     const aceDfCategory=!filters?.membership&&(category==='ace'||category==='double_faults');
     let stake=0,profit=0,oddsTotal=0,oddsSample=0,unitSample=0,roiOddsSum=0,roiOddCount=0,ledgerDiscrepancies=0;
     for(const {publication} of graded){
-      // ACES/DF Results use the same normalized-or-real quote shown in the table.
-      // This is a 1u display performance calculation and does not rewrite ledger settlement.
+      // Never calculate Aces/DF ROI from illustrative prices or fantasy pick'em.
+      // Only a settled, independently priced market contributes actual units.
       if(aceDfCategory){
         const displayOdds=aceDfResultKpiOdds(publication);
-        if(!Number.isFinite(displayOdds)||displayOdds<=1)continue;
-        const outcome=publicationOutcome(publication);
-        const units=outcome.kind==='win'?displayOdds-1:-1;
+        const realStake=publication?.result?.staked_units==null?NaN:Number(publication.result.staked_units);
+        const realProfit=publication?.result?.profit_units==null?NaN:Number(publication.result.profit_units);
+        if(!Number.isFinite(displayOdds)||!Number.isFinite(realStake)||realStake<=0||!Number.isFinite(realProfit))continue;
         oddsTotal+=displayOdds;
         oddsSample++;
         stake+=1;
-        profit+=units;
+        profit+=realProfit;
         unitSample++;
         roiOddsSum+=displayOdds;
         roiOddCount++;
@@ -3706,11 +3690,11 @@
       // Filtered Results compare every settled quoted pick on the same 1u basis.
       // profit_units is already the displayed unit result; legacy staked_units can
       // carry a different scale (for example 100) and must not dilute filter ROI.
-      const actualOdds=publication?.odds==null?NaN:Number(publication.odds);
-      const status=String(publication?.price_status||'').trim().toLowerCase();
       const market=String(publication?.market||'').trim().toLowerCase();
       const projectionMarket=['aces','double_faults','sets','games'].includes(market);
-      const priced=projectionMarket?status==='priced_projection':['','priced','priced_projection'].includes(status);
+      const status=String(publication?.price_status||'').trim().toLowerCase();
+      const actualOdds=projectionMarket?verifiedProjectionOdds(publication):(publication?.odds==null?NaN:Number(publication.odds));
+      const priced=projectionMarket?Number.isFinite(actualOdds):['','priced','priced_projection'].includes(status);
       if(!priced||!Number.isFinite(actualOdds)||actualOdds<=1)continue;
       oddsTotal+=actualOdds;
       oddsSample++;
@@ -3794,26 +3778,11 @@
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
         const displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
-        const projectionOdds=publication?.odds==null?NaN:Number(publication?.odds),projectionUnits=publication?.result?.profit_units==null?NaN:Number(publication?.result?.profit_units);
-        const estimatedProjectionOdds=Number.isFinite(projectionOdds)&&projectionOdds>1?NaN:projectionIndicativeOdds(publication);
-        const realProjectionOddsText=Number.isFinite(projectionOdds)&&projectionOdds>1?projectionOdds.toFixed(2):'—';
-        // Historic backfills are deliberately NON-QUOTE illustrations. Never
-        // mistake the unrelated 1.50–1.70 filler for model EV or bookmaker odds.
-        const placeholderRaw=publication?.historical_display_placeholder_odds;
-        const placeholderOdds=placeholderRaw==null?NaN:Number(placeholderRaw);
-        const illustrativeOnly=publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
-          &&Number.isFinite(placeholderOdds)&&placeholderOdds>=1.50&&placeholderOdds<=1.70;
-        const temporaryAceDfOdds=aceDfLegacyResultDisplayOdds(publication);
-        const displayedProjectionOdds=Number.isFinite(temporaryAceDfOdds)?temporaryAceDfOdds.toFixed(2):
-          realProjectionOddsText!=='—'?realProjectionOddsText:
-          illustrativeOnly?placeholderOdds.toFixed(2):
-          Number.isFinite(estimatedProjectionOdds)?estimatedProjectionOdds.toFixed(2):'—';
-        // Historical display-only prices can fill the visible Units cell,
-        // but never become a settled stake, ledger profit, or genuine ROI.
-        const aceDfKpiOdds=aceDfResultKpiOdds(publication);
-        const displayUnits=Number.isFinite(aceDfKpiOdds)
-          ?(outcome.kind==='void'?0:outcome.kind==='win'?aceDfKpiOdds-1:outcome.kind==='loss'?-1:NaN)
-          :resultVisibleUnits(publication,outcome,resultVisibleOdds(publication));
+        const realProjectionOdds=verifiedProjectionOdds(publication);
+        const displayedProjectionOdds=Number.isFinite(realProjectionOdds)?realProjectionOdds.toFixed(2):'—';
+        // Model-derived and historical synthetic prices never appear as quotes
+        // or contribute monetary units, even for a settled W/L prediction.
+        const displayUnits=resultVisibleUnits(publication,outcome,realProjectionOdds);
         const unitsText=Number.isFinite(displayUnits)?
           `${displayUnits>0?'+':''}${displayUnits.toFixed(2)}u`:'—';
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
@@ -7257,8 +7226,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
       [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
-      ['ROI',m.roi==null?'—':pct(m.roi),m.aceDfNormalizedKpis?lcopy('1u result ROI from normalized legacy / real API odds','1u výsledkové ROI z normalizovaných historických / reálnych API kurzov','1u výsledkové ROI z normalizovaných historických / reálných API kurzů'):lcopy('1u per settled pick with a real quote','1u na každý vyhodnotený tip s reálnym kurzom','1u na každý vyhodnocený tip s reálným kurzem')],
-      [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',m.aceDfNormalizedKpis?lcopy('1u per settled Aces/DF pick','1u na každý vyhodnotený pick ESÁ/DF','1u na každý vyhodnocený tip ESA/DF'):lcopy('settled profit','vyhodnotený zisk','vyhodnocený zisk')],
+      ['ROI',m.roi==null?'—':pct(m.roi),lcopy('1u per settled pick with a verified market quote','1u na každý vyhodnotený tip s overeným trhovým kurzom','1u na každý vyhodnocený tip s ověřeným tržním kurzem')],
+      [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',lcopy('verified settled profit only','iba overený vyhodnotený zisk','pouze ověřený vyhodnocený zisk')],
       [publicText('Sample'),sampleValue,sampleNote],
     ]);
   }
