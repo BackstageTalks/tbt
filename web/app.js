@@ -2075,6 +2075,37 @@
   function orderedResultCategories(){
     return ['all',...orderedDailyHubTabs().map(tab=>RESULT_CATEGORY_BY_TAB[tab]).filter(Boolean)];
   }
+  function availableResultCategories(){
+    const order=orderedResultCategories();
+    if(isAdminAccount()&&!state.previewPlan)return order;
+    // Admin tier preview uses its configured draft rules; real members use only
+    // the server-authorized categories returned in their personal feed.
+    if(isAdminAccount()&&state.previewPlan){
+      const hub=dailyHubConfig();
+      return ['all',...orderedDailyHubTabs().filter(tab=>{
+        const cfg=hub.tabs?.[tab]||{},rule=dailyHubRuleForPlan(tab);
+        const display=String(rule.display_state||((rule.tab_enabled===false)?'hidden':'active')).toLowerCase();
+        const visible=rule.visible_rows??0,overrides=rule.row_overrides||{};
+        return cfg.enabled!==false&&rule.tab_enabled!==false&&display==='active'
+          &&(String(visible).toUpperCase()==='ALL'||Number(visible)>0
+            ||Object.values(overrides).some(value=>String(value).toLowerCase()==='active'));
+      }).map(tab=>RESULT_CATEGORY_BY_TAB[tab]).filter(Boolean)];
+    }
+    const allowed=new Set(Array.isArray(state.feed?.entitlements?.result_categories)
+      ?state.feed.entitlements.result_categories:[]);
+    return order.filter(value=>value==='all'||allowed.has(value));
+  }
+  function normalizedResultsCategory(value){
+    const allowed=new Set(availableResultCategories().filter(value=>value!=='all'));
+    const selected=[...new Set(String(value||'all').split(',').filter(value=>allowed.has(value)))];
+    return selected.length?selected.join(','):'all';
+  }
+  function authorizedResultPublication(publication){
+    if(isAdminAccount()&&!state.previewPlan)return true;
+    const market=String(publication?.market||'').trim().toLowerCase();
+    const category=market==='aces'?'ace':['double_faults','sets','games'].includes(market)?market:String(publication?.section||'').trim().toLowerCase();
+    return availableResultCategories().includes(category);
+  }
   function moveDailyHubTab(source,target){
     const order=orderedDailyHubTabs(),from=order.indexOf(source),to=order.indexOf(target);
     if(from<0||to<0||from===to)return false;
@@ -3442,14 +3473,15 @@
   }
   function filteredResults(filtersOverride=null){
     const filters=filtersOverride||state.resultsFilters||{},now=Date.now();
+    const category=normalizedResultsCategory(filters.category||'all');
     const todayKeys=String(filters?.window||'all')==='today'?currentBettingDayPublishedKeys(now):null;
     return (state.feed.results||[]).filter(row=>{
       if(filters.tour&&String(row?.tour||'').toUpperCase()!==filters.tour)return false;
       // "All surfaces" really means all settled published rows. Unknown/missing
       // surface metadata must never hide a valid historical result.
       if(filters.surface){const raw=String(row?.surface||'').toLowerCase();const mapped=raw==='indoor_hard'?'hard':raw;if(mapped!==filters.surface)return false;}
-      const category=filters.category||'all';
       const pubs=publicResultPublications(row)
+        .filter(authorizedResultPublication)
         .filter(p=>resultPublicationMatchesWindow(row,p,filters,now,todayKeys))
         .filter(p=>publicationOutcome(p).kind!=='pending');
       if(!pubs.length)return false;
@@ -3478,6 +3510,8 @@
   function shortRangeDate(value){const parts=String(value||'').split('-');return parts.length===3?`${Number(parts[2])}. ${Number(parts[1])}. ${parts[0].slice(-2)}`:'—';}
   function renderResultsFilters(){
     const rows=state.feed.results||[],filters=state.resultsFilters||{},hours=resultsHistoryHours();
+    filters.category=normalizedResultsCategory(filters.category||'all');
+    const resultCategories=availableResultCategories();
     const tours=[...new Set(rows.map(r=>String(r?.tour||'').toUpperCase()).filter(Boolean))].sort();
     const surfaces=[...new Set(rows.map(r=>{const v=String(r?.surface||'').toLowerCase();return v==='indoor_hard'?'hard':v;}).filter(v=>v&&v!=='unknown'))].sort();
     const option=(value,label,selected)=>`<option value="${escapeHtml(value)}"${value===selected?' selected':''}>${escapeHtml(label)}</option>`;
@@ -3499,7 +3533,7 @@
         <span class="results-mobile-filter-current">${escapeHtml(mobileFilterLabel)}<i aria-hidden="true"></i></span>
       </button>
       <div class="results-filter-bar results-filter-bar-v683">
-      <div class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory" class="results-category-compat">${orderedResultCategories().map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><details class="results-category-picker"><summary>${escapeHtml(resultCategoryLabel(filters.category||'all'))}</summary><div class="results-category-options">${orderedResultCategories().map(v=>`<label><input type="checkbox" data-result-category="${v}" ${String(filters.category||'all').split(',').includes(v)?'checked':''}><span>${escapeHtml(resultCategoryLabel(v))}</span></label>`).join('')}</div></details></span></div>
+      <div class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory" class="results-category-compat">${resultCategories.map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><details class="results-category-picker"><summary>${escapeHtml(resultCategoryLabel(filters.category||'all'))}</summary><div class="results-category-options">${resultCategories.map(v=>`<label><input type="checkbox" data-result-category="${v}" ${String(filters.category||'all').split(',').includes(v)?'checked':''}><span>${escapeHtml(resultCategoryLabel(v))}</span></label>`).join('')}</div></details></span></div>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow">${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
@@ -3583,6 +3617,11 @@
   }
   function statsHaveExcludedMarkets(){return statsExcludedSections().size>0;}
   function settledPublishedEntries(rows,category='all',filters=null,statsOnly=false){
+    // The internal Admin KPI "winners" cohort is not a user-selectable Results
+    // category. Do not normalize it to "all", which mixes projection results
+    // into winner ROI. Member-facing filters remain strictly allowlisted.
+    if(!(isAdminAccount()&&!state.previewPlan&&!filters&&category==='winners'))
+      category=normalizedResultsCategory(category);
     const specific=String(category).includes(',')||['top200','prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
     const unique=new Map();
     const cohort=memberResultCohort(filters?.membership);
@@ -3591,6 +3630,7 @@
     const excluded=statsOnly?statsExcludedSections():null;
     (rows||[]).forEach(row=>{
       const pubs=publicResultPublications(row)
+        .filter(authorizedResultPublication)
         .filter(p=>!filters||resultPublicationMatchesWindow(row,p,filters,now,todayKeys))
         .filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category))
         // Exclude opted-out categories only for STATS, before deduplication;
@@ -3892,6 +3932,7 @@
         const chosen=new Set(checked.filter(value=>value!=='all'));
         state.resultsFilters.category=chosen.size?[...chosen].join(','):'all';
       }
+      state.resultsFilters.category=normalizedResultsCategory(state.resultsFilters.category);
       refreshCategoryResults();
     });
     [['resultsCategory','category'],['resultsTour','tour'],['resultsSurface','surface']].forEach(([id,key])=>{const el=$(id);if(el)el.onchange=()=>{state.resultsFilters[key]=el.value;rerender();};});
@@ -7183,7 +7224,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   function renderDashboardResultsPreview(){
     const host=$('resultsPreviewContent');if(!host)return;
     const filters={category:'all',tour:'',surface:'',window:'today',dateFrom:'',dateTo:'',bettingDay:true};
-    const rows=filteredResults(filters),m=localResultMetrics(rows,'all',filters),total=statsHaveExcludedMarkets()?null:todayPublishedPickCount();
+    const allCategories=availableResultCategories().length===orderedResultCategories().length;
+    const rows=filteredResults(filters),m=localResultMetrics(rows,'all',filters),total=statsHaveExcludedMarkets()||!allCategories?null:todayPublishedPickCount();
     host.innerHTML=`<div class="results-preview-metrics"><span><small>${escapeHtml(publicText('Record'))}</small><strong>${m.wins}-${m.losses}</strong></span><span><small>${escapeHtml(publicText('Hit rate'))}</small><strong>${m.hit==null?'—':pct(m.hit)}</strong></span><span><small>ROI</small><strong>${m.roi==null?'—':pct(m.roi)}</strong></span><span><small>${escapeHtml(publicText('Units'))}</small><strong>${m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—'}</strong></span></div>`;
     const progress=total==null?`${m.sample}`:`${m.sample}/${total}`;
     const progressText=lcopy(`${progress} settled today`,`${progress} vyhodnotených dnes`,`${progress} vyhodnocených dnes`);
@@ -7201,7 +7243,9 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       &&filters.dateFrom===currentDay&&(filters.dateTo||filters.dateFrom)===currentDay
       &&!filters.tour&&!filters.surface;
     const todayTotal=(filters.window==='today'||exactCurrentBettingDay)
-      &&category==='all'&&!statsHaveExcludedMarkets()?todayPublishedPickCount(filters.membership):null;
+      &&category==='all'&&!statsHaveExcludedMarkets()
+      &&availableResultCategories().length===orderedResultCategories().length
+        ?todayPublishedPickCount(filters.membership):null;
     const sampleValue=todayTotal==null?String(m.sample):`${m.sample}/${todayTotal}`;
     const memberName=filters.membership?String(filters.membership).toUpperCase():'';
     const sampleNote=todayTotal==null
