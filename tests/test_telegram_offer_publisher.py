@@ -448,3 +448,74 @@ def test_full_offer_reserves_every_exact_publication_for_daily_results(tmp_path,
     assert len(selected)==25
     assert [sum(x["channel"]==section for x in selected) for section in ("top","value","aces")]==[17,5,3]
     assert len(tg.load(out/"messages.json"))>=1
+
+
+def test_aces_odds_never_fall_back_to_match_winner_or_unpriced_quote():
+    cfg=settings()
+    card=row(601,"Taylor Fritz","aces")
+    card.update(
+        price_status="projection_only", price_contract="player_total_ou",
+        ou_side="under", market_line=19.5, odds=2.0,
+        betting={"odds":1.45,"selection_id":"p1"},
+    )
+    assert tg.fmt(card,"aces",cfg).endswith(" | —")
+    assert tg.result_reference(card,"aces")["odds"] is None
+
+    # An explicitly priced player O/U row can still use its own real price,
+    # never a stale winner price in the embedded betting payload.
+    card.update(price_status="priced_projection",odds=1.87)
+    assert tg.fmt(card,"aces",cfg).endswith(" | 1.87")
+    assert tg.result_reference(card,"aces")["odds"] == 1.87
+
+
+def test_aces_quote_and_receipt_require_exact_issued_line_and_price():
+    cfg=settings()
+    card=row(602,"Daniil Medvedev","aces")
+    card.update(
+        price_status="priced_projection",price_contract="player_total_ou",
+        ou_side="under",market_line=12.5,odds=1.91,
+        betting={"odds":2.00,"selection_id":"p1"},
+    )
+    pub={
+        "section":"ace","market":"aces","selection_id":"p1",
+        "publication_key":"ace:602:p1:under:12.5",
+        "price_status":"priced_projection","price_contract":"player_total_ou",
+        "ou_side":"under","market_line":12.5,"odds":1.91,
+    }
+    other={**pub,"publication_key":"ace:602:p1:under:19.5",
+           "market_line":19.5,"odds":2.00}
+    card["market_publications"]=[other,pub]
+    assert tg.fmt(card,"aces",cfg).endswith(" | 1.91")
+    sent=tg.result_reference(card,"aces")
+    assert sent["odds"]==1.91
+    assert sent["publication_key"]=="ace:602:p1:under:12.5"
+    assert sent["market_line"]==12.5
+    assert sent["projection_direction"]=="under"
+
+    # A different player total (even if it has the same selection ID) cannot
+    # provide the quote or the frozen publication key.
+    card["market_publications"]=[other]
+    assert tg.fmt(card,"aces",cfg).endswith(" | —")
+    sent=tg.result_reference(card,"aces")
+    assert sent["odds"] is None and sent["publication_key"]==""
+
+    # A contradictory publication/row price is never silently replaced by
+    # the unrelated betting.odds=2.00.
+    card["market_publications"]=[{**pub,"odds":1.79}]
+    assert tg.fmt(card,"aces",cfg).endswith(" | —")
+    assert tg.result_reference(card,"aces")["odds"] is None
+    card["market_publications"]=[{**pub,"price_status":"projection_only"}]
+    assert tg.fmt(card,"aces",cfg).endswith(" | —")
+    assert tg.result_reference(card,"aces")["odds"] is None
+
+
+def test_different_aces_lines_for_same_player_are_not_silently_deduplicated():
+    card=row(603,"Alexander Zverev","aces")
+    card.update(price_status="priced_projection",price_contract="player_total_ou",
+                ou_side="under",market_line=14.5,odds=1.92)
+    other={**card,"market_line":15.5,"odds":1.85}
+    sample=offer()
+    sample["ace_picks"]=[card,other]
+    selected=tg.select_groups(sample,settings(free_top_pick=False),NOW)
+    assert len(selected["aces"])==2
+    assert [r["market_line"] for r in selected["aces"]]==[14.5,15.5]
