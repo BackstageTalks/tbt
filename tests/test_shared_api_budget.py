@@ -63,7 +63,7 @@ def test_absolute_provider_hard_stop_between_1707_and_1710():
     _, result = shared_budget.calculate(None, "live", 1,
                                         now=datetime(2026, 9, 27, 17, 10, tzinfo=timezone.utc))
     assert result["global_spent"] == 1
-    assert result["global_remaining"] == 14699
+    assert result["global_remaining"] == 14499
 
 
 @pytest.mark.parametrize("day", [(2026, 9, 27), (2026, 10, 25)])
@@ -76,7 +76,7 @@ def test_provider_day_resets_at_1709_utc(day):
 
     ledger, result = shared_budget.calculate(ledger, "refresh", 1000, now=at_reset)
     assert result["global_spent"] == 1000
-    assert result["global_remaining"] == 13700
+    assert result["global_remaining"] == 13500
     assert result["window"] == "provider_day_17_09_utc"
 
 
@@ -400,7 +400,7 @@ def test_live_and_batch_workflows_enforce_identical_daily_limits():
     data = (root / ".github/workflows/data.yml").read_text()
     history = (root / ".github/workflows/player-enrichment.yml").read_text()
     assert "budget['global_spent'] <= 14500 == budget['global_limit']" in live
-    assert "budget['reserved_provider_headroom'] == 300" in live
+    assert "budget['reserved_provider_headroom'] == 500" in live
     assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'" in data
     assert "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'" in history
     assert "unset BLINQ_SHARED_API_BUDGET_URL" not in data
