@@ -2,6 +2,7 @@
    Scope: visual boundary only. Preserve the managed banner's copy, crop,
    click targets, carousel behavior and per-device heights. */
 body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardHero {
+  margin-top: 12px !important;
   position: relative !important;
   box-sizing: border-box !important;
   overflow: hidden !important;
