@@ -39,36 +39,56 @@ def _timestamp(value):
         return None
 
 
-def _priced(pub, result):
-    """Only an issued, real quoted 1u wager may affect ROI."""
+def _issued_odds(pub):
+    """A frozen bookmaker quote can be displayed even when the bet was void."""
+    import math
     try:
         quote = float(pub.get("odds"))
-        stake = float(result.get("staked_units"))
-        profit = float(result.get("profit_units"))
     except (TypeError, ValueError):
-        return None, None
-    import math
-    if not all(map(math.isfinite, (quote, stake, profit))):
-        return None, None
-    if quote <= 1 or stake <= 0:
-        return None, None
+        return None
+    if not math.isfinite(quote) or quote <= 1:
+        return None
     market = str(pub.get("market") or "").lower()
     price = str(pub.get("price_status") or "").lower()
     if market in {"aces", "double_faults", "sets", "games"}:
         if price != "priced_projection":
-            return None, None
+            return None
     elif price not in ("", "priced", "priced_projection"):
+        return None
+    return quote
+
+
+def _priced(pub, result):
+    """Only a genuinely staked and quoted settled wager can affect ROI."""
+    import math
+    if _issued_odds(pub) is None:
+        return None, None
+    try:
+        stake = float(result.get("staked_units"))
+        profit = float(result.get("profit_units"))
+    except (TypeError, ValueError):
+        return None, None
+    if not math.isfinite(stake) or not math.isfinite(profit) or stake <= 0:
         return None, None
     return stake, profit
 
 
 def _selection(row, pub):
     target = str(pub.get("selection_id") or pub.get("winner_id") or "").strip()
+    name = ""
     for key in ("player1", "player2"):
         player = row.get(key) if isinstance(row.get(key), dict) else {}
         if str(player.get("id") or "") == target and player.get("name"):
-            return str(player["name"])
-    return str(pub.get("selection") or pub.get("pick") or target).strip()
+            name = str(player["name"]).strip()
+            break
+    if not name:
+        name = str(pub.get("selection") or pub.get("pick") or target).strip()
+    if str(pub.get("market") or "").lower() == "aces" and name:
+        side = str(pub.get("ou_side") or "").lower()
+        line = pub.get("market_line")
+        if side in ("over", "under") and line not in (None, ""):
+            return name + " (" + side.title() + " " + str(line) + " esá)"
+    return name
 
 
 def report_rows(feed: dict, archive: list, exclusions: set, target_day: str) -> dict:
@@ -117,7 +137,7 @@ def report_rows(feed: dict, archive: list, exclusions: set, target_day: str) -> 
                 "scheduled_at": scheduled.isoformat(),
                 "selection": _selection(row, pub),
                 "status": outcome,
-                "odds": pub.get("odds") if stake is not None else None,
+                "odds": _issued_odds(pub),
                 "stake": stake, "profit": profit,
             }
             existing = seen.get(identity)
