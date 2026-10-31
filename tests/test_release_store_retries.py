@@ -239,6 +239,9 @@ def test_history_inventory_is_uploaded_after_parquets_and_before_checksum(
     import pytest
 
     store = _store_for_test(tmp_path)
+    # This legacy batching test applies to unrelated reports releases.
+    # Canonical CDB and serving predictions use guarded staged replacement.
+    store.tag = "tbt-reports-v1"
     store._remote_bundle_files = lambda: {}
     parquet = tmp_path / "history-2026.parquet"
     parquet.write_bytes(b"test parquet payload")

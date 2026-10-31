@@ -320,6 +320,20 @@ jobs:
           if [[ "$MODE" != provider-probe ]]; then
             test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
           fi
+          # A failed GitHub release upload must not leave the serving feed
+          # or immutable issuance ledger broken. Recover under the existing
+          # tbt-production-deploy job group before any paid provider calls.
+          if [[ "$MODE" == refresh || "$MODE" == current-refresh || "$MODE" == results-rebuild || "$MODE" == deploy-current ]]; then
+            python scripts/ensure_prediction_release.py --data-repository "$TBT_DATA_REPOSITORY"
+          fi
+          # Under the existing CDB global lock, recover a committed/rollback
+          # release generation before touching paid API quota. This is a no-op
+          # for healthy releases and uses the existing audited legacy repair.
+          case "$MODE" in
+            history|statistics|extras|identity|refresh|current-refresh|results-rebuild|mega-data|ace-statistics|sg-scores)
+              python scripts/ensure_cdb_history_release.py --data-repository "$TBT_DATA_REPOSITORY"
+              ;;
+          esac
           # Writer runs start from a physically clean canonical release. The repair
           # is a no-op when history is already clean and rewrites only affected years.
           if [[ "$MODE" == history || "$MODE" == statistics || "$MODE" == extras || "$MODE" == identity ]]; then
@@ -690,6 +704,21 @@ jobs:
           name: blinq-history-repair-${{ github.run_id }}
           path: .cache/tbt/history-repair-all/history_repair_report.json
           if-no-files-found: ignore
+
+      - name: Preserve paid-provider history on failed checkpoint
+        if: ${{ failure() && (env.MODE == 'history' || env.MODE == 'statistics' || env.MODE == 'extras' || env.MODE == 'identity') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-uncommitted-private-history-${{ github.run_id }}
+          path: |
+            .cache/tbt/history/history-*.parquet
+            .cache/tbt/history/history_manifest.json
+            .cache/tbt/history/download_progress.json
+            .cache/tbt/history/download_report.json
+            .cache/tbt/history/history_provider_quarantine.json
+            .cache/tbt/history/statistics_expected.json
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Upload history/statistics run report
         if: ${{ always() && (env.MODE == 'history' || env.MODE == 'statistics' || env.MODE == 'extras' || env.MODE == 'identity') }}

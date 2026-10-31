@@ -4,6 +4,7 @@ import argparse
 import json
 import re
 import subprocess
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -105,15 +106,26 @@ def main() -> None:
             raise ValueError(
                 f"Upload output must be named exactly {BUNDLE_MANIFEST}"
             )
-        result = subprocess.run(
-            [
-                "gh", "release", "upload", args.tag, str(out),
-                "--repo", args.repository, "--clobber",
-            ],
-            capture_output=True, text=True, check=False,
-        )
-        if result.returncode:
-            raise RuntimeError(result.stderr.strip()[:500])
+        if args.repository == "BackstageTalks/tbt-data" and args.tag == "tbt-data-v1":
+            # The generic checksum repair must not bypass the CDB lock or
+            # repeat the 2026-10-30 destructive manifest --clobber incident.
+            from cdb_global_writer_lock import verify
+            from release_store import ReleaseStore
+            verify(args.repository, Path(".cdb-global-writer-lock.json"))
+            store = ReleaseStore(args.repository, args.tag, out.parent)
+            swap = store._guarded_publish(out, uuid.uuid4().hex)
+            if swap is not None:
+                store._cleanup_guarded([swap])
+        else:
+            result = subprocess.run(
+                [
+                    "gh", "release", "upload", args.tag, str(out),
+                    "--repo", args.repository, "--clobber",
+                ],
+                capture_output=True, text=True, check=False,
+            )
+            if result.returncode:
+                raise RuntimeError(result.stderr.strip()[:500])
 
     print(json.dumps({
         "repository": args.repository,

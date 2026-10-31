@@ -12,6 +12,7 @@ import json
 import os
 import re
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -111,7 +112,16 @@ def repair_bundle_manifest(store: release_store.ReleaseStore) -> dict:
             encoding="utf-8",
         )
         temporary_manifest.replace(manifest_path)
-        store.upload([manifest_path])
+        # Maintenance must not reintroduce the incident through a bare
+        # --clobber on the only committed checksum manifest.
+        if store.repository == "BackstageTalks/tbt-data" and store.tag == "tbt-data-v1":
+            from cdb_global_writer_lock import verify
+            verify(store.repository, Path(".cdb-global-writer-lock.json"))
+            swap = store._guarded_publish(manifest_path, uuid.uuid4().hex)
+            if swap is not None:
+                store._cleanup_guarded([swap])
+        else:
+            store.upload([manifest_path])
         return manifest
 
 
