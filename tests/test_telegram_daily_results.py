@@ -107,12 +107,79 @@ def test_prepare_results_is_idempotently_reserved_without_provider_calls(tmp_pat
     assert out["attempts"]["results:"+DAY]["status"]=="reserved"
     messages=tg.load(tmp_path/"out"/"messages.json")
     assert len(messages)==1 and "ROI +80.0%" in messages[0]["text"]
+    assert messages[0]["audience"]=="elite"
+    assert "🆓 FREE" not in messages[0]["text"]
     # Once the reservation is committed, repeated cron ticks do not re-post.
     tg.save(path,out)
     (tmp_path/"out"/"ready").unlink()
     r.prepare(args)
     assert not (tmp_path/"out"/"ready").exists()
 
+
+
+
+def test_settle_current_day_immediately_after_last_result_without_waiting_for_0600(tmp_path,monkeypatch,capsys):
+    # 31 Oct 19:00 Bratislava: result is eligible the same evening.
+    now=datetime(2026,10,31,18,0,tzinfo=timezone.utc)
+    rows=[sent("top","top-1"),sent("value","value-1"),sent("aces","aces-1"),
+          sent("free","top-1")]
+    state={"schema":1,"attempts":{DAY+":daily:0620":{
+        "status":"sent","rows":rows,"message_ids":[701,702]}}}
+    path=tmp_path/"ledger.json";tg.save(path,state)
+    monkeypatch.setattr(tg,"config",lambda *_:{"enabled":True,"results_enabled":True})
+    available=[settled(rows[0],True),settled(rows[1],False)]
+    calls=[]
+    def get_archive(url,day):
+        calls.append(day)
+        return list(available)
+    monkeypatch.setattr(r,"archive",get_archive)
+    args=SimpleNamespace(now=now.isoformat(),config_url="none",api_url="none",
+                         state=str(path),output=str(tmp_path/"out"),external_tick=False)
+    # First reconciliation sees only two settled market decisions: no TG send.
+    r.prepare(args)
+    waiting=capsys.readouterr().out
+    assert "issued_picks_not_all_settled" in waiting
+    assert not (tmp_path/"out"/"ready").exists()
+    assert tg.load(path)==state  # no premature reservation, ledger unchanged
+    # Final match finished, but Aces stats are still pending: still no send.
+    available.append(settled(rows[2],True,price_status="projection_only"))
+    r.prepare(args)
+    out=capsys.readouterr().out
+    assert "reserved" in out
+    assert (tmp_path/"out"/"ready").exists()
+    posted=tg.load(tmp_path/"out"/"messages.json")
+    assert len(posted)==1 and posted[0]["audience"]=="elite"
+    assert "ROI" in posted[0]["text"] and "⏳ PENDING" in posted[0]["text"]
+    assert "PENDING 0" in posted[0]["text"]
+    assert all(x==DAY for x in calls)
+    # Newly reserved result cannot be published a second time.
+    tg.save(path,tg.load(tmp_path/"out"/"state.json"))
+    (tmp_path/"out"/"ready").unlink()
+    r.prepare(args)
+    assert not (tmp_path/"out"/"ready").exists()
+
+
+def test_current_day_prefers_unsettled_yesterday_only_when_published(tmp_path,monkeypatch):
+    today="2026-11-01"
+    now=datetime(2026,11,1,8,0,tzinfo=timezone.utc)  # after 06:00 local
+    old=sent()
+    current=dict(old,event_id="new-1",scheduled_at="2026-11-01T09:30:00+00:00")
+    ledger={"attempts":{
+      DAY+":daily:0620":{"status":"sent","message_ids":[1],"rows":[old]},
+      today+":daily:0620":{"status":"sent","message_ids":[2],"rows":[current]}}}
+    assert r.unreported_day(ledger,now)==DAY
+    ledger["attempts"]["results:"+DAY]={"status":"sent","message_ids":[3]}
+    assert r.unreported_day(ledger,now)==today
+    ledger["attempts"]["results:"+today]={"status":"reserved"}
+    assert r.unreported_day(ledger,now) is None
+
+
+def test_missing_provider_result_never_grades_pending_as_loss():
+    samples=[sent("top","a"),sent("aces","b")]
+    first=settled(samples[0],False)
+    assert not r.all_settled(samples,[first])
+    assert r.evaluate(samples[1],[first])["status"]=="pending"
+    assert r.all_settled(samples,[first,settled(samples[1],True)])
 
 def test_results_use_aces_label_and_linkable_stat_engine_footer():
     sample=sent("aces","match-aces",None)
