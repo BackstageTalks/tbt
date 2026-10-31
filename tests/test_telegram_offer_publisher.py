@@ -207,3 +207,44 @@ def test_telegram_send_post_contains_real_link_entities(monkeypatch, tmp_path):
     posted_entities = json.loads(seen[0]["entities"][0])
     assert posted_entities == tg.telegram_link_entities(seen[0]["text"][0])
     assert "parse_mode" not in seen[0]  # untrusted players never parsed as HTML
+
+
+
+def test_full_offer_has_no_hidden_top_value_aces_cap_and_paginate():
+    sample=offer()
+    sample["top_daily_picks"]=[row(i,f"Top Surname{i}") for i in range(1,75)]
+    sample["value_picks"]=[row(100+i,f"Value Person{i}") for i in range(1,27)]
+    sample["ace_picks"]=[row(200+i,f"Aces Server{i}","aces") for i in range(1,28)]
+    cfg=settings(max_per_section=0,free_top_pick=False)
+    out=tg.messages(sample,cfg,NOW)
+    assert len(out)>=2
+    assert all(item["audience"]=="premium" for item in out)
+    assert all(len(item["text"].encode("utf-16-le"))//2<=4096 for item in out)
+    lines="\n".join(x["text"] for x in out)
+    for ident in ("Surname1 |", "Surname74 |", "Person1 |", "Person26 |", "Server1 |", "Server27 |"):
+        assert lines.count(ident)==1
+    assert lines.index("Surname74 |")<lines.index("Person1 |")<lines.index("Server1 |")
+    assert lines.count("📅") == len(out)
+
+
+def test_full_offer_reserves_every_exact_publication_for_daily_results(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    sample=offer()
+    sample["top_daily_picks"]=[row(i,f"Top Player{i}") for i in range(1,18)]
+    sample["value_picks"]=[row(100+i,f"Value Person{i}") for i in range(1,6)]
+    sample["ace_picks"]=[row(200+i,f"Aces Server{i}","aces") for i in range(1,4)]
+    cfg=settings(max_per_section=0,free_top_pick=False)
+    cfg["schedule"]["enabled"]=False
+    cfg["manual_request"]={"id":"fullsend001","created_at":NOW.isoformat()}
+    monkeypatch.setattr(tg,"config",lambda *_: cfg)
+    monkeypatch.setattr(tg,"snapshot",lambda *_:sample)
+    out=tmp_path/"out"
+    tg.prepare(SimpleNamespace(now=NOW.isoformat(),state=str(tmp_path/"state.json"),
+                               output=str(out),config_url="https://test.invalid/api/v1/ui-config"))
+    state=tg.load(out/"state.json")
+    attempts=list(state["attempts"].values())
+    assert len(attempts)==1
+    selected=attempts[0]["rows"]
+    assert len(selected)==25
+    assert [sum(x["channel"]==section for x in selected) for section in ("top","value","aces")]==[17,5,3]
+    assert len(tg.load(out/"messages.json"))>=1
