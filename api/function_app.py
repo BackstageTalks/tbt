@@ -132,6 +132,7 @@ from tbt.providers.shared_budget import (
 )
 from tbt.services.entitlements import (
     filter_feed_for_access,
+    filter_results_for_categories,
     entitlement_manifest,
     match_detail_entitlements,
     match_intelligence_row_authorized,
@@ -1447,6 +1448,11 @@ def feed(req):
             if bool(entitlements.get("results")):
                 data["results"] = runtime_settled_results(data, data["match_statuses"])
                 data = apply_result_exclusions(data, excluded_result_ids)
+                # Security boundary after response-time settlements. Already
+                # authorized market rows may embed other category publications.
+                data["results"] = filter_results_for_categories(
+                    data.get("results") or [], entitlements.get("result_categories") or []
+                )
                 if not exclusions_available:
                     data["results"] = []
                     data["results_exclusions_unavailable"] = True
