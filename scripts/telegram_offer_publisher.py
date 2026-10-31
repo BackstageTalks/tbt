@@ -67,7 +67,7 @@ def num(v):
 NUMBER_EMOJIS=("1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟")
 # Conservative single-row mobile preview bound; Telegram clients may wrap differently.
 MAX_INLINE_EV_CHARS=48
-HEADER="BlinQ | Tennis Intelligence"
+HEADER="🎾 BlinQ | Tennis Intelligence"
 FOOTER="ℹ️ Analytical preview only"
 BRAND_LINK_TEXT="BlinQ Stat Engine"
 BRAND_FOOTER="by " + BRAND_LINK_TEXT
