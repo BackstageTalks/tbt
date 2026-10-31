@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "kind": "operator-approved-one-time-repost",
+  "betting_day": "2026-10-31",
+  "revision": "format-squares-v4",
+  "format": {
+    "top": "🅃",
+    "value": "🅅",
+    "aces": "🄰",
+    "free": "🆓 FREE"
+  },
+  "preserve_original_confirmed_picks": true
+}
