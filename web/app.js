@@ -5111,7 +5111,7 @@ function adminActivityRows(){
     const days=['Po','Ut','St','Št','Pi','So','Ne'].map((name,index)=>`<label class="tg-bot-weekday"><input type="checkbox" data-tg-bot-day="${index}" ${(s.weekdays||[]).includes(index)?'checked':''}>${name}</label>`).join('');
     return `<section class="admin-ux-section tg-bot-admin">
       <div class="admin-ux-heading"><div><small>AUTOMATIZÁCIA</small><h2>Telegram · Bot publisher</h2><p>Posielanie potvrdenej dennej ponuky TOP / Value / Esá cez GitHub Secrets TGB a TGCH.</p></div></div>
-      <div class="admin-runtime-note"><strong>Stav</strong><span>Nastavenia uložíš tlačidlom Publikovať. GitHub kontroluje rozvrh každých 10 minút; skutočný čas spustenia môže byť oneskorený.</span></div>
+      <div class="admin-runtime-note"><strong>Stav</strong><span>Nastavenia uložíš tlačidlom Publikovať. GitHub používa existujúci externý hodinový tick. Presné minúty vyžadujú externý 10-minútový dispatch; bez neho môže byť správa oneskorená.</span></div>
       <div class="tg-bot-layout">
         <div class="tg-bot-card"><h3>Čo posielať</h3>
           ${check('enabled',c.enabled===true,'Zapnúť Telegram publisher')}
@@ -5154,7 +5154,7 @@ function adminActivityRows(){
 
 ℹ️ Analytical preview only
 🧠 by BackstageTalks Data Engine</pre><small>Ilustračný text. FREE sa posiela v samostatnej správe s jedným stabilne náhodným TOP tipom.</small></details>
-      <div class="tg-bot-actions"><button class="btn btn-primary" type="button" data-admin-action="tg-bot-queue" ${state.uiStorageAvailable===true?'':'disabled'}>Zaradiť jednorazové odoslanie</button><small>Uloží aktuálne nastavenia a požiadavku. Nie je to potvrdenie doručenia; výsledok bude v GitHub Actions → BlinQ Telegram offer. Požiadavka sa neodošle dvakrát.</small></div>
+      <div class="tg-bot-actions"><button class="btn btn-primary" type="button" data-admin-action="tg-bot-queue" ${state.uiStorageAvailable===true?'':'disabled'}>Zaradiť jednorazové odoslanie</button><small>Uloží nastavenia a požiadavku do 90-minútového okna. Doručenie potvrdí až GitHub Actions → BlinQ Telegram offer. Požiadavka sa neodošle dvakrát.</small></div>
     </section>`;
   }
 
