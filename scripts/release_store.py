@@ -590,7 +590,12 @@ class ReleaseStore:
                     original_directory = self.directory
                     try:
                         self.directory = Path(directory)
-                        self.download()
+                        if self.tag == "tbt-predictions-v1":
+                            self.download(required_names=(
+                                "feed.json", "ledger.json", "daily_offer_snapshot.json",
+                            ))
+                        else:
+                            self.download()
                     finally:
                         self.directory = original_directory
                 committed = True
