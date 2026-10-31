@@ -1,8 +1,10 @@
 """Read confirmed BlinQ offer and publish through Telegram without paid APIs."""
-import argparse, hashlib, json, os, re, subprocess, urllib.parse, urllib.request
+import argparse, hashlib, json, os, re, subprocess, sys, urllib.parse, urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
+from tbt.services.entitlements import _daily_rows
 TZ=ZoneInfo("Europe/Bratislava")
 SECTIONS={"top":"top_daily_picks","value":"value_picks","aces":"ace_picks"}
 LABELS={"top":"🏆 TOP","value":"💎 VALUE","aces":"🎯 ESÁ"}
@@ -95,7 +97,7 @@ def select_groups(x,c,now):
     for k,key in SECTIONS.items():
         if not (c.get("sections") or {}).get(k) and not (k=="top" and c.get("free_top_pick",True)):
             continue
-        source=x.get(key) or []
+        source=_daily_rows(x) if k=='top' else (x.get(key) or [])
         if not isinstance(source,list):raise ValueError("Invalid confirmed offer section")
         rows=[]
         for r in source:
@@ -117,7 +119,7 @@ def select_groups(x,c,now):
         if rows:got[k]=rows
     return got
 
-def messages(x,c,now):
+def messages(x,c,now,free_event_id=None):
     got=select_groups(x,c,now)
     if not got:return []
     today=day(now)
@@ -140,10 +142,11 @@ def messages(x,c,now):
     if c.get("free_top_pick",True) and got.get("top"):
         # Stable deterministic pseudo-random selection by betting day.
         # A different action run on the same day cannot select another FREE pick.
-        winner=min(got["top"],key=lambda r:hashlib.sha256(
+        candidates=[row for row in got["top"] if str(row.get("event_id"))==str(free_event_id)] if free_event_id else got["top"]
+        winner=min(candidates,key=lambda r:hashlib.sha256(
             (today+"|"+str(r.get("event_id"))+"|"+str((r.get("betting") or {}).get("selection_id") or r.get("winner_id"))).encode("utf-8")).hexdigest())
         free="\n".join(["🎾 FREE | BlinQ",f"📅 {date}","",fmt(winner,"top",c,1).replace("1️⃣","🆓",1)])
-        outbound.append({"audience":"free","text":"\n\n".join([HEADER,free,footer])})
+        outbound.append({"audience":"free","text":"\n\n".join([HEADER,free,footer]),"free_event_id":str(winner.get("event_id"))})
     if any(len(item["text"])>4096 for item in outbound):
         raise RuntimeError("Telegram 4096 character limit; reduce max_per_section")
     return outbound
@@ -156,11 +159,16 @@ def prepare(a):
     if not isinstance(attempts,dict):raise RuntimeError("Invalid state")
     ident=day(now)+":"+key
     if ident in attempts:print('{"status":"skipped","reason":"already_reserved"}');return
-    out=Path(a.output);msg=messages(snapshot(out/"assets"),v,now)
+    out=Path(a.output)
+    sticky=old.get("free_picks") if isinstance(old.get("free_picks"),dict) else {}
+    msg=messages(snapshot(out/"assets"),v,now,free_event_id=sticky.get(day(now)))
     if not msg:print('{"status":"skipped","reason":"no_eligible_rows"}');return
     save(out/"messages.json",msg)
     attempts[ident]={"reserved_at":now.isoformat(),"sha256":hashlib.sha256(json.dumps(msg,ensure_ascii=False).encode()).hexdigest()}
-    save(out/"state.json",{"schema":1,"attempts":dict(list(attempts.items())[-100:])})
+    for item in msg:
+        if item.get("audience")=="free" and item.get("free_event_id"):
+            sticky[day(now)]=item["free_event_id"]
+    save(out/"state.json",{"schema":1,"attempts":dict(list(attempts.items())[-100:]),"free_picks":dict(list(sticky.items())[-30:])})
     (out/"ready").write_text(ident,encoding="utf-8")
     print(json.dumps({"status":"reserved","id":ident,"messages":len(msg)}))
 def send(a):
