@@ -71,21 +71,21 @@ def test_aces_prediction_contracts_and_mobile_compaction():
     unpriced=tg.fmt(count,"aces",cfg,index=6)
     assert "Medvedev | " in unpriced
     assert "najviac es" in unpriced
-    assert "aces 8.3" not in unpriced
+    assert "proj. 8.3 es" in unpriced
     assert unpriced.endswith(" | 0" ) is False
 
     superiority=dict(count, price_contract="player_superiority",price_status="priced_projection",
                      odds=2.0)
     priced=tg.fmt(superiority,"aces",cfg,index=6)
-    assert "najviac es | 2.00" in priced
+    assert "najviac es | proj. 8.3 es | 2.00" in priced
     assert "72.0%" not in priced  # the optional confidence was dropped to fit mobile
-    assert len(priced)<=48  # category label adds text; confidence is removed first
+    assert len(priced)<=65  # still one compact row; confidence is removed first
 
     over=dict(count,price_contract="player_total_ou",price_status="priced_projection",
               market_line=8.5,ou_side="over",model_probability=0.65,odds=1.9)
     text=tg.fmt(over,"aces",cfg,index=2)
     assert "Over 8.5 es" in text
-    assert "8.3" not in text
+    assert "Over 8.5 es | proj. 8.3 es | 1.90" in text
     assert "72.0%" not in text  # model O/U probability differs from most-aces confidence
     assert "EV" not in text
     bad=dict(over)
@@ -96,6 +96,33 @@ def test_aces_prediction_contracts_and_mobile_compaction():
         pass
     else:
         raise AssertionError("Invalid O/U contract rendered as valid pick")
+
+
+def test_ace_projection_is_player_specific_and_missing_data_is_not_fabricated():
+    cfg=settings()
+    ace=row(92,"Selected Player","aces")
+    ace["price_contract"]="player_superiority"
+    ace["odds"]=1.85
+    rendered=tg.fmt(ace,"aces",cfg)
+    assert "Player | " in rendered
+    assert "najviac es | proj. 8.3 es | 1.85" in rendered
+    assert "5.4" not in rendered  # opponent's projection is never substituted
+    assert "\n" not in rendered
+
+    missing=dict(ace)
+    missing.pop("projection")
+    assert "proj." not in tg.fmt(missing,"aces",cfg)
+    for invalid in ("not-a-number", float("nan"), float("inf"), -1):
+        corrupt=dict(ace,projection=invalid)
+        assert "proj." not in tg.fmt(corrupt,"aces",cfg)
+
+    numeric_string=dict(ace,projection="6.25")
+    assert "proj. 6.2 es" in tg.fmt(numeric_string,"aces",cfg)
+    premium=tg.messages(offer(),cfg,NOW)[0]["text"]
+    aces=[line for line in premium.splitlines() if line.startswith("🄰 |")]
+    assert len(aces)==1 and "proj. 8.3 es" in aces[0]
+    assert all("proj." not in line for line in premium.splitlines()
+               if line.startswith(("🅃 |","🅅 |")))
 
 
 def test_daily_queue_is_durable_idempotent_and_full_offer_override(tmp_path, monkeypatch):
