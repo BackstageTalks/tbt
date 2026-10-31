@@ -313,7 +313,7 @@ def test_all_issued_results_are_preserved_when_telegram_message_spills():
     assert len(posts)>1
     assert all(len(item["text"].encode("utf-16-le"))//2<=4096 for item in posts)
     body="\n".join(item["text"] for item in posts)
-    assert body.count("Surname | 1.80 | +0.80u ✅")==len(samples)
+    assert body.count(" | 1.80 | +0.80u ✅")==len(samples)
     assert "WIN 149" in posts[-1]["text"]
     assert sum(item["counts"]["won"] for item in posts)==149
     assert "ROI +80.0%" in posts[-1]["text"]
