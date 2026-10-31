@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from math import isfinite
+import hashlib
+import json
 
 
 MODEL_CALIBRATION_BRANCH = "research/model-calibration"
@@ -197,6 +199,7 @@ def normalize_model_calibration_snapshot(raw: object) -> dict:
         "shadow": {
             "captured": captured, "settled": settled, "pending": pending,
             "settled_utc_days": days,
+            "minimum_days_for_review": _nonnegative(cohort.get("minimum_days_for_review", 3), "minimum_days_for_review"),
             "minimum_for_review": _nonnegative(
                 cohort.get("minimum_for_review"), "minimum_for_review"
             ),
@@ -214,7 +217,8 @@ def normalize_model_calibration_snapshot(raw: object) -> dict:
                 for key in (
                     "minimum_matches_met", "minimum_days_met",
                     "accuracy_not_worse", "log_loss_better",
-                    "brier_better", "ece_not_worse", "ready_for_promotion_review"
+                    "brier_better", "ece_not_worse", "ready_for_promotion_review",
+                    "accuracy_within_tolerance", "brier_within_tolerance"
                 )
             },
         },
@@ -248,6 +252,76 @@ def normalize_model_calibration_snapshot(raw: object) -> dict:
     }
 
 
+
+def calibration_fingerprint(record: dict) -> str:
+    """Stable digest of every accepted source datum, without wall-clock metadata."""
+    data = {key: value for key, value in record.items()
+            if key not in ("updated_at", "snapshot_sha256", "age_seconds",
+                           "stale", "promotion_permitted", "health_warnings")}
+    raw = json.dumps(data, ensure_ascii=False, sort_keys=True,
+                     separators=(",", ":"), allow_nan=False).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def assert_calibration_successor(previous: dict, incoming: dict) -> bool:
+    """Return True for newer evidence, False for exact retry; reject regressions.
+
+    Production changes are allowed only as a distinct (already independently
+    digest-verified by the publisher) cohort. They never inherit old metrics.
+    """
+    old_time = _timestamp(previous.get("source_generated_at"))
+    new_time = _timestamp(incoming.get("source_generated_at"))
+    if not old_time or not new_time:
+        raise ValueError("Calibration source timestamp missing")
+    old_date = datetime.fromisoformat(old_time)
+    new_date = datetime.fromisoformat(new_time)
+    if new_date < old_date:
+        raise ValueError("Stale calibration snapshot rejected")
+    same_pair = (previous.get("production_version"), previous.get("candidate_version")) == (
+        incoming.get("production_version"), incoming.get("candidate_version"))
+    if new_date == old_date:
+        if calibration_fingerprint(previous) == calibration_fingerprint(incoming):
+            return False
+        raise ValueError("Conflicting calibration snapshots share a timestamp")
+    if same_pair:
+        for key in ("captured", "settled", "settled_utc_days"):
+            if incoming["shadow"][key] < previous["shadow"][key]:
+                raise ValueError("Calibration shadow cohort regressed: " + key)
+        # A later Azure publication must not accidentally replace a newly
+        # generated evidence report with an older release or CDB audit.
+        for key in ("shadow_generated_at",):
+            old_stamp, new_stamp = previous.get(key), incoming.get(key)
+            if old_stamp and (not new_stamp or _timestamp(new_stamp) < _timestamp(old_stamp)):
+                raise ValueError("Calibration shadow evidence regressed")
+        if previous.get("unseen", {}).get("available") and incoming.get("unseen", {}).get("available"):
+            old_audit = previous["unseen"].get("readiness_generated_at")
+            new_audit = incoming["unseen"].get("readiness_generated_at")
+            if old_audit and (not new_audit or _timestamp(new_audit) < _timestamp(old_audit)):
+                raise ValueError("Calibration readiness evidence regressed")
+            old_rows = previous["unseen"].get("eligible_rows")
+            new_rows = incoming["unseen"].get("eligible_rows")
+            if old_rows is not None and (new_rows is None or new_rows < old_rows):
+                raise ValueError("Calibration unseen-data sample regressed")
+    return True
+
+
+def calibration_health_warnings(record: dict, now: datetime) -> list[str]:
+    warnings = []
+    for key, label in (("shadow_generated_at", "shadow_report_stale"),
+                       ("source_generated_at", "source_report_stale")):
+        stamp = record.get(key)
+        if not stamp or (now - datetime.fromisoformat(_timestamp(stamp))).total_seconds() > SNAPSHOT_STALE_SECONDS:
+            warnings.append(label)
+    audit = record.get("unseen", {}).get("readiness_generated_at")
+    if record.get("unseen", {}).get("available") and (
+        not audit or (now - datetime.fromisoformat(_timestamp(audit))).total_seconds() > SNAPSHOT_STALE_SECONDS
+    ):
+        warnings.append("readiness_audit_stale")
+    if record.get("shadow", {}).get("pending", 0) > 0 and "shadow_report_stale" in warnings:
+        warnings.append("pending_shadow_requires_review")
+    return warnings
+
+
 def with_freshness(record: object, *, now: datetime | None = None) -> dict:
     if not isinstance(record, dict):
         raise ValueError("Calibration status is unavailable")
@@ -260,4 +334,5 @@ def with_freshness(record: object, *, now: datetime | None = None) -> dict:
         **record, "age_seconds": age,
         "stale": age > SNAPSHOT_STALE_SECONDS,
         "promotion_permitted": False,
+        "health_warnings": calibration_health_warnings(record, now),
     }
