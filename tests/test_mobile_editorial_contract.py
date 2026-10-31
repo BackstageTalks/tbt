@@ -23,7 +23,7 @@ def test_editorial_layer_is_phone_only_and_public_only():
     assert ".site-header" not in css
     assert ".site-footer" not in css
     assert "#dashboardKpis" not in css
-    assert "hub-row-locked) {" not in css
+    assert "tbody tr.hub-row-locked {" not in css
     assert "data-tab=\"see_all\"" in css
     assert "min-height: 44px" in css
     assert "#dailyHub" in css and ".results-card-row" in css
