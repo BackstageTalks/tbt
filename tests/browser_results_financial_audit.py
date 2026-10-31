@@ -48,6 +48,7 @@ def main():
                   document.getElementById('appShell').hidden=false;
                   document.getElementById('routePanel').hidden=false;
                   document.body.classList.add('blinq-route');
+                  s.feed.account={is_admin:true,role:'admin',plan:'admin',status:'active'};
                   s.resultsPage=0;s.resultsPageSize=50;
                   s.resultsFilters={category:'games',window:'all',tour:'',surface:''};
                   const odds=[1.65,1.67,1.83,1.55,1.54];
