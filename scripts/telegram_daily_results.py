@@ -250,6 +250,8 @@ def daily_report(sent, archive_rows, day_text, footer):
                 result.append({"audience":"premium","text":text,
                                "counts":{key:0 for key in icons},"priced_decisions":0})
                 current=[line]
+        else:
+            current.append(line)
     # The full, single-day summary always appears on the final page.
     ending=prefix+"\n".join(current)+final
     if units_len(ending)>4096:
