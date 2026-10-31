@@ -277,12 +277,54 @@ def result_reference(row,section):
             "name":_selection_name(row), "odds":odds if odds and odds>1 else None,
             "projection":num(row.get("projection")) if market=="aces" else None}
 
+def _same_frozen_selection(current, frozen):
+    """No change to exact sent identity, price or O/U settlement contract."""
+    for key in ("event_id","section","channel","market","selection_id",
+                "publication_key","market_line","projection_direction"):
+        if str(current.get(key) or "")!=str(frozen.get(key) or ""):
+            return False
+    old_price=num(frozen.get("odds"));new_price=num(current.get("odds"))
+    return (old_price is None and new_price is None) or (
+        old_price is not None and new_price is not None
+        and abs(old_price-new_price)<0.00001)
+
+def _original_offer_only(confirmed, sent, now):
+    """Make a reformat of the previously issued offer, never new model picks."""
+    source=select_groups(confirmed,{"sections":{k:True for k in SECTIONS},
+        "free_top_pick":True,"include_started":True,"max_per_section":0},now)
+    selected={key:[] for key in SECTIONS}
+    used=set()
+    for frozen in sent.get("rows") or []:
+        section=frozen.get("channel")
+        if section=="free":
+            continue
+        if section not in SECTIONS:
+            raise RuntimeError("Unexpected original Telegram section")
+        matches=[row for row in source.get(section,[])
+                 if _same_frozen_selection(result_reference(row,section),frozen)]
+        if len(matches)!=1:
+            raise RuntimeError("Original issued Telegram pick no longer matches a unique confirmed snapshot row")
+        identity=(section,str(frozen["event_id"]),str(frozen["selection_id"]))
+        if identity in used:
+            raise RuntimeError("Duplicated frozen original identity")
+        used.add(identity)
+        selected[section].append(matches[0])
+    if len(used)!=len([row for row in sent.get("rows") or [] if row.get("channel")!="free"]):
+        raise RuntimeError("Frozen publication count mismatch")
+    # Keep the original TOP set through the shared public selection helper.
+    frozen_offer={**confirmed,"top_daily_picks":selected["top"],
+                  "value_picks":selected["value"],"ace_picks":selected["aces"]}
+    if _daily_rows(frozen_offer)!=selected["top"]:
+        raise RuntimeError("Frozen original TOP no longer passes exact public TOP selection")
+    return frozen_offer
+
+
 def mark_sent(args):
     """Called only after all message IDs were received; commit separate state read-back."""
     out=Path(args.output)
     ident=(out/"ready").read_text(encoding="utf-8").strip()
     state=load(out/"state.json")
-    attempt=(state.get("attempts") or {}).get(ident)
+    attempt=(state.get("attempts") or {}).get(ident) or (state.get("reposts") or {}).get(ident)
     receipt=load(out/"receipt.json")
     if not attempt or not isinstance(receipt,list):
         raise RuntimeError("Missing confirmed Telegram receipt")
@@ -318,11 +360,14 @@ def queue_daily(a):
 
 def prepare(a):
     now=stamp(a.now) if a.now else datetime.now(timezone.utc);v=config(a.config_url)
-    if getattr(a,"daily",False):
-        # Explicitly operator-approved full offer. Admin UI settings remain unchanged.
+    repost=getattr(a,"preview_format",False)
+    if getattr(a,"daily",False) or repost:
+        # Explicit operator-approved issue; no mutation to Admin configuration.
         v={**v,"enabled":True,"sections":{k:True for k in SECTIONS},
            "layout":"combined","max_per_section":0,"free_top_pick":True}
-        key="daily:0620"
+        if repost:
+            v["include_started"]=True  # Editing the exact morning offer, not new picks
+        key="repost:format-v2-no-ev" if repost else "daily:0620"
     else:
         key=due(v,now)
     if not key:print('{"status":"skipped","reason":"not_due"}');return
@@ -330,17 +375,28 @@ def prepare(a):
     attempts=old.get("attempts")
     if not isinstance(attempts,dict):raise RuntimeError("Invalid state")
     ident=day(now)+":"+key
-    if getattr(a,"daily",False) and any(k!=ident and k.startswith(day(now)+":")
-                       and isinstance(v,dict) and v.get("status") in ("reserved","sent")
-                       for k,v in attempts.items()):
+    reposts=old.get("reposts") or {}
+    if not isinstance(reposts,dict):raise RuntimeError("Invalid repost ledger")
+    if repost and ident in reposts:
+        print('{"status":"skipped","reason":"repost_already_reserved_or_sent"}');return
+    if getattr(a,"daily",False) and not repost and any(k!=ident and k.startswith(day(now)+":")
+                       and isinstance(val,dict) and val.get("status") in ("reserved","sent")
+                       for k,val in attempts.items()):
         print('{"status":"skipped","reason":"daily_offer_already_reserved"}');return
-    if ident in attempts and attempts[ident].get("status")!="queued":
+    if not repost and ident in attempts and attempts[ident].get("status")!="queued":
         print('{"status":"skipped","reason":"already_reserved"}');return
+    previous=attempts.get(_daily_id(now)) if repost else None
+    if repost and (not isinstance(previous,dict) or previous.get("status")!="sent"
+                   or not previous.get("message_ids") or not previous.get("rows")):
+        raise RuntimeError("No previously confirmed same-day Telegram delivery to reformat")
     out=Path(a.output)
     sticky=old.get("free_picks") if isinstance(old.get("free_picks"),dict) else {}
     confirmed=snapshot(out/"assets")
+    if repost:confirmed=_original_offer_only(confirmed,previous,now)
     msg=messages(confirmed,v,now,free_event_id=sticky.get(day(now)))
     if not msg:print('{"status":"skipped","reason":"no_eligible_rows"}');return
+    if repost and len(msg)!=len(previous["message_ids"]):
+        raise RuntimeError("Reformatted message count does not match original receipts")
     groups=select_groups(confirmed,v,now)
     sent_rows=[]
     for section,rows in groups.items():
@@ -355,14 +411,24 @@ def prepare(a):
         if top is None:raise RuntimeError("FREE pick missing from confirmed TOP")
         sent_rows.append(result_reference(top,"free"))
     if not sent_rows:raise RuntimeError("No exact Telegram rows to evaluate")
+    if repost:
+        original=previous["rows"]
+        if len(sent_rows)!=len(original) or any(
+                not _same_frozen_selection(now_row,old_row)
+                for now_row,old_row in zip(sent_rows,original)):
+            raise RuntimeError("Preview would change previously published picks")
     save(out/"messages.json",msg)
-    attempts[ident]={"reserved_at":now.isoformat(),"status":"reserved",
-                     "rows":sent_rows,
-                     "sha256":hashlib.sha256(json.dumps(msg,ensure_ascii=False).encode()).hexdigest()}
+    slot=reposts if repost else attempts
+    slot[ident]={"reserved_at":now.isoformat(),"status":"reserved",
+                 "rows":sent_rows if not repost else [],
+                 "sha256":hashlib.sha256(json.dumps(msg,ensure_ascii=False).encode()).hexdigest()}
     for item in msg:
         if item.get("audience")=="free" and item.get("free_event_id"):
             sticky[day(now)]=item["free_event_id"]
-    save(out/"state.json",{"schema":1,"attempts":dict(list(attempts.items())[-100:]),"free_picks":dict(list(sticky.items())[-30:])})
+    save(out/"state.json",{**old,"schema":1,
+        "attempts":dict(list(attempts.items())[-100:]),
+        "reposts":dict(list(reposts.items())[-30:]),
+        "free_picks":dict(list(sticky.items())[-30:])})
     (out/"ready").write_text(ident,encoding="utf-8")
     print(json.dumps({"status":"reserved","id":ident,"messages":len(msg)}))
 def send(a):
@@ -394,4 +460,5 @@ if __name__=="__main__":
     p.add_argument("--config-url",default="https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/ui-config")
     p.add_argument("--state",default="ops/telegram-bot-state.json");p.add_argument("--output",default="/tmp/blinq-telegram");p.add_argument("--now",default="")
     p.add_argument("--daily",action="store_true",help="Operator-approved full daily offer")
+    p.add_argument("--preview-format",action="store_true",help="One-time repost of exact sent offer with updated presentation")
     a=p.parse_args();{"prepare":prepare,"queue-daily":queue_daily,"send":send,"mark-sent":mark_sent}[a.action](a)
