@@ -61,6 +61,39 @@ def test_value_ev_is_inline_when_it_fits_and_omitted_for_long_mobile_rows():
     assert "\n" not in long
     assert tg.fmt(row(88, "Sinner"), "top", cfg, index=1).count("EV") == 0
 
+
+def test_daily_queue_is_durable_idempotent_and_full_offer_override(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    state_path=tmp_path/"state.json"
+    args=SimpleNamespace(now=NOW.isoformat(),state=str(state_path))
+    tg.queue_daily(args)
+    queued=tg.load(state_path)
+    ident=tg._daily_id(NOW)
+    assert queued["attempts"][ident]["status"]=="queued"
+    tg.queue_daily(args)
+    assert tg.load(state_path)==queued
+
+    disabled=settings()
+    disabled.update(enabled=False,max_per_section=1,layout="separate",
+                    sections={"top":False,"value":False,"aces":False},
+                    free_top_pick=False)
+    monkeypatch.setattr(tg,"config",lambda *_:disabled)
+    monkeypatch.setattr(tg,"snapshot",lambda *_:offer())
+    out=tmp_path/"prepared"
+    tg.prepare(SimpleNamespace(now=NOW.isoformat(),state=str(state_path),
+                               output=str(out),config_url="https://unit.invalid/api/v1/ui-config",
+                               daily=True))
+    msgs=tg.load(out/"messages.json")
+    assert [x["audience"] for x in msgs]==["premium","free"]
+    premium=msgs[0]["text"]
+    assert premium.index("1️⃣ Surname1")<premium.index("6️⃣ Value")<premium.index("7️⃣ Server")
+    assert "🆓" in msgs[1]["text"]
+    result=tg.load(out/"state.json")
+    assert result["attempts"][ident]["status"]=="reserved"
+    assert len(result["attempts"][ident]["rows"])==8
+    tg.queue_daily(SimpleNamespace(now=NOW.isoformat(),state=str(out/"state.json")))
+    assert tg.load(out/"state.json")["attempts"][ident]["status"]=="reserved"
+
 def test_classic_format_and_deterministic_free_pick():
     first = tg.messages(offer(), settings(), NOW)
     second = tg.messages(offer(), settings(), NOW)
