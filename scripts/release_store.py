@@ -520,10 +520,12 @@ class ReleaseStore:
                 print(f"WARNING: retained verified rollback {backup}: {exc}", file=sys.stderr)
 
     def recover_interrupted_swaps(self):
-        """No provider requests. Call only while owning the global CDB lock.
+        """Finish or roll back an interrupted bundle under the existing CDB lock.
 
-        Keep a fully valid committed generation. Otherwise roll back all
-        surviving aliases from an interrupted transaction, then read back.
+        A journal is uploaded before touching any canonical names. The journal
+        identifies newly created assets, which otherwise have no old alias to
+        restore. A committed generation is accepted only when its exact final
+        checksum digest matches the journal and a normal download verifies.
         """
         if self.repository != "BackstageTalks/tbt-data" or self.tag != "tbt-data-v1":
             raise ValueError("Recovery requires the canonical CDB release")
@@ -531,17 +533,75 @@ class ReleaseStore:
         verify(self.repository, Path(".cdb-global-writer-lock.json"))
         assets = self._release_asset_inventory()
         groups = {}
+        journals = {}
         for name, asset in assets.items():
-            match = re.fullmatch(r"blinq-rollback-([0-9a-f]{32})-(.+)", name)
-            if match:
-                groups.setdefault(match.group(1), []).append((match.group(2), asset))
-        if not groups:
+            rollback = re.fullmatch(r"blinq-rollback-([0-9a-f]{32})-(.+)", name)
+            journal = re.fullmatch(r"blinq-txn-([0-9a-f]{32})\\.json", name)
+            if rollback:
+                groups.setdefault(rollback.group(1), []).append((rollback.group(2), asset))
+            if journal:
+                journals[journal.group(1)] = asset
+        tokens = set(groups) | set(journals)
+        if not tokens:
             return {"pending_transactions": 0, "status": "clean"}
-        if len(groups) > 1:
+        if len(tokens) != 1:
             raise RuntimeError("Multiple pending bundle swaps; manual review required")
+        token = next(iter(tokens))
+        entries = groups.get(token, [])
+        journal = journals.get(token)
+        created = []
+        expected_sha = None
+        if journal:
+            name = f"blinq-txn-{token}.json"
+            self._download_asset(name)
+            path = self.directory / name
+            if not self._verified_asset({name: journal}, name, path):
+                raise RuntimeError("Interrupted release journal digest mismatch")
+            evidence = json.loads(path.read_text(encoding="utf-8"))
+            created = evidence.get("created", [])
+            expected_sha = evidence.get("target_bundle_sha256")
+            if (
+                not isinstance(created, list)
+                or len(created) != len(set(created))
+                or any(not isinstance(v, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", v) for v in created)
+                or not isinstance(expected_sha, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", expected_sha)
+            ):
+                raise ValueError("Invalid interrupted release journal")
+        # Without a journal (e.g., interruption during cleanup), integrity
+        # readback alone decides whether the current release is committed.
+        current_bundle = assets.get(self.BUNDLE_MANIFEST)
+        candidate_committed = (
+            expected_sha is None
+            or (
+                current_bundle is not None
+                and current_bundle.get("digest") == "sha256:" + expected_sha
+            )
+        )
+        committed = False
+        if candidate_committed:
+            try:
+                with tempfile.TemporaryDirectory() as directory:
+                    original_directory = self.directory
+                    try:
+                        self.directory = Path(directory)
+                        self.download()
+                    finally:
+                        self.directory = original_directory
+                committed = True
+            except (RuntimeError, ValueError, FileNotFoundError, OSError):
+                committed = False
 
-        # An interrupted cleanup after a *successful* commit needs no rollback.
-        try:
+        if not committed:
+            for name, old in reversed(entries):
+                current = self._release_asset_inventory()
+                if name in current:
+                    self._asset_api("DELETE", int(current[name]["id"]))
+                self._asset_api("PATCH", int(old["id"]), name=name)
+            for name in created:
+                current = self._release_asset_inventory()
+                if name in current:
+                    self._asset_api("DELETE", int(current[name]["id"]))
             with tempfile.TemporaryDirectory() as directory:
                 original_directory = self.directory
                 try:
@@ -549,27 +609,14 @@ class ReleaseStore:
                     self.download()
                 finally:
                     self.directory = original_directory
-            committed = True
-        except (RuntimeError, ValueError, FileNotFoundError, OSError):
-            committed = False
-        token, entries = next(iter(groups.items()))
-        if committed:
+        else:
             for _name, asset in entries:
                 self._asset_api("DELETE", int(asset["id"]))
-            return {"pending_transactions": 1, "status": "committed_generation_verified"}
-        for name, old in reversed(entries):
-            current = self._release_asset_inventory()
-            if name in current:
-                self._asset_api("DELETE", int(current[name]["id"]))
-            self._asset_api("PATCH", int(old["id"]), name=name)
-        with tempfile.TemporaryDirectory() as directory:
-            original_directory = self.directory
-            try:
-                self.directory = Path(directory)
-                self.download()
-            finally:
-                self.directory = original_directory
-        return {"pending_transactions": 1, "status": "previous_generation_restored"}
+        if journal is not None:
+            self._asset_api("DELETE", int(journal["id"]))
+        return {"pending_transactions": 1, "status": (
+            "committed_generation_verified" if committed
+            else "previous_generation_restored")}
 
     def upload_bundle(self, paths, *, before_upload=None, remove_names=()):
         """Upload related assets, then commit their checksums last.
@@ -663,6 +710,22 @@ class ReleaseStore:
             return
 
         token = uuid.uuid4().hex
+        # Durable pre-write journal also identifies names that are entirely new.
+        # Without it, a killed process could orphan an uncommitted new partition.
+        old_names = self._asset_names()
+        created = sorted(
+            path.name for path in [*payload_files, *history_inventory, manifest_path]
+            if path.name not in old_names
+        )
+        journal_name = f"blinq-txn-{token}.json"
+        journal_path = self.directory / journal_name
+        journal_path.write_text(json.dumps({
+            "schema": 1, "created": created,
+            "target_bundle_sha256": self._sha256(manifest_path),
+        }, sort_keys=True), encoding="utf-8")
+        self.upload([journal_path])  # Unique filename; canonical assets still untouched.
+        if not self._verified_asset(self._release_asset_inventory(), journal_name, journal_path):
+            raise RuntimeError("Release transaction journal was not verified")
         swaps = []
         try:
             # Retention/identity repairs must not delete the only partition
@@ -681,6 +744,22 @@ class ReleaseStore:
                     swaps.append(result)
         except Exception:
             self._rollback_guarded(swaps)
+            # Remove newly created uncommitted assets as well as restored swaps.
+            for name in created:
+                try:
+                    asset = self._release_asset_inventory().get(name)
+                    if asset is not None:
+                        self._asset_api("DELETE", int(asset["id"]))
+                except Exception as restore_error:
+                    print(f"ERROR: uncommitted new asset {name}: {restore_error}", file=sys.stderr)
+            # Leave the journal if any rollback step failed. Recovery is safe
+            # to repeat under the next global lock before provider requests.
             raise
         self._cleanup_guarded(swaps)
+        try:
+            journal_asset = self._release_asset_inventory().get(journal_name)
+            if journal_asset:
+                self._asset_api("DELETE", int(journal_asset["id"]))
+        except Exception as exc:
+            print(f"WARNING: retained committed release journal {journal_name}: {exc}", file=sys.stderr)
 
