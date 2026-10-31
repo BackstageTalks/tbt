@@ -292,6 +292,10 @@ def main():
                 assert page.evaluate('comparatorHarness.state.route') == 'predictions'
                 hint = page.locator('#accessHint')
                 hint.wait_for(state='visible')
+                # Page/layout scrolling after a click must not cancel the
+                # intentionally pinned upgrade hint. Hover-only hints may close.
+                page.evaluate("window.dispatchEvent(new Event('scroll'))")
+                assert hint.is_visible(), (width, 'pinned hint closed on scroll')
                 # A deliberate click pins the compact lock hint. Moving the
                 # pointer/focus off the nav must not erase it after 240 ms.
                 page.mouse.move(2, 2)

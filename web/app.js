@@ -7933,7 +7933,7 @@ function adminActivityRows(){
       hideAccessHint();
     });
     $('upgradeDialog').addEventListener('close',()=>{const target=upgradeReturnTarget;upgradeReturnTarget=null;const restore=()=>{if(target?.isConnected)target.focus({preventScroll:true});hideAccessHint();};restore();queueMicrotask(restore);});
-    window.addEventListener('scroll',()=>hideAccessHint(),{passive:true});
+    window.addEventListener('scroll',()=>{if(!accessHintPinnedByClick)hideAccessHint();},{passive:true});
     window.addEventListener('resize',()=>{if(accessHintTarget&&!$('accessHint')?.hidden)positionAccessHint(accessHintTarget);},{passive:true});
     let resizeTimer,lastCardCapacity=dashboardCardsPerPanel(); window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{const capacity=dashboardCardsPerPanel();if(capacity===lastCardCapacity)return;lastCardCapacity=capacity;if(state.route==='predictions'){state.page=0;Object.keys(state.marketPage||{}).forEach(k=>{state.marketPage[k]=0;});renderPredictions();renderMarketSections();renderDashboardComposition();}},120)});
   }
