@@ -45,6 +45,28 @@ class UiWatchdogTests(unittest.TestCase):
     def test_current_site_passes_when_deployment_sha_is_not_main(self):
         self.assertEqual(verify_once(self.web, "https://test.invalid", self.fetch), SHA)
 
+    def test_newer_checkout_is_not_falsely_treated_as_live_drift(self):
+        # Azure's valid deployed SHA is older than the CI checkout. The
+        # immutable release is the source of truth; a later HEAD is unrelated.
+        original = {name: (self.web / name).read_bytes()
+                    for name in (*FRONTEND_FILES, "index.html")}
+        (self.web / "app.js").write_bytes(b"new_head_app")
+        (self.web / "index.html").write_text("<html>new main HTML</html>")
+        expected = lambda _web, sha: original if sha == SHA else None
+        self.assertEqual(verify_once(self.web, "https://test.invalid", self.fetch,
+                                     source_loader=expected), SHA)
+        # A genuine cross-route drift still fails even against the right SHA.
+        self.files["/follow-the-data/"] = b"<html>broken SPA route</html>"
+        with self.assertRaisesRegex(ValueError, "/follow-the-data/"):
+            verify_once(self.web, "https://test.invalid", self.fetch,
+                        source_loader=expected)
+
+    def test_invalid_revision_fails_closed_even_if_current_files_match(self):
+        with self.assertRaisesRegex(ValueError, "Cannot verify"):
+            verify_once(self.web, "https://test.invalid", self.fetch,
+                        source_loader=lambda *_: (_ for _ in ()).throw(
+                            ValueError("Cannot verify exact deployed revision from Git history")))
+
     def test_detects_stale_app_even_with_success_http(self):
         self.files["/app.js"] = b"old_application"
         with self.assertRaisesRegex(ValueError, "app.js"):
