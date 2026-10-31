@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: blinq-telegram-offer
+  group: blinq-telegram-ledger
   cancel-in-progress: false
 
 jobs:
