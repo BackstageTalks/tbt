@@ -23,7 +23,7 @@ Applies to work on BackstageTalks/tbt and BackstageTalks/tbt-data. This document
 
 ### B. Shared RapidAPI budget and automation (separate task from model backup)
 - Do not count a scheduler configuration or successful smoke test as a real scheduled collection.
-- Respect the **runtime shared-budget implementation** as the source of truth: **15,000 provider/day**, **14,700 global BlinQ ceiling**, **300 reserved**, **6 requests/sec**, fixed reset **17:09 UTC** (**18:09 CET / 19:09 CEST**), and the hourly ingestion cutoff **17:07 UTC**. The history downloader also has its separate **12,000 requests/run** bound. Do not reproduce superseded quota values as standing policy. Never spend requests merely to exhaust quota.
+- Respect the **runtime shared-budget implementation** as the source of truth: **15,000 provider/day**, **14,500 global BlinQ ceiling**, **500 reserved**, **6 requests/sec**, fixed reset **17:09 UTC** (**18:09 CET / 19:09 CEST**), and the hourly ingestion cutoff **17:07 UTC**. The history downloader also has its separate **12,000 requests/run** bound. Do not reproduce superseded quota values as standing policy. Never spend requests merely to exhaust quota.
 - A quota job is **VERIFIED** only after a real scheduled tick, workflow completion, governed writer evidence, source API usage, persisted read-back and coverage/quality delta. Report a blocked or skipped tick as such.
 - The external scheduler depends on its actual enabled state, permissions and expected first real run, and is not a substitute for proof of execution.
 
