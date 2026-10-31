@@ -143,7 +143,7 @@ def fmt(r,k,c,index=1,name_map=None,prefix_override=None):
             market_line=num(r.get("market_line"))
             if side not in ("over","under") or market_line is None or market_line<0:
                 raise ValueError("Incomplete confirmed ACES over/under contract")
-            values=[f"{side.title()} {market_line:.1f} es"]
+            values=[f"{'O' if side == 'over' else 'U'} {market_line:.1f} es"]
             # O/U probability and Most Aces confidence describe different outcomes.
             confidence=num(r.get("model_probability"))
         else:
