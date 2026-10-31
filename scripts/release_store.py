@@ -448,11 +448,13 @@ class ReleaseStore:
         if self._verified_asset(assets, name, path):
             return None
         if old is None:
-            # New names have no existing copy to lose.
+            # New names have no existing copy to lose, but must still be
+            # rolled back if a later manifest/checksum commit fails.
             self.upload([path])
-            if not self._verified_asset(self._release_asset_inventory(), name, path):
+            uploaded = self._release_asset_inventory().get(name)
+            if not self._verified_asset({name: uploaded}, name, path):
                 raise RuntimeError(f"Release upload verification failed for {name}")
-            return None
+            return (name, None, int(uploaded["id"]), None)
 
         candidate = f"blinq-candidate-{token}-{name}"
         backup = f"blinq-rollback-{token}-{name}"
@@ -495,6 +497,10 @@ class ReleaseStore:
         for name, old_id, new_id, backup in reversed(swaps):
             try:
                 current = self._release_asset_inventory()
+                if old_id is None:
+                    if name in current and int(current[name]["id"]) == new_id:
+                        self._asset_api("DELETE", new_id)
+                    continue
                 if backup not in current:
                     continue
                 if name in current:
@@ -505,6 +511,8 @@ class ReleaseStore:
 
     def _cleanup_guarded(self, swaps):
         for _name, old_id, _new_id, backup in swaps:
+            if old_id is None:
+                continue
             try:
                 self._asset_api("DELETE", old_id)
             except Exception as exc:
@@ -597,17 +605,22 @@ class ReleaseStore:
         if not files and not removals:
             return
 
+        guarded = (
+            self.repository == "BackstageTalks/tbt-data"
+            and self.tag == "tbt-data-v1"
+        )
         remote_assets = self._asset_names() if removals else set()
-        for name in sorted(removals & remote_assets):
-            gh(
-                "release",
-                "delete-asset",
-                self.tag,
-                name,
-                "--repo",
-                self.repository,
-                "--yes",
-            )
+        if not guarded:
+            for name in sorted(removals & remote_assets):
+                gh(
+                    "release",
+                    "delete-asset",
+                    self.tag,
+                    name,
+                    "--repo",
+                    self.repository,
+                    "--yes",
+                )
 
         retained = {
             name: meta
@@ -632,10 +645,6 @@ class ReleaseStore:
         # deleted even though an earlier version had been readable.
         history_inventory = [p for p in files if p.name == "history_manifest.json"]
         payload_files = [p for p in files if p.name != "history_manifest.json"]
-        guarded = (
-            self.repository == "BackstageTalks/tbt-data"
-            and self.tag == "tbt-data-v1"
-        )
         if not guarded:
             if payload_files:
                 self.upload(payload_files)
@@ -656,6 +665,16 @@ class ReleaseStore:
         token = uuid.uuid4().hex
         swaps = []
         try:
+            # Retention/identity repairs must not delete the only partition
+            # copy before the new committed inventory is available.
+            for name in sorted(removals & remote_assets):
+                asset = self._release_asset_inventory().get(name)
+                if asset is None:
+                    raise FileNotFoundError(f"Partition vanished during removal: {name}")
+                old_id = int(asset["id"])
+                backup = f"blinq-rollback-{token}-{name}"
+                self._asset_api("PATCH", old_id, name=backup)
+                swaps.append((name, old_id, None, backup))
             for path in [*payload_files, *history_inventory, manifest_path]:
                 result = self._guarded_publish(path, token)
                 if result is not None:
