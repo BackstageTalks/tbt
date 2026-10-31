@@ -56,6 +56,7 @@ jobs:
           python -m unittest discover -q -s tests -p 'test_refresh_dil_secondary.py'
           python -m unittest discover -q -s tests -p 'test_audit_dil_cdb_secondary_parity.py'
           python -m unittest discover -q -s tests -p 'test_finalize_dil_from_cdb_v2.py'
+          python -m unittest discover -q -s tests -p 'test_audit_dil_to_cdb_null_candidates.py'
       - name: Install canonical Parquet and private Drive read dependencies
         run: |
           set -euo pipefail
@@ -130,6 +131,56 @@ jobs:
           print('ONE_FULL_CURRENT_SOURCE_PARITY_AND_IMMUTABLE_SECONDARY_READBACK_PASS')
           PY
           echo 'ONE_FULL_CURRENT_SOURCE_PARITY_AND_IMMUTABLE_SECONDARY_READBACK_PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Count verified DIL-only missing CDB stat cells (private, no writes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/dil-private"
+          DIL_NAME=$(python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'dil-private'
+          ptr=json.loads((root/'secondary/current-secondary.json').read_text())
+          name=ptr.get('filename')
+          if not isinstance(name,str) or Path(name).name!=name or ptr.get('secondary_only') is not True:
+              raise SystemExit('BLOCKED_UNTRUSTED_DIL_SECONDARY_POINTER')
+          print(name)
+          PY
+          )
+          python scripts/audit_dil_to_cdb_null_candidates.py \
+            --cdb "$ROOT/attempt-one/cdb-compare.sqlite" \
+            --dil "$ROOT/secondary/$DIL_NAME" \
+            --export-receipt "$ROOT/attempt-one/cdb-compare.sqlite.receipt.json" \
+            --parity-report "$ROOT/attempt-one/secondary-parity.json" \
+            --out "$ROOT/attempt-one/dil-to-cdb-readonly.json" \
+            > "$ROOT/attempt-one/reverse-audit-private.log" 2>&1
+          python scripts/check_dil_secondary_health.py \
+            --secondary-dir "$ROOT/secondary" --verify-live-cdb \
+            > "$ROOT/attempt-one/reverse-freshness-private.log" 2>&1
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ['RUNNER_TEMP'])/'dil-private/attempt-one/dil-to-cdb-readonly.json'
+          r=json.loads(p.read_text())
+          assert r['schema']=='DIL_TO_CDB_NULL_CANDIDATES_READONLY_V1'
+          assert r['status']=='READ_ONLY_SOURCE_PROVENANCE_PENDING'
+          assert r['canonical_write_authorized'] is False
+          assert r['ready_for_existing_cdb_writer']==0
+          assert r['production_cdb_changed'] is False and r['api_requests']==0
+          c=r['counts']
+          print('DIL_TO_CDB_REVERSE_READONLY_COUNTS',json.dumps({
+            'matched':c.get('matched_existing_canonical_matches',0),
+            'cdb_null_raw':c.get('dil_present_cdb_null_cells',0),
+            'cdb_null_type_valid_provenance_pending':c.get('type_valid_cdb_null_cells_needing_provenance',0),
+            'intra_dil_overlay_conflicts':c.get('intra_dil_overlay_conflicts',0),
+            'unsupported_or_invalid':c.get('invalid_or_unsupported_null_cells',0),
+            'cdb_already_populated':c.get('already_populated_cdb_cells',0),
+            'by_field':r['type_valid_candidate_fields'],
+            'by_tour_year':r['by_tour_year'],
+            'cdb_manifest_sha256':r['cdb_manifest_sha256'],
+          },sort_keys=True))
+          PY
+          echo 'DIL_TO_CDB_NULL_GAP_COUNTS_ONLY_NO_WRITE' >> "$GITHUB_STEP_SUMMARY"
       - name: Erase source and isolated candidate after ephemeral audit
         if: always()
         shell: bash
