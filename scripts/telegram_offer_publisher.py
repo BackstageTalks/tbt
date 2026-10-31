@@ -196,6 +196,7 @@ def messages(x,c,now,free_event_id=None):
     names=_name_map(shown)
     def pack(records):
         """Lossless Telegram 4096-character pages, numbered across all pages."""
+        length=lambda value:len(value.encode("utf-16-le"))//2
         if not records:return []
         prefix="\n\n".join((HEADER,f"📅 {date}"))+"\n\n"
         suffix="\n\n"+footer
@@ -203,12 +204,12 @@ def messages(x,c,now,free_event_id=None):
         for key,row,number in records:
             line=fmt(row,key,c,number,names)
             candidate="\n".join([*page,line])
-            if len(prefix+candidate+suffix)>4096:
+            if length(prefix+candidate+suffix)>4096:
                 if not page:
                     raise RuntimeError("One confirmed tip exceeds Telegram's message limit")
                 pages.append({"audience":"premium","text":prefix+"\n".join(page)+suffix})
                 page=[line]
-                if len(prefix+line+suffix)>4096:
+                if length(prefix+line+suffix)>4096:
                     raise RuntimeError("One confirmed tip exceeds Telegram's message limit")
             else:
                 page.append(line)
@@ -230,7 +231,7 @@ def messages(x,c,now,free_event_id=None):
             (today+"|"+str(r.get("event_id"))+"|"+str((r.get("betting") or {}).get("selection_id") or r.get("winner_id"))).encode("utf-8")).hexdigest())
         free="\n".join(["🎾 FREE | BlinQ",f"📅 {date}","",fmt(winner,"top",c,1).replace("1️⃣","🆓",1)])
         outbound.append({"audience":"free","text":"\n\n".join([HEADER,free,footer]),"free_event_id":str(winner.get("event_id"))})
-    if any(len(item["text"])>4096 for item in outbound):
+    if any(len(item["text"].encode("utf-16-le"))//2>4096 for item in outbound):
         raise RuntimeError("Telegram 4096 character limit; reduce max_per_section")
     return outbound
 
