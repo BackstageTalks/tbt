@@ -42,7 +42,7 @@ def due(v,now):
     r=v.get("manual_request") or {}
     if isinstance(r,dict) and re.fullmatch("[A-Za-z0-9_-]{8,80}",str(r.get("id",""))):
         age=(now-stamp(r.get("created_at"))).total_seconds()
-        if 0<=age<=1800 and day(stamp(r["created_at"]))==day(now): return "manual:"+r["id"]
+        if 0<=age<=5400 and day(stamp(r["created_at"]))==day(now): return "manual:"+r["id"]
     s=v.get("schedule") or {};local=now.astimezone(TZ)
     if not s.get("enabled") or local.weekday() not in s.get("weekdays",list(range(7))): return None
     h,m=map(int,s.get("time","08:15").split(":"));planned=local.replace(hour=h,minute=m,second=0,microsecond=0)
