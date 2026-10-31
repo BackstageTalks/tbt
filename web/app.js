@@ -5164,18 +5164,18 @@ function adminActivityRows(){
 🎾 TOP Picks | BlinQ
 📅 31.10.2026
 
-1️⃣ Hráč A vs Hráč B | 12:30 | 72.4% | 1.75
-2️⃣ Hráč C vs Hráč D | 14:00 | 69.1% | 1.88
+1️⃣ Hráč A | 12:30 | 72.4% | 1.75
+2️⃣ Hráč C | 14:00 | 69.1% | 1.88
 
 💎 VALUE Picks | BlinQ
 📅 31.10.2026
 
-1️⃣ Hráč E vs Hráč F | 15:00 | 68.3% | 2.05 | EV +10.2%
+1️⃣ Hráč E | 15:00 | 68.3% | 2.05 | EV +10.2%
 
 🎯 ESÁ | BlinQ
 📅 31.10.2026
 
-1️⃣ Hráč G vs Hráč H | 16:00 | esá 8.2 | confidence 73.0% | —
+1️⃣ Hráč G | 16:00 | esá 8.2 | confidence 73.0% | —
 
 ℹ️ Analytical preview only
 🧠 by BackstageTalks Data Engine</pre><small>Ilustračný text. FREE sa posiela v samostatnej správe s jedným stabilne náhodným TOP tipom.</small></details>
