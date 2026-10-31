@@ -1817,7 +1817,7 @@ def admin_api_budget(req):
 
 @app.route(route="v1/internal/telegram/settled-results", methods=["GET"])
 def internal_telegram_settled_results(req):
-    """Read-only verified settlement archive for yesterday's Telegram report.
+    """Read-only verified settlement archive for current/previous Telegram offer.
 
     No API provider calls, model updates, score inference or archive mutations.
     A shared worker-token is mandatory; no public/admin browser bypass.
@@ -1830,7 +1830,11 @@ def internal_telegram_settled_results(req):
     try:
         target = datetime.strptime(day_text, "%Y-%m-%d").date()
         local = datetime.now(ZoneInfo("Europe/Bratislava"))
-        if not (local.date() - timedelta(days=14) <= target < local.date()):
+        # The 06:00 BlinQ betting-day boundary is authoritative. Same-day
+        # settlements are readable after the match-status worker persists them;
+        # an unfinished or future fixture never receives a fabricated result.
+        current_betting_day = local.date() if local.hour >= 6 else local.date()-timedelta(days=1)
+        if not (current_betting_day - timedelta(days=14) <= target <= current_betting_day):
             return response({"error": "outside_settlement_window"}, 400)
         archived = load_settled_results_archive()
         approved = []

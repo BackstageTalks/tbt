@@ -22,6 +22,30 @@ def previous_day(now):
     return (local.date() - timedelta(days=1)).isoformat()
 
 
+def unreported_day(state, now):
+    """Oldest unresolved issued day: current BlinQ day or its predecessor.
+
+    The 06:00 rollover must not discard a late finishing prior-day match.
+    Never resurrect older historic offers on routine worker ticks.
+    """
+    today=tg.day(now)
+    yesterday=(datetime.fromisoformat(today).date()-timedelta(days=1)).isoformat()
+    for target_day in (yesterday,today):
+        if "results:"+target_day in (state.get("attempts") or {}):
+            continue
+        if extract_sent(state,target_day):
+            return target_day
+    return None
+
+
+def all_settled(rows, archived):
+    """Require every issued selection, including the duplicate FREE reference.
+
+    Missing/ambiguous published O/U market or stat evidence remains pending.
+    """
+    return all(evaluate(row,archived)["status"] in ("won","lost","void") for row in rows)
+
+
 def archive(url, day):
     if not re.fullmatch(r"https://[A-Za-z0-9.-]+", url):
         raise ValueError("Only HTTPS results API is allowed")
@@ -299,11 +323,8 @@ def combined_daily_report(rows, archive_rows, day_text, footer):
 
 def prepare(args):
     now=tg.stamp(args.now) if args.now else datetime.now(timezone.utc)
-    target_day=previous_day(now)
-    local=now.astimezone(tg.TZ)
-    if args.external_tick and not (local.hour==7 or (local.hour==8 and local.minute<30)):
-        print(json.dumps({"status":"skipped","reason":"outside_07_local_window"}))
-        return
+    # Match-status worker dispatches us after each 30-minute reconciliation.
+    # Also accept legacy external ticks without the obsolete 07:00 time gate.
     cfg=tg.config(args.config_url)
     if cfg.get("enabled") is not True or cfg.get("results_enabled") is not True:
         print(json.dumps({"status":"skipped","reason":"results_disabled"}))
@@ -311,23 +332,25 @@ def prepare(args):
     state=tg.load(args.state)
     if not isinstance(state,dict) or not isinstance(state.get("attempts"),dict):
         raise RuntimeError("Invalid durable Telegram state")
+    target_day=unreported_day(state,now)
+    if not target_day:
+        print(json.dumps({"status":"skipped","reason":"no_unreported_issued_day"}))
+        return
     key="results:"+target_day
-    if key in state["attempts"]:
-        print(json.dumps({"status":"skipped","reason":"result_already_reserved"}))
-        return
     sent=extract_sent(state,target_day)
-    if not sent:
-        print(json.dumps({"status":"skipped","reason":"no_confirmed_sent_offers"}))
-        return
     verified=archive(args.api_url,target_day)
+    pending=[row for row in sent if evaluate(row,verified)["status"]=="pending"]
+    if pending:
+        print(json.dumps({"status":"waiting","reason":"issued_picks_not_all_settled",
+                          "day":target_day,"settled":len(sent)-len(pending),
+                          "total":len(sent)}))
+        return
     footer=tg.branded_footer(cfg.get("footer"))
-    # Premium: one chronological-by-section scorecard, preserving every
-    # actually sent TOP -> Value -> Aces pick and a total daily summary.
-    # FREE is separately graded but excluded from the premium denominator.
+    # Only a complete ELITE scorecard is delivered; the duplicate FREE
+    # reference is used for completion checks but never inflates ROI.
     posts=combined_daily_report(sent,verified,target_day,footer)
-    free=report_rows(sent,verified,"free",target_day,footer)
-    if free:
-        posts.append(free)
+    for post in posts:
+        post["audience"]="elite"
     if not posts:
         print(json.dumps({"status":"skipped","reason":"no_results_to_report"}))
         return
