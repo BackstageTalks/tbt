@@ -230,7 +230,7 @@ def test_combined_scorecard_daily_win_loss_void_pending_and_roi():
     assert abs(out["profit_units"]-0.6)<1e-9
     message=out["text"]
     assert message.count("📅")==0  # date lives inside the Results title
-    assert "WIN 2 | ❌ LOSS 1 | ➖ VOID 1 | ⏳ PENDING 1" in message
+    assert "WIN 2 | ❌ LOSS 1 | 🟪 VOID 1 | ⏳ PENDING 1" in message
     assert "Úspešnosť 66.7%" in message
     assert "Zisk +0.60u" in message
     assert "ROI +20.0%" in message
@@ -239,6 +239,60 @@ def test_combined_scorecard_daily_win_loss_void_pending_and_roi():
     assert "ACES · WIN 1 | LOSS 0 | VOID 0 | PENDING 1" in message
     assert "by BlinQ Stat Engine" in message
     assert tg.telegram_link_entities(message)[0]["url"] == tg.BRAND_URL
+    assert "🅃 Surname | 1.80 | +0.80u ✅" in message
+    assert "🅅 Surname | 2.05 | -1.00u ❌" in message
+    assert "🅃 Surname | 1.65 | +0.00u 🟪 VOID" in message
+    assert "🄰 Surname | — | — ⏳" in message
+    assert "🄰 Surname | 1.80 | +0.80u ✅" in message
+    assert all(icon not in message for icon in tg.NUMBER_EMOJIS)
+    assert "13:30" not in message  # no match time in compact ELITE results
+
+
+
+
+def test_elite_seven_picks_with_postponed_and_purple_void_are_not_fabricated():
+    names=("Hanfmann","Virtanen","Gray","Hijikata","Fritz","Medvedev","Zverev")
+    sections=("top","top","top","value","aces","aces","aces")
+    prices=(1.66,1.67,1.67,1.83,2.00,2.00,2.00)
+    rows=[]
+    for i,(name,section,price) in enumerate(zip(names,sections,prices),1):
+        entry=sent(section,f"fixture-{i}",price)
+        entry["name"]=name
+        rows.append(entry)
+    archive_rows=[settled(row,correct=outcome) for row,outcome in zip(rows,(True,True,False,True,False,True,False))]
+    report=r.combined_daily_report(rows,archive_rows,DAY,tg.branded_footer())
+    assert len(report)==1
+    body=report[0]["text"]
+    expected=(
+        "🅃 Hanfmann | 1.66 | +0.66u ✅",
+        "🅃 Virtanen | 1.67 | +0.67u ✅",
+        "🅃 Gray | 1.67 | -1.00u ❌",
+        "🅅 Hijikata | 1.83 | +0.83u ✅",
+        "🄰 Fritz | 2.00 | -1.00u ❌",
+        "🄰 Medvedev | 2.00 | +1.00u ✅",
+        "🄰 Zverev | 2.00 | -1.00u ❌",
+    )
+    assert all(entry in body for entry in expected)
+    assert all(body.index(first)<body.index(second) for first,second in zip(expected,expected[1:]))
+    assert report[0]["counts"]=={"won":4,"lost":3,"void":0,"pending":0}
+    assert "Zisk +0.16u" in body and "ROI +2.3%" in body
+    assert tg.telegram_link_entities(body)[0]["url"]==tg.BRAND_URL
+
+    # Explicit verified VOID is neutral for units/ROI, not an invented loss.
+    void_rows=list(archive_rows)
+    void_rows[4]=settled(rows[4],void=True,correct=None)
+    void_post=r.combined_daily_report(rows,void_rows,DAY,tg.branded_footer())[0]
+    assert "🄰 Fritz | 2.00 | +0.00u 🟪 VOID" in void_post["text"]
+    assert void_post["counts"]=={"won":4,"lost":2,"void":1,"pending":0}
+    assert void_post["priced_decisions"]==6
+
+    # A postponed match has no verified settlement: remain pending/hourglass.
+    # Automatic ELITE delivery must wait; it cannot infer a VOID from a delay.
+    postponed=list(void_rows[:-1])
+    waiting=r.combined_daily_report(rows,postponed,DAY,tg.branded_footer())[0]
+    assert "🄰 Zverev | 2.00 | — ⏳" in waiting["text"]
+    assert waiting["counts"]=={"won":4,"lost":1,"void":1,"pending":1}
+    assert not r.all_settled(rows,postponed)
 
 
 def test_result_count_does_not_double_count_free_pick():
@@ -259,7 +313,7 @@ def test_all_issued_results_are_preserved_when_telegram_message_spills():
     assert len(posts)>1
     assert all(len(item["text"].encode("utf-16-le"))//2<=4096 for item in posts)
     body="\n".join(item["text"] for item in posts)
-    assert body.count("✅ Surname")==len(samples)
+    assert body.count("Surname | 1.80 | +0.80u ✅")==len(samples)
     assert "WIN 149" in posts[-1]["text"]
     assert sum(item["counts"]["won"] for item in posts)==149
     assert "ROI +80.0%" in posts[-1]["text"]
