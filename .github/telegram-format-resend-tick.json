@@ -1,6 +1,17 @@
 {
   "schema": 1,
-  "reason": "Explicit operator-approved manual one-time Telegram resend of the already issued 2026-10-31 offer, presentation updated, EV removed",
+  "kind": "operator-approved-one-time-format-reissue",
   "betting_day": "2026-10-31",
-  "requested_by": "operator"
+  "revision": "format-aces-compact-v5",
+  "format": {
+    "ace_category": "🄰",
+    "over": "O",
+    "under": "U",
+    "projection": "≈",
+    "ace_unit": "implicit",
+    "preserve_odds": true
+  },
+  "preserve_original_confirmed_picks": true,
+  "requested_by": "operator",
+  "note": "Reformat previously Telegram-confirmed 31 Oct daily selections; never issue new selections. Prevent any second send under the same revision."
 }

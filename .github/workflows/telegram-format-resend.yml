@@ -47,7 +47,22 @@ jobs:
           set -euo pipefail
           test -n "$GH_TOKEN"
           test -s .private-telegram/ops/telegram-bot-state.json
-          python scripts/telegram_offer_publisher.py prepare --preview-format --preview-revision format-squares-v4 \
+          if [[ "$(TZ=Europe/Bratislava date +%F)" != "2026-10-31" ]]; then
+            echo "::notice::31 Oct preview expired; no backdated or next-day send."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path(".github/telegram-format-resend-tick.json")
+          request=json.loads(p.read_text(encoding="utf-8"))
+          assert request.get("betting_day")=="2026-10-31"
+          assert request.get("revision")=="format-aces-compact-v5"
+          assert request.get("preserve_original_confirmed_picks") is True
+          print("Approved one-time 31 Oct ACE compact reissue trigger verified")
+          PY
+          python scripts/telegram_offer_publisher.py prepare --preview-format --preview-revision format-aces-compact-v5 \
             --state .private-telegram/ops/telegram-bot-state.json \
             --config-url "$BLINQ_URL/api/v1/ui-config"
           if [[ -s /tmp/blinq-telegram/ready ]]; then
