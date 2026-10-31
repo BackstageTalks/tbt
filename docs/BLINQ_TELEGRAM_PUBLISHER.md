@@ -120,7 +120,7 @@ BlinQ | Tennis Intelligence
 4️⃣ ⏳ Alcaraz | 17:00 | — | Pending
 
 📊 Denný súhrn
-TOP · WIN 1 | LOSS 0 | VOID 1 | PENDING 0 | Win 100.0% | +0.80u | ROI 80.0%
+TOP · WIN 1 | LOSS 0 | VOID 1 | PENDING 0 | Win 100.0% | +0.80u | ROI +80.0%
 VALUE · WIN 0 | LOSS 1 | VOID 0 | PENDING 0 | Win 0.0% | -1.00u | ROI -100.0%
 ACES · WIN 0 | LOSS 0 | VOID 0 | PENDING 1 | Win — | +0.00u | ROI —
 ✅ WIN 1 | ❌ LOSS 1 | ➖ VOID 1 | ⏳ PENDING 1
