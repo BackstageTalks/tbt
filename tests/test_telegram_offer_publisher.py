@@ -42,7 +42,7 @@ def settings(**kwargs):
 def offer():
     return dict(confirmed_only=True, betting_day="2026-10-31",
                 generated_at=NOW.isoformat(),
-                top_daily_picks=[row(i, f"Player {i}") for i in range(1, 6)],
+                top_daily_picks=[row(i, f"Player Surname{i}") for i in range(1, 6)],
                 value_picks=[row(42, "Value")],
                 ace_picks=[row(51, "Server", "aces"), row(52, "DF", "aces") | {"market": "double_faults"}])
 
@@ -53,12 +53,12 @@ def test_classic_format_and_deterministic_free_pick():
     assert first == second
     assert [x["audience"] for x in first] == ["premium", "free"]
     assert "Data Betting by BackstageTalks" in first[0]["text"]
-    assert "1️⃣ Player" in first[0]["text"]
+    assert "1️⃣ Surname1 | " in first[0]["text"]
     assert " | " in first[0]["text"]
     assert "🎾 TOP Picks | BlinQ" in first[0]["text"]
     assert "💎 VALUE Picks | BlinQ" in first[0]["text"]
     assert "🎯 ESÁ | BlinQ" in first[0]["text"]
-    assert "🆓 Player" in first[1]["text"]
+    assert "🆓 Surname" in first[1]["text"]
     assert first[1]["text"].count("🆓") == 1
     assert "Double Fault" not in first[0]["text"]
     assert all("Analytical preview only" in x["text"] for x in first)
@@ -84,7 +84,7 @@ def test_stale_unconfirmed_and_started_are_blocked():
     expired = offer()
     expired["top_daily_picks"][0]["scheduled_at"] = (NOW - timedelta(minutes=1)).isoformat()
     m = tg.messages(expired, settings(sections={"top": True, "value": False, "aces": False}, free_top_pick=False), NOW)
-    assert "Player 1" not in m[0]["text"]
+    assert "Surname1" not in m[0]["text"]
 
 
 def test_due_window_and_manual_request():
@@ -95,6 +95,14 @@ def test_due_window_and_manual_request():
     cfg["manual_request"] = {"id": "abcdef123456", "created_at": NOW.isoformat()}
     assert tg.due(cfg, NOW) == "manual:abcdef123456"
     assert tg.due(cfg, NOW + timedelta(minutes=91)) is None
+
+
+def test_scheduled_2330_survives_midnight_betting_day():
+    now = datetime(2026, 10, 31, 22, 30, tzinfo=timezone.utc)
+    cfg = settings()
+    cfg["schedule"]["time"] = "23:30"
+    cfg["schedule"]["weekdays"] = [5]  # Saturday Oct 31
+    assert tg.due(cfg, now) == "schedule:2026-10-31"
 
 
 def test_snapshot_checksum_guard(tmp_path, monkeypatch):
