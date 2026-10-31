@@ -320,6 +320,12 @@ jobs:
           if [[ "$MODE" != provider-probe ]]; then
             test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
           fi
+          # A failed GitHub release upload must not leave the serving feed
+          # or immutable issuance ledger broken. Recover under the existing
+          # tbt-production-deploy job group before any paid provider calls.
+          if [[ "$MODE" == refresh || "$MODE" == current-refresh || "$MODE" == results-rebuild || "$MODE" == deploy-current ]]; then
+            python scripts/ensure_prediction_release.py --data-repository "$TBT_DATA_REPOSITORY"
+          fi
           # Under the existing CDB global lock, recover a committed/rollback
           # release generation before touching paid API quota. This is a no-op
           # for healthy releases and uses the existing audited legacy repair.
