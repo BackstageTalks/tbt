@@ -1445,7 +1445,7 @@ def validate_ui_config(payload: object) -> dict:
             raise ValueError("Telegram bot config must be an object")
         if any(key in bot for key in ("bot_token", "token", "chat_id", "TGB", "TGCH")):
             raise ValueError("Telegram credentials must be stored in GitHub Secrets")
-        for key in ("enabled", "include_started", "show_probability", "show_odds", "free_top_pick"):
+        for key in ("enabled", "include_started", "show_probability", "show_odds", "free_top_pick", "results_enabled"):
             if key in bot and not isinstance(bot[key], bool):
                 raise ValueError("Invalid Telegram flag " + key)
         sections = bot.get("sections", {})
@@ -1464,6 +1464,8 @@ def validate_ui_config(payload: object) -> dict:
         days = schedule.get("weekdays", list(range(7)))
         if not isinstance(days, list) or any(type(day) is not int or day not in range(7) for day in days):
             raise ValueError("Invalid Telegram weekdays")
+        if not re.fullmatch(r"(?:0[6-9]|1[0-9]|2[0-3]):[0-5][0-9]", str(bot.get("results_time", "07:00"))):
+            raise ValueError("Telegram Results time must be 06:00 or later")
         if bot.get("layout", "combined") not in ("combined", "separate"):
             raise ValueError("Invalid Telegram message layout")
         limit = bot.get("max_per_section", 7)
