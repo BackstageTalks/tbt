@@ -21,7 +21,7 @@ jobs:
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
     steps:
       - name: Dispatch private calibration re-read only after exact live release
         env:
@@ -43,6 +43,25 @@ jobs:
           fi
           # The signed private worker will independently verify the CDB, model
           # pair, immutable release, CAS storage write and authenticated readback.
+          correlation="postdeploy-${DEPLOYED_SHA:0:12}-${GITHUB_RUN_ID}"
           gh workflow run model-calibration-monitor.yml \
-            --repo "$GITHUB_REPOSITORY" --ref main
-          echo 'CALIBRATION_POSTDEPLOY_DISPATCH_SUBMITTED_NOT_YET_VERIFIED'
+            --repo "$GITHUB_REPOSITORY" --ref main -f "request_id=$correlation"
+          # Dispatch acknowledgment is NOT the result. Wait for the exact
+          # correlated, private monitor run and require a successful readback.
+          monitor_id=""
+          for attempt in {1..20}; do
+            monitor_id="$(gh run list --repo "$GITHUB_REPOSITORY" \
+              --workflow model-calibration-monitor.yml --branch main \
+              --event workflow_dispatch --limit 40 \
+              --json databaseId,displayTitle \
+              --jq ".[] | select(.displayTitle == \"Model Lab tests $correlation\") | .databaseId" | head -1)"
+            [[ -n "$monitor_id" ]] && break
+            sleep 3
+          done
+          if [[ -z "$monitor_id" ]]; then
+            echo "::error::CALIBRATION_POSTDEPLOY_NO_CORRELATED_MONITOR_RUN"
+            exit 1
+          fi
+          gh run watch "$monitor_id" --repo "$GITHUB_REPOSITORY" \
+            --exit-status --interval 15
+          echo "CALIBRATION_POSTDEPLOY_VERIFIED monitor_run=$monitor_id"
