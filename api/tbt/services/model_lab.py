@@ -238,6 +238,15 @@ def collect_status(read=github):
         entries = []
         inspected_preflight = False
         for item in raw.get("workflow_runs", []):
+            if item.get("status") in ("queued", "in_progress", "waiting", "pending", "requested"):
+                busy = True
+            # Inspect every queued data writer, but retain only our tagged
+            # manual runs. Storing 100 ordinary data runs would exceed Azure
+            # Table's single-property payload cap and break Admin status sync.
+            if (action == "refresh_champion_inputs" and
+                    not re.fullmatch(r"BlinQ inputs refresh [0-9a-f]{24}",
+                                     str(item.get("display_title") or ""))):
+                continue
             record = {k: item.get(k) for k in
                       ("id", "status", "conclusion", "html_url", "display_title", "created_at", "head_sha")}
             if (action == "refresh_champion_inputs" and
