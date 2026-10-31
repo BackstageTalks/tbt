@@ -1,5 +1,5 @@
-name: BlinQ Telegram daily results
-# External cron repository_dispatch at ~07:00 Europe/Bratislava (no GitHub cron)
+name: BlinQ Telegram ELITE verified results after last pick
+# Triggered by the existing 30-minute match-status worker, no new cron.
 on:
   repository_dispatch:
     types: [telegram-results-tick]
@@ -34,13 +34,15 @@ jobs:
         run: |
           set -euo pipefail
           test -s .private-telegram/ops/telegram-bot-state.json
-      - name: Build previous-betting-day report
+      - name: Build report only when ALL issued picks have verified results
         env:
           BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
           BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          TGCH_ELITE: ${{ secrets.TGCH_ELITE }}
         run: |
           set -euo pipefail
           test -n "$BLINQ_LIVE_WORKER_TOKEN" || { echo "::error::BLINQ_LIVE_WORKER_TOKEN missing"; exit 1; }
+          test -n "$TGCH_ELITE" || { echo "::error::TGCH_ELITE must be configured before any result reservation"; exit 1; }
           args=()
           if [ "$GITHUB_EVENT_NAME" = repository_dispatch ]; then args+=(--external-tick); fi
           python scripts/telegram_daily_results.py prepare --api-url "$BLINQ_PRODUCTION_URL" --config-url "$BLINQ_PRODUCTION_URL/api/v1/ui-config" --state .private-telegram/ops/telegram-bot-state.json "${args[@]}"
@@ -59,12 +61,12 @@ jobs:
           actual=$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')
           test "$expected" = "$actual" || { echo "::error::Results reservation read-back failed"; exit 1; }
           echo "ready=true" >>"$GITHUB_OUTPUT"
-      - name: Send verified Telegram daily results
+      - name: Send verified ELITE results (no FREE/premium fallback)
         if: steps.reserve.outputs.ready == 'true'
         env:
           TGB: ${{ secrets.TGB }}
           TGCH: ${{ secrets.TGCH }}
-          TGCH_FREE: ${{ secrets.TGCH_FREE }}
+          TGCH_ELITE: ${{ secrets.TGCH_ELITE }}
         run: |
           python scripts/telegram_offer_publisher.py send
       - name: Confirm Telegram results receipts
