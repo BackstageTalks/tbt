@@ -112,15 +112,18 @@ def test_mobile_market_cards():
                 page.route('**/*',static_route)
                 page.goto(ORIGIN+'/index.html?lang=sk',wait_until='networkidle')
                 page.evaluate(SETUP,'daily')
+                page.evaluate("document.querySelectorAll('*').forEach(n=>{n.style.setProperty('transition','none','important');n.style.setProperty('animation','none','important')})")
                 if admin:
                     page.evaluate("document.body.classList.add('blinq-admin')")
+                page.wait_for_timeout(100)
                 snapshot = """() => [...document.querySelectorAll('body,.site-header,.site-header *,#dashboardHero,#dashboardHero *,#dashboardKpis,#dashboardKpis *,#dailyHub,#dailyHub *,#mobileTabs,#mobileTabs *')].map(n=>{
                   const s=getComputedStyle(n),r=n.getBoundingClientRect();
                   return [r.x,r.y,r.width,r.height,s.background,s.fontSize,s.display,s.border,s.padding,s.gridTemplateAreas];
                 })"""
                 before=page.evaluate(snapshot)
                 page.evaluate("document.querySelector('link[href*=\"blinq-mobile-court.css\"]').disabled=true")
-                assert before==page.evaluate(snapshot),(width,admin,'visual layer leaked outside phone scope')
+                after=page.evaluate(snapshot)
+                assert before==after,(width,admin,[(a,b) for a,b in zip(before,after) if a!=b][:3])
                 print('unchanged-scope',width,'admin' if admin else 'tablet/desktop')
                 page.close()
         finally:
