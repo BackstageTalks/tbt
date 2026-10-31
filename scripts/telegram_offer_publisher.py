@@ -287,14 +287,47 @@ def mark_sent(args):
     save(out/"state.json",state)
     print(json.dumps({"status":"sent","id":ident,"confirmed":len(receipt)}))
 
+def _daily_id(now):
+    return day(now)+":daily:0620"
+
+def queue_daily(a):
+    """Durable, data-free send intent. Commit this ledger before waiting for data."""
+    now=stamp(a.now) if a.now else datetime.now(timezone.utc)
+    ident=_daily_id(now)
+    state=load(a.state) if Path(a.state).is_file() else {"schema":1,"attempts":{}}
+    attempts=state.setdefault("attempts",{})
+    if not isinstance(attempts,dict):raise RuntimeError("Invalid state")
+    # Never schedule another premium batch for a day already reserved or sent.
+    if any(key.startswith(day(now)+":") and isinstance(value,dict)
+           and value.get("status") in ("reserved","sent")
+           for key,value in attempts.items()):
+        print(json.dumps({"status":"skipped","reason":"already_reserved_or_sent","id":ident}))
+        return
+    if ident not in attempts:
+        attempts[ident]={"status":"queued","queued_at":now.isoformat()}
+        save(a.state,state)
+    print(json.dumps({"status":"queued","id":ident}))
+
 def prepare(a):
-    now=stamp(a.now) if a.now else datetime.now(timezone.utc);v=config(a.config_url);key=due(v,now)
+    now=stamp(a.now) if a.now else datetime.now(timezone.utc);v=config(a.config_url)
+    if a.daily:
+        # Explicitly operator-approved full offer. Admin UI settings remain unchanged.
+        v={**v,"enabled":True,"sections":{k:True for k in SECTIONS},
+           "layout":"combined","max_per_section":0,"free_top_pick":True}
+        key="daily:0620"
+    else:
+        key=due(v,now)
     if not key:print('{"status":"skipped","reason":"not_due"}');return
     old=load(a.state) if Path(a.state).is_file() else {"schema":1,"attempts":{}}
     attempts=old.get("attempts")
     if not isinstance(attempts,dict):raise RuntimeError("Invalid state")
     ident=day(now)+":"+key
-    if ident in attempts:print('{"status":"skipped","reason":"already_reserved"}');return
+    if a.daily and any(k!=ident and k.startswith(day(now)+":")
+                       and isinstance(v,dict) and v.get("status") in ("reserved","sent")
+                       for k,v in attempts.items()):
+        print('{"status":"skipped","reason":"daily_offer_already_reserved"}');return
+    if ident in attempts and attempts[ident].get("status")!="queued":
+        print('{"status":"skipped","reason":"already_reserved"}');return
     out=Path(a.output)
     sticky=old.get("free_picks") if isinstance(old.get("free_picks"),dict) else {}
     confirmed=snapshot(out/"assets")
@@ -349,7 +382,8 @@ def send(a):
         save(Path(a.output)/"receipt.json",receipts)
         print("Telegram accepted message_id="+str(message_id))
 if __name__=="__main__":
-    p=argparse.ArgumentParser();p.add_argument("action",choices=["prepare","send","mark-sent"])
+    p=argparse.ArgumentParser();p.add_argument("action",choices=["prepare","queue-daily","send","mark-sent"])
     p.add_argument("--config-url",default="https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/ui-config")
     p.add_argument("--state",default="ops/telegram-bot-state.json");p.add_argument("--output",default="/tmp/blinq-telegram");p.add_argument("--now",default="")
-    a=p.parse_args();{"prepare":prepare,"send":send,"mark-sent":mark_sent}[a.action](a)
+    p.add_argument("--daily",action="store_true",help="Operator-approved full daily offer")
+    a=p.parse_args();{"prepare":prepare,"queue-daily":queue_daily,"send":send,"mark-sent":mark_sent}[a.action](a)
