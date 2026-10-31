@@ -1514,9 +1514,9 @@ def validate_ui_config(payload: object) -> dict:
             raise ValueError("Invalid Telegram weekdays")
         if bot.get("layout", "combined") not in ("combined", "separate"):
             raise ValueError("Invalid Telegram message layout")
-        limit = bot.get("max_per_section", 7)
-        if type(limit) is not int or not 1 <= limit <= 10:
-            raise ValueError("Telegram limit must be 1..10")
+        limit = bot.get("max_per_section", 0)
+        if type(limit) is not int or not 0 <= limit <= 1000:
+            raise ValueError("Telegram limit must be 0 (ALL) or 1..1000")
         footer = bot.get("footer", "BlinQ · Tennis Intelligence")
         if not isinstance(footer, str) or len(footer) > 200 or "\r" in footer:
             raise ValueError("Invalid Telegram footer")

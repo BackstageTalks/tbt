@@ -5123,7 +5123,7 @@ function adminActivityRows(){
     if(!state.ui.telegram_bot||typeof state.ui.telegram_bot!=='object')
       state.ui.telegram_bot={enabled:false,sections:{top:true,value:true,aces:true},
         schedule:{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]},layout:'combined',
-        max_per_section:7,include_started:false,show_probability:true,show_odds:true,free_top_pick:true,results_enabled:false,
+        max_per_section:0,include_started:false,show_probability:true,show_odds:true,free_top_pick:true,results_enabled:false,
         footer:'ℹ️ Analytical preview only'};
     const c=state.ui.telegram_bot;
     if(typeof c.footer==='string'&&c.footer.includes('BackstageTalks Data Engine'))c.footer=c.footer.replace(/\n?🧠 by BackstageTalks Data Engine/g,'').trim()||'ℹ️ Analytical preview only';
@@ -5145,7 +5145,7 @@ function adminActivityRows(){
           ${check('sections.value',c.sections.value===true,'💎 Value')}
           ${check('sections.aces',c.sections.aces===true,'🎯 Aces')}
           ${check('free_top_pick',c.free_top_pick!==false,'🆓 Jeden náhodný tip z TOP (FREE)')}
-          <label>Maximum tipov na kategóriu <input type="number" min="1" max="10" data-tg-bot-field="max_per_section" value="${Number(c.max_per_section)||7}"></label>
+          <label>Počet tipov na kategóriu <select data-tg-bot-field="max_per_section"><option value="0" ${Number(c.max_per_section)===0?'selected':''}>Celá potvrdená ponuka (ALL)</option>${[3,5,7,10,20,50].map(n=>`<option value="${n}" ${Number(c.max_per_section)===n?'selected':''}>${n} tipov</option>`).join('')}</select></label>
         </div>
         <div class="tg-bot-card"><h3>Kedy posielať</h3>
           ${check('schedule.enabled',s.enabled===true,'Automatické denné odosielanie')}
@@ -5160,7 +5160,7 @@ function adminActivityRows(){
           <div class="tg-bot-results-toggle">
             <h3>📊 Denné vyhodnotenie</h3>
             ${check('results_enabled',c.results_enabled===true,'Posielať vyhodnotenie predchádzajúceho betting day')}
-            <small>Samostatný externý cron okolo 07:00 Europe/Bratislava spúšťa workflow BlinQ Telegram daily results. Neuzavreté výsledky sú Pending. ROI počítame len z overených ocenených tipov.</small>
+            <small>Jeden spoločný denný report za predchádzajúci betting day: WIN / LOSS / VOID / PENDING, úspešnosť %, zisk v units, ROI a rozpad TOP / Value / Aces. Free sa vyhodnotí samostatne. Externý cron okolo 07:00 Europe/Bratislava; neuzavreté zápasy zostanú Pending. ROI len z overených kurzových tipov.</small>
           </div>
           <label>Poznámka v pätičke <textarea rows="2" maxlength="200" data-tg-bot-field="footer">${escapeHtml(c.footer||'ℹ️ Analytical preview only')}</textarea><small>Odkaz „by BlinQ Stat Engine“ sa pridáva automaticky do každej správy.</small></label>
         </div>
@@ -5176,6 +5176,24 @@ function adminActivityRows(){
 
 ℹ️ Analytical preview only
 by BlinQ Stat Engine</pre><small>Ilustračné tipy. BlinQ Stat Engine bude v Telegrame klikateľný odkaz na Follow the Data. FREE ide samostatne ako 🆓.</small></details>
+      <details class="tg-bot-preview"><summary>Náhľad výsledkového reportu</summary><pre>BlinQ | Tennis Intelligence
+
+📊 Results | 30.10.2026
+
+1️⃣ ✅ Novak | 13:30 | 1.80 | +0.80u
+2️⃣ ❌ Sinner | 14:15 | 2.05 | -1.00u
+3️⃣ ➖ Kovac | 15:00 | 1.92 | +0.00u
+4️⃣ ⏳ Alcaraz | 17:00 | — | Pending
+
+📊 Denný súhrn
+TOP · WIN 1 | LOSS 0 | VOID 1 | PENDING 0 | Win 100.0% | +0.80u | ROI +80.0%
+VALUE · WIN 0 | LOSS 1 | VOID 0 | PENDING 0 | Win 0.0% | -1.00u | ROI -100.0%
+ACES · WIN 0 | LOSS 0 | VOID 0 | PENDING 1 | Win — | +0.00u | ROI —
+✅ WIN 1 | ❌ LOSS 1 | ➖ VOID 1 | ⏳ PENDING 1
+🎯 Úspešnosť 50.0% | 💰 Zisk -0.20u | 📈 ROI -10.0%
+
+ℹ️ Analytical preview only
+by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky rozdelia do viacerých správ; konečný súhrn bude v poslednej správe. WIN % = WIN/(WIN + LOSS). ROI = zisk/počet reálne ocenených rozhodnutých tipov.</small></details>
       <div class="tg-bot-actions"><button class="btn btn-primary" type="button" data-admin-action="tg-bot-queue" ${state.uiStorageAvailable===true?'':'disabled'}>Zaradiť jednorazové odoslanie</button><small>Uloží nastavenia a požiadavku do 90-minútového okna. Doručenie potvrdí až GitHub Actions → BlinQ Telegram offer. Požiadavka sa neodošle dvakrát.</small></div>
     </section>`;
   }
