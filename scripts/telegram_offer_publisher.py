@@ -370,7 +370,10 @@ def prepare(a):
            "layout":"combined","max_per_section":0,"free_top_pick":True}
         if repost:
             v["include_started"]=True  # Editing the exact morning offer, not new picks
-        key="repost:format-v2-no-ev" if repost else "daily:0620"
+        revision=getattr(a,"preview_revision","format-v2-no-ev")
+        if not re.fullmatch(r"[A-Za-z0-9-]{8,48}",revision):
+            raise ValueError("Invalid explicit preview revision")
+        key="repost:"+revision if repost else "daily:0620"
     else:
         key=due(v,now)
     if not key:print('{"status":"skipped","reason":"not_due"}');return
@@ -467,4 +470,5 @@ if __name__=="__main__":
     p.add_argument("--state",default="ops/telegram-bot-state.json");p.add_argument("--output",default="/tmp/blinq-telegram");p.add_argument("--now",default="")
     p.add_argument("--daily",action="store_true",help="Operator-approved full daily offer")
     p.add_argument("--preview-format",action="store_true",help="One-time repost of exact sent offer with updated presentation")
+    p.add_argument("--preview-revision",default="format-v2-no-ev",help="Stable unique operator-approved repost revision")
     a=p.parse_args();{"prepare":prepare,"queue-daily":queue_daily,"send":send,"mark-sent":mark_sent}[a.action](a)
