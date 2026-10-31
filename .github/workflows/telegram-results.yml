@@ -1,0 +1,67 @@
+name: BlinQ Telegram Results previous day
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hourly-api-gapfill-tick.json'
+  repository_dispatch:
+    types: [telegram-results-tick]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: blinq-telegram-offer
+  cancel-in-progress: false
+jobs:
+  results:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Load persistent Telegram ledger
+        run: |
+          set -euo pipefail
+          git fetch origin telegram-bot-state
+          git worktree add --detach /tmp/blinq-tg-ledger FETCH_HEAD
+          mkdir -p /tmp/blinq-tg-ledger/ops
+          if [ ! -f /tmp/blinq-tg-ledger/ops/telegram-bot-state.json ]; then
+            printf '{"schema":1,"attempts":{}}\n' >/tmp/blinq-tg-ledger/ops/telegram-bot-state.json
+          fi
+      - name: Prepare verified Results report
+        env:
+          BLINQ_RESULTS_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN" || { echo "::error::Missing existing BLINQ_LIVE_WORKER_TOKEN"; exit 1; }
+          python scripts/telegram_result_publisher.py --config-url "$BLINQ_RESULTS_BASE_URL/api/v1/ui-config" --results-url "$BLINQ_RESULTS_BASE_URL/api/v1/internal/telegram-results" --state /tmp/blinq-tg-ledger/ops/telegram-bot-state.json
+      - name: Reserve results report before Telegram request
+        id: reserve
+        run: |
+          set -euo pipefail
+          if [ ! -f /tmp/blinq-telegram-results/ready ]; then
+            echo "ready=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          cp /tmp/blinq-telegram-results/state.json /tmp/blinq-tg-ledger/ops/telegram-bot-state.json
+          git -C /tmp/blinq-tg-ledger config user.name "github-actions[bot]"
+          git -C /tmp/blinq-tg-ledger config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C /tmp/blinq-tg-ledger add ops/telegram-bot-state.json
+          git -C /tmp/blinq-tg-ledger commit -m "Reserve BlinQ Telegram Results report [skip ci]"
+          git -C /tmp/blinq-tg-ledger push origin HEAD:telegram-bot-state
+          expected=$(git -C /tmp/blinq-tg-ledger rev-parse HEAD)
+          actual=$(git ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')
+          test "$expected" = "$actual" || { echo "::error::Results reservation readback failed"; exit 1; }
+          echo "ready=true" >>"$GITHUB_OUTPUT"
+      - name: Send previous day results
+        if: steps.reserve.outputs.ready == 'true'
+        env:
+          TGB: ${{ secrets.TGB }}
+          TGCH: ${{ secrets.TGCH }}
+        run: |
+          python scripts/telegram_offer_publisher.py send --output /tmp/blinq-telegram-results
