@@ -412,6 +412,24 @@ class TestWorker(unittest.TestCase):
             self.assertNotIn("promote", json.dumps(arguments))
             self.assertNotIn("max_requests", json.dumps(arguments))
 
+    def test_champion_inputs_refresh_dispatch_never_trains_or_promotes(self):
+        from admin_model_lab_worker import dispatch
+        pending = {"action": "refresh_champion_inputs", "id": "a" * 24,
+                   "expected_candidate_sha256": "a" * 64,
+                   "expected_champion_sha256": "b" * 64}
+        with patch("admin_model_lab_worker.collect_status", return_value=snapshot()), \
+             patch("admin_model_lab_worker.inspect", return_value={"can_start": True}), \
+             patch("admin_model_lab_worker.sync", return_value={"stored": True, "dispatch_ready": True}), \
+             patch("admin_model_lab_worker.github") as gh:
+            dispatch(pending)
+            url, kwargs = gh.call_args.args
+            self.assertEqual(url, "BackstageTalks/tbt/actions/workflows/data.yml/dispatches")
+            self.assertEqual(kwargs["inputs"], {
+                "request_id": "a" * 24, "mode": "current-refresh",
+                "promote": "false", "morning_refresh": "false",
+            })
+            self.assertEqual(kwargs["ref"], "main")
+
     def test_worker_refuses_candidate_change(self):
         from admin_model_lab_worker import dispatch
         pending = {"action": "refresh_tests", "id": "b" * 24,
@@ -424,6 +442,16 @@ class TestWorker(unittest.TestCase):
             with self.assertRaises(model_training.TrainingBlocked):
                 dispatch(pending)
             gh.assert_not_called()
+
+
+class TestChampionInputRefreshWorkflow(unittest.TestCase):
+    def test_existing_data_workflow_correlates_and_guards_refresh(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/data.yml").read_text()
+        self.assertIn("request_id:", workflow)
+        self.assertIn("BlinQ inputs refresh {0}", workflow)
+        self.assertIn("Validate Model Lab input-refresh dispatch", workflow)
+        self.assertIn('[[ "$MODE" == "current-refresh" && "$PROMOTE" != "true" ]]', workflow)
+        self.assertIn("python scripts/pipeline.py", workflow)
 
 
 class TestWorkerHeartbeat(unittest.TestCase):
