@@ -202,7 +202,6 @@ jobs:
         env:
           TGB: ${{ secrets.TGB }}
           TGCH: ${{ secrets.TGCH }}
-          TGCH_FREE: ${{ secrets.TGCH_FREE }}
         run: |
           python scripts/telegram_offer_publisher.py send
       - name: Persist Telegram receipts and independently verify

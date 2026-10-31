@@ -34,11 +34,9 @@ jobs:
         env:
           TGB: ${{ secrets.TGB }}
           TGCH: ${{ secrets.TGCH }}
-          TGCH_ELITE: ${{ secrets.TGCH_ELITE }}
         run: |
           set -euo pipefail
-          test -n "$TGB" && test -n "$TGCH" && test -n "$TGCH_ELITE" || {
-            echo "::error::TGB, TGCH, and TGCH_ELITE required; never fall back to non-ELITE channel"
+            echo "::error::TGB and TGCH required for the single configured Telegram channel"
             exit 1
           }
           python scripts/telegram_elite_results_preview.py
@@ -81,7 +79,6 @@ jobs:
         env:
           TGB: ${{ secrets.TGB }}
           TGCH: ${{ secrets.TGCH }}
-          TGCH_ELITE: ${{ secrets.TGCH_ELITE }}
         run: |
           set -euo pipefail
           python scripts/telegram_offer_publisher.py send

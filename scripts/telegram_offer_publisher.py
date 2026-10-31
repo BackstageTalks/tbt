@@ -449,14 +449,7 @@ def send(a):
     receipts=[]
     for item in load(Path(a.output)/"messages.json"):
         if not isinstance(item,dict) or item.get("audience") not in ("free","premium","elite"): raise RuntimeError("Invalid reserved recipient")
-        if item["audience"]=="elite":
-            # Results must not fall back to the premium or FREE channel.
-            destination=os.getenv("TGCH_ELITE") or ""
-            if not destination:raise RuntimeError("TGCH_ELITE secret required for ELITE-only results")
-        elif item["audience"]=="free":
-            destination=os.getenv("TGCH_FREE") or chat
-        else:
-            destination=chat
+        destination=chat
         # Telegram text_link entities keep the visible footer compact and
         # clickable without untrusted player text passing through HTML parsing.
         body={"chat_id":destination,"text":item["text"],"disable_web_page_preview":"true"}

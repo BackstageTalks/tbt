@@ -76,7 +76,6 @@ jobs:
         env:
           TGB: ${{ secrets.TGB }}
           TGCH: ${{ secrets.TGCH }}
-          TGCH_FREE: ${{ secrets.TGCH_FREE }}
         run: |
           set -euo pipefail
           python scripts/telegram_offer_publisher.py send
