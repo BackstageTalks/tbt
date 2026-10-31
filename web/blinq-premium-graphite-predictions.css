@@ -114,7 +114,9 @@
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #predictionsView #dailyHub :is(.hub-tournament-copy small, .hub-pick-stack small,
-                                  .hub-number-stack small, .hub-confidence-cell::before) {
+                                  .hub-number-stack small),
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .hub-confidence-cell::before {
     color: var(--bq-graphite-muted) !important;
     text-shadow: none !important;
   }
