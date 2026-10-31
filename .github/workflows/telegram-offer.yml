@@ -1,0 +1,89 @@
+name: BlinQ Telegram offer
+# Reuse the existing external hourly tick; optional 10-minute
+# repository_dispatch gives finer timing. Native GitHub cron is forbidden.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hourly-api-gapfill-tick.json'
+  repository_dispatch:
+    types: [telegram-offer-tick]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blinq-telegram-ledger
+  cancel-in-progress: false
+
+jobs:
+  telegram:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Read persistent delivery ledger
+        run: |
+          set -euo pipefail
+          git fetch origin telegram-bot-state
+          git worktree add --detach /tmp/blinq-tg-ledger FETCH_HEAD
+          mkdir -p /tmp/blinq-tg-ledger/ops
+          if [ ! -f /tmp/blinq-tg-ledger/ops/telegram-bot-state.json ]; then
+            printf '{"schema":1,"attempts":{}}\n' >/tmp/blinq-tg-ledger/ops/telegram-bot-state.json
+          fi
+      - name: Prepare only confirmed and eligible daily picks
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          BLINQ_TG_CONFIG_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "::error::TBT_DATA_GH_TOKEN required to read the private confirmed offer"; exit 1; }
+          python scripts/telegram_offer_publisher.py prepare \
+            --config-url "$BLINQ_TG_CONFIG_URL/api/v1/ui-config" \
+            --state /tmp/blinq-tg-ledger/ops/telegram-bot-state.json
+      - name: Reserve send before any Telegram request
+        id: reserve
+        run: |
+          set -euo pipefail
+          if [ ! -f /tmp/blinq-telegram/ready ]; then
+            echo "ready=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          cp /tmp/blinq-telegram/state.json /tmp/blinq-tg-ledger/ops/telegram-bot-state.json
+          git -C /tmp/blinq-tg-ledger config user.name "github-actions[bot]"
+          git -C /tmp/blinq-tg-ledger config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C /tmp/blinq-tg-ledger add ops/telegram-bot-state.json
+          git -C /tmp/blinq-tg-ledger commit -m "Reserve BlinQ Telegram daily send [skip ci]"
+          git -C /tmp/blinq-tg-ledger push origin HEAD:telegram-bot-state
+          expected=$(git -C /tmp/blinq-tg-ledger rev-parse HEAD)
+          actual=$(git ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')
+          test "$expected" = "$actual" || { echo "::error::Telegram reservation read-back failed"; exit 1; }
+          echo "ready=true" >>"$GITHUB_OUTPUT"
+      - name: Send reserved Telegram offer
+        if: steps.reserve.outputs.ready == 'true'
+        env:
+          TGB: ${{ secrets.TGB }}
+          TGCH: ${{ secrets.TGCH }}
+          TGCH_FREE: ${{ secrets.TGCH_FREE }}
+        run: |
+          set -euo pipefail
+          python scripts/telegram_offer_publisher.py send
+      - name: Record confirmed Telegram delivery
+        if: steps.reserve.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          python scripts/telegram_offer_publisher.py mark-sent
+          cp /tmp/blinq-telegram/state.json /tmp/blinq-tg-ledger/ops/telegram-bot-state.json
+          git -C /tmp/blinq-tg-ledger add ops/telegram-bot-state.json
+          git -C /tmp/blinq-tg-ledger commit -m "Confirm Telegram send receipts [skip ci]"
+          git -C /tmp/blinq-tg-ledger push origin HEAD:telegram-bot-state
+          expected=$(git -C /tmp/blinq-tg-ledger rev-parse HEAD)
+          actual=$(git ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')
+          test "$expected" = "$actual" || { echo "::error::Telegram receipt read-back failed"; exit 1; }

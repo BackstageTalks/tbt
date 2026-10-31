@@ -1,0 +1,73 @@
+name: BlinQ Telegram daily results
+# External cron repository_dispatch at ~07:00 Europe/Bratislava (no GitHub cron)
+on:
+  repository_dispatch:
+    types: [telegram-results-tick]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: blinq-telegram-ledger
+  cancel-in-progress: false
+jobs:
+  results:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Read Telegram sent-picks ledger
+        run: |
+          set -euo pipefail
+          git fetch origin telegram-bot-state
+          git worktree add --detach /tmp/blinq-tg-ledger FETCH_HEAD
+          test -s /tmp/blinq-tg-ledger/ops/telegram-bot-state.json
+      - name: Build previous-betting-day report
+        env:
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN" || { echo "::error::BLINQ_LIVE_WORKER_TOKEN missing"; exit 1; }
+          args=()
+          if [ "$GITHUB_EVENT_NAME" = repository_dispatch ]; then args+=(--external-tick); fi
+          python scripts/telegram_daily_results.py prepare --api-url "$BLINQ_PRODUCTION_URL" --config-url "$BLINQ_PRODUCTION_URL/api/v1/ui-config" --state /tmp/blinq-tg-ledger/ops/telegram-bot-state.json "${args[@]}"
+      - name: Reserve results before Telegram requests
+        id: reserve
+        run: |
+          set -euo pipefail
+          if [ ! -f /tmp/blinq-telegram/ready ]; then echo "ready=false" >>"$GITHUB_OUTPUT"; exit 0; fi
+          cp /tmp/blinq-telegram/state.json /tmp/blinq-tg-ledger/ops/telegram-bot-state.json
+          git -C /tmp/blinq-tg-ledger config user.name "github-actions[bot]"
+          git -C /tmp/blinq-tg-ledger config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C /tmp/blinq-tg-ledger add ops/telegram-bot-state.json
+          git -C /tmp/blinq-tg-ledger commit -m "Reserve Telegram results [skip ci]"
+          git -C /tmp/blinq-tg-ledger push origin HEAD:telegram-bot-state
+          expected=$(git -C /tmp/blinq-tg-ledger rev-parse HEAD)
+          actual=$(git ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')
+          test "$expected" = "$actual" || { echo "::error::Results reservation read-back failed"; exit 1; }
+          echo "ready=true" >>"$GITHUB_OUTPUT"
+      - name: Send verified Telegram daily results
+        if: steps.reserve.outputs.ready == 'true'
+        env:
+          TGB: ${{ secrets.TGB }}
+          TGCH: ${{ secrets.TGCH }}
+          TGCH_FREE: ${{ secrets.TGCH_FREE }}
+        run: |
+          python scripts/telegram_offer_publisher.py send
+      - name: Confirm Telegram results receipts
+        if: steps.reserve.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          python scripts/telegram_offer_publisher.py mark-sent
+          cp /tmp/blinq-telegram/state.json /tmp/blinq-tg-ledger/ops/telegram-bot-state.json
+          git -C /tmp/blinq-tg-ledger add ops/telegram-bot-state.json
+          git -C /tmp/blinq-tg-ledger commit -m "Confirm Telegram results [skip ci]"
+          git -C /tmp/blinq-tg-ledger push origin HEAD:telegram-bot-state
+          expected=$(git -C /tmp/blinq-tg-ledger rev-parse HEAD)
+          actual=$(git ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')
+          test "$expected" = "$actual" || { echo "::error::Results receipt read-back failed"; exit 1; }

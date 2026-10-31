@@ -1,6 +1,7 @@
 from pathlib import Path
 from collections import defaultdict, deque
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from threading import Lock
 import gzip
 import hashlib
@@ -112,7 +113,7 @@ from tbt.services.push_notifications import (
     delete_subscription, push_storage_diagnostics, save_subscription, sync_push_access, webpush_config,
 )
 from tbt.services.ops_storage import record_system_event, list_system_events
-from tbt.services.feed import read_feed, visible_feed
+from tbt.services.feed import read_feed, visible_feed, _row_betting_day
 from tbt.services.dashboard_kpis import selected_dashboard_cards
 from tbt.services.result_exclusions import (
     result_candidates, load_result_exclusions, set_result_exclusions,
@@ -1812,6 +1813,69 @@ def admin_api_budget(req):
         return response({"ok":True,"budget":shared_api_budget_status()})
     except SharedBudgetUnavailable:
         return response({"error":"api_budget_unavailable"},503)
+
+
+@app.route(route="v1/internal/telegram/settled-results", methods=["GET"])
+def internal_telegram_settled_results(req):
+    """Read-only verified settlement archive for yesterday's Telegram report.
+
+    No API provider calls, model updates, score inference or archive mutations.
+    A shared worker-token is mandatory; no public/admin browser bypass.
+    """
+    if not _live_worker_token_ok(req):
+        return response({"error": "unauthorized"}, 401)
+    day_text = str((getattr(req, "params", {}) or {}).get("day") or "")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day_text):
+        return response({"error": "invalid_betting_day"}, 400)
+    try:
+        target = datetime.strptime(day_text, "%Y-%m-%d").date()
+        local = datetime.now(ZoneInfo("Europe/Bratislava"))
+        if not (local.date() - timedelta(days=14) <= target < local.date()):
+            return response({"error": "outside_settlement_window"}, 400)
+        archived = load_settled_results_archive()
+        approved = []
+        for row in archived:
+            if not isinstance(row, dict) or _row_betting_day(row) != day_text:
+                continue
+            pubs = [
+                pub for pub in row.get("market_publications") or []
+                if isinstance(pub, dict)
+                and pub.get("publication_status", "published") == "published"
+                and isinstance(pub.get("result"), dict)
+                and pub["result"].get("runtime_source") == "match_status_snapshot"
+                and (type(pub["result"].get("correct")) is bool or pub["result"].get("void") is True)
+            ]
+            for pub in pubs:
+                if pub.get("section") not in {"top_daily", "value", "ace"}:
+                    continue
+                approved.append({
+                    "event_id": str(row.get("event_id") or ""),
+                    "scheduled_at": str(row.get("scheduled_at") or ""),
+                    "section": str(pub.get("section") or ""),
+                    "market": str(pub.get("market") or ""),
+                    "selection_id": str(pub.get("selection_id") or pub.get("winner_id") or ""),
+                    "publication_key": str(pub.get("publication_key") or ""),
+                    "market_line": pub.get("market_line"),
+                    "projection_direction": str(pub.get("ou_side") or pub.get("projection_direction") or ""),
+                    "odds": pub.get("odds"),
+                    "price_status": pub.get("price_status"),
+                    "result": {
+                        k: pub["result"].get(k)
+                        for k in ("correct", "void", "status", "actual_count",
+                                  "profit_units", "staked_units", "runtime_source")
+                    },
+                })
+        if len(approved) > 1000:
+            return response({"error": "telegram_result_limit_exceeded"}, 503)
+        return response({
+            "schema": 1,
+            "betting_day": day_text,
+            "source": "verified_match_status_snapshot",
+            "archived_rows": len(approved),
+            "rows": approved,
+        })
+    except AdminStorageUnavailable:
+        return response({"error": "archive_unavailable"}, 503)
 
 
 @app.route(route="v1/internal/live-radar-status", methods=["GET"])

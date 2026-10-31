@@ -1,5 +1,18 @@
 {
   "schema": 2,
+  "telegram_bot": {
+    "enabled": false,
+    "sections": {"top": true, "value": true, "aces": true},
+    "schedule": {"enabled": false, "time": "08:15", "weekdays": [0, 1, 2, 3, 4, 5, 6]},
+    "layout": "combined",
+    "max_per_section": 7,
+    "include_started": false,
+    "show_probability": true,
+    "show_odds": true,
+    "free_top_pick": true,
+    "results_enabled": false,
+    "footer": "ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine"
+  },
   "plans": {
     "trial": {
       "label": "ROOKIE LEGACY",
