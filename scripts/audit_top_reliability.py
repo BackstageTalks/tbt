@@ -253,6 +253,10 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
         for pub in row.get("market_publications") or []:
             if not isinstance(pub, dict) or pub.get("section") != section or pub.get("market") != "match_winner":
                 continue
+            issued = timestamp(pub.get("issued_at"))
+            scheduled = timestamp((pub.get("result") or {}).get("scheduled_at") or row.get("scheduled_at"))
+            if not issued or not scheduled or not start <= scheduled < now:
+                continue
             if model_version is not None:
                 # Do not mix legacy champion predictions with the current
                 # production artifact. A mutable event row is not issuance proof.
@@ -261,6 +265,13 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
                         or snap.get("model_version") != model_version
                         or pub.get("model_version") != model_version):
                     diagnostics["missing_or_other_model_issued_proof"] += 1
+                    reason = ("other_model_issued_proof" if snap is not None
+                              and snap.get("source") == "pre_deploy_feed_confirmed"
+                              and snap.get("model_version") == pub.get("model_version")
+                              and pub.get("model_version")
+                              and pub.get("model_version") != model_version
+                              else "missing_or_inconsistent_model_issued_proof")
+                    diagnostics[reason] += 1
                     continue
                 captured_players = snap.get("players") or {}
                 ids = [str((captured_players.get(side) or {}).get("id") or "")
@@ -279,10 +290,6 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
                             public_odds, quote_odds, rel_tol=0, abs_tol=1e-4)):
                     diagnostics["unverified_current_model_selected_price"] += 1
                     continue
-            issued = timestamp(pub.get("issued_at"))
-            scheduled = timestamp((pub.get("result") or {}).get("scheduled_at") or row.get("scheduled_at"))
-            if not issued or not scheduled or not start <= scheduled < now:
-                continue
             key = str(pub.get("publication_key") or "") or ":".join(
                 (str(row.get("event_id") or ""), str(pub.get("selection_id") or ""), str(issued))
             )
@@ -296,7 +303,7 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
             result = pub.get("result")
             if not isinstance(result, dict):
                 diagnostics["unsettled"] += 1
-                continue
+                result = {}
             status = str(result.get("status") or "").lower()
             if status == "void" or result.get("correct") is None:
                 correct = None
