@@ -10136,7 +10136,7 @@ body.blinq-compare .footer-system-dot{display:none}
 .admin-calibration-panel td.is-worse{color:#ff9b9b;font-weight:800}
 .admin-calibration-gates{display:grid;gap:0}
 .admin-calibration-gates>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #193d51;font-size:12px;color:#d9e8f1}
-.admin-calibration-gates strong{border:1px solid #315169;border-radius:8px;min-width:26px;min-height:26px;display:grid;place-items:center}
+.admin-calibration-gates strong{border:1px solid #315169;border-radius:8px;min-width:58px;min-height:28px;padding:3px 8px;display:grid;place-items:center;box-sizing:border-box;white-space:nowrap;flex-shrink:0;font-size:11px;line-height:1.2;text-align:center}
 .admin-calibration-gates strong.is-good{background:#104938;color:#8affc5;border-color:#25785b}
 .admin-calibration-gates strong.is-pending{color:#a6b4c1}
 .admin-calibration-gates strong.is-worse{color:#ffaaaa;border-color:#805052;background:#39242b}
