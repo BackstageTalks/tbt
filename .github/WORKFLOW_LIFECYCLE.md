@@ -59,6 +59,14 @@ Production workflows such as `ci.yml`, `data.yml`, `morning-refresh.yml`, `match
 - `.github/workflows/recover-orphan-cdb-lock-39130345960-once.yml`
 - `.github/workflows/recover-orphaned-721-cdb-lock-once.yml`
 
+## Retired one-shot request marker cleanup (2026-10-31)
+
+Eight stale `.github/*-request.json` trigger markers were removed after
+their paired one-shot workflow definitions were retired. These removals do not
+delete historical runs or source code: both remain accessible in Git history.
+Active daily ticks, scheduler triggers, deploy workflows, and any marker
+still referenced by an active workflow were left intact.
+
 ## Recovery
 
 To recover a specific experiment, inspect its file at commit `ad5fc135478f32c8d3ee21d23fd326cb82c68714` and explicitly reintroduce only the required logic after reviewing up-to-date CDB evidence, single-writer controls, API reserve, and dependencies. Do not resurrect old pinned writers wholesale.
