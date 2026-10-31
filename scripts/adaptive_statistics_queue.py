@@ -27,10 +27,10 @@ class AdaptiveStatisticsQueue:
     RECENT_MATCH_WINDOW = 96
     # A repeated paid provider miss must not consume the fixed exploration
     # share indefinitely. Require evidence from at least 20 separate matches;
-    # still sample weak cohorts every eighth baseline selection.
-    LOW_YIELD_MIN_REQUESTS = 32
+    # still sample weak cohorts every twelfth baseline selection.
+    LOW_YIELD_MIN_REQUESTS = 24
     LOW_YIELD_MIN_MATCHES = 20
-    LOW_YIELD_SAMPLE_EVERY = 8
+    LOW_YIELD_SAMPLE_EVERY = 12
 
     def __init__(self, candidates, bucket_coverage=None):
         self._order = {}
