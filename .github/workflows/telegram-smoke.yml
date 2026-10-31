@@ -1,0 +1,59 @@
+name: BlinQ Telegram smoke test
+# One explicit same-repository branch push authorizes exactly one synthetic send.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/telegram-results-previous-betting-day-20261031
+    paths:
+      - '.github/telegram-smoke-test-trigger.txt'
+permissions:
+  contents: read
+concurrency:
+  group: blinq-telegram-smoke
+  cancel-in-progress: false
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[tg-smoke-now]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Telegram synthetic format test (no CDB, no production tips)
+        env:
+          TGB: ${{ secrets.TGB }}
+          TGCH: ${{ secrets.TGCH }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, urllib.parse, urllib.request
+          token=os.environ.get("TGB","").strip()
+          chat=os.environ.get("TGCH","").strip()
+          if not token or not chat:
+              raise SystemExit("ERROR: TGB or TGCH GitHub Secret missing")
+          message="""🧪 TEST FORMÁTU — FIKTÍVNE TIPY, NEVSÁDZAŤ
+
+          Data Betting by BackstageTalks
+
+          📅 Ukážka
+
+          1️⃣ Hráč A | 12:30 | 72.4% | 1.75
+          2️⃣ Hráč B | 14:00 | 69.1% | 1.88
+          3️⃣ Hráč C | 15:00 | 68.3% | 2.05 | EV +10.2%
+          4️⃣ Hráč D | 16:00 | esá 8.2 | confidence 73.0% | —
+
+          ℹ️ Iba test vizuálu a spojenia
+          🧠 by BackstageTalks Data Engine"""
+          message="\n".join(line.strip() for line in message.splitlines())
+          payload=urllib.parse.urlencode({"chat_id":chat,"text":message,"disable_web_page_preview":"true"}).encode("utf-8")
+          req=urllib.request.Request("https://api.telegram.org/bot"+token+"/sendMessage",data=payload,method="POST")
+          try:
+              with urllib.request.urlopen(req,timeout=25) as response:
+                  result=json.loads(response.read(32768))
+          except Exception as error:
+              raise SystemExit("Telegram synthetic test send failed: "+type(error).__name__)
+          msg_id=(result.get("result") or {}).get("message_id")
+          if not result.get("ok") or not isinstance(msg_id,int):
+              raise SystemExit("Telegram did not acknowledge sendMessage")
+          print("TELEGRAM_SMOKE_SEND_ACCEPTED message_id="+str(msg_id))
+          PY
