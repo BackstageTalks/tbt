@@ -3617,7 +3617,11 @@
   }
   function statsHaveExcludedMarkets(){return statsExcludedSections().size>0;}
   function settledPublishedEntries(rows,category='all',filters=null,statsOnly=false){
-    category=normalizedResultsCategory(category);
+    // The internal Admin KPI "winners" cohort is not a user-selectable Results
+    // category. Do not normalize it to "all", which mixes projection results
+    // into winner ROI. Member-facing filters remain strictly allowlisted.
+    if(!(isAdminAccount()&&!state.previewPlan&&!filters&&category==='winners'))
+      category=normalizedResultsCategory(category);
     const specific=String(category).includes(',')||['top200','prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
     const unique=new Map();
     const cohort=memberResultCohort(filters?.membership);
