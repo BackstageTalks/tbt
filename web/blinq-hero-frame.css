@@ -22,3 +22,10 @@ body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardHero {
     box-shadow: 0 5px 17px rgba(0,0,0,.12) !important;
   }
 }
+
+/* Higher-specificity desktop/tablet frame overrides earlier mobile visual layers. */
+@media (min-width: 601px) {
+  body#blinqPremium#blinqPremium.blinq-home:not(.blinq-admin) #dashboardHero {
+    border-radius: 16px !important;
+  }
+}
