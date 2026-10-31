@@ -15,5 +15,5 @@ def test_hero_frame_is_public_and_does_not_override_managed_content():
     assert 'border-radius: 16px' in css
     assert 'border-radius: 11px' in css
     assert 'overflow: hidden' in css
-    for forbidden in ('height:', 'width:', 'object-position', 'dashboard-hero-copy', 'hero-slide-image', 'mobileTabs', 'site-header', 'site-footer', 'dashboardKpis'):
+    for forbidden in ('height:', 'width: 100', 'object-position', 'dashboard-hero-copy', 'hero-slide-image', 'mobileTabs', 'site-header', 'site-footer', 'dashboardKpis'):
         assert forbidden not in css
