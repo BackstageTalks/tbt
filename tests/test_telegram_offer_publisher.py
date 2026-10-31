@@ -94,7 +94,7 @@ def test_due_window_and_manual_request():
     cfg["schedule"]["enabled"] = False
     cfg["manual_request"] = {"id": "abcdef123456", "created_at": NOW.isoformat()}
     assert tg.due(cfg, NOW) == "manual:abcdef123456"
-    assert tg.due(cfg, NOW + timedelta(minutes=31)) is None
+    assert tg.due(cfg, NOW + timedelta(minutes=91)) is None
 
 
 def test_snapshot_checksum_guard(tmp_path, monkeypatch):
@@ -105,6 +105,7 @@ def test_snapshot_checksum_guard(tmp_path, monkeypatch):
     monkeypatch.setattr(tg.subprocess, "run", fake_run)
     # The manifest is fetched first, then the snapshot. Fake both in advance.
     raw = json.dumps(snap).encode()
+    (d / "daily_offer_snapshot.json").write_bytes(raw)
     (d / "_tbt_bundle_manifest.json").write_text(json.dumps({"files": {"daily_offer_snapshot.json": {
         "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)}}}))
     assert tg.snapshot(d)["confirmed_only"] is True
