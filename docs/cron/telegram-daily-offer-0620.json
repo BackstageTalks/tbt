@@ -39,9 +39,9 @@
     "duplicate_guard": "private telegram-bot-state branch",
     "sent_verification": "Telegram message IDs plus private ledger read-back",
     "row_prefixes": {
-      "top": "🏆 TOP |",
-      "value": "💎 VALUE |",
-      "aces": "🎯 ACES |",
+      "top": "T |",
+      "value": "V |",
+      "aces": "A |",
       "free": "🆓 FREE |"
     },
     "numeric_prefixes": false
