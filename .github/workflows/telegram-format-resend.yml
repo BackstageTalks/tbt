@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/telegram-format-resend-tick.json'
       - '.github/telegram-tva-resend-tick.json'
+      - '.github/telegram-square-resend-tick.json'
   workflow_dispatch:
 
 permissions:
@@ -46,7 +47,7 @@ jobs:
           set -euo pipefail
           test -n "$GH_TOKEN"
           test -s .private-telegram/ops/telegram-bot-state.json
-          python scripts/telegram_offer_publisher.py prepare --preview-format --preview-revision format-tva-v3 \
+          python scripts/telegram_offer_publisher.py prepare --preview-format --preview-revision format-squares-v4 \
             --state .private-telegram/ops/telegram-bot-state.json \
             --config-url "$BLINQ_URL/api/v1/ui-config"
           if [[ -s /tmp/blinq-telegram/ready ]]; then
