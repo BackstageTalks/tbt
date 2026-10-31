@@ -37,7 +37,14 @@
     "show_prediction_not_projection": true,
     "queue_until_release_verified": true,
     "duplicate_guard": "private telegram-bot-state branch",
-    "sent_verification": "Telegram message IDs plus private ledger read-back"
+    "sent_verification": "Telegram message IDs plus private ledger read-back",
+    "row_prefixes": {
+      "top": "🏆 TOP |",
+      "value": "💎 VALUE |",
+      "aces": "🎯 ACES |",
+      "free": "🆓 FREE |"
+    },
+    "numeric_prefixes": false
   },
   "notes": [
     "Template only: creating this file does not activate a remote cron.",
