@@ -195,3 +195,21 @@ def test_browser_uses_authoritative_categories_and_new_cache_key():
     assert 'function authorizedResultPublication(publication)' in app
     assert '.filter(authorizedResultPublication)' in app
     assert '&results-access-20261031=1' in index
+
+
+def test_restricted_markets_do_not_leak_through_raw_performance_windows():
+    payload = _payload()
+    for key in ("performance", "betting_performance", "performance_windows",
+                "performance_window_summary", "performance_subgroups"):
+        payload[key] = {"secret_all_categories": "hidden-market-result"}
+    cfg = _config({("elite", "prime"): {"visible_rows": 0, "display_state": "active"}})
+    elite, ent = _read("elite", cfg, payload)
+    assert "prime" not in ent["result_categories"]
+    for key in ("performance", "betting_performance", "performance_windows",
+                "performance_window_summary", "performance_subgroups"):
+        assert elite[key] == {}
+    legend, _ = _read("legend", cfg, payload)
+    assert legend["performance"]["secret_all_categories"] == "hidden-market-result"
+    admin, _ = _read("admin", cfg, payload)
+    assert admin["performance"]["secret_all_categories"] == "hidden-market-result"
+    assert payload["performance"]["secret_all_categories"] == "hidden-market-result"
