@@ -5123,7 +5123,7 @@ function adminActivityRows(){
     if(!state.ui.telegram_bot||typeof state.ui.telegram_bot!=='object')
       state.ui.telegram_bot={enabled:false,sections:{top:true,value:true,aces:true},
         schedule:{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]},layout:'combined',
-        max_per_section:7,include_started:false,show_probability:true,show_odds:true,free_top_pick:true,
+        max_per_section:7,include_started:false,show_probability:true,show_odds:true,free_top_pick:true,results_enabled:false,
         footer:'ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine'};
     const c=state.ui.telegram_bot;
     c.sections=c.sections||{top:true,value:true,aces:true};
@@ -5156,6 +5156,11 @@ function adminActivityRows(){
           <label>Formát správ <select data-tg-bot-field="layout"><option value="combined" ${c.layout!=='separate'?'selected':''}>Spoločná správa</option><option value="separate" ${c.layout==='separate'?'selected':''}>Každá kategória samostatne</option></select></label>
           ${check('show_probability',c.show_probability!==false,'Zobraziť pravdepodobnosť')}
           ${check('show_odds',c.show_odds!==false,'Zobraziť dostupné kurzy')}
+          <div class="tg-bot-results-toggle">
+            <h3>📊 Denné vyhodnotenie</h3>
+            ${check('results_enabled',c.results_enabled===true,'Posielať vyhodnotenie predchádzajúceho betting day')}
+            <small>Samostatný externý cron okolo 07:00 Europe/Bratislava spúšťa workflow BlinQ Telegram daily results. Neuzavreté výsledky sú Pending. ROI počítame len z overených ocenených tipov.</small>
+          </div>
           <label>Záverečný text <textarea rows="2" maxlength="200" data-tg-bot-field="footer">${escapeHtml(c.footer||'ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine')}</textarea></label>
         </div>
       </div>
