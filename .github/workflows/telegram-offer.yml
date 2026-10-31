@@ -75,3 +75,15 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/telegram_offer_publisher.py send
+      - name: Record confirmed Telegram delivery
+        if: steps.reserve.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          python scripts/telegram_offer_publisher.py mark-sent
+          cp /tmp/blinq-telegram/state.json /tmp/blinq-tg-ledger/ops/telegram-bot-state.json
+          git -C /tmp/blinq-tg-ledger add ops/telegram-bot-state.json
+          git -C /tmp/blinq-tg-ledger commit -m "Confirm Telegram send receipts [skip ci]"
+          git -C /tmp/blinq-tg-ledger push origin HEAD:telegram-bot-state
+          expected=$(git -C /tmp/blinq-tg-ledger rev-parse HEAD)
+          actual=$(git ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')
+          test "$expected" = "$actual" || { echo "::error::Telegram receipt read-back failed"; exit 1; }
