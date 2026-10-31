@@ -72,3 +72,31 @@ The test suite checks classic formatting, deterministic/free-only selection, con
 5. Inspect workflow logs and the actual Telegram channel. Only then enable the desired daily schedule.
 
 Do not enable automatic sending until you have independently verified the target chat and test delivery.
+
+
+## Daily settlement reports — previous betting day (NEW)
+
+The previous-day evaluation uses the **exact picks with Telegram-confirmed message IDs** from the isolated `telegram-bot-state` branch. The opening betting day is `Europe/Bratislava 06:00` until the next 06:00. At ~07:00 on 1 November the report covers 31 October, even if a tennis match crossed midnight.
+
+- Enable **Telegram bot → Denné vyhodnotenie** in Admin and click **Publikovať**. Defaults OFF. The existing publishing toggle must also be ON.
+- Job: `.github/workflows/telegram-results.yml` (**BlinQ Telegram daily results**).
+- Configure your external scheduler for **07:00 Europe/Bratislava** with DST-aware timezone; invoke `repository_dispatch` with `event_type=telegram-results-tick`. GitHub native cron is forbidden by the existing project contract. Manual `workflow_dispatch` remains available.
+- The GitHub secret `BLINQ_LIVE_WORKER_TOKEN` (already used by other BlinQ workers) authenticates a **read-only** call to `/api/v1/internal/telegram/settled-results?day=YYYY-MM-DD`. This endpoint returns only settled issued TOP / Value / Esá publications with verified match-status archive evidence. No new provider calls, no settlement side effects.
+- Report sections **TOP / Value / Esá / FREE** keep the classic `📊 Results`, row-by-row `✅ ❌ ➖ ⏳` and `unit / ROI` layout.
+- Missing settlements show **Pending**. Projection-only aces may show a verified outcome but **do not contribute invented stake, yield or ROI**. Priced ROI divides genuine one-unit graded stakes only. Reports with pending picks are explicitly marked *priebežné*.
+- Report `results:YYYY-MM-DD` is reserved before any Telegram request. A successfully delivered report is saved back with individual message IDs; an uncertain send never triggers automatic duplicate retries.
+
+Example external scheduler HTTP action (provide its GitHub auth token securely):
+```http
+POST https://api.github.com/repos/BackstageTalks/tbt/dispatches
+Authorization: Bearer <external-scheduler-GitHub-token>
+Accept: application/vnd.github+json
+Content-Type: application/json
+
+{"event_type":"telegram-results-tick"}
+```
+For convenient local timezone scheduling use `TZ=Europe/Bratislava` (or your scheduler's equivalent); do not hardcode UTC 06:00 throughout the year because DST changes.
+
+## Data impact
+
+The Telegram PR never modifies CDB, the existing verified-results archive, provider quotas, models or prediction issuance. It **does** update the existing Admin UI-config storage when the operator publishes settings, writes a dedicated GitHub branch ledger of Telegram reservations/receipts/immutable sent-row identifiers, and sends Telegram messages. The settlement API is read-only.
