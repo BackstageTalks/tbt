@@ -201,7 +201,8 @@
         document.querySelector('.reference-navigation [data-route="predictions"]')?.click();
       }));
       section('Predikcie', 'predictions');
-      nav.append(button('Porovnávač', () => {
+      const compareLocked = document.querySelector('.reference-navigation [data-route="compare"]')?.classList.contains('comparator-nav-locked');
+      nav.append(button('Porovnávač' + (compareLocked ? ' 🔒' : ''), () => {
         dialog.close();
         document.querySelector('.reference-navigation [data-route="compare"]')?.click();
       }));
