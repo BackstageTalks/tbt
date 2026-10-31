@@ -21,7 +21,7 @@ def budget():
         "reserved_provider_headroom": 500,
         "global_limit": 14500,
         "global_spent": 2100,
-        "global_remaining": 12600,
+        "global_remaining": 12400,
         "schema": 2,
         "window": "provider_day_17_09_utc",
         "spent": {"live": 300, "match": 0, "refresh": 0, "history": 1800},
