@@ -5093,6 +5093,50 @@ function adminActivityRows(){
     return `<section class="admin-ux-section admin-membership-manager"><div class="admin-ux-heading"><div><small>ČLENSTVÁ</small><h2>Levely a upgrade karty</h2><p>Spravuj názvy, popisy, odkazy, dostupnosť a predvolenú platnosť bez ručnej úpravy JSON.</p></div></div><div class="admin-runtime-note"><strong>Zobrazenie na jednom mieste</strong><span>V tejto sekcii upravuješ iba ponuku členstiev, ceny, odkazy a platnosť. Všetky prístupy, panely a limity podľa levelu nastavíš v <b>Zobrazenie</b>. Publikum notifikácií zostáva v <b>Info & LIVE</b>.</span></div><div class="admin-membership-list">${plans}</div>${inactivityPanel}</section>`;
   }
 
+
+  function tgBotConfig(){
+    if(!state.ui.telegram_bot||typeof state.ui.telegram_bot!=='object')
+      state.ui.telegram_bot={enabled:false,sections:{top:true,value:true,aces:true},
+        schedule:{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]},layout:'combined',
+        max_per_section:7,include_started:false,show_probability:true,show_odds:true,
+        footer:'BlinQ · Tennis Intelligence'};
+    const c=state.ui.telegram_bot;
+    c.sections=c.sections||{top:true,value:true,aces:true};
+    c.schedule=c.schedule||{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]};
+    return c;
+  }
+  function renderAdminTelegramBot(){
+    const c=tgBotConfig(),s=c.schedule;
+    const check=(name,value,text)=>`<label class="tg-bot-toggle"><input type="checkbox" data-tg-bot-field="${name}" ${value?'checked':''}><span>${text}</span></label>`;
+    const days=['Po','Ut','St','Št','Pi','So','Ne'].map((name,index)=>`<label class="tg-bot-weekday"><input type="checkbox" data-tg-bot-day="${index}" ${(s.weekdays||[]).includes(index)?'checked':''}>${name}</label>`).join('');
+    return `<section class="admin-ux-section tg-bot-admin">
+      <div class="admin-ux-heading"><div><small>AUTOMATIZÁCIA</small><h2>Telegram · Bot publisher</h2><p>Posielanie potvrdenej dennej ponuky TOP / Value / Esá cez GitHub Secrets TGB a TGCH.</p></div></div>
+      <div class="admin-runtime-note"><strong>Stav</strong><span>Nastavenia uložíš tlačidlom Publikovať. GitHub kontroluje rozvrh každých 10 minút; skutočný čas spustenia môže byť oneskorený.</span></div>
+      <div class="tg-bot-layout">
+        <div class="tg-bot-card"><h3>Čo posielať</h3>
+          ${check('enabled',c.enabled===true,'Zapnúť Telegram publisher')}
+          ${check('sections.top',c.sections.top===true,'🏆 TOP')}
+          ${check('sections.value',c.sections.value===true,'💎 Value')}
+          ${check('sections.aces',c.sections.aces===true,'🎯 Esá')}
+          <label>Maximum tipov na kategóriu <input type="number" min="1" max="10" data-tg-bot-field="max_per_section" value="${Number(c.max_per_section)||7}"></label>
+        </div>
+        <div class="tg-bot-card"><h3>Kedy posielať</h3>
+          ${check('schedule.enabled',s.enabled===true,'Automatické denné odosielanie')}
+          <label>Čas (Europe/Bratislava) <input type="time" data-tg-bot-field="schedule.time" value="${escapeHtml(s.time||'08:15')}"></label>
+          <span class="tg-bot-caption">Dni odosielania</span><div class="tg-bot-days">${days}</div>
+          ${check('include_started',c.include_started===true,'Zahrnúť aj začaté zápasy')}
+        </div>
+        <div class="tg-bot-card"><h3>Ako posielať</h3>
+          <label>Formát správ <select data-tg-bot-field="layout"><option value="combined" ${c.layout!=='separate'?'selected':''}>Spoločná správa</option><option value="separate" ${c.layout==='separate'?'selected':''}>Každá kategória samostatne</option></select></label>
+          ${check('show_probability',c.show_probability!==false,'Zobraziť pravdepodobnosť')}
+          ${check('show_odds',c.show_odds!==false,'Zobraziť dostupné kurzy')}
+          <label>Pätička <input type="text" maxlength="160" data-tg-bot-field="footer" value="${escapeHtml(c.footer||'BlinQ · Tennis Intelligence')}"></label>
+        </div>
+      </div>
+      <div class="tg-bot-actions"><button class="btn btn-primary" type="button" data-admin-action="tg-bot-queue" ${state.uiStorageAvailable===true?'':'disabled'}>Zaradiť jednorazové odoslanie</button><small>Uloží aktuálne nastavenia a požiadavku. Nie je to potvrdenie doručenia; výsledok bude v GitHub Actions → BlinQ Telegram offer. Požiadavka sa neodošle dvakrát.</small></div>
+    </section>`;
+  }
+
   function renderAdminTelegram(){
     const cfg=state.ui.telegram_groups=state.ui.telegram_groups||{schema:1,enabled:true,eyebrow:'BLINQ COMMUNITY',title:'Telegram skupiny',description:'',groups:[]};
     cfg.groups=Array.isArray(cfg.groups)?cfg.groups:[];
@@ -5897,7 +5941,7 @@ function adminActivityRows(){
     return [...saved,...ids.filter(id=>!saved.includes(id))];
   }
   function moveAdminTab(source,target){
-    const ids=['accounts','projects','levels','dashboard','testresults','layout','banners','telegram','insights','calibration','system'];
+    const ids=['accounts','projects','levels','dashboard','testresults','layout','banners','telegram','tgbot','insights','calibration','system'];
     const ordered=orderedAdminTabs(ids),from=ordered.indexOf(source),to=ordered.indexOf(target);
     if(from<0||to<0||from===to)return false;
     ordered.splice(from,1);ordered.splice(to,0,source);
@@ -5906,10 +5950,10 @@ function adminActivityRows(){
     return true;
   }
   function renderAdminRoute(){
-    const tabs=[['accounts','Účty','Prístup · platnosť'],['projects','Projektové skupiny','Skupiny · INFO · výsledky'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard · KPI','3 karty · KPI'],['testresults','Testovacie tipy','Manuálne vylúčenia'],['layout','Zobrazenie','Prístupy · panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram skupiny','Skupiny · odkazy'],['insights','INFO & LIVE','Správy · radar'],['calibration','Model Lab','Tréning · kalibrácia'],['system','Systém','Diagnostika']];
+    const tabs=[['accounts','Účty','Prístup · platnosť'],['projects','Projektové skupiny','Skupiny · INFO · výsledky'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard · KPI','3 karty · KPI'],['testresults','Testovacie tipy','Manuálne vylúčenia'],['layout','Zobrazenie','Prístupy · panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram skupiny','Skupiny · odkazy'],['tgbot','Telegram bot','Tipy · rozvrh'],['insights','INFO & LIVE','Správy · radar'],['calibration','Model Lab','Tréning · kalibrácia'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
-    const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,testresults:renderAdminTestList,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,calibration:()=>renderAdminModelLab()+renderAdminCalibration(),system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
-    const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],projects:['Projektové skupiny','Samostatné skupiny bez ohľadu na level, ich INFO kanál a vyhodnotenia.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard · KPI','Nastavenie troch hlavných metrík bez zmeny grafiky.'],testresults:['Testovacie tipy','Manuálne vylúčenie testovacích predikcií.'],layout:['Zobrazenie','Všetky prístupy levelov, história výsledkov, panely a denné riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram skupiny','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['INFO & LIVE','Správy podľa levelu a Comeback radar.'],calibration:['Model Lab & kalibrácia','Riadený tréning, shadow a porovnanie s produkciou.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
+    const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,testresults:renderAdminTestList,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,tgbot:renderAdminTelegramBot,insights:renderAdminInsights,calibration:()=>renderAdminModelLab()+renderAdminCalibration(),system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
+    const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],projects:['Projektové skupiny','Samostatné skupiny bez ohľadu na level, ich INFO kanál a vyhodnotenia.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard · KPI','Nastavenie troch hlavných metrík bez zmeny grafiky.'],testresults:['Testovacie tipy','Manuálne vylúčenie testovacích predikcií.'],layout:['Zobrazenie','Všetky prístupy levelov, história výsledkov, panely a denné riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram skupiny','Skupiny, odkazy a minimálna úroveň prístupu.'],tgbot:['Telegram bot','TOP, Value, Esá · čas a formát odosielania.'],insights:['INFO & LIVE','Správy podľa levelu a Comeback radar.'],calibration:['Model Lab & kalibrácia','Riadený tréning, shadow a porovnanie s produkciou.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
     let contextual='';
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov ulož tlačidlom Uložiť · bez globálneho Publikovať</div>';
     else if(state.adminTab==='projects')contextual='<div class="admin-account-direct-note"><span></span>Projektové operácie majú vlastné uloženie · bez globálneho Publikovať</div>';
@@ -6182,7 +6226,7 @@ function adminActivityRows(){
       if(navReset){state.adminNavOrder=null;try{localStorage.removeItem(ADMIN_TAB_ORDER_KEY);}catch{}rerenderAdmin();showStatus('Predvolené poradie admin sekcií obnovené v tomto prehliadači.');return;}
       const navStep=event.target.closest('[data-admin-nav-step]');
       if(navStep){
-        const order=orderedAdminTabs(['accounts','projects','levels','dashboard','testresults','layout','banners','telegram','insights','calibration','system']);
+        const order=orderedAdminTabs(['accounts','projects','levels','dashboard','testresults','layout','banners','telegram','tgbot','insights','calibration','system']);
         const from=order.indexOf(navStep.dataset.adminNavId),target=order[from+Number(navStep.dataset.adminNavStep)];
         if(target&&moveAdminTab(navStep.dataset.adminNavId,target))rerenderAdmin();
         return;
@@ -6521,6 +6565,16 @@ function adminActivityRows(){
       }
       else if(action==='load-draft')restoreAdminDraft();
       else if(action==='publish-config')await publishUiConfig();
+      else if(action==='tg-bot-queue'){
+        const cfg=tgBotConfig();
+        if(cfg.enabled!==true||!['top','value','aces'].some(k=>cfg.sections[k]===true)){showStatus('Zapni publisher a vyber kategóriu.');return;}
+        if(!window.confirm('Uložiť konfiguráciu a zaradiť jednorazové Telegram odoslanie?'))return;
+        const before=cfg.manual_request;
+        cfg.manual_request={id:(window.crypto?.randomUUID?.()||('request'+Date.now()+Math.random().toString(36).slice(2))).replace(/-/g,''),created_at:new Date().toISOString()};
+        const ok=await publishUiConfig();
+        if(ok)showStatus('Požiadavka uložená; doručenie overíš v GitHub Actions.');
+        else cfg.manual_request=before;
+      }
       else if(action==='export')exportUiConfig();
       else if(action==='reset'){localStorage.removeItem(draftKey());state.ui=clone(state.uiSource);state.selectedElement='HERO_BANNER_1';renderAllUiContent();rerenderAdmin();showStatus('Reset to repository defaults. Publish if you want this reset live.');}
       else if(action==='preview-demo'){state.previewPlan=null;enableDemoBoardPreview();}
@@ -6562,6 +6616,20 @@ function adminActivityRows(){
         return;
       }
       const t=event.target;
+      if(t.dataset.tgBotDay!==undefined){
+        const cfg=tgBotConfig(),days=new Set(cfg.schedule.weekdays||[]),n=Number(t.dataset.tgBotDay);
+        if(t.checked)days.add(n);else days.delete(n);
+        cfg.schedule.weekdays=[...days].sort((a,b)=>a-b);
+        showStatus('Rozvrh je v koncepte. Klikni Publikovať.');return;
+      }
+      if(t.dataset.tgBotField){
+        const cfg=tgBotConfig(),field=t.dataset.tgBotField;
+        const value=t.type==='checkbox'?t.checked:(field==='max_per_section'?Number(t.value):t.value);
+        if(field.startsWith('sections.'))cfg.sections[field.slice(9)]=value;
+        else if(field.startsWith('schedule.'))cfg.schedule[field.slice(9)]=value;
+        else cfg[field]=value;
+        showStatus('Telegram nastavenie je v koncepte. Klikni Publikovať.');return;
+      }
       if(t.dataset.adminTestCheck){const chosen=new Set(state.adminTestSelected||[]);if(t.checked)chosen.add(t.dataset.adminTestCheck);else chosen.delete(t.dataset.adminTestCheck);state.adminTestSelected=[...chosen];rerenderAdmin();return;}
       if(t.dataset.adminTestFilter){adminTestFilter()[t.dataset.adminTestFilter]=String(t.value||'');state.adminTestPage=0;rerenderAdmin();return;}
       if(t.hasAttribute('data-admin-test-size')){state.adminTestSize=[50,100].includes(Number(t.value))?Number(t.value):50;state.adminTestPage=0;rerenderAdmin();return;}
