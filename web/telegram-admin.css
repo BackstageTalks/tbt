@@ -1,0 +1,20 @@
+.tg-bot-admin{display:grid;gap:18px}
+.tg-bot-layout{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.tg-bot-card{border:1px solid rgba(122,164,185,.25);background:linear-gradient(145deg,rgba(15,36,55,.82),rgba(8,23,37,.92));border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:13px;min-width:0}
+.tg-bot-card h3{font-size:1rem;margin:0 0 4px;color:#f3faff}
+.tg-bot-card label{display:grid;gap:7px;color:#d7e7ef;font-size:.88rem;line-height:1.4}
+.tg-bot-card input:not([type="checkbox"]),.tg-bot-card select,.tg-bot-card textarea{width:100%;min-height:40px;background:#0c2031;color:#eaf8ff;border:1px solid #37627b;border-radius:6px;padding:8px 10px}
+.tg-bot-card .tg-bot-toggle{display:flex;align-items:center;gap:10px;background:rgba(35,65,83,.32);border:1px solid rgba(91,132,156,.25);padding:9px 10px;border-radius:6px}
+.tg-bot-toggle input,.tg-bot-weekday input{accent-color:#39c8b1;width:17px;height:17px;flex-shrink:0}
+.tg-bot-caption{color:#aac0cc;font-size:.8rem}
+.tg-bot-days{display:flex;gap:4px;flex-wrap:wrap}
+.tg-bot-weekday{display:flex!important;flex-direction:row;align-items:center;gap:5px!important;background:#112c40;padding:7px;border-radius:5px}
+.tg-bot-weekday input{width:14px;height:14px}
+.tg-bot-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-top:1px solid rgba(128,180,201,.25);padding-top:15px}
+.tg-bot-actions small{flex:1;min-width:250px;color:#a7c0ca;line-height:1.5}
+@media(max-width:1024px){.tg-bot-layout{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.tg-bot-layout{grid-template-columns:1fr}.tg-bot-actions{align-items:stretch;flex-direction:column}.tg-bot-actions small{min-width:0}.tg-bot-card{padding:15px}}
+.tg-bot-card textarea{resize:vertical;min-height:80px;line-height:1.4}
+.tg-bot-preview{border-top:1px solid rgba(128,180,201,.25);padding-top:12px}
+.tg-bot-preview summary{cursor:pointer;font-weight:600;color:#cce7f6}
+.tg-bot-preview pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#cfe1e8;background:#0a1a28;border-radius:6px;padding:12px;font-size:.82rem}
