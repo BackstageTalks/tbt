@@ -108,7 +108,7 @@ def name_map(rows):
     return mapping
 
 
-def render_section(rows, label, target):
+def render_section(rows, label, target, *, free=False):
     d = date.fromisoformat(target).strftime("%d.%m.%y")
     counts = {s: 0 for s in ("win", "loss", "void", "pending")}
     profit = stake = 0.0
@@ -140,7 +140,7 @@ def render_section(rows, label, target):
             profit += units
         odds_text = f"{odds:.2f}" if odds is not None and odds > 1 else "—"
         units_text = f"{units:+.2f}u" if units is not None and wager is not None else ("Pending" if status == "pending" else "—")
-        prefix = NUMBERS[idx - 1] if idx <= len(NUMBERS) else str(idx) + "."
+        prefix = "🆓" if free else (NUMBERS[idx - 1] if idx <= len(NUMBERS) else str(idx) + ".")
         rendered.append(f"{prefix} {marker} {names.get(selection, selection)} | {clock} | {odds_text} | {units_text}")
     roi = f"ROI {profit / stake * 100:+.1f}%" if stake > 0 else "ROI —"
     aggregate = f"✅{counts['win']} ❌{counts['loss']} ➖{counts['void']} ⏳{counts['pending']} | {profit:+.2f}u | {roi}"
@@ -152,7 +152,7 @@ def render_section(rows, label, target):
                       FOOTER])
 
 
-def messages(payload, previous):
+def messages(payload, previous, free_event_id=None):
     if payload.get("betting_day") != previous or payload.get("source") != "blinq_issued_results_archive_read_only":
         raise ValueError("Previous day not verified")
     rows = payload.get("rows") or []
@@ -168,6 +168,17 @@ def messages(payload, previous):
         if len(body) > 4096:
             raise RuntimeError("Results message too long; fail rather than truncate official results")
         messages.append({"audience": "premium", "text": body, "section": section})
+    # Only a previously reserved FREE publication can produce a FREE result.
+    # Use the SAME archived TOP row; never infer a win from an absent result.
+    if free_event_id:
+        free_matches = [x for x in rows if isinstance(x, dict)
+                        and x.get("section") == "top"
+                        and str(x.get("event_id") or "") == str(free_event_id)]
+        if len(free_matches) == 1:
+            free_body = render_section(free_matches, "FREE", previous, free=True)
+            if len(free_body) > 4096:
+                raise RuntimeError("FREE Results message too long")
+            messages.append({"audience": "free", "text": free_body, "section": "free"})
     return messages
 
 
@@ -190,7 +201,8 @@ def prepare(args):
         return
     base = args.results_url
     payload = fetch(base, os.getenv("BLINQ_LIVE_WORKER_TOKEN", ""), target)
-    outgoing = messages(payload, target)
+    free_event_id = (state.get("free_picks") or {}).get(target)
+    outgoing = messages(payload, target, free_event_id=free_event_id)
     if not outgoing:
         print('{"status":"skipped","reason":"no_verified_results"}')
         return
