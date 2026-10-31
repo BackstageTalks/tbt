@@ -9,7 +9,9 @@ permissions:
 
 concurrency:
   group: tbt-ui-hotfix-deploy
-  cancel-in-progress: true
+  # Only a newer explicit deployment may supersede an active upload.
+  # Ordinary main commits have skipped deploy jobs and must not cancel it.
+  cancel-in-progress: ${{ contains(github.event.head_commit.message, '[ui-hotfix-deploy]') }}
 
 jobs:
   deploy:
