@@ -379,7 +379,10 @@ def prepare(a):
     if not isinstance(reposts,dict):raise RuntimeError("Invalid repost ledger")
     if repost and ident in reposts:
         print('{"status":"skipped","reason":"repost_already_reserved_or_sent"}');return
-    if getattr(a,"daily",False) and not repost and any(k!=ident and k.startswith(day(now)+":")
+    # A legacy Admin schedule, a manual request and the 06:20 daily job must
+    # never independently publish the same betting day's offer.
+    # Explicit, separately tracked operator-approved format reposts are exempt.
+    if not repost and any(k!=ident and k.startswith(day(now)+":")
                        and isinstance(val,dict) and val.get("status") in ("reserved","sent")
                        for k,val in attempts.items()):
         print('{"status":"skipped","reason":"daily_offer_already_reserved"}');return
