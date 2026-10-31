@@ -166,8 +166,8 @@ def test_live_radar_status_uses_current_quota_guard_and_local_dst_reset(monkeypa
     data = body(response)
     assert response.status_code == 200
     assert data["ok"] is True
-    assert data["budget"]["global_limit"] == 14700
-    assert data["budget"]["reserved_provider_headroom"] == 300
+    assert data["budget"]["global_limit"] == 14500
+    assert data["budget"]["reserved_provider_headroom"] == 500
     assert data["budget"]["next_reset_utc"] == "2026-10-25T17:09:00+00:00"
     assert data["budget"]["next_reset_bratislava_time"] == "18:09"
     assert data["budget"]["next_reset_bratislava_zone"] == "CET"
@@ -186,7 +186,7 @@ def test_live_radar_status_rejects_stale_quota_contract(monkeypatch):
         datetime(2026, 10, 25, 16, 0, tzinfo=timezone.utc)
     ))
     monkeypatch.setattr(function_app, "shared_api_budget_status",
-                        lambda: {**good, "global_limit": 14500})
+                        lambda: {**good, "global_limit": 14700})
     response = function_app.internal_live_radar_status(WorkerRequest())
     assert response.status_code == 503
     assert body(response)["error"] == "api_budget_invalid"

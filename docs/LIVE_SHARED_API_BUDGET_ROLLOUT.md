@@ -3,8 +3,8 @@
 ## Capacity and scope
 
 The provider plan is treated as **15,000 requests per provider billing day**.
-BlinQ enforces a fail-closed **14,700 request global ceiling** and permanently
-keeps **300 requests (2.00%)** as provider headroom.
+BlinQ enforces a fail-closed **14,500 request global ceiling** and permanently
+keeps **500 requests (3.33%)** as provider headroom.
 
 The durable ledger is aligned to the verified provider-day reset used by the
 runtime guard: **17:09 UTC**. The Admin and internal read-only budget status
@@ -22,16 +22,16 @@ current provider day, not a generic rolling 24-hour window.
 | --- | ---: |
 | LIVE Radar | 3,000 |
 | Match Status | 2,500 |
-| Refresh (including presentation enrichment) | 14,700 |
-| History/backfill opportunistic ceiling | 14,700 |
-| **Combined, hard** | **14,700** |
-| **Provider reserve kept untouched** | **300** |
+| Refresh (including presentation enrichment) | 14,500 |
+| History/backfill opportunistic ceiling | 14,500 |
+| **Combined, hard** | **14,500** |
+| **Provider reserve kept untouched** | **500** |
 | **Provider plan** | **15,000** |
 
 LIVE and Match Status retain bounded purpose allocations. Refresh and
 history/backfill may each use remaining provider-day capacity up to the same
-14,700 global ceiling. The global ceiling is always authoritative, so the
-300 provider reserve remains untouched.
+14,500 global ceiling. The global ceiling is always authoritative, so the
+500 provider reserve remains untouched.
 
 An API request is reserved **before every billable upstream attempt, including
 retries**. Cancelled, timed-out or ambiguous requests are never refunded:
@@ -40,7 +40,7 @@ request.
 
 The ledger protects only callers instrumented through the BlinQ shared budget
 guard. Direct/manual use of the same RapidAPI key outside BlinQ is not visible to
-this ledger, which is why the 300-request provider reserve remains mandatory.
+this ledger, which is why the 500-request provider reserve remains mandatory.
 
 ## Runtime source of truth
 
@@ -48,11 +48,11 @@ The authoritative values live in
 `api/tbt/providers/shared_budget.py`:
 
 - `PROVIDER_PLAN_LIMIT = 15000`
-- `PROVIDER_RESERVE = 300`
-- `GLOBAL_CEILING = 14700`
+- `PROVIDER_RESERVE = 500`
+- `GLOBAL_CEILING = 14500`
 - reset: `17:09 UTC (18:09 winter / 19:09 summer in Bratislava)`
-- `PURPOSE_CAPS = {live: 3000, match: 2500, refresh: 14700, history: 14700}`
-  (`history` is opportunistic; the shared 14,700 global ceiling still applies)
+- `PURPOSE_CAPS = {live: 3000, match: 2500, refresh: 14500, history: 14500}`
+  (`history` is opportunistic; the shared 14,500 global ceiling still applies)
 
 CI contains a documentation contract test so future edits must keep this file
 synchronized with those runtime constants.
@@ -71,7 +71,7 @@ synchronized with those runtime constants.
    allocation.
 5. Refresh jobs use the **refresh** allocation. History/statistics/autofill jobs
    use the **history** class, which can consume otherwise-unused global headroom
-   but can never exceed the 14,700 global ceiling.
+   but can never exceed the 14,500 global ceiling.
 6. The Ops journal records 80% and 96.67% threshold crossings for both the global
    budget and the active purpose cap.
 
@@ -92,7 +92,7 @@ synchronized with those runtime constants.
 
 Local history reservation helpers and the SQLite counter now use the same
 **17:09 UTC** provider-day boundary, the **17:07–17:10 UTC** hard stop,
-and a maximum of **14,700** calls. Previous-day local reservations expire
+and a maximum of **14,500** calls. Previous-day local reservations expire
 at the provider-day boundary, not at midnight or after an arbitrary rolling
 24-hour period. The shared ETag ledger and actual provider remaining-call
 response headers are still required for paid work.

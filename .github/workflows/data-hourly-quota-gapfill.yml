@@ -134,8 +134,8 @@ jobs:
           if not isinstance(budget, dict) or (
               budget.get("window") != "provider_day_17_09_utc"
               or budget.get("provider_plan_limit") != 15000
-              or budget.get("global_limit") != 14700
-              or budget.get("reserved_provider_headroom") != 300
+              or budget.get("global_limit") != 14500
+              or budget.get("reserved_provider_headroom") != 500
           ):
               raise SystemExit("Unrecognized budget contract; no dispatch")
 
@@ -148,7 +148,7 @@ jobs:
               if DRY_RUN:
                   print("DRY RUN active writer check: " + str(check_writers()))
               sys.exit(0)
-          if spent < 0 or remaining != max(0, 14700-spent):
+          if spent < 0 or remaining != max(0, 14500-spent):
               raise SystemExit("Shared budget inconsistency; no dispatch")
           reset = datetime.fromisoformat(str(budget["next_reset_utc"]).replace("Z", "+00:00"))
           if (reset.tzinfo is None or reset.astimezone(timezone.utc) != expected_reset
@@ -219,14 +219,14 @@ jobs:
               if not isinstance(budget, dict) or (
                   budget.get("window") != "provider_day_17_09_utc"
                   or budget.get("provider_plan_limit") != 15000
-                  or budget.get("global_limit") != 14700
-                  or budget.get("reserved_provider_headroom") != 300
+                  or budget.get("global_limit") != 14500
+                  or budget.get("reserved_provider_headroom") != 500
               ):
                   raise SystemExit("Unrecognized budget contract after writer wait; no dispatch")
               spent = int(budget["global_spent"])
               remaining = int(budget["global_remaining"])
               history_remaining = int(budget["remaining"]["history"])
-              if spent < 0 or remaining != max(0, 14700-spent):
+              if spent < 0 or remaining != max(0, 14500-spent):
                   raise SystemExit("Shared budget inconsistency after writer wait; no dispatch")
               reset = datetime.fromisoformat(str(budget["next_reset_utc"]).replace("Z", "+00:00"))
               if (

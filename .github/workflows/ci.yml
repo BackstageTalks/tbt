@@ -373,12 +373,12 @@ jobs:
           assert budget.get("schema") == 2
           assert budget.get("window") == "provider_day_17_09_utc"
           assert budget.get("provider_plan_limit") == 15000
-          assert budget.get("global_limit") == 14700
-          assert budget.get("reserved_provider_headroom") == 300
+          assert budget.get("global_limit") == 14500
+          assert budget.get("reserved_provider_headroom") == 500
           spent = budget.get("global_spent")
           remaining = budget.get("global_remaining")
-          assert type(spent) is int and 0 <= spent <= 14700
-          assert type(remaining) is int and remaining == 14700 - spent
+          assert type(spent) is int and 0 <= spent <= 14500
+          assert type(remaining) is int and remaining == 14500 - spent
           reset = datetime.fromisoformat(budget["next_reset_utc"].replace("Z", "+00:00"))
           reset = reset.astimezone(timezone.utc)
           assert (reset.hour, reset.minute, reset.second) == (17, 9, 0)

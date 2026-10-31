@@ -15,22 +15,22 @@ def test_local_reservations_reset_at_1709_utc_across_dst(day, clock):
     old = datetime(*day, 17, 6, tzinfo=timezone.utc)
     new = datetime(*day, 17, 10, tzinfo=timezone.utc)
     assert next_provider_reset(old).astimezone(ZoneInfo("Europe/Bratislava")).hour == clock
-    ledger, count = reserve_allocation(None, 14700, now=old)
-    assert count == 14700
+    ledger, count = reserve_allocation(None, 14500, now=old)
+    assert count == 14500
     _, count = reserve_allocation(ledger, 1, now=old)
     assert count == 0
     with pytest.raises(RequestBudgetExceeded, match="17:07"):
         reserve_allocation(ledger, 1, now=old + timedelta(minutes=2))
-    refreshed, count = reserve_allocation(ledger, 14700, now=new)
-    assert count == 14700
+    refreshed, count = reserve_allocation(ledger, 14500, now=new)
+    assert count == 14500
     assert len(refreshed["reservations"]) == 1
     assert refreshed["reservations"][0]["created_at"] == new.isoformat()
 
 
 def test_local_ledgers_fail_closed_for_oversized_limits_and_bad_entries(tmp_path):
-    with pytest.raises(ValueError, match="14700"):
+    with pytest.raises(ValueError, match="14500"):
         reserve_allocation(None, 15000)
-    with pytest.raises(ValueError, match="14700"):
+    with pytest.raises(ValueError, match="14500"):
         LocalRequestBudget(tmp_path / "too_large.db", limit=15000)
     with pytest.raises(ValueError):
         reserve_allocation({"schema": 1, "reservations": [{"requests": 1}]}, 1)

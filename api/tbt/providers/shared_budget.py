@@ -22,7 +22,7 @@ SLOT_SECONDS = 300
 # Reset-aligned bucket slots; schema-1 entries migrate without quota undercount.
 SLOT_OFFSET_SECONDS = 240
 PROVIDER_PLAN_LIMIT = 15000
-PROVIDER_RESERVE = 300
+PROVIDER_RESERVE = 500
 GLOBAL_CEILING = PROVIDER_PLAN_LIMIT - PROVIDER_RESERVE
 # The provider clock is UTC; Bratislava is a presentation timezone only.
 # ZoneInfo applies CET/CEST DST transitions from the timezone database.

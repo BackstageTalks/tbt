@@ -732,7 +732,7 @@ def main():
     parser = argparse.ArgumentParser(description="Offline BlinQ training and prediction publication")
     parser.add_argument("mode", choices=["train", "refresh", "current-refresh", "backtest"])
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data"))
-    parser.add_argument("--max-requests", type=int, default=14700)
+    parser.add_argument("--max-requests", type=int, default=14500)
     parser.add_argument(
         "--market-odds-max-events",
         type=int,
@@ -785,8 +785,8 @@ def main():
                                     else _require_training_backup_gate())
         except RuntimeError as exc:
             parser.error(str(exc))
-    if not 1 <= args.max_requests <= 14700:
-        parser.error("refresh allowance must be 1..14700")
+    if not 1 <= args.max_requests <= 14500:
+        parser.error("refresh allowance must be 1..14500")
     if args.market_odds_max_events < -1:
         parser.error("market-odds-max-events must be >= -1 (-1 means uncapped)")
     if args.propline_max_events < -1:
