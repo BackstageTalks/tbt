@@ -878,6 +878,25 @@ jobs:
               -f content="$encoded" >/dev/null
           fi
 
+      # The six-hour monitor can finish before the morning refresh publishes
+      # current completed matches. Publish the SAME newly audited, SHA-pinned
+      # readiness snapshot immediately after its private CDB commit instead of
+      # showing a truthful-but-obsolete zero for another six hours. This step
+      # is read-only regarding CDB/model/providers and re-verifies the live
+      # champion digest before signed Azure status publication.
+      - name: Synchronize freshly audited shadow and retrain readiness to Admin
+        env:
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .cache/tbt/model-readiness/readiness.json
+          python scripts/publish_model_calibration_status.py \
+            --readiness-file .cache/tbt/model-readiness/readiness.json \
+            --output .cache/tbt/model-readiness/calibration-status.json
+          test -s .cache/tbt/model-readiness/calibration-status.json
+
   deploy:
     name: Deploy current prediction generation
     needs: pipeline

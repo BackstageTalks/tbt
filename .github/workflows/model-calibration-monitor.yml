@@ -17,6 +17,7 @@ on:
     paths:
       - 'scripts/publish_model_calibration_status.py'
       - 'scripts/model_promotion_readiness.py'
+      - '.github/workflows/data.yml'
       - 'api/tbt/services/model_calibration_status.py'
       - '.github/workflows/model-calibration-monitor.yml'
 
