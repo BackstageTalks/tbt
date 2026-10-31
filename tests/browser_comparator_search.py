@@ -290,7 +290,13 @@ def main():
                 else:
                     nav.dispatch_event('click')
                 assert page.evaluate('comparatorHarness.state.route') == 'predictions'
-                assert page.locator('#accessHint').is_visible()
+                hint = page.locator('#accessHint')
+                hint.wait_for(state='visible')
+                # A deliberate click pins the compact lock hint. Moving the
+                # pointer/focus off the nav must not erase it after 240 ms.
+                page.mouse.move(2, 2)
+                page.wait_for_timeout(320)
+                assert hint.is_visible()
                 assert 'LEGEND' in page.locator('#accessHintTitle').inner_text()
                 page.evaluate("""() => {
                     const h=comparatorHarness;
