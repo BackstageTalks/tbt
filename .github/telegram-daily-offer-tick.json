@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "trigger": "one-time-operator-approved-complete-daily-offer",
+  "betting_day": "2026-10-31",
+  "requested_at": "2026-10-31T09:35:00+01:00",
+  "source": "manual_one_time_preview"
+}
