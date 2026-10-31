@@ -103,6 +103,43 @@ def _asset_digest(release: dict, name: str) -> str:
     return digest[7:] if digest.startswith("sha256:") and SHA.fullmatch(digest[7:]) else ""
 
 
+def _read_champion_refresh_publication(run: dict, read=github) -> bool:
+    """Require actual pipeline, public deploy and publication confirmation.
+
+    Workflow completion alone is not proof: stale-deploy jobs can be skipped.
+    """
+    run_id = run.get("id")
+    if (not isinstance(run_id, int) or isinstance(run_id, bool) or run_id <= 0
+            or run.get("status") != "completed" or run.get("conclusion") != "success"
+            or not re.fullmatch(r"BlinQ inputs refresh [0-9a-f]{24}",
+                                str(run.get("display_title") or ""))):
+        return False
+    data = read(f"{APP}/actions/runs/{run_id}/jobs?per_page=100")
+    jobs = data.get("jobs")
+    if not isinstance(jobs, list) or data.get("total_count") != len(jobs):
+        return False
+    def confirmed(job_name, required_steps):
+        eligible = [job for job in jobs if job.get("name") == job_name
+                    and job.get("status") == "completed"
+                    and job.get("conclusion") == "success"]
+        if len(eligible) != 1:
+            return False
+        steps = eligible[0].get("steps") or []
+        return all(any(step.get("name") == name and step.get("status") == "completed"
+                       and step.get("conclusion") == "success"
+                       for step in steps) for name in required_steps)
+    return (confirmed("pipeline", (
+                "Acquire global cross-repository canonical writer",
+                "Execute selected operation",
+                "Prepare refreshed serving feed and cached player assets",
+            ))
+            and confirmed("Deploy current prediction generation", (
+                "Deploy refreshed feed and application",
+                "Verify exact web revision after prediction redeploy",
+                "Confirm exactly deployed prediction publication",
+            )))
+
+
 def _read_preflight_report(run: dict, artifacts: list[dict]) -> dict:
     """Trusted Actions worker: independently download and validate audit bytes."""
     run_id = run.get("id")
@@ -197,12 +234,27 @@ def collect_status(read=github):
     runs = {}
     busy = False
     for action, workflow in WORKFLOWS.items():
-        raw = read(f"{APP}/actions/workflows/{workflow}/runs?per_page=15")
+        raw = read(f"{APP}/actions/workflows/{workflow}/runs?per_page={100 if action == 'refresh_champion_inputs' else 15}")
         entries = []
         inspected_preflight = False
         for item in raw.get("workflow_runs", []):
+            if item.get("status") in ("queued", "in_progress", "waiting", "pending", "requested"):
+                busy = True
+            # Inspect every queued data writer, but retain only our tagged
+            # manual runs. Storing 100 ordinary data runs would exceed Azure
+            # Table's single-property payload cap and break Admin status sync.
+            if (action == "refresh_champion_inputs" and
+                    not re.fullmatch(r"BlinQ inputs refresh [0-9a-f]{24}",
+                                     str(item.get("display_title") or ""))):
+                continue
             record = {k: item.get(k) for k in
                       ("id", "status", "conclusion", "html_url", "display_title", "created_at", "head_sha")}
+            if (action == "refresh_champion_inputs" and
+                    re.fullmatch(r"BlinQ inputs refresh [0-9a-f]{24}",
+                                 str(item.get("display_title") or "")) and
+                    item.get("status") == "completed" and
+                    item.get("conclusion") == "success"):
+                record["publication_verified"] = _read_champion_refresh_publication(item, read)
             if (action == "prepare_inputs" and not inspected_preflight and
                     item.get("status") == "completed" and item.get("conclusion") == "success"):
                 inspected_preflight = True
@@ -365,14 +417,22 @@ def _finalize(request, run, snapshot):
                       "note": "Beh skončil, ale report dát nie je nezávisle overený. Potvrď zlyhanie auditu a zopakuj prípravu dát."})
         raise TrainingBlocked("Preflight report was not independently retained as a GitHub artifact")
     if request["action"] == "refresh_champion_inputs":
+        if run.get("publication_verified") is not True:
+            _put("last", {"id": request["id"], "action": request["action"],
+                          "state": "VERIFICATION_FAILED", "run": run,
+                          "note": "Výpočet nemá potvrdené nasadenie a read-back publikácie. Operácia zostáva zablokovaná na rekonciliáciu."})
+            raise TrainingBlocked("Prediction deployment/publication not independently verified")
         if snapshot["champion_sha256"] != request["expected_champion_sha256"]:
             raise TrainingBlocked("Produkčný champion sa zmenil; aktualizácia vstupov sa nepotvrdí.")
         if snapshot["active_sha256"] != request["expected_candidate_sha256"]:
             raise TrainingBlocked("Shadow kandidát sa počas refreshu zmenil; vyžaduje sa kontrola.")
-        if (not SHA.fullmatch(str(snapshot.get("feed_sha256") or ""))
-                or snapshot["feed_sha256"] == request.get("expected_feed_sha256")
-                or not 0 <= _age(snapshot.get("feed_updated_at")) < _age(request["created_at"]) + 60):
-            raise TrainingBlocked("Nezávislý read-back nepotvrdil novú publikovanú generáciu predikcií.")
+        if not SHA.fullmatch(str(snapshot.get("feed_sha256") or "")):
+            raise TrainingBlocked("Nezávislý read-back feedu nie je dostupný.")
+        changed = snapshot["feed_sha256"] != request.get("expected_feed_sha256")
+        if changed and not 0 <= _age(snapshot.get("feed_updated_at")) < _age(request["created_at"]) + 60:
+            raise TrainingBlocked("Nová generácia feedu nemá overený čas publikácie.")
+        # Exact same content is valid when there is no new eligible match.
+        # Do not claim that any new feature values were incorporated in a no-op.
     if request["action"] == "activate_shadow":
         expected = request["source_sha256"]
         source = next((c for c in snapshot["candidates"]
@@ -387,14 +447,17 @@ def _finalize(request, run, snapshot):
     result = {
         "id": request["id"], "action": request["action"],
         "approval": {key: request.get(key) for key in ("actor", "source_tag", "source_sha256", "expected_champion_sha256", "calibration_override", "reason")},
-        "state": "WORKFLOW_VERIFIED", "run": run,
+        "state": ("NO_CHANGE_VERIFIED" if request["action"] == "refresh_champion_inputs"
+                  and not changed else "WORKFLOW_VERIFIED"), "run": run,
         "verified_at": _utcnow().isoformat(),
         # A successful bounded import run is not proof that new eligible rows existed.
         "note": ("Skontroluj počet nových CDB riadkov v importe."
                  if request["action"] == "import_drive" else
                  "Predtréningový audit prešiel; snapshot pre fit sa vytvorí až pri tréningu."
                  if request["action"] == "prepare_inputs" else
-                 "Vstupy boli znovu vyhodnotené a nová generácia predikcií publikovaná; váhy a SHA championa sa nezmenili."
+                 ("Aktuálna CDB bola vyhodnotená a verejná ponuka overená, ale obsah feedu sa nezmenil; žiadne nové zahrnuté hodnoty tým nie sú preukázané."
+                  if not changed else
+                  "Vstupy boli znovu vyhodnotené a zmenený feed publikovaný; váhy a SHA championa sa nezmenili.")
                  if request["action"] == "refresh_champion_inputs" else
                  "Zápis kandidáta a kontrola produkcie boli overené."
                  if request["action"] == "activate_shadow" else
