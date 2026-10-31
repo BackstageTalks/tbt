@@ -178,7 +178,7 @@ def test_hourly_scheduler_keeps_bounded_extras_and_same_writer():
     assert "extras_slot = stage_hour in (14, 17)" in hourly
     assert "proposed = min(proposed, 450)" in hourly
     assert 'payload["inputs"]["mode"] = "extras"' in hourly
-    assert "BLINQ_PROVIDER_REQUEST_RESERVE=300" in data
+    assert "BLINQ_PROVIDER_REQUEST_RESERVE=500" in data
     assert "BLINQ_RAPIDAPI_MAX_RPS=6" in data
     assert "python scripts/cdb_global_writer_lock.py acquire" in data
     assert "python scripts/verify_tennisapi_extras.py" in data
@@ -403,7 +403,7 @@ def test_daily_extras_slots_keep_2026_first_and_share_provider_budget():
     assert "proposed = min(proposed, 450)" in dispatch
     assert 'payload["inputs"]["mode"] = "extras"' in dispatch
     assert '"start": "2022-01-01"' in dispatch
-    assert "14700" in dispatch and "reserved_provider_headroom" in dispatch
+    assert "14500" in dispatch and "reserved_provider_headroom" in dispatch
     assert "newest_season_first_then_verified_identity" in source
     assert 'report["extras_candidate_rows_by_year"]' in source
     assert 'output_report["extras_processed_by_year"]' in source
