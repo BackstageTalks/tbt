@@ -7922,7 +7922,7 @@ by BlinQ Stat Engine</pre><small>Ilustračné tipy. BlinQ Stat Engine bude v Tel
       const next=e.target.closest('[data-market-next]');if(next){const key=next.dataset.marketNext;state.marketPage[key]=Number(state.marketPage[key]||0)+1;renderMarketSections();return;}
       const target=e.target.closest('[data-route]');if(!target)return;const route=target.dataset.route;if(!routeMeta[route])return;e.preventDefault();if(route==='account'){openAccountDialog();return;}const upgradeDialog=$('upgradeDialog');if(upgradeDialog?.open&&target.closest('#upgradeDialog'))upgradeDialog.close();const matchDialog=$('matchDialog');if(matchDialog?.open&&target.closest('#matchDialog'))matchDialog.close();setRoute(route);
     });
-    document.addEventListener('pointerover',e=>{const target=accessHintTrigger(e.target);if(!target||state.route==='admin'||window.matchMedia('(hover: none)').matches)return;if(e.relatedTarget instanceof Node&&target.contains(e.relatedTarget))return;clearTimeout(accessHintTimer);clearTimeout(accessHintHoverTimer);accessHintHoverTimer=setTimeout(()=>showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false),320);});
+    document.addEventListener('pointerover',e=>{if(accessHintPinnedByClick)return;const target=accessHintTrigger(e.target);if(!target||state.route==='admin'||window.matchMedia('(hover: none)').matches)return;if(e.relatedTarget instanceof Node&&target.contains(e.relatedTarget))return;clearTimeout(accessHintTimer);clearTimeout(accessHintHoverTimer);accessHintHoverTimer=setTimeout(()=>showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false),320);});
     document.addEventListener('pointerout',e=>{if(accessHintPinnedByClick)return;const target=accessHintTrigger(e.target);if(!target)return;const next=e.relatedTarget;const hint=$('accessHint');if(next instanceof Node&&(target.contains(next)||hint?.contains(next)))return;clearTimeout(accessHintHoverTimer);hideAccessHint(240);});
     const accessHintNode=$('accessHint');
     if(accessHintNode){
@@ -7930,7 +7930,7 @@ by BlinQ Stat Engine</pre><small>Ilustračné tipy. BlinQ Stat Engine bude v Tel
       accessHintNode.addEventListener('pointerenter',()=>{clearTimeout(accessHintTimer);clearTimeout(accessHintHoverTimer);});
       accessHintNode.addEventListener('pointerleave',e=>{if(accessHintPinnedByClick)return;const next=e.relatedTarget;if(next instanceof Node&&accessHintTarget?.contains?.(next))return;hideAccessHint(220);});
     }
-    document.addEventListener('focusin',e=>{const target=accessHintTrigger(e.target);if(target&&state.route!=='admin')showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false);});
+    document.addEventListener('focusin',e=>{if(accessHintPinnedByClick)return;const target=accessHintTrigger(e.target);if(target&&state.route!=='admin')showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false);});
     document.addEventListener('focusout',e=>{if(accessHintPinnedByClick)return;const hint=$('accessHint'),next=e.relatedTarget;if(next instanceof Node&&(hint?.contains(next)||accessHintTarget?.contains(next)))return;if(accessHintTrigger(e.target)||hint?.contains(e.target))hideAccessHint(180);});
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('accessHint')?.hidden){hideAccessHint();}});
     $('upgradeDialog').addEventListener('cancel',event=>{
