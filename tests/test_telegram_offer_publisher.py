@@ -89,7 +89,7 @@ def test_stale_unconfirmed_and_started_are_blocked():
 
 def test_due_window_and_manual_request():
     cfg = settings()
-    assert tg.due(cfg, NOW) == "scheduled:2026-10-31"
+    assert tg.due(cfg, NOW) == "schedule:2026-10-31"
     assert tg.due(cfg, NOW + timedelta(hours=2)) is None
     cfg["schedule"]["enabled"] = False
     cfg["manual_request"] = {"id": "abcdef123456", "created_at": NOW.isoformat()}
