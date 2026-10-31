@@ -252,24 +252,14 @@ def combined_daily_report(rows, archive_rows, day_text, footer):
     total={status:sum(stats[s][status] for s in categories) for status in ("won","lost","void","pending")}
     total_profit=sum(stats[s]["units"] for s in categories)
     total_staked=sum(stats[s]["priced"] for s in categories)
-    def summary(section):
-        s=stats[section]
-        decided=s["won"]+s["lost"]
-        label={"top":"TOP","value":"VALUE","aces":"ACES"}[section]
-        rate=_pct(s["won"],decided)
-        roi=(_pct(s["units"],s["priced"],signed=True) if s["priced"] else "—")
-        return (f"{label} · WIN {s['won']} | LOSS {s['lost']} | VOID {s['void']} | "
-                f"PENDING {s['pending']} | Win {rate} | {s['units']:+.2f}u | ROI {roi}")
-    summaries=[summary(s) for s in categories if sum(stats[s][k] for k in ("won","lost","void","pending"))]
     decisions=total["won"]+total["lost"]
     win=_pct(total["won"],decisions)
     roi=_pct(total_profit,total_staked,signed=True) if total_staked else "—"
     summary_tail=[
-        "📊 Denný súhrn",
-        *summaries,
-        (f"✅ WIN {total['won']} | ❌ LOSS {total['lost']} | "
-         f"🟪 VOID {total['void']} | ⏳ PENDING {total['pending']}"),
-        f"🎯 Úspešnosť {win} | 💰 Zisk {total_profit:+.2f}u | 📈 ROI {roi}",
+        f"✅ WIN {total['won']} | ❌ LOSS {total['lost']}",
+        f"🟪 VOID {total['void']} | ⏳ PENDING {total['pending']}",
+        f"🎯 Úspešnosť {win}",
+        f"💰 Zisk {total_profit:+.2f}u | 📈 ROI {roi}",
     ]
     if total["pending"]:
         summary_tail.append("⏳ Priebežné vyhodnotenie: neuzavreté zápasy sa počítajú ako Pending.")
