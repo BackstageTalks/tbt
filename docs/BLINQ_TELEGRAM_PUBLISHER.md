@@ -5,7 +5,7 @@
 Admin -> **Telegram bot** is independent of the existing **Telegram skupiny** page. On that page set:
 
 - Publisher ON / OFF.
-- TOP, VALUE, ESÁ categories independently.
+- TOP, VALUE, ACES categories independently.
 - Free preview: one deterministic random confirmed TOP bet per BlinQ betting day (defaults ON).
 - Scheduled dispatch time in **Europe/Bratislava**, weekdays, on/off.
 - Combined vs per-category message, number of picks, include already-started matches, probability/odds fields, classic footer.
@@ -33,12 +33,12 @@ Uses the **confirmed_only** `daily_offer_snapshot.json` from the existing privat
 
 - No tennis RapidAPI calls.
 - Never publishes shadow, pending, stale or unconfirmed predictions.
-- ESÁ projection-only offers never receive fabricated prices.
+- ACES projection-only offers never receive fabricated prices.
 - FREE chooses exactly one confirmed eligible TOP row; deterministic hashed rank. The chosen event ID is persisted so later runs for that day use the same event.
 
 Historical style retained:
 ```
-Data Betting by BackstageTalks
+BlinQ | Tennis Intelligence
 
 🎾 TOP Picks | BlinQ
 📅 31.10.2026
@@ -46,7 +46,7 @@ Data Betting by BackstageTalks
 1️⃣ Player A vs Player B | 12:30 | 72.4% | 1.75
 ...
 ℹ️ Analytical preview only
-🧠 by BackstageTalks Data Engine
+by BlinQ Stat Engine
 ```
 
 ## Delivery guarantees
@@ -100,3 +100,7 @@ For convenient local timezone scheduling use `TZ=Europe/Bratislava` (or your sch
 ## Data impact
 
 The Telegram PR never modifies CDB, the existing verified-results archive, provider quotas, models or prediction issuance. It **does** update the existing Admin UI-config storage when the operator publishes settings, writes a dedicated GitHub branch ledger of Telegram reservations/receipts/immutable sent-row identifiers, and sends Telegram messages. The settlement API is read-only.
+
+### Linked Stat Engine signature
+
+Every generated Telegram message (TOP / Value / Aces, separate FREE and prior-day Results) ends with `by BlinQ Stat Engine`. The **BlinQ Stat Engine** label is attached to [Follow the Data](https://agreeable-sky-011a7fe10.7.azurestaticapps.net/follow-the-data/) using Telegram `text_link` entities and UTF-16 offsets, rather than HTML interpolation. Telegram receives the URL without printing it inline. The footer field in Admin is an optional note/disclaimer that appears **above** this fixed signature. Legacy BackstageTalks Data Engine sign-offs are removed at render time. The main header is **BlinQ | Tennis Intelligence**; the prediction content follows TOP → Value → Aces without category headings. Aces projections use the English label `aces`.
