@@ -27,9 +27,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DEPLOYED_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
         shell: bash
         run: |
           set -euo pipefail
+          deploy_result="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/jobs?per_page=100" \
+            --jq '.jobs[] | select(.name == "deploy") | .conclusion' | head -1)"
+          if [[ "$deploy_result" != "success" ]]; then
+            echo 'CALIBRATION_POSTDEPLOY_NO_SUCCESSFUL_DEPLOY'
+            exit 0
+          fi
           latest="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')"
           if [[ "$latest" != "$DEPLOYED_SHA" ]]; then
             echo 'CALIBRATION_POSTDEPLOY_STALE_WORKFLOW_IGNORED'
