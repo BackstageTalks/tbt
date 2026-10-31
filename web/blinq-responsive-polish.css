@@ -267,3 +267,24 @@ body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardHero :is(.dashboard-her
     color:var(--bq-editorial-mint)!important;
   }
 }
+
+
+/* Unified dashboard vertical rhythm: avoid stacking hero margin, grid padding
+   and KPI margin into three different-looking panel gaps. */
+body#blinqPremium.blinq-home:not(.blinq-admin) {
+  --bq-dashboard-panel-gap:10px;
+}
+body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardHero {
+  margin-bottom:0!important;
+}
+body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardContentGrid {
+  padding-top:var(--bq-dashboard-panel-gap)!important;
+}
+body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardKpis {
+  margin-bottom:var(--bq-dashboard-panel-gap)!important;
+}
+@media(max-width:600px) {
+  body#blinqPremium.blinq-home:not(.blinq-admin) {
+    --bq-dashboard-panel-gap:8px;
+  }
+}
