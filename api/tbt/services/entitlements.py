@@ -1051,10 +1051,14 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
         source_results, history_hours,
         allowed_categories=set(manifest.get("result_categories") or []),
     )
-    if history_hours is not None:
-        # Aggregate performance in the published feed may cover all time, so do not
-        # expose it to ROOKIE/PRO. Their UI calculates metrics from the authorized
-        # 24h/48h result slice instead.
+    restricted_categories = (
+        manifest["plan"] != "admin"
+        and set(manifest.get("result_categories") or []) != set(RESULT_CATEGORY_ORDER)
+    )
+    if history_hours is not None or restricted_categories:
+        # Raw performance aggregates contain every historical category.
+        # Never leak totals for disabled markets through this alternate API
+        # surface; member-facing Results/KPIs use the authorized ledger.
         if "performance" in result:
             result["performance"] = {}
         if "betting_performance" in result:
