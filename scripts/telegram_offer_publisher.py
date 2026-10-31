@@ -310,7 +310,7 @@ def queue_daily(a):
 
 def prepare(a):
     now=stamp(a.now) if a.now else datetime.now(timezone.utc);v=config(a.config_url)
-    if a.daily:
+    if getattr(a,"daily",False):
         # Explicitly operator-approved full offer. Admin UI settings remain unchanged.
         v={**v,"enabled":True,"sections":{k:True for k in SECTIONS},
            "layout":"combined","max_per_section":0,"free_top_pick":True}
@@ -322,7 +322,7 @@ def prepare(a):
     attempts=old.get("attempts")
     if not isinstance(attempts,dict):raise RuntimeError("Invalid state")
     ident=day(now)+":"+key
-    if a.daily and any(k!=ident and k.startswith(day(now)+":")
+    if getattr(a,"daily",False) and any(k!=ident and k.startswith(day(now)+":")
                        and isinstance(v,dict) and v.get("status") in ("reserved","sent")
                        for k,v in attempts.items()):
         print('{"status":"skipped","reason":"daily_offer_already_reserved"}');return
