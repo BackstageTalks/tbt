@@ -5166,26 +5166,17 @@ function adminActivityRows(){
           <label>Záverečný text <textarea rows="2" maxlength="200" data-tg-bot-field="footer">${escapeHtml(c.footer||'ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine')}</textarea></label>
         </div>
       </div>
-      <details class="tg-bot-preview"><summary>Náhľad pôvodného formátu správy</summary><pre>Data Betting by BackstageTalks
+      <details class="tg-bot-preview"><summary>Náhľad Telegram správy (TOP → Value → Esá)</summary><pre>Data Betting by BackstageTalks
 
-🎾 TOP Picks | BlinQ
 📅 31.10.2026
 
 1️⃣ Novak | 12:30 | 72.4% | 1.75
 2️⃣ Kovac | 14:00 | 69.1% | 1.88
-
-💎 VALUE Picks | BlinQ
-📅 31.10.2026
-
-1️⃣ Sinner | 15:00 | 68.3% | 2.05 | EV +10.2%
-
-🎯 ESÁ | BlinQ
-📅 31.10.2026
-
-1️⃣ Alcaraz | 16:00 | esá 8.2 | confidence 73.0% | —
+3️⃣ Sinner | 15:00 | 68.3% | 2.05 | EV +10.2%
+4️⃣ Alcaraz | 16:00 | esá 8.2 | confidence 73.0% | —
 
 ℹ️ Analytical preview only
-🧠 by BackstageTalks Data Engine</pre><small>Ilustračný text. FREE sa posiela v samostatnej správe s jedným stabilne náhodným TOP tipom. Ranné Results používajú rovnaké číslovanie, stavové emoji, units a ROI; vychádzajú iba z overeného výsledkového archívu.</small></details>
+🧠 by BackstageTalks Data Engine</pre><small>Ilustračné tipy. Bez nadpisov kategórií, v poradí TOP, Value, Esá. FREE ide samostatne ako 🆓. Ranné Results zachovávajú ✅/❌, units a ROI.</small></details>
       <div class="tg-bot-actions"><button class="btn btn-primary" type="button" data-admin-action="tg-bot-queue" ${state.uiStorageAvailable===true?'':'disabled'}>Zaradiť jednorazové odoslanie</button><small>Uloží nastavenia a požiadavku do 90-minútového okna. Doručenie potvrdí až GitHub Actions → BlinQ Telegram offer. Požiadavka sa neodošle dvakrát.</small></div>
     </section>`;
   }
