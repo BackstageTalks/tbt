@@ -176,6 +176,127 @@ def report_rows(rows, archive_rows, category, day_text, footer):
             "priced_decisions":priced}
 
 
+
+def _pct(numerator, denominator):
+    return f"{numerator / denominator * 100:.1f}%" if denominator else "—"
+
+
+def combined_daily_report(rows, archive_rows, day_text, footer):
+    """One premium daily results scorecard for the entire confirmed sent offer.
+
+    Free picks are a separate audience and must never inflate premium totals.
+    The only monetary denominator is the number of genuinely priced 1u
+    decisions. VOID/PENDING and projection-only picks don't create ROI stakes.
+    """
+    categories=("top", "value", "aces")
+    ordered=[(category,row) for category in categories
+             for row in rows if row.get("channel")==category]
+    if not ordered:
+        return []
+    stats={section:{"won":0,"lost":0,"void":0,"pending":0,"units":0.0,"priced":0}
+           for section in categories}
+    names={}
+    for _,row in ordered:
+        full=str(row.get("name") or "—").strip()
+        short=full.split()[-1] if full.split() else "—"
+        names.setdefault(short.casefold(),set()).add(full)
+    lines=[]
+    for index,(section,row) in enumerate(ordered,1):
+        outcome=evaluate(row,archive_rows)
+        status=outcome["status"]
+        if status not in stats[section]:
+            raise RuntimeError("Unexpected settlement status in verified report")
+        bucket=stats[section]
+        bucket[status]+=1
+        if outcome["units"] is not None:
+            bucket["units"]+=outcome["units"]
+            bucket["priced"]+=outcome["stake"]
+        full=str(row.get("name") or "—").strip()
+        short=full.split()[-1] if full.split() else "—"
+        name=full if len(names[short.casefold()])>1 else short
+        time=tg.stamp(row["scheduled_at"]).astimezone(tg.TZ).strftime("%H:%M")
+        odds=tg.num(row.get("odds"))
+        odds_text=f"{odds:.2f}" if odds is not None and odds>1 else "—"
+        result_text=(f"{outcome['units']:+.2f}u" if outcome["units"] is not None else
+                     "+0.00u" if status=="void" else
+                     "Pending" if status=="pending" else "—")
+        index_text=tg.NUMBER_EMOJIS[index-1] if index<=len(tg.NUMBER_EMOJIS) else f"{index}."
+        icon={"won":"✅","lost":"❌","void":"➖","pending":"⏳"}[status]
+        lines.append(f"{index_text} {icon} {name} | {time} | {odds_text} | {result_text}")
+
+    total={status:sum(stats[s][status] for s in categories) for status in ("won","lost","void","pending")}
+    total_profit=sum(stats[s]["units"] for s in categories)
+    total_staked=sum(stats[s]["priced"] for s in categories)
+    def summary(section):
+        s=stats[section]
+        decided=s["won"]+s["lost"]
+        label={"top":"TOP","value":"VALUE","aces":"ACES"}[section]
+        rate=_pct(s["won"],decided)
+        roi=(_pct(s["units"],s["priced"]) if s["priced"] else "—")
+        return (f"{label} · WIN {s['won']} | LOSS {s['lost']} | VOID {s['void']} | "
+                f"PENDING {s['pending']} | Win {rate} | {s['units']:+.2f}u | ROI {roi}")
+    summaries=[summary(s) for s in categories if sum(stats[s][k] for k in ("won","lost","void","pending"))]
+    decisions=total["won"]+total["lost"]
+    win=_pct(total["won"],decisions)
+    roi=_pct(total_profit,total_staked) if total_staked else "—"
+    summary_tail=[
+        "📊 Denný súhrn",
+        *summaries,
+        (f"✅ WIN {total['won']} | ❌ LOSS {total['lost']} | "
+         f"➖ VOID {total['void']} | ⏳ PENDING {total['pending']}"),
+        f"🎯 Úspešnosť {win} | 💰 Zisk {total_profit:+.2f}u | 📈 ROI {roi}",
+    ]
+    if total["pending"]:
+        summary_tail.append("⏳ Priebežné vyhodnotenie: neuzavreté zápasy sa počítajú ako Pending.")
+    if decisions > total_staked:
+        summary_tail.append("ℹ️ Projekcie bez potvrdeného kurzu sú mimo zisku a ROI.")
+    day_label=datetime.fromisoformat(day_text).strftime("%d.%m.%Y")
+    header=[tg.HEADER, f"📊 Results | {day_label}"]
+    closing="\n".join([*summary_tail,"",footer])
+    def size(text):
+        return len(text.encode("utf-16-le"))//2
+    def compose(rows_text, include_closing=False):
+        parts=[*header]
+        if rows_text:
+            parts.append("\n".join(rows_text))
+        if include_closing:
+            parts.append(closing)
+        else:
+            parts.append(footer)
+        return "\n\n".join(parts)
+    # Prefer one complete daily report when it fits. For longer days,
+    # all rows are preserved, and the financial/quality summary is posted last.
+    if size(compose(lines,True))<=4096:
+        pages=[compose(lines,True)]
+    else:
+        pages=[]
+        current=[]
+        for line in lines:
+            if size(compose(current+[line]))>4096:
+                if not current:
+                    raise RuntimeError("A settlement line is too long for Telegram")
+                pages.append(compose(current))
+                current=[]
+            current.append(line)
+        if size(compose(current,True))<=4096:
+            pages.append(compose(current,True))
+        else:
+            if current:
+                pages.append(compose(current))
+            if size(compose([],True))>4096:
+                raise RuntimeError("Telegram settlement summary exceeds 4096 units")
+            pages.append(compose([],True))
+    if any(size(message)>4096 for message in pages):
+        raise RuntimeError("Telegram result pagination exceeds message limit")
+    return [
+        {"audience":"premium","text":page,
+         "counts":total if i==len(pages)-1 else {k:0 for k in total},
+         "priced_decisions":total_staked if i==len(pages)-1 else 0,
+         "profit_units":total_profit if i==len(pages)-1 else 0.0}
+        for i,page in enumerate(pages)
+    ]
+
+
 def prepare(args):
     now=tg.stamp(args.now) if args.now else datetime.now(timezone.utc)
     target_day=previous_day(now)
@@ -200,9 +321,13 @@ def prepare(args):
         return
     verified=archive(args.api_url,target_day)
     footer=tg.branded_footer(cfg.get("footer"))
-    posts=[report_rows(sent,verified,category,target_day,footer)
-           for category in ("top","value","aces","free")]
-    posts=[post for post in posts if post]
+    # Premium: one chronological-by-section scorecard, preserving every
+    # actually sent TOP -> Value -> Aces pick and a total daily summary.
+    # FREE is separately graded but excluded from the premium denominator.
+    posts=combined_daily_report(sent,verified,target_day,footer)
+    free=report_rows(sent,verified,"free",target_day,footer)
+    if free:
+        posts.append(free)
     if not posts:
         print(json.dumps({"status":"skipped","reason":"no_results_to_report"}))
         return
