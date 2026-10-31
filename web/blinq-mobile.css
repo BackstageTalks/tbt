@@ -1192,7 +1192,8 @@ body#blinqPremium .site-header .reference-navigation a.comparator-nav-locked > .
 body#blinqPremium .site-header .mobile-icon-nav a.comparator-nav-locked > .comparator-access-lock{
   display:grid!important;
 }
-body#blinqPremium .site-header .comparator-access-lock svg{
+body#blinqPremium .site-header .reference-navigation[data-icon-navigation="1"] a.nav-icon-link.nav-icon-compare > .comparator-access-lock > svg,
+body#blinqPremium .site-header .mobile-icon-nav a.mobile-icon-link[data-route="compare"] > .comparator-access-lock > svg{
   display:block!important;width:12px!important;height:12px!important;
   min-width:12px!important;min-height:12px!important;max-width:12px!important;max-height:12px!important;
   stroke:currentColor!important;stroke-width:1.6!important;
