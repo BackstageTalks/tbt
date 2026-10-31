@@ -4,6 +4,13 @@ const vm = require('vm');
 const assert = require('assert');
 
 const src = fs.readFileSync('web/app.js', 'utf8');
+const css = fs.readFileSync('web/blinq-app.css', 'utf8');
+const pipeline = fs.readFileSync('.github/workflows/data.yml', 'utf8');
+const monitor = fs.readFileSync('.github/workflows/model-calibration-monitor.yml', 'utf8');
+assert.match(css,/\.admin-calibration-gates strong\{[^}]*min-width:58px;[^}]*white-space:nowrap/);
+assert.match(pipeline,/Synchronize freshly audited shadow and retrain readiness to Admin/);
+assert.match(pipeline,/--readiness-file \.cache\/tbt\/model-readiness\/readiness\.json/);
+assert.match(monitor,/\.github\/workflows\/data\.yml/);
 const escapeHtml = value => String(value).replaceAll('&','&amp;')
   .replaceAll('<','&lt;').replaceAll('>','&gt;')
   .replaceAll('"','&quot;').replaceAll("'",'&#39;');
