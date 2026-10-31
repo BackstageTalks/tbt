@@ -5179,6 +5179,24 @@ function adminActivityRows(){
 
 ℹ️ Analytical preview only
 by BlinQ Stat Engine</pre><small>Ilustračné tipy. BlinQ Stat Engine bude v Telegrame klikateľný odkaz na Follow the Data. FREE ide samostatne ako 🆓.</small></details>
+      <details class="tg-bot-preview"><summary>Náhľad ranného vyhodnotenia (predchádzajúci betting day)</summary><pre>BlinQ | Tennis Intelligence
+
+📊 Results | BlinQ
+📅 30.10.26
+
+1️⃣ ✅ Novak | 12:30 | 1.80 | +0.80u
+2️⃣ ✅ Sinner | 14:00 | 1.80 | +0.80u
+3️⃣ ❌ Fritz | 15:00 | 2.05 | -1.00u
+4️⃣ ➖ Shelton | 16:00 | 1.90 | +0.00u
+5️⃣ ⏳ Alcaraz | 17:00 | — | Pending
+
+✅ WIN 2 (50.0%) | ❌ LOSS 1 (25.0%)
+➖ VOID 1 (25.0%) | ⏳ PENDING 1
+🎯 Úspešnosť 66.7% (2/3)
+💰 Zisk +0.60u | 📈 ROI +20.0% (3u)
+
+ℹ️ Analytical preview only
+by BlinQ Stat Engine</pre><small>Len ukážka. % pri WIN/LOSS/VOID je zo všetkých uzavretých tipov; úspešnosť je WIN/(WIN+LOSS). ROI počíta iba overené ocenené stávky. Nevyhodnotené tipy zostanú PENDING.</small></details>
       <div class="tg-bot-actions"><button class="btn btn-primary" type="button" data-admin-action="tg-bot-queue" ${state.uiStorageAvailable===true?'':'disabled'}>Zaradiť jednorazové odoslanie</button><small>Uloží nastavenia a požiadavku do 90-minútového okna. Doručenie potvrdí až GitHub Actions → BlinQ Telegram offer. Požiadavka sa neodošle dvakrát.</small></div>
     </section>`;
   }
