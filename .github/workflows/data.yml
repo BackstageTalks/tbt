@@ -320,6 +320,12 @@ jobs:
           if [[ "$MODE" != provider-probe ]]; then
             test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
           fi
+          # Under the existing CDB global lock, recover a committed/rollback
+          # release generation before touching paid API quota. This is a no-op
+          # for healthy releases and uses the existing audited legacy repair.
+          if [[ "$MODE" == history || "$MODE" == statistics || "$MODE" == extras || "$MODE" == identity ]]; then
+            python scripts/ensure_cdb_history_release.py --data-repository "$TBT_DATA_REPOSITORY"
+          fi
           # Writer runs start from a physically clean canonical release. The repair
           # is a no-op when history is already clean and rewrites only affected years.
           if [[ "$MODE" == history || "$MODE" == statistics || "$MODE" == extras || "$MODE" == identity ]]; then
