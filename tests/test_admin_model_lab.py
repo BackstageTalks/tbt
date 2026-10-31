@@ -197,6 +197,42 @@ class TestLab(unittest.TestCase):
         self.assertFalse(m._read_champion_refresh_publication(
             run, lambda _: {"total_count": 3, "jobs": [pipeline, deploy]}))
 
+    def test_data_workflow_scan_keeps_status_payload_bounded(self):
+        tagged = {"id": 999, "status": "completed", "conclusion": "success",
+                  "display_title": "BlinQ inputs refresh " + "b" * 24,
+                  "created_at": datetime.now(timezone.utc).isoformat()}
+        ordinary = [{"id": n, "status": "completed", "conclusion": "success",
+                     "display_title": "Tennis data and predictions",
+                     "created_at": datetime.now(timezone.utc).isoformat()}
+                    for n in range(99)]
+        ordinary[0]["status"] = "in_progress"
+        def read(path):
+            if path == m.DATA:
+                return {}
+            if path.endswith("tbt-model-candidate-v1") or path.endswith("tbt-model-production-v1"):
+                return {"assets": [
+                    {"name": name, "size": 1, "digest": "sha256:" + "a" * 64}
+                    for name in sorted(m.REQUIRED_ASSETS)]}
+            if path.endswith("tbt-predictions-v1"):
+                return {"assets": [{"name": "feed.json", "size": 10,
+                                    "digest": "sha256:" + "f" * 64,
+                                    "updated_at": datetime.now(timezone.utc).isoformat()}]}
+            if path.endswith("releases?per_page=100"):
+                return []
+            if path.endswith("data.yml/runs?per_page=100"):
+                return {"workflow_runs": ordinary + [tagged]}
+            if "/actions/workflows/" in path:
+                return {"workflow_runs": []}
+            raise AssertionError(path)
+        with patch.object(m, "inspect", return_value={"can_start": True, "reason": "ready"}), \
+             patch.object(m, "_read_champion_refresh_publication", return_value=True) as verified:
+            status = m.collect_status(read=read)
+        self.assertFalse(status["can_start"])  # another CDB writer is running
+        self.assertEqual(len(status["runs"]["refresh_champion_inputs"]), 1)
+        self.assertTrue(status["runs"]["refresh_champion_inputs"][0]["publication_verified"])
+        verified.assert_called_once()
+        self.assertLess(len(json.dumps(status)), 20000)
+
     def test_unknown_operations_and_fields_rejected(self):
         for data in (
             {"action": "promote"}, {"action": "refresh_tests", "max_requests": 100},
