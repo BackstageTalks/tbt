@@ -65,7 +65,9 @@ def num(v):
     try: return float(v) if v is not None else None
     except (TypeError,ValueError): return None
 NUMBER_EMOJIS=("1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟")
-HEADER="BlinQ | Tennis Intelligence"
+# Conservative single-row mobile preview bound; Telegram clients may wrap differently.
+MAX_INLINE_EV_CHARS=48
+HEADER="🎾 BlinQ | Tennis Intelligence"
 FOOTER="ℹ️ Analytical preview only"
 BRAND_LINK_TEXT="BlinQ Stat Engine"
 BRAND_FOOTER="by " + BRAND_LINK_TEXT
@@ -141,11 +143,16 @@ def fmt(r,k,c,index=1,name_map=None):
     odds=num(bet.get("odds") or r.get("odds"))
     if c.get("show_odds",True):
         values.append(f"{odds:.2f}" if odds is not None and odds>1 else "—")
+    prefix=NUMBER_EMOJIS[index-1] if 1<=index<=len(NUMBER_EMOJIS) else f"{index}."
+    line=f"{prefix} {name} | {time} | "+" | ".join(values)
     if k=="value":
         ev=num(bet.get("expected_value") if "expected_value" in bet else r.get("expected_value"))
-        if ev is not None:values.append(f"EV {(ev*100 if abs(ev)<=1 else ev):+.1f}%")
-    prefix=NUMBER_EMOJIS[index-1] if 1<=index<=len(NUMBER_EMOJIS) else f"{index}."
-    return f"{prefix} {name} | {time} | "+" | ".join(values)
+        if ev is not None:
+            # Never move EV to a second row; omit it on long mobile lines.
+            suffix=f" | EV {(ev*100 if abs(ev)<=1 else ev):+.1f}%"
+            if len(line+suffix)<=MAX_INLINE_EV_CHARS:
+                line+=suffix
+    return line
 
 def select_groups(x,c,now):
     today=day(now)
@@ -280,14 +287,47 @@ def mark_sent(args):
     save(out/"state.json",state)
     print(json.dumps({"status":"sent","id":ident,"confirmed":len(receipt)}))
 
+def _daily_id(now):
+    return day(now)+":daily:0620"
+
+def queue_daily(a):
+    """Durable, data-free send intent. Commit this ledger before waiting for data."""
+    now=stamp(a.now) if a.now else datetime.now(timezone.utc)
+    ident=_daily_id(now)
+    state=load(a.state) if Path(a.state).is_file() else {"schema":1,"attempts":{}}
+    attempts=state.setdefault("attempts",{})
+    if not isinstance(attempts,dict):raise RuntimeError("Invalid state")
+    # Never schedule another premium batch for a day already reserved or sent.
+    if any(key.startswith(day(now)+":") and isinstance(value,dict)
+           and value.get("status") in ("reserved","sent")
+           for key,value in attempts.items()):
+        print(json.dumps({"status":"skipped","reason":"already_reserved_or_sent","id":ident}))
+        return
+    if ident not in attempts:
+        attempts[ident]={"status":"queued","queued_at":now.isoformat()}
+        save(a.state,state)
+    print(json.dumps({"status":"queued","id":ident}))
+
 def prepare(a):
-    now=stamp(a.now) if a.now else datetime.now(timezone.utc);v=config(a.config_url);key=due(v,now)
+    now=stamp(a.now) if a.now else datetime.now(timezone.utc);v=config(a.config_url)
+    if getattr(a,"daily",False):
+        # Explicitly operator-approved full offer. Admin UI settings remain unchanged.
+        v={**v,"enabled":True,"sections":{k:True for k in SECTIONS},
+           "layout":"combined","max_per_section":0,"free_top_pick":True}
+        key="daily:0620"
+    else:
+        key=due(v,now)
     if not key:print('{"status":"skipped","reason":"not_due"}');return
     old=load(a.state) if Path(a.state).is_file() else {"schema":1,"attempts":{}}
     attempts=old.get("attempts")
     if not isinstance(attempts,dict):raise RuntimeError("Invalid state")
     ident=day(now)+":"+key
-    if ident in attempts:print('{"status":"skipped","reason":"already_reserved"}');return
+    if getattr(a,"daily",False) and any(k!=ident and k.startswith(day(now)+":")
+                       and isinstance(v,dict) and v.get("status") in ("reserved","sent")
+                       for k,v in attempts.items()):
+        print('{"status":"skipped","reason":"daily_offer_already_reserved"}');return
+    if ident in attempts and attempts[ident].get("status")!="queued":
+        print('{"status":"skipped","reason":"already_reserved"}');return
     out=Path(a.output)
     sticky=old.get("free_picks") if isinstance(old.get("free_picks"),dict) else {}
     confirmed=snapshot(out/"assets")
@@ -342,7 +382,8 @@ def send(a):
         save(Path(a.output)/"receipt.json",receipts)
         print("Telegram accepted message_id="+str(message_id))
 if __name__=="__main__":
-    p=argparse.ArgumentParser();p.add_argument("action",choices=["prepare","send","mark-sent"])
+    p=argparse.ArgumentParser();p.add_argument("action",choices=["prepare","queue-daily","send","mark-sent"])
     p.add_argument("--config-url",default="https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/ui-config")
     p.add_argument("--state",default="ops/telegram-bot-state.json");p.add_argument("--output",default="/tmp/blinq-telegram");p.add_argument("--now",default="")
-    a=p.parse_args();{"prepare":prepare,"send":send,"mark-sent":mark_sent}[a.action](a)
+    p.add_argument("--daily",action="store_true",help="Operator-approved full daily offer")
+    a=p.parse_args();{"prepare":prepare,"queue-daily":queue_daily,"send":send,"mark-sent":mark_sent}[a.action](a)

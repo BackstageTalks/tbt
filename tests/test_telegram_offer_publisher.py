@@ -47,12 +47,59 @@ def offer():
                 ace_picks=[row(51, "Server", "aces"), row(52, "DF", "aces") | {"market": "double_faults"}])
 
 
+
+def test_value_ev_is_inline_when_it_fits_and_omitted_for_long_mobile_rows():
+    cfg = settings()
+    short = tg.fmt(row(88, "Sinner"), "value", cfg, index=3)
+    long = tg.fmt(row(89, "Alexander ExtraordinaryLongSurname"), "value", cfg, index=4)
+    assert " | EV +25.0%" in short
+    assert short.count("EV") == 1
+    assert "\n" not in short
+    assert len(short) <= tg.MAX_INLINE_EV_CHARS
+    assert "EV" not in long
+    assert long.endswith(" | 1.80")
+    assert "\n" not in long
+    assert tg.fmt(row(88, "Sinner"), "top", cfg, index=1).count("EV") == 0
+
+
+def test_daily_queue_is_durable_idempotent_and_full_offer_override(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    state_path=tmp_path/"state.json"
+    args=SimpleNamespace(now=NOW.isoformat(),state=str(state_path))
+    tg.queue_daily(args)
+    queued=tg.load(state_path)
+    ident=tg._daily_id(NOW)
+    assert queued["attempts"][ident]["status"]=="queued"
+    tg.queue_daily(args)
+    assert tg.load(state_path)==queued
+
+    disabled=settings()
+    disabled.update(enabled=False,max_per_section=1,layout="separate",
+                    sections={"top":False,"value":False,"aces":False},
+                    free_top_pick=False)
+    monkeypatch.setattr(tg,"config",lambda *_:disabled)
+    monkeypatch.setattr(tg,"snapshot",lambda *_:offer())
+    out=tmp_path/"prepared"
+    tg.prepare(SimpleNamespace(now=NOW.isoformat(),state=str(state_path),
+                               output=str(out),config_url="https://unit.invalid/api/v1/ui-config",
+                               daily=True))
+    msgs=tg.load(out/"messages.json")
+    assert [x["audience"] for x in msgs]==["premium","free"]
+    premium=msgs[0]["text"]
+    assert premium.index("1️⃣ Surname1")<premium.index("6️⃣ Value")<premium.index("7️⃣ Server")
+    assert "🆓" in msgs[1]["text"]
+    result=tg.load(out/"state.json")
+    assert result["attempts"][ident]["status"]=="reserved"
+    assert len(result["attempts"][ident]["rows"])==8
+    tg.queue_daily(SimpleNamespace(now=NOW.isoformat(),state=str(out/"state.json")))
+    assert tg.load(out/"state.json")["attempts"][ident]["status"]=="reserved"
+
 def test_classic_format_and_deterministic_free_pick():
     first = tg.messages(offer(), settings(), NOW)
     second = tg.messages(offer(), settings(), NOW)
     assert first == second
     assert [x["audience"] for x in first] == ["premium", "free"]
-    assert "BlinQ | Tennis Intelligence" in first[0]["text"]
+    assert first[0]["text"].startswith("🎾 BlinQ | Tennis Intelligence")
     assert "Data Betting" not in first[0]["text"]
     assert "1️⃣ Surname1 | " in first[0]["text"]
     assert " | " in first[0]["text"]

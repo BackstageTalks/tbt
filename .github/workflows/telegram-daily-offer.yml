@@ -1,0 +1,213 @@
+name: BlinQ Telegram complete daily offer (06:20 queue)
+# External scheduler calls repository_dispatch in Europe/Bratislava at 06:20.
+# The job retries while data writers run; no native GitHub cron.
+on:
+  repository_dispatch:
+    types: [telegram-daily-offer-tick]
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/telegram-daily-offer-tick.json'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  queue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: blinq-telegram-ledger
+      cancel-in-progress: false
+    outputs:
+      queued: ${{ steps.intent.outputs.queued }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: telegram-bot-state
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: .private-telegram
+          sparse-checkout: ops
+          sparse-checkout-cone-mode: true
+          persist-credentials: true
+      - name: Persist daily intent in private ledger before waiting
+        id: intent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .private-telegram/ops/telegram-bot-state.json
+          python scripts/telegram_offer_publisher.py queue-daily --state .private-telegram/ops/telegram-bot-state.json | tee /tmp/daily-intent.json
+          if [[ "$(jq -r .status /tmp/daily-intent.json)" == "skipped" ]]; then
+            echo "queued=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git -C .private-telegram config user.name "github-actions[bot]"
+          git -C .private-telegram config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git -C .private-telegram diff --quiet -- ops/telegram-bot-state.json; then
+            git -C .private-telegram add ops/telegram-bot-state.json
+            git -C .private-telegram commit -m "Queue confirmed BlinQ daily Telegram offer [skip ci]"
+            git -C .private-telegram push origin HEAD:telegram-bot-state
+            expected="$(git -C .private-telegram rev-parse HEAD)"
+            actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
+            test "$expected" = "$actual" || { echo "::error::Queue read-back failed"; exit 1; }
+          fi
+          echo "queued=true" >> "$GITHUB_OUTPUT"
+
+  wait-for-confirmed-offer:
+    needs: queue
+    if: needs.queue.outputs.queued == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 285
+    outputs:
+      ready: ${{ steps.wait.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Wait while writers are running and for today's verified release snapshot
+        id: wait
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DATA_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$DATA_TOKEN"
+          # At most ~4h20 per attempt. Before GitHub's timeout, requeue another
+          # workflow_dispatch so a long morning refresh does not lose the send.
+          start_day="$(TZ=Europe/Bratislava date +%Y-%m-%d)"
+          for n in $(seq 1 260); do
+            current_day="$(TZ=Europe/Bratislava date +%Y-%m-%d)"
+            current_hour="$(TZ=Europe/Bratislava date +%H)"
+            if [[ "$current_day" != "$start_day" && "$current_hour" -ge 6 ]]; then
+              echo "::warning::Betting day rolled; stale offers are never sent."
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            busy=false
+            for workflow in data.yml morning-refresh.yml prediction-release-recovery.yml; do
+              if ! payload="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?per_page=50")"; then
+                busy=true
+                break
+              fi
+              if jq -e '.workflow_runs[] | select(.status != "completed")' <<< "$payload" >/dev/null; then
+                busy=true
+                break
+              fi
+            done
+            if [[ "$busy" == "false" ]]; then
+              if GH_TOKEN="$DATA_TOKEN" python - <<'PY'
+          import sys
+          from datetime import datetime, timezone
+          from pathlib import Path
+          sys.path.insert(0,str(Path.cwd()/"scripts"))
+          import telegram_offer_publisher as pub
+          now=datetime.now(timezone.utc)
+          snap=pub.snapshot(Path("/tmp/blinq-telegram-gate")/"assets")
+          if snap.get("betting_day")!=pub.day(now) or pub.day(pub.stamp(snap["generated_at"]))!=pub.day(now):
+              raise SystemExit("Confirmed snapshot is not from current betting day")
+          cfg={"sections":{k:True for k in pub.SECTIONS},"free_top_pick":True,
+               "include_started":False,"max_per_section":0}
+          if not pub.select_groups(snap,cfg,now):
+              raise SystemExit("No future confirmed daily selections yet")
+          print("Verified current-day release contains eligible confirmed rows")
+          PY
+              then
+                echo "ready=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+            echo "Attempt $n: data pipeline busy or current verified offer not ready; waiting 60s"
+            sleep 60
+          done
+          echo "::notice::Still queued; handing off to a fresh workflow run"
+          gh workflow run telegram-daily-offer.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+
+  deliver:
+    needs: [queue, wait-for-confirmed-offer]
+    if: needs.wait-for-confirmed-offer.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: blinq-telegram-ledger
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: telegram-bot-state
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: .private-telegram
+          sparse-checkout: ops
+          sparse-checkout-cone-mode: true
+          persist-credentials: true
+      - name: Prepare entire confirmed daily TOP VALUE ACES and one FREE TOP
+        id: prepare
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          BLINQ_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        run: |
+          set -euo pipefail
+          python scripts/telegram_offer_publisher.py prepare --daily --config-url "$BLINQ_URL/api/v1/ui-config" --state .private-telegram/ops/telegram-bot-state.json
+          if [[ ! -s /tmp/blinq-telegram/ready ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Previously reserved or no longer eligible. No duplicate."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Reserve exactly once before Telegram requests
+        if: steps.prepare.outputs.ready == 'true'
+        id: reserve
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/blinq-telegram/state.json .private-telegram/ops/telegram-bot-state.json
+          git -C .private-telegram config user.name "github-actions[bot]"
+          git -C .private-telegram config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C .private-telegram add ops/telegram-bot-state.json
+          git -C .private-telegram commit -m "Reserve full daily Telegram delivery [skip ci]"
+          git -C .private-telegram push origin HEAD:telegram-bot-state
+          expected="$(git -C .private-telegram rev-parse HEAD)"
+          actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
+          test "$expected" = "$actual" || { echo "::error::Reservation read-back failed"; exit 1; }
+      - name: Send ALL confirmed picks and separate FREE TOP
+        if: steps.prepare.outputs.ready == 'true'
+        env:
+          TGB: ${{ secrets.TGB }}
+          TGCH: ${{ secrets.TGCH }}
+          TGCH_FREE: ${{ secrets.TGCH_FREE }}
+        run: |
+          python scripts/telegram_offer_publisher.py send
+      - name: Persist Telegram receipts and independently verify
+        if: steps.prepare.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/telegram_offer_publisher.py mark-sent
+          cp /tmp/blinq-telegram/state.json .private-telegram/ops/telegram-bot-state.json
+          git -C .private-telegram add ops/telegram-bot-state.json
+          git -C .private-telegram commit -m "Confirm full daily Telegram delivery receipts [skip ci]"
+          git -C .private-telegram push origin HEAD:telegram-bot-state
+          expected="$(git -C .private-telegram rev-parse HEAD)"
+          actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
+          test "$expected" = "$actual" || { echo "::error::Telegram receipt read-back failed"; exit 1; }
