@@ -738,10 +738,26 @@ class ReleaseStore:
                 backup = f"blinq-rollback-{token}-{name}"
                 self._asset_api("PATCH", old_id, name=backup)
                 swaps.append((name, old_id, None, backup))
-            for path in [*payload_files, *history_inventory, manifest_path]:
+            for path in [*payload_files, *history_inventory]:
                 result = self._guarded_publish(path, token)
                 if result is not None:
                     swaps.append(result)
+            # Before committing the new checksum inventory, independently
+            # compare every covered remote asset to its expected digest and
+            # byte count. This catches stale prior metadata and partial writes
+            # without downloading or spending provider requests.
+            current = self._release_asset_inventory()
+            for name, metadata in manifest["files"].items():
+                asset = current.get(name)
+                if (
+                    asset is None
+                    or asset.get("digest") != "sha256:" + metadata["sha256"]
+                    or int(asset.get("size") or -1) != metadata["bytes"]
+                ):
+                    raise RuntimeError(f"Remote CDB checkpoint digest mismatch: {name}")
+            result = self._guarded_publish(manifest_path, token)
+            if result is not None:
+                swaps.append(result)
         except Exception:
             self._rollback_guarded(swaps)
             # Remove newly created uncommitted assets as well as restored swaps.
