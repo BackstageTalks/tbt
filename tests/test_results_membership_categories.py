@@ -1,7 +1,5 @@
 """Results must never expose a category disabled for the authenticated tier."""
 
-from copy import deepcopy
-
 import pytest
 
 from tbt.services.entitlements import filter_feed_for_access
@@ -46,9 +44,9 @@ def _payload():
     }
 
 
-def _config(**changes):
+def _config(changes=None):
     tabs = {}
-    for (plan, category), settings in changes.items():
+    for (plan, category), settings in (changes or {}).items():
         tab = {"top_daily": "daily", "ace": "ace", "double_faults": "double_faults"}.get(category, category)
         tabs.setdefault(tab, {"plans": {}})["plans"][plan] = settings
     return {
@@ -63,7 +61,10 @@ def _config(**changes):
 
 
 def _read(plan, cfg, payload=None):
-    return filter_feed_for_access(payload or _payload(), {"plan": plan, "status": "active"}, cfg)
+    account = {"plan": plan, "status": "active"}
+    if plan == "admin":
+        account["role"] = "admin"
+    return filter_feed_for_access(payload or _payload(), account, cfg)
 
 
 def _returned(data):
@@ -88,7 +89,7 @@ def test_default_results_respect_each_tiers_market_permissions(plan, expected):
 
 def test_elite_mixed_row_strips_disabled_blurred_hidden_and_zero_categories():
     cfg = _config(
-        **{
+        {
             ("elite", "prime"): {"visible_rows": 0, "display_state": "active"},
             ("elite", "value"): {"visible_rows": "ALL", "display_state": "blurred"},
             ("elite", "doubles"): {"visible_rows": "ALL", "display_state": "hidden"},
@@ -104,7 +105,7 @@ def test_elite_mixed_row_strips_disabled_blurred_hidden_and_zero_categories():
 
 
 def test_projection_market_owns_category_even_when_legacy_section_mismatches():
-    cfg = _config(**{
+    cfg = _config({
         ("elite", "ace"): {"visible_rows": 0, "display_state": "active"},
         ("elite", "double_faults"): {"visible_rows": "ALL", "display_state": "active"},
     })
@@ -115,7 +116,7 @@ def test_projection_market_owns_category_even_when_legacy_section_mismatches():
 
 
 def test_admin_keeps_complete_audit_with_disabled_categories():
-    cfg = _config(**{
+    cfg = _config({
         ("elite", "ace"): {"visible_rows": 0},
         ("legend", "prime"): {"visible_rows": 0},
         ("goat", "games"): {"visible_rows": 0},
@@ -129,7 +130,7 @@ def test_admin_keeps_complete_audit_with_disabled_categories():
 
 
 def test_all_categories_disabled_fails_closed_with_zero_rows():
-    cfg = _config(**{
+    cfg = _config({
         ("elite", cat): {"visible_rows": 0, "display_state": "active"}
         for cat in ("top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games")
     })
@@ -140,7 +141,7 @@ def test_all_categories_disabled_fails_closed_with_zero_rows():
 
 
 def test_explicit_active_override_can_allow_a_category_with_zero_base():
-    cfg = _config(**{
+    cfg = _config({
         ("elite", "games"): {"visible_rows": 0, "display_state": "active", "row_overrides": {"1": "active"}},
     })
     data, ent = _read("elite", cfg)
