@@ -80,7 +80,7 @@ def test_winner_roi_yield_differ_from_all_results_and_ignore_refunds():
     configured = cards(("winner_roi", "3"), ("results_roi", "3"),
                        ("results_yield_units", "3"))
     value = selected_dashboard_cards(feed, configured, now=NOW)
-    assert [x["value"] for x in value] == pytest.approx([0, .8, 3.2])
+    assert [x["value"] for x in value[:3]] == pytest.approx([0, .8, 3.2])
     assert all(set(x) == {"metric", "period", "value"} for x in value)
 
 
@@ -89,10 +89,10 @@ def test_auto_maximizes_each_metric_instead_of_reusing_model_auto_period():
     selected = selected_dashboard_cards(feed, cards(
         ("model_success", "auto"), ("roi", "auto"), ("yield_units", "auto")
     ), now=NOW)
-    assert [(x["value"], x["selected_period"]) for x in selected] == [
+    assert [(x["value"], x["selected_period"]) for x in selected[:3]] == [
         (.75, "14"), (.50, "3"), (5.1, "365"),
     ]
-    assert [x["sample"] for x in selected] == [40, 3, 365]
+    assert [x["sample"] for x in selected[:3]] == [40, 3, 365]
     avg = selected_dashboard_cards(feed, cards(
         ("avg_odds", "auto"), ("results_roi", "auto"),
         ("winner_yield_units", "auto")
@@ -125,8 +125,8 @@ def test_auto_excludes_empty_windows_and_tracks_full_results_period():
         cards(("winner_roi","auto"),("results_roi","auto"),("avg_odds","auto")),
         now=NOW,
     )
-    assert [item["value"] for item in no_data] == [None]*3
-    assert all(item["selected_period"] is None for item in no_data)
+    assert [item["value"] for item in no_data] == [None]*4
+    assert all(item["selected_period"] is None for item in no_data[:3])
 
 
 def test_requested_auto_metrics_compare_both_sources_not_legacy_one_source_auto():
@@ -144,8 +144,8 @@ def test_requested_auto_metrics_compare_both_sources_not_legacy_one_source_auto(
     assert selected[2]["selected_source"] == "results_roi"
     assert selected[2]["selected_period"] == "7"
     assert selected[2]["sample"] == 4
-    assert all(item["period"] == "auto" for item in selected)
-    assert not any("results" in item["metric"] for item in selected)
+    assert all(item["period"] == "auto" for item in selected[:3])
+    assert not any("results" in item["metric"] for item in selected[:3])
 
 
 def test_auto_yield_picks_actual_profit_across_winner_and_results():
@@ -190,4 +190,4 @@ def test_auto_no_invented_number_and_only_four_auto_choice_ids():
     ), now=NOW)
     assert all(item["value"] is None and item["selected_period"] is None
                and item["sample"] == 0 and "selected_source" not in item
-               for item in selected)
+               for item in selected[:3])

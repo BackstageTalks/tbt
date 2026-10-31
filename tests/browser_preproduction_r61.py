@@ -103,10 +103,21 @@ def main():
                     aligned_boxes = boxes + [telegram_box, footer_box]
                     assert max(b['x'] for b in aligned_boxes)-min(b['x'] for b in aligned_boxes) <= 1, (width, aligned_boxes)
                     assert max(b['width'] for b in aligned_boxes)-min(b['width'] for b in aligned_boxes) <= 1, (width, aligned_boxes)
-                cards = page.locator('.dashboard-kpi')
-                sizes = [cards.nth(i).bounding_box() for i in range(3)]
+                cards = page.locator('#dashboardKpis .dashboard-kpi')
+                assert cards.count() == 4, (width, cards.count())
+                sizes = [cards.nth(i).bounding_box() for i in range(4)]
+                assert all(sizes), (width, sizes)
                 assert max(b['width'] for b in sizes)-min(b['width'] for b in sizes) <= 1
-                assert len({b['y'] for b in sizes}) == 1, (width, sizes, page.locator('#dashboardKpis').evaluate('(e)=>getComputedStyle(e).gridTemplateColumns'))
+                if width <= 1100:
+                    # Two clean rows, two equal-width cards per row on tablet/mobile.
+                    assert abs(sizes[0]['y'] - sizes[1]['y']) <= 1, (width, sizes)
+                    assert abs(sizes[2]['y'] - sizes[3]['y']) <= 1, (width, sizes)
+                    assert sizes[2]['y'] > sizes[0]['y'], (width, sizes)
+                    assert abs(sizes[0]['x'] - sizes[2]['x']) <= 1, (width, sizes)
+                    assert abs(sizes[1]['x'] - sizes[3]['x']) <= 1, (width, sizes)
+                else:
+                    # Desktop shows the complete four-card row without wrapping.
+                    assert len({b['y'] for b in sizes}) == 1, (width, sizes)
                 if width <= 900:
                     assert abs(sizes[0]['x'] - (boxes[0]['x'] + 12)) <= 1, (width, boxes[0], sizes)
                     assert abs((sizes[-1]['x'] + sizes[-1]['width']) - (boxes[0]['x'] + boxes[0]['width'] - 12)) <= 1, (width, boxes[0], sizes)

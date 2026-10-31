@@ -221,8 +221,37 @@ def test_current_model_top_audit_uses_only_exact_binary_version_and_quoted_price
     assert report["overall"]["settled"] == 1
     assert report["overall"]["wins"] == 1
     assert report["diagnostics"]["missing_or_other_model_issued_proof"] == 2
+    assert report["diagnostics"]["other_model_issued_proof"] == 1
+    assert report["diagnostics"]["missing_or_inconsistent_model_issued_proof"] == 1
     assert report["overall"]["average_odds"] == 1.6
 
+
+def test_pending_publications_count_as_published_without_changing_scores():
+    for section in ("top_daily", "value"):
+        win = _with_confirmed_model_quote(fixture("win", section=section))
+        pending = _with_confirmed_model_quote(fixture("pending", section=section))
+        pending["market_publications"][0]["result"] = None
+        report = analyze([win, pending], now=NOW, model_version="v7.2.1-test", section=section)
+        assert report["overall"]["published"] == 2
+        assert report["overall"]["settled"] == 1
+        assert report["overall"]["void_or_unsettled"] == 1
+        assert report["overall"]["hit_rate"] == 1
+        assert report["overall"]["calibration_n"] == 1
+        assert report["diagnostics"]["unsettled"] == 1
+        assert sum(report["coverage"]["betting_day_counts"].values()) == 2
+
+
+def test_outside_window_publications_do_not_inflate_model_proof_diagnostics():
+    old = fixture("old")
+    old["market_publications"][0]["result"]["scheduled_at"] = (NOW - timedelta(days=31)).isoformat()
+    future = fixture("future")
+    future["market_publications"][0]["result"]["scheduled_at"] = (NOW + timedelta(days=1)).isoformat()
+    report = analyze([old, future], now=NOW, window_days=30, model_version="v7.2.1-test")
+    assert report["overall"]["published"] == 0
+    assert report["diagnostics"].get("missing_or_other_model_issued_proof", 0) == 0
+
+def test_current_model_rejects_forged_price_identity_and_version():
+    current = _with_confirmed_model_quote(fixture("current"))
     forged_quote = deepcopy(current)
     forged_quote["market_publications"][0]["odds"] = 1.70
     report = analyze([forged_quote], now=NOW, model_version="v7.2.1-test")

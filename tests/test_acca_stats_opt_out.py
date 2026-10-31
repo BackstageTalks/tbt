@@ -64,7 +64,7 @@ def test_acca_only_returns_empty_stats_not_deleted_results():
         "market_publications": [_pub("prime", won=True, selection="a", odds=1.11)],
     }]}
     cards = selected_dashboard_cards(feed, _ui(True), now=NOW)
-    assert [card["value"] for card in cards] == [None, None, None]
+    assert [card["value"] for card in cards] == [None, None, None, None]
     assert len(feed["results"][0]["market_publications"]) == 1
     assert selected_dashboard_cards(feed, _ui(False), now=NOW)[0]["value"] == 1
 
