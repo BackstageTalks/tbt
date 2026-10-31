@@ -277,7 +277,12 @@
   /* Sample's quiet typography — mint only for confidence and active cue. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #predictionsView #dailyHub :is(.hub-pick-stack small,.hub-number-stack small,
-    .hub-tournament-copy small,.hub-time small,.hub-confidence-cell::before) {
+    .hub-tournament-copy small,.hub-time small) {
+    color: #A8B8B1 !important;
+    text-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .hub-confidence-cell::before {
     color: #A8B8B1 !important;
     text-shadow: none !important;
   }
