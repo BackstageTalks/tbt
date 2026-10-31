@@ -482,3 +482,60 @@ def test_repeated_propline_timeouts_open_circuit_without_losing_prior_prices():
     assert client.calls == 6  # board + markets + odds + 3 failing markets
     assert "match_winner" in priced["rapid-new-0"]
     assert "rapid-new-4" not in priced
+
+
+def test_fantasy_pickem_is_not_an_independent_two_sided_aces_quote():
+    from tbt.services.propline_live import _is_non_standalone_pickem
+
+    fantasy={"title":"PrizePicks","key":"prizepicks",
+             "markets":[{"key":"player_aces","outcomes":[
+                 {"name":"Over","description":"Alex de Minaur","point":8.5,"price":100},
+                 {"name":"Under","description":"Alex de Minaur","point":8.5,"price":100},
+             ]}]}
+    assert _price(100)==2
+    assert _is_non_standalone_pickem(fantasy)
+    assert not _normalize_book(fantasy,MATCH,{"aces"})
+    assert not _normalize_book({**fantasy,"title":"Underdog Fantasy","key":"underdog"},
+                               MATCH,{"aces"})
+    # An independent sportsbook with the same nominal prices is not excluded
+    # just because both sides happen to be listed at even money.
+    real={**fantasy,"title":"Example Sportsbook","key":"example-sportsbook"}
+    result=_normalize_book(real,MATCH,{"aces"})
+    assert extract_player_total_ou(result["aces"],"aces","Álex de Miñaur")
+    assert not _is_non_standalone_pickem(
+        {**real,"title":"Underdog Sportsbook","key":"underdog-sportsbook"})
+
+
+def test_fantasy_pickem_is_quarantined_before_real_bookmaker_fallback():
+    fantasy={"title":"PrizePicks","key":"prizepicks",
+             "markets":[{"key":"player_aces","outcomes":[
+                 {"name":"Over","description":"Alex de Minaur","point":8.5,"price":100},
+                 {"name":"Under","description":"Alex de Minaur","point":8.5,"price":100},
+             ]}]}
+    real={"title":"Actual Sportsbook","key":"actual","markets":PRICE_MARKETS}
+
+    class MultipleBooks(FakeProp):
+        def get(self,path,params=None):
+            if path.endswith("/odds"):
+                self.calls+=1
+                return {"bookmakers":[fantasy,real]}
+            return super().get(path,params)
+
+    found,audit=discover_propline_fallback(MultipleBooks(),[MATCH],{},now=NOW,max_events=2)
+    assert audit["excluded_non_standalone_pickem_books"]=={"PrizePicks":1}
+    assert audit["priced_by_market"]["aces"]==1
+    assert found["rapid-133"]["aces"]["bookmaker"]=="Actual Sportsbook"
+    assert found["rapid-133"]["aces"]["source"]=="propline"
+
+    class OnlyFantasy(MultipleBooks):
+        def get(self,path,params=None):
+            if path.endswith("/odds"):
+                self.calls+=1
+                return {"bookmakers":[fantasy]}
+            return super().get(path,params)
+
+    found,audit=discover_propline_fallback(OnlyFantasy(),[MATCH],{},now=NOW,max_events=2)
+    assert not found
+    assert audit["priced_by_market"]["aces"]==0
+    assert audit["sample_offers"]["aces"]==[]
+    assert audit["excluded_non_standalone_pickem_books"]=={"PrizePicks":1}
