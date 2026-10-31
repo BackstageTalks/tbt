@@ -8,7 +8,7 @@ Admin -> **Telegram bot** is independent of the existing **Telegram skupiny** pa
 - TOP, VALUE, ESÁ categories independently.
 - Free preview: one deterministic random confirmed TOP bet per BlinQ betting day (defaults ON).
 - Scheduled dispatch time in **Europe/Bratislava**, weekdays, on/off.
-- Combined vs per-category message, number of picks, include already-started matches, probability/odds fields, classic footer.
+- By default **ALL** confirmed TOP → Value → Aces rows are sent in one unlabelled sequential offer. Admin can apply an optional explicit per-category cap. Large offers are split at record boundaries to respect the Telegram 4096 UTF-16 text limit without silently dropping a pick. FREE is separately issued from one deterministic daily TOP pick.
 
 Click **Publikovať** to store the configuration in the existing durable Azure Admin UI store. The default is OFF. Clicking **Zaradiť jednorazové odoslanie** saves the current draft along with a unique request ID; the existing externally scheduled hourly tick processes fresh requests, within 90 minutes. An external 10-minute repository dispatch can improve precision. The button does not mean that Telegram confirmed delivery.
 
@@ -82,7 +82,7 @@ The previous-day evaluation uses the **exact picks with Telegram-confirmed messa
 - Job: `.github/workflows/telegram-results.yml` (**BlinQ Telegram daily results**).
 - Configure your external scheduler for **07:00 Europe/Bratislava** with DST-aware timezone; invoke `repository_dispatch` with `event_type=telegram-results-tick`. GitHub native cron is forbidden by the existing project contract. Manual `workflow_dispatch` remains available.
 - The GitHub secret `BLINQ_LIVE_WORKER_TOKEN` (already used by other BlinQ workers) authenticates a **read-only** call to `/api/v1/internal/telegram/settled-results?day=YYYY-MM-DD`. This endpoint returns only settled issued TOP / Value / Esá publications with verified match-status archive evidence. No new provider calls, no settlement side effects.
-- Report sections **TOP / Value / Esá / FREE** keep the classic `📊 Results`, row-by-row `✅ ❌ ➖ ⏳` and `unit / ROI` layout.
+- **One premium daily report** combines all TOP → Value → Aces picks with their original order and individual ✅ WIN / ❌ LOSS / ➖ VOID / ⏳ PENDING status, followed by each category’s W/L/V/P, win rate, units, ROI, plus **overall daily W/L/V/P, win percentage, total profit in units, and daily ROI**. FREE remains a separate report and does not inflate the premium totals.
 - Missing settlements show **Pending**. Projection-only aces may show a verified outcome but **do not contribute invented stake, yield or ROI**. Priced ROI divides genuine one-unit graded stakes only. Reports with pending picks are explicitly marked *priebežné*.
 - Report `results:YYYY-MM-DD` is reserved before any Telegram request. A successfully delivered report is saved back with individual message IDs; an uncertain send never triggers automatic duplicate retries.
 
@@ -104,3 +104,27 @@ The Telegram PR never modifies CDB, the existing verified-results archive, provi
 ### Security isolation of Telegram state
 
 The application repository `BackstageTalks/tbt` is **public**. Never commit issued paid picks, recipient IDs, price data or Telegram message receipts to any public branch of this repo. Both Telegram workflows check out the **private** `BackstageTalks/tbt-data` branch `telegram-bot-state` with sparse `ops/` checkout. The existing `TBT_DATA_GH_TOKEN` must be allowed to read that private repository and push to this isolated branch; if it cannot push, the workflow fails **before sending**. No CDB branch, asset or release is written by either workflow.
+
+### Results calculation parity with historical `tbt-pro`
+
+The previous historical bot `corq/tg_feed.py::build_results_summary_message` and `corq/results_engine/weekly_stats.py` used `WIN/(WIN + LOSS)` for win rate, ignoring VOID and PENDING. We retain that meaning while strengthening financial integrity: `profit = Σ (confirmed odds − 1)` for each WIN and `−1u` for each LOSS **only if the original published quote matches the settled archive**; `ROI = profit / Σ verified 1u stakes × 100`. VOID adds 0 units and no stake, PENDING has no outcome, and projection-only Aces do not fabricate prices. The daily financial summary excludes the FREE repeat of a paid TOP event. Rows and totals use only the private immutable sent-picks ledger with confirmed Telegram message IDs, matched to independent verified match-status settlement. A missing settlement is explicitly Pending, never silently a loss. If the results text exceeds Telegram limits, the report is paginated with a final comprehensive summary, not truncated to ten picks.
+
+Daily report example:
+```text
+BlinQ | Tennis Intelligence
+📊 Results | 30.10.2026
+
+1️⃣ ✅ Novak | 13:30 | 1.80 | +0.80u
+2️⃣ ❌ Sinner | 14:15 | 2.05 | -1.00u
+3️⃣ ➖ Kovac | 15:00 | 1.92 | +0.00u
+4️⃣ ⏳ Alcaraz | 17:00 | — | Pending
+
+📊 Denný súhrn
+TOP · WIN 1 | LOSS 0 | VOID 1 | PENDING 0 | Win 100.0% | +0.80u | ROI 80.0%
+VALUE · WIN 0 | LOSS 1 | VOID 0 | PENDING 0 | Win 0.0% | -1.00u | ROI -100.0%
+ACES · WIN 0 | LOSS 0 | VOID 0 | PENDING 1 | Win — | +0.00u | ROI —
+✅ WIN 1 | ❌ LOSS 1 | ➖ VOID 1 | ⏳ PENDING 1
+🎯 Úspešnosť 50.0% | 💰 Zisk -0.20u | 📈 ROI -10.0%
+
+by BlinQ Stat Engine
+```
