@@ -5124,8 +5124,9 @@ function adminActivityRows(){
       state.ui.telegram_bot={enabled:false,sections:{top:true,value:true,aces:true},
         schedule:{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]},layout:'combined',
         max_per_section:7,include_started:false,show_probability:true,show_odds:true,free_top_pick:true,results_enabled:false,
-        footer:'ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine'};
+        footer:'ℹ️ Analytical preview only'};
     const c=state.ui.telegram_bot;
+    if(typeof c.footer==='string'&&c.footer.includes('BackstageTalks Data Engine'))c.footer=c.footer.replace(/\\n?🧠 by BackstageTalks Data Engine/g,'').trim()||'ℹ️ Analytical preview only';
     c.sections=c.sections||{top:true,value:true,aces:true};
     c.schedule=c.schedule||{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]};
     return c;
@@ -5142,7 +5143,7 @@ function adminActivityRows(){
           ${check('enabled',c.enabled===true,'Zapnúť Telegram publisher')}
           ${check('sections.top',c.sections.top===true,'🏆 TOP')}
           ${check('sections.value',c.sections.value===true,'💎 Value')}
-          ${check('sections.aces',c.sections.aces===true,'🎯 Esá')}
+          ${check('sections.aces',c.sections.aces===true,'🎯 Aces')}
           ${check('free_top_pick',c.free_top_pick!==false,'🆓 Jeden náhodný tip z TOP (FREE)')}
           <label>Maximum tipov na kategóriu <input type="number" min="1" max="10" data-tg-bot-field="max_per_section" value="${Number(c.max_per_section)||7}"></label>
         </div>
@@ -5161,20 +5162,20 @@ function adminActivityRows(){
             ${check('results_enabled',c.results_enabled===true,'Posielať vyhodnotenie predchádzajúceho betting day')}
             <small>Samostatný externý cron okolo 07:00 Europe/Bratislava spúšťa workflow BlinQ Telegram daily results. Neuzavreté výsledky sú Pending. ROI počítame len z overených ocenených tipov.</small>
           </div>
-          <label>Záverečný text <textarea rows="2" maxlength="200" data-tg-bot-field="footer">${escapeHtml(c.footer||'ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine')}</textarea></label>
+          <label>Poznámka v pätičke <textarea rows="2" maxlength="200" data-tg-bot-field="footer">${escapeHtml(c.footer||'ℹ️ Analytical preview only')}</textarea><small>Odkaz „by BlinQ Stat Engine“ sa pridáva automaticky do každej správy.</small></label>
         </div>
       </div>
-      <details class="tg-bot-preview"><summary>Náhľad Telegram správy (TOP → Value → Esá)</summary><pre>Data Betting by BackstageTalks
+      <details class="tg-bot-preview"><summary>Náhľad Telegram správy (TOP → Value → Aces)</summary><pre>BlinQ | Tennis Intelligence
 
 📅 31.10.2026
 
 1️⃣ Novak | 12:30 | 72.4% | 1.75
 2️⃣ Kovac | 14:00 | 69.1% | 1.88
 3️⃣ Sinner | 15:00 | 68.3% | 2.05 | EV +10.2%
-4️⃣ Alcaraz | 16:00 | esá 8.2 | confidence 73.0% | —
+4️⃣ Alcaraz | 16:00 | aces 8.2 | confidence 73.0% | —
 
 ℹ️ Analytical preview only
-🧠 by BackstageTalks Data Engine</pre><small>Ilustračné tipy. Bez nadpisov kategórií, v poradí TOP, Value, Esá. FREE ide samostatne ako 🆓. Ranné Results zachovávajú ✅/❌, units a ROI.</small></details>
+by BlinQ Stat Engine</pre><small>Ilustračné tipy. BlinQ Stat Engine bude v Telegrame klikateľný odkaz na Follow the Data. FREE ide samostatne ako 🆓.</small></details>
       <div class="tg-bot-actions"><button class="btn btn-primary" type="button" data-admin-action="tg-bot-queue" ${state.uiStorageAvailable===true?'':'disabled'}>Zaradiť jednorazové odoslanie</button><small>Uloží nastavenia a požiadavku do 90-minútového okna. Doručenie potvrdí až GitHub Actions → BlinQ Telegram offer. Požiadavka sa neodošle dvakrát.</small></div>
     </section>`;
   }
