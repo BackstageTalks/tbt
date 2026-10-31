@@ -55,9 +55,14 @@ def test_classic_format_and_deterministic_free_pick():
     assert "Data Betting by BackstageTalks" in first[0]["text"]
     assert "1️⃣ Surname1 | " in first[0]["text"]
     assert " | " in first[0]["text"]
-    assert "🎾 TOP Picks | BlinQ" in first[0]["text"]
-    assert "💎 VALUE Picks | BlinQ" in first[0]["text"]
-    assert "🎯 ESÁ | BlinQ" in first[0]["text"]
+    assert "🎾 TOP Picks | BlinQ" not in first[0]["text"]
+    assert "💎 VALUE Picks | BlinQ" not in first[0]["text"]
+    assert "🎯 ESÁ | BlinQ" not in first[0]["text"]
+    premium = first[0]["text"]
+    assert premium.index("1️⃣ Surname1") < premium.index("5️⃣ Surname5")
+    assert premium.index("5️⃣ Surname5") < premium.index("6️⃣ Value")
+    assert premium.index("6️⃣ Value") < premium.index("7️⃣ Server")
+    assert premium.count("📅") == 1
     assert "🆓 Surname" in first[1]["text"]
     assert first[1]["text"].count("🆓") == 1
     assert "Double Fault" not in first[0]["text"]
@@ -180,3 +185,15 @@ def test_same_surname_disambiguated():
     result = tg.messages(sample, settings(free_top_pick=False), NOW)[0]["text"]
     assert "A. Cerundolo |" in result
     assert "M. Cerundolo |" in result
+
+def test_compact_separate_mode_keeps_original_category_order_without_headings():
+    settings_now = settings(layout="separate", free_top_pick=False)
+    out = tg.messages(offer(), settings_now, NOW)
+    assert len(out) == 3
+    assert [t["audience"] for t in out] == ["premium"] * 3
+    expected = ("Surname1", "Value", "Server")
+    for message, pick in zip(out, expected):
+        assert "1️⃣ " + pick in message["text"]
+        assert "🎾 TOP Picks" not in message["text"]
+        assert "💎 VALUE Picks" not in message["text"]
+        assert "🎯 ESÁ" not in message["text"]
