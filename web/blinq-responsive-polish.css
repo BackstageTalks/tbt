@@ -267,3 +267,13 @@ body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardHero :is(.dashboard-her
     color:var(--bq-editorial-mint)!important;
   }
 }
+
+
+/* One vertical rhythm for banner, KPI strip and prediction panel. */
+body#blinqPremium.blinq-home:not(.blinq-admin){--bq-panel-gap:10px}
+body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardHero{margin-bottom:0!important}
+body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardContentGrid{padding-top:var(--bq-panel-gap)!important}
+body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardKpis{margin-bottom:var(--bq-panel-gap)!important}
+@media(max-width:600px){
+ body#blinqPremium.blinq-home:not(.blinq-admin){--bq-panel-gap:8px}
+}
