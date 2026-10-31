@@ -80,30 +80,131 @@ class TestModelCalibrationStatus(unittest.TestCase):
         self.assertFalse(normalized["candidate_active"])
         self.assertFalse(normalized["shadow"]["gate"]["ready_for_promotion_review"])
 
-    def test_offline_receipt_does_not_block_promoted_champion(self):
+    def test_publisher_requires_independent_readback(self):
         import io
         import json
         from unittest.mock import patch
         from publish_model_calibration_status import publish
+        from tbt.services.model_calibration_status import calibration_fingerprint
 
-        snapshot = {
-            "production_version": "v7.2.1-new",
-            "candidate_version": "",
-            "offline_candidate": {
-                "champion_version": "old-champion",
-                "candidate_version": "v7.2.1-new",
-            },
-        }
+        snapshot = fixture()
+        normalized = normalize_model_calibration_snapshot(snapshot)
+        digest = calibration_fingerprint(normalized)
         receipt = {
-            "stored": True, "production_version": "v7.2.1-new",
-            "candidate_version": None, "offline_candidate_version": None,
+            "stored": True, "production_version": "champion-v1",
+            "candidate_version": "challenger-v2",
+            "offline_candidate_version": None, "snapshot_sha256": digest,
         }
+        readback = {
+            "production_version": "champion-v1", "candidate_version": "challenger-v2",
+            "source_generated_at": normalized["source_generated_at"],
+            "snapshot_sha256": digest,
+            "shadow": {k: normalized["shadow"][k] for k in ("captured", "settled", "pending")},
+            "unseen": {"eligible_rows": normalized["unseen"]["eligible_rows"]},
+        }
+        def reply(data):
+            return io.BytesIO(json.dumps(data).encode("utf-8"))
         with patch("publish_model_calibration_status.urlopen",
-                   return_value=io.BytesIO(json.dumps(receipt).encode("utf-8"))):
+                   side_effect=[reply(receipt), reply(readback)]) as api:
             self.assertEqual(
                 publish(snapshot, "https://agreeable-sky-011a7fe10.7.azurestaticapps.net", "test-token"),
                 receipt,
             )
+            self.assertEqual(api.call_count, 2)
+            self.assertEqual(api.call_args.args[0].get_method(), "GET")
+        with patch("publish_model_calibration_status.urlopen",
+                   side_effect=[reply(receipt), reply({**readback, "shadow": {"captured": 0}})]):
+            with self.assertRaisesRegex(RuntimeError, "read-back differs"):
+                publish(snapshot, "https://agreeable-sky-011a7fe10.7.azurestaticapps.net", "test-token")
+
+    def test_monotonic_evidence_guard_and_cohort_reset(self):
+        from tbt.services.model_calibration_status import (
+            assert_calibration_successor, calibration_fingerprint,
+        )
+        old = normalize_model_calibration_snapshot(fixture())
+        self.assertFalse(assert_calibration_successor(old, old))
+        later = fixture()
+        later["source_generated_at"] = "2026-10-09T07:00:00Z"
+        later["shadow"]["cohort"]["captured"] = 165
+        later["shadow"]["cohort"]["pending"] = 60
+        next_record = normalize_model_calibration_snapshot(later)
+        self.assertTrue(assert_calibration_successor(old, next_record))
+        regressed = normalize_model_calibration_snapshot({**later, "source_generated_at": "2026-10-09T05:00:00Z"})
+        with self.assertRaises(ValueError):
+            assert_calibration_successor(old, regressed)
+        later["shadow"]["cohort"]["settled"] = 101
+        with self.assertRaisesRegex(ValueError, "shadow cohort regressed"):
+            assert_calibration_successor(old, normalize_model_calibration_snapshot(later))
+        next_record["shadow"]["settled"] = 105
+        next_record["unseen"]["eligible_rows"] = 20
+        with self.assertRaisesRegex(ValueError, "unseen-data"):
+            assert_calibration_successor(old, next_record)
+        self.assertEqual(calibration_fingerprint(old), calibration_fingerprint(dict(old, updated_at="other")))
+        # A newly verified champion has its own explicitly reset cohort.
+        promoted = fixture()
+        promoted["production_version"] = "champion-new"
+        promoted["candidate_version"] = ""
+        promoted["shadow"]["production_model_version"] = "champion-new"
+        promoted["shadow"]["challenger_model_version"] = ""
+        promoted["shadow"]["cohort"] = {"captured": 0, "settled": 0,
+                                       "pending": 0, "settled_utc_days": 0,
+                                       "minimum_for_review": 200}
+        promoted["shadow"]["production"] = {}
+        promoted["shadow"]["challenger"] = {}
+        promoted["shadow_pair_state"] = "awaiting_new_pair"
+        promoted["historical_shadow_pair"] = {"production_version": "champion-v1",
+                                               "candidate_version": "challenger-v2"}
+        promoted["readiness"]["production_version"] = "champion-new"
+        promoted["source_generated_at"] = "2026-10-09T07:00:00Z"
+        self.assertTrue(assert_calibration_successor(old, normalize_model_calibration_snapshot(promoted)))
+
+    def test_storage_cas_retries_and_reads_back(self):
+        from unittest.mock import patch
+        from tbt.services import admin_storage
+
+        class Entity(dict):
+            def __init__(self, row, version):
+                super().__init__(row)
+                self.metadata = {"etag": str(version)}
+
+        class FakeTable:
+            row = None
+            version = 0
+            updates = 0
+            def get_entity(self, *, partition_key, row_key):
+                if self.row is None:
+                    raise KeyError("not found")
+                return Entity(self.row, self.version)
+            def create_entity(self, row):
+                if self.row is not None:
+                    raise RuntimeError("duplicate")
+                self.row = dict(row)
+                self.version += 1
+            def update_entity(self, row, *, etag, mode, match_condition):
+                if etag != str(self.version):
+                    raise RuntimeError("stale etag")
+                self.updates += 1
+                self.row.update(row)
+                self.version += 1
+
+        table = FakeTable()
+        with patch.object(admin_storage, "_table", return_value=table):
+            initial = admin_storage.save_model_calibration_status(fixture())
+            self.assertEqual(initial["shadow"]["captured"], 140)
+            self.assertEqual(initial["snapshot_sha256"], table.row["payload"] and initial["snapshot_sha256"])
+            self.assertEqual(table.updates, 0)
+            self.assertEqual(admin_storage.save_model_calibration_status(fixture())["snapshot_sha256"],
+                             initial["snapshot_sha256"])
+            self.assertEqual(table.updates, 0)
+            newer = fixture()
+            newer["source_generated_at"] = "2026-10-09T07:00:00Z"
+            newer["shadow"]["cohort"]["captured"] += 1
+            newer["shadow"]["cohort"]["pending"] += 1
+            saved = admin_storage.save_model_calibration_status(newer)
+            self.assertEqual(saved["shadow"]["captured"], 141)
+            self.assertEqual(table.updates, 1)
+            with self.assertRaisesRegex(ValueError, "older evidence"):
+                admin_storage.save_model_calibration_status(fixture())
 
     def test_current_shadow_pair_keeps_actual_issued_metrics(self):
         from publish_model_calibration_status import build_snapshot
