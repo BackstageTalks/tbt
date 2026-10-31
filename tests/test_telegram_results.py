@@ -145,3 +145,29 @@ def test_free_results_only_for_previously_reserved_official_top():
     assert "VALUE" not in free[0]["text"]
     assert [entry for entry in tg.messages(source, CLOSED_DAY, free_event_id="not-issued")
             if entry["audience"] == "free"] == []
+
+
+def test_aces_priced_over_under_line_is_never_lost():
+    entry = row("ace", event="over84", market="aces", priced=True)
+    entry["market_publications"][0]["ou_side"] = "over"
+    entry["market_publications"][0]["market_line"] = 8.5
+    msg = tg.messages(report([entry]), CLOSED_DAY)[0]["text"]
+    assert "Novak (Over 8.5 esá)" in msg
+    assert "1.80 | +0.80u" in msg
+
+
+def test_void_quote_displayed_without_adding_to_roi():
+    void = row("value", event="void", state="void")
+    result = report([void])
+    msg = tg.messages(result, CLOSED_DAY)[0]["text"]
+    assert "➖ Novak" in msg
+    assert "| 1.80 | —" in msg
+    assert "ROI —" in msg
+
+
+def test_many_results_show_first_ten_but_count_all():
+    rows = [row("top_daily", event=str(i)) for i in range(13)]
+    report_text = tg.messages(report(rows), CLOSED_DAY)[0]["text"]
+    assert "🔟" in report_text
+    assert "ďalších 3 výsledkov" in report_text
+    assert "✅13" in report_text
