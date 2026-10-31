@@ -48,18 +48,54 @@ def offer():
 
 
 
-def test_value_ev_is_inline_when_it_fits_and_omitted_for_long_mobile_rows():
-    cfg = settings()
-    short = tg.fmt(row(88, "Sinner"), "value", cfg, index=3)
-    long = tg.fmt(row(89, "Alexander ExtraordinaryLongSurname"), "value", cfg, index=4)
-    assert " | EV +25.0%" in short
-    assert short.count("EV") == 1
-    assert "\n" not in short
-    assert len(short) <= tg.MAX_INLINE_EV_CHARS
-    assert "EV" not in long
-    assert long.endswith(" | 1.80")
-    assert "\n" not in long
-    assert tg.fmt(row(88, "Sinner"), "top", cfg, index=1).count("EV") == 0
+def test_telegram_omits_ev_everywhere_including_value_and_full_daily_message():
+    cfg=settings()
+    top=tg.fmt(row(88,"Sinner"),"top",cfg,index=1)
+    value=tg.fmt(row(89,"Hijikata"),"value",cfg,index=4)
+    value_long=tg.fmt(row(90,"Alexander ExtraordinaryLongSurname"),"value",cfg,index=5)
+    assert top.endswith(" | 1.80")
+    assert value.endswith(" | 1.80")
+    assert value_long.endswith(" | 1.80")
+    assert all("EV" not in line for line in (top,value,value_long))
+    assert all("\n" not in line for line in (top,value,value_long))
+    combined=tg.messages(offer(),cfg,NOW)
+    assert len(combined)==2
+    assert all("EV" not in message["text"] for message in combined)
+    assert "6️⃣ Value" in combined[0]["text"]
+
+
+def test_aces_prediction_contracts_and_mobile_compaction():
+    cfg=settings()
+    count=row(90,"Daniil Medvedev","aces")
+    count.update(price_status="projection_only")
+    unpriced=tg.fmt(count,"aces",cfg,index=6)
+    assert "Medvedev | " in unpriced
+    assert "najviac es" in unpriced
+    assert "aces 8.3" not in unpriced
+    assert unpriced.endswith(" | 0" ) is False
+
+    superiority=dict(count, price_contract="player_superiority",price_status="priced_projection",
+                     odds=2.0)
+    priced=tg.fmt(superiority,"aces",cfg,index=6)
+    assert "najviac es | 2.00" in priced
+    assert "72.0%" not in priced  # the optional confidence was dropped to fit mobile
+    assert len(priced)<=44
+
+    over=dict(count,price_contract="player_total_ou",price_status="priced_projection",
+              market_line=8.5,ou_side="over",model_probability=0.65,odds=1.9)
+    text=tg.fmt(over,"aces",cfg,index=2)
+    assert "Over 8.5 es" in text
+    assert "8.3" not in text
+    assert "72.0%" not in text  # model O/U probability differs from most-aces confidence
+    assert "EV" not in text
+    bad=dict(over)
+    bad.pop("market_line")
+    try:
+        tg.fmt(bad,"aces",cfg)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Invalid O/U contract rendered as valid pick")
 
 
 def test_daily_queue_is_durable_idempotent_and_full_offer_override(tmp_path, monkeypatch):
@@ -113,7 +149,8 @@ def test_classic_format_and_deterministic_free_pick():
     assert premium.count("📅") == 1
     assert "🆓 Surname" in first[1]["text"]
     assert first[1]["text"].count("🆓") == 1
-    assert "aces 8.3" in first[0]["text"]
+    assert "najviac es" in first[0]["text"]
+    assert "aces 8.3" not in first[0]["text"]
     assert "esá" not in first[0]["text"]
     assert "Double Fault" not in first[0]["text"]
     assert all("Analytical preview only" in x["text"] for x in first)

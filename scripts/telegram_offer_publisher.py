@@ -65,8 +65,6 @@ def num(v):
     try: return float(v) if v is not None else None
     except (TypeError,ValueError): return None
 NUMBER_EMOJIS=("1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟")
-# Conservative single-row mobile preview bound; Telegram clients may wrap differently.
-MAX_INLINE_EV_CHARS=48
 HEADER="🎾 BlinQ | Tennis Intelligence"
 FOOTER="ℹ️ Analytical preview only"
 BRAND_LINK_TEXT="BlinQ Stat Engine"
@@ -134,9 +132,22 @@ def fmt(r,k,c,index=1,name_map=None):
     name=(name_map or {}).get(selected) or selected.split()[-1] if selected else "—"
     time=stamp(r["scheduled_at"]).astimezone(TZ).strftime("%H:%M")
     if k=="aces":
-        projection=num(r.get("projection")); confidence=num(r.get("projection_confidence"))
-        values=[f"aces {projection:.1f}" if projection is not None else "projection —"]
-        if confidence is not None:values.append(f"{(confidence*100 if abs(confidence)<=1 else confidence):.1f}%")
+        contract=str(r.get("price_contract") or "").lower()
+        if contract=="player_total_ou":
+            side=str(r.get("ou_side") or "").lower()
+            market_line=num(r.get("market_line"))
+            if side not in ("over","under") or market_line is None or market_line<0:
+                raise ValueError("Incomplete confirmed ACES over/under contract")
+            values=[f"{side.title()} {market_line:.1f} es"]
+            # O/U probability and Most Aces confidence describe different outcomes.
+            confidence=num(r.get("model_probability"))
+        else:
+            # The model predicts which player will hit the most aces;
+            # its numeric count projection is not a bookmaker line.
+            values=["najviac es"]
+            confidence=num(r.get("projection_confidence"))
+        if confidence is not None:
+            values.append(f"{(confidence*100 if abs(confidence)<=1 else confidence):.1f}%")
     else:
         prob=num(bet.get("blinq_probability") or bet.get("model_probability") or r.get("blinq_probability") or r.get("probability"))
         values=[f"{(prob*100 if abs(prob)<=1 else prob):.1f}%" if prob is not None else "—"] if c.get("show_probability",True) else []
@@ -145,13 +156,10 @@ def fmt(r,k,c,index=1,name_map=None):
         values.append(f"{odds:.2f}" if odds is not None and odds>1 else "—")
     prefix=NUMBER_EMOJIS[index-1] if 1<=index<=len(NUMBER_EMOJIS) else f"{index}."
     line=f"{prefix} {name} | {time} | "+" | ".join(values)
-    if k=="value":
-        ev=num(bet.get("expected_value") if "expected_value" in bet else r.get("expected_value"))
-        if ev is not None:
-            # Never move EV to a second row; omit it on long mobile lines.
-            suffix=f" | EV {(ev*100 if abs(ev)<=1 else ev):+.1f}%"
-            if len(line+suffix)<=MAX_INLINE_EV_CHARS:
-                line+=suffix
+    if k=="aces" and len(line)>44 and confidence is not None:
+        # Keep the exact prediction and genuine odds readable on narrow phones.
+        values=[item for item in values if item!=f"{(confidence*100 if abs(confidence)<=1 else confidence):.1f}%"]
+        line=f"{prefix} {name} | {time} | "+" | ".join(values)
     return line
 
 def select_groups(x,c,now):
