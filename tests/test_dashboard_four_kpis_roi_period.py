@@ -67,7 +67,7 @@ def test_mobile_and_desktop_tiles_show_selected_roi_period():
     assert "dashboardKpiDefaults.length" in app
     assert "snapshot?.selected_period" in app
     assert "effectivePeriod" in app
-    assert "Za '+effectivePeriod+' dní" in app
+    assert "String(effectivePeriod)==='3'?' dni':' dní'" in app
     assert "Obdobie ROI:" in app
     assert "grid-template-columns:repeat(4,minmax(0,1fr))!important" in css
     assert "grid-template-columns:repeat(2,minmax(0,1fr))!important" in mobile
