@@ -124,7 +124,7 @@ class TestLab(unittest.TestCase):
         with self.assertRaises(model_training.TrainingBlocked):
             m.start({"action": "refresh_champion_inputs"}, "admin")
 
-    def test_champion_inputs_refresh_requires_updated_feed_and_unchanged_model(self):
+    def _completed_champion_refresh(self):
         m.start({"action": "refresh_champion_inputs"}, "admin")
         m.sync(snapshot())
         request = m._json("active")
@@ -134,11 +134,19 @@ class TestLab(unittest.TestCase):
             "id": 58, "status": "completed", "conclusion": "success",
             "display_title": "BlinQ inputs refresh " + request["id"],
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "publication_verified": True,
         }]
-        with self.assertRaises(model_training.TrainingBlocked):
-            m.sync(complete)  # Existing feed is not a successful update.
-        self.assertIsNotNone(m._json("active"))
+        return complete, request
+
+    def test_champion_inputs_refresh_requires_publication_and_unchanged_model(self):
+        complete, _request = self._completed_champion_refresh()
+        complete["runs"]["refresh_champion_inputs"][0]["publication_verified"] = False
         complete["feed_sha256"] = "f" * 64
+        with self.assertRaises(model_training.TrainingBlocked):
+            m.sync(complete)
+        self.assertIsNotNone(m._json("active"))
+        self.assertEqual(m._json("last")["state"], "VERIFICATION_FAILED")
+        complete["runs"]["refresh_champion_inputs"][0]["publication_verified"] = True
         complete["champion_sha256"] = "d" * 64
         with self.assertRaises(model_training.TrainingBlocked):
             m.sync(complete)
@@ -148,6 +156,46 @@ class TestLab(unittest.TestCase):
         self.assertIsNone(m._json("active"))
         self.assertEqual(m._json("last")["state"], "WORKFLOW_VERIFIED")
         self.assertIn("váhy", m._json("last")["note"])
+
+    def test_champion_refresh_no_change_does_not_claim_new_data(self):
+        complete, _request = self._completed_champion_refresh()
+        m.sync(complete)
+        self.assertIsNone(m._json("active"))
+        self.assertEqual(m._json("last")["state"], "NO_CHANGE_VERIFIED")
+        self.assertIn("nezmenil", m._json("last")["note"])
+        self.assertNotIn("nová generácia", m._json("last")["note"])
+
+    def test_champion_refresh_requires_independent_pipeline_and_deploy_steps(self):
+        run = {"id": 42, "status": "completed", "conclusion": "success",
+               "display_title": "BlinQ inputs refresh " + "a" * 24}
+        def step(name, result="success"):
+            return {"name": name, "status": "completed", "conclusion": result}
+        pipeline = {"name": "pipeline", "status": "completed", "conclusion": "success",
+                    "steps": [step(name) for name in (
+                        "Acquire global cross-repository canonical writer",
+                        "Execute selected operation",
+                        "Prepare refreshed serving feed and cached player assets")]}
+        deploy = {"name": "Deploy current prediction generation",
+                  "status": "completed", "conclusion": "success",
+                  "steps": [step(name) for name in (
+                      "Deploy refreshed feed and application",
+                      "Verify exact web revision after prediction redeploy",
+                      "Confirm exactly deployed prediction publication")]}
+        def read(_path):
+            return {"total_count": 2, "jobs": [pipeline, deploy]}
+        self.assertTrue(m._read_champion_refresh_publication(run, read))
+        deploy["steps"][-1]["conclusion"] = "skipped"
+        self.assertFalse(m._read_champion_refresh_publication(run, read))
+        deploy["steps"][-1]["conclusion"] = "success"
+        deploy["conclusion"] = "skipped"
+        self.assertFalse(m._read_champion_refresh_publication(run, read))
+        deploy["conclusion"] = "success"
+        self.assertFalse(m._read_champion_refresh_publication(
+            {**run, "display_title": "Unrelated history job"}, read))
+        self.assertFalse(m._read_champion_refresh_publication(
+            {**run, "conclusion": "failure"}, read))
+        self.assertFalse(m._read_champion_refresh_publication(
+            run, lambda _: {"total_count": 3, "jobs": [pipeline, deploy]}))
 
     def test_unknown_operations_and_fields_rejected(self):
         for data in (
@@ -452,6 +500,16 @@ class TestChampionInputRefreshWorkflow(unittest.TestCase):
         self.assertIn("Validate Model Lab input-refresh dispatch", workflow)
         self.assertIn('[[ "$MODE" == "current-refresh" && "$PROMOTE" != "true" ]]', workflow)
         self.assertIn("python scripts/pipeline.py", workflow)
+        # Regression: current-refresh previously finished the data job but
+        # never executed the separate verified public deploy job.
+        deploy = workflow.split("\n  deploy:\n", 1)[1]
+        criteria = deploy.split("\n    runs-on:", 1)[0]
+        self.assertIn("inputs.mode == 'current-refresh'", criteria)
+        self.assertIn("Confirm exactly deployed prediction publication", deploy)
+        self.assertIn("Deploy refreshed feed and application", deploy)
+        self.assertIn("Verify exact web revision after prediction redeploy", deploy)
+        self.assertIn("env.MODE == 'current-refresh'", workflow)
+
 
 
 class TestWorkerHeartbeat(unittest.TestCase):
