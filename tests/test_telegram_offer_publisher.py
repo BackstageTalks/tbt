@@ -147,3 +147,36 @@ def test_telegram_routes_free_to_optional_free_chat(monkeypatch, tmp_path):
     monkeypatch.setattr(tg.urllib.request, "urlopen", fake_open)
     tg.send(types.SimpleNamespace(output=str(tmp_path)))
     assert seen == ["-100111", "-100222"]
+
+
+def test_free_pick_is_reserved_at_most_once_per_day(monkeypatch, tmp_path):
+    # Scheduled and manual sends may both run on one day. Only the first
+    # reservation should include the complimentary FREE TOP selection.
+    from types import SimpleNamespace
+    settings_now = settings()
+    settings_now["schedule"]["enabled"] = False
+    settings_now["manual_request"] = {"id": "firstrequest01", "created_at": NOW.isoformat()}
+    monkeypatch.setattr(tg, "config", lambda *_: settings_now)
+    monkeypatch.setattr(tg, "snapshot", lambda *_: offer())
+    state = tmp_path / "state.json"
+    output1 = tmp_path / "out1"
+    tg.prepare(SimpleNamespace(now=NOW.isoformat(), state=str(state),
+                               output=str(output1), config_url="https://example.com/api/v1/ui-config"))
+    first = tg.load(output1 / "messages.json")
+    assert len([x for x in first if x["audience"] == "free"]) == 1
+    tg.save(state, tg.load(output1 / "state.json"))
+    settings_now["manual_request"] = {"id": "secondrequest02", "created_at": NOW.isoformat()}
+    output2 = tmp_path / "out2"
+    tg.prepare(SimpleNamespace(now=NOW.isoformat(), state=str(state),
+                               output=str(output2), config_url="https://example.com/api/v1/ui-config"))
+    later = tg.load(output2 / "messages.json")
+    assert later and all(x["audience"] != "free" for x in later)
+    assert any(x["audience"] == "premium" for x in later)
+
+
+def test_same_surname_disambiguated():
+    sample = offer()
+    sample["top_daily_picks"] = [row(1, "Anna Cerundolo"), row(2, "Maria Cerundolo")]
+    result = tg.messages(sample, settings(free_top_pick=False), NOW)[0]["text"]
+    assert "A. Cerundolo |" in result
+    assert "M. Cerundolo |" in result
