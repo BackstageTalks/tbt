@@ -29,7 +29,7 @@ Výstup `report.json` je agregovaný, `linker_inputs/` obsahuje súkromné per-s
 
 ## Reálne zistenie na archivovanom DIL zdroji
 
-Read-only spustenie na nekomprimovanom zdrojovom rozšírení 31.10.2026: 139 016 source-only riadkov, z toho 69 062 v rokoch 2016–2026. Po vylúčení 2 569 neistých/nedokončených skóre a 3 564 neúplných/neplatných serve dvojíc má 62 929 riadkov platné obojstranné serve počty (z toho 62 927 s úplnými validnými break point count údajmi). **Všetkým 62 929** však chýbajú pôvodné winner/loser/event ID: `linker_input_rows_pending_independent_crosswalk=0`, `cdb_null_only_import_ready=0`. Všetkých 139 016 raw/provenance riadkov zostáva zachovaných v zdrojovom rozšírení DIL. Predchádzajúcich 663 prepojení / 9 282 štatistík je už v baseline, takže to nie je nový zápis.
+Read-only spustenie na nekomprimovanom zdrojovom rozšírení 31.10.2026: 139 016 source-only riadkov, z toho 69 062 v rokoch 2016–2026. Po vylúčení 2 569 neistých/nedokončených skóre a 3 564 neúplných/neplatných serve dvojíc má 62 929 riadkov platné obojstranné serve počty (z toho 62 927 s úplnými validnými break point count údajmi). **Všetkým 62 929** však chýbajú pôvodné winner/loser/event ID: `linker_input_rows_pending_independent_crosswalk=0`, `cdb_null_only_import_ready=0`. Všetkých 139 016 raw/provenance riadkov zostáva zachovaných v zdrojovom rozšírení DIL. Opätovne skontrolovaných 663 prepojení / 9 282 štatistík je už v baseline, takže to nie je nový zápis.
 
 ### Dôležité
 
