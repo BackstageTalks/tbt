@@ -45,7 +45,15 @@ def _payload():
 
 
 def _config(changes=None):
+    # Model a published dashboard with independently configured SETS and
+    # DOUBLE FAULTS. A missing rule intentionally inherits GAMES/ACES on old UI.
     tabs = {}
+    for tab in ("sets", "double_faults"):
+        tabs[tab] = {"plans": {
+            plan: {"visible_rows": "ALL" if plan in ("elite", "legend", "goat") else 0,
+                   "display_state": "active"}
+            for plan in ("rookie", "pro", "elite", "legend", "goat")
+        }}
     for (plan, category), settings in (changes or {}).items():
         tab = {"top_daily": "daily", "ace": "ace", "double_faults": "double_faults"}.get(category, category)
         tabs.setdefault(tab, {"plans": {}})["plans"][plan] = settings
