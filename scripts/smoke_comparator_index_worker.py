@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 import time
+import unicodedata
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
 
@@ -11,12 +12,30 @@ from tbt.services.comparator_index import load_pair_artifact
 from tbt.services.comparator_runtime import compare_from_artifact, search_players
 
 
+def _exact_player(directory, name):
+    # The current canonical index may store a verified Latin transliteration
+    # ("Svrcina") while search input retains Unicode accents ("Svrčina").
+    def fold(value):
+        return "".join(
+            letter for letter in unicodedata.normalize("NFKD", value.casefold())
+            if not unicodedata.combining(letter)
+        )
+
+    matches = [
+        row for row in search_players(directory, name, tour="atp")
+        if fold(row["name"]) == fold(name)
+    ]
+    if len(matches) != 1:
+        raise ValueError(f"Comparator identity is not unique for {name!r}: {len(matches)} matches")
+    return matches[0]
+
+
 def main():
     index = Path(sys.argv[1])
     directory = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
     start = time.perf_counter()
-    norrie = next(row for row in search_players(directory, "Cameron Norrie", tour="atp") if row["name"] == "Cameron Norrie")
-    svrcina = next(row for row in search_players(directory, "Dalibor Svrčina", tour="atp") if row["name"] == "Dalibor Svrčina")
+    norrie = _exact_player(directory, "Cameron Norrie")
+    svrcina = _exact_player(directory, "Dalibor Svrčina")
     artifact = load_pair_artifact(index, directory, player1=norrie["player_id"], player2=svrcina["player_id"], tour="atp")
     result = compare_from_artifact(artifact, player1=norrie["player_id"], player2=svrcina["player_id"], tour="atp", surface="hard", best_of=3)
     json.dumps(result, allow_nan=False)
