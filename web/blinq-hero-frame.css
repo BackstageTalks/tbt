@@ -1,0 +1,19 @@
+/* BlinQ hero frame — desktop and mobile.
+   Keeps existing artwork, admin-controlled crop/copy positions, carousel and
+   height intact; only adds a restrained edge and clean rounded clipping. */
+body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardHero {
+  box-sizing: border-box !important;
+  position: relative !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(173,213,196,.20) !important;
+  border-radius: 16px !important;
+  background: #071916 !important;
+  box-shadow: 0 8px 26px rgba(0,0,0,.16), inset 0 1px 0 rgba(230,255,244,.04) !important;
+}
+@media (max-width: 600px) {
+  body#blinqPremium.blinq-home.bqm-enabled:not(.blinq-admin) #dashboardHero {
+    border-radius: 11px !important;
+    border-color: rgba(173,213,196,.18) !important;
+    box-shadow: 0 5px 17px rgba(0,0,0,.12) !important;
+  }
+}
