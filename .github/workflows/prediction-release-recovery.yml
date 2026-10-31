@@ -1,0 +1,39 @@
+name: Recover private prediction release transaction (no provider calls)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/prediction-release-recovery-request.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Recover and independently verify serving assets
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "::error::Missing private release token"; exit 1; }
+          python scripts/ensure_prediction_release.py --data-repository "$TBT_DATA_REPOSITORY"
+      - name: Confirm no orphan transaction aliases remain
+        run: |
+          set -euo pipefail
+          gh release view tbt-predictions-v1 --repo "$TBT_DATA_REPOSITORY" --json assets \
+            --jq '[.assets[].name | select(startswith("blinq-rollback-") or startswith("blinq-txn-") or startswith("blinq-candidate-"))] | if length == 0 then "CLEAN" else error("Unresolved transaction aliases: " + join(",")) end' |
+            grep -qx CLEAN
