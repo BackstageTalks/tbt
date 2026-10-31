@@ -65,8 +65,6 @@ def num(v):
     try: return float(v) if v is not None else None
     except (TypeError,ValueError): return None
 NUMBER_EMOJIS=("1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟")
-# Conservative single-row mobile preview bound; Telegram clients may wrap differently.
-MAX_INLINE_EV_CHARS=48
 HEADER="🎾 BlinQ | Tennis Intelligence"
 FOOTER="ℹ️ Analytical preview only"
 BRAND_LINK_TEXT="BlinQ Stat Engine"
@@ -145,13 +143,6 @@ def fmt(r,k,c,index=1,name_map=None):
         values.append(f"{odds:.2f}" if odds is not None and odds>1 else "—")
     prefix=NUMBER_EMOJIS[index-1] if 1<=index<=len(NUMBER_EMOJIS) else f"{index}."
     line=f"{prefix} {name} | {time} | "+" | ".join(values)
-    if k=="value":
-        ev=num(bet.get("expected_value") if "expected_value" in bet else r.get("expected_value"))
-        if ev is not None:
-            # Never move EV to a second row; omit it on long mobile lines.
-            suffix=f" | EV {(ev*100 if abs(ev)<=1 else ev):+.1f}%"
-            if len(line+suffix)<=MAX_INLINE_EV_CHARS:
-                line+=suffix
     return line
 
 def select_groups(x,c,now):
