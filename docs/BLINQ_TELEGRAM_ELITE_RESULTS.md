@@ -1,6 +1,9 @@
 # BlinQ ELITE Telegram results — after final verified pick
 
-Daily offer remains operator-scheduled at 06:20 Europe/Bratislava. This
+Daily offer remains operator-scheduled at 06:20 Europe/Bratislava. The
+operator-approved ELITE auto-results mode explicitly ignores the old Admin
+`telegram_bot.enabled` and `results_enabled` schedule switches; existing manual
+and legacy results behavior remains unchanged. This
 **results** job has **no additional cron**: the existing external 30-minute
 `match-status.yml` worker dispatches `telegram-results.yml` only after a
 successful status reconciliation and durable match-status snapshot read-back.
