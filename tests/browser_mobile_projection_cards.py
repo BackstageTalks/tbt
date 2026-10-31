@@ -80,22 +80,22 @@ def test_mobile_market_cards():
                     assert g['row']['h']<530,(width,market,'over-tall card',g)
                     assert g['pick']['w']>=100,(width,market,'collapsed prediction',g)
                     if width <= 600 and market in ('daily','value'):
-                        assert 'match confidence' in g['areas'] and 'pick action' in g['areas'],(width,market,g)
+                        assert 'match match' in g['areas'] and 'pick action' in g['areas'],(width,market,g)
                     if width<=600:
                         for name in ('time','confidence','odds','action'):
                             assert g[name]['r']<=g['row']['r']+1,(width,market,name,g)
                         assert g['startedInline'] and g['startedTimeHidden'],(width,market,g)
                         assert g['depthHidden'],(width,market,g)
                         assert g['detailVisible'],(width,market,g)
-                        assert g['confidence']['l']>=g['match']['r']-2,(width,market,g)
-                        assert abs(g['confidence']['l']-g['odds']['l'])<3,(width,market,g)
-                        assert abs(g['odds']['l']-g['action']['l'])<3,(width,market,g)
-                        assert g['confidence']['b']<=g['odds']['t']+2,(width,market,g)
-                        assert g['odds']['b']<=g['action']['t']+2,(width,market,g)
+                        assert g['match']['r']>=g['confidence']['r']-2,(width,market,g)
+                        assert g['confidence']['r']<=g['odds']['l']+2,(width,market,g)
+                        assert abs(g['pick']['t']-g['action']['t'])<3,(width,market,g)
+                        assert abs(g['confidence']['t']-g['odds']['t'])<3,(width,market,g)
+                        assert g['action']['b']<=g['odds']['t']+2,(width,market,g)
                         assert not overlap(g['pick'],g['action']),(width,market,g)
                         if market in PROJECTED:
                             assert 'projection' in g['areas'],(width,market,g)
-                            assert g['projection']['t']>=g['pick']['b']-2,(width,market,g)
+                            assert g['projection']['t']>=g['confidence']['b']-2,(width,market,g)
                             assert not overlap(g['projection'],g['action']),(width,market,g)
                     else:
                         assert not g['startedInline'],(width,market,g)
