@@ -1587,7 +1587,7 @@
           :effectivePeriod==='all'
             ?lcopy('All available history','Celé dostupné obdobie','Celé dostupné období')
             :dashboardKpiPeriodChoices.includes(effectivePeriod)
-              ?lcopy('Last '+effectivePeriod+' days','Za '+effectivePeriod+' dní','Za '+effectivePeriod+' dní')
+              ?lcopy('Last '+effectivePeriod+' days','Za '+effectivePeriod+' dni','Za '+effectivePeriod+' dny')
               :lcopy('Period unavailable','Obdobie nie je dostupné','Období není dostupné')
         :'';
       return [icon,label,value,note,''];
@@ -2276,7 +2276,7 @@
   function dailyHubIsComingSoon(tab){return false;}
   function dailyHubColumns(tab){
     if(dailyHubIsComingSoon(tab))return [''];
-    const time=lcopy('TIME','ČAS','ČAS'),tournament=lcopy('TOURNAMENT','TURNAJ','TURNAJ'),match=lcopy('MATCH','ZÁPAS','ZÁPAS'),prediction=lcopy('PREDICTION','PREDIKCIA','PREDIKCE'),odds=lcopy('ODDS','KURZ','KURZ'),projection=lcopy('PREDICTED COUNT','PREDIKOVANÝ POČET','PREDIKOVANÝ POČET'),confidence=lcopy('CONFIDENCE','ISTOTA','JISTOTA');
+    const time=lcopy('TIME','ČAS','ČAS'),tournament=lcopy('TOURNAMENT','TURNAJ','TURNAJ'),match=lcopy('MATCH','ZÁPAS','ZÁPAS'),prediction=lcopy('PREDICTION','PREDIKCIA','PREDIKCE'),odds=lcopy('ODDS','KURZ','KURZ'),projection=lcopy('PROJECTION','PROJEKCIA','PROJEKCE'),confidence=lcopy('CONFIDENCE','ISTOTA','JISTOTA');
     if(tab==='see_all')return ['#',time,tournament,match,prediction,odds,lcopy('MODEL','MODEL','MODEL'),''];
     if(tab==='value')return ['#',time,tournament,match,prediction,odds,'BLINQ %',''];
     if(tab==='ace'||tab==='double_faults')return ['#',time,tournament,match,prediction,odds,projection,confidence];
@@ -2301,10 +2301,9 @@
     return '';
   }
   function hubConfidenceHtml(value,row=null){
-    const depth=hubDataDepthLabel(row);
-    const n=Number(value);if(!Number.isFinite(n))return `<span class="hub-confidence is-empty"><strong>—</strong>${depth?`<small class="hub-data-depth">${escapeHtml(depth)}</small>`:''}</span>`;
+    const n=Number(value);if(!Number.isFinite(n))return `<span class="hub-confidence is-empty"><strong>—</strong></span>`;
     const normalized=n<=1?n:n/100,p=Math.max(0,Math.min(100,normalized*100));
-    return `<span class="hub-confidence"><strong>${escapeHtml(pct(n))}</strong><i aria-hidden="true"><b style="width:${p.toFixed(1)}%"></b></i>${depth?`<small class="hub-data-depth" title="${escapeHtml(lcopy('Usable historical sample behind this prediction','Použiteľná historická vzorka za touto predikciou','Použitelný historický vzorek za touto predikcí'))}">${escapeHtml(depth)}</small>`:''}</span>`;
+    return `<span class="hub-confidence"><strong>${escapeHtml(pct(n))}</strong><i aria-hidden="true"><b style="width:${p.toFixed(1)}%"></b></i></span>`;
   }
   function hubPredictionHtml(sourceTab,text,subLabel=''){
     const label=subLabel||({daily:'TOP',prime:'ACCA',value:'VALUE',ace:'ACES',double_faults:'DVOJCHYBY',doubles:'DOUBLES',games:'GAMES',sets:'SETS'}[sourceTab]||String(sourceTab||'').toUpperCase());
@@ -2314,8 +2313,8 @@
     return `<span class="hub-number-stack"><strong>${escapeHtml(value)}</strong>${label?`<small>${escapeHtml(label)}</small>`:''}</span>`;
   }
   function hubSeeAllProjectionHtml(value,label,confidence,row){
-    const n=Number(confidence),confidenceText=Number.isFinite(n)?pct(n):'—',depth=hubDataDepthLabel(row);
-    return `<span class="hub-seeall-model"><span class="hub-number-stack"><strong>${escapeHtml(value)}</strong><small>${escapeHtml(label)}</small></span><span class="hub-seeall-confidence"><strong>${escapeHtml(confidenceText)}</strong>${depth?`<small>${escapeHtml(depth)}</small>`:''}</span></span>`;
+    const n=Number(confidence),confidenceText=Number.isFinite(n)?pct(n):'—';
+    return `<span class="hub-seeall-model"><span class="hub-number-stack"><strong>${escapeHtml(value)}</strong><small>${escapeHtml(label)}</small></span><span class="hub-seeall-confidence"><strong>${escapeHtml(confidenceText)}</strong></span></span>`;
   }
   function safeNum(value){ const n=Number(value); return Number.isFinite(n)?n:null; }
   function clampValue(value,min=0,max=100){ const n=Number(value); if(!Number.isFinite(n)) return min; return Math.max(min,Math.min(max,n)); }
@@ -2791,7 +2790,7 @@
     if(sourceTab==='ace'||sourceTab==='double_faults'){
       const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=projectionPickText(row,sourceTab),market=aceMarketName(row);
       const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces prediction','Predikcia es','Predikce es'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}</button>`:'';
-      const oddsHtml=projectionOddsHtml(row),projectionText=Number.isFinite(projection)?projection.toFixed(2):'—',projectionUnit=lcopy('prediction','predikcia','predikce');
+      const oddsHtml=projectionOddsHtml(row),projectionText=Number.isFinite(projection)?projection.toFixed(2):'—',projectionUnit=lcopy('projection','projekcia','projekce');
       if(tab==='see_all'){
         return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-seeall-model-cell">${hubSeeAllProjectionHtml(projectionText,projectionUnit,confidence,row)}</td><td class="hub-action-cell hub-optional-action">${action}</td></tr>`;
       }
