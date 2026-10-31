@@ -345,7 +345,7 @@ def _expired_unclaimed_readonly(request, snapshot):
             return False
     except (KeyError, TypeError, ValueError, AttributeError):
         return False
-    return bool(request and request.get("action") in {"prepare_inputs", "refresh_tests", "audit_shadow"}
+    return bool(request and request.get("action") in {"prepare_inputs", "refresh_tests", "audit_shadow", "refresh_champion_inputs"}
                 and _age(request.get("snapshot_at")) > 5400
                 and _json("claim-" + request["id"]) is None
                 and _find_run(request, snapshot) is None)
@@ -495,7 +495,7 @@ def acknowledge_failed(payload):
             _table(UI_TABLE).delete_entity(partition_key=PARTITION, row_key="active")
             if _row("active"):
                 raise AdminStorageUnavailable("Expired request guard was not removed")
-            return {"state": "EXPIRED_UNCLAIMED_CANCELLED", "message": "Neodoslaná požiadavka zrušená. Spusti prípravu dát znova."}
+            return {"state": "EXPIRED_UNCLAIMED_CANCELLED", "message": "Neodoslaná požiadavka zrušená. Môžeš vytvoriť novú."}
     last = _json("last")
     if not active or not last or active["id"] != payload["id"] or last.get("id") != payload["id"] or last.get("state") not in {"FAILED_NEEDS_REVIEW", "VERIFICATION_FAILED"}:
         raise TrainingBlocked("No independently verified failed operation")
