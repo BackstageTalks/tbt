@@ -337,14 +337,21 @@ def result_reference(row,section):
               and str(p.get("selection_id") or p.get("winner_id") or "")==selection]
         pub=pubs[0] if len(pubs)==1 else {}
         odds=num(pub.get("odds") or betting.get("odds") or row.get("odds"))
-    return {"event_id":str(row["event_id"]), "section":real_section,
-            "channel":section, "market":market, "selection_id":selection,
-            "publication_key":str(pub.get("publication_key") or ""),
-            "market_line":pub.get("market_line"),
-            "projection_direction":str(pub.get("ou_side") or pub.get("projection_direction") or ""),
-            "scheduled_at":str(row["scheduled_at"]),
-            "name":_selection_name(row), "odds":odds if odds and odds>1 else None,
-            "projection":num(row.get("projection")) if market=="aces" else None}
+    reference={"event_id":str(row["event_id"]), "section":real_section,
+               "channel":section, "market":market, "selection_id":selection,
+               "publication_key":str(pub.get("publication_key") or ""),
+               "market_line":pub.get("market_line"),
+               "projection_direction":str(pub.get("ou_side") or pub.get("projection_direction") or ""),
+               "scheduled_at":str(row["scheduled_at"]),
+               "name":_selection_name(row), "odds":odds if odds and odds>1 else None,
+               "projection":num(row.get("projection")) if market=="aces" else None}
+    if section=="aces":
+        # Private immutable ledger only: retain source evidence for a future
+        # bookmaker-price audit without modifying the published price.
+        for field in ("odds_source","odds_market_name","captured_at",
+                      "provider_id","odds_bookmaker","odds_provider_event_id"):
+            reference[field]=pub.get(field) or row.get(field)
+    return reference
 
 def _same_frozen_selection(current, frozen):
     """No change to exact sent identity, price or O/U settlement contract."""
