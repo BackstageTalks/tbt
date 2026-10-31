@@ -52,7 +52,8 @@ def test_classic_format_and_deterministic_free_pick():
     second = tg.messages(offer(), settings(), NOW)
     assert first == second
     assert [x["audience"] for x in first] == ["premium", "free"]
-    assert "Data Betting by BackstageTalks" in first[0]["text"]
+    assert "BlinQ | Tennis Intelligence" in first[0]["text"]
+    assert "Data Betting" not in first[0]["text"]
     assert "1️⃣ Surname1 | " in first[0]["text"]
     assert " | " in first[0]["text"]
     assert "🎾 TOP Picks | BlinQ" not in first[0]["text"]
@@ -65,8 +66,12 @@ def test_classic_format_and_deterministic_free_pick():
     assert premium.count("📅") == 1
     assert "🆓 Surname" in first[1]["text"]
     assert first[1]["text"].count("🆓") == 1
+    assert "aces 8.3" in first[0]["text"]
+    assert "esá" not in first[0]["text"]
     assert "Double Fault" not in first[0]["text"]
     assert all("Analytical preview only" in x["text"] for x in first)
+    assert all(x["text"].endswith("by BlinQ Stat Engine") for x in first)
+    assert all(tg.telegram_link_entities(x["text"]) for x in first)
 
 
 def test_free_only_does_not_show_other_premium_rows():
@@ -141,6 +146,7 @@ def test_telegram_routes_free_to_optional_free_chat(monkeypatch, tmp_path):
         {"audience": "premium", "text": "VIP"},
         {"audience": "free", "text": "FREE"}])
     seen = []
+    outgoing = []
     class Response:
         def __enter__(self): return self
         def __exit__(self, *_): pass
@@ -148,10 +154,12 @@ def test_telegram_routes_free_to_optional_free_chat(monkeypatch, tmp_path):
     def fake_open(req, **kwargs):
         values = tg.urllib.parse.parse_qs(req.data.decode())
         seen.append(values["chat_id"][0])
+        outgoing.append(values)
         return Response()
     monkeypatch.setattr(tg.urllib.request, "urlopen", fake_open)
     tg.send(types.SimpleNamespace(output=str(tmp_path)))
     assert seen == ["-100111", "-100222"]
+    assert all("entities" not in x for x in outgoing)  # legacy unbranded messages still work
 
 def test_compact_separate_mode_order_without_category_headings():
     out = tg.messages(offer(), settings(layout="separate", free_top_pick=False), NOW)
@@ -162,3 +170,40 @@ def test_compact_separate_mode_order_without_category_headings():
         assert "🎾 TOP Picks" not in message["text"]
         assert "💎 VALUE Picks" not in message["text"]
         assert "🎯 ESÁ" not in message["text"]
+
+
+def test_telegram_footer_text_link_is_clickable_and_utf16_safe():
+    # Telegram offsets are UTF-16 code units (emojis are surrogate pairs).
+    body = "🎾 BlinQ | Tennis Intelligence\n1️⃣ Test\n" + tg.branded_footer(
+        "ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine")
+    assert body.endswith("ℹ️ Analytical preview only\nby BlinQ Stat Engine")
+    entities = tg.telegram_link_entities(body)
+    assert len(entities) == 1
+    link = entities[0]
+    assert link["url"] == "https://agreeable-sky-011a7fe10.7.azurestaticapps.net/follow-the-data/"
+    encoded = body.encode("utf-16-le")
+    start = link["offset"] * 2
+    end = (link["offset"] + link["length"]) * 2
+    assert encoded[start:end].decode("utf-16-le") == "BlinQ Stat Engine"
+
+
+def test_telegram_send_post_contains_real_link_entities(monkeypatch, tmp_path):
+    monkeypatch.setenv("TGB", "test-secret")
+    monkeypatch.setenv("TGCH", "-100111")
+    (tmp_path / "ready").write_text("reservation")
+    tg.save(tmp_path / "messages.json", [
+        {"audience": "premium", "text": "🎾\n" + tg.branded_footer()}])
+    seen = []
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_): pass
+        def read(self, *_): return b'{"ok":true,"result":{"message_id":700}}'
+    def fake_open(req, **kwargs):
+        seen.append(tg.urllib.parse.parse_qs(req.data.decode()))
+        return Response()
+    monkeypatch.setattr(tg.urllib.request, "urlopen", fake_open)
+    tg.send(types.SimpleNamespace(output=str(tmp_path)))
+    assert len(seen) == 1
+    posted_entities = json.loads(seen[0]["entities"][0])
+    assert posted_entities == tg.telegram_link_entities(seen[0]["text"][0])
+    assert "parse_mode" not in seen[0]  # untrusted players never parsed as HTML
