@@ -705,6 +705,21 @@ jobs:
           path: .cache/tbt/history-repair-all/history_repair_report.json
           if-no-files-found: ignore
 
+      - name: Preserve paid-provider history on failed checkpoint
+        if: ${{ failure() && (env.MODE == 'history' || env.MODE == 'statistics' || env.MODE == 'extras' || env.MODE == 'identity') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-uncommitted-private-history-${{ github.run_id }}
+          path: |
+            .cache/tbt/history/history-*.parquet
+            .cache/tbt/history/history_manifest.json
+            .cache/tbt/history/download_progress.json
+            .cache/tbt/history/download_report.json
+            .cache/tbt/history/history_provider_quarantine.json
+            .cache/tbt/history/statistics_expected.json
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Upload history/statistics run report
         if: ${{ always() && (env.MODE == 'history' || env.MODE == 'statistics' || env.MODE == 'extras' || env.MODE == 'identity') }}
         uses: actions/upload-artifact@v4
