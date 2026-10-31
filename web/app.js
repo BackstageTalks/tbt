@@ -1587,7 +1587,7 @@
           :effectivePeriod==='all'
             ?lcopy('All available history','Celé dostupné obdobie','Celé dostupné období')
             :dashboardKpiPeriodChoices.includes(effectivePeriod)
-              ?lcopy('Last '+effectivePeriod+' days','Za '+effectivePeriod+' dni','Za '+effectivePeriod+' dny')
+              ?lcopy('Last '+effectivePeriod+' days','Za '+effectivePeriod+(String(effectivePeriod)==='3'?' dni':' dní'),'Za '+effectivePeriod+(String(effectivePeriod)==='3'?' dny':' dní'))
               :lcopy('Period unavailable','Obdobie nie je dostupné','Období není dostupné')
         :'';
       return [icon,label,value,note,''];
