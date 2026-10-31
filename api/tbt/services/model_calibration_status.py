@@ -46,6 +46,29 @@ def _metric_row(value: object) -> dict:
     return result
 
 
+
+def _paired_interval(value: object) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    n = _nonnegative(value.get("n"), "paired_n")
+    result = {"n": n}
+    for key in ("delta", "lower", "upper"):
+        raw = value.get(key)
+        if raw is None:
+            result[key] = None
+        elif type(raw) in (int, float) and isfinite(raw) and -100 <= float(raw) <= 100:
+            result[key] = float(raw)
+        else:
+            raise ValueError("Invalid paired shadow confidence interval")
+    if result["lower"] is not None and result["upper"] is not None and (
+        result["lower"] > result["upper"] or
+        result["delta"] is None or
+        not result["lower"] <= result["delta"] <= result["upper"]
+    ):
+        raise ValueError("Inconsistent paired confidence bounds")
+    return result
+
+
 def _timestamp(value: object) -> str:
     text = _bounded_text(value, 64)
     if not text:
@@ -210,6 +233,19 @@ def normalize_model_calibration_snapshot(raw: object) -> dict:
             # Tracking target counts captured immutable pre-match pairs; review
             # minimum above counts only genuinely settled results.
             "remaining_to_target": max(0, SHADOW_TARGET_MATCHES - captured),
+            "paired_uncertainty": {
+                key: _paired_interval(shadow.get("paired_uncertainty", {}).get(key))
+                for key in ("accuracy", "log_loss", "brier_score")
+            } if isinstance(shadow.get("paired_uncertainty"), dict) else {},
+            "tour_diagnostics": {
+                tour: {
+                    "n": _nonnegative(shadow["tour_diagnostics"][tour].get("n"), tour+"_n"),
+                    "paired_log_loss": _paired_interval(shadow["tour_diagnostics"][tour].get("paired_log_loss")),
+                }
+                for tour in ("ATP", "WTA")
+                if isinstance(shadow.get("tour_diagnostics"), dict)
+                and isinstance(shadow["tour_diagnostics"].get(tour), dict)
+            },
             "production": _metric_row(shadow.get("production")),
             "candidate": _metric_row(shadow.get("challenger")),
             "gate": {
