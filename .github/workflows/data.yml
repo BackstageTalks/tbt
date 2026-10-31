@@ -101,7 +101,7 @@ jobs:
     # not block ordinary application deploys. The workflow-level history lock
     # still serializes all shared history writers.
     concurrency:
-      group: ${{ ((github.event_name == 'push' || inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current') && 'tbt-production-deploy') || format('tbt-data-pipeline-{0}', github.run_id) }}
+      group: ${{ ((github.event_name == 'push' || inputs.mode == 'refresh' || inputs.mode == 'current-refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current') && 'tbt-production-deploy') || format('tbt-data-pipeline-{0}', github.run_id) }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 210
@@ -919,7 +919,7 @@ jobs:
     if: >-
       needs.pipeline.result == 'success' &&
       ((github.event_name == 'push' && (contains(github.event.head_commit.message, '[refresh-now]') || contains(github.event.head_commit.message, '[comparator-build]') || contains(github.event.head_commit.message, '[deploy-current]'))) ||
-       inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'comparator-build' || inputs.mode == 'deploy-current')
+       inputs.mode == 'refresh' || inputs.mode == 'current-refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'comparator-build' || inputs.mode == 'deploy-current')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Only the short public publication window shares the production lock.
