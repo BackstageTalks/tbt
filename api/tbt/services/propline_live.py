@@ -41,6 +41,22 @@ def _name(value: Any) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", text.casefold()))
 
 
+def _is_non_standalone_pickem(book: dict) -> bool:
+    """Fantasy pick'em props are not independently tradable decimal odds.
+
+    PrizePicks and Underdog Fantasy payouts depend on a multi-pick entry.
+    A +100 indicator in their feed must not turn a single ACES O/U into
+    a supposed bookmaker bet at 2.00. Do not blacklist a distinct sportsbook
+    product merely because it shares the Underdog name.
+    """
+    names=(_name(book.get(field)) for field in ("title","key","name"))
+    return any(
+        value in {"prizepicks","prize picks","underdog fantasy"}
+        or value.startswith(("prizepicks ","prize picks ","underdog fantasy "))
+        for value in names
+    )
+
+
 def _when(value: Any) -> datetime | None:
     try:
         dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
@@ -256,7 +272,9 @@ def _match_board(predictions: list[dict], board: list[dict], now: datetime) -> l
 
 
 def _normalize_book(book: dict, row: dict, missing: set[str]) -> dict[str, dict]:
-    """Only full two-way quotes from ONE bookmaker at ONE matching line."""
+    """Only independently priced full two-way quotes from ONE bookmaker."""
+    if _is_non_standalone_pickem(book):
+        return {}
     result: dict[str, dict] = {}
     p1, p2 = _players(row)
     p1_key, p2_key = _name(p1), _name(p2)
@@ -370,6 +388,7 @@ def discover_propline_fallback(
                                   "match_winner": 0, "aces": 0, "double_faults": 0,
                                   "sets": 0, "games": 0},
                               "odds_payload_events": 0, "bookmakers_with_target_market": 0,
+                              "excluded_non_standalone_pickem_books": {},
                               "events_limited_out": 0,
                               "bookmakers_priced_by_market": {
                                   "match_winner": {}, "aces": {}, "double_faults": {},
@@ -425,6 +444,11 @@ def discover_propline_fallback(
             report["odds_payload_events"] += 1
             for book in payload.get("bookmakers") or []:
                 if not isinstance(book, dict):
+                    continue
+                if _is_non_standalone_pickem(book):
+                    label=str(book.get("title") or book.get("key") or book.get("name") or "unknown")[:90]
+                    excluded=report["excluded_non_standalone_pickem_books"]
+                    excluded[label]=excluded.get(label,0)+1
                     continue
                 parsed = _normalize_book(book, row, missing)
                 if parsed:
