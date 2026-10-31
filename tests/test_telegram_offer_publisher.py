@@ -207,3 +207,24 @@ def test_telegram_send_post_contains_real_link_entities(monkeypatch, tmp_path):
     posted_entities = json.loads(seen[0]["entities"][0])
     assert posted_entities == tg.telegram_link_entities(seen[0]["text"][0])
     assert "parse_mode" not in seen[0]  # untrusted players never parsed as HTML
+
+
+def test_full_offer_over_seven_and_long_telegram_messages_are_lossless():
+    sample = offer()
+    sample["top_daily_picks"] = [row(i, "First Surname" + str(i)) for i in range(1, 111)]
+    cfg = settings(free_top_pick=False, full_offer=True, max_per_section=7)
+    posts = tg.messages(sample, cfg, NOW)
+    assert len(posts) >= 2
+    premium = "\n".join(item["text"] for item in posts)
+    assert "1️⃣ Surname1" in premium
+    assert "110. Surname110" in premium
+    assert "111. Value" in premium
+    assert "112. Server" in premium
+    assert "TOP Picks |" not in premium
+    assert all(len(item["text"].encode("utf-16-le")) // 2 <= 4096 for item in posts)
+    assert len(tg.select_groups(sample, cfg, NOW)["top"]) == 110
+    # Explicit limited mode still supports the old Admin selection.
+    limited = settings(free_top_pick=False, full_offer=False, max_per_section=7)
+    text = "\n".join(item["text"] for item in tg.messages(sample, limited, NOW))
+    assert "8. Surname8" not in text
+    assert "7️⃣ Surname7" in text
