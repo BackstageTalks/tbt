@@ -329,9 +329,11 @@ jobs:
           # Under the existing CDB global lock, recover a committed/rollback
           # release generation before touching paid API quota. This is a no-op
           # for healthy releases and uses the existing audited legacy repair.
-          if [[ "$MODE" == history || "$MODE" == statistics || "$MODE" == extras || "$MODE" == identity ]]; then
-            python scripts/ensure_cdb_history_release.py --data-repository "$TBT_DATA_REPOSITORY"
-          fi
+          case "$MODE" in
+            history|statistics|extras|identity|refresh|current-refresh|results-rebuild|mega-data|ace-statistics|sg-scores)
+              python scripts/ensure_cdb_history_release.py --data-repository "$TBT_DATA_REPOSITORY"
+              ;;
+          esac
           # Writer runs start from a physically clean canonical release. The repair
           # is a no-op when history is already clean and rewrites only affected years.
           if [[ "$MODE" == history || "$MODE" == statistics || "$MODE" == extras || "$MODE" == identity ]]; then
