@@ -96,7 +96,7 @@ def main():
                           const odds=row?.querySelector('.hub-odds .hub-number-stack strong');
                           const pbar=row?.querySelector('.hub-confidence>i');
                           const rect=el=>el?el.getBoundingClientRect():null;
-                          return {css:css?.href||'',kpiBg:k?getComputedStyle(k).backgroundImage:null,
+                          return {css:css?.href||'',kpiBg:k?getComputedStyle(k).backgroundImage:null,kpiBgColor:k?getComputedStyle(k).backgroundColor:null,
                             kpiAccent:k?getComputedStyle(k,'::before').content:null,
                             kpiRadius:k?getComputedStyle(k).borderRadius:null,
                             kpiValueSize:k?.querySelector('strong')?getComputedStyle(k.querySelector('strong')).fontSize:null,
@@ -105,13 +105,17 @@ def main():
                             pickSize:pick?getComputedStyle(pick).fontSize:null,
                             oddsColor:odds?getComputedStyle(odds).color:null,
                             confidenceBar:pbar?getComputedStyle(pbar).display:null,
-                            rowBg:row?getComputedStyle(row).backgroundImage:null,navBg,navLine};
+                            rowBg:row?getComputedStyle(row).backgroundImage:null,rowBgColor:row?getComputedStyle(row).backgroundColor:null,
+                            pickBg:row?.querySelector('.hub-pick')?getComputedStyle(row.querySelector('.hub-pick')).backgroundColor:null,
+                            heroRadius:document.querySelector('#dashboardHero')?getComputedStyle(document.querySelector('#dashboardHero')).borderRadius:null,navBg,navLine};
                         }""")
                         assert 'sports-intelligence=20261030-1' in premium['css'], premium
-                        assert premium['rowBg'] and 'rgb(16, 38, 33)' in premium['rowBg'], premium
+                        assert premium['rowBg'] == 'none' and premium['rowBgColor'] == 'rgb(13, 33, 28)', premium
+                        assert premium['pickBg'] == 'rgba(0, 0, 0, 0)', premium
+                        assert premium['heroRadius'] == '11px', premium
                         assert premium['navBg'] == 'none', premium
                         assert premium['navLine'] == 'rgb(85, 231, 170)', premium
-                        assert premium['kpiBg'] and 'rgb(17, 41, 35)' in premium['kpiBg'], premium
+                        assert premium['kpiBg'] == 'none' and premium['kpiBgColor'] == 'rgb(13, 33, 28)', premium
                         assert premium['kpiAccent'] == 'none', premium
                         assert premium['kpiRadius'] == '10px', premium
                         assert 23 <= float(premium['kpiValueSize'].replace('px','')) <= 31, premium

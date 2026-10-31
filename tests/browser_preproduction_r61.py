@@ -83,6 +83,15 @@ def main():
                   t.renderDailyHub();t.renderDashboardKpis();t.renderTelegramGroupsPanel();
                 }''')
                 page.wait_for_timeout(150)
+                # Desktop and mobile use the same delicately framed hero. The
+                # managed image crop/copy and hero height stay unchanged.
+                hero_frame=page.locator('#dashboardHero').evaluate(
+                    "(e)=>({radius:getComputedStyle(e).borderRadius, "
+                    "style:getComputedStyle(e).borderTopStyle, "
+                    "width:getComputedStyle(e).borderTopWidth})"
+                )
+                assert hero_frame['radius']==('11px' if width<=600 else '14px'), (width,hero_frame)
+                assert hero_frame['style']=='solid' and hero_frame['width']=='1px', (width,hero_frame)
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1'), width
                 core_selectors = ['#dashboardKpis','#dailyHub']
                 boxes = [page.locator(s).bounding_box() for s in core_selectors]
