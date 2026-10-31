@@ -527,10 +527,15 @@ class ReleaseStore:
         restore. A committed generation is accepted only when its exact final
         checksum digest matches the journal and a normal download verifies.
         """
-        if self.repository != "BackstageTalks/tbt-data" or self.tag != "tbt-data-v1":
-            raise ValueError("Recovery requires the canonical CDB release")
-        from cdb_global_writer_lock import verify
-        verify(self.repository, Path(".cdb-global-writer-lock.json"))
+        if self.repository != "BackstageTalks/tbt-data" or self.tag not in {
+            "tbt-data-v1", "tbt-predictions-v1",
+        }:
+            raise ValueError("Recovery requires a supported private production release")
+        if self.tag == "tbt-data-v1":
+            from cdb_global_writer_lock import verify
+            verify(self.repository, Path(".cdb-global-writer-lock.json"))
+        # tbt-predictions-v1 is serialized by the existing workflow's
+        # tbt-production-deploy concurrency group, not the CDB writer lock.
         assets = self._release_asset_inventory()
         groups = {}
         journals = {}
@@ -654,7 +659,7 @@ class ReleaseStore:
 
         guarded = (
             self.repository == "BackstageTalks/tbt-data"
-            and self.tag == "tbt-data-v1"
+            and self.tag in {"tbt-data-v1", "tbt-predictions-v1"}
         )
         remote_assets = self._asset_names() if removals else set()
         if not guarded:
