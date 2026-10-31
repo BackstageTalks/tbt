@@ -33,7 +33,7 @@ def config(url):
     if type(v.get("max_per_section",7)) is not int or not 1<=v.get("max_per_section",7)<=10: raise ValueError("Invalid limit")
     if v.get("layout","combined") not in ("combined","separate"): raise ValueError("Invalid layout")
     if not isinstance(s.get("weekdays",list(range(7))),list) or any(type(n) is not int or n not in range(7) for n in s.get("weekdays",list(range(7)))): raise ValueError("Invalid weekdays")
-    for f in ("enabled","include_started","show_probability","show_odds","free_top_pick"):
+    for f in ("enabled","include_started","show_probability","show_odds","free_top_pick","full_offer"):
         if type(v.get(f,False)) is not bool: raise ValueError("Invalid "+f)
     if type(s.get("enabled",False)) is not bool: raise ValueError("Invalid schedule enabled")
     return v
@@ -173,7 +173,7 @@ def select_groups(x,c,now):
             seen.add(ident);rows.append(r)
             # FREE pick can select among the whole confirmed TOP shortlist,
             # independently of the number of premium tips in the outbound message.
-            if len(rows)>=max(c.get("max_per_section",7),10 if k=="top" else 0):
+            if not c.get("full_offer",True) and len(rows)>=max(c.get("max_per_section",7),10 if k=="top" else 0):
                 break
         if rows:got[k]=rows
     return got
@@ -185,22 +185,42 @@ def messages(x,c,now,free_event_id=None):
     date=now.astimezone(TZ).strftime("%d.%m.%Y")
     footer=branded_footer(c.get("footer"))
     outbound=[]
-    # User-facing order: TOP -> Value -> Aces, without category headings.
-    premium_groups=[(key,rows[:c.get("max_per_section",7)]) for key,rows in got.items()
+    # TOP -> Value -> Aces, in the exact order of the confirmed selection.
+    # The full offer is the default even for previously stored Admin configs
+    # where max_per_section was 7. Limited mode is an explicit opt-out.
+    full=c.get("full_offer",True)
+    limit=c.get("max_per_section",7)
+    premium_groups=[(key,rows if full else rows[:limit]) for key,rows in got.items()
                     if (c.get("sections") or {}).get(key)]
     shown=[row for _,rows in premium_groups for row in rows]
     names=_name_map(shown)
-    def lines(records):
-        return "\n".join(fmt(row,key,c,i,names) for i,(key,row) in enumerate(records,1))
+    def pack(records):
+        """Lossless Telegram 4096-character pages, numbered across all pages."""
+        if not records:return []
+        prefix="\n\n".join((HEADER,f"📅 {date}"))+"\n\n"
+        suffix="\n\n"+footer
+        pages=[];page=[]
+        for key,row,number in records:
+            line=fmt(row,key,c,number,names)
+            candidate="\n".join([*page,line])
+            if len(prefix+candidate+suffix)>4096:
+                if not page:
+                    raise RuntimeError("One confirmed tip exceeds Telegram's message limit")
+                pages.append({"audience":"premium","text":prefix+"\n".join(page)+suffix})
+                page=[line]
+                if len(prefix+line+suffix)>4096:
+                    raise RuntimeError("One confirmed tip exceeds Telegram's message limit")
+            else:
+                page.append(line)
+        if page:pages.append({"audience":"premium","text":prefix+"\n".join(page)+suffix})
+        return pages
     if premium_groups:
         if c.get("layout","combined")=="separate":
-            outbound.extend({"audience":"premium","text":"\n\n".join(
-                [HEADER,f"📅 {date}",lines([(key,row) for row in rows]),footer])}
-                for key,rows in premium_groups)
+            for key,rows in premium_groups:
+                outbound.extend(pack([(key,row,index) for index,row in enumerate(rows,1)]))
         else:
             records=[(key,row) for key,rows in premium_groups for row in rows]
-            outbound.append({"audience":"premium","text":"\n\n".join(
-                [HEADER,f"📅 {date}",lines(records),footer])})
+            outbound.extend(pack([(key,row,index) for index,(key,row) in enumerate(records,1)]))
     if c.get("free_top_pick",True) and got.get("top"):
         # Stable deterministic pseudo-random selection by betting day.
         # A different action run on the same day cannot select another FREE pick.
@@ -272,7 +292,7 @@ def prepare(a):
     for section,rows in groups.items():
         if not (v.get("sections") or {}).get(section):
             continue
-        for row in rows[:v.get("max_per_section",7)]:
+        for row in (rows if v.get("full_offer",True) else rows[:v.get("max_per_section",7)]):
             sent_rows.append(result_reference(row,section))
     free=next((item for item in msg if item.get("audience")=="free"),None)
     if free:
