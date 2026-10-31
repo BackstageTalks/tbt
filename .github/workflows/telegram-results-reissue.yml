@@ -1,0 +1,96 @@
+name: BlinQ one-time verified Telegram results formatting reissue
+# Explicit operator-approved reissue of existing delivered results; no new predictions.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/telegram-results-reissue-tick.json'
+permissions:
+  contents: read
+concurrency:
+  group: blinq-telegram-ledger
+  cancel-in-progress: false
+jobs:
+  reissue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout confirmed private Telegram ledger
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: telegram-bot-state
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: .private-telegram
+          sparse-checkout: ops
+          sparse-checkout-cone-mode: true
+          persist-credentials: true
+      - name: Build one-time reissue from exact archived settlements
+        id: prepare
+        env:
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        run: |
+          set -euo pipefail
+          test -s .private-telegram/ops/telegram-bot-state.json
+          test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          python scripts/telegram_results_reissue.py prepare \
+            --day 2026-10-31 --revision compact-four-lines-v1 \
+            --api-url "$BLINQ_PRODUCTION_URL" \
+            --config-url "$BLINQ_PRODUCTION_URL/api/v1/ui-config"
+          if test -s /tmp/blinq-telegram/ready; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Reserve reissue before Telegram request
+        if: steps.prepare.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          cp /tmp/blinq-telegram/state.json .private-telegram/ops/telegram-bot-state.json
+          git -C .private-telegram config user.name "github-actions[bot]"
+          git -C .private-telegram config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C .private-telegram add ops/telegram-bot-state.json
+          git -C .private-telegram commit -m "Reserve verified Telegram results format reissue [skip ci]"
+          git -C .private-telegram push origin HEAD:telegram-bot-state
+          expected=$(git -C .private-telegram rev-parse HEAD)
+          actual=$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')
+          test "$expected" = "$actual"
+      - name: Send the corrected results once to original Telegram destination
+        if: steps.prepare.outputs.ready == 'true'
+        env:
+          TGB: ${{ secrets.TGB }}
+          TGCH: ${{ secrets.TGCH }}
+        run: |
+          set -euo pipefail
+          python scripts/telegram_offer_publisher.py send
+          test -s /tmp/blinq-telegram/receipt.json
+      - name: Record receipt and independently verify private ledger
+        if: steps.prepare.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          python scripts/telegram_offer_publisher.py mark-sent
+          cp /tmp/blinq-telegram/state.json .private-telegram/ops/telegram-bot-state.json
+          git -C .private-telegram add ops/telegram-bot-state.json
+          git -C .private-telegram commit -m "Confirm Telegram results reissue receipt [skip ci]"
+          git -C .private-telegram push origin HEAD:telegram-bot-state
+          expected=$(git -C .private-telegram rev-parse HEAD)
+          actual=$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')
+          test "$expected" = "$actual"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('.private-telegram/ops/telegram-bot-state.json').read_text())
+          key='results-reissue:2026-10-31:compact-four-lines-v1'
+          x=d.get('reposts',{}).get(key,{})
+          assert x.get('status')=='sent'
+          assert len(x.get('message_ids',[]))==1 and x['message_ids'][0]>0
+          assert x.get('counts')=={'won':5,'lost':2,'void':0,'pending':0}
+          print('Confirmed verified Telegram results reissue message_id='+str(x['message_ids'][0]))
+          PY
