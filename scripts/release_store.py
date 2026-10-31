@@ -536,7 +536,7 @@ class ReleaseStore:
         journals = {}
         for name, asset in assets.items():
             rollback = re.fullmatch(r"blinq-rollback-([0-9a-f]{32})-(.+)", name)
-            journal = re.fullmatch(r"blinq-txn-([0-9a-f]{32})\\.json", name)
+            journal = re.fullmatch(r"blinq-txn-([0-9a-f]{32})\.json", name)
             if rollback:
                 groups.setdefault(rollback.group(1), []).append((rollback.group(2), asset))
             if journal:
