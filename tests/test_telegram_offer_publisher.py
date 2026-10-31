@@ -97,6 +97,14 @@ def test_due_window_and_manual_request():
     assert tg.due(cfg, NOW + timedelta(minutes=91)) is None
 
 
+def test_scheduled_2330_survives_midnight_betting_day():
+    now = datetime(2026, 10, 31, 23, 0, tzinfo=timezone.utc)
+    cfg = settings()
+    cfg["schedule"]["time"] = "23:30"
+    cfg["schedule"]["weekdays"] = [5]  # Saturday Oct 31
+    assert tg.due(cfg, now) == "schedule:2026-10-31"
+
+
 def test_snapshot_checksum_guard(tmp_path, monkeypatch):
     d = tmp_path
     snap = offer()
