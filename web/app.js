@@ -5123,9 +5123,11 @@ function adminActivityRows(){
     if(!state.ui.telegram_bot||typeof state.ui.telegram_bot!=='object')
       state.ui.telegram_bot={enabled:false,sections:{top:true,value:true,aces:true},
         schedule:{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]},layout:'combined',
-        max_per_section:7,include_started:false,show_probability:true,show_odds:true,free_top_pick:true,
+        max_per_section:7,include_started:false,show_probability:true,show_odds:true,free_top_pick:true,results_enabled:false,results_time:'07:00',
         footer:'ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine'};
     const c=state.ui.telegram_bot;
+    if(typeof c.results_enabled!=='boolean')c.results_enabled=false;
+    c.results_time=c.results_time||'07:00';
     c.sections=c.sections||{top:true,value:true,aces:true};
     c.schedule=c.schedule||{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]};
     return c;
@@ -5151,6 +5153,11 @@ function adminActivityRows(){
           <label>Čas (Europe/Bratislava) <input type="time" data-tg-bot-field="schedule.time" value="${escapeHtml(s.time||'08:15')}"></label>
           <span class="tg-bot-caption">Dni odosielania</span><div class="tg-bot-days">${days}</div>
           ${check('include_started',c.include_started===true,'Zahrnúť aj začaté zápasy')}
+          <div class="tg-bot-results-settings"><h3>Ranné vyhodnotenie</h3>
+            ${check('results_enabled',c.results_enabled===true,'Odosielať výsledky predchádzajúceho betting day')}
+            <label>Čas reportu (Europe/Bratislava) <input type="time" data-tg-bot-field="results_time" value="${escapeHtml(c.results_time||'07:00')}" min="06:00"></label>
+            <small>Bez prepočtu predikcií: iba overené Results z archívu, maximálne 1 report za deň. Externý cron pošli na telegram-results-tick.</small>
+          </div>
         </div>
         <div class="tg-bot-card"><h3>Ako posielať</h3>
           <label>Formát správ <select data-tg-bot-field="layout"><option value="combined" ${c.layout!=='separate'?'selected':''}>Spoločná správa</option><option value="separate" ${c.layout==='separate'?'selected':''}>Každá kategória samostatne</option></select></label>
