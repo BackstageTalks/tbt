@@ -5098,8 +5098,8 @@ function adminActivityRows(){
     if(!state.ui.telegram_bot||typeof state.ui.telegram_bot!=='object')
       state.ui.telegram_bot={enabled:false,sections:{top:true,value:true,aces:true},
         schedule:{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]},layout:'combined',
-        max_per_section:7,include_started:false,show_probability:true,show_odds:true,
-        footer:'BlinQ · Tennis Intelligence'};
+        max_per_section:7,include_started:false,show_probability:true,show_odds:true,free_top_pick:true,
+        footer:'ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine'};
     const c=state.ui.telegram_bot;
     c.sections=c.sections||{top:true,value:true,aces:true};
     c.schedule=c.schedule||{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]};
@@ -5118,6 +5118,7 @@ function adminActivityRows(){
           ${check('sections.top',c.sections.top===true,'🏆 TOP')}
           ${check('sections.value',c.sections.value===true,'💎 Value')}
           ${check('sections.aces',c.sections.aces===true,'🎯 Esá')}
+          ${check('free_top_pick',c.free_top_pick!==false,'🆓 Jeden náhodný tip z TOP (FREE)')}
           <label>Maximum tipov na kategóriu <input type="number" min="1" max="10" data-tg-bot-field="max_per_section" value="${Number(c.max_per_section)||7}"></label>
         </div>
         <div class="tg-bot-card"><h3>Kedy posielať</h3>
@@ -5130,7 +5131,7 @@ function adminActivityRows(){
           <label>Formát správ <select data-tg-bot-field="layout"><option value="combined" ${c.layout!=='separate'?'selected':''}>Spoločná správa</option><option value="separate" ${c.layout==='separate'?'selected':''}>Každá kategória samostatne</option></select></label>
           ${check('show_probability',c.show_probability!==false,'Zobraziť pravdepodobnosť')}
           ${check('show_odds',c.show_odds!==false,'Zobraziť dostupné kurzy')}
-          <label>Pätička <input type="text" maxlength="160" data-tg-bot-field="footer" value="${escapeHtml(c.footer||'BlinQ · Tennis Intelligence')}"></label>
+          <label>Záverečný text <textarea rows="2" maxlength="200" data-tg-bot-field="footer">${escapeHtml(c.footer||'ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine')}</textarea></label>
         </div>
       </div>
       <div class="tg-bot-actions"><button class="btn btn-primary" type="button" data-admin-action="tg-bot-queue" ${state.uiStorageAvailable===true?'':'disabled'}>Zaradiť jednorazové odoslanie</button><small>Uloží aktuálne nastavenia a požiadavku. Nie je to potvrdenie doručenia; výsledok bude v GitHub Actions → BlinQ Telegram offer. Požiadavka sa neodošle dvakrát.</small></div>
@@ -6018,6 +6019,7 @@ function adminActivityRows(){
         // Do not derive restricted historical metrics from the browser's feed.
         await loadFeed(false).catch(()=>showStatus('Nastavenia uložené. Obnov stránku, ak sa nové KPI ešte nenačítali.'));
       }
+      return true;
     }catch(error){
       const message=error?.status===503?'Admin storage nie je dostupný. Skontroluj Admin → Systém.':(error?.message||'Nastavenie sa nepodarilo publikovať.');
       showStatus(message);
