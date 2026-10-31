@@ -8,7 +8,9 @@ from tbt.services.entitlements import _daily_rows
 TZ=ZoneInfo("Europe/Bratislava")
 SECTIONS={"top":"top_daily_picks","value":"value_picks","aces":"ace_picks"}
 LABELS={"top":"🏆 TOP","value":"💎 VALUE","aces":"🎯 ACES"}
-OFFER_ICONS={"top":"🏆 TOP","value":"💎 VALUE","aces":"🎯 ACES"}
+# Native Telegram FREE button (🆓) has no TOP/VALUE/ACES Unicode equivalents.
+# Keep compact, client-independent ASCII labels instead of simulated custom emoji.
+OFFER_ICONS={"top":"T","value":"V","aces":"A"}
 def load(p): return json.loads(Path(p).read_text(encoding="utf-8"))
 def save(p,x):
     p=Path(p);p.parent.mkdir(parents=True,exist_ok=True)
