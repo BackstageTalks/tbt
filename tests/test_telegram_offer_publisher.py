@@ -61,7 +61,7 @@ def test_telegram_omits_ev_everywhere_including_value_and_full_daily_message():
     combined=tg.messages(offer(),cfg,NOW)
     assert len(combined)==2
     assert all("EV" not in message["text"] for message in combined)
-    assert "6️⃣ Value" in combined[0]["text"]
+    assert "💎 Value" in combined[0]["text"]
 
 
 def test_aces_prediction_contracts_and_mobile_compaction():
@@ -122,7 +122,7 @@ def test_daily_queue_is_durable_idempotent_and_full_offer_override(tmp_path, mon
     msgs=tg.load(out/"messages.json")
     assert [x["audience"] for x in msgs]==["premium","free"]
     premium=msgs[0]["text"]
-    assert premium.index("1️⃣ Surname1")<premium.index("6️⃣ Value")<premium.index("7️⃣ Server")
+    assert premium.index("🏆 Surname1")<premium.index("💎 Value")<premium.index("🎯 Server")
     assert "🆓" in msgs[1]["text"]
     result=tg.load(out/"state.json")
     assert result["attempts"][ident]["status"]=="reserved"
@@ -217,16 +217,19 @@ def test_classic_format_and_deterministic_free_pick():
     assert [x["audience"] for x in first] == ["premium", "free"]
     assert first[0]["text"].startswith("🎾 BlinQ | Tennis Intelligence")
     assert "Data Betting" not in first[0]["text"]
-    assert "1️⃣ Surname1 | " in first[0]["text"]
+    assert "🏆 Surname1 | " in first[0]["text"]
     assert " | " in first[0]["text"]
     assert "🎾 TOP Picks | BlinQ" not in first[0]["text"]
     assert "💎 VALUE Picks | BlinQ" not in first[0]["text"]
     assert "🎯 ESÁ | BlinQ" not in first[0]["text"]
     premium = first[0]["text"]
-    assert premium.index("1️⃣ Surname1") < premium.index("5️⃣ Surname5")
-    assert premium.index("5️⃣ Surname5") < premium.index("6️⃣ Value")
-    assert premium.index("6️⃣ Value") < premium.index("7️⃣ Server")
+    assert premium.index("🏆 Surname1") < premium.index("🏆 Surname5")
+    assert premium.index("🏆 Surname5") < premium.index("💎 Value")
+    assert premium.index("💎 Value") < premium.index("🎯 Server")
     assert premium.count("📅") == 1
+    assert all(prefix in premium for prefix in ("🏆 Surname1","💎 Value","🎯 Server"))
+    assert not any(number in premium for number in tg.NUMBER_EMOJIS)
+    assert "EV" not in premium
     assert "🆓 Surname" in first[1]["text"]
     assert first[1]["text"].count("🆓") == 1
     assert "najviac es" in first[0]["text"]
@@ -330,7 +333,7 @@ def test_compact_separate_mode_order_without_category_headings():
     assert len(out) == 3
     for message,pick in zip(out,("Surname1","Value","Server")):
         assert message["audience"] == "premium"
-        assert "1️⃣ " + pick in message["text"]
+        assert {"Surname1":"🏆", "Value":"💎", "Server":"🎯"}[pick]+" "+pick in message["text"]
         assert "🎾 TOP Picks" not in message["text"]
         assert "💎 VALUE Picks" not in message["text"]
         assert "🎯 ESÁ" not in message["text"]
