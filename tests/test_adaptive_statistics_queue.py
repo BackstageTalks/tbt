@@ -216,7 +216,9 @@ def test_audit_empty_provider_cohort_is_throttled_but_revisited():
     assert report["low_yield_baseline_samples"] > 0
     assert report["baseline_choices"] >= 90
     assert len(seen) == len(set(seen))
-    assert 4 <= sum(x.startswith("empty-") for x in seen[200:360]) < 32
+    # Revisit zero-yield cohorts, but do not require paid misses at the old frequency.
+    assert 2 <= sum(x.startswith("empty-") for x in seen[200:360]) < 32
+    assert q.LOW_YIELD_SAMPLE_EVERY == 12
 
 
 def test_low_yield_probe_recovers_when_provider_starts_returning_values():
