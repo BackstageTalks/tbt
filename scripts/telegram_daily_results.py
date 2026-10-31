@@ -238,15 +238,16 @@ def combined_daily_report(rows, archive_rows, day_text, footer):
         full=str(row.get("name") or "—").strip()
         short=full.split()[-1] if full.split() else "—"
         name=full if len(names[short.casefold()])>1 else short
-        time=tg.stamp(row["scheduled_at"]).astimezone(tg.TZ).strftime("%H:%M")
         odds=tg.num(row.get("odds"))
         odds_text=f"{odds:.2f}" if odds is not None and odds>1 else "—"
         result_text=(f"{outcome['units']:+.2f}u" if outcome["units"] is not None else
-                     "+0.00u" if status=="void" else
-                     "Pending" if status=="pending" else "—")
-        index_text=tg.NUMBER_EMOJIS[index-1] if index<=len(tg.NUMBER_EMOJIS) else f"{index}."
-        icon={"won":"✅","lost":"❌","void":"➖","pending":"⏳"}[status]
-        lines.append(f"{index_text} {icon} {name} | {time} | {odds_text} | {result_text}")
+                     "+0.00u" if status=="void" else "—")
+        # Match the issued offer: uniform monochrome square for the category.
+        # Keep W/L at the end; a purple marker denotes confirmed VOID, while
+        # hourglass is reserved for unresolved / postponed, never a loss.
+        category=tg.OFFER_ICONS[section]
+        outcome_icon={"won":"✅","lost":"❌","void":"🟪 VOID","pending":"⏳"}[status]
+        lines.append(f"{category} {name} | {odds_text} | {result_text} {outcome_icon}")
 
     total={status:sum(stats[s][status] for s in categories) for status in ("won","lost","void","pending")}
     total_profit=sum(stats[s]["units"] for s in categories)
@@ -267,7 +268,7 @@ def combined_daily_report(rows, archive_rows, day_text, footer):
         "📊 Denný súhrn",
         *summaries,
         (f"✅ WIN {total['won']} | ❌ LOSS {total['lost']} | "
-         f"➖ VOID {total['void']} | ⏳ PENDING {total['pending']}"),
+         f"🟪 VOID {total['void']} | ⏳ PENDING {total['pending']}"),
         f"🎯 Úspešnosť {win} | 💰 Zisk {total_profit:+.2f}u | 📈 ROI {roi}",
     ]
     if total["pending"]:
