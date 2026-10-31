@@ -79,7 +79,7 @@ def test_aces_prediction_contracts_and_mobile_compaction():
     priced=tg.fmt(superiority,"aces",cfg,index=6)
     assert "najviac es | 2.00" in priced
     assert "72.0%" not in priced  # the optional confidence was dropped to fit mobile
-    assert len(priced)<=44
+    assert len(priced)<=48  # category label adds text; confidence is removed first
 
     over=dict(count,price_contract="player_total_ou",price_status="priced_projection",
               market_line=8.5,ou_side="over",model_probability=0.65,odds=1.9)
