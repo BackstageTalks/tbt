@@ -5123,10 +5123,11 @@ function adminActivityRows(){
     if(!state.ui.telegram_bot||typeof state.ui.telegram_bot!=='object')
       state.ui.telegram_bot={enabled:false,sections:{top:true,value:true,aces:true},
         schedule:{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]},layout:'combined',
-        max_per_section:7,include_started:false,show_probability:true,show_odds:true,free_top_pick:true,results_enabled:false,
+        max_per_section:7,full_offer:true,include_started:false,show_probability:true,show_odds:true,free_top_pick:true,results_enabled:false,
         footer:'ℹ️ Analytical preview only'};
     const c=state.ui.telegram_bot;
     if(typeof c.footer==='string'&&c.footer.includes('BackstageTalks Data Engine'))c.footer=c.footer.replace(/\n?🧠 by BackstageTalks Data Engine/g,'').trim()||'ℹ️ Analytical preview only';
+    if(typeof c.full_offer!=='boolean')c.full_offer=true;
     c.sections=c.sections||{top:true,value:true,aces:true};
     c.schedule=c.schedule||{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]};
     return c;
@@ -5145,7 +5146,9 @@ function adminActivityRows(){
           ${check('sections.value',c.sections.value===true,'💎 Value')}
           ${check('sections.aces',c.sections.aces===true,'🎯 Aces')}
           ${check('free_top_pick',c.free_top_pick!==false,'🆓 Jeden náhodný tip z TOP (FREE)')}
-          <label>Maximum tipov na kategóriu <input type="number" min="1" max="10" data-tg-bot-field="max_per_section" value="${Number(c.max_per_section)||7}"></label>
+          ${check('full_offer',c.full_offer!==false,'Celá publikovaná ponuka (bez počtového limitu)')}
+          ${c.full_offer===false?`<label>Limit na kategóriu <input type="number" min="1" max="10" data-tg-bot-field="max_per_section" value="${Number(c.max_per_section)||7}"></label>`:''}
+          <small>Ak je ponuka dlhšia, bot ju automaticky rozdelí na správy do 4096 znakov, bez straty tipov.</small>
         </div>
         <div class="tg-bot-card"><h3>Kedy posielať</h3>
           ${check('schedule.enabled',s.enabled===true,'Automatické denné odosielanie')}
@@ -6692,6 +6695,7 @@ by BlinQ Stat Engine</pre><small>Ilustračné tipy. BlinQ Stat Engine bude v Tel
         if(field.startsWith('sections.'))cfg.sections[field.slice(9)]=value;
         else if(field.startsWith('schedule.'))cfg.schedule[field.slice(9)]=value;
         else cfg[field]=value;
+        if(field==='full_offer'){renderAdmin();}
         showStatus('Telegram nastavenie je v koncepte. Klikni Publikovať.');return;
       }
       if(t.dataset.adminTestCheck){const chosen=new Set(state.adminTestSelected||[]);if(t.checked)chosen.add(t.dataset.adminTestCheck);else chosen.delete(t.dataset.adminTestCheck);state.adminTestSelected=[...chosen];rerenderAdmin();return;}
