@@ -90,7 +90,7 @@ def main():
                     "style:getComputedStyle(e).borderTopStyle, "
                     "width:getComputedStyle(e).borderTopWidth})"
                 )
-                assert hero_frame['radius']==('11px' if width<=600 else '14px'), (width,hero_frame)
+                assert hero_frame['radius']==('11px' if width<=600 else '16px'), (width,hero_frame)
                 assert hero_frame['style']=='solid' and hero_frame['width']=='1px', (width,hero_frame)
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1'), width
                 core_selectors = ['#dashboardKpis','#dailyHub']
