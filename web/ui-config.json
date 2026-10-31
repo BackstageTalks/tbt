@@ -11,7 +11,7 @@
     "show_odds": true,
     "free_top_pick": true,
     "results_enabled": false,
-    "footer": "ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine"
+    "footer": "ℹ️ Analytical preview only"
   },
   "plans": {
     "trial": {

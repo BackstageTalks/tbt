@@ -140,7 +140,7 @@ def report_rows(rows, archive_rows, category, day_text, footer):
     icons={"won":"✅","lost":"❌","void":"➖","pending":"⏳"}
     counts={name:0 for name in icons}
     units=0.0; priced=0
-    labels={"top":"TOP","value":"VALUE","aces":"ESÁ","free":"FREE"}
+    labels={"top":"TOP","value":"VALUE","aces":"ACES","free":"FREE"}
     ordered=[r for r in rows if r.get("channel")==category]
     if not ordered:
         return None
@@ -199,7 +199,7 @@ def prepare(args):
         print(json.dumps({"status":"skipped","reason":"no_confirmed_sent_offers"}))
         return
     verified=archive(args.api_url,target_day)
-    footer=str(cfg.get("footer") or tg.FOOTER)
+    footer=tg.branded_footer(cfg.get("footer"))
     posts=[report_rows(sent,verified,category,target_day,footer)
            for category in ("top","value","aces","free")]
     posts=[post for post in posts if post]
