@@ -1,5 +1,7 @@
 # BlinQ Telegram publisher — Admin and GitHub Actions
 
+> **Schválený produkčný cron 06:20:** [presné nastavenia, dispatch JSON, čakanie na dátové workflow a read-back](BLINQ_TELEGRAM_0620_CRON.md). Tento cron nevychádza z Admin plánovania nižšie: používa samostatný trvalý queue job. Aktiváciu externého cronu robí operátor.
+
 ## Use
 
 Admin -> **Telegram bot** is independent of the existing **Telegram skupiny** page. On that page set:
