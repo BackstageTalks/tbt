@@ -157,7 +157,7 @@ def fmt(r,k,c,index=1,name_map=None,prefix_override=None):
         # O/U line and not the combined projection for both competitors.
         projection=num(r.get("projection"))
         if projection is not None and math.isfinite(projection) and projection>=0:
-            values.append(f"proj. {projection:.1f} es")
+            values.append(f"≈{projection:.1f} es")
     else:
         prob=num(bet.get("blinq_probability") or bet.get("model_probability") or r.get("blinq_probability") or r.get("probability"))
         values=[f"{(prob*100 if abs(prob)<=1 else prob):.1f}%" if prob is not None else "—"] if c.get("show_probability",True) else []
