@@ -1,8 +1,9 @@
 """Results must never expose a category disabled for the authenticated tier."""
 
 import pytest
+from copy import deepcopy
 
-from tbt.services.entitlements import filter_feed_for_access
+from tbt.services.entitlements import filter_feed_for_access, filter_results_for_categories
 
 
 def _published(section, market="match_winner"):
@@ -163,3 +164,22 @@ def test_results_route_lock_overrides_market_entitlements():
     data, ent = _read("elite", cfg)
     assert ent["result_categories"] == []
     assert data["results"] == []
+
+
+def test_second_pass_removes_unentitled_publication_from_runtime_mixed_market_row():
+    # An authorized daily row may embed a projection-market publication. Runtime
+    # settlement must not reintroduce it into the member's historical results.
+    overlay = _payload()["results"]
+    original = deepcopy(overlay)
+    kept = filter_results_for_categories(overlay, {"top_daily", "ace"})
+    assert set(_returned({"results": kept})) == {"top_daily", "aces"}
+    assert overlay == original
+    assert filter_results_for_categories(overlay, set()) == []
+
+
+def test_feed_route_rechecks_after_status_overlay_before_response():
+    from pathlib import Path
+    app = (Path(__file__).resolve().parents[1] / "api/function_app.py").read_text(encoding="utf-8")
+    assert 'data["results"] = runtime_settled_results(data, data["match_statuses"])' in app
+    assert 'data["results"] = filter_results_for_categories(' in app
+    assert 'entitlements.get("result_categories") or []' in app
