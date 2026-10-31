@@ -104,3 +104,12 @@ The Telegram PR never modifies CDB, the existing verified-results archive, provi
 ### Security isolation of Telegram state
 
 The application repository `BackstageTalks/tbt` is **public**. Never commit issued paid picks, recipient IDs, price data or Telegram message receipts to any public branch of this repo. Both Telegram workflows check out the **private** `BackstageTalks/tbt-data` branch `telegram-bot-state` with sparse `ops/` checkout. The existing `TBT_DATA_GH_TOKEN` must be allowed to read that private repository and push to this isolated branch; if it cannot push, the workflow fails **before sending**. No CDB branch, asset or release is written by either workflow.
+
+## Complete daily offer and combined daily Results
+
+- Admin **Celá publikovaná ponuka** (default ON) sends all eligible confirmed TOP → Value → Aces picks instead of the previous limit of 7 per category. Switching it OFF restores the optional per-category limit (1–10). The existing include-started setting remains effective. Longer Telegram posts are split into lossless ordered pages.
+- Daily Results at around 07:00 Europe/Bratislava use the previous completed 06:00–06:00 betting day. Premium sections are consolidated into one Results report (or automatically paginated), FREE remains separately addressed.
+- The tbt-pro TG_SENT_SNAPSHOT_V12 and TG_RESULTS_COMPLETENESS_V11 principle is retained: only exact, Telegram-receipt-confirmed sent rows are expected; verified settled Results are paired by immutable identity and absent outcomes stay PENDING.
+- WIN, LOSS, VOID percentages each use all settled outcomes as denominator (WIN + LOSS + VOID). **Hit rate = WIN / (WIN + LOSS)**, excluding VOID/PENDING.
+- **Profit units** = sum of settled priced 1u picks (WIN: odds − 1; LOSS: −1; VOID: 0), **daily ROI** = profit / number of settled priced 1u picks × 100. Projection-only Aces may have an outcome but no invented money performance.
+- No new tennis API calls, CDB updates, model recalculation, or settlement writes. The publisher writes only its separate Telegram delivery ledger.
