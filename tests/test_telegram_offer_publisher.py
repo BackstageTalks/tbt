@@ -467,6 +467,20 @@ def test_aces_odds_never_fall_back_to_match_winner_or_unpriced_quote():
     assert tg.fmt(card,"aces",cfg).endswith(" | 1.87")
     assert tg.result_reference(card,"aces")["odds"] == 1.87
 
+    # A winner betting payload can point at the opposing player; the ACES
+    # market's own selected player must own the name, publication and receipt.
+    card["selection_id"]="p2"
+    card["player2"]={"id":"p2","name":"Carlos Alcaraz"}
+    card["market_publications"]=[{
+        "section":"ace","market":"aces","selection_id":"p2",
+        "price_contract":"player_total_ou","ou_side":"under",
+        "market_line":19.5,"price_status":"priced_projection",
+        "odds":1.87,"publication_key":"ace:p2:under:19.5",
+    }]
+    assert "Alcaraz" in tg.fmt(card,"aces",cfg)
+    assert tg.result_reference(card,"aces")["selection_id"]=="p2"
+    assert tg.result_reference(card,"aces")["publication_key"]=="ace:p2:under:19.5"
+
 
 def test_aces_quote_and_receipt_require_exact_issued_line_and_price():
     cfg=settings()
