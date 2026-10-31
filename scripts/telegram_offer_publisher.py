@@ -1,5 +1,5 @@
 """Read confirmed BlinQ offer and publish through Telegram without paid APIs."""
-import argparse, hashlib, json, os, re, subprocess, sys, urllib.parse, urllib.request
+import argparse, hashlib, json, math, os, re, subprocess, sys, urllib.parse, urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -153,6 +153,11 @@ def fmt(r,k,c,index=1,name_map=None,prefix_override=None):
             confidence=num(r.get("projection_confidence"))
         if confidence is not None:
             values.append(f"{(confidence*100 if abs(confidence)<=1 else confidence):.1f}%")
+        # This is the selected player's expected ace count, not the bookmaker
+        # O/U line and not the combined projection for both competitors.
+        projection=num(r.get("projection"))
+        if projection is not None and math.isfinite(projection) and projection>=0:
+            values.append(f"proj. {projection:.1f} es")
     else:
         prob=num(bet.get("blinq_probability") or bet.get("model_probability") or r.get("blinq_probability") or r.get("probability"))
         values=[f"{(prob*100 if abs(prob)<=1 else prob):.1f}%" if prob is not None else "—"] if c.get("show_probability",True) else []
