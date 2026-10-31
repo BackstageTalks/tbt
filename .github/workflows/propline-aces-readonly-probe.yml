@@ -1,0 +1,43 @@
+name: "BlinQ read-only PropLine ACES real odds probe"
+
+on:
+  push:
+    branches:
+      - audit/propline-aces-50calls-20261101
+    paths:
+      - scripts/propline_aces_quote_probe.py
+      - .github/workflows/propline-aces-readonly-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: propline-aces-readonly-20261101
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/audit/propline-aces-50calls-20261101'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PROPL: ${{ secrets.PROPL }}
+      PYTHONPATH: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prove parser isolation and correct odds/line contracts offline
+        run: python scripts/propline_aces_quote_probe.py --self-test
+      - name: Probe real ACES bookmaker odds with 12-call hard limit
+        run: python scripts/propline_aces_quote_probe.py --live --max-calls 12 --event-fallback 8
+      - name: Save read-only provider evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: propline-aces-readonly-${{ github.run_id }}
+          path: propline_aces_live_probe.json
+          if-no-files-found: warn
+          retention-days: 7
