@@ -15,6 +15,7 @@ EXPECTED = {
     'copy': 'rgb(236, 243, 239)',
     'mint': 'rgb(101, 205, 164)',
     'inset': 'rgb(27, 42, 41)',
+    'clear': 'rgba(0, 0, 0, 0)',
 }
 
 VALUES = """() => {
@@ -22,13 +23,15 @@ VALUES = """() => {
     const node = document.querySelector(selector);
     if (!node) throw Error('Missing element: '+selector);
     const css = getComputedStyle(node);
-    return {bg: css.backgroundColor, border: css.borderTopColor, color: css.color, shadow: css.boxShadow};
+    return {bg: css.backgroundColor, border: css.borderTopColor, color: css.color, shadow: css.boxShadow, topWidth: css.borderTopWidth, leftWidth: css.borderLeftWidth};
   };
   return {
     card: get('#dailyHubBody tr'),
     pick: get('#dailyHubBody .hub-pick-stack strong'),
     confidence: get('#dailyHubBody .hub-confidence strong'),
     detail: get('#dailyHubBody .hub-detail:not(.is-locked)'),
+    pickSurface: get('#dailyHubBody .hub-pick'),
+    confidenceSurface: get('#dailyHubBody .hub-confidence-cell'),
     projection: get('#dailyHubBody tr td:nth-child(7)'),
   };
 }"""
@@ -55,8 +58,16 @@ def test_graphite():
                         assert values['pick']['color'] == EXPECTED['copy'], (width, market, values)
                         assert values['confidence']['color'] == EXPECTED['mint'], (width, market, values)
                         assert values['detail']['bg'] == EXPECTED['inset'], (width, market, values)
+                        assert values['pickSurface']['bg'] == EXPECTED['clear'], (width, market, values)
+                        assert values['pickSurface']['topWidth'] == '1px', (width, market, values)
+                        if market == 'daily':
+                            assert values['confidenceSurface']['leftWidth'] == '0px', (width, market, values)
+                            assert values['confidenceSurface']['topWidth'] == '1px', (width, market, values)
+                        else:
+                            assert values['confidenceSurface']['leftWidth'] == '1px', (width, market, values)
                         if market == 'double_faults':
-                            assert values['projection']['bg'] == EXPECTED['inset'], (width, market, values)
+                            assert values['projection']['bg'] == EXPECTED['clear'], (width, market, values)
+                            assert values['projection']['topWidth'] == '1px', (width, market, values)
                         if width == 390:
                             output.mkdir(parents=True, exist_ok=True)
                             page.locator('#dailyHub').screenshot(
@@ -68,7 +79,7 @@ def test_graphite():
                 context.close()
         finally:
             browser.close()
-    print('Premium Graphite Chromium colors: 320/390/600px PASS; tablet unchanged; screenshots saved')
+    print('Premium Graphite v2 Chromium colors and single-sheet geometry: 320/390/600px PASS; tablet unchanged; screenshots saved')
 
 
 if __name__ == '__main__':
