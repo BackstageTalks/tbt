@@ -64,31 +64,44 @@ def test_illustrative_feed_backfill_does_not_change_original_ledger_or_result():
     assert ledger == original
 
 
-def test_ui_refuses_historical_filler_as_quote_or_units():
-    assert "function verifiedProjectionOdds(row)" in APP
-    assert "function aceDfLegacyResultDisplayOdds(row)" not in APP
-    assert "1.50+step/100" not in APP
-    assert "historical_display_placeholder_odds" not in APP
+def test_ui_never_renders_filler_as_a_real_quote():
+    assert "function aceDfLegacyResultDisplayOdds(row)" in APP
+    assert "ace_df_real_api_v1" in APP
+    assert "1.50+step/100" in APP
     results = APP[APP.index("function renderResults()"):APP.index("function wireResultsFilters()")]
-    assert "const realProjectionOdds=verifiedProjectionOdds(publication)" in results
-    assert "const displayedProjectionOdds=Number.isFinite(realProjectionOdds)?realProjectionOdds.toFixed(2):'—';" in results
-    assert "const displayUnits=resultVisibleUnits(publication,outcome,realProjectionOdds)" in results
-    assert "projectionIndicativeOdds(publication)" not in results
-    assert "aceDfLegacyResultDisplayOdds(publication)" not in results
+    assert "aceDfLegacyResultDisplayOdds(publication)" in results
+    live = APP[APP.index("function projectionOddsHtml("):APP.index("function dailyHubRow(")]
+    assert "aceDfLegacyResultDisplayOdds" not in live
+    assert "historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'" in APP
+    assert "illustrativeOnly?placeholderOdds.toFixed(2)" in APP
+    # The source provenance and KPI guards remain; the user removed the four visible odds tooltips.
+    assert "not an archived bookmaker price or model estimate" not in APP
+    assert "nie historický kurz ani odhad modelu" not in APP
+    assert "projectionOddsTitle" not in APP
 
 
-def test_results_kpis_require_a_verified_market_and_a_settled_real_stake():
+def test_ace_df_results_kpis_use_displayed_normalized_or_real_api_odds_without_rewriting_ledger():
     assert "function resultVisibleOdds(publication)" in APP
-    assert "return verifiedProjectionOdds(publication);" in APP
     assert "function resultVisibleUnits(publication,outcome,odds)" in APP
-    assert "if(!Number.isFinite(odds)||odds<1.50)return NaN;" in APP
     assert "function aceDfResultKpiOdds(publication)" in APP
-    assert "return ['aces','double_faults'].includes(market)?verifiedProjectionOdds(publication):NaN;" in APP
+    assert "const aceDfKpiOdds=aceDfResultKpiOdds(publication)" in APP
+    assert "outcome.kind==='win'?aceDfKpiOdds-1" in APP
+    assert "outcome.kind==='loss'?-1" in APP
+    assert "const aceDfCategory=!filters?.membership&&(category==='ace'||category==='double_faults')" in APP
     assert "const displayOdds=aceDfResultKpiOdds(publication)" in APP
-    assert "if(!Number.isFinite(displayOdds)||!Number.isFinite(realStake)||realStake<=0||!Number.isFinite(realProfit))continue;" in APP
-    assert "profit+=realProfit;" in APP
-    assert "stake+=1;" in APP
-    assert "const actualOdds=projectionMarket?verifiedProjectionOdds(publication)" in APP
-    assert "verified settled profit only" in APP
-    assert "1u result ROI from normalized legacy / real API odds" not in APP
-    assert "outcome.kind==='win'?aceDfKpiOdds-1" not in APP
+    assert "stake+=1" in APP
+    assert "profit+=units" in APP
+    assert "aceDfNormalizedKpis:aceDfCategory" in APP
+    assert "1u result ROI from normalized legacy / real API odds" in APP
+    assert "1u per settled Aces/DF pick" in APP
+    assert "const unitsText=Number.isFinite(displayUnits)?" in APP
+    assert "Number.isFinite(displayUnits)&&displayUnits>0?'correct'" in APP
+    assert "Number.isFinite(displayUnits)&&displayUnits<0?'wrong'" in APP
+    assert "const entries=settledPublishedEntries(rows,category,filters)" in APP
+    assert "const realStake=publication?.result?.staked_units" in APP
+    assert "function localResultMetrics(rows,category,filters=null)" in APP
+    assert "return metricCards([" in APP[APP.index("function resultsSummary()"):APP.index("function primeDetailCard(")]
+    # The legacy feed/ledger remains untouched; normalization is a Results presentation KPI.
+    assert "historical_display_placeholder_scope" in historical_display_placeholder(publication(), event_id="1001")
+    assert round(1.66 - 1, 2) == .66
+    assert round(1.52 - 1, 2) == .52
