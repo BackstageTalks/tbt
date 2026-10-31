@@ -217,12 +217,12 @@ def test_full_offer_over_seven_and_long_telegram_messages_are_lossless():
     assert len(posts) >= 2
     premium = "\n".join(item["text"] for item in posts)
     assert "1️⃣ Surname1" in premium
-    assert "110. Surname110" in premium
-    assert "111. Value" in premium
-    assert "112. Server" in premium
+    assert "109. Surname110" in premium
+    assert "110. Value" in premium
+    assert "111. Server" in premium
     assert "TOP Picks |" not in premium
     assert all(len(item["text"].encode("utf-16-le")) // 2 <= 4096 for item in posts)
-    assert len(tg.select_groups(sample, cfg, NOW)["top"]) == 110
+    assert len(tg.select_groups(sample, cfg, NOW)["top"]) == 109  # Value event 42 takes precedence over TOP
     # Explicit limited mode still supports the old Admin selection.
     limited = settings(free_top_pick=False, full_offer=False, max_per_section=7)
     text = "\n".join(item["text"] for item in tg.messages(sample, limited, NOW))
