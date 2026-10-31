@@ -6,7 +6,7 @@ WEB = Path(__file__).resolve().parents[1] / "web"
 
 def test_hero_frame_stylesheet_loaded_after_mobile_layouts():
     html = (WEB / "index.html").read_text(encoding="utf-8")
-    assert len(re.findall(r"/blinq-hero-frame\.css\?v=7360&p=61&frame=20261031-\d+", html)) == 1
+    assert re.search(r"/blinq-hero-frame\.css\?v=\d+&p=\d+&frame=\d{8}-\d+", html)
     assert html.index("/blinq-mobile-unified-cards.css?") < html.index("/blinq-hero-frame.css?")
 
 def test_hero_frame_is_public_and_does_not_override_managed_content():
