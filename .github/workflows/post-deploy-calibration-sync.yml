@@ -1,0 +1,48 @@
+name: Verify calibration after deploying its backend
+
+on:
+  workflow_run:
+    workflows: ["Test and deploy"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: model-calibration-postdeploy
+  cancel-in-progress: false
+
+jobs:
+  dispatch-after-deploy:
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch private calibration re-read only after exact live release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOYED_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')"
+          if [[ "$latest" != "$DEPLOYED_SHA" ]]; then
+            echo 'CALIBRATION_POSTDEPLOY_STALE_WORKFLOW_IGNORED'
+            exit 0
+          fi
+          # Avoid an expensive CDB scan after unrelated web-only deployments.
+          changed="$(gh api "repos/$GITHUB_REPOSITORY/commits/$DEPLOYED_SHA" --jq '.files[].filename')"
+          if ! grep -Eq '^(api/function_app\.py|api/tbt/services/(admin_storage|model_calibration_status)\.py|scripts/publish_model_calibration_status\.py|\.github/workflows/(model-calibration-monitor|post-deploy-calibration-sync)\.yml)$' <<< "$changed"; then
+            echo 'CALIBRATION_POSTDEPLOY_NO_RELEVANT_CHANGES'
+            exit 0
+          fi
+          # The signed private worker will independently verify the CDB, model
+          # pair, immutable release, CAS storage write and authenticated readback.
+          gh workflow run model-calibration-monitor.yml \
+            --repo "$GITHUB_REPOSITORY" --ref main
+          echo 'CALIBRATION_POSTDEPLOY_DISPATCH_SUBMITTED_NOT_YET_VERIFIED'
