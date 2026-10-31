@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/telegram-elite-results-preview-tick.json'
+      - '.github/telegram-elite-results-preview-testchannel-tick.json'
 permissions:
   contents: read
 concurrency:
@@ -29,16 +30,16 @@ jobs:
           sparse-checkout: ops
           sparse-checkout-cone-mode: true
           persist-credentials: true
-      - name: Verify ELITE-only destination and build labelled synthetic preview
+      - name: Verify already-configured isolated TG test channel and build synthetic preview
         shell: bash
         env:
           TGB: ${{ secrets.TGB }}
           TGCH: ${{ secrets.TGCH }}
-          TGCH_ELITE: ${{ secrets.TGCH_ELITE }}
+          TGCH_ELITE: ${{ secrets.TGCH }}  # synthetic preview only; production ELITE workflow still requires TGCH_ELITE
         run: |
           set -euo pipefail
           test -n "$TGB" && test -n "$TGCH" && test -n "$TGCH_ELITE" || {
-            echo "::error::TGB, TGCH, and TGCH_ELITE required; never fall back to non-ELITE channel"
+            echo "::error::TGB and existing TGCH test channel required for this synthetic-only preview"
             exit 1
           }
           python scripts/telegram_elite_results_preview.py
@@ -76,12 +77,12 @@ jobs:
           expected="$(git -C .private-telegram rev-parse HEAD)"
           actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
           test "$expected" = "$actual"
-      - name: Send a single ELITE synthetic results test (never regular/free)
+      - name: Send one synthetic results sample to existing isolated TGCH test channel
         if: steps.reserve.outputs.ready == 'true'
         env:
           TGB: ${{ secrets.TGB }}
           TGCH: ${{ secrets.TGCH }}
-          TGCH_ELITE: ${{ secrets.TGCH_ELITE }}
+          TGCH_ELITE: ${{ secrets.TGCH }}  # synthetic preview only; production ELITE workflow still requires TGCH_ELITE
         run: |
           set -euo pipefail
           python scripts/telegram_offer_publisher.py send
