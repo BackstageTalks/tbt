@@ -55,7 +55,6 @@ def test_results_ui_distinguishes_estimates_from_real_prices():
     assert "function projectionIndicativeOdds(row)" in APP
     assert "function indicativeOddsHint()" not in APP
     assert "displayedProjectionOdds" in APP
-    assert "const realProjectionOdds=verifiedProjectionOdds(publication)" in APP
-    assert "projectionIndicativeOdds(publication)" not in APP[APP.index('function renderResults()'):APP.index('function wireResultsFilters()')]
+    assert "Number.isFinite(estimatedProjectionOdds)?estimatedProjectionOdds.toFixed(2):'—'" in APP
     assert "projectionOddsTitle" not in APP
     assert "projectionUnits=publication?.result?.profit_units" in APP
