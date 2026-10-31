@@ -106,6 +106,14 @@ def prepare(source: Path, output: Path, expected_sha256: str, *, start_year=2016
         source_files = _source_index(db)
         if not source_files:
             raise ValueError("Missing source files")
+        preexisting = db.execute('''SELECT count(*),
+            coalesce(sum(already_present_stat_values),0), coalesce(sum(new_stat_values),0)
+            FROM dil_sackmann_verified_preexisting_links''').fetchone()
+        if (preexisting[0] != int(receipts.get("verified_already_present", -1))
+                or preexisting[2] != 0 or receipts.get("canonical_new_metric_values") != "0"):
+            raise ValueError("Preexisting-only link receipt mismatch or unauthorized new stats")
+        counts["preexisting_verified_links"] = preexisting[0]
+        counts["preexisting_stat_values_reused"] = preexisting[1]
         observed_by_file = Counter()
         seen_origin = set()
         for name, line, tour, year, row_sha, winner, loser, tournament, identity_status, raw_text in db.execute('''
