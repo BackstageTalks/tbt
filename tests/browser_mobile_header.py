@@ -105,10 +105,11 @@ def main():
                             pickSize:pick?getComputedStyle(pick).fontSize:null,
                             oddsColor:odds?getComputedStyle(odds).color:null,
                             confidenceBar:pbar?getComputedStyle(pbar).display:null,
-                            rowBg:row?getComputedStyle(row).backgroundImage:null,navBg,navLine};
+                            rowBg:row?getComputedStyle(row).backgroundImage:null,
+                            rowBgColor:row?getComputedStyle(row).backgroundColor:null,navBg,navLine};
                         }""")
                         assert 'sports-intelligence=20261030-1' in premium['css'], premium
-                        assert premium['rowBg'] and 'rgb(16, 38, 33)' in premium['rowBg'], premium
+                        assert premium['rowBgColor'] == 'rgb(11, 27, 27)', premium
                         assert premium['navBg'] == 'none', premium
                         assert premium['navLine'] == 'rgb(85, 231, 170)', premium
                         assert premium['kpiBg'] and 'rgb(17, 41, 35)' in premium['kpiBg'], premium
@@ -136,14 +137,13 @@ def main():
                           return result;
                         }""")
                         assert grid_fit and all(grid_fit[k] for k in ('pick','odds','confidence','action')),grid_fit
-                        # Premium compact card: players on left, metrics on right,
-                        # odds and Detail stacked vertically on the right.
-                        assert 'match confidence' in grid_fit['areas'],grid_fit
-                        assert 'pick action' in grid_fit['areas'],grid_fit
+                        # Editorial card: full-width players, pick with Detail, unboxed metrics.
+                        assert 'match match' in grid_fit['areas'],grid_fit
+                        assert 'pick action' in grid_fit['areas'] and 'confidence number' in grid_fit['areas'],grid_fit
                         assert grid_fit['pick']['right'] <= grid_fit['action']['left']+2,grid_fit
                         assert grid_fit['odds']['right'] <= 391,grid_fit
-                        assert grid_fit['confidence']['bottom'] <= grid_fit['odds']['top']+2,grid_fit
-                        assert grid_fit['odds']['bottom'] <= grid_fit['action']['top']+2,grid_fit
+                        assert abs(grid_fit['confidence']['top']-grid_fit['odds']['top'])<=2,grid_fit
+                        assert grid_fit['action']['bottom'] <= grid_fit['confidence']['top']+2,grid_fit
                         if os.getenv('BLINQ_SCREENSHOTS'):
                             out = Path(os.environ['BLINQ_SCREENSHOTS'])
                             out.mkdir(parents=True, exist_ok=True)
