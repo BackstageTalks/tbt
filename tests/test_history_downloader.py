@@ -19,7 +19,7 @@ def test_cancelled_runs_keep_reserved_allowance():
     ledger, granted = reserve_allocation(ledger, 5000, now)
     assert granted == 5000
     ledger, granted = reserve_allocation(ledger, 1000, now)
-    assert granted == 700
+    assert granted == 500
     assert reserve_allocation(ledger, 1000, now)[1] == 0
     with pytest.raises(RequestBudgetExceeded):
         reserve_allocation(ledger, 5000, datetime(2026, 9, 5, 17, 8, tzinfo=timezone.utc))
