@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "requested_date": "2026-10-31",
+  "reason": "verify and clean interrupted tbt-predictions-v1 rollback journal",
+  "provider_requests_allowed": 0,
+  "expected_transaction": "9b0b2e1df2a24fcea9714092ccc97891"
+}
