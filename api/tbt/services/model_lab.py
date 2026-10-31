@@ -21,6 +21,7 @@ from .model_training import APP, DATA, TrainingBlocked, TrainingUnavailable, git
 PARTITION = "model-lab-queue"
 WORKFLOWS = {
     "prepare_inputs": "model-factory-preflight.yml",
+    "refresh_champion_inputs": "data.yml",
     "import_drive": "cdb-drive-inbox.yml",
     "refresh_tests": "model-calibration-monitor.yml",
     "audit_shadow": "model-shadow-evaluation-readonly.yml",
@@ -91,6 +92,14 @@ def _digest(release):
     if not REQUIRED_ASSETS <= assets.keys():
         return ""
     digest = str(assets["model.joblib"].get("digest") or "")
+    return digest[7:] if digest.startswith("sha256:") and SHA.fullmatch(digest[7:]) else ""
+
+
+def _asset_digest(release: dict, name: str) -> str:
+    """Return a verified-format GitHub release asset digest, not an inferred hash."""
+    asset = next((a for a in release.get("assets", [])
+                  if a.get("name") == name and int(a.get("size") or 0) > 0), None)
+    digest = str((asset or {}).get("digest") or "")
     return digest[7:] if digest.startswith("sha256:") and SHA.fullmatch(digest[7:]) else ""
 
 
@@ -167,6 +176,12 @@ def collect_status(read=github):
     active_sha, champion_sha = _digest(current), _digest(production)
     if not active_sha or not champion_sha:
         raise TrainingUnavailable("Current model release is missing verified asset digests")
+    # The serving refresh consumes the canonical history on each prediction run;
+    # this is publication evidence, not a claim that every CDB value is a model feature.
+    predictions = read(f"{DATA}/releases/tags/tbt-predictions-v1")
+    feed_sha = _asset_digest(predictions, "feed.json")
+    feed_updated_at = next((str(a.get("updated_at") or "") for a in predictions.get("assets", [])
+                            if a.get("name") == "feed.json"), "")
     releases = read(f"{DATA}/releases?per_page=100")
     candidates = []
     for item in releases:
@@ -211,6 +226,7 @@ def collect_status(read=github):
         "reason": ("Iný import, test alebo shadow aktivácia už prebieha." if busy
                    else training["reason"]),
         "active_sha256": active_sha, "champion_sha256": champion_sha,
+        "feed_sha256": feed_sha, "feed_updated_at": feed_updated_at,
         "candidates": candidates, "runs": runs,
     }
 
@@ -289,6 +305,8 @@ def start(payload, actor):
             raise TrainingBlocked("Tento model už môže byť aktívnym kandidátom. Skontroluj shadow report.")
         if action == "promote_production" and digest == current["champion_sha256"]:
             raise TrainingBlocked("Tento model už je v produkcii.")
+    if action == "refresh_champion_inputs" and not SHA.fullmatch(str(current.get("feed_sha256") or "")):
+        raise TrainingBlocked("Nedá sa overiť aktuálna generácia predikcií; refresh je zablokovaný.")
     request = {
         "id": secrets.token_hex(12), "action": action,
         "actor": str(actor)[:128], "created_at": _utcnow().isoformat(),
@@ -296,6 +314,7 @@ def start(payload, actor):
         "expected_candidate_sha256": current["active_sha256"],
         "expected_champion_sha256": current["champion_sha256"],
         "snapshot_at": current["observed_at"],
+        "expected_feed_sha256": current.get("feed_sha256") if action == "refresh_champion_inputs" else None,
     }
     if action == "promote_production":
         request.update(calibration_override=True, reason=payload["reason"].strip(),
@@ -345,6 +364,15 @@ def _finalize(request, run, snapshot):
                       "state": "VERIFICATION_FAILED", "run": run,
                       "note": "Beh skončil, ale report dát nie je nezávisle overený. Potvrď zlyhanie auditu a zopakuj prípravu dát."})
         raise TrainingBlocked("Preflight report was not independently retained as a GitHub artifact")
+    if request["action"] == "refresh_champion_inputs":
+        if snapshot["champion_sha256"] != request["expected_champion_sha256"]:
+            raise TrainingBlocked("Produkčný champion sa zmenil; aktualizácia vstupov sa nepotvrdí.")
+        if snapshot["active_sha256"] != request["expected_candidate_sha256"]:
+            raise TrainingBlocked("Shadow kandidát sa počas refreshu zmenil; vyžaduje sa kontrola.")
+        if (not SHA.fullmatch(str(snapshot.get("feed_sha256") or ""))
+                or snapshot["feed_sha256"] == request.get("expected_feed_sha256")
+                or not 0 <= _age(snapshot.get("feed_updated_at")) < _age(request["created_at"]) + 60):
+            raise TrainingBlocked("Nezávislý read-back nepotvrdil novú publikovanú generáciu predikcií.")
     if request["action"] == "activate_shadow":
         expected = request["source_sha256"]
         source = next((c for c in snapshot["candidates"]
@@ -366,6 +394,8 @@ def _finalize(request, run, snapshot):
                  if request["action"] == "import_drive" else
                  "Predtréningový audit prešiel; snapshot pre fit sa vytvorí až pri tréningu."
                  if request["action"] == "prepare_inputs" else
+                 "Vstupy boli znovu vyhodnotené a nová generácia predikcií publikovaná; váhy a SHA championa sa nezmenili."
+                 if request["action"] == "refresh_champion_inputs" else
                  "Zápis kandidáta a kontrola produkcie boli overené."
                  if request["action"] == "activate_shadow" else
                  "Produkčný model bol overený. Release s výnimkou kalibrácie; nejde o potvrdenie kvality modelu."
