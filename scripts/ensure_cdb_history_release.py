@@ -27,7 +27,7 @@ def main():
     recovered = store.recover_interrupted_swaps()
     assets = store._asset_names()
     if "history_manifest.json" not in assets and any(
-        re.fullmatch(r"history-\\d{4}\\.parquet", name) for name in assets
+        re.fullmatch(r"history-\d{4}\.parquet", name) for name in assets
     ):
         # The original 2026-10-30 outage predates the staged-swap protocol.
         # Reuse the existing audited identity/schema/dedup recovery, and verify
