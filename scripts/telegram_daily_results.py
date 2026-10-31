@@ -177,8 +177,8 @@ def report_rows(rows, archive_rows, category, day_text, footer):
 
 
 
-def _pct(numerator, denominator):
-    return f"{numerator / denominator * 100:.1f}%" if denominator else "—"
+def _pct(numerator, denominator, signed=False):
+    return (f"{numerator / denominator * 100:+.1f}%" if signed else f"{numerator / denominator * 100:.1f}%") if denominator else "—"
 
 
 def combined_daily_report(rows, archive_rows, day_text, footer):
@@ -232,13 +232,13 @@ def combined_daily_report(rows, archive_rows, day_text, footer):
         decided=s["won"]+s["lost"]
         label={"top":"TOP","value":"VALUE","aces":"ACES"}[section]
         rate=_pct(s["won"],decided)
-        roi=(_pct(s["units"],s["priced"]) if s["priced"] else "—")
+        roi=(_pct(s["units"],s["priced"],signed=True) if s["priced"] else "—")
         return (f"{label} · WIN {s['won']} | LOSS {s['lost']} | VOID {s['void']} | "
                 f"PENDING {s['pending']} | Win {rate} | {s['units']:+.2f}u | ROI {roi}")
     summaries=[summary(s) for s in categories if sum(stats[s][k] for k in ("won","lost","void","pending"))]
     decisions=total["won"]+total["lost"]
     win=_pct(total["won"],decisions)
-    roi=_pct(total_profit,total_staked) if total_staked else "—"
+    roi=_pct(total_profit,total_staked,signed=True) if total_staked else "—"
     summary_tail=[
         "📊 Denný súhrn",
         *summaries,
