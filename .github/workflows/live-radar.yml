@@ -51,7 +51,7 @@ jobs:
           heartbeat=row['heartbeat']; budget=row['budget']
           assert heartbeat.get('fresh') is True, 'LIVE heartbeat stale'
           assert not heartbeat.get('last_error'), 'LIVE worker error'
-          assert 0 <= budget['global_spent'] <= 14700 == budget['global_limit']
+          assert 0 <= budget['global_spent'] <= 14500 == budget['global_limit']
           assert 0 <= budget['live_spent'] <= 3000 == budget['live_limit']
           assert budget['provider_plan_limit'] == 15000
           assert budget['reserved_provider_headroom'] == 300
