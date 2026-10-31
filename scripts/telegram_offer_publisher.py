@@ -30,7 +30,7 @@ def config(url):
     if not isinstance(v,dict) or not isinstance(s,dict) or not isinstance(cats,dict): raise ValueError("Invalid configuration")
     if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d",str(s.get("time","08:15"))): raise ValueError("Invalid clock")
     if any(type(cats.get(k,False)) is not bool for k in SECTIONS): raise ValueError("Invalid categories")
-    if type(v.get("max_per_section",7)) is not int or not 1<=v.get("max_per_section",7)<=10: raise ValueError("Invalid limit")
+    if type(v.get("max_per_section",0)) is not int or not 0<=v.get("max_per_section",0)<=1000: raise ValueError("Invalid limit")
     if v.get("layout","combined") not in ("combined","separate"): raise ValueError("Invalid layout")
     if not isinstance(s.get("weekdays",list(range(7))),list) or any(type(n) is not int or n not in range(7) for n in s.get("weekdays",list(range(7)))): raise ValueError("Invalid weekdays")
     for f in ("enabled","include_started","show_probability","show_odds","free_top_pick"):
@@ -173,7 +173,8 @@ def select_groups(x,c,now):
             seen.add(ident);rows.append(r)
             # FREE pick can select among the whole confirmed TOP shortlist,
             # independently of the number of premium tips in the outbound message.
-            if len(rows)>=max(c.get("max_per_section",7),10 if k=="top" else 0):
+            limit=c.get("max_per_section",0)
+            if limit and len(rows)>=max(limit,10 if k=="top" else 0):
                 break
         if rows:got[k]=rows
     return got
@@ -186,21 +187,46 @@ def messages(x,c,now,free_event_id=None):
     footer=branded_footer(c.get("footer"))
     outbound=[]
     # User-facing order: TOP -> Value -> Aces, without category headings.
-    premium_groups=[(key,rows[:c.get("max_per_section",7)]) for key,rows in got.items()
+    # 0 means ALL issued/eligible picks; never silently truncate the offer.
+    # Telegram's 4096 character cap is handled by splitting the message.
+    limit=c.get("max_per_section",0)
+    premium_groups=[(key,rows[:limit] if limit else rows) for key,rows in got.items()
                     if (c.get("sections") or {}).get(key)]
     shown=[row for _,rows in premium_groups for row in rows]
     names=_name_map(shown)
     def lines(records):
         return "\n".join(fmt(row,key,c,i,names) for i,(key,row) in enumerate(records,1))
+    def split_long_message(records):
+        # If the complete published offer will not fit one Telegram message,
+        # split at row boundaries; preserve original order and global numbering.
+        base=[HEADER,f"📅 {date}"]
+        chunks=[]
+        current=[]
+        for index,(key,row) in enumerate(records,1):
+            line=fmt(row,key,c,index,names)
+            candidate="\n\n".join(base+["\n".join(current+[line]),footer])
+            if len(candidate.encode("utf-16-le"))//2>4096:
+                if not current:
+                    raise RuntimeError("A Telegram prediction row exceeds safe size")
+                chunks.append("\n\n".join(base+["\n".join(current),footer]))
+                current=[line]
+                if len("\n\n".join(base+[line,footer]).encode("utf-16-le"))//2>4096:
+                    raise RuntimeError("A Telegram prediction row exceeds safe size")
+            else:
+                current.append(line)
+        if current:
+            chunks.append("\n\n".join(base+["\n".join(current),footer]))
+        return chunks
+
     if premium_groups:
         if c.get("layout","combined")=="separate":
-            outbound.extend({"audience":"premium","text":"\n\n".join(
-                [HEADER,f"📅 {date}",lines([(key,row) for row in rows]),footer])}
-                for key,rows in premium_groups)
+            for key,rows in premium_groups:
+                outbound.extend({"audience":"premium","text":message}
+                                for message in split_long_message([(key,row) for row in rows]))
         else:
             records=[(key,row) for key,rows in premium_groups for row in rows]
-            outbound.append({"audience":"premium","text":"\n\n".join(
-                [HEADER,f"📅 {date}",lines(records),footer])})
+            outbound.extend({"audience":"premium","text":message}
+                            for message in split_long_message(records))
     if c.get("free_top_pick",True) and got.get("top"):
         # Stable deterministic pseudo-random selection by betting day.
         # A different action run on the same day cannot select another FREE pick.
@@ -210,7 +236,7 @@ def messages(x,c,now,free_event_id=None):
             (today+"|"+str(r.get("event_id"))+"|"+str((r.get("betting") or {}).get("selection_id") or r.get("winner_id"))).encode("utf-8")).hexdigest())
         free="\n".join(["🎾 FREE | BlinQ",f"📅 {date}","",fmt(winner,"top",c,1).replace("1️⃣","🆓",1)])
         outbound.append({"audience":"free","text":"\n\n".join([HEADER,free,footer]),"free_event_id":str(winner.get("event_id"))})
-    if any(len(item["text"])>4096 for item in outbound):
+    if any(len(item["text"].encode("utf-16-le"))//2>4096 for item in outbound):
         raise RuntimeError("Telegram 4096 character limit; reduce max_per_section")
     return outbound
 
@@ -272,7 +298,8 @@ def prepare(a):
     for section,rows in groups.items():
         if not (v.get("sections") or {}).get(section):
             continue
-        for row in rows[:v.get("max_per_section",7)]:
+        limit=v.get("max_per_section",0)
+        for row in (rows[:limit] if limit else rows):
             sent_rows.append(result_reference(row,section))
     free=next((item for item in msg if item.get("audience")=="free"),None)
     if free:
