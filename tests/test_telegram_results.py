@@ -132,3 +132,16 @@ def test_reads_are_read_only_and_provenance_checked(monkeypatch):
                     "secret", CLOSED_DAY)["settled"] == 1
     with pytest.raises(RuntimeError):
         tg.fetch("https://example.com/api/v1/internal/telegram-results", "", CLOSED_DAY)
+
+
+def test_free_results_only_for_previously_reserved_official_top():
+    source = report([row(event="winning-free"), row("value", event="ordinary-value")])
+    full = tg.messages(source, CLOSED_DAY, free_event_id="winning-free")
+    free = [entry for entry in full if entry["audience"] == "free"]
+    assert len(free) == 1
+    assert "📊 Results | FREE" in free[0]["text"]
+    assert "🆓 ✅ Novak" in free[0]["text"]
+    assert "1️⃣" not in free[0]["text"]
+    assert "VALUE" not in free[0]["text"]
+    assert [entry for entry in tg.messages(source, CLOSED_DAY, free_event_id="not-issued")
+            if entry["audience"] == "free"] == []
