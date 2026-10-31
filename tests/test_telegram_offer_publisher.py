@@ -1,0 +1,146 @@
+"""Offline contract tests for the BlinQ Telegram publisher."""
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+import importlib.util
+import json
+import hashlib
+import os
+import sys
+import types
+
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts/telegram_offer_publisher.py"
+spec = importlib.util.spec_from_file_location("blinq_telegram_offer", SCRIPT)
+tg = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(tg)
+
+NOW = datetime(2026, 10, 31, 7, 0, tzinfo=timezone.utc)  # 08:00 Bratislava
+
+
+def row(identifier, player="A", category="top"):
+    start = (NOW + timedelta(hours=4)).isoformat()
+    data = dict(event_id=str(identifier), scheduled_at=start,
+                player1={"id": "p1", "name": player},
+                player2={"id": "p2", "name": "B"},
+                winner_id="p1", betting={"selection_id": "p1", "odds": 1.8,
+                                           "blinq_probability": 0.7, "expected_value": 0.25})
+    if category == "aces":
+        data.update(market="aces", projection=8.3, opponent_projection=5.4,
+                    projection_confidence=0.72)
+        del data["betting"]
+        data["selection_id"] = "p1"
+    return data
+
+
+def settings(**kwargs):
+    c = dict(enabled=True, sections={"top": True, "value": True, "aces": True},
+             schedule={"enabled": True, "time": "08:00", "weekdays": list(range(7))},
+             max_per_section=7, layout="combined", free_top_pick=True,
+             show_probability=True, show_odds=True)
+    return dict(c, **kwargs)
+
+
+def offer():
+    return dict(confirmed_only=True, betting_day="2026-10-31",
+                generated_at=NOW.isoformat(),
+                top_daily_picks=[row(i, f"Player {i}") for i in range(1, 6)],
+                value_picks=[row(42, "Value")],
+                ace_picks=[row(51, "Server", "aces"), row(52, "DF", "aces") | {"market": "double_faults"}])
+
+
+def test_classic_format_and_deterministic_free_pick():
+    first = tg.messages(offer(), settings(), NOW)
+    second = tg.messages(offer(), settings(), NOW)
+    assert first == second
+    assert [x["audience"] for x in first] == ["premium", "free"]
+    assert "Data Betting by BackstageTalks" in first[0]["text"]
+    assert "1️⃣ Player" in first[0]["text"]
+    assert " | " in first[0]["text"]
+    assert "🎾 TOP Picks | BlinQ" in first[0]["text"]
+    assert "💎 VALUE Picks | BlinQ" in first[0]["text"]
+    assert "🎯 ESÁ | BlinQ" in first[0]["text"]
+    assert "🆓 Player" in first[1]["text"]
+    assert first[1]["text"].count("🆓") == 1
+    assert "Double Fault" not in first[0]["text"]
+    assert all("Analytical preview only" in x["text"] for x in first)
+
+
+def test_free_only_does_not_show_other_premium_rows():
+    cfg = settings(sections={"top": False, "value": False, "aces": False})
+    messages = tg.messages(offer(), cfg, NOW)
+    assert len(messages) == 1 and messages[0]["audience"] == "free"
+    assert "🎾 TOP Picks" not in messages[0]["text"]
+    assert "VALUE Picks" not in messages[0]["text"]
+
+
+def test_stale_unconfirmed_and_started_are_blocked():
+    stale = offer()
+    stale["betting_day"] = "2026-10-30"
+    try:
+        tg.messages(stale, settings(), NOW)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("Stale snapshot accepted")
+    expired = offer()
+    expired["top_daily_picks"][0]["scheduled_at"] = (NOW - timedelta(minutes=1)).isoformat()
+    m = tg.messages(expired, settings(sections={"top": True, "value": False, "aces": False}, free_top_pick=False), NOW)
+    assert "Player 1" not in m[0]["text"]
+
+
+def test_due_window_and_manual_request():
+    cfg = settings()
+    assert tg.due(cfg, NOW) == "scheduled:2026-10-31"
+    assert tg.due(cfg, NOW + timedelta(hours=2)) is None
+    cfg["schedule"]["enabled"] = False
+    cfg["manual_request"] = {"id": "abcdef123456", "created_at": NOW.isoformat()}
+    assert tg.due(cfg, NOW) == "manual:abcdef123456"
+    assert tg.due(cfg, NOW + timedelta(minutes=31)) is None
+
+
+def test_snapshot_checksum_guard(tmp_path, monkeypatch):
+    d = tmp_path
+    snap = offer()
+    def fake_run(args, **kwargs):
+        name = args[args.index("--pattern") + 1]
+        if name == "daily_offer_snapshot.json":
+            (d / name).write_text(json.dumps(snap))
+        else:
+            raw = (d / "daily_offer_snapshot.json").read_bytes() if (d / "daily_offer_snapshot.json").exists() else json.dumps(snap).encode()
+            (d / name).write_text(json.dumps({"files": {"daily_offer_snapshot.json": {
+                "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)}}}))
+    monkeypatch.setattr(tg.subprocess, "run", fake_run)
+    # The manifest is fetched first, then the snapshot. Fake both in advance.
+    raw = json.dumps(snap).encode()
+    (d / "_tbt_bundle_manifest.json").write_text(json.dumps({"files": {"daily_offer_snapshot.json": {
+        "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)}}}))
+    assert tg.snapshot(d)["confirmed_only"] is True
+    snap["confirmed_only"] = False
+    (d / "daily_offer_snapshot.json").write_text(json.dumps(snap))
+    try:
+        tg.snapshot(d)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("Unconfirmed offer accepted")
+
+
+def test_telegram_routes_free_to_optional_free_chat(monkeypatch, tmp_path):
+    monkeypatch.setenv("TGB", "fake-secret")
+    monkeypatch.setenv("TGCH", "-100111")
+    monkeypatch.setenv("TGCH_FREE", "-100222")
+    tmp_path.joinpath("ready").write_text("reservation")
+    tg.save(tmp_path / "messages.json", [
+        {"audience": "premium", "text": "VIP"},
+        {"audience": "free", "text": "FREE"}])
+    seen = []
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_): pass
+        def read(self, *_): return b'{"ok":true,"result":{"message_id":123}}'
+    def fake_open(req, **kwargs):
+        values = tg.urllib.parse.parse_qs(req.data.decode())
+        seen.append(values["chat_id"][0])
+        return Response()
+    monkeypatch.setattr(tg.urllib.request, "urlopen", fake_open)
+    tg.send(types.SimpleNamespace(output=str(tmp_path)))
+    assert seen == ["-100111", "-100222"]
