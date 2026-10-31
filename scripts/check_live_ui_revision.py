@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 import time
 import urllib.request
@@ -56,35 +57,78 @@ def http_get(url: str, timeout: int = 15) -> bytes:
         return response.read()
 
 
+
+def revision_files(web: Path, deployed_sha: str) -> dict[str, bytes]:
+    """Resolve expected files from the immutable deployed commit, not HEAD.
+
+    A newer main checkout can be perfectly valid while Azure still serves its
+    prior release. Git fetch changes only this disposable CI checkout, never
+    production or CDB. A missing historical commit fails closed.
+    """
+    names = (*FRONTEND_FILES, "index.html")
+    root = web.resolve().parent
+    if not (root / ".git").exists():
+        # Explicit offline fixtures (tests) have no repository metadata.
+        return {name: (web / name).read_bytes() for name in names}
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--verify", "HEAD"],
+            check=True, capture_output=True, timeout=10,
+        ).stdout.decode().strip()
+        if head == deployed_sha:
+            return {name: (web / name).read_bytes() for name in names}
+        present = subprocess.run(
+            ["git", "-C", str(root), "cat-file", "-e", deployed_sha + "^{commit}"],
+            capture_output=True, timeout=10,
+        )
+        if present.returncode != 0:
+            subprocess.run(
+                ["git", "-C", str(root), "fetch", "--no-tags", "--depth=1",
+                 "origin", deployed_sha],
+                check=True, capture_output=True, timeout=60,
+            )
+        return {
+            name: subprocess.run(
+                ["git", "-C", str(root), "show", f"{deployed_sha}:web/{name}"],
+                check=True, capture_output=True, timeout=20,
+            ).stdout
+            for name in names
+        }
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        raise ValueError("Cannot verify exact deployed revision from Git history") from exc
+
+
 def verify_once(
     web: Path,
     base_url: str,
     fetch=http_get,
     token: str = "watch",
+    source_loader=revision_files,
 ) -> str:
     base_url = base_url.rstrip("/")
     def get(path: str) -> bytes:
         return fetch(f"{base_url}{path}?__blinq_watchdog={token}")
 
-    release = json.loads((web / "release.json").read_text(encoding="utf-8"))
     deployed = json.loads(get("/deployment.json").decode("utf-8"))
     live_sha = str(deployed.get("git_sha", ""))
     if not re.fullmatch(r"[0-9a-f]{40}", live_sha):
         raise ValueError("live deployment.json has no valid Git SHA")
+    expected_files = source_loader(web, live_sha)
+    release = json.loads(expected_files["release.json"].decode("utf-8"))
     if deployed.get("patch") != release.get("patch"):
         raise ValueError("live patch differs from repository release")
     if deployed.get("visual_revision") != release.get("visual_revision"):
         raise ValueError("live visual revision differs from repository release")
 
     for name in FRONTEND_FILES:
-        expected = (web / name).read_bytes()
+        expected = expected_files[name]
         actual = get("/" + name)
         if sha256(actual) != sha256(expected):
             raise ValueError(f"outdated or modified frontend file: {name}")
         if name in STAMPED_FILES and (deployed.get("files_sha256") or {}).get(name) != sha256(actual):
             raise ValueError(f"invalid deployment stamp checksum: {name}")
 
-    expected_html = (web / "index.html").read_text(encoding="utf-8")
+    expected_html = expected_files["index.html"].decode("utf-8")
     for route in ("/", "/follow-the-data/"):
         actual_html = get(route).decode("utf-8")
         if f'name="blinq-deployment-sha" content="{live_sha}"' not in actual_html:

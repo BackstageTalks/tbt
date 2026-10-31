@@ -1,10 +1,12 @@
 """Offline regression tests for the live Azure UI drift watchdog."""
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.check_live_ui_revision import FRONTEND_FILES, STAMPED_FILES, original_index, sha256, verify_once
+from scripts.check_live_ui_revision import FRONTEND_FILES, STAMPED_FILES, original_index, revision_files, sha256, verify_once
 
 SHA = "a" * 40
 
@@ -44,6 +46,52 @@ class UiWatchdogTests(unittest.TestCase):
 
     def test_current_site_passes_when_deployment_sha_is_not_main(self):
         self.assertEqual(verify_once(self.web, "https://test.invalid", self.fetch), SHA)
+
+    def test_newer_checkout_is_not_falsely_treated_as_live_drift(self):
+        # Azure's valid deployed SHA is older than the CI checkout. The
+        # immutable release is the source of truth; a later HEAD is unrelated.
+        original = {name: (self.web / name).read_bytes()
+                    for name in (*FRONTEND_FILES, "index.html")}
+        (self.web / "app.js").write_bytes(b"new_head_app")
+        (self.web / "index.html").write_text("<html>new main HTML</html>")
+        expected = lambda _web, sha: original if sha == SHA else None
+        self.assertEqual(verify_once(self.web, "https://test.invalid", self.fetch,
+                                     source_loader=expected), SHA)
+        # A genuine cross-route drift still fails even against the right SHA.
+        self.files["/follow-the-data/"] = b"<html>broken SPA route</html>"
+        with self.assertRaisesRegex(ValueError, "/follow-the-data/"):
+            verify_once(self.web, "https://test.invalid", self.fetch,
+                        source_loader=expected)
+
+    def test_invalid_revision_fails_closed_even_if_current_files_match(self):
+        with self.assertRaisesRegex(ValueError, "Cannot verify"):
+            verify_once(self.web, "https://test.invalid", self.fetch,
+                        source_loader=lambda *_: (_ for _ in ()).throw(
+                            ValueError("Cannot verify exact deployed revision from Git history")))
+
+    def test_revision_files_reads_actual_git_commit_not_newer_checkout(self):
+        root = self.web / "checkout"
+        web = root / "web"
+        web.mkdir(parents=True)
+        for name in (*FRONTEND_FILES, "index.html"):
+            shutil.copy2(self.web / name, web / name)
+        def git(*args):
+            return subprocess.run(["git", "-C", str(root), *args],
+                                  check=True, capture_output=True).stdout.decode().strip()
+        git("init", "-q")
+        git("config", "user.email", "ci@example.test")
+        git("config", "user.name", "CI")
+        git("add", "web")
+        git("commit", "-qm", "first deployed frontend")
+        deployed_sha = git("rev-parse", "HEAD")
+        original = revision_files(web, deployed_sha)
+        (web / "app.js").write_text("newer main release")
+        (web / "index.html").write_text("<html>new main</html>")
+        git("add", "web")
+        git("commit", "-qm", "later checkout revision")
+        checked = revision_files(web, deployed_sha)
+        self.assertEqual(checked, original)
+        self.assertNotEqual(checked["app.js"], (web / "app.js").read_bytes())
 
     def test_detects_stale_app_even_with_success_http(self):
         self.files["/app.js"] = b"old_application"
