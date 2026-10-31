@@ -110,23 +110,23 @@ def main():
                             heroRadius:document.querySelector('#dashboardHero')?getComputedStyle(document.querySelector('#dashboardHero')).borderRadius:null,navBg,navLine};
                         }""")
                         assert 'sports-intelligence=20261030-1' in premium['css'], premium
-                        assert premium['rowBg'] == 'none' and premium['rowBgColor'] == 'rgb(13, 33, 28)', premium
+                        assert premium['rowBg'] == 'none' and premium['rowBgColor'] == 'rgba(3, 23, 17, 0.58)', premium
                         assert premium['pickBg'] == 'rgba(0, 0, 0, 0)', premium
                         assert premium['heroRadius'] == '11px', premium
                         assert premium['navBg'] == 'none', premium
                         assert premium['navLine'] == 'rgb(85, 231, 170)', premium
-                        assert premium['kpiBg'] == 'none' and premium['kpiBgColor'] == 'rgb(13, 33, 28)', premium
+                        assert premium['kpiBg'] == 'none' and premium['kpiBgColor'] == 'rgba(0, 0, 0, 0)', premium
                         assert premium['kpiAccent'] == 'none', premium
-                        assert premium['kpiRadius'] == '10px', premium
-                        assert 23 <= float(premium['kpiValueSize'].replace('px','')) <= 31, premium
+                        assert premium['kpiRadius'] == '0px', premium
+                        assert 20 <= float(premium['kpiValueSize'].replace('px','')) <= 26, premium
                         assert premium['kpiIconSize'] == '16px', premium
                         assert len(premium['cards']) == 4, premium
-                        # Responsive four-slot layout: two equal cards in each row.
+                        # Approved compact four-slot strip: all values on one row.
                         k=premium['cards']
                         assert abs(k[0]['top']-k[1]['top'])<=1 and abs(k[2]['top']-k[3]['top'])<=1, premium
-                        assert k[2]['top']>k[0]['top'], premium
+                        assert abs(k[2]['top']-k[0]['top'])<=1, premium
                         assert all(0<=c['left']<c['right']<=390+1 for c in premium['cards']), premium
-                        assert premium['confidenceBar'] == 'block', premium
+                        assert premium['confidenceBar'] == 'none', premium
                         assert float(premium['pickSize'].replace('px','')) >= 12, premium
                         grid_fit = page.evaluate("""() => {
                           const hub=document.querySelector('#dailyHub'),row=document.querySelector('#dailyHubBody tr:not(.hub-row-locked)');
@@ -141,12 +141,12 @@ def main():
                         }""")
                         assert grid_fit and all(grid_fit[k] for k in ('pick','odds','confidence','action')),grid_fit
                         # Premium compact card: players on left, metrics on right,
-                        # odds and Detail stacked vertically on the right.
+                        # equal-size metrics side by side, Detail below the odds.
                         assert 'match confidence' in grid_fit['areas'],grid_fit
-                        assert 'pick action' in grid_fit['areas'],grid_fit
+                        assert 'pick pick action' in grid_fit['areas'],grid_fit
                         assert grid_fit['pick']['right'] <= grid_fit['action']['left']+2,grid_fit
                         assert grid_fit['odds']['right'] <= 391,grid_fit
-                        assert grid_fit['confidence']['bottom'] <= grid_fit['odds']['top']+2,grid_fit
+                        assert grid_fit['confidence']['right'] <= grid_fit['odds']['left']+2,grid_fit
                         assert grid_fit['odds']['bottom'] <= grid_fit['action']['top']+2,grid_fit
                         if os.getenv('BLINQ_SCREENSHOTS'):
                             out = Path(os.environ['BLINQ_SCREENSHOTS'])
