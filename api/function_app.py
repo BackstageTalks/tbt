@@ -158,6 +158,7 @@ from tbt.services.results_archive import (
     load_settled_results_archive, merge_settled_results,
     read_only_archive_category_counts,
 )
+from tbt.services.telegram_result_report import report_rows as telegram_report_rows, previous_closed_day
 from tbt.services.comparator_runtime import (
     RuntimeComparatorError,
     RuntimeArtifactStale,
@@ -1946,6 +1947,38 @@ def internal_live_radar_worker(req):
         except Exception:
             pass
         return response({"error":"live_worker_failed","detail":exc.__class__.__name__},503)
+
+
+@app.route(route="v1/internal/telegram-results", methods=["GET"])
+def internal_telegram_results(req):
+    """Read-only verified settlement view for the next morning's TG report.
+
+    Never invokes the tennis provider, modifies CDB, settlement or publication.
+    Only the existing private Match Status worker token grants access.
+    """
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    now = datetime.now(timezone.utc)
+    try:
+        previous_day = previous_closed_day(now)
+    except ValueError:
+        return response({"error": "betting_day_not_closed"}, 409)
+    requested_day = str((getattr(req, "params", {}) or {}).get("day") or "").strip()
+    if requested_day and requested_day != previous_day:
+        return response({"error": "only_previous_closed_day_supported"}, 400)
+    try:
+        # Same verification and reversible exclusion contract as /v1/feed.
+        # Fail closed if either persisted source is unavailable.
+        archive = load_settled_results_archive()
+        excluded = load_result_exclusions()
+        result = telegram_report_rows(read_feed(FEED), archive, excluded, previous_day)
+        result["generated_at"] = now.isoformat()
+        return response(result)
+    except AdminStorageUnavailable:
+        return response({"error": "verified_results_storage_unavailable"}, 503)
+    except (ValueError, TypeError) as exc:
+        logging.warning("Telegram results read blocked: %s", exc.__class__.__name__)
+        return response({"error": "verified_results_invalid"}, 503)
 
 
 @app.route(route="v1/internal/match-status-worker", methods=["POST"])
