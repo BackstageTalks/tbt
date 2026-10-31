@@ -54,11 +54,11 @@ def test_value_ev_is_inline_when_it_fits_and_omitted_for_long_mobile_rows():
     long = tg.fmt(row(89, "Alexander ExtraordinaryLongSurname"), "value", cfg, index=4)
     assert " | EV +25.0%" in short
     assert short.count("EV") == 1
-    assert "\\n" not in short
+    assert "\n" not in short
     assert len(short) <= tg.MAX_INLINE_EV_CHARS
     assert "EV" not in long
     assert long.endswith(" | 1.80")
-    assert "\\n" not in long
+    assert "\n" not in long
     assert tg.fmt(row(88, "Sinner"), "top", cfg, index=1).count("EV") == 0
 
 def test_classic_format_and_deterministic_free_pick():
