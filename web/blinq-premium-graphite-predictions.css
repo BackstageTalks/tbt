@@ -1,0 +1,162 @@
+/* Premium Graphite — predictions mobile pilot, 2026-10-31.
+   Surface-only override: no DOM, data, permissions, typography, geometry, or
+   market-grid changes. Loaded after the existing mobile styles. */
+@media (max-width: 600px) {
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #predictionsView {
+    --bq-graphite-card: #10191C;
+    --bq-graphite-panel: #0C1518;
+    --bq-graphite-inset: #1B2A29;
+    --bq-graphite-line: #2B3839;
+    --bq-graphite-copy: #ECF3EF;
+    --bq-graphite-muted: #A8B8B1;
+    --bq-graphite-accent: #65CDA4;
+  }
+
+  /* KPI strip and the board are matte surfaces, not light emitters. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dashboardKpis .dashboard-kpi {
+    background: var(--bq-graphite-card) !important;
+    border-color: var(--bq-graphite-line) !important;
+    box-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dashboardKpis .dashboard-kpi > span {
+    background: var(--bq-graphite-inset) !important;
+    border-color: var(--bq-graphite-line) !important;
+    color: var(--bq-graphite-accent) !important;
+    box-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dashboardKpis .dashboard-kpi strong {
+    color: var(--bq-graphite-copy) !important;
+    text-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dashboardKpis .dashboard-kpi small {
+    color: var(--bq-graphite-muted) !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub {
+    background: var(--bq-graphite-panel) !important;
+    border-color: var(--bq-graphite-line) !important;
+    box-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .daily-panel-head h2 {
+    color: var(--bq-graphite-copy) !important;
+    text-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub :is(.daily-panel-head h2 span, .daily-meta, .daily-promise) {
+    color: var(--bq-graphite-muted) !important;
+  }
+
+  /* Existing category tabs and their active indicator remain in place. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .daily-tabs-row {
+    background: var(--bq-graphite-card) !important;
+    border-color: var(--bq-graphite-line) !important;
+    box-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .daily-hub-tab {
+    background: transparent !important;
+    color: var(--bq-graphite-muted) !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .daily-hub-tab.active {
+    background: transparent !important;
+    color: var(--bq-graphite-copy) !important;
+    box-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .daily-hub-tab.active::after {
+    background: var(--bq-graphite-accent) !important;
+    box-shadow: none !important;
+  }
+
+  /* Every unlocked market row, including expanded/see-all, shares one material.
+     Market-specific grid areas and labels are intentionally untouched. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked) {
+    background: var(--bq-graphite-card) !important;
+    border-color: var(--bq-graphite-line) !important;
+    box-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .daily-hub-table :is(.hub-match-cell, .hub-pick, .hub-time) {
+    background: transparent !important;
+    border-color: var(--bq-graphite-line) !important;
+    box-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .daily-hub-table :is(.hub-confidence-cell, .hub-odds:nth-child(6)) {
+    background: transparent !important;
+    border-color: var(--bq-graphite-line) !important;
+    box-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
+  .daily-hub-table tbody tr:not(.hub-row-locked) > td:nth-child(7) {
+    background: var(--bq-graphite-inset) !important;
+    border-color: var(--bq-graphite-line) !important;
+    box-shadow: none !important;
+  }
+
+  /* Strong data stays white; mint is reserved for confidence and the active cue. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub :is(.hub-tournament-copy > b, .hub-match-player-main b,
+                                  .hub-pick-stack strong, .hub-number-stack strong) {
+    color: var(--bq-graphite-copy) !important;
+    text-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub :is(.hub-tournament-copy small, .hub-pick-stack small,
+                                  .hub-number-stack small, .hub-confidence-cell::before) {
+    color: var(--bq-graphite-muted) !important;
+    text-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .hub-confidence strong {
+    color: var(--bq-graphite-accent) !important;
+    text-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .hub-confidence > i {
+    background: var(--bq-graphite-line) !important;
+    box-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .hub-confidence > i > b {
+    background: var(--bq-graphite-accent) !important;
+    box-shadow: none !important;
+  }
+
+  /* Buttons stay touch-sized and functional; membership-locked colors remain
+     under their original styling. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .hub-detail:not(.is-locked) {
+    background: var(--bq-graphite-inset) !important;
+    border-color: #334B44 !important;
+    color: var(--bq-graphite-copy) !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .hub-detail:not(.is-locked):hover {
+    background: #263735 !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub :is(.hub-detail, .daily-hub-tab, .daily-expand):focus-visible {
+    outline-color: var(--bq-graphite-accent) !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #predictionsView #dailyHub .daily-empty {
+    background: var(--bq-graphite-card) !important;
+    border-color: var(--bq-graphite-line) !important;
+    color: var(--bq-graphite-muted) !important;
+    box-shadow: none !important;
+  }
+}
