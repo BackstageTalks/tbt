@@ -181,6 +181,27 @@ def test_missing_provider_result_never_grades_pending_as_loss():
     assert r.evaluate(samples[1],[first])["status"]=="pending"
     assert r.all_settled(samples,[first,settled(samples[1],True)])
 
+
+def test_explicit_elite_automation_ignores_legacy_disabled_admin_switches(tmp_path,monkeypatch):
+    target=sent()
+    state={"schema":1,"attempts":{DAY+":daily:0620":{
+        "status":"sent","rows":[target],"message_ids":[717]}}}
+    path=tmp_path/"state.json"
+    tg.save(path,state)
+    monkeypatch.setattr(tg,"config",lambda *_:{"enabled":False,"results_enabled":False})
+    monkeypatch.setattr(r,"archive",lambda *_:[settled(target,True)])
+    args=SimpleNamespace(now=NOW.isoformat(),config_url="unused",api_url="unused",
+                         state=str(path),output=str(tmp_path/"old"),external_tick=False)
+    r.prepare(args)
+    assert not (tmp_path/"old"/"ready").exists()
+    args.elite_auto=True
+    args.output=str(tmp_path/"elite")
+    r.prepare(args)
+    assert (tmp_path/"elite"/"ready").is_file()
+    messages=tg.load(tmp_path/"elite"/"messages.json")
+    assert len(messages)==1 and messages[0]["audience"]=="elite"
+    assert "ROI +80.0%" in messages[0]["text"]
+
 def test_results_use_aces_label_and_linkable_stat_engine_footer():
     sample=sent("aces","match-aces",None)
     footer=tg.branded_footer("ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine")

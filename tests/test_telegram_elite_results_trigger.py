@@ -13,6 +13,7 @@ def test_match_status_dispatches_results_after_successful_reconciliation():
 def test_results_worker_checks_on_every_tick_and_uses_explicit_elite_recipient():
     workflow=(ROOT/".github/workflows/telegram-results.yml").read_text()
     assert "TGCH_ELITE: ${{ secrets.TGCH_ELITE }}" in workflow
+    assert "prepare --elite-auto --api-url" in workflow
     assert "TGCH_ELITE must be configured before any result reservation" in workflow
     assert "BLINQ_LIVE_WORKER_TOKEN" in workflow
     assert "group: blinq-telegram-ledger" in workflow

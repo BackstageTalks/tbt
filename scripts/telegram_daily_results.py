@@ -326,7 +326,11 @@ def prepare(args):
     # Match-status worker dispatches us after each 30-minute reconciliation.
     # Also accept legacy external ticks without the obsolete 07:00 time gate.
     cfg=tg.config(args.config_url)
-    if cfg.get("enabled") is not True or cfg.get("results_enabled") is not True:
+    # Operator-approved automatic ELITE settlement follows the existing
+    # match-status clock, even if legacy Admin schedule/toggles are disabled.
+    # Explicit ELITE destination secret and exact verified archive remain mandatory.
+    if not getattr(args,"elite_auto",False) and (
+            cfg.get("enabled") is not True or cfg.get("results_enabled") is not True):
         print(json.dumps({"status":"skipped","reason":"results_disabled"}))
         return
     state=tg.load(args.state)
@@ -377,5 +381,6 @@ if __name__=="__main__":
     parser.add_argument("--output",default="/tmp/blinq-telegram")
     parser.add_argument("--now",default="")
     parser.add_argument("--external-tick",action="store_true")
+    parser.add_argument("--elite-auto",action="store_true",help="Operator-approved automatic ELITE settlement independent of old Admin switches")
     args=parser.parse_args()
     prepare(args)
