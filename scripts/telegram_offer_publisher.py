@@ -193,7 +193,11 @@ def prepare(a):
     if ident in attempts:print('{"status":"skipped","reason":"already_reserved"}');return
     out=Path(a.output)
     sticky=old.get("free_picks") if isinstance(old.get("free_picks"),dict) else {}
-    msg=messages(snapshot(out/"assets"),v,now,free_event_id=sticky.get(day(now)))
+    # A FREE selection is reserved before the Telegram call. Once reserved it
+    # cannot be published twice, even by another manual or scheduled run.
+    already_reserved_free=day(now) in sticky
+    current_config={**v,"free_top_pick":False} if already_reserved_free else v
+    msg=messages(snapshot(out/"assets"),current_config,now)
     if not msg:print('{"status":"skipped","reason":"no_eligible_rows"}');return
     save(out/"messages.json",msg)
     attempts[ident]={"reserved_at":now.isoformat(),"sha256":hashlib.sha256(json.dumps(msg,ensure_ascii=False).encode()).hexdigest()}
