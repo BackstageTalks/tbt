@@ -176,6 +176,95 @@ def report_rows(rows, archive_rows, category, day_text, footer):
             "priced_decisions":priced}
 
 
+def daily_report(sent, archive_rows, day_text, footer):
+    """One premium report for the entire exact sent TOP/Value/Aces cohort.
+
+    The current day is never read as settlement; only official previous-day
+    archive matches are accepted. FREE is a separate destination/report.
+    Telegram messages are split losslessly on UTF-16 boundaries when necessary.
+    """
+    categories=("top","value","aces")
+    premium=[row for category in categories for row in sent if row.get("channel")==category]
+    if not premium:
+        return []
+    icons={"won":"✅","lost":"❌","void":"➖","pending":"⏳"}
+    counts={key:0 for key in icons}
+    units=0.0;priced=0
+    lines=[]
+    for index,row in enumerate(premium,1):
+        item=evaluate(row,archive_rows)
+        status=item["status"]
+        counts[status]+=1
+        if item["units"] is not None:
+            units+=item["units"]
+            priced+=item["stake"]
+        odds=tg.num(row.get("odds"))
+        price_text=f"{odds:.2f}" if odds is not None and odds>1 else "—"
+        unit_text=(f"{item['units']:+.2f}u" if item["units"] is not None else
+                   "Pending" if status=="pending" else
+                   "+0.00u" if status=="void" else "—")
+        index_text=tg.NUMBER_EMOJIS[index-1] if index<=10 else f"{index}."
+        selected=str(row.get("name") or "—").split()
+        short=selected[-1] if selected else "—"
+        time=tg.stamp(row["scheduled_at"]).astimezone(tg.TZ).strftime("%H:%M")
+        lines.append(f"{index_text} {icons[status]} {short} | {time} | {price_text} | {unit_text}")
+
+    settled=counts["won"]+counts["lost"]+counts["void"]
+    decided=counts["won"]+counts["lost"]
+    def pct(n):
+        return f"{n/settled*100:.1f}%" if settled else "—"
+    hit=f"{counts['won']/decided*100:.1f}%" if decided else "—"
+    roi=f"{units/priced*100:+.1f}%" if priced else "—"
+    cash=f"{units:+.2f}u" if priced else "—"
+    summary=[
+      f"✅ WIN {counts['won']} ({pct(counts['won'])}) | ❌ LOSS {counts['lost']} ({pct(counts['lost'])})",
+      f"➖ VOID {counts['void']} ({pct(counts['void'])}) | ⏳ PENDING {counts['pending']}",
+      f"🎯 Úspešnosť {hit} ({counts['won']}/{decided})",
+      f"💰 Zisk {cash} | 📈 ROI {roi}" + (f" ({priced}u)" if priced else ""),
+    ]
+    if counts["pending"]:
+        summary.append("⏳ Priebežné: zostávajú nevyhodnotené tipy z odoslanej ponuky.")
+    if decided>priced:
+        summary.append("ℹ️ Bezkurzové projekcie sú mimo výpočtu units/ROI.")
+    if not settled:
+        summary.append("ℹ️ Zatiaľ nie je potvrdený výsledok; percentá nie sú dostupné.")
+    prefix="\n".join([tg.HEADER,"","📊 Results | BlinQ",f"📅 {datetime.fromisoformat(day_text):%d.%m.%y}",""])
+    final="\n"+"\n".join(summary)+"\n\n"+footer
+    normal_footer="\n\n"+footer
+    result=[];current=[]
+    def units_len(value):
+        return len(value.encode("utf-16-le"))//2
+    for line in lines:
+        candidate="\n".join([*current,line])
+        if units_len(prefix+candidate+final)>4096:
+            if not current:
+                # If final summary is unusually large, let the row stay on a
+                # page without the summary and validate it independently.
+                if units_len(prefix+line+normal_footer)>4096:
+                    raise RuntimeError("One settled pick cannot fit in Telegram")
+                current=[line]
+            else:
+                text=prefix+"\n".join(current)+normal_footer
+                if units_len(text)>4096:
+                    raise RuntimeError("Telegram Results page overflow")
+                result.append({"audience":"premium","text":text,
+                               "counts":{key:0 for key in icons},"priced_decisions":0})
+                current=[line]
+    # The full, single-day summary always appears on the final page.
+    ending=prefix+"\n".join(current)+final
+    if units_len(ending)>4096:
+        if not current or units_len(prefix+"\n".join(current)+normal_footer)>4096:
+            raise RuntimeError("Telegram results summary does not fit")
+        result.append({"audience":"premium","text":prefix+"\n".join(current)+normal_footer,
+                       "counts":{key:0 for key in icons},"priced_decisions":0})
+        ending=prefix+"\n".join(summary)+"\n\n"+footer
+    if units_len(ending)>4096:
+        raise RuntimeError("Telegram results summary exceeds character limit")
+    result.append({"audience":"premium","text":ending,
+                   "counts":counts,"priced_decisions":priced})
+    return result
+
+
 def prepare(args):
     now=tg.stamp(args.now) if args.now else datetime.now(timezone.utc)
     target_day=previous_day(now)
@@ -200,9 +289,9 @@ def prepare(args):
         return
     verified=archive(args.api_url,target_day)
     footer=tg.branded_footer(cfg.get("footer"))
-    posts=[report_rows(sent,verified,category,target_day,footer)
-           for category in ("top","value","aces","free")]
-    posts=[post for post in posts if post]
+    posts=daily_report(sent,verified,target_day,footer)
+    free=report_rows(sent,verified,"free",target_day,footer)
+    if free: posts.append(free)
     if not posts:
         print(json.dumps({"status":"skipped","reason":"no_results_to_report"}))
         return
