@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "reason": "User explicitly requested sending same approved confirmed offer again with compact T/V/A prefixes",
+  "betting_day": "2026-10-31",
+  "repost_revision": "format-tva-v3",
+  "kind": "manual_one_time",
+  "source": "original_confirmed_daily_issue"
+}
