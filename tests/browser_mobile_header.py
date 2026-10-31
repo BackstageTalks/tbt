@@ -158,7 +158,14 @@ def main():
                         page.locator('#bqm-more').click()
                         menu = page.locator('#bqm-dialog')
                         assert menu.is_visible()
-                        assert menu.get_by_role('button', name='Porovnávač', exact=True).is_visible()
+                        comparator_locked = 'comparator-nav-locked' in (
+                            page.locator('.reference-navigation [data-route="compare"]').get_attribute('class') or ''
+                        )
+                        expected_comparator_label = 'Porovnávač 🔒' if comparator_locked else 'Porovnávač'
+                        assert menu.get_by_role('button', name=expected_comparator_label, exact=True).is_visible()
+                        # A lock is shown only when the same configured comparator entitlement
+                        # denies access; the drawer mirrors the desktop route state.
+                        assert page.locator('.reference-navigation [data-route="compare"] .comparator-access-lock').count() == 1
                         assert menu.get_by_role('button', name='Moje skupiny', exact=False).count() > 0
                         assert menu.get_by_role('button', name='Môj účet', exact=True).is_visible()
                         page.get_by_role('button', name='Zavrieť menu').click()
