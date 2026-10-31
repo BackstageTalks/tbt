@@ -49,3 +49,17 @@ Offline contract tests: `tests/test_telegram_offer_publisher.py`.
 After merge and a verified successful frontend deployment, configure Admin → Telegram bot → enable the publisher, select categories, save via Publish. Use **Zaradiť jednorazové odoslanie** and (if the next hourly tick is too far away) manually run the `BlinQ Telegram offer` workflow from Actions. Confirm a Telegram `message_id` in Actions AND the message in the destination channel before enabling automatic sends.
 
 **Do not mistake a successful dispatch, saved configuration, or HTTP 200 response for verified Telegram delivery.**
+
+## Ranné Results — výsledky predchádzajúceho betting day
+
+Samostatný read-only workflow `.github/workflows/telegram-results.yml` a formátovač `scripts/telegram_result_publisher.py`:
+- Predvolený čas **07:00 Europe/Bratislava**; 06:00 je hranica betting day. Napríklad 31.10. o 07:00 patrí report za 30.10. V Admin → Telegram bot samostatne zapni **Odosielať výsledky** a nastav `Čas reportu`.
+- Trigger: externý GitHub `repository_dispatch` typu **`telegram-results-tick`** podľa tvojho cronu (približne 07:00 Bratislava vrátane letného času). Zároveň funguje už existujúci externý hourly tick alebo ručné `workflow_dispatch`; prijať sa môže len 90-minútové okno od nastaveného času.
+- Dáta sa **nevypočítavajú nanovo**. Interný read-only endpoint `GET /api/v1/internal/telegram-results` vyžaduje už používaný `BLINQ_LIVE_WORKER_TOKEN`. Číta presne aktuálne serverové Results a ich overený archív, používa existujúci zoznam testovacích vylúčení. Nevolá platené športové API, nemení výsledky ani ich nepersistuje.
+- Pre TOP, Value a Esá formát **Data Betting by BackstageTalks → 📊 Results → 📅 → 1️⃣ ✅ / ❌ / ➖ / ⏳ → súhrn units + ROI**. Finančné metriky zobrazí iba pri skutočne ocenených, vydaných a overených výsledkoch.
+- Report zahŕňa len **zaznamenané** Results v archíve. Po 07:00 nemusia byť všetky zápasy doriešené, preto sa nikdy netvári ako úplné vyhodnotenie celej vydanej ponuky. Pri prázdnom overenom výsledkovom zdroji sa nič neodosiela, namiesto nepravdivého „0 výhier“.
+- Ak predchádzajúci FREE výber z TOP existuje v dennej rezervácii a má zodpovedajúci oficiálny výsledok, bot vie vytvoriť aj 📊 Results | FREE. `TGCH_FREE` ho smeruje do FREE kanála, inak používa `TGCH`.
+- Spoločné idempotentné rezervácie na `telegram-bot-state`: **maximálne jeden ranný report za predchádzajúci betting day**. Pri chybnom/neurčitom odoslaní sa neskúša slepá automatická oprava.
+- Offline testy: `tests/test_telegram_results.py`. Nevyžaduje sa žiadny nový secret okrem existujúcich `TGB`, `TGCH`, `BLINQ_LIVE_WORKER_TOKEN` a čítacieho `TBT_DATA_GH_TOKEN` pre tipy.
+
+**Vynucovaný limit:** PR je iba používateľské zobrazenie, read-only endpoint a Telegram automatizácia. Nepíše do CDB, nemení schému ani výpočty modelu, nevytvára settlement a nevolá provider API.
