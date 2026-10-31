@@ -1427,6 +1427,54 @@ def validate_ui_config(payload: object) -> dict:
     if not isinstance(detail_limit, int) or not 3 <= detail_limit <= 5:
         raise ValueError("Dashboard detail pick limit must be between 3 and 5")
 
+    # Telegram automation is OFF by default. Validate only public configuration;
+    # bot token and target channel must remain in GitHub Secrets, never Azure.
+    bot = payload.get("telegram_bot")
+    if bot is not None:
+        if not isinstance(bot, dict):
+            raise ValueError("Telegram bot config must be an object")
+        if any(key in bot for key in ("bot_token", "token", "chat_id", "TGB", "TGCH")):
+            raise ValueError("Telegram credentials must be stored in GitHub Secrets")
+        for key in ("enabled", "include_started", "show_probability", "show_odds"):
+            if key in bot and not isinstance(bot[key], bool):
+                raise ValueError("Invalid Telegram flag " + key)
+        sections = bot.get("sections", {})
+        if not isinstance(sections, dict):
+            raise ValueError("Invalid Telegram sections")
+        for key in ("top", "value", "aces"):
+            if key in sections and not isinstance(sections[key], bool):
+                raise ValueError("Invalid Telegram section")
+        schedule = bot.get("schedule", {})
+        if not isinstance(schedule, dict) or (
+            "enabled" in schedule and not isinstance(schedule["enabled"], bool)
+        ):
+            raise ValueError("Invalid Telegram schedule")
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", str(schedule.get("time", "08:15"))):
+            raise ValueError("Invalid Telegram clock")
+        days = schedule.get("weekdays", list(range(7)))
+        if not isinstance(days, list) or any(type(day) is not int or day not in range(7) for day in days):
+            raise ValueError("Invalid Telegram weekdays")
+        if bot.get("layout", "combined") not in ("combined", "separate"):
+            raise ValueError("Invalid Telegram message layout")
+        limit = bot.get("max_per_section", 7)
+        if type(limit) is not int or not 1 <= limit <= 10:
+            raise ValueError("Telegram limit must be 1..10")
+        footer = bot.get("footer", "BlinQ · Tennis Intelligence")
+        if not isinstance(footer, str) or len(footer) > 160 or "\n" in footer or "\r" in footer:
+            raise ValueError("Invalid Telegram footer")
+        request = bot.get("manual_request") or {}
+        if not isinstance(request, dict):
+            raise ValueError("Invalid Telegram manual request")
+        if request:
+            if not re.fullmatch(r"[A-Za-z0-9_-]{8,80}", str(request.get("id") or "")):
+                raise ValueError("Invalid Telegram manual request id")
+            try:
+                date = datetime.fromisoformat(str(request.get("created_at") or "").replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError("Invalid Telegram manual request time") from exc
+            if date.tzinfo is None:
+                raise ValueError("Telegram manual request time must be timezone aware")
+
     encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     if len(encoded.encode("utf-8")) > 128_000:
         raise ValueError("UI configuration is too large")
