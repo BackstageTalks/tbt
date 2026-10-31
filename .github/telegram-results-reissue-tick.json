@@ -1,0 +1,7 @@
+{
+  "day": "2026-10-31",
+  "revision": "compact-four-lines-v1",
+  "reason": "operator approved one-time resend of verified results in four-line format",
+  "source_results_message_id": 713,
+  "trigger": "manual_push_once"
+}

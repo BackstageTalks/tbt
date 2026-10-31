@@ -32,9 +32,9 @@ on:
         type: string
         default: ''
       max_requests:
-        description: Per-run Tennis RapidAPI allowance, including retries (maximum 14700; shared provider-day ceiling is authoritative).
+        description: Per-run Tennis RapidAPI allowance, including retries (maximum 14500; shared provider-day ceiling is authoritative).
         type: number
-        default: 14700
+        default: 14500
       market_odds_max_events:
         description: Provider-1 odds event cap during refresh (-1 uses available request budget)
         type: number
@@ -117,8 +117,9 @@ jobs:
       START_DATE: ${{ inputs.start }}
       LOOKBACK_DAYS: ${{ inputs.lookback_days || 1095 }}
       END_DATE: ${{ inputs.end }}
-      MAX_REQUESTS: ${{ inputs.max_requests || 14700 }}
+      MAX_REQUESTS: ${{ inputs.max_requests || 14500 }}
       BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'
+      BLINQ_PROVIDER_REQUEST_RESERVE: '500'
       BLINQ_AUTOFILL_HIGH_YIELD: ${{ inputs.hourly_autofill && inputs.mode == 'statistics' && 'true' || 'false' }}
       BLINQ_API_AUTOFILL_STOP_AT_UTC: ${{ inputs.autofill_stop_at_utc || '' }}
       MARKET_ODDS_MAX_EVENTS: ${{ github.event_name == 'workflow_dispatch' && inputs.market_odds_max_events == 0 && '0' || inputs.market_odds_max_events || -1 }}
@@ -143,8 +144,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if ! [[ "$MAX_REQUESTS" =~ ^[0-9]+$ ]] || (( 10#$MAX_REQUESTS < 1 || 10#$MAX_REQUESTS > 14700 )); then
-            echo "::error::MAX_REQUESTS must be 1..14700; refusing provider run."
+          if ! [[ "$MAX_REQUESTS" =~ ^[0-9]+$ ]] || (( 10#$MAX_REQUESTS < 1 || 10#$MAX_REQUESTS > 14500 )); then
+            echo "::error::MAX_REQUESTS must be 1..14500; refusing provider run."
             exit 1
           fi
           if [[ "${{ inputs.hourly_autofill || 'false' }}" == "true" ]]; then
@@ -156,7 +157,7 @@ jobs:
             # Fail closed on the provider's actual remaining-call header;
             # preserve 300 provider requests even if key usage outside BlinQ
             # is absent from the internal shared ledger.
-            echo "BLINQ_PROVIDER_REQUEST_RESERVE=300" >> "$GITHUB_ENV"
+            echo "BLINQ_PROVIDER_REQUEST_RESERVE=500" >> "$GITHUB_ENV"
           fi
 
       - name: Resolve controlled push data request
@@ -174,8 +175,8 @@ jobs:
           promote="$(jq -r '.promote // false' "$request")"
           [[ "$promote" == "true" || "$promote" == "false" ]] || { echo "Invalid promote flag"; exit 1; }
           max_requests="$(jq -r '.max_requests // 1000' "$request")"
-          [[ "$max_requests" =~ ^[0-9]+$ ]] && (( 10#$max_requests >= 1 && 10#$max_requests <= 14700 )) || {
-            echo "Invalid max_requests: $max_requests (expected 1..14700)"; exit 1;
+          [[ "$max_requests" =~ ^[0-9]+$ ]] && (( 10#$max_requests >= 1 && 10#$max_requests <= 14500 )) || {
+            echo "Invalid max_requests: $max_requests (expected 1..14500)"; exit 1;
           }
           # The existing history/statistics downloader enforces a stricter
           # per-run ceiling than the generic workflow input. Reject excess
@@ -249,14 +250,14 @@ jobs:
           if [[ "$mode" == "statistics" && "$targeted" == "true" ]]; then
             # Keep a provider-side reserve even if calls outside the shared
             # BlinQ ledger have consumed API credits.
-            echo "BLINQ_PROVIDER_REQUEST_RESERVE=300" >> "$GITHUB_ENV"
+            echo "BLINQ_PROVIDER_REQUEST_RESERVE=500" >> "$GITHUB_ENV"
             echo "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER=true" >> "$GITHUB_ENV"
           fi
           if [[ "$mode" == "identity" ]]; then
             # Identity calendar recovery can make paid native API calls too.
             # Preserve the same hard provider-side reserve and require provider
             # quota evidence before any call (also when triggered by push).
-            echo "BLINQ_PROVIDER_REQUEST_RESERVE=300" >> "$GITHUB_ENV"
+            echo "BLINQ_PROVIDER_REQUEST_RESERVE=500" >> "$GITHUB_ENV"
             echo "BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER=true" >> "$GITHUB_ENV"
           fi
           echo "BLINQ_SHARED_API_BUDGET_PURPOSE=history" >> "$GITHUB_ENV"
@@ -1082,7 +1083,7 @@ jobs:
       BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
       BLINQ_SHARED_API_BUDGET_PURPOSE: ${{ inputs.mode == 'refresh' && 'refresh' || 'history' }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
-      MAX_REQUESTS: ${{ inputs.max_requests || 14700 }}
+      MAX_REQUESTS: ${{ inputs.max_requests || 14500 }}
     steps:
       - name: Checkout latest presentation assets
         uses: actions/checkout@v4
