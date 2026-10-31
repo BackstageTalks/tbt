@@ -67,6 +67,28 @@ delete historical runs or source code: both remain accessible in Git history.
 Active daily ticks, scheduler triggers, deploy workflows, and any marker
 still referenced by an active workflow were left intact.
 
+## Retired one-shot request marker cleanup, batch 2 (2026-10-31)
+
+Eight additional historical read-only/private research markers were retired after
+verifying their paired workflow definitions were removed on 2026-10-21 and
+none of the 206 workflows currently in `main` refer to their filenames.
+No web assets, deploy configurations, importers, CDB history, model data or
+provider quotas were altered. Original JSON values remain recoverable in Git
+history. Removed markers:
+
+- `.github/cdb-sofa-provider-id-probe-2025-request.json`
+- `.github/cdb-sofascore-p12302-request-20261013.json`
+- `.github/cdb-source-identity-probe-2025-request.json`
+- `.github/cdb-source-layer-upload-20261015-request.json`
+- `.github/rejected-drive-evidence-request.json`
+- `.github/rejected-drive-evidence-verification-request.json`
+- `.github/sackmann-cdb2025-readonly-request.json`
+- `.github/source-evidence-lake-request.json`
+
+Keep all active request/tick markers and workflow definitions. In particular,
+an old-looking marker is not orphaned merely because its filename contains a
+date; current workflow references take precedence.
+
 ## Recovery
 
 To recover a specific experiment, inspect its file at commit `ad5fc135478f32c8d3ee21d23fd326cb82c68714` and explicitly reintroduce only the required logic after reviewing up-to-date CDB evidence, single-writer controls, API reserve, and dependencies. Do not resurrect old pinned writers wholesale.
