@@ -6,6 +6,7 @@
     "schedule": {"enabled": false, "time": "08:15", "weekdays": [0, 1, 2, 3, 4, 5, 6]},
     "layout": "combined",
     "max_per_section": 7,
+    "full_offer": true,
     "include_started": false,
     "show_probability": true,
     "show_odds": true,
