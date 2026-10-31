@@ -334,7 +334,7 @@ def test_snapshot_checksum_guard(tmp_path, monkeypatch):
         raise AssertionError("Unconfirmed offer accepted")
 
 
-def test_telegram_routes_free_to_optional_free_chat(monkeypatch, tmp_path):
+def test_telegram_routes_free_to_single_configured_chat(monkeypatch, tmp_path):
     monkeypatch.setenv("TGB", "fake-secret")
     monkeypatch.setenv("TGCH", "-100111")
     monkeypatch.setenv("TGCH_FREE", "-100222")
@@ -355,7 +355,7 @@ def test_telegram_routes_free_to_optional_free_chat(monkeypatch, tmp_path):
         return Response()
     monkeypatch.setattr(tg.urllib.request, "urlopen", fake_open)
     tg.send(types.SimpleNamespace(output=str(tmp_path)))
-    assert seen == ["-100111", "-100222"]
+    assert seen == ["-100111", "-100111"]
     assert all("entities" not in x for x in outgoing)  # legacy unbranded messages still work
 
 def test_compact_separate_mode_order_without_category_headings():
