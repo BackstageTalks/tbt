@@ -892,8 +892,8 @@ jobs:
         run: |
           set -euo pipefail
           test -s .cache/tbt/model-readiness/readiness.json
-          python scripts/publish_model_calibration_status.py \\
-            --readiness-file .cache/tbt/model-readiness/readiness.json \\
+          python scripts/publish_model_calibration_status.py \
+            --readiness-file .cache/tbt/model-readiness/readiness.json \
             --output .cache/tbt/model-readiness/calibration-status.json
           test -s .cache/tbt/model-readiness/calibration-status.json
 
