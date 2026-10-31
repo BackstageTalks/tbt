@@ -6,7 +6,7 @@ Cron **zatiaľ nie je aktivovaný**. Tento súbor je príprava pre operátora. P
 worker je [`telegram-daily-offer.yml`](../../.github/workflows/telegram-daily-offer.yml).
 Schválená spoločná správa = všetky oprávnené TOP → VALUE → ACES **bez nadpisov**
 a bez EV, predikcia/pick namiesto projekcie; samostatná FREE správa obsahuje
-jeden deterministicky vybraný TOP tip. Každý riadok má označenie kategórie (`🏆 TOP |`, `💎 VALUE |`, `🎯 ACES |`), samostatný tip má `🆓 FREE |`. Číselné prefixy sa nepoužívajú.
+jeden deterministicky vybraný TOP tip. Každý riadok má jednoduché označenie kategórie (`T |`, `V |`, `A |`), samostatný tip má pôvodné Telegram emoji `🆓 FREE |`. Číselné prefixy a neexistujúce vlastné systémové emoji sa nepoužívajú.
 Zachovaná je pätička a klikateľný odkaz na BlinQ Stat Engine.
 
 Údaje na nastavenie cronu sú aj v
