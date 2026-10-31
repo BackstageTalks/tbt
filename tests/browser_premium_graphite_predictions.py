@@ -10,8 +10,8 @@ from browser_mobile_projection_cards import SETUP
 from browser_runtime_r43 import ORIGIN, browser_path, static_route
 
 EXPECTED = {
-    'card': 'rgb(21, 31, 35)',
-    'stroke': 'rgba(175, 193, 193, 0.22)',
+    'card': 'rgb(16, 25, 28)',
+    'stroke': 'rgb(43, 56, 57)',
     'copy': 'rgb(236, 243, 239)',
     'mint': 'rgb(101, 205, 164)',
     'inset': 'rgb(27, 42, 41)',
@@ -23,10 +23,11 @@ VALUES = """() => {
     const node = document.querySelector(selector);
     if (!node) throw Error('Missing element: '+selector);
     const css = getComputedStyle(node);
-    return {bg: css.backgroundColor, border: css.borderTopColor, color: css.color, shadow: css.boxShadow, topWidth: css.borderTopWidth, leftWidth: css.borderLeftWidth};
+    return {bg: css.backgroundColor, image: css.backgroundImage, border: css.borderTopColor, color: css.color, shadow: css.boxShadow, topWidth: css.borderTopWidth, leftWidth: css.borderLeftWidth};
   };
   return {
     card: get('#dailyHubBody tr'),
+    kpi: get('#dashboardKpis .dashboard-kpi'),
     pick: get('#dailyHubBody .hub-pick-stack strong'),
     confidence: get('#dailyHubBody .hub-confidence strong'),
     detail: get('#dailyHubBody .hub-detail:not(.is-locked)'),
@@ -55,6 +56,10 @@ def test_graphite():
                         assert values['card']['bg'] == EXPECTED['card'], (width, market, values)
                         assert values['card']['border'] == EXPECTED['stroke'], (width, market, values)
                         assert values['card']['shadow'] == 'none', (width, market, values)
+                        assert values['card']['image'] == 'none', (width, market, values)
+                        assert values['kpi']['bg'] == EXPECTED['card'], (width, market, values)
+                        assert values['kpi']['border'] == EXPECTED['stroke'], (width, market, values)
+                        assert values['kpi']['shadow'] == 'none', (width, market, values)
                         assert values['pick']['color'] == EXPECTED['copy'], (width, market, values)
                         assert values['confidence']['color'] == EXPECTED['mint'], (width, market, values)
                         assert values['detail']['bg'] == EXPECTED['inset'], (width, market, values)
@@ -79,7 +84,7 @@ def test_graphite():
                 context.close()
         finally:
             browser.close()
-    print('Premium Graphite v2 Chromium colors and single-sheet geometry: 320/390/600px PASS; tablet unchanged; screenshots saved')
+    print('Premium Graphite reference Chromium colors and single-sheet geometry: 320/390/600px PASS; tablet unchanged; screenshots saved')
 
 
 if __name__ == '__main__':
