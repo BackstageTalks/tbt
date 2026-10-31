@@ -69,18 +69,20 @@ def num(v):
     except (TypeError,ValueError): return None
 NUMBER_EMOJIS=("1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟")
 HEADER="🎾 BlinQ | Tennis Intelligence"
-FOOTER="ℹ️ Analytical preview only"
+FOOTER="ℹ️ Analytical preview"
 BRAND_LINK_TEXT="BlinQ Stat Engine"
 BRAND_FOOTER="by " + BRAND_LINK_TEXT
 BRAND_URL="https://agreeable-sky-011a7fe10.7.azurestaticapps.net/follow-the-data/"
 
 
 def branded_footer(value=None):
-    """Preserve Admin's disclaimer while unconditionally appending the linked brand."""
+    """Compact one-line standard footer; preserve other Admin disclaimers."""
     text=str(value or FOOTER).strip()
     for old in ("🧠 by BackstageTalks Data Engine", "by BackstageTalks Data Engine",
                 BRAND_FOOTER):
         text=text.replace(old,"").strip()
+    if text in ("ℹ️ Analytical preview only","ℹ️ Analytical preview"):
+        return FOOTER+" "+BRAND_FOOTER
     return (text+"\n" if text else "")+BRAND_FOOTER
 
 
