@@ -7541,11 +7541,15 @@ function adminActivityRows(){
   function showAccessHint(target,planId='elite',sectionLabel='',autoHide=false){
     const hint=$('accessHint'),title=$('accessHintTitle'),text=$('accessHintText'),button=$('accessHintUpgrade');if(!hint||!target||!target.isConnected||hint.contains(target)||$('upgradeDialog')?.open)return;
     clearTimeout(accessHintHoverTimer);
-    const d=accessHintDetails(planId,sectionLabel);accessHintTarget=target;accessHintPinnedByClick=autoHide;
+    // A click-pinned access hint must not turn into a hover hint when focusin
+    // or a delayed pointerover arrives for that same trigger after the click.
+    const keepPinned=accessHintPinnedByClick&&accessHintTarget===target;
+    const pin=Boolean(autoHide||keepPinned);
+    const d=accessHintDetails(planId,sectionLabel);accessHintTarget=target;accessHintPinnedByClick=pin;
     if(title)title.textContent=d.title;if(text)text.textContent=d.text;
     if(button){button.textContent=`Upgrade na ${d.levelName}`;button.dataset.upgradePlan=planId;button.dataset.upgradeSection=sectionLabel||d.levelName;}
     hint.hidden=false;positionAccessHint(target);
-    clearTimeout(accessHintTimer);if(autoHide)accessHintTimer=setTimeout(()=>hideAccessHint(),4300);
+    clearTimeout(accessHintTimer);if(pin)accessHintTimer=setTimeout(()=>hideAccessHint(),4300);
   }
 
   function upgradePlanFeatureList(planId){
@@ -7839,7 +7843,7 @@ function adminActivityRows(){
       hideAccessHint();
     });
     $('upgradeDialog').addEventListener('close',()=>{const target=upgradeReturnTarget;upgradeReturnTarget=null;const restore=()=>{if(target?.isConnected)target.focus({preventScroll:true});hideAccessHint();};restore();queueMicrotask(restore);});
-    window.addEventListener('scroll',()=>hideAccessHint(),{passive:true});
+    window.addEventListener('scroll',()=>{if(accessHintPinnedByClick&&accessHintTarget?.isConnected&&!$('accessHint')?.hidden){positionAccessHint(accessHintTarget);return;}hideAccessHint();},{passive:true});
     window.addEventListener('resize',()=>{if(accessHintTarget&&!$('accessHint')?.hidden)positionAccessHint(accessHintTarget);},{passive:true});
     let resizeTimer,lastCardCapacity=dashboardCardsPerPanel(); window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{const capacity=dashboardCardsPerPanel();if(capacity===lastCardCapacity)return;lastCardCapacity=capacity;if(state.route==='predictions'){state.page=0;Object.keys(state.marketPage||{}).forEach(k=>{state.marketPage[k]=0;});renderPredictions();renderMarketSections();renderDashboardComposition();}},120)});
   }
