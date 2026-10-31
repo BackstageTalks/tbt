@@ -1435,7 +1435,7 @@ def validate_ui_config(payload: object) -> dict:
             raise ValueError("Telegram bot config must be an object")
         if any(key in bot for key in ("bot_token", "token", "chat_id", "TGB", "TGCH")):
             raise ValueError("Telegram credentials must be stored in GitHub Secrets")
-        for key in ("enabled", "include_started", "show_probability", "show_odds"):
+        for key in ("enabled", "include_started", "show_probability", "show_odds", "free_top_pick"):
             if key in bot and not isinstance(bot[key], bool):
                 raise ValueError("Invalid Telegram flag " + key)
         sections = bot.get("sections", {})
@@ -1460,7 +1460,7 @@ def validate_ui_config(payload: object) -> dict:
         if type(limit) is not int or not 1 <= limit <= 10:
             raise ValueError("Telegram limit must be 1..10")
         footer = bot.get("footer", "BlinQ · Tennis Intelligence")
-        if not isinstance(footer, str) or len(footer) > 160 or "\n" in footer or "\r" in footer:
+        if not isinstance(footer, str) or len(footer) > 200 or "\r" in footer:
             raise ValueError("Invalid Telegram footer")
         request = bot.get("manual_request") or {}
         if not isinstance(request, dict):
