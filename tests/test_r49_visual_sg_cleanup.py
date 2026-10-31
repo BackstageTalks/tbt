@@ -35,7 +35,7 @@ def test_results_only_expose_separate_sets_and_games_filters():
     assert "sets:'sets'" in mapping
     assert "games:'games'" in mapping
     assert 'sg:' not in mapping
-    assert APP.count('orderedResultCategories().map(v=>') == 2
+    assert APP.count('resultCategories.map(v=>') == 2
 
 
 def test_doubles_ev_is_analysis_only_not_publication_gate():
