@@ -57,7 +57,7 @@ def test_telegram_omits_ev_everywhere_including_value_and_full_daily_message():
     assert value.endswith(" | 1.80")
     assert value_long.endswith(" | 1.80")
     assert all("EV" not in line for line in (top,value,value_long))
-    assert all("\\n" not in line for line in (top,value,value_long))
+    assert all("\n" not in line for line in (top,value,value_long))
     combined=tg.messages(offer(),cfg,NOW)
     assert len(combined)==2
     assert all("EV" not in message["text"] for message in combined)
