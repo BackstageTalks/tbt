@@ -30,3 +30,33 @@ body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardHero {
     border-radius: 16px !important;
   }
 }
+
+/* Homepage surface-radius standard. Main panels share one radius;
+   nested cards and controls use smaller, consistent tiers. */
+body#blinqPremium.blinq-home:not(.blinq-admin) {
+  --bq-radius-panel: 14px;
+  --bq-radius-card: 10px;
+  --bq-radius-control: 8px;
+}
+body#blinqPremium.blinq-home:not(.blinq-admin) :is(
+  #dashboardHero, #dashboardKpis .dashboard-kpi, #dailyHub, .telegram-groups-panel
+) {
+  border-radius: var(--bq-radius-panel) !important;
+}
+body#blinqPremium.blinq-home:not(.blinq-admin) .tg-group-card {
+  border-radius: var(--bq-radius-card) !important;
+}
+body#blinqPremium.blinq-home:not(.blinq-admin) :is(
+  .tg-group-cta, #dailyHub .hub-detail
+) {
+  border-radius: var(--bq-radius-control) !important;
+}
+@media (max-width: 600px) {
+  body#blinqPremium.blinq-home:not(.blinq-admin) {
+    --bq-radius-panel: 11px;
+    --bq-radius-card: 9px;
+  }
+  body#blinqPremium.blinq-home.bqm-enabled:not(.blinq-admin) #dashboardHero {
+    border-radius: var(--bq-radius-panel) !important;
+  }
+}
