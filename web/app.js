@@ -7648,11 +7648,17 @@ function adminActivityRows(){
   function showAccessHint(target,planId='elite',sectionLabel='',autoHide=false){
     const hint=$('accessHint'),title=$('accessHintTitle'),text=$('accessHintText'),button=$('accessHintUpgrade');if(!hint||!target||!target.isConnected||hint.contains(target)||$('upgradeDialog')?.open)return;
     clearTimeout(accessHintHoverTimer);
-    const d=accessHintDetails(planId,sectionLabel);accessHintTarget=target;accessHintPinnedByClick=autoHide;
+    // A focus/hover event after the explicit click must not downgrade the
+    // pinned hint to an ephemeral one: pointerout would otherwise hide it.
+    const wasPinned=accessHintPinnedByClick&&accessHintTarget===target&&!hint.hidden;
+    const pinned=autoHide||wasPinned;
+    const d=accessHintDetails(planId,sectionLabel);accessHintTarget=target;accessHintPinnedByClick=pinned;
     if(title)title.textContent=d.title;if(text)text.textContent=d.text;
     if(button){button.textContent=`Upgrade na ${d.levelName}`;button.dataset.upgradePlan=planId;button.dataset.upgradeSection=sectionLabel||d.levelName;}
     hint.hidden=false;positionAccessHint(target);
-    clearTimeout(accessHintTimer);if(autoHide)accessHintTimer=setTimeout(()=>hideAccessHint(),4300);
+    // Keep the original click timeout if another focus/hover event follows.
+    if(autoHide){clearTimeout(accessHintTimer);accessHintTimer=setTimeout(()=>hideAccessHint(),4300);}
+    else if(!pinned)clearTimeout(accessHintTimer);
   }
 
   function upgradePlanFeatureList(planId){
