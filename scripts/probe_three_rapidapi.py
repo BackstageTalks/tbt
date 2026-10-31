@@ -5,10 +5,7 @@ from datetime import datetime, timezone
 from _bootstrap import ROOT
 from tbt.providers.guarded_rapidapi import GuardedRapidApiHttp
 
-TARGETS = [
- ("sportscore6.p.rapidapi.com", [("/api/widget/match/", {"sport":"tennis","slug":"liam-draxl-vs-darwin-blanch"}), ("/api/widget/match/", {"sport":"tennis","slug":"tatiana-prozorova-vs-hayu-kinoshita"})]),
- ("ai-tennis-predictions.p.rapidapi.com", [("/predictions/today", {})]),
-]
+TARGETS = [("odds-api4.p.rapidapi.com", [("/sports", {})])]
 report={"time":datetime.now(timezone.utc).isoformat(), "commit":os.getenv("GITHUB_SHA"), "run_id":os.getenv("GITHUB_RUN_ID"), "cdb_writes":0, "providers":[]}
 key=os.environ["RAPIDAPI_KEY"]
 def clean(s):
