@@ -54,7 +54,7 @@ jobs:
           assert 0 <= budget['global_spent'] <= 14500 == budget['global_limit']
           assert 0 <= budget['live_spent'] <= 3000 == budget['live_limit']
           assert budget['provider_plan_limit'] == 15000
-          assert budget['reserved_provider_headroom'] == 300
+          assert budget['reserved_provider_headroom'] == 500
           print(json.dumps({'readback':'PASS','heartbeat':heartbeat.get('last_success_at'),
                             'global_spent':budget['global_spent'],
                             'live_spent':budget['live_spent']},sort_keys=True))
