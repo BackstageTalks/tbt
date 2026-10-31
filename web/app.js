@@ -5126,7 +5126,7 @@ function adminActivityRows(){
         max_per_section:7,include_started:false,show_probability:true,show_odds:true,free_top_pick:true,results_enabled:false,
         footer:'ℹ️ Analytical preview only'};
     const c=state.ui.telegram_bot;
-    if(typeof c.footer==='string'&&c.footer.includes('BackstageTalks Data Engine'))c.footer=c.footer.replace(/\\n?🧠 by BackstageTalks Data Engine/g,'').trim()||'ℹ️ Analytical preview only';
+    if(typeof c.footer==='string'&&c.footer.includes('BackstageTalks Data Engine'))c.footer=c.footer.replace(/\n?🧠 by BackstageTalks Data Engine/g,'').trim()||'ℹ️ Analytical preview only';
     c.sections=c.sections||{top:true,value:true,aces:true};
     c.schedule=c.schedule||{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]};
     return c;
@@ -5136,7 +5136,7 @@ function adminActivityRows(){
     const check=(name,value,text)=>`<label class="tg-bot-toggle"><input type="checkbox" data-tg-bot-field="${name}" ${value?'checked':''}><span>${text}</span></label>`;
     const days=['Po','Ut','St','Št','Pi','So','Ne'].map((name,index)=>`<label class="tg-bot-weekday"><input type="checkbox" data-tg-bot-day="${index}" ${(s.weekdays||[]).includes(index)?'checked':''}>${name}</label>`).join('');
     return `<section class="admin-ux-section tg-bot-admin">
-      <div class="admin-ux-heading"><div><small>AUTOMATIZÁCIA</small><h2>Telegram · Bot publisher</h2><p>Posielanie potvrdenej dennej ponuky TOP / Value / Esá cez GitHub Secrets TGB a TGCH.</p></div></div>
+      <div class="admin-ux-heading"><div><small>AUTOMATIZÁCIA</small><h2>Telegram · Bot publisher</h2><p>Posielanie potvrdenej dennej ponuky TOP / Value / Aces cez GitHub Secrets TGB a TGCH.</p></div></div>
       <div class="admin-runtime-note"><strong>Stav</strong><span>Nastavenia uložíš tlačidlom Publikovať. GitHub používa existujúci externý hodinový tick. Presné minúty vyžadujú externý 10-minútový dispatch; bez neho môže byť správa oneskorená.</span></div>
       <div class="tg-bot-layout">
         <div class="tg-bot-card"><h3>Čo posielať</h3>
