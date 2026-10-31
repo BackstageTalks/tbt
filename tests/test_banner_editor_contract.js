@@ -51,4 +51,6 @@ const desktopGradient="linear-gradient(90deg,rgba(2,9,12,.98) 0%,rgba(2,9,12,.94
 const mobileGradient="linear-gradient(90deg,rgba(2,15,13,.94) 0%,rgba(2,15,13,.77) 45%,rgba(2,15,13,.22) 78%,rgba(2,15,13,.35) 100%)";
 assert.ok(css.includes('.lean-admin-preview.desktop::before{\n  background:'+desktopGradient+'!important;'),'desktop preview uses public desktop gradient');
 assert.ok(css.includes('.lean-admin-preview.mobile::before{\n  background:'+mobileGradient+'!important;'),'mobile preview uses public mobile gradient');
+for(const spec of ['1396×203 px','2792×406 px','370×128 px','1110×384 px','6,88 : 1','2,89 : 1']) assert.ok(app.includes(spec),'banner help must match the actual desktop/mobile preview geometry: '+spec);
+assert.ok(!app.includes('1920×313'),'obsolete desktop banner export instructions must be removed');
 console.log('PASS: banner editor contract');
