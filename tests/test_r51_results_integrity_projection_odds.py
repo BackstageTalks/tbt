@@ -28,8 +28,8 @@ def test_results_use_compact_model_odds_result_columns_and_projection_odds():
     assert '<th data-mobile-label="BlinQ %">Model / BlinQ %' in APP
     assert '</small></th><th>Kurz</th><th>Výsledok</th><th>Jednotky</th>' in APP
     assert "<th>Skutočne</th>" not in APP
-    assert "projectionOdds=publication?.odds==null?NaN:Number(publication?.odds)" in APP
-    assert "Number.isFinite(projectionOdds)&&projectionOdds>1?projectionOdds.toFixed(2):'—'" in APP
+    assert "const realProjectionOdds=verifiedProjectionOdds(publication)" in APP
+    assert "Number.isFinite(realProjectionOdds)?realProjectionOdds.toFixed(2):'—'" in APP
     assert 'class="results-actual"' in APP
     assert 'class="results-outcome-stack"' in APP
     assert "if(tab==='games'||tab==='sets')return ['#',time,tournament,match,prediction,odds,projection,confidence]" in APP
