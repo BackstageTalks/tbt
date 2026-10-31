@@ -101,13 +101,7 @@ def test_snapshot_checksum_guard(tmp_path, monkeypatch):
     d = tmp_path
     snap = offer()
     def fake_run(args, **kwargs):
-        name = args[args.index("--pattern") + 1]
-        if name == "daily_offer_snapshot.json":
-            (d / name).write_text(json.dumps(snap))
-        else:
-            raw = (d / "daily_offer_snapshot.json").read_bytes() if (d / "daily_offer_snapshot.json").exists() else json.dumps(snap).encode()
-            (d / name).write_text(json.dumps({"files": {"daily_offer_snapshot.json": {
-                "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)}}}))
+        return None
     monkeypatch.setattr(tg.subprocess, "run", fake_run)
     # The manifest is fetched first, then the snapshot. Fake both in advance.
     raw = json.dumps(snap).encode()
