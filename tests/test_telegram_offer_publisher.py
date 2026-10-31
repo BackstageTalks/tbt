@@ -84,8 +84,13 @@ def test_aces_prediction_contracts_and_mobile_compaction():
     over=dict(count,price_contract="player_total_ou",price_status="priced_projection",
               market_line=8.5,ou_side="over",model_probability=0.65,odds=1.9)
     text=tg.fmt(over,"aces",cfg,index=2)
-    assert "Over 8.5 es" in text
-    assert "Over 8.5 es | ≈8.3 es | 1.90" in text
+    assert "O 8.5 es" in text
+    assert "O 8.5 es | ≈8.3 es | 1.90" in text
+    assert "Over 8.5" not in text
+    under=dict(over,ou_side="under")
+    under_text=tg.fmt(under,"aces",cfg,index=2)
+    assert "U 8.5 es | ≈8.3 es | 1.90" in under_text
+    assert "Under 8.5" not in under_text
     assert "72.0%" not in text  # model O/U probability differs from most-aces confidence
     assert "EV" not in text
     bad=dict(over)
