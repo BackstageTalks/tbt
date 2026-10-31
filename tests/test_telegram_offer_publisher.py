@@ -48,18 +48,20 @@ def offer():
 
 
 
-def test_value_ev_is_inline_when_it_fits_and_omitted_for_long_mobile_rows():
-    cfg = settings()
-    short = tg.fmt(row(88, "Sinner"), "value", cfg, index=3)
-    long = tg.fmt(row(89, "Alexander ExtraordinaryLongSurname"), "value", cfg, index=4)
-    assert " | EV +25.0%" in short
-    assert short.count("EV") == 1
-    assert "\n" not in short
-    assert len(short) <= tg.MAX_INLINE_EV_CHARS
-    assert "EV" not in long
-    assert long.endswith(" | 1.80")
-    assert "\n" not in long
-    assert tg.fmt(row(88, "Sinner"), "top", cfg, index=1).count("EV") == 0
+def test_telegram_omits_ev_everywhere_including_value_and_full_daily_message():
+    cfg=settings()
+    top=tg.fmt(row(88,"Sinner"),"top",cfg,index=1)
+    value=tg.fmt(row(89,"Hijikata"),"value",cfg,index=4)
+    value_long=tg.fmt(row(90,"Alexander ExtraordinaryLongSurname"),"value",cfg,index=5)
+    assert top.endswith(" | 1.80")
+    assert value.endswith(" | 1.80")
+    assert value_long.endswith(" | 1.80")
+    assert all("EV" not in line for line in (top,value,value_long))
+    assert all("\\n" not in line for line in (top,value,value_long))
+    combined=tg.messages(offer(),cfg,NOW)
+    assert len(combined)==2
+    assert all("EV" not in message["text"] for message in combined)
+    assert "6️⃣ Value" in combined[0]["text"]
 
 
 def test_daily_queue_is_durable_idempotent_and_full_offer_override(tmp_path, monkeypatch):
