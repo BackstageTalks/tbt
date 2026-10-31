@@ -61,7 +61,7 @@ def test_telegram_omits_ev_everywhere_including_value_and_full_daily_message():
     combined=tg.messages(offer(),cfg,NOW)
     assert len(combined)==2
     assert all("EV" not in message["text"] for message in combined)
-    assert "6️⃣ Value" in combined[0]["text"]
+    assert "💎 VALUE | Value" in combined[0]["text"]
 
 
 def test_aces_prediction_contracts_and_mobile_compaction():
@@ -79,7 +79,7 @@ def test_aces_prediction_contracts_and_mobile_compaction():
     priced=tg.fmt(superiority,"aces",cfg,index=6)
     assert "najviac es | 2.00" in priced
     assert "72.0%" not in priced  # the optional confidence was dropped to fit mobile
-    assert len(priced)<=44
+    assert len(priced)<=48  # category label adds text; confidence is removed first
 
     over=dict(count,price_contract="player_total_ou",price_status="priced_projection",
               market_line=8.5,ou_side="over",model_probability=0.65,odds=1.9)
@@ -122,13 +122,48 @@ def test_daily_queue_is_durable_idempotent_and_full_offer_override(tmp_path, mon
     msgs=tg.load(out/"messages.json")
     assert [x["audience"] for x in msgs]==["premium","free"]
     premium=msgs[0]["text"]
-    assert premium.index("1️⃣ Surname1")<premium.index("6️⃣ Value")<premium.index("7️⃣ Server")
+    assert premium.index("🏆 TOP | Surname1")<premium.index("💎 VALUE | Value")<premium.index("🎯 ACES | Server")
     assert "🆓" in msgs[1]["text"]
     result=tg.load(out/"state.json")
     assert result["attempts"][ident]["status"]=="reserved"
     assert len(result["attempts"][ident]["rows"])==8
     tg.queue_daily(SimpleNamespace(now=NOW.isoformat(),state=str(out/"state.json")))
     assert tg.load(out/"state.json")["attempts"][ident]["status"]=="reserved"
+
+
+def test_old_admin_schedule_does_not_duplicate_0620_delivery(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+    state_path=tmp_path/"state.json"
+    ident=tg._daily_id(NOW)
+    tg.save(state_path,{"schema":1,"attempts":{ident:{
+        "status":"sent","message_ids":[702,703],"rows":[{"event_id":"one"}]}}})
+    monkeypatch.setattr(tg,"config",lambda *_: settings())
+    monkeypatch.setattr(tg,"snapshot",
+                        lambda *_: (_ for _ in ()).throw(AssertionError("Must not read/send again")))
+    args=SimpleNamespace(now=NOW.isoformat(),state=str(state_path),
+                         output=str(tmp_path/"out"),config_url="https://unit.invalid/api/v1/ui-config")
+    tg.prepare(args)
+    assert "daily_offer_already_reserved" in capsys.readouterr().out
+    assert not (tmp_path/"out"/"ready").exists()
+    assert tg.load(state_path)["attempts"][ident]["status"]=="sent"
+
+
+def test_daily_dispatch_does_not_duplicate_other_publisher(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+    state_path=tmp_path/"state.json"
+    tg.save(state_path,{"schema":1,"attempts":{"2026-10-31:schedule:2026-10-31":{
+        "status":"reserved","rows":[{"event_id":"one"}]}}})
+    monkeypatch.setattr(tg,"config",lambda *_: settings(enabled=False))
+    monkeypatch.setattr(tg,"snapshot",
+                        lambda *_: (_ for _ in ()).throw(AssertionError("Must not read/send again")))
+    args=SimpleNamespace(now=NOW.isoformat(),state=str(state_path),
+                         output=str(tmp_path/"out"),config_url="https://unit.invalid/api/v1/ui-config",
+                         daily=True)
+    tg.prepare(args)
+    assert "daily_offer_already_reserved" in capsys.readouterr().out
+    assert not (tmp_path/"out"/"ready").exists()
+
+
 
 def test_one_time_format_reissue_preserves_exact_previous_picks_and_dedup(tmp_path, monkeypatch):
     from types import SimpleNamespace
@@ -182,17 +217,21 @@ def test_classic_format_and_deterministic_free_pick():
     assert [x["audience"] for x in first] == ["premium", "free"]
     assert first[0]["text"].startswith("🎾 BlinQ | Tennis Intelligence")
     assert "Data Betting" not in first[0]["text"]
-    assert "1️⃣ Surname1 | " in first[0]["text"]
+    assert "🏆 TOP | Surname1 | " in first[0]["text"]
     assert " | " in first[0]["text"]
     assert "🎾 TOP Picks | BlinQ" not in first[0]["text"]
     assert "💎 VALUE Picks | BlinQ" not in first[0]["text"]
     assert "🎯 ESÁ | BlinQ" not in first[0]["text"]
     premium = first[0]["text"]
-    assert premium.index("1️⃣ Surname1") < premium.index("5️⃣ Surname5")
-    assert premium.index("5️⃣ Surname5") < premium.index("6️⃣ Value")
-    assert premium.index("6️⃣ Value") < premium.index("7️⃣ Server")
+    assert premium.index("🏆 TOP | Surname1") < premium.index("🏆 TOP | Surname5")
+    assert premium.index("🏆 TOP | Surname5") < premium.index("💎 VALUE | Value")
+    assert premium.index("💎 VALUE | Value") < premium.index("🎯 ACES | Server")
     assert premium.count("📅") == 1
-    assert "🆓 Surname" in first[1]["text"]
+    assert all(prefix in premium for prefix in ("🏆 TOP | Surname1","💎 VALUE | Value","🎯 ACES | Server"))
+    assert all(" | " in row for row in premium.splitlines() if row.startswith(("🏆 TOP", "💎 VALUE", "🎯 ACES")))
+    assert not any(number in premium for number in tg.NUMBER_EMOJIS)
+    assert "EV" not in premium
+    assert "🆓 FREE | Surname" in first[1]["text"]
     assert first[1]["text"].count("🆓") == 1
     assert "najviac es" in first[0]["text"]
     assert "aces 8.3" not in first[0]["text"]
@@ -295,7 +334,7 @@ def test_compact_separate_mode_order_without_category_headings():
     assert len(out) == 3
     for message,pick in zip(out,("Surname1","Value","Server")):
         assert message["audience"] == "premium"
-        assert "1️⃣ " + pick in message["text"]
+        assert {"Surname1":"🏆 TOP", "Value":"💎 VALUE", "Server":"🎯 ACES"}[pick]+" | "+pick in message["text"]
         assert "🎾 TOP Picks" not in message["text"]
         assert "💎 VALUE Picks" not in message["text"]
         assert "🎯 ESÁ" not in message["text"]

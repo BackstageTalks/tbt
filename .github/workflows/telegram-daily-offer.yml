@@ -85,8 +85,11 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$DATA_TOKEN"
-          # At most ~4h20 per attempt. Before GitHub's timeout, requeue another
-          # workflow_dispatch so a long morning refresh does not lose the send.
+          # At most ~4h20 per attempt. Before GitHub's timeout, hand off
+          # the persisted QUEUED intent via workflow_dispatch; never claim
+          # Telegram delivery before independently verified message IDs.
+          # A failed/uncertain Telegram send stays reserved for manual review
+          # (Telegram sendMessage has no reliable idempotency key).
           start_day="$(TZ=Europe/Bratislava date +%Y-%m-%d)"
           for n in $(seq 1 260); do
             current_day="$(TZ=Europe/Bratislava date +%Y-%m-%d)"
@@ -97,7 +100,11 @@ jobs:
               exit 0
             fi
             busy=false
-            for workflow in data.yml morning-refresh.yml prediction-release-recovery.yml; do
+            # Wait for all known release/data writers, not only the morning wrapper.
+            # This loop does not hold the private Telegram ledger lock.
+            for workflow in data.yml morning-refresh.yml prediction-release-recovery.yml \
+                            data-autofill.yml data-hourly-quota-gapfill.yml \
+                            nightly-data-maintenance.yml; do
               if ! payload="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?per_page=50")"; then
                 busy=true
                 break

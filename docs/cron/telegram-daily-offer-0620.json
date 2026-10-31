@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "title": "BlinQ Telegram daily offer 06:20 Europe/Bratislava",
+  "enabled_in_external_scheduler": false,
+  "schedule": {
+    "cron": "20 6 * * *",
+    "timezone": "Europe/Bratislava",
+    "dst_aware": true
+  },
+  "request": {
+    "method": "POST",
+    "url": "https://api.github.com/repos/BackstageTalks/tbt/dispatches",
+    "headers": {
+      "Accept": "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Content-Type": "application/json",
+      "Authorization": "Bearer <EXTERNAL_CRON_GITHUB_TOKEN>"
+    },
+    "json_body": {
+      "event_type": "telegram-daily-offer-tick"
+    },
+    "success_http_status": 204,
+    "timeout_seconds": 30
+  },
+  "workflow": ".github/workflows/telegram-daily-offer.yml",
+  "data_source": "BackstageTalks/tbt-data private release tbt-predictions-v1: _tbt_bundle_manifest.json + daily_offer_snapshot.json",
+  "delivery": {
+    "layout": "combined",
+    "categories": [
+      "TOP",
+      "VALUE",
+      "ACES"
+    ],
+    "all_confirmed_eligible": true,
+    "free_separate": true,
+    "ev_in_message": false,
+    "show_prediction_not_projection": true,
+    "queue_until_release_verified": true,
+    "duplicate_guard": "private telegram-bot-state branch",
+    "sent_verification": "Telegram message IDs plus private ledger read-back",
+    "row_prefixes": {
+      "top": "🏆 TOP |",
+      "value": "💎 VALUE |",
+      "aces": "🎯 ACES |",
+      "free": "🆓 FREE |"
+    },
+    "numeric_prefixes": false
+  },
+  "notes": [
+    "Template only: creating this file does not activate a remote cron.",
+    "Use a dedicated fine-grained GitHub token scoped to BackstageTalks/tbt with Contents read/write, stored only in the scheduler secret field.",
+    "The cron POST contains no tennis picks or private data; the workflow retrieves the current verified release itself.",
+    "Telegram delivery is at-most-once after reservation. If the send outcome is uncertain, inspect channel and ledger before manual retry."
+  ]
+}
