@@ -7,6 +7,15 @@ import pytest
 from release_store import ReleaseStore
 
 
+@pytest.fixture(autouse=True)
+def _simulate_owned_global_writer_lock(monkeypatch):
+    # CI itself is a GitHub Actions environment, so the production writer
+    # correctly enforces its lock. Only this isolated in-memory unit fixture
+    # substitutes lock ownership; the lock integration tests remain unchanged.
+    import cdb_global_writer_lock
+    monkeypatch.setattr(cdb_global_writer_lock, "verify", lambda *_args, **_kwargs: {})
+
+
 def make_store(tmp_path, *, existing=(), fail_upload=None, fail_rename=None):
     store = object.__new__(ReleaseStore)
     store.repository = "BackstageTalks/tbt-data"
