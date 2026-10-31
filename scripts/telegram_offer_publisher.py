@@ -102,7 +102,7 @@ def telegram_link_entities(message):
 
 def _selection_name(row):
     bet=row.get("betting") or {}
-    sid=str(bet.get("selection_id") or row.get("selection_id") or row.get("winner_id") or "")
+    sid=str((row.get("selection_id") or bet.get("selection_id")) if row.get("market") in ("aces","double_faults") else (bet.get("selection_id") or row.get("selection_id") or row.get("winner_id") or ""))
     for player in (row.get("player1") or {},row.get("player2") or {}):
         if str(player.get("id"))==sid and player.get("name"):
             return str(player["name"]).strip()
@@ -248,7 +248,7 @@ def select_groups(x,c,now):
             except (ValueError,KeyError,TypeError):continue
             if start.astimezone(TZ).date().isoformat()!=today or day(start)!=today:continue
             if not c.get("include_started",False) and start<=now:continue
-            selector=str((r.get("betting") or {}).get("selection_id") or r.get("selection_id") or r.get("winner_id") or r.get("pick") or "")
+            selector=str((r.get("selection_id") or (r.get("betting") or {}).get("selection_id") or r.get("winner_id") or r.get("pick") or "") if k=="aces" else ((r.get("betting") or {}).get("selection_id") or r.get("selection_id") or r.get("winner_id") or r.get("pick") or ""))
             ident=(str(r["event_id"]),"aces",selector,str(r.get("price_contract") or ""),str(r.get("ou_side") or ""),str(r.get("market_line") or "")) if k=="aces" else (str(r["event_id"]),"match_winner",selector)
             if not selector or ident in seen:continue
             seen.add(ident);rows.append(r)
@@ -327,7 +327,7 @@ def result_reference(row,section):
     betting=row.get("betting") or {}
     real_section={"top":"top_daily","value":"value","aces":"ace","free":"top_daily"}[section]
     market="aces" if section=="aces" else "match_winner"
-    selection=str(betting.get("selection_id") or row.get("selection_id") or row.get("winner_id") or "")
+    selection=str((row.get("selection_id") or betting.get("selection_id") or row.get("winner_id") or "") if section=="aces" else (betting.get("selection_id") or row.get("selection_id") or row.get("winner_id") or ""))
     if section=="aces":
         odds, pub=_ace_issued_quote(row)
         pub=pub or {}
