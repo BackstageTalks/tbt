@@ -90,22 +90,30 @@ def fetch(url, token, target):
 
 
 def name_map(rows):
+    """Same concise surname display as the historic Telegram, keeping Aces lines."""
     names = list(dict.fromkeys(str(x.get("selection") or "").strip() for x in rows))
+    base_names = {full: full.partition(" (")[0] for full in names}
+    collisions = {}
+    for base in base_names.values():
+        parts = base.split()
+        surname = parts[-1] if parts else "—"
+        collisions.setdefault(surname.casefold(), set()).add(base)
     mapping = {}
-    colliding = {}
-    for full in names:
-        parts = full.split()
+    for full, base in base_names.items():
+        parts = base.split()
         surname = parts[-1] if parts else "—"
-        colliding.setdefault(surname.casefold(), []).append(full)
-    for full in names:
-        parts = full.split()
-        surname = parts[-1] if parts else "—"
-        if len(colliding[surname.casefold()]) > 1 and len(parts) > 1:
-            name = "".join(x[0].upper() + "." for x in parts[:-1]) + " " + surname
+        if len(collisions[surname.casefold()]) > 1 and len(parts) > 1:
+            display = "".join(p[0].upper() + "." for p in parts[:-1]) + " " + surname
         else:
-            name = surname
-        mapping[full] = name
-    return mapping
+            display = surname
+        suffix = full[len(base):]
+        mapping[full] = display + suffix
+    # If initials still collide use the original full name, never a wrong identity.
+    counts = {}
+    for visible in mapping.values():
+        counts[visible.casefold()] = counts.get(visible.casefold(), 0) + 1
+    return {full: (full if counts[value.casefold()] > 1 else value)
+            for full, value in mapping.items()}
 
 
 def render_section(rows, label, target, *, free=False):
@@ -141,8 +149,11 @@ def render_section(rows, label, target, *, free=False):
         odds_text = f"{odds:.2f}" if odds is not None and odds > 1 else "—"
         units_text = f"{units:+.2f}u" if units is not None and wager is not None else ("Pending" if status == "pending" else "—")
         prefix = "🆓" if free else (NUMBERS[idx - 1] if idx <= len(NUMBERS) else str(idx) + ".")
-        rendered.append(f"{prefix} {marker} {names.get(selection, selection)} | {clock} | {odds_text} | {units_text}")
+        if idx <= len(NUMBERS):
+            rendered.append(f"{prefix} {marker} {names.get(selection, selection)} | {clock} | {odds_text} | {units_text}")
     roi = f"ROI {profit / stake * 100:+.1f}%" if stake > 0 else "ROI —"
+    if len(rows) > len(NUMBERS):
+        rendered.append(f"… ďalších {len(rows) - len(NUMBERS)} výsledkov je zahrnutých v súhrne.")
     aggregate = f"✅{counts['win']} ❌{counts['loss']} ➖{counts['void']} ⏳{counts['pending']} | {profit:+.2f}u | {roi}"
     # The settled archive is NOT a complete issued-pick inventory. Never imply
     # that unobserved historical picks are losses, wins, or 0 outstanding.
