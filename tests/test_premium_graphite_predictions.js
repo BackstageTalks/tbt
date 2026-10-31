@@ -6,7 +6,10 @@ const css = fs.readFileSync('web/blinq-premium-graphite-predictions.css','utf8')
 const styles = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map(m => m[1].split('?')[0]);
 assert.equal(styles.at(-1),'/blinq-premium-graphite-predictions.css', 'pilot CSS must have final cascade priority');
 assert.equal(styles.filter(s => s === '/blinq-premium-graphite-predictions.css').length, 1);
-for (const color of ['#10191C','#2B3839','#ECF3EF','#65CDA4']) assert.ok(css.includes(color), color);
+for (const color of ['#10191C','#2B3839','#ECF3EF','#65CDA4','#1B2A29','#334B44']) assert.ok(css.includes(color), color);
+assert.doesNotMatch(css, /#151F23|rgba\(175,193,193,\.22\)/, 'rejected v2 colors must not reappear');
+assert.match(css, /background:\s*#10191C\s*!important/);
+assert.match(css, /border:\s*1px solid #2B3839\s*!important/);
 assert.match(css, /@media \(max-width: 600px\)/);
 assert.match(css, /#predictionsView #dailyHub/);
 assert.match(css, /#predictionsView #dashboardKpis/);
