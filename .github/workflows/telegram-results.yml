@@ -45,7 +45,7 @@ jobs:
           test -n "$TGCH_ELITE" || { echo "::error::TGCH_ELITE must be configured before any result reservation"; exit 1; }
           args=()
           if [ "$GITHUB_EVENT_NAME" = repository_dispatch ]; then args+=(--external-tick); fi
-          python scripts/telegram_daily_results.py prepare --api-url "$BLINQ_PRODUCTION_URL" --config-url "$BLINQ_PRODUCTION_URL/api/v1/ui-config" --state .private-telegram/ops/telegram-bot-state.json "${args[@]}"
+          python scripts/telegram_daily_results.py prepare --elite-auto --api-url "$BLINQ_PRODUCTION_URL" --config-url "$BLINQ_PRODUCTION_URL/api/v1/ui-config" --state .private-telegram/ops/telegram-bot-state.json "${args[@]}"
       - name: Reserve results before Telegram requests
         id: reserve
         run: |
