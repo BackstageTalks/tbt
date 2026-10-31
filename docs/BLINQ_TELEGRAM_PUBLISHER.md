@@ -21,7 +21,7 @@ Add these in **BackstageTalks/tbt → Settings → Secrets and variables → Act
 | `TGB` | Telegram bot token (required) |
 | `TGCH` | Telegram channel chat ID (required, bot must be allowed to post) |
 | `TGCH_FREE` | Optional second FREE channel ID. Without it FREE goes to the same `TGCH` channel |
-| `TBT_DATA_GH_TOKEN` | Existing GitHub token with read access to private `BackstageTalks/tbt-data` release assets |
+| `TBT_DATA_GH_TOKEN` | Existing GitHub token with **read access to private release assets and Contents write permission to the isolated `telegram-bot-state` branch** in `BackstageTalks/tbt-data` |
 
 The last token is already used by existing BlinQ data workflows and must not be replaced with the Telegram bot token.
 
@@ -53,7 +53,7 @@ Data Betting by BackstageTalks
 
 Workflow: `.github/workflows/telegram-offer.yml`; no native GitHub cron (prohibited by the app release contract). The existing external hourly API tick triggers the publisher on `.github/hourly-api-gapfill-tick.json` updates. To tighten delivery to 10-minute resolution, configure an external scheduler to call `repository_dispatch` with `event_type=telegram-offer-tick` every 10 minutes. The send window is the selected time plus 90 minutes. If no external ticks occur, automatic sending will not run.
 
-Before any Telegram request, the workflow writes a durable send reservation to the separate `telegram-bot-state` branch and performs a GitHub read-back. Reservation keys are betting day + schedule/manual request ID. Only a successfully reserved batch is sent; retries do **not** automatically resend a batch because Telegram does not support an idempotency key. If a send fails or GH status is uncertain, inspect GitHub Actions and the Telegram channel before manually creating a new request.
+Before any Telegram request, the workflow writes a durable send reservation to the **private `BackstageTalks/tbt-data` / `telegram-bot-state` branch** and performs a GitHub read-back. Reservation keys are betting day + schedule/manual request ID. Only a successfully reserved batch is sent; retries do **not** automatically resend a batch because Telegram does not support an idempotency key. If a send fails or GH status is uncertain, inspect GitHub Actions and the Telegram channel before manually creating a new request.
 
 A FREE message uses `TGCH_FREE` when configured, otherwise `TGCH`. With both channels pointing to the same chat, FREE will be a separate post in that channel.
 
@@ -76,7 +76,7 @@ Do not enable automatic sending until you have independently verified the target
 
 ## Daily settlement reports — previous betting day (NEW)
 
-The previous-day evaluation uses the **exact picks with Telegram-confirmed message IDs** from the isolated `telegram-bot-state` branch. The opening betting day is `Europe/Bratislava 06:00` until the next 06:00. At ~07:00 on 1 November the report covers 31 October, even if a tennis match crossed midnight.
+The previous-day evaluation uses the **exact picks with Telegram-confirmed message IDs** from the isolated **private `BackstageTalks/tbt-data` / `telegram-bot-state` branch**. The opening betting day is `Europe/Bratislava 06:00` until the next 06:00. At ~07:00 on 1 November the report covers 31 October, even if a tennis match crossed midnight.
 
 - Enable **Telegram bot → Denné vyhodnotenie** in Admin and click **Publikovať**. Defaults OFF. The existing publishing toggle must also be ON.
 - Job: `.github/workflows/telegram-results.yml` (**BlinQ Telegram daily results**).
@@ -99,4 +99,8 @@ For convenient local timezone scheduling use `TZ=Europe/Bratislava` (or your sch
 
 ## Data impact
 
-The Telegram PR never modifies CDB, the existing verified-results archive, provider quotas, models or prediction issuance. It **does** update the existing Admin UI-config storage when the operator publishes settings, writes a dedicated GitHub branch ledger of Telegram reservations/receipts/immutable sent-row identifiers, and sends Telegram messages. The settlement API is read-only.
+The Telegram PR never modifies CDB, the existing verified-results archive, provider quotas, models or prediction issuance. It **does** update the existing Admin UI-config storage when the operator publishes settings, writes a **private `tbt-data` branch** ledger of Telegram reservations/receipts/immutable sent-row identifiers, and sends Telegram messages. The settlement API is read-only.
+
+### Security isolation of Telegram state
+
+The application repository `BackstageTalks/tbt` is **public**. Never commit issued paid picks, recipient IDs, price data or Telegram message receipts to any public branch of this repo. Both Telegram workflows check out the **private** `BackstageTalks/tbt-data` branch `telegram-bot-state` with sparse `ops/` checkout. The existing `TBT_DATA_GH_TOKEN` must be allowed to read that private repository and push to this isolated branch; if it cannot push, the workflow fails **before sending**. No CDB branch, asset or release is written by either workflow.
