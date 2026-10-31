@@ -130,6 +130,41 @@ def test_daily_queue_is_durable_idempotent_and_full_offer_override(tmp_path, mon
     tg.queue_daily(SimpleNamespace(now=NOW.isoformat(),state=str(out/"state.json")))
     assert tg.load(out/"state.json")["attempts"][ident]["status"]=="reserved"
 
+
+def test_old_admin_schedule_does_not_duplicate_0620_delivery(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+    state_path=tmp_path/"state.json"
+    ident=tg._daily_id(NOW)
+    tg.save(state_path,{"schema":1,"attempts":{ident:{
+        "status":"sent","message_ids":[702,703],"rows":[{"event_id":"one"}]}}})
+    monkeypatch.setattr(tg,"config",lambda *_: settings())
+    monkeypatch.setattr(tg,"snapshot",
+                        lambda *_: (_ for _ in ()).throw(AssertionError("Must not read/send again")))
+    args=SimpleNamespace(now=NOW.isoformat(),state=str(state_path),
+                         output=str(tmp_path/"out"),config_url="https://unit.invalid/api/v1/ui-config")
+    tg.prepare(args)
+    assert "daily_offer_already_reserved" in capsys.readouterr().out
+    assert not (tmp_path/"out"/"ready").exists()
+    assert tg.load(state_path)["attempts"][ident]["status"]=="sent"
+
+
+def test_daily_dispatch_does_not_duplicate_other_publisher(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+    state_path=tmp_path/"state.json"
+    tg.save(state_path,{"schema":1,"attempts":{"2026-10-31:schedule:2026-10-31":{
+        "status":"reserved","rows":[{"event_id":"one"}]}}})
+    monkeypatch.setattr(tg,"config",lambda *_: settings(enabled=False))
+    monkeypatch.setattr(tg,"snapshot",
+                        lambda *_: (_ for _ in ()).throw(AssertionError("Must not read/send again")))
+    args=SimpleNamespace(now=NOW.isoformat(),state=str(state_path),
+                         output=str(tmp_path/"out"),config_url="https://unit.invalid/api/v1/ui-config",
+                         daily=True)
+    tg.prepare(args)
+    assert "daily_offer_already_reserved" in capsys.readouterr().out
+    assert not (tmp_path/"out"/"ready").exists()
+
+
+
 def test_one_time_format_reissue_preserves_exact_previous_picks_and_dedup(tmp_path, monkeypatch):
     from types import SimpleNamespace
     confirmed=offer()
