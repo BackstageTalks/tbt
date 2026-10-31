@@ -110,14 +110,14 @@ def main():
                             heroRadius:document.querySelector('#dashboardHero')?getComputedStyle(document.querySelector('#dashboardHero')).borderRadius:null,navBg,navLine};
                         }""")
                         assert 'sports-intelligence=20261030-1' in premium['css'], premium
-                        assert premium['rowBg'] == 'none' and premium['rowBgColor'] == 'rgb(13, 33, 28)', premium
+                        assert premium['rowBg'] == 'none' and premium['rowBgColor'] == 'rgb(16, 25, 28)', premium
                         assert premium['pickBg'] == 'rgba(0, 0, 0, 0)', premium
                         assert premium['heroRadius'] == '11px', premium
                         assert premium['navBg'] == 'none', premium
                         assert premium['navLine'] == 'rgb(85, 231, 170)', premium
-                        assert premium['kpiBg'] == 'none' and premium['kpiBgColor'] == 'rgb(13, 33, 28)', premium
+                        assert premium['kpiBg'] == 'none' and premium['kpiBgColor'] == 'rgb(16, 25, 28)', premium
                         assert premium['kpiAccent'] == 'none', premium
-                        assert premium['kpiRadius'] == '10px', premium
+                        assert premium['kpiRadius'] == '11px', premium
                         assert 23 <= float(premium['kpiValueSize'].replace('px','')) <= 31, premium
                         assert premium['kpiIconSize'] == '16px', premium
                         assert len(premium['cards']) == 4, premium
