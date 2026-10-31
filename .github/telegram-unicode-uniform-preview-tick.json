@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "type": "operator-approved-once-only-text-design-test",
+  "day": "2026-10-31",
+  "variant": "uniform-square-vs-colored-options",
+  "does_not_modify_daily_predictions": true
+}
