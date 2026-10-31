@@ -8,6 +8,7 @@ from tbt.services.entitlements import _daily_rows
 TZ=ZoneInfo("Europe/Bratislava")
 SECTIONS={"top":"top_daily_picks","value":"value_picks","aces":"ace_picks"}
 LABELS={"top":"🏆 TOP","value":"💎 VALUE","aces":"🎯 ACES"}
+OFFER_ICONS={"top":"🏆","value":"💎","aces":"🎯"}
 def load(p): return json.loads(Path(p).read_text(encoding="utf-8"))
 def save(p,x):
     p=Path(p);p.parent.mkdir(parents=True,exist_ok=True)
@@ -126,7 +127,7 @@ def _name_map(rows):
     return {full:(full if len(used[display.casefold()])>1 else display)
             for full,display in names_out.items()}
 
-def fmt(r,k,c,index=1,name_map=None):
+def fmt(r,k,c,index=1,name_map=None,prefix_override=None):
     bet=r.get("betting") or {}
     selected=_selection_name(r)
     name=(name_map or {}).get(selected) or selected.split()[-1] if selected else "—"
@@ -154,7 +155,7 @@ def fmt(r,k,c,index=1,name_map=None):
     odds=num(bet.get("odds") or r.get("odds"))
     if c.get("show_odds",True):
         values.append(f"{odds:.2f}" if odds is not None and odds>1 else "—")
-    prefix=NUMBER_EMOJIS[index-1] if 1<=index<=len(NUMBER_EMOJIS) else f"{index}."
+    prefix=prefix_override or OFFER_ICONS[k]
     line=f"{prefix} {name} | {time} | "+" | ".join(values)
     if k=="aces" and len(line)>44 and confidence is not None:
         # Keep the exact prediction and genuine odds readable on narrow phones.
@@ -249,7 +250,7 @@ def messages(x,c,now,free_event_id=None):
         if not candidates: raise RuntimeError("Previously issued FREE TOP event is no longer in confirmed TOP; refusing changed FREE pick")
         winner=min(candidates,key=lambda r:hashlib.sha256(
             (today+"|"+str(r.get("event_id"))+"|"+str((r.get("betting") or {}).get("selection_id") or r.get("winner_id"))).encode("utf-8")).hexdigest())
-        free="\n".join(["🎾 FREE | BlinQ",f"📅 {date}","",fmt(winner,"top",c,1).replace("1️⃣","🆓",1)])
+        free="\n".join(["🎾 FREE | BlinQ",f"📅 {date}","",fmt(winner,"top",c,1,prefix_override="🆓")])
         outbound.append({"audience":"free","text":"\n\n".join([HEADER,free,footer]),"free_event_id":str(winner.get("event_id"))})
     if any(len(item["text"].encode("utf-16-le"))//2>4096 for item in outbound):
         raise RuntimeError("Telegram 4096 character limit; reduce max_per_section")
