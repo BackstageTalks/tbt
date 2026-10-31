@@ -209,6 +209,30 @@ def test_one_time_format_reissue_preserves_exact_previous_picks_and_dedup(tmp_pa
     tg.prepare(args)
     assert not (tmp_path/"repeat"/"ready").exists()
 
+    # A distinct, operator-requested revision can be posted once without
+    # changing the prior daily publication, its settlement, or the v2 reissue.
+    args.preview_revision="format-tva-v3"
+    args.state=str(tmp_path/"repost"/"state.json")
+    args.output=str(tmp_path/"tva-reissue")
+    tg.prepare(args)
+    tva=tg.load(tmp_path/"tva-reissue"/"messages.json")
+    assert len(tva)==2
+    assert "T | Surname1" in tva[0]["text"]
+    assert "V | Value" in tva[0]["text"]
+    assert "A | Server" in tva[0]["text"]
+    assert "🆓 FREE |" in tva[1]["text"]
+    assert all("EV" not in m["text"] for m in tva)
+    reissue=tg.load(tmp_path/"tva-reissue"/"state.json")
+    new_id=tg.day(NOW)+":repost:format-tva-v3"
+    assert reissue["reposts"][new_id]["status"]=="reserved"
+    assert reissue["reposts"][new_id]["rows"]==[]
+    assert reissue["reposts"][repost_id]["status"]=="sent"
+    assert reissue["attempts"][sent_id]==prior
+    args.state=str(tmp_path/"tva-reissue"/"state.json")
+    args.output=str(tmp_path/"tva-repeat")
+    tg.prepare(args)
+    assert not (tmp_path/"tva-repeat"/"ready").exists()
+
 
 def test_classic_format_and_deterministic_free_pick():
     first = tg.messages(offer(), settings(), NOW)
