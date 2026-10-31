@@ -6,7 +6,7 @@ import json
 import os
 import re
 import subprocess
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -34,13 +34,13 @@ from audit_statistics_inventory import _quality_ready, statistics_value_change
 from adaptive_statistics_queue import AdaptiveStatisticsQueue
 from recover_native_event_id import candidate_days, recover_day, identity_gap_inventory
 
-# Priorities from five independently read-back VERIFIED CDB statistics runs on
-# 2026-10-20 (11,564 paid calls; 135,213 persisted new values). WTA 2023
-# earned a high-yield slot alongside WTA 2024/2022 and ATP 2024.
+# Initial priorities use recent independently read-back CDB yield:
+# ATP 2024 and WTA 2023 remain productive. WTA 2025 is sampled only if
+# identity and retry gates find eligible provider-native matches.
 # These are initial ordering priors, not fixed quota shares: the online queue
 # relearns from paid CDB gains each run, with >=25% baseline exploration.
 # ATP 2025 and 2026 remain available for exploration, never guessed or forced.
-VERIFIED_HIGH_YIELD_COHORTS = (("wta", 2024), ("wta", 2023), ("wta", 2022), ("atp", 2024))
+VERIFIED_HIGH_YIELD_COHORTS = (("atp", 2024), ("wta", 2023), ("wta", 2024), ("wta", 2022))
 
 
 def read_json(path, default):
@@ -317,7 +317,8 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
 
         def bucket_priority(bucket):
             if family == "recent_gap":
-                return (0, bucket_ready[bucket] / max(1, bucket_total[bucket]),
+                return (0 if bucket == ("wta", 2025) else 1,
+                        bucket_ready[bucket] / max(1, bucket_total[bucket]),
                         -bucket[1], bucket[0])
             prior = (VERIFIED_HIGH_YIELD_COHORTS.index(bucket)
                      if family in {"recent_verified", "historic_verified"}
@@ -377,20 +378,26 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
 
     candidates = []
     skipped = Counter()
+    eligibility_by_cohort = defaultdict(Counter)
     for match in in_window:
         stats = match.stats if isinstance(match.stats, dict) else {}
         p1_ready = _quality_ready(stats, "p1")
         p2_ready = _quality_ready(stats, "p2")
+        cohort = f"{str(match.tour or 'unknown').lower()}:{match.scheduled_at.year}"
         if targeted:
             if not missing_fields(match):
                 skipped["target_fields_present"] += 1
+                eligibility_by_cohort[cohort]["target_fields_present"] += 1
                 continue
             if event_id(match) is None:
                 skipped["missing_or_conflicting_event_id"] += 1
+                eligibility_by_cohort[cohort]["missing_or_conflicting_event_id"] += 1
                 continue
             if not retry_due(match, STATISTICS_SCHEMA_VERSION):
                 skipped["retry_not_due"] += 1
+                eligibility_by_cohort[cohort]["retry_not_due"] += 1
                 continue
+            eligibility_by_cohort[cohort]["eligible"] += 1
         elif p1_ready and p2_ready:
             continue
         key = (str(match.tour or "unknown").lower(), int(match.scheduled_at.year))
@@ -441,13 +448,16 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
         "candidate_rows": len(candidates),
         "targeted": targeted,
         "historical_high_yield": historical_high_yield,
-        "preferred_verified_cohort": "wta:2024:serve_return_incomplete" if historical_high_yield else None,
+        "preferred_verified_cohort": "atp:2024:serve_return_incomplete" if historical_high_yield else None,
         "verified_high_yield_cohorts": [f"{tour}:{year}" for tour, year in VERIFIED_HIGH_YIELD_COHORTS] if historical_high_yield else [],
         "priority_policy": "8_recent_verified_6_recent_gap_3_historic_verified_1_historic_gap_2_other" if historical_high_yield else None,
         "first_1000_by_tour_year": priority_preview,
         "recent_focus_years": [2024, 2025, 2026] if historical_high_yield else [],
         "planned_recent_baseline_share_if_all_families_available": 0.7 if historical_high_yield else None,
         "skipped": dict(skipped),
+        "eligibility_by_tour_year": {
+            cohort: dict(counts) for cohort, counts in sorted(eligibility_by_cohort.items())
+        } if targeted else {},
         "bucket_coverage": {
             f"{tour}:{year}": {
                 "completed": bucket_total[(tour, year)],
