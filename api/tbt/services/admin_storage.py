@@ -131,7 +131,7 @@ class _FirestoreTableAdapter:
         from google.api_core.exceptions import FailedPrecondition, NotFound
         from google.cloud.firestore_v1 import LastUpdateOption
 
-        if str(mode).lower() != "merge" or match_condition != MatchConditions.IfNotModified or etag is None:
+        if str(getattr(mode, "value", mode)).lower() != "merge" or match_condition != MatchConditions.IfNotModified or etag is None:
             raise ValueError("Conditional merge requires the last-read entity version")
         row = dict(entity)
         pk, rk = row.get("PartitionKey"), row.get("RowKey")
@@ -1063,6 +1063,7 @@ def save_model_calibration_status(payload: object) -> dict:
     NEVER move shadow counters or the CDB unseen audit backwards.
     """
     from azure.core import MatchConditions
+    from azure.data.tables import UpdateMode
     from .model_calibration_status import (
         normalize_model_calibration_snapshot, assert_calibration_successor,
         calibration_fingerprint,
@@ -1101,7 +1102,7 @@ def save_model_calibration_status(payload: object) -> dict:
                 etag = getattr(prior_entity, "metadata", {}).get("etag")
                 if etag is None:
                     raise AdminStorageUnavailable("Calibration storage does not expose CAS ETag")
-                table.update_entity(entity, mode="merge", etag=etag,
+                table.update_entity(entity, mode=UpdateMode.MERGE, etag=etag,
                                     match_condition=MatchConditions.IfNotModified)
         except AdminStorageUnavailable:
             raise
