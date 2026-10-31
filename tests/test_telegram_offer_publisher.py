@@ -505,7 +505,7 @@ def test_aces_quote_and_receipt_require_exact_issued_line_and_price():
     sent=tg.result_reference(card,"aces")
     assert sent["odds"]==1.91
     assert sent["publication_key"]=="ace:602:p1:under:7.5"
-    assert sent["market_line"]==12.5
+    assert sent["market_line"]==7.5
     assert sent["projection_direction"]=="under"
     assert sent["odds_source"]=="propline"
     assert sent["odds_market_name"]=="Synthetic Beta - Player Aces"
@@ -532,7 +532,7 @@ def test_different_aces_lines_for_same_player_are_not_silently_deduplicated():
     card=row(603,"Synthetic Gamma","aces")
     card.update(price_status="priced_projection",price_contract="player_total_ou",
                 ou_side="under",market_line=5.5,odds=1.92)
-    other={**card,"market_line":15.5,"odds":1.85}
+    other={**card,"market_line":6.5,"odds":1.85}
     sample=offer()
     sample["ace_picks"]=[card,other]
     selected=tg.select_groups(sample,settings(free_top_pick=False),NOW)
