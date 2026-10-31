@@ -209,6 +209,16 @@ def _filter_result_history(
 
 
 
+def filter_results_for_categories(rows: list, categories: list[str] | set[str]) -> list:
+    """Recheck runtime settlement overlays before the feed leaves the API.
+
+    The first pass runs before the status overlay. This pass prevents a
+    multi-market publication nested in an authorized daily pick from widening
+    a member's Results access during response-time settlement.
+    """
+    return _filter_result_history(rows, None, allowed_categories=set(categories))
+
+
 def effective_plan(access: dict) -> str:
     if bool(access.get("is_admin")) or str(access.get("role") or "").lower() == "admin":
         return "admin"
