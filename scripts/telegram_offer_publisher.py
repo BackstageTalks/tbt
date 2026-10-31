@@ -183,6 +183,46 @@ def messages(x,c,now,free_event_id=None):
         raise RuntimeError("Telegram 4096 character limit; reduce max_per_section")
     return outbound
 
+
+def result_reference(row,section):
+    """Immutable compact reference to a sendable and subsequently gradable pick."""
+    betting=row.get("betting") or {}
+    real_section={"top":"top_daily","value":"value","aces":"ace","free":"top_daily"}[section]
+    market="aces" if section=="aces" else "match_winner"
+    selection=str(betting.get("selection_id") or row.get("selection_id") or row.get("winner_id") or "")
+    pubs=[p for p in row.get("market_publications") or [] if isinstance(p,dict)
+          and p.get("section")==real_section and str(p.get("market") or market)==market
+          and str(p.get("selection_id") or p.get("winner_id") or "")==selection]
+    pub=pubs[0] if len(pubs)==1 else {}
+    odds=num(pub.get("odds") or betting.get("odds") or row.get("odds"))
+    if section=="aces" and pub and pub.get("price_status")!="priced_projection":odds=None
+    return {"event_id":str(row["event_id"]), "section":real_section,
+            "channel":section, "market":market, "selection_id":selection,
+            "publication_key":str(pub.get("publication_key") or ""),
+            "market_line":pub.get("market_line"),
+            "projection_direction":str(pub.get("ou_side") or pub.get("projection_direction") or ""),
+            "scheduled_at":str(row["scheduled_at"]),
+            "name":_selection_name(row), "odds":odds if odds and odds>1 else None,
+            "projection":num(row.get("projection")) if market=="aces" else None}
+
+def mark_sent(args):
+    """Called only after all message IDs were received; commit separate state read-back."""
+    out=Path(args.output)
+    ident=(out/"ready").read_text(encoding="utf-8").strip()
+    state=load(out/"state.json")
+    attempt=(state.get("attempts") or {}).get(ident)
+    receipt=load(out/"receipt.json")
+    if not attempt or not isinstance(receipt,list):
+        raise RuntimeError("Missing confirmed Telegram receipt")
+    expected=load(out/"messages.json")
+    if len(receipt)!=len(expected) or not all(isinstance(n,int) and n>0 for n in receipt):
+        raise RuntimeError("Incomplete Telegram send receipt")
+    attempt["status"]="sent"
+    attempt["sent_at"]=datetime.now(timezone.utc).isoformat()
+    attempt["message_ids"]=receipt
+    save(out/"state.json",state)
+    print(json.dumps({"status":"sent","id":ident,"confirmed":len(receipt)}))
+
 def prepare(a):
     now=stamp(a.now) if a.now else datetime.now(timezone.utc);v=config(a.config_url);key=due(v,now)
     if not key:print('{"status":"skipped","reason":"not_due"}');return
@@ -193,10 +233,26 @@ def prepare(a):
     if ident in attempts:print('{"status":"skipped","reason":"already_reserved"}');return
     out=Path(a.output)
     sticky=old.get("free_picks") if isinstance(old.get("free_picks"),dict) else {}
-    msg=messages(snapshot(out/"assets"),v,now,free_event_id=sticky.get(day(now)))
+    confirmed=snapshot(out/"assets")
+    msg=messages(confirmed,v,now,free_event_id=sticky.get(day(now)))
     if not msg:print('{"status":"skipped","reason":"no_eligible_rows"}');return
+    groups=select_groups(confirmed,v,now)
+    sent_rows=[]
+    for section,rows in groups.items():
+        if not (v.get("sections") or {}).get(section):
+            continue
+        for row in rows[:v.get("max_per_section",7)]:
+            sent_rows.append(result_reference(row,section))
+    free=next((item for item in msg if item.get("audience")=="free"),None)
+    if free:
+        top=next((row for row in groups.get("top",[]) if str(row.get("event_id"))==free["free_event_id"]),None)
+        if top is None:raise RuntimeError("FREE pick missing from confirmed TOP")
+        sent_rows.append(result_reference(top,"free"))
+    if not sent_rows:raise RuntimeError("No exact Telegram rows to evaluate")
     save(out/"messages.json",msg)
-    attempts[ident]={"reserved_at":now.isoformat(),"sha256":hashlib.sha256(json.dumps(msg,ensure_ascii=False).encode()).hexdigest()}
+    attempts[ident]={"reserved_at":now.isoformat(),"status":"reserved",
+                     "rows":sent_rows,
+                     "sha256":hashlib.sha256(json.dumps(msg,ensure_ascii=False).encode()).hexdigest()}
     for item in msg:
         if item.get("audience")=="free" and item.get("free_event_id"):
             sticky[day(now)]=item["free_event_id"]
@@ -207,6 +263,7 @@ def send(a):
     token=os.getenv("TGB");chat=os.getenv("TGCH")
     if not token or not chat:raise RuntimeError("Missing GH Secrets TGB or TGCH")
     if not (Path(a.output)/"ready").is_file():raise RuntimeError("Missing durable reservation")
+    receipts=[]
     for item in load(Path(a.output)/"messages.json"):
         if not isinstance(item,dict) or item.get("audience") not in ("free","premium"): raise RuntimeError("Invalid reserved recipient")
         destination=(os.getenv("TGCH_FREE") or chat) if item["audience"]=="free" else chat
@@ -216,9 +273,12 @@ def send(a):
         except Exception as exc:
             raise RuntimeError("Telegram request failed (credentials redacted): "+exc.__class__.__name__) from None
         if not answer.get("ok") or not (answer.get("result") or {}).get("message_id"):raise RuntimeError("Telegram send not confirmed")
-        print("Telegram accepted message_id="+str(answer["result"]["message_id"]))
+        message_id=int(answer["result"]["message_id"])
+        receipts.append(message_id)
+        save(Path(a.output)/"receipt.json",receipts)
+        print("Telegram accepted message_id="+str(message_id))
 if __name__=="__main__":
-    p=argparse.ArgumentParser();p.add_argument("action",choices=["prepare","send"])
+    p=argparse.ArgumentParser();p.add_argument("action",choices=["prepare","send","mark-sent"])
     p.add_argument("--config-url",default="https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/ui-config")
     p.add_argument("--state",default="ops/telegram-bot-state.json");p.add_argument("--output",default="/tmp/blinq-telegram");p.add_argument("--now",default="")
-    a=p.parse_args();(prepare if a.action=="prepare" else send)(a)
+    a=p.parse_args();{"prepare":prepare,"send":send,"mark-sent":mark_sent}[a.action](a)
