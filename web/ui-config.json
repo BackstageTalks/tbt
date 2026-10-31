@@ -10,6 +10,7 @@
     "show_probability": true,
     "show_odds": true,
     "free_top_pick": true,
+    "results_enabled": false,
     "footer": "ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine"
   },
   "plans": {
