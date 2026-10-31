@@ -156,20 +156,26 @@ def messages(x,c,now,free_event_id=None):
     today=day(now)
     date=now.astimezone(TZ).strftime("%d.%m.%Y")
     footer=str(c.get("footer") or FOOTER)
-    def category_text(k,rows):
-        names={"top":"🎾 TOP Picks | BlinQ","value":"💎 VALUE Picks | BlinQ","aces":"🎯 ESÁ | BlinQ"}
-        return "\n".join([names[k],f"📅 {date}",""]+
-                         [fmt(r,k,c,i,_name_map(rows)) for i,r in enumerate(rows,1)])
     outbound=[]
-    premium=[]
-    for k,rows in got.items():
-        if (c.get("sections") or {}).get(k):
-            premium.append(category_text(k,rows[:c.get("max_per_section",7)]))
-    if premium:
+    premium_groups=[(key,rows[:c.get("max_per_section",7)]) for key,rows in got.items()
+                    if (c.get("sections") or {}).get(key)]
+    # Published order is TOP -> Value -> Aces, but the outbound message deliberately
+    # has no category headings. One continuous list, one shared numbering sequence.
+    # Disambiguate equal surnames across *all* displayed sections.
+    all_premium_rows=[row for _,rows in premium_groups for row in rows]
+    names=_name_map(all_premium_rows)
+    def body(rows,starting_index=1):
+        return "\n".join(fmt(row,key,c,idx,names)
+                         for idx,(key,row) in enumerate(rows,starting_index))
+    if premium_groups:
         if c.get("layout","combined")=="separate":
-            outbound.extend({"audience":"premium","text":"\n\n".join([HEADER,part,footer])} for part in premium)
+            outbound.extend({"audience":"premium","text":"\n\n".join(
+                [HEADER,f"📅 {date}",body([(key,row) for row in rows]),footer])}
+                for key,rows in premium_groups)
         else:
-            outbound.append({"audience":"premium","text":"\n\n".join([HEADER,*premium,footer])})
+            records=[(key,row) for key,rows in premium_groups for row in rows]
+            outbound.append({"audience":"premium","text":"\n\n".join(
+                [HEADER,f"📅 {date}",body(records),footer])})
     if c.get("free_top_pick",True) and got.get("top"):
         # Stable deterministic pseudo-random selection by betting day.
         # A different action run on the same day cannot select another FREE pick.
