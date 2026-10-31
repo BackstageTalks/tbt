@@ -44,8 +44,11 @@ def due(v,now):
         age=(now-stamp(r.get("created_at"))).total_seconds()
         if 0<=age<=5400 and day(stamp(r["created_at"]))==day(now): return "manual:"+r["id"]
     s=v.get("schedule") or {};local=now.astimezone(TZ)
-    if not s.get("enabled") or local.weekday() not in s.get("weekdays",list(range(7))): return None
+    if not s.get("enabled"): return None
     h,m=map(int,s.get("time","08:15").split(":"));planned=local.replace(hour=h,minute=m,second=0,microsecond=0)
+    # Accept the prior local calendar day's late schedule after midnight.
+    if planned>local:planned-=timedelta(days=1)
+    if planned.weekday() not in s.get("weekdays",list(range(7))):return None
     if day(planned)==day(now) and 0<=(local-planned).total_seconds()<=5400: return "schedule:"+day(now)
     return None
 def snapshot(dest):
@@ -64,29 +67,57 @@ def num(v):
 NUMBER_EMOJIS=("1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟")
 HEADER="Data Betting by BackstageTalks"
 FOOTER="ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine"
-def fmt(r,k,c,index=1):
-    a,b=(r.get(n) or {} for n in ("player1","player2"))
+def _selection_name(row):
+    bet=row.get("betting") or {}
+    sid=str(bet.get("selection_id") or row.get("selection_id") or row.get("winner_id") or "")
+    for player in (row.get("player1") or {},row.get("player2") or {}):
+        if str(player.get("id"))==sid and player.get("name"):
+            return str(player["name"]).strip()
+    return str(row.get("pick") or row.get("selection") or sid).strip()
+
+def _name_map(rows):
+    # Preserve compact surname-style Telegram names while disambiguating collisions.
+    names=list(dict.fromkeys(_selection_name(row) for row in rows))
+    surnames={}
+    for full in names:
+        surname=full.split()[-1] if full.split() else "—"
+        surnames.setdefault(surname.casefold(),[]).append(full)
+    names_out={}
+    for full in names:
+        parts=full.split()
+        surname=parts[-1] if parts else "—"
+        if len(surnames[surname.casefold()])>1 and len(parts)>1:
+            initials="".join(item[:1].upper()+"." for item in parts[:-1])
+            names_out[full]=initials+" "+surname
+        else:
+            names_out[full]=surname
+    # Shared initials are ambiguous: keep complete names instead.
+    used={}
+    for full,display in names_out.items():
+        used.setdefault(display.casefold(),[]).append(full)
+    return {full:(full if len(used[display.casefold()])>1 else display)
+            for full,display in names_out.items()}
+
+def fmt(r,k,c,index=1,name_map=None):
     bet=r.get("betting") or {}
-    sid=str(bet.get("selection_id") or r.get("selection_id") or r.get("winner_id") or "")
-    selected=next((str(x.get("name")) for x in (a,b) if str(x.get("id"))==sid and x.get("name")),None)
-    selected=selected or str(r.get("pick") or r.get("selection") or sid)
-    other=next((str(x.get("name")) for x in (a,b) if str(x.get("name") or "")!=selected and x.get("name")),"—")
+    selected=_selection_name(r)
+    name=(name_map or {}).get(selected) or selected.split()[-1] if selected else "—"
     time=stamp(r["scheduled_at"]).astimezone(TZ).strftime("%H:%M")
     if k=="aces":
         projection=num(r.get("projection")); confidence=num(r.get("projection_confidence"))
         values=[f"esá {projection:.1f}" if projection is not None else "projekcia —"]
-        if confidence is not None: values.append(f"{confidence*100:.1f}%")
+        if confidence is not None:values.append(f"{(confidence*100 if abs(confidence)<=1 else confidence):.1f}%")
     else:
         prob=num(bet.get("blinq_probability") or bet.get("model_probability") or r.get("blinq_probability") or r.get("probability"))
-        values=[f"{prob*100:.1f}%" if prob is not None else "—"] if c.get("show_probability",True) else []
+        values=[f"{(prob*100 if abs(prob)<=1 else prob):.1f}%" if prob is not None else "—"] if c.get("show_probability",True) else []
     odds=num(bet.get("odds") or r.get("odds"))
     if c.get("show_odds",True):
         values.append(f"{odds:.2f}" if odds is not None and odds>1 else "—")
     if k=="value":
         ev=num(bet.get("expected_value") if "expected_value" in bet else r.get("expected_value"))
-        if ev is not None:values.append(f"EV {ev*100:+.1f}%")
+        if ev is not None:values.append(f"EV {(ev*100 if abs(ev)<=1 else ev):+.1f}%")
     prefix=NUMBER_EMOJIS[index-1] if 1<=index<=len(NUMBER_EMOJIS) else f"{index}."
-    return f"{prefix} {selected} vs {other} | {time} | "+" | ".join(values)
+    return f"{prefix} {name} | {time} | "+" | ".join(values)
 
 def select_groups(x,c,now):
     today=day(now)
@@ -128,7 +159,7 @@ def messages(x,c,now,free_event_id=None):
     def category_text(k,rows):
         names={"top":"🎾 TOP Picks | BlinQ","value":"💎 VALUE Picks | BlinQ","aces":"🎯 ESÁ | BlinQ"}
         return "\n".join([names[k],f"📅 {date}",""]+
-                         [fmt(r,k,c,i) for i,r in enumerate(rows,1)])
+                         [fmt(r,k,c,i,_name_map(rows)) for i,r in enumerate(rows,1)])
     outbound=[]
     premium=[]
     for k,rows in got.items():
