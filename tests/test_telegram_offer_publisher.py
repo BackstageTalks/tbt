@@ -66,7 +66,7 @@ def test_classic_format_and_deterministic_free_pick():
     second = tg.messages(offer(), settings(), NOW)
     assert first == second
     assert [x["audience"] for x in first] == ["premium", "free"]
-    assert "BlinQ | Tennis Intelligence" in first[0]["text"]
+    assert first[0]["text"].startswith("🎾 BlinQ | Tennis Intelligence")
     assert "Data Betting" not in first[0]["text"]
     assert "1️⃣ Surname1 | " in first[0]["text"]
     assert " | " in first[0]["text"]
