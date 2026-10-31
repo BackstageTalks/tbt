@@ -44,8 +44,11 @@ def due(v,now):
         age=(now-stamp(r.get("created_at"))).total_seconds()
         if 0<=age<=5400 and day(stamp(r["created_at"]))==day(now): return "manual:"+r["id"]
     s=v.get("schedule") or {};local=now.astimezone(TZ)
-    if not s.get("enabled") or local.weekday() not in s.get("weekdays",list(range(7))): return None
+    if not s.get("enabled"): return None
     h,m=map(int,s.get("time","08:15").split(":"));planned=local.replace(hour=h,minute=m,second=0,microsecond=0)
+    # Accept the prior local calendar day's late schedule after midnight.
+    if planned>local:planned-=timedelta(days=1)
+    if planned.weekday() not in s.get("weekdays",list(range(7))):return None
     if day(planned)==day(now) and 0<=(local-planned).total_seconds()<=5400: return "schedule:"+day(now)
     return None
 def snapshot(dest):
