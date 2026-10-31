@@ -136,6 +136,8 @@ def main():
                       filterToggleVisible:filterToggle&&getComputedStyle(filterToggle).display!=='none',
                       filterBarDisplay:filterBar?getComputedStyle(filterBar).display:'',
                       cardClass:first?.classList.contains('results-card-row')||false,
+                       cardBg:first?getComputedStyle(first).backgroundColor:null,
+                       cardRadius:first?getComputedStyle(first).borderRadius:null,
                       navVisible:nav&&getComputedStyle(nav).display!=='none',
                       rows:table.tBodies[0].rows.length
                     };
@@ -154,6 +156,9 @@ def main():
                     assert report["filterToggleVisible"],(width,report)
                     assert report["filterBarDisplay"]=="none",(width,report)
                     assert report["cardClass"],(width,report)
+                    if width <= 600:
+                        assert report["cardBg"] == "rgb(13, 33, 28)", (width,report)
+                        assert report["cardRadius"] == "11px", (width,report)
                     assert report["projectChip"]["top"]>=report["header"]["top"]-2,(width,report)
                     assert report["projectChip"]["bottom"]<=report["header"]["bottom"]+2,(width,report)
                     assert report["projectChip"]["right"]<=report["info"]["left"]+2,(width,report)
