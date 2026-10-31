@@ -252,6 +252,8 @@ def main():
                 assert brand.locator('.brand-menu-chevron').is_visible()
                 assert brand.get_attribute('role')=='button'
                 assert brand.get_attribute('aria-controls')=='bqm-dialog'
+                # Native <dialog> close event synchronizes ARIA asynchronously.
+                page.wait_for_function("document.querySelector('.header-top > .brand')?.getAttribute('aria-expanded') === 'false'")
                 assert brand.get_attribute('aria-expanded')=='false'
                 assert page.locator('#profileButton').get_attribute('aria-controls')=='bqm-dialog'
                 # Approved header: gold rocket instead of PP, no tile borders,
