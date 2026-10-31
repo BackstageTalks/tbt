@@ -132,9 +132,22 @@ def fmt(r,k,c,index=1,name_map=None):
     name=(name_map or {}).get(selected) or selected.split()[-1] if selected else "—"
     time=stamp(r["scheduled_at"]).astimezone(TZ).strftime("%H:%M")
     if k=="aces":
-        projection=num(r.get("projection")); confidence=num(r.get("projection_confidence"))
-        values=[f"aces {projection:.1f}" if projection is not None else "projection —"]
-        if confidence is not None:values.append(f"{(confidence*100 if abs(confidence)<=1 else confidence):.1f}%")
+        contract=str(r.get("price_contract") or "").lower()
+        if contract=="player_total_ou":
+            side=str(r.get("ou_side") or "").lower()
+            market_line=num(r.get("market_line"))
+            if side not in ("over","under") or market_line is None or market_line<0:
+                raise ValueError("Incomplete confirmed ACES over/under contract")
+            values=[f"{side.title()} {market_line:.1f} es"]
+            # O/U probability and Most Aces confidence describe different outcomes.
+            confidence=num(r.get("model_probability"))
+        else:
+            # The model predicts which player will hit the most aces;
+            # its numeric count projection is not a bookmaker line.
+            values=["najviac es"]
+            confidence=num(r.get("projection_confidence"))
+        if confidence is not None:
+            values.append(f"{(confidence*100 if abs(confidence)<=1 else confidence):.1f}%")
     else:
         prob=num(bet.get("blinq_probability") or bet.get("model_probability") or r.get("blinq_probability") or r.get("probability"))
         values=[f"{(prob*100 if abs(prob)<=1 else prob):.1f}%" if prob is not None else "—"] if c.get("show_probability",True) else []
@@ -143,6 +156,10 @@ def fmt(r,k,c,index=1,name_map=None):
         values.append(f"{odds:.2f}" if odds is not None and odds>1 else "—")
     prefix=NUMBER_EMOJIS[index-1] if 1<=index<=len(NUMBER_EMOJIS) else f"{index}."
     line=f"{prefix} {name} | {time} | "+" | ".join(values)
+    if k=="aces" and len(line)>44 and confidence is not None:
+        # Keep the exact prediction and genuine odds readable on narrow phones.
+        values=[item for item in values if item!=f"{(confidence*100 if abs(confidence)<=1 else confidence):.1f}%"]
+        line=f"{prefix} {name} | {time} | "+" | ".join(values)
     return line
 
 def select_groups(x,c,now):
