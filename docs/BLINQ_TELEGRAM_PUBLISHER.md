@@ -128,3 +128,7 @@ ACES · WIN 0 | LOSS 0 | VOID 0 | PENDING 1 | Win — | +0.00u | ROI —
 
 by BlinQ Stat Engine
 ```
+
+### Release & production read-back
+
+PR #1084 introduces the full confirmed daily TOP → Value → Aces offer and the daily WIN/LOSS/VOID/PENDING + win-rate/units/ROI report. Deployment is through the existing `BlinQ UI hotfix deploy` workflow; a merge alone does not update Azure Static Web Apps. Verify the stamped `deployment.json` SHA and the served `app.js` asset (not just HTTP 200) after deploying. The default static Admin config has `max_per_section=0` for ALL; **existing Azure runtime Admin configuration is authoritative** and an older operator-published numeric cap may persist until Admin → Telegram bot → ALL is explicitly published. Publisher/results remain disabled unless explicitly enabled by the operator.
