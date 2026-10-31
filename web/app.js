@@ -7598,7 +7598,7 @@ function adminActivityRows(){
       [publicText('Validity'),duration],
     ];
   }
-  let accessHintTimer=0,accessHintHoverTimer=0,accessHintTarget=null,upgradeReturnTarget=null,upgradeReturnTargetOverride=null;
+  let accessHintTimer=0,accessHintHoverTimer=0,accessHintTarget=null,accessHintPinnedByClick=false,upgradeReturnTarget=null,upgradeReturnTargetOverride=null;
   function accessHintTrigger(node){
     if(node?.closest?.('#accessHint')||$('upgradeDialog')?.open)return null;
     return node?.closest?.('[data-upgrade-plan]:not([data-upgrade-explicit="1"])');
@@ -7610,7 +7610,7 @@ function adminActivityRows(){
   }
   function hideAccessHint(delay=0){
     clearTimeout(accessHintTimer);clearTimeout(accessHintHoverTimer);
-    const run=()=>{const hint=$('accessHint');if(hint)hint.hidden=true;accessHintTarget=null;};
+    const run=()=>{const hint=$('accessHint');if(hint)hint.hidden=true;accessHintTarget=null;accessHintPinnedByClick=false;};
     if(delay)accessHintTimer=setTimeout(run,delay);else run();
   }
   function positionAccessHint(target){
@@ -7629,7 +7629,7 @@ function adminActivityRows(){
   function showAccessHint(target,planId='elite',sectionLabel='',autoHide=false){
     const hint=$('accessHint'),title=$('accessHintTitle'),text=$('accessHintText'),button=$('accessHintUpgrade');if(!hint||!target||!target.isConnected||hint.contains(target)||$('upgradeDialog')?.open)return;
     clearTimeout(accessHintHoverTimer);
-    const d=accessHintDetails(planId,sectionLabel);accessHintTarget=target;
+    const d=accessHintDetails(planId,sectionLabel);accessHintTarget=target;accessHintPinnedByClick=autoHide;
     if(title)title.textContent=d.title;if(text)text.textContent=d.text;
     if(button){button.textContent=`Upgrade na ${d.levelName}`;button.dataset.upgradePlan=planId;button.dataset.upgradeSection=sectionLabel||d.levelName;}
     hint.hidden=false;positionAccessHint(target);
@@ -7906,15 +7906,15 @@ function adminActivityRows(){
       const target=e.target.closest('[data-route]');if(!target)return;const route=target.dataset.route;if(!routeMeta[route])return;e.preventDefault();if(route==='account'){openAccountDialog();return;}const upgradeDialog=$('upgradeDialog');if(upgradeDialog?.open&&target.closest('#upgradeDialog'))upgradeDialog.close();const matchDialog=$('matchDialog');if(matchDialog?.open&&target.closest('#matchDialog'))matchDialog.close();setRoute(route);
     });
     document.addEventListener('pointerover',e=>{const target=accessHintTrigger(e.target);if(!target||state.route==='admin'||window.matchMedia('(hover: none)').matches)return;if(e.relatedTarget instanceof Node&&target.contains(e.relatedTarget))return;clearTimeout(accessHintTimer);clearTimeout(accessHintHoverTimer);accessHintHoverTimer=setTimeout(()=>showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false),320);});
-    document.addEventListener('pointerout',e=>{const target=accessHintTrigger(e.target);if(!target)return;const next=e.relatedTarget;const hint=$('accessHint');if(next instanceof Node&&(target.contains(next)||hint?.contains(next)))return;clearTimeout(accessHintHoverTimer);hideAccessHint(240);});
+    document.addEventListener('pointerout',e=>{if(accessHintPinnedByClick)return;const target=accessHintTrigger(e.target);if(!target)return;const next=e.relatedTarget;const hint=$('accessHint');if(next instanceof Node&&(target.contains(next)||hint?.contains(next)))return;clearTimeout(accessHintHoverTimer);hideAccessHint(240);});
     const accessHintNode=$('accessHint');
     if(accessHintNode){
       accessHintNode.addEventListener('focusin',()=>{clearTimeout(accessHintTimer);clearTimeout(accessHintHoverTimer);});
       accessHintNode.addEventListener('pointerenter',()=>{clearTimeout(accessHintTimer);clearTimeout(accessHintHoverTimer);});
-      accessHintNode.addEventListener('pointerleave',e=>{const next=e.relatedTarget;if(next instanceof Node&&accessHintTarget?.contains?.(next))return;hideAccessHint(220);});
+      accessHintNode.addEventListener('pointerleave',e=>{if(accessHintPinnedByClick)return;const next=e.relatedTarget;if(next instanceof Node&&accessHintTarget?.contains?.(next))return;hideAccessHint(220);});
     }
     document.addEventListener('focusin',e=>{const target=accessHintTrigger(e.target);if(target&&state.route!=='admin')showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false);});
-    document.addEventListener('focusout',e=>{const hint=$('accessHint'),next=e.relatedTarget;if(next instanceof Node&&(hint?.contains(next)||accessHintTarget?.contains(next)))return;if(accessHintTrigger(e.target)||hint?.contains(e.target))hideAccessHint(180);});
+    document.addEventListener('focusout',e=>{if(accessHintPinnedByClick)return;const hint=$('accessHint'),next=e.relatedTarget;if(next instanceof Node&&(hint?.contains(next)||accessHintTarget?.contains(next)))return;if(accessHintTrigger(e.target)||hint?.contains(e.target))hideAccessHint(180);});
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('accessHint')?.hidden){hideAccessHint();}});
     $('upgradeDialog').addEventListener('cancel',event=>{
       event.preventDefault();
