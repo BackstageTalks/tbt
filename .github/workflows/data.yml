@@ -1,4 +1,7 @@
 name: Tennis data and predictions
+# Only an authenticated Model Lab request carries an operation marker.
+# Preserve ordinary workflow names for all automatic/provider jobs.
+run-name: ${{ inputs.request_id && format('BlinQ inputs refresh {0}', inputs.request_id) || 'Tennis data and predictions' }}
 on:
   push:
     branches: [main]
@@ -7,6 +10,10 @@ on:
       - '.github/data-operation-request.json'
   workflow_dispatch:
     inputs:
+      request_id:
+        description: Internal Model Lab correlation ID; leave blank for normal runs
+        type: string
+        default: ''
       mode:
         type: choice
         options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, extras, identity, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, production-audit, top-audit, market-audit, results-rebuild, comparator-build, deploy-current, current-refresh, train, backtest, refresh]
@@ -254,6 +261,15 @@ jobs:
           fi
           echo "BLINQ_SHARED_API_BUDGET_PURPOSE=history" >> "$GITHUB_ENV"
           echo "Resolved controlled data request: mode=$mode targeted=$targeted max_requests=$max_requests start=$start_date end=$end_date promote=$promote"
+
+      - name: Validate Model Lab input-refresh dispatch
+        if: inputs.request_id != ''
+        env:
+          ADMIN_REFRESH_ID: ${{ inputs.request_id }}
+        run: |
+          set -euo pipefail
+          [[ "$ADMIN_REFRESH_ID" =~ ^[0-9a-f]{24}$ ]] || { echo "::error::Invalid Model Lab request ID"; exit 1; }
+          [[ "$MODE" == "current-refresh" && "$PROMOTE" != "true" ]] || { echo "::error::Model Lab operation is current-refresh only, without promotion"; exit 1; }
 
       - name: Reject training without protected backup workflow
         shell: bash

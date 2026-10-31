@@ -39,6 +39,7 @@ def snapshot():
         "observed_at": datetime.now(timezone.utc).isoformat(),
         "can_start": True, "reason": "Pripravené",
         "active_sha256": "a" * 64, "champion_sha256": "b" * 64,
+        "feed_sha256": "e" * 64, "feed_updated_at": datetime.now(timezone.utc).isoformat(),
         "candidates": [{"tag": "blinq-candidate-frozen-123-1",
                         "sha256": "c" * 64,
                         "url": "https://github.com/BackstageTalks/tbt-data/releases/tag/blinq-candidate-frozen-123-1"}],
@@ -106,6 +107,47 @@ class TestLab(unittest.TestCase):
         row = self.fake.data[(model_training.PARTITION, "request-initial")]
         self.assertEqual(row["profile"], "top-7.2.1")
         self.assertIsNone(m._json("active"))
+
+    def test_champion_inputs_refresh_requires_verifiable_feed(self):
+        original = snapshot()
+        original["feed_sha256"] = ""
+        m._put("snapshot", original)
+        with self.assertRaises(model_training.TrainingBlocked):
+            m.start({"action": "refresh_champion_inputs"}, "admin")
+        m._put("snapshot", snapshot())
+        queued = m.start({"action": "refresh_champion_inputs"}, "admin")
+        request = m._json("active")
+        self.assertEqual(queued["state"], "QUEUED")
+        self.assertEqual(request["expected_champion_sha256"], "b" * 64)
+        self.assertEqual(request["expected_feed_sha256"], "e" * 64)
+        self.assertIsNone(request["source_tag"])
+        with self.assertRaises(model_training.TrainingBlocked):
+            m.start({"action": "refresh_champion_inputs"}, "admin")
+
+    def test_champion_inputs_refresh_requires_updated_feed_and_unchanged_model(self):
+        m.start({"action": "refresh_champion_inputs"}, "admin")
+        m.sync(snapshot())
+        request = m._json("active")
+        complete = snapshot()
+        complete["can_start"] = False
+        complete["runs"]["refresh_champion_inputs"] = [{
+            "id": 58, "status": "completed", "conclusion": "success",
+            "display_title": "BlinQ inputs refresh " + request["id"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }]
+        with self.assertRaises(model_training.TrainingBlocked):
+            m.sync(complete)  # Existing feed is not a successful update.
+        self.assertIsNotNone(m._json("active"))
+        complete["feed_sha256"] = "f" * 64
+        complete["champion_sha256"] = "d" * 64
+        with self.assertRaises(model_training.TrainingBlocked):
+            m.sync(complete)
+        self.assertIsNotNone(m._json("active"))
+        complete["champion_sha256"] = "b" * 64
+        m.sync(complete)
+        self.assertIsNone(m._json("active"))
+        self.assertEqual(m._json("last")["state"], "WORKFLOW_VERIFIED")
+        self.assertIn("váhy", m._json("last")["note"])
 
     def test_unknown_operations_and_fields_rejected(self):
         for data in (
@@ -370,6 +412,24 @@ class TestWorker(unittest.TestCase):
             self.assertNotIn("promote", json.dumps(arguments))
             self.assertNotIn("max_requests", json.dumps(arguments))
 
+    def test_champion_inputs_refresh_dispatch_never_trains_or_promotes(self):
+        from admin_model_lab_worker import dispatch
+        pending = {"action": "refresh_champion_inputs", "id": "a" * 24,
+                   "expected_candidate_sha256": "a" * 64,
+                   "expected_champion_sha256": "b" * 64}
+        with patch("admin_model_lab_worker.collect_status", return_value=snapshot()), \
+             patch("admin_model_lab_worker.inspect", return_value={"can_start": True}), \
+             patch("admin_model_lab_worker.sync", return_value={"stored": True, "dispatch_ready": True}), \
+             patch("admin_model_lab_worker.github") as gh:
+            dispatch(pending)
+            url, kwargs = gh.call_args.args
+            self.assertEqual(url, "BackstageTalks/tbt/actions/workflows/data.yml/dispatches")
+            self.assertEqual(kwargs["inputs"], {
+                "request_id": "a" * 24, "mode": "current-refresh",
+                "promote": "false", "morning_refresh": "false",
+            })
+            self.assertEqual(kwargs["ref"], "main")
+
     def test_worker_refuses_candidate_change(self):
         from admin_model_lab_worker import dispatch
         pending = {"action": "refresh_tests", "id": "b" * 24,
@@ -382,6 +442,16 @@ class TestWorker(unittest.TestCase):
             with self.assertRaises(model_training.TrainingBlocked):
                 dispatch(pending)
             gh.assert_not_called()
+
+
+class TestChampionInputRefreshWorkflow(unittest.TestCase):
+    def test_existing_data_workflow_correlates_and_guards_refresh(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/data.yml").read_text()
+        self.assertIn("request_id:", workflow)
+        self.assertIn("BlinQ inputs refresh {0}", workflow)
+        self.assertIn("Validate Model Lab input-refresh dispatch", workflow)
+        self.assertIn('[[ "$MODE" == "current-refresh" && "$PROMOTE" != "true" ]]', workflow)
+        self.assertIn("python scripts/pipeline.py", workflow)
 
 
 class TestWorkerHeartbeat(unittest.TestCase):

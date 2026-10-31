@@ -5445,6 +5445,7 @@ function adminActivityRows(){
     const operation=d?.operation, last=d?.last_operation;
     const trainRun=training?.runs?.[0], trainBusy=!!trainRun&&['queued','in_progress','waiting','pending','requested'].includes(trainRun.status);
     const canBuild=!busy&&d?.can_start===true&&training?.can_start===true&&!trainBusy;
+    const canRefreshInputs=canBuild&&/^[0-9a-f]{64}$/.test(String(d?.feed_sha256||''));
     const preflight=d?.last_preflight;
     const evidenceTime=Date.parse(preflight?.verified_at||'');
     const preflightFresh=preflight?.state==='WORKFLOW_VERIFIED'&&
@@ -5558,6 +5559,12 @@ function adminActivityRows(){
       '<p>Jeden postup: príprava dát → tréning a shadow → schválené produkčné nasadenie. Champion zostáva nedotknutý až do samostatne schváleného prepnutia.</p></div>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="calibration-refresh" '+(busy?'disabled':'')+'>Obnoviť celý stav</button></div>'+
       productionSummary+
+      '<article class="admin-calibration-panel admin-model-input-refresh" aria-label="Obnova vstupov championa">'+
+      '<small>CHAMPION · BEZ TRÉNINGU</small><h3>Aktualizácia nových dát</h3>'+
+      '<p>Champion automaticky prepočítava formu, Elo, H2H a dostupné serve/return vstupy z novej CDB pri každom bežnom refreshe predikcií. Váhy a verzia modelu sa nemenia.</p>'+
+      '<p><strong>Posledná publikovaná ponuka:</strong> '+escapeHtml(d?.feed_updated_at?fmtStamp(d.feed_updated_at):'neoverené')+'</p>'+
+      '<button type="button" class="btn btn-primary" data-admin-action="model-lab-start" data-model-lab-operation="refresh_champion_inputs" '+(canRefreshInputs?'':'disabled')+'>Obnoviť vstupy a prepočítať ponuku</button>'+
+      '<p>Manuálny refresh načíta aktuálnu CDB, znovu vypočíta predikcie a použije existujúci spoločný API rozpočet. Nevykoná tréning, import do CDB ani prepnutie modelu. Publikované tipy a história zostávajú chránené.</p></article>'+
       '<p role="status">'+escapeHtml(hint)+'</p>'+
       '<p class="model-factory-sync">Stav sa obnovuje každých 30 sekúnd počas otvorenia tejto karty. Posledná synchronizácia workerom: '+escapeHtml(stamp)+'. Požiadavku prevezme existujúci worker, bežne do 30 minút; kartu môžeš zavrieť.</p>'+
       '<div class="admin-calibration-grid model-factory-three-steps">'+
@@ -6525,7 +6532,8 @@ function adminActivityRows(){
       }
       if(action==='model-lab-start'){
         const operation=String(actionNode.dataset.modelLabOperation||'');
-        if(!['prepare_inputs','import_drive','refresh_tests','audit_shadow','activate_shadow'].includes(operation))return;
+        if(!['prepare_inputs','refresh_champion_inputs','import_drive','refresh_tests','audit_shadow','activate_shadow'].includes(operation))return;
+        if(operation==='refresh_champion_inputs'&&!await confirmAdminModelOperation('Znova vypočítať dnešnú ponuku z aktuálnych dát CDB? Použije to dostupnú API kvótu a publikuje novú generáciu predikcií, ale nenatrénuje ani nevymení championa.'))return;
         if(operation==='prepare_inputs'&&!await confirmAdminModelOperation('Spustiť read-only kontrolu zdrojových ATP/WTA dát? Nevytvorí produkčný model ani CDB import.'))return;
         if(operation==='activate_shadow'&&!await confirmAdminModelOperation('Aktivovať vybraný model iba v shadow režime? Produkčný champion zostane nezmenený.'))return;
         if(operation==='import_drive'&&!await confirmAdminModelOperation('Spustiť jednu ohraničenú dávku existujúceho Drive importu do CDB?'))return;

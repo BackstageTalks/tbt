@@ -51,7 +51,12 @@ def dispatch(pending):
     if preflight.get("dispatch_ready") is not True:
         raise TrainingBlocked("Durable Admin queue did not confirm this claimed dispatch")
     inputs = {"request_id": marker}
-    if operation == "import_drive":
+    if operation == "refresh_champion_inputs":
+        # Re-run serving against the current canonical CDB. No fit, no model
+        # promotion and no CDB import. Provider calls use the shared budget.
+        inputs.update({"mode": "current-refresh", "promote": "false",
+                       "morning_refresh": "false"})
+    elif operation == "import_drive":
         inputs["catchup_remaining"] = "0"  # One existing guarded 100-file batch.
     elif operation == "activate_shadow":
         if not any(c["tag"] == pending["source_tag"]
