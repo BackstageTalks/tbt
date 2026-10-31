@@ -183,3 +183,15 @@ def test_feed_route_rechecks_after_status_overlay_before_response():
     assert 'data["results"] = runtime_settled_results(data, data["match_statuses"])' in app
     assert 'data["results"] = filter_results_for_categories(' in app
     assert 'entitlements.get("result_categories") or []' in app
+
+
+def test_browser_uses_authoritative_categories_and_new_cache_key():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    app = (root / "web/app.js").read_text(encoding="utf-8")
+    index = (root / "web/index.html").read_text(encoding="utf-8")
+    assert 'state.feed?.entitlements?.result_categories' in app
+    assert 'function availableResultCategories()' in app
+    assert 'function authorizedResultPublication(publication)' in app
+    assert '.filter(authorizedResultPublication)' in app
+    assert '&results-access-20261031=1' in index
