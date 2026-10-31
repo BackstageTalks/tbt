@@ -141,3 +141,66 @@ def test_retention_removal_is_rolled_back_on_checksum_failure(tmp_path):
     with pytest.raises(RuntimeError, match="HTTP 500"):
         store.upload_bundle([history], remove_names=("history-2024.parquet",))
     assert all(remote[name]["body"] == payload for name, payload in originals.items())
+
+
+def test_interrupted_commit_restores_previous_manifest_before_next_api_run(
+    tmp_path, monkeypatch,
+):
+    import cdb_global_writer_lock
+    import json
+
+    monkeypatch.setattr(cdb_global_writer_lock, "verify", lambda *_args: None)
+    store, remote = make_store(
+        tmp_path, existing=("history_manifest.json", "_tbt_bundle_manifest.json"))
+    old = remote["history_manifest.json"]["body"]
+    token = "a" * 32
+    history = tmp_path / "history_manifest.json"
+    history.write_text('{"years": {"2026": {"asset": "history-2026.parquet"}}}')
+    store._guarded_publish(history, token)
+    assert remote["history_manifest.json"]["body"] != old
+    journal = tmp_path / f"blinq-txn-{token}.json"
+    journal.write_text(json.dumps({
+        "schema": 1,
+        "created": [],
+        "target_bundle_sha256": "f" * 64,
+    }))
+    store.upload([journal])
+    store._download_asset = lambda name: (store.directory / name).write_bytes(remote[name]["body"])
+    store.download = lambda: (
+        None if remote["history_manifest.json"]["body"] == old
+        else (_ for _ in ()).throw(RuntimeError("uncommitted checksum"))
+    )
+    report = store.recover_interrupted_swaps()
+    assert report["status"] == "previous_generation_restored"
+    assert remote["history_manifest.json"]["body"] == old
+    assert not any(n.startswith("blinq-rollback-") or n.startswith("blinq-txn-")
+                   for n in remote)
+
+
+def test_interrupted_cleanup_preserves_verified_new_bundle(tmp_path, monkeypatch):
+    import cdb_global_writer_lock
+    import json
+
+    monkeypatch.setattr(cdb_global_writer_lock, "verify", lambda *_args: None)
+    store, remote = make_store(
+        tmp_path, existing=("history_manifest.json", "_tbt_bundle_manifest.json"))
+    token = "b" * 32
+    history = tmp_path / "history_manifest.json"
+    history.write_text('{"years": {}}')
+    store._guarded_publish(history, token)
+    bundle = tmp_path / "_tbt_bundle_manifest.json"
+    bundle.write_text('{"schema": 1, "files": {}}')
+    store._guarded_publish(bundle, token)
+    journal = tmp_path / f"blinq-txn-{token}.json"
+    journal.write_text(json.dumps({
+        "schema": 1, "created": [],
+        "target_bundle_sha256": store._sha256(bundle),
+    }))
+    store.upload([journal])
+    store._download_asset = lambda name: (store.directory / name).write_bytes(remote[name]["body"])
+    store.download = lambda: None
+    report = store.recover_interrupted_swaps()
+    assert report["status"] == "committed_generation_verified"
+    assert remote["_tbt_bundle_manifest.json"]["body"] == bundle.read_bytes()
+    assert not any(n.startswith("blinq-rollback-") or n.startswith("blinq-txn-")
+                   for n in remote)
