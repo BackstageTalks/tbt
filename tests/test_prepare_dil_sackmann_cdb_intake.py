@@ -42,7 +42,7 @@ def fixture(folder: Path, rows: list[dict], *, altered_receipt=False):
         CREATE TABLE dil_sackmann_source_observations(source_file TEXT,source_row INT,tour TEXT,file_year INT,row_sha256 TEXT,winner_id TEXT,loser_id TEXT,tourney_id TEXT,identity_status TEXT,raw_json TEXT);
         CREATE TABLE dil_sackmann_provenance(match_key TEXT);
         CREATE TABLE dil_sackmann_intake_decisions(decision TEXT);
-        CREATE TABLE dil_sackmann_verified_preexisting_links(match_id TEXT);
+        CREATE TABLE dil_sackmann_verified_preexisting_links(match_id TEXT,already_present_stat_values INT,new_stat_values INT);
         CREATE TABLE dil_sackmann_receipts(key TEXT,value TEXT);
     """)
     db.execute("INSERT INTO dil_sackmann_source_files VALUES (?,?,?,?,?)",
@@ -57,7 +57,8 @@ def fixture(folder: Path, rows: list[dict], *, altered_receipt=False):
                "provenance_join_to_observation_verified": "false",
                "production_CDB_modified": "false",
                "source_observations": str(len(rows)),
-               "sources_metadata_provenance": str(len(rows))}
+               "sources_metadata_provenance": str(len(rows)),
+               "verified_already_present": "0", "canonical_new_metric_values": "0"}
     if altered_receipt:
         receipt["production_CDB_modified"] = "true"
     db.executemany("INSERT INTO dil_sackmann_receipts VALUES (?,?)", receipt.items())
@@ -117,6 +118,14 @@ class NativeDILBridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "SHA-256 mismatch"):
             bridge.prepare(source, self.root/"stage", "0"*64)
         self.assertFalse((self.root/"stage").exists())
+
+    def test_reject_unapproved_preexisting_link_counts(self):
+        source, _ = fixture(self.root, [row()])
+        db = sqlite3.connect(source)
+        db.execute("INSERT INTO dil_sackmann_verified_preexisting_links VALUES ('x', 10, 1)")
+        db.commit(); db.close()
+        with self.assertRaisesRegex(ValueError, "Preexisting-only link"):
+            bridge.prepare(source, self.root/"stage", bridge.digest(source))
 
     def test_wont_reuse_output(self):
         source, sha = fixture(self.root, [row()])
