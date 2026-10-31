@@ -1,7 +1,13 @@
 name: BlinQ Telegram offer
+# Reuse the existing external hourly tick; optional 10-minute
+# repository_dispatch gives finer timing. Native GitHub cron is forbidden.
 on:
-  schedule:
-    - cron: "*/10 * * * *"
+  push:
+    branches: [main]
+    paths:
+      - '.github/hourly-api-gapfill-tick.json'
+  repository_dispatch:
+    types: [telegram-offer-tick]
   workflow_dispatch:
 
 permissions:
