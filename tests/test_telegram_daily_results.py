@@ -136,7 +136,7 @@ def test_one_daily_ledger_report_has_win_loss_void_percent_units_roi():
     assert len(pages)==1
     text=pages[0]["text"]
     assert "📊 Results | BlinQ" in text
-    assert text.index("topwon") == -1  # compact player names, not event ids
+    assert "topwon" not in text  # compact player names, not event ids
     assert "✅ WIN 2 (50.0%)" in text
     assert "❌ LOSS 1 (25.0%)" in text
     assert "➖ VOID 1 (25.0%)" in text
@@ -149,16 +149,16 @@ def test_one_daily_ledger_report_has_win_loss_void_percent_units_roi():
 
 def test_all_sent_settlements_split_losslessly_and_keep_global_summary():
     picks=[sent("top" if i<35 else "value" if i<70 else "aces",
-                event="match-"+str(i),odds=1.80) for i in range(105)]
+                event="match-"+str(i),odds=1.80) for i in range(205)]
     matched=[settled(p,True) for p in picks]
     pages=r.daily_report(picks,matched,DAY,tg.branded_footer(tg.FOOTER))
     assert len(pages)>=2
     assert all(item["audience"]=="premium" for item in pages)
     assert all(len(item["text"].encode("utf-16-le"))//2<=4096 for item in pages)
-    assert "✅ WIN 105 (100.0%)" in pages[-1]["text"]
-    assert "ROI +80.0% (105u)" in pages[-1]["text"]
-    assert sum(item["counts"]["won"] for item in pages)==105
+    assert "✅ WIN 205 (100.0%)" in pages[-1]["text"]
+    assert "ROI +80.0% (205u)" in pages[-1]["text"]
+    assert sum(item["counts"]["won"] for item in pages)==205
     # There is one numbered result for each immutable previously sent pick.
     import re
     all_text="\n".join(item["text"] for item in pages)
-    assert len(re.findall(r"(?m)^\d+\. ✅",all_text))==95
+    assert len(re.findall(r"(?m)^\d+\. ✅",all_text))==195
