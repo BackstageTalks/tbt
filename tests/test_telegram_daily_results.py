@@ -121,3 +121,57 @@ def test_results_use_aces_label_and_linkable_stat_engine_footer():
     assert "📊 Results | BlinQ ACES" in text
     assert text.endswith("by BlinQ Stat Engine")
     assert tg.telegram_link_entities(text)[0]["url"].endswith("/follow-the-data/")
+
+
+
+def test_combined_scorecard_daily_win_loss_void_pending_and_roi():
+    win=sent("top","winner-1",1.80)
+    loss=sent("value","loser-1",2.05)
+    void=sent("top","void-1",1.65)
+    pending=sent("aces","pending-1",None)
+    aces_win=sent("aces","aces-winner-1",1.80)
+    archived=[settled(win,True),settled(loss,False),settled(void,True,void=True),
+              settled(aces_win,True)]
+    posts=r.combined_daily_report([win,void,loss,pending,aces_win],archived,DAY,
+                                   tg.branded_footer())
+    assert len(posts)==1
+    out=posts[0]
+    assert out["audience"]=="premium"
+    assert out["counts"]=={"won":2,"lost":1,"void":1,"pending":1}
+    assert out["priced_decisions"]==3
+    assert abs(out["profit_units"]-0.6)<1e-9
+    message=out["text"]
+    assert message.count("📅")==0  # date lives inside the Results title
+    assert "WIN 2 | ❌ LOSS 1 | ➖ VOID 1 | ⏳ PENDING 1" in message
+    assert "Úspešnosť 66.7%" in message
+    assert "Zisk +0.60u" in message
+    assert "ROI 20.0%" in message
+    assert "TOP · WIN 1 | LOSS 0 | VOID 1" in message
+    assert "VALUE · WIN 0 | LOSS 1" in message
+    assert "ACES · WIN 1 | LOSS 0 | VOID 0 | PENDING 1" in message
+    assert "by BlinQ Stat Engine" in message
+    assert tg.telegram_link_entities(message)[0]["url"] == tg.BRAND_URL
+
+
+def test_result_count_does_not_double_count_free_pick():
+    top=sent("top","same-event",1.8)
+    free=sent("free","same-event",1.8)
+    posts=r.combined_daily_report([top,free],[settled(top,True)],DAY,tg.branded_footer())
+    assert len(posts)==1
+    assert posts[0]["counts"]["won"]==1
+    assert posts[0]["profit_units"]==.8
+
+
+def test_all_issued_results_are_preserved_when_telegram_message_spills():
+    samples=[sent("top","match-"+str(i),1.8) for i in range(1,150)]
+    for ix, entry in enumerate(samples):
+        entry["name"]="Player Surname"+str(ix+1)
+    archive_rows=[settled(sample,True) for sample in samples]
+    posts=r.combined_daily_report(samples,archive_rows,DAY,tg.branded_footer())
+    assert len(posts)>1
+    assert all(len(item["text"].encode("utf-16-le"))//2<=4096 for item in posts)
+    body="\n".join(item["text"] for item in posts)
+    assert body.count("✅ Surname")==len(samples)
+    assert "WIN 149" in posts[-1]["text"]
+    assert sum(item["counts"]["won"] for item in posts)==149
+    assert "ROI 80.0%" in posts[-1]["text"]
