@@ -481,6 +481,8 @@ def test_aces_quote_and_receipt_require_exact_issued_line_and_price():
         "publication_key":"ace:602:p1:under:12.5",
         "price_status":"priced_projection","price_contract":"player_total_ou",
         "ou_side":"under","market_line":12.5,"odds":1.91,
+        "odds_source":"propline","odds_market_name":"Daniil Medvedev - Player Aces",
+        "captured_at":NOW.isoformat(),"provider_id":2,
     }
     other={**pub,"publication_key":"ace:602:p1:under:19.5",
            "market_line":19.5,"odds":2.00}
@@ -491,6 +493,9 @@ def test_aces_quote_and_receipt_require_exact_issued_line_and_price():
     assert sent["publication_key"]=="ace:602:p1:under:12.5"
     assert sent["market_line"]==12.5
     assert sent["projection_direction"]=="under"
+    assert sent["odds_source"]=="propline"
+    assert sent["odds_market_name"]=="Daniil Medvedev - Player Aces"
+    assert sent["captured_at"]==NOW.isoformat()
 
     # A different player total (even if it has the same selection ID) cannot
     # provide the quote or the frozen publication key.
