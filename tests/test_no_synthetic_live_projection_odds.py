@@ -11,9 +11,11 @@ def test_live_cards_require_exact_api_odds_and_never_use_results_placeholder():
                APP.index("function dailyHubRow(")]
     contract = APP[APP.index("function authenticLiveProjection("):
                    APP.index("function dailyHubRow(")]
-    assert "row?.price_status==='priced_projection'" in contract
-    assert "Number.isFinite(odds)&&odds>=1.50" in contract
-    assert "Boolean(row?.captured_at)" in contract
+    assert "Number.isFinite(verifiedProjectionOdds(row))" in contract
+    assert "function verifiedProjectionOdds(row)" in APP
+    assert "row?.price_status!=='priced_projection'" in APP
+    assert "!row?.captured_at" in APP
+    assert "!book||/^(prize" in APP
     assert "['ace','sg'].includes(key)?value.filter(authenticLiveProjection)" in contract
     assert "aceDfLegacyResultDisplayOdds" not in live
     assert "hubNumberHtml('N/A',reason)" in live
