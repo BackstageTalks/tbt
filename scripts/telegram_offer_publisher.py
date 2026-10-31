@@ -143,6 +143,7 @@ def messages(x,c,now,free_event_id=None):
         # Stable deterministic pseudo-random selection by betting day.
         # A different action run on the same day cannot select another FREE pick.
         candidates=[row for row in got["top"] if str(row.get("event_id"))==str(free_event_id)] if free_event_id else got["top"]
+        if not candidates: raise RuntimeError("Previously issued FREE TOP event is no longer in confirmed TOP; refusing changed FREE pick")
         winner=min(candidates,key=lambda r:hashlib.sha256(
             (today+"|"+str(r.get("event_id"))+"|"+str((r.get("betting") or {}).get("selection_id") or r.get("winner_id"))).encode("utf-8")).hexdigest())
         free="\n".join(["🎾 FREE | BlinQ",f"📅 {date}","",fmt(winner,"top",c,1).replace("1️⃣","🆓",1)])
