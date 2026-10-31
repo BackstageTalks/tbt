@@ -6,8 +6,7 @@ from _bootstrap import ROOT
 from tbt.providers.guarded_rapidapi import GuardedRapidApiHttp
 
 TARGETS = [
- ("free-livescore-api.p.rapidapi.com", [("/livescore-get-search", {"sportname":"tennis","search":"Bucharest"}), ("/livescore-get-search", {"sportname":"tennis","search":"Wimbledon"})]),
- ("sportscore6.p.rapidapi.com", [("/api/widget/matches/", {"sport":"tennis","limit":10})]),
+ ("sportscore6.p.rapidapi.com", [("/api/widget/match/", {"sport":"tennis","slug":"liam-draxl-vs-darwin-blanch"}), ("/api/widget/match/", {"sport":"tennis","slug":"tatiana-prozorova-vs-hayu-kinoshita"})]),
  ("ai-tennis-predictions.p.rapidapi.com", [("/predictions/today", {})]),
 ]
 report={"time":datetime.now(timezone.utc).isoformat(), "commit":os.getenv("GITHUB_SHA"), "run_id":os.getenv("GITHUB_RUN_ID"), "cdb_writes":0, "providers":[]}
