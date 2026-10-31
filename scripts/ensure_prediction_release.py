@@ -19,7 +19,20 @@ def main():
     parser.add_argument("--work-dir", default=".cache/tbt/prediction-release-preflight")
     args = parser.parse_args()
     store = ReleaseStore(args.data_repository, "tbt-predictions-v1", Path(args.work_dir))
-    print(json.dumps({"prediction_release_preflight": store.recover_interrupted_swaps()}))
+    recovered = store.recover_interrupted_swaps()
+    # Check all three live-serving invariants even when no rollback was found.
+    # The strict reader validates SHA-256 against the committed bundle.
+    selected = store.download(required_names=(
+        "feed.json", "ledger.json", "daily_offer_snapshot.json",
+    ))
+    assets = store._release_asset_inventory()
+    pending = [name for name in assets
+               if name.startswith(("blinq-rollback-", "blinq-txn-", "blinq-candidate-"))]
+    if pending:
+        raise RuntimeError("Unresolved production release transaction: " + ", ".join(sorted(pending)))
+    print(json.dumps({"prediction_release_preflight": recovered,
+                      "verified_assets": selected,
+                      "pending_transactions": 0}))
 
 
 if __name__ == "__main__":
