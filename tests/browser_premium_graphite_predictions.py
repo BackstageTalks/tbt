@@ -10,8 +10,8 @@ from browser_mobile_projection_cards import SETUP
 from browser_runtime_r43 import ORIGIN, browser_path, static_route
 
 EXPECTED = {
-    'card': 'rgb(16, 25, 28)',
-    'stroke': 'rgb(43, 56, 57)',
+    'card': 'rgb(21, 31, 35)',
+    'stroke': 'rgba(175, 193, 193, 0.22)',
     'copy': 'rgb(236, 243, 239)',
     'mint': 'rgb(101, 205, 164)',
     'inset': 'rgb(27, 42, 41)',
