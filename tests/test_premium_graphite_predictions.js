@@ -1,0 +1,18 @@
+'use strict';
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const html = fs.readFileSync('web/index.html','utf8');
+const css = fs.readFileSync('web/blinq-premium-graphite-predictions.css','utf8');
+const styles = [...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map(m => m[1].split('?')[0]);
+assert.equal(styles.at(-1),'/blinq-premium-graphite-predictions.css', 'pilot CSS must have final cascade priority');
+assert.equal(styles.filter(s => s === '/blinq-premium-graphite-predictions.css').length, 1);
+for (const color of ['#10191C','#2B3839','#ECF3EF','#65CDA4']) assert.ok(css.includes(color), color);
+assert.match(css, /@media \(max-width: 600px\)/);
+assert.match(css, /#predictionsView #dailyHub/);
+assert.match(css, /#predictionsView #dashboardKpis/);
+assert.match(css, /\.hub-detail:not\(\.is-locked\)/);
+assert.match(css, /\.hub-row-locked/);
+assert.match(css, /data-tab="double_faults"/);
+assert.doesNotMatch(css, /grid-template|font-size\s*:|padding\s*:|margin\s*:|height\s*:|min-height\s*:|\bdisplay\s*:|content\s*:/);
+assert.doesNotMatch(css, /linear-gradient|radial-gradient|0 0 \d+px/);
+console.log('PASS: mobile Premium Graphite predictions style-only scope');
