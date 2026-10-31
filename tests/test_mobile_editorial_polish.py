@@ -39,3 +39,10 @@ def test_flat_public_mobile_cards_only():
     assert "display:none!important" in CSS  # only duplicate native table-label
     assert "hub-row-locked) .daily-hub-table" not in CSS
     assert "#dashboardKpis" in CSS
+
+
+def test_clicked_upgrade_hint_cannot_be_demoted_by_hover_or_focus():
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+    assert "document.addEventListener('pointerover',e=>{if(accessHintPinnedByClick)return;" in app
+    assert "document.addEventListener('focusin',e=>{if(accessHintPinnedByClick)return;" in app
+    assert "&hint-pin=20261031" in INDEX
