@@ -130,6 +130,51 @@ def test_daily_queue_is_durable_idempotent_and_full_offer_override(tmp_path, mon
     tg.queue_daily(SimpleNamespace(now=NOW.isoformat(),state=str(out/"state.json")))
     assert tg.load(out/"state.json")["attempts"][ident]["status"]=="reserved"
 
+def test_one_time_format_reissue_preserves_exact_previous_picks_and_dedup(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    confirmed=offer()
+    cfg=settings(enabled=False)
+    base_messages=tg.messages(confirmed,settings(),NOW)
+    original=[]
+    for section,items in (("top",confirmed["top_daily_picks"]),
+                          ("value",confirmed["value_picks"]),
+                          ("aces",[confirmed["ace_picks"][0]])):
+        original.extend(tg.result_reference(row,section) for row in items)
+    free_id=base_messages[1]["free_event_id"]
+    free_row=next(row for row in confirmed["top_daily_picks"] if row["event_id"]==free_id)
+    original.append(tg.result_reference(free_row,"free"))
+    sent_id=tg._daily_id(NOW)
+    prior={"status":"sent","message_ids":[702,703],"rows":original}
+    state={"schema":1,"attempts":{sent_id:prior},"free_picks":{tg.day(NOW):free_id}}
+    state_file=tmp_path/"private.json"
+    tg.save(state_file,state)
+    monkeypatch.setattr(tg,"config",lambda *_:cfg)
+    monkeypatch.setattr(tg,"snapshot",lambda *_:confirmed)
+    args=SimpleNamespace(now=NOW.isoformat(),state=str(state_file),
+                         output=str(tmp_path/"repost"),config_url="https://unit.invalid/api/v1/ui-config",
+                         daily=False,preview_format=True)
+    tg.prepare(args)
+    rendered=tg.load(tmp_path/"repost"/"messages.json")
+    assert [m["audience"] for m in rendered]==["premium","free"]
+    assert all("EV" not in m["text"] for m in rendered)
+    assert "najviac es" in rendered[0]["text"]
+    staged=tg.load(tmp_path/"repost"/"state.json")
+    assert staged["attempts"][sent_id]==prior
+    repost_id=tg.day(NOW)+":repost:format-v2-no-ev"
+    assert staged["reposts"][repost_id]["status"]=="reserved"
+    assert staged["reposts"][repost_id]["rows"]==[]
+    tg.save(tmp_path/"repost"/"receipt.json",[704,705])
+    tg.mark_sent(SimpleNamespace(output=str(tmp_path/"repost")))
+    sent=tg.load(tmp_path/"repost"/"state.json")
+    assert sent["reposts"][repost_id]["message_ids"]==[704,705]
+    assert sent["reposts"][repost_id]["status"]=="sent"
+    assert sent["attempts"][sent_id]==prior
+    args.state=str(tmp_path/"repost"/"state.json")
+    args.output=str(tmp_path/"repeat")
+    tg.prepare(args)
+    assert not (tmp_path/"repeat"/"ready").exists()
+
+
 def test_classic_format_and_deterministic_free_pick():
     first = tg.messages(offer(), settings(), NOW)
     second = tg.messages(offer(), settings(), NOW)
