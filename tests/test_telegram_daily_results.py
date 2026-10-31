@@ -52,6 +52,7 @@ def test_results_format_matches_old_summary_with_pending():
     value=r.report_rows(rows,archive,"value",DAY,tg.FOOTER)
     aces=r.report_rows(rows,archive,"aces",DAY,tg.FOOTER)
     assert "📊 Results | BlinQ TOP" in top["text"]
+    assert "BlinQ | Tennis Intelligence" in top["text"]
     assert "📅 31.10.26" in top["text"]
     assert "1️⃣ ✅ Surname | 13:30 | 1.80 | +0.80u" in top["text"]
     assert "✅1 ❌0 ➖0 ⏳0 | +0.80u | ROI +80.0%" in top["text"]
@@ -111,3 +112,12 @@ def test_prepare_results_is_idempotently_reserved_without_provider_calls(tmp_pat
     (tmp_path/"out"/"ready").unlink()
     r.prepare(args)
     assert not (tmp_path/"out"/"ready").exists()
+
+
+def test_results_use_aces_label_and_linkable_stat_engine_footer():
+    sample=sent("aces","match-aces",None)
+    footer=tg.branded_footer("ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine")
+    text=r.report_rows([sample],[],"aces",DAY,footer)["text"]
+    assert "📊 Results | BlinQ ACES" in text
+    assert text.endswith("by BlinQ Stat Engine")
+    assert tg.telegram_link_entities(text)[0]["url"].endswith("/follow-the-data/")
