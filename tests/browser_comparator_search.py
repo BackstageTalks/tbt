@@ -292,6 +292,9 @@ def main():
                 assert page.evaluate('comparatorHarness.state.route') == 'predictions'
                 hint = page.locator('#accessHint')
                 hint.wait_for(state='visible')
+                # Focus can arrive after a click, but must not downgrade the
+                # click-pinned upgrade hint to hover-dismiss behavior.
+                nav.dispatch_event('focusin')
                 # A deliberate click pins the compact lock hint. Moving the
                 # pointer/focus off the nav must not erase it after 240 ms.
                 page.mouse.move(2, 2)
