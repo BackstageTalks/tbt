@@ -36,4 +36,4 @@ for host, targets in TARGETS:
   item["stopped"]=type(exc).__name__+": "+clean(str(exc))[:300]
 Path(".cache/tbt/three-rapidapi").mkdir(parents=True,exist_ok=True)
 Path(".cache/tbt/three-rapidapi/report.json").write_text(json.dumps(report,indent=2),encoding="utf8")
-print(json.dumps({"run_id":report["run_id"],"providers":[{k:v for k,v in x.items() if k!="responses"}|{"statuses":[r["status"] for r in x["responses"]]} for x in report["providers"]},indent=2))
+print(json.dumps({"run_id":report["run_id"],"providers":[{k:v for k,v in x.items() if k!="responses"}|{"statuses":[r["status"] for r in x["responses"]]} for x in report["providers"]]},indent=2))
