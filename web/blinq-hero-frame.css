@@ -10,6 +10,11 @@ body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardHero {
   background: #071916 !important;
   box-shadow: 0 9px 28px rgba(0,0,0,.16), inset 0 1px 0 rgba(229,255,239,.035) !important;
 }
+@media (min-width: 601px) and (max-width: 900px) {
+  body#blinqPremium.blinq-home:not(.blinq-admin) #dashboardHero {
+    border-radius: 14px !important;
+  }
+}
 @media (max-width: 600px) {
   body#blinqPremium.blinq-home.bqm-enabled:not(.blinq-admin) #dashboardHero {
     border-radius: 11px !important;
