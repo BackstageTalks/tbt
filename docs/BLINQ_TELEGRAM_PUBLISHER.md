@@ -10,7 +10,7 @@ Admin -> **Telegram bot** is independent of the existing **Telegram skupiny** pa
 - Scheduled dispatch time in **Europe/Bratislava**, weekdays, on/off.
 - Combined vs per-category message, number of picks, include already-started matches, probability/odds fields, classic footer.
 
-Click **Publikovať** to store the configuration in the existing durable Azure Admin UI store. The default is OFF. Clicking **Zaradiť jednorazové odoslanie** saves the current draft along with a unique request ID; the 10-minute poller processes fresh requests, within 30 minutes. The button does not mean that Telegram confirmed delivery.
+Click **Publikovať** to store the configuration in the existing durable Azure Admin UI store. The default is OFF. Clicking **Zaradiť jednorazové odoslanie** saves the current draft along with a unique request ID; the existing externally scheduled hourly tick processes fresh requests, within 90 minutes. An external 10-minute repository dispatch can improve precision. The button does not mean that Telegram confirmed delivery.
 
 ## Secrets
 
@@ -51,7 +51,7 @@ Data Betting by BackstageTalks
 
 ## Delivery guarantees
 
-Workflow: `.github/workflows/telegram-offer.yml`; scheduler every 10 minutes. Schedule is based on published Admin state, not a fixed cron send time. The GitHub scheduler may run late; the send window is the selected time plus 90 minutes.
+Workflow: `.github/workflows/telegram-offer.yml`; no native GitHub cron (prohibited by the app release contract). The existing external hourly API tick triggers the publisher on `.github/hourly-api-gapfill-tick.json` updates. To tighten delivery to 10-minute resolution, configure an external scheduler to call `repository_dispatch` with `event_type=telegram-offer-tick` every 10 minutes. The send window is the selected time plus 90 minutes. If no external ticks occur, automatic sending will not run.
 
 Before any Telegram request, the workflow writes a durable send reservation to the separate `telegram-bot-state` branch and performs a GitHub read-back. Reservation keys are betting day + schedule/manual request ID. Only a successfully reserved batch is sent; retries do **not** automatically resend a batch because Telegram does not support an idempotency key. If a send fails or GH status is uncertain, inspect GitHub Actions and the Telegram channel before manually creating a new request.
 
@@ -68,7 +68,7 @@ The test suite checks classic formatting, deterministic/free-only selection, con
 1. Merge code through green CI; verify production backend/frontend deployment.
 2. Confirm `TGB`, `TGCH` and existing `TBT_DATA_GH_TOKEN` secrets.
 3. In Admin -> Telegram bot enable publisher; keep scheduled sending OFF during initial smoke test.
-4. Click **Zaradiť jednorazové odoslanie** with an appropriate confirmed daily offer.
+4. Click **Zaradiť jednorazové odoslanie** with an appropriate confirmed daily offer. It will be picked up at the next external tick or by manually running `BlinQ Telegram offer` from GitHub Actions.
 5. Inspect workflow logs and the actual Telegram channel. Only then enable the desired daily schedule.
 
 Do not enable automatic sending until you have independently verified the target chat and test delivery.
