@@ -238,9 +238,9 @@ def test_hourly_priority_favors_verified_yield_over_depleted_atp_2025(match_fact
     assert default[0].match_id == 'wta-2026'
     assert preferred[0].match_id == 'wta-2024'
     assert preferred[-1].match_id == 'atp-2025-ace'
-    assert report['preferred_verified_cohort'] == 'wta:2024:serve_return_incomplete'
+    assert report['preferred_verified_cohort'] == 'atp:2024:serve_return_incomplete'
     assert report['verified_high_yield_cohorts'] == [
-        'wta:2024', 'wta:2023', 'wta:2022', 'atp:2024',
+        'atp:2024', 'wta:2023', 'wta:2024', 'wta:2022',
     ]
     assert report['historical_high_yield'] is True
     import pytest
@@ -397,7 +397,7 @@ def test_high_yield_rotates_distinct_atp_wta_buckets_in_same_year(match_factory)
         matches, date(2024, 1, 1), date(2024, 12, 31),
         targeted=True, historical_high_yield=True,
     )
-    assert [m.tour for m in ordered] == ['WTA', 'ATP'] * 4
+    assert [m.tour for m in ordered] == ['ATP', 'WTA'] * 4
 
 
 def test_hourly_high_yield_flag_is_not_enabled_for_manual_operator_request():
@@ -482,3 +482,84 @@ def test_provider_coverage_reason_is_visible_in_segment_report(match_factory):
     _record_targeted_statistics_outcome(segments, reasons, m, 'unavailable', 1, {})
     assert reasons == {'empty_whole_match_statistics': 1, 'provider_event_not_finished': 1}
     assert segments[f'wta:{m.scheduled_at.year}']['unavailable_provider_event_not_finished'] == 1
+
+
+def test_hourly_verified_atp_2024_leads_initial_evidence_order(match_factory):
+    from datetime import date
+    from download_tennis_history import _statistics_candidates
+
+    rows = []
+    for tour, year in (("WTA", 2024), ("ATP", 2024), ("WTA", 2023)):
+        for n in range(4):
+            m = match_factory(f"{tour}-{year}-{n}", "A", "B", "A")
+            m.tour = tour
+            m.scheduled_at = datetime(year, 6, n + 1, tzinfo=timezone.utc)
+            m.stats = {"p1_service_points_won": 0.6}
+            m.provider_payload = {"id": str(1000 + len(rows))}
+            rows.append(m)
+    ordered, plan = _statistics_candidates(
+        rows, date(2023, 1, 1), date(2024, 12, 31),
+        targeted=True, historical_high_yield=True,
+    )
+    assert (ordered[0].tour, ordered[0].scheduled_at.year) == ("ATP", 2024)
+    assert plan["preferred_verified_cohort"] == "atp:2024:serve_return_incomplete"
+    assert len({row.match_id for row in ordered}) == len(rows)
+
+
+def test_wta_2025_eligible_probe_precedes_repeatedly_empty_2026_baseline(
+    match_factory,
+):
+    from datetime import date
+    from download_tennis_history import _statistics_candidates
+
+    rows = []
+    for tour, year in (("ATP", 2026), ("WTA", 2026), ("WTA", 2025)):
+        for n in range(8):
+            m = match_factory(f"{tour}-{year}-{n}", "A", "B", "A")
+            m.tour = tour
+            m.scheduled_at = datetime(year, 5, n + 1, tzinfo=timezone.utc)
+            m.stats = {"p1_service_points_won": 0.6}
+            m.provider_payload = {"id": str(2000 + len(rows))}
+            rows.append(m)
+    ordered, plan = _statistics_candidates(
+        rows, date(2025, 1, 1), date(2026, 12, 31),
+        targeted=True, historical_high_yield=True,
+    )
+    assert (ordered[0].tour, ordered[0].scheduled_at.year) == ("WTA", 2025)
+    assert sum(row.scheduled_at.year == 2026 for row in ordered[:8]) > 0
+    assert plan["eligibility_by_tour_year"]["wta:2025"]["eligible"] == 8
+    assert len(ordered) == len(rows)
+
+
+def test_wta_2025_ineligible_gaps_report_why_without_extra_api_calls(
+    match_factory,
+):
+    from datetime import date
+    from download_tennis_history import _statistics_candidates
+
+    rows = []
+    for n in range(3):
+        m = match_factory(f"wta-ineligible-{n}", "A", "B", "A")
+        m.tour = "WTA"
+        m.scheduled_at = datetime(2025, 5, n + 1, tzinfo=timezone.utc)
+        m.stats = {"p1_service_points_won": 0.6}
+        rows.append(m)
+    rows[0].provider_payload = {"id": "333"}
+    rows[1].provider_payload = {}
+    rows[2].provider_payload = {
+        "id": "335",
+        "_tbt_statistics": {
+            "schema": STATISTICS_SCHEMA_VERSION, "event_id": "335",
+            "status": "unavailable", "fetched_at": datetime.now(timezone.utc).isoformat(),
+        },
+    }
+    eligible, plan = _statistics_candidates(
+        rows, date(2025, 1, 1), date(2025, 12, 31),
+        targeted=True, historical_high_yield=True,
+    )
+    assert [row.match_id for row in eligible] == ["wta-ineligible-0"]
+    assert plan["eligibility_by_tour_year"]["wta:2025"] == {
+        "eligible": 1,
+        "missing_or_conflicting_event_id": 1,
+        "retry_not_due": 1,
+    }
