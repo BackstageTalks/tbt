@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/telegram-unicode-letters-preview-tick.json'
+      - '.github/telegram-unicode-uniform-preview-tick.json'
 permissions:
   contents: read
 concurrency:
@@ -37,7 +37,7 @@ jobs:
           from pathlib import Path
           p=Path(".private-telegram/ops/telegram-bot-state.json")
           d=json.loads(p.read_text(encoding="utf-8"))
-          key="2026-10-31:unicode-enclosed-letter-preview-v1"
+          key="2026-10-31:unicode-squared-and-color-preview-v2"
           tests=d.setdefault("badge_tests",{})
           ready=key not in tests
           if ready:
@@ -68,20 +68,24 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           body=(
-            "🧪 TEST – natívne Unicode písmená v Telegrame\n"
-            "Nie je to denná ponuka ani obrázok.\n\n"
-            "Štvorčeky:\n"
-            "🆃 | TOP\n"
-            "🆅 | VALUE\n"
-            "🅰︎ | ACES\n\n"
-            "Krúžky:\n"
-            "🅣 | TOP\n"
-            "🅥 | VALUE\n"
-            "🅐 | ACES\n\n"
-            "🆓 | FREE (referencia)\n"
-            "ℹ️ Skontroluj, ako sa písmená vykreslia v aplikácii."
+            "🧪 TEST – Telegram štvorčekové označenia (len vzhľad)\n"
+            "Nie je to nová denná ponuka.\n\n"
+            "1. JEDNOFAREBNÉ ŠTVORČEKY – odporúčané\n"
+            "🅃 | Hanfmann | 92.7% | 1.66\n"
+            "🅅 | Hijikata | 70.1% | 1.83\n"
+            "🄰 | Fritz | Under 19.5 es | 2.00\n\n"
+            "2. ROVNAKÁ MODRÁ FARBA (písmeno vedľa štvorčeka)\n"
+            "🟦 T | Hanfmann | 92.7% | 1.66\n"
+            "🟦 V | Hijikata | 70.1% | 1.83\n"
+            "🟦 A | Fritz | Under 19.5 es | 2.00\n\n"
+            "3. FARBY PODĽA KATEGÓRIE\n"
+            "🟦 T | Hanfmann | 92.7% | 1.66\n"
+            "🟪 V | Hijikata | 70.1% | 1.83\n"
+            "🟩 A | Fritz | Under 19.5 es | 2.00\n\n"
+            "🆓 FREE – pôvodné Telegram emoji\n"
+            "ℹ️ Test Unicode; farba jednofarebných znakov závisí od fontu."
           )
-          assert len(body) < 1000 and all(c in body for c in ("🆃","🆅","🅰︎","🅣","🅥","🅐"))
+          assert len(body) < 2500 and all(v in body for v in ("🅃","🅅","🄰","🟦","🟪","🟩"))
           Path("/tmp/blinq-unicode-test.txt").write_text(body,encoding="utf-8")
           PY
           curl --fail-with-body --silent --show-error \
@@ -104,7 +108,7 @@ jobs:
           d=json.loads(f.read_text(encoding="utf-8"))
           receipt=json.loads(Path("/tmp/blinq-unicode-receipt.json").read_text(encoding="utf-8"))
           mid=(receipt.get("result") or {}).get("message_id")
-          key="2026-10-31:unicode-enclosed-letter-preview-v1"
+          key="2026-10-31:unicode-squared-and-color-preview-v2"
           if receipt.get("ok") is not True or not isinstance(mid,int) or mid<=0:
               raise SystemExit("Missing Telegram acknowledgement")
           if d["badge_tests"][key].get("status")!="reserved":
