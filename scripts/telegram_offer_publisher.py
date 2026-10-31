@@ -31,12 +31,12 @@ def config(url):
     if type(v.get("max_per_section",7)) is not int or not 1<=v.get("max_per_section",7)<=10: raise ValueError("Invalid limit")
     if v.get("layout","combined") not in ("combined","separate"): raise ValueError("Invalid layout")
     if not isinstance(s.get("weekdays",list(range(7))),list) or any(type(n) is not int or n not in range(7) for n in s.get("weekdays",list(range(7)))): raise ValueError("Invalid weekdays")
-    for f in ("enabled","include_started","show_probability","show_odds"):
+    for f in ("enabled","include_started","show_probability","show_odds","free_top_pick"):
         if type(v.get(f,False)) is not bool: raise ValueError("Invalid "+f)
     if type(s.get("enabled",False)) is not bool: raise ValueError("Invalid schedule enabled")
     return v
 def due(v,now):
-    if not v.get("enabled") or not any((v.get("sections") or {}).get(k) for k in SECTIONS): return None
+    if not v.get("enabled") or not (any((v.get("sections") or {}).get(k) for k in SECTIONS) or v.get("free_top_pick",True)): return None
     r=v.get("manual_request") or {}
     if isinstance(r,dict) and re.fullmatch("[A-Za-z0-9_-]{8,80}",str(r.get("id",""))):
         age=(now-stamp(r.get("created_at"))).total_seconds()
@@ -59,57 +59,95 @@ def snapshot(dest):
 def num(v):
     try: return float(v) if v is not None else None
     except (TypeError,ValueError): return None
-def fmt(r,k,c):
-    a,b=(r.get(n) or {} for n in ("player1","player2")); bet=r.get("betting") or {}
+NUMBER_EMOJIS=("1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟")
+HEADER="Data Betting by BackstageTalks"
+FOOTER="ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine"
+def fmt(r,k,c,index=1):
+    a,b=(r.get(n) or {} for n in ("player1","player2"))
+    bet=r.get("betting") or {}
     sid=str(bet.get("selection_id") or r.get("selection_id") or r.get("winner_id") or "")
-    p=next((x.get("name") for x in (a,b) if str(x.get("id"))==sid),None) or r.get("pick") or r.get("selection") or sid
+    selected=next((str(x.get("name")) for x in (a,b) if str(x.get("id"))==sid and x.get("name")),None)
+    selected=selected or str(r.get("pick") or r.get("selection") or sid)
+    other=next((str(x.get("name")) for x in (a,b) if str(x.get("name") or "")!=selected and x.get("name")),"—")
     time=stamp(r["scheduled_at"]).astimezone(TZ).strftime("%H:%M")
-    parts=[]
     if k=="aces":
-        if num(r.get("projection")) is not None: parts.append("esá %.1f"%num(r["projection"]))
-        if num(r.get("opponent_projection")) is not None: parts.append("súper %.1f"%num(r["opponent_projection"]))
-        if num(r.get("projection_confidence")) is not None: parts.append("confidence %.1f%%"%(num(r["projection_confidence"])*100))
+        projection=num(r.get("projection")); confidence=num(r.get("projection_confidence"))
+        values=[f"esá {projection:.1f}" if projection is not None else "projekcia —"]
+        if confidence is not None: values.append(f"{confidence*100:.1f}%")
     else:
         prob=num(bet.get("blinq_probability") or bet.get("model_probability") or r.get("blinq_probability") or r.get("probability"))
-        if c.get("show_probability",True) and prob is not None: parts.append("P %.1f%%"%(prob*100))
+        values=[f"{prob*100:.1f}%" if prob is not None else "—"] if c.get("show_probability",True) else []
     odds=num(bet.get("odds") or r.get("odds"))
     if c.get("show_odds",True):
-        if odds and odds>1: parts.append("kurz %.2f"%odds)
-        elif k=="aces": parts.append("bez potvrdeného kurzu")
+        values.append(f"{odds:.2f}" if odds is not None and odds>1 else "—")
     if k=="value":
         ev=num(bet.get("expected_value") if "expected_value" in bet else r.get("expected_value"))
-        if ev is not None: parts.append("EV %+.1f%%"%(ev*100))
-    return "🎾 %s – %s\n⏰ %s · %s\n%s"%(a.get("name","—"),b.get("name","—"),time,p," · ".join(parts))
-def messages(x,c,now):
+        if ev is not None:values.append(f"EV {ev*100:+.1f}%")
+    prefix=NUMBER_EMOJIS[index-1] if 1<=index<=len(NUMBER_EMOJIS) else f"{index}."
+    return f"{prefix} {selected} vs {other} | {time} | "+" | ".join(values)
+
+def select_groups(x,c,now):
     today=day(now)
-    if x.get("betting_day")!=today or day(stamp(x["generated_at"]))!=today or stamp(x["generated_at"])>now+timedelta(minutes=5): raise RuntimeError("Wrong betting day")
+    generated=stamp(x["generated_at"])
+    if x.get("betting_day")!=today or day(generated)!=today or generated>now+timedelta(minutes=5):
+        raise RuntimeError("Wrong betting day")
     got={};seen=set()
     for k,key in SECTIONS.items():
-        if not (c.get("sections") or {}).get(k): continue
+        if not (c.get("sections") or {}).get(k) and not (k=="top" and c.get("free_top_pick",True)):
+            continue
+        source=x.get(key) or []
+        if not isinstance(source,list):raise ValueError("Invalid confirmed offer section")
         rows=[]
-        for r in x.get(key) or []:
-            if not isinstance(r,dict) or not r.get("event_id") or (k=="aces" and r.get("market")!="aces"): continue
-            try: start=stamp(r["scheduled_at"])
-            except (ValueError,KeyError,TypeError): continue
-            if start.astimezone(TZ).date().isoformat()!=today or day(start)!=today or (not c.get("include_started",False) and start<=now):continue
+        for r in source:
+            if not isinstance(r,dict) or not r.get("event_id") or (k=="aces" and r.get("market")!="aces"):
+                continue
             if not all(isinstance(r.get(p),dict) for p in ("player1","player2")):continue
-            sel=str((r.get("betting") or {}).get("selection_id") or r.get("selection_id") or r.get("winner_id") or r.get("pick") or "")
-            identity=(r["event_id"],"aces" if k=="aces" else "match_winner",sel)
-            if not sel or identity in seen:continue
-            seen.add(identity);rows.append(r)
-            if len(rows)>=c.get("max_per_section",7): break
+            try:start=stamp(r["scheduled_at"])
+            except (ValueError,KeyError,TypeError):continue
+            if start.astimezone(TZ).date().isoformat()!=today or day(start)!=today:continue
+            if not c.get("include_started",False) and start<=now:continue
+            selector=str((r.get("betting") or {}).get("selection_id") or r.get("selection_id") or r.get("winner_id") or r.get("pick") or "")
+            ident=(str(r["event_id"]),"aces" if k=="aces" else "match_winner",selector)
+            if not selector or ident in seen:continue
+            seen.add(ident);rows.append(r)
+            # FREE pick can select among the whole confirmed TOP shortlist,
+            # independently of the number of premium tips in the outbound message.
+            if len(rows)>=max(c.get("max_per_section",7),10 if k=="top" else 0):
+                break
         if rows:got[k]=rows
+    return got
+
+def messages(x,c,now):
+    got=select_groups(x,c,now)
     if not got:return []
-    title="🎾 BlinQ · "+now.astimezone(TZ).strftime("%d.%m.%Y")
-    footer=str(c.get("footer","BlinQ · Tennis Intelligence"))
-    if c.get("layout")=="separate":
-        result=["\n\n".join([title,LABELS[k],*(fmt(r,k,c) for r in rows),footer]) for k,rows in got.items()]
-    else:
-        parts=[title]
-        for k,rows in got.items():parts.extend([LABELS[k],*(fmt(r,k,c) for r in rows)])
-        result=["\n\n".join([*parts,footer])]
-    if any(len(t)>4096 for t in result): raise RuntimeError("Telegram 4096 character limit; lower count")
-    return result
+    today=day(now)
+    date=now.astimezone(TZ).strftime("%d.%m.%Y")
+    footer=str(c.get("footer") or FOOTER)
+    def category_text(k,rows):
+        names={"top":"🎾 TOP Picks | BlinQ","value":"💎 VALUE Picks | BlinQ","aces":"🎯 ESÁ | BlinQ"}
+        return "\n".join([names[k],f"📅 {date}",""]+
+                         [fmt(r,k,c,i) for i,r in enumerate(rows,1)])
+    outbound=[]
+    premium=[]
+    for k,rows in got.items():
+        if (c.get("sections") or {}).get(k):
+            premium.append(category_text(k,rows[:c.get("max_per_section",7)]))
+    if premium:
+        if c.get("layout","combined")=="separate":
+            outbound.extend({"audience":"premium","text":"\n\n".join([HEADER,part,footer])} for part in premium)
+        else:
+            outbound.append({"audience":"premium","text":"\n\n".join([HEADER,*premium,footer])})
+    if c.get("free_top_pick",True) and got.get("top"):
+        # Stable deterministic pseudo-random selection by betting day.
+        # A different action run on the same day cannot select another FREE pick.
+        winner=min(got["top"],key=lambda r:hashlib.sha256(
+            (today+"|"+str(r.get("event_id"))+"|"+str((r.get("betting") or {}).get("selection_id") or r.get("winner_id"))).encode("utf-8")).hexdigest())
+        free="\n".join(["🎾 FREE | BlinQ",f"📅 {date}","",fmt(winner,"top",c,1).replace("1️⃣","🆓",1)])
+        outbound.append({"audience":"free","text":"\n\n".join([HEADER,free,footer])})
+    if any(len(item["text"])>4096 for item in outbound):
+        raise RuntimeError("Telegram 4096 character limit; reduce max_per_section")
+    return outbound
+
 def prepare(a):
     now=stamp(a.now) if a.now else datetime.now(timezone.utc);v=config(a.config_url);key=due(v,now)
     if not key:print('{"status":"skipped","reason":"not_due"}');return
@@ -129,9 +167,14 @@ def send(a):
     token=os.getenv("TGB");chat=os.getenv("TGCH")
     if not token or not chat:raise RuntimeError("Missing GH Secrets TGB or TGCH")
     if not (Path(a.output)/"ready").is_file():raise RuntimeError("Missing durable reservation")
-    for msg in load(Path(a.output)/"messages.json"):
-        req=urllib.request.Request("https://api.telegram.org/bot"+token+"/sendMessage",data=urllib.parse.urlencode({"chat_id":chat,"text":msg,"disable_web_page_preview":"true"}).encode(),method="POST")
-        with urllib.request.urlopen(req,timeout=30) as f: answer=json.loads(f.read(16384))
+    for item in load(Path(a.output)/"messages.json"):
+        if not isinstance(item,dict) or item.get("audience") not in ("free","premium"): raise RuntimeError("Invalid reserved recipient")
+        destination=(os.getenv("TGCH_FREE") or chat) if item["audience"]=="free" else chat
+        req=urllib.request.Request("https://api.telegram.org/bot"+token+"/sendMessage",data=urllib.parse.urlencode({"chat_id":destination,"text":item["text"],"disable_web_page_preview":"true"}).encode(),method="POST")
+        try:
+            with urllib.request.urlopen(req,timeout=30) as f: answer=json.loads(f.read(16384))
+        except Exception as exc:
+            raise RuntimeError("Telegram request failed (credentials redacted): "+exc.__class__.__name__) from None
         if not answer.get("ok") or not (answer.get("result") or {}).get("message_id"):raise RuntimeError("Telegram send not confirmed")
         print("Telegram accepted message_id="+str(answer["result"]["message_id"]))
 if __name__=="__main__":
