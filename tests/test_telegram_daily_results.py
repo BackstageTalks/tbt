@@ -317,3 +317,15 @@ def test_all_issued_results_are_preserved_when_telegram_message_spills():
     assert "WIN 149" in posts[-1]["text"]
     assert sum(item["counts"]["won"] for item in posts)==149
     assert "ROI +80.0%" in posts[-1]["text"]
+
+def test_elite_preview_is_clearly_synthetic_and_uses_the_real_formatter():
+    from telegram_elite_results_preview import preview
+    text=preview()
+    assert "🧪 TEST – simulované výsledky, nie skutočné vyhodnotenie" in text
+    assert "🅃 Hanfmann | 1.66 | +0.66u ✅" in text
+    assert "🄰 Zverev | 2.00 | -1.00u ❌" in text
+    assert "🟪 VOID" in text and "⏳" in text
+    assert "Zisk +0.16u" in text and "ROI +2.3%" in text
+    assert "ℹ️ Analytical preview by BlinQ Stat Engine" in text
+    assert tg.telegram_link_entities(text)[0]["url"]==tg.BRAND_URL
+
