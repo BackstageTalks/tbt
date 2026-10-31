@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
 from tbt.services.entitlements import _daily_rows
 TZ=ZoneInfo("Europe/Bratislava")
 SECTIONS={"top":"top_daily_picks","value":"value_picks","aces":"ace_picks"}
-LABELS={"top":"🏆 TOP","value":"💎 VALUE","aces":"🎯 ESÁ"}
+LABELS={"top":"🏆 TOP","value":"💎 VALUE","aces":"🎯 ACES"}
 def load(p): return json.loads(Path(p).read_text(encoding="utf-8"))
 def save(p,x):
     p=Path(p);p.parent.mkdir(parents=True,exist_ok=True)
@@ -65,8 +65,36 @@ def num(v):
     try: return float(v) if v is not None else None
     except (TypeError,ValueError): return None
 NUMBER_EMOJIS=("1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟")
-HEADER="Data Betting by BackstageTalks"
-FOOTER="ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine"
+HEADER="BlinQ | Tennis Intelligence"
+FOOTER="ℹ️ Analytical preview only"
+BRAND_LINK_TEXT="BlinQ Stat Engine"
+BRAND_FOOTER="by " + BRAND_LINK_TEXT
+BRAND_URL="https://agreeable-sky-011a7fe10.7.azurestaticapps.net/follow-the-data/"
+
+
+def branded_footer(value=None):
+    """Preserve Admin's disclaimer while unconditionally appending the linked brand."""
+    text=str(value or FOOTER).strip()
+    for old in ("🧠 by BackstageTalks Data Engine", "by BackstageTalks Data Engine",
+                BRAND_FOOTER):
+        text=text.replace(old,"").strip()
+    return (text+"\n" if text else "")+BRAND_FOOTER
+
+
+def telegram_link_entities(message):
+    """Offsets are Telegram UTF-16 code units, not Python codepoints.
+
+    Text entities are safer than interpolating player names into HTML parse mode.
+    """
+    pos=message.rfind(BRAND_FOOTER)
+    if pos<0:
+        return []
+    start=pos+len("by ")
+    return [{"type":"text_link",
+             "offset":len(message[:start].encode("utf-16-le"))//2,
+             "length":len(BRAND_LINK_TEXT.encode("utf-16-le"))//2,
+             "url":BRAND_URL}]
+
 def _selection_name(row):
     bet=row.get("betting") or {}
     sid=str(bet.get("selection_id") or row.get("selection_id") or row.get("winner_id") or "")
@@ -105,7 +133,7 @@ def fmt(r,k,c,index=1,name_map=None):
     time=stamp(r["scheduled_at"]).astimezone(TZ).strftime("%H:%M")
     if k=="aces":
         projection=num(r.get("projection")); confidence=num(r.get("projection_confidence"))
-        values=[f"esá {projection:.1f}" if projection is not None else "projekcia —"]
+        values=[f"aces {projection:.1f}" if projection is not None else "projection —"]
         if confidence is not None:values.append(f"{(confidence*100 if abs(confidence)<=1 else confidence):.1f}%")
     else:
         prob=num(bet.get("blinq_probability") or bet.get("model_probability") or r.get("blinq_probability") or r.get("probability"))
@@ -155,7 +183,7 @@ def messages(x,c,now,free_event_id=None):
     if not got:return []
     today=day(now)
     date=now.astimezone(TZ).strftime("%d.%m.%Y")
-    footer=str(c.get("footer") or FOOTER)
+    footer=branded_footer(c.get("footer"))
     outbound=[]
     # User-facing order: TOP -> Value -> Aces, without category headings.
     premium_groups=[(key,rows[:c.get("max_per_section",7)]) for key,rows in got.items()
@@ -270,7 +298,13 @@ def send(a):
     for item in load(Path(a.output)/"messages.json"):
         if not isinstance(item,dict) or item.get("audience") not in ("free","premium"): raise RuntimeError("Invalid reserved recipient")
         destination=(os.getenv("TGCH_FREE") or chat) if item["audience"]=="free" else chat
-        req=urllib.request.Request("https://api.telegram.org/bot"+token+"/sendMessage",data=urllib.parse.urlencode({"chat_id":destination,"text":item["text"],"disable_web_page_preview":"true"}).encode(),method="POST")
+        # Telegram text_link entities keep the visible footer compact and
+        # clickable without untrusted player text passing through HTML parsing.
+        body={"chat_id":destination,"text":item["text"],"disable_web_page_preview":"true"}
+        entities=telegram_link_entities(item["text"])
+        if entities:
+            body["entities"]=json.dumps(entities,ensure_ascii=False)
+        req=urllib.request.Request("https://api.telegram.org/bot"+token+"/sendMessage",data=urllib.parse.urlencode(body).encode(),method="POST")
         try:
             with urllib.request.urlopen(req,timeout=30) as f: answer=json.loads(f.read(16384))
         except Exception as exc:
