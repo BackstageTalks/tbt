@@ -5123,7 +5123,7 @@ function adminActivityRows(){
     if(!state.ui.telegram_bot||typeof state.ui.telegram_bot!=='object')
       state.ui.telegram_bot={enabled:false,sections:{top:true,value:true,aces:true},
         schedule:{enabled:false,time:'08:15',weekdays:[0,1,2,3,4,5,6]},layout:'combined',
-        max_per_section:7,include_started:false,show_probability:true,show_odds:true,free_top_pick:true,results_enabled:false,
+        max_per_section:0,include_started:false,show_probability:true,show_odds:true,free_top_pick:true,results_enabled:false,
         footer:'ℹ️ Analytical preview only'};
     const c=state.ui.telegram_bot;
     if(typeof c.footer==='string'&&c.footer.includes('BackstageTalks Data Engine'))c.footer=c.footer.replace(/\n?🧠 by BackstageTalks Data Engine/g,'').trim()||'ℹ️ Analytical preview only';
@@ -5145,7 +5145,7 @@ function adminActivityRows(){
           ${check('sections.value',c.sections.value===true,'💎 Value')}
           ${check('sections.aces',c.sections.aces===true,'🎯 Aces')}
           ${check('free_top_pick',c.free_top_pick!==false,'🆓 Jeden náhodný tip z TOP (FREE)')}
-          <label>Maximum tipov na kategóriu <input type="number" min="1" max="10" data-tg-bot-field="max_per_section" value="${Number(c.max_per_section)||7}"></label>
+          <label>Počet tipov na kategóriu <select data-tg-bot-field="max_per_section"><option value="0" ${Number(c.max_per_section)===0?'selected':''}>Celá potvrdená ponuka (ALL)</option>${[3,5,7,10,20,50].map(n=>`<option value="${n}" ${Number(c.max_per_section)===n?'selected':''}>${n} tipov</option>`).join('')}</select></label>
         </div>
         <div class="tg-bot-card"><h3>Kedy posielať</h3>
           ${check('schedule.enabled',s.enabled===true,'Automatické denné odosielanie')}
