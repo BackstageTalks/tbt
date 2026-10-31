@@ -263,7 +263,8 @@ def test_classic_format_and_deterministic_free_pick():
     assert "aces 8.3" not in first[0]["text"]
     assert "esá" not in first[0]["text"]
     assert "Double Fault" not in first[0]["text"]
-    assert all("Analytical preview only" in x["text"] for x in first)
+    assert all("ℹ️ Analytical preview by BlinQ Stat Engine" in x["text"] for x in first)
+    assert all("Analytical preview only" not in x["text"] for x in first)
     assert all(x["text"].endswith("by BlinQ Stat Engine") for x in first)
     assert all(tg.telegram_link_entities(x["text"]) for x in first)
 
@@ -370,7 +371,10 @@ def test_telegram_footer_text_link_is_clickable_and_utf16_safe():
     # Telegram offsets are UTF-16 code units (emojis are surrogate pairs).
     body = "🎾 BlinQ | Tennis Intelligence\n1️⃣ Test\n" + tg.branded_footer(
         "ℹ️ Analytical preview only\n🧠 by BackstageTalks Data Engine")
-    assert body.endswith("ℹ️ Analytical preview only\nby BlinQ Stat Engine")
+    assert body.endswith("ℹ️ Analytical preview by BlinQ Stat Engine")
+    assert "\nby BlinQ Stat Engine" not in body
+    assert tg.branded_footer() == "ℹ️ Analytical preview by BlinQ Stat Engine"
+    assert tg.branded_footer("ℹ️ Analytical preview only") == tg.branded_footer()
     entities = tg.telegram_link_entities(body)
     assert len(entities) == 1
     link = entities[0]
