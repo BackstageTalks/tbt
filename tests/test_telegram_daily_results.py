@@ -145,7 +145,7 @@ def test_combined_scorecard_daily_win_loss_void_pending_and_roi():
     assert "WIN 2 | ❌ LOSS 1 | ➖ VOID 1 | ⏳ PENDING 1" in message
     assert "Úspešnosť 66.7%" in message
     assert "Zisk +0.60u" in message
-    assert "ROI 20.0%" in message
+    assert "ROI +20.0%" in message
     assert "TOP · WIN 1 | LOSS 0 | VOID 1" in message
     assert "VALUE · WIN 0 | LOSS 1" in message
     assert "ACES · WIN 1 | LOSS 0 | VOID 0 | PENDING 1" in message
@@ -174,4 +174,4 @@ def test_all_issued_results_are_preserved_when_telegram_message_spills():
     assert body.count("✅ Surname")==len(samples)
     assert "WIN 149" in posts[-1]["text"]
     assert sum(item["counts"]["won"] for item in posts)==149
-    assert "ROI 80.0%" in posts[-1]["text"]
+    assert "ROI +80.0%" in posts[-1]["text"]
