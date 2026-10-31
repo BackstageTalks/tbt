@@ -1445,7 +1445,7 @@ def validate_ui_config(payload: object) -> dict:
             raise ValueError("Telegram bot config must be an object")
         if any(key in bot for key in ("bot_token", "token", "chat_id", "TGB", "TGCH")):
             raise ValueError("Telegram credentials must be stored in GitHub Secrets")
-        for key in ("enabled", "include_started", "show_probability", "show_odds", "free_top_pick"):
+        for key in ("enabled", "include_started", "show_probability", "show_odds", "free_top_pick", "results_enabled"):
             if key in bot and not isinstance(bot[key], bool):
                 raise ValueError("Invalid Telegram flag " + key)
         sections = bot.get("sections", {})
