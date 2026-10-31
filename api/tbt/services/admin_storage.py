@@ -131,7 +131,7 @@ class _FirestoreTableAdapter:
         from google.api_core.exceptions import FailedPrecondition, NotFound
         from google.cloud.firestore_v1 import LastUpdateOption
 
-        if str(mode).lower() != "merge" or match_condition != MatchConditions.IfNotModified or etag is None:
+        if str(getattr(mode, "value", mode)).lower() != "merge" or match_condition != MatchConditions.IfNotModified or etag is None:
             raise ValueError("Conditional merge requires the last-read entity version")
         row = dict(entity)
         pk, rk = row.get("PartitionKey"), row.get("RowKey")
@@ -1057,28 +1057,76 @@ def load_account_worker_status() -> dict | None:
 
 
 def save_model_calibration_status(payload: object) -> dict:
-    """Store only a small, validated, read-only model-monitor snapshot in Azure.
+    """CAS-publish only strictly newer verified model-pair evidence.
 
-    Called exclusively by the secret-protected internal endpoint. No training,
-    GitHub token, raw private ledger, player rows or model artifact is stored.
+    The two publishers share this Azure/Firestore row. A late older job must
+    NEVER move shadow counters or the CDB unseen audit backwards.
     """
-    from .model_calibration_status import normalize_model_calibration_snapshot
+    from azure.core import MatchConditions
+    from azure.data.tables import UpdateMode
+    from .model_calibration_status import (
+        normalize_model_calibration_snapshot, assert_calibration_successor,
+        calibration_fingerprint,
+    )
     safe = normalize_model_calibration_snapshot(payload)
-    now = datetime.now(timezone.utc).isoformat()
-    safe["updated_at"] = now
-    encoded = json.dumps(safe, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-    if len(encoded.encode("utf-8")) > 24_000:
-        raise ValueError("Calibration status exceeds safe Azure Table payload size")
-    try:
-        _table(UI_TABLE).upsert_entity({
-            "PartitionKey": "runtime",
-            "RowKey": "model-calibration-status-v1",
-            "payload": encoded,
-            "updated_at": now,
-        }, mode="replace")
-    except Exception as exc:
-        raise AdminStorageUnavailable("Unable to save calibration status") from exc
-    return safe
+    safe["snapshot_sha256"] = calibration_fingerprint(safe)
+    table = _table(UI_TABLE)
+    pk, rk = "runtime", "model-calibration-status-v1"
+    for attempt in range(5):
+        try:
+            prior_entity = table.get_entity(partition_key=pk, row_key=rk)
+        except Exception as exc:
+            if _storage_not_found(exc):
+                prior_entity = None
+            else:
+                raise AdminStorageUnavailable("Unable to read previous calibration status") from exc
+        if prior_entity is not None:
+            try:
+                prior = json.loads(str(prior_entity.get("payload") or ""))
+                newer = assert_calibration_successor(prior, safe)
+            except (ValueError, TypeError, KeyError) as exc:
+                raise ValueError("Calibration update rejected: invalid or older evidence") from exc
+            if not newer:
+                # Idempotent retry; return what was durably saved originally.
+                return prior
+        now = datetime.now(timezone.utc).isoformat()
+        final = {**safe, "updated_at": now}
+        encoded = json.dumps(final, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+        if len(encoded.encode("utf-8")) > 24_000:
+            raise ValueError("Calibration status exceeds safe Azure Table payload size")
+        entity = {"PartitionKey": pk, "RowKey": rk, "payload": encoded, "updated_at": now}
+        try:
+            if prior_entity is None:
+                table.create_entity(entity)
+            else:
+                etag = getattr(prior_entity, "metadata", {}).get("etag")
+                if etag is None:
+                    raise AdminStorageUnavailable("Calibration storage does not expose CAS ETag")
+                table.update_entity(entity, mode=UpdateMode.MERGE, etag=etag,
+                                    match_condition=MatchConditions.IfNotModified)
+        except AdminStorageUnavailable:
+            raise
+        except Exception as exc:
+            if getattr(exc, "status_code", None) in (409, 412) or (
+                "alreadyexists" in type(exc).__name__.lower() or
+                "resourceexists" in type(exc).__name__.lower()
+            ):
+                if attempt < 4:
+                    continue
+                raise AdminStorageUnavailable("Calibration CAS retry exhausted") from exc
+            raise AdminStorageUnavailable("Unable to save calibration status") from exc
+        # Independent storage read-back, not just HTTP 200 or local serialization.
+        try:
+            remote = table.get_entity(partition_key=pk, row_key=rk)
+            confirmed = json.loads(str(remote.get("payload") or ""))
+        except Exception as exc:
+            raise AdminStorageUnavailable("Calibration read-back unavailable") from exc
+        if confirmed.get("snapshot_sha256") != safe["snapshot_sha256"] or (
+            calibration_fingerprint(confirmed) != safe["snapshot_sha256"]
+        ):
+            raise AdminStorageUnavailable("Calibration CAS read-back mismatch")
+        return confirmed
+    raise AdminStorageUnavailable("Calibration CAS did not converge")
 
 
 def load_model_calibration_status() -> dict | None:

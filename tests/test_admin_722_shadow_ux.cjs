@@ -80,7 +80,23 @@ html=ctx.renderAdminCalibration();
 assert.match(html,/Shadow – zachytené predzápasové páry<\/strong><span>330 \/ 1\s*000/);
 assert.match(html,/Shadow – minimum vyhodnotených zápasov<\/strong><span>215 \/ 200/);
 assert.match(html,/title="Nesplnené"/);
+assert.match(html,/Úspešnosť: pokles najviac 1 pp/);
+assert.match(html,/Brier: zhoršenie najviac 0,003/);
+assert.match(html,/Doplnkové diagnostiky \(nie veto\)/);
 assert.doesNotMatch(html,/čaká na výsledky zápasov/);
+state.adminCalibration.shadow.gate.accuracy_within_tolerance=true;
+state.adminCalibration.shadow.gate.brier_within_tolerance=true;
+state.adminCalibration.shadow.gate.log_loss_better=true;
+state.adminCalibration.shadow.gate.ready_for_promotion_review=true;
+state.adminCalibration.shadow.paired_uncertainty={
+  log_loss:{n:215,delta:-.01,lower:-.03,upper:-.001}
+};
+state.adminCalibration.shadow.tour_diagnostics={ATP:{n:120},WTA:{n:95}};
+html=ctx.renderAdminCalibration();
+assert.match(html,/Pripravený na odborné posúdenie/);
+assert.match(html,/Párový rozdiel log loss/);
+assert.match(html,/ATP 120 · WTA 95/);
+state.adminCalibration.shadow.gate.ready_for_promotion_review=false;
 
 // Old GitHub evidence is visibly historical, even if Azure was just read again.
 state.adminCalibration.shadow_generated_at='2026-10-29T06:06:00Z';

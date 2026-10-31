@@ -8,6 +8,7 @@ completed history.  A new candidate version automatically starts a new cohort.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from math import log, sqrt
 from typing import Iterable
 
 from ..models.metrics import evaluate_probabilities
@@ -195,6 +196,38 @@ def _delta(challenger: dict, production: dict, key: str) -> float | None:
     return float(left) - float(right)
 
 
+
+def _paired_uncertainty(rows: list[dict]) -> dict:
+    """Exploratory paired 95% normal-approximation intervals, NOT a promotion gate.
+
+    We subtract scores of two frozen probabilities for each exact same match.
+    This retains within-match covariance; the simple SE is not time-cluster
+    robust and must not be used as an automatic promotion decision.
+    """
+    components = {"accuracy": [], "log_loss": [], "brier_score": []}
+    for row in rows:
+        y = int(row["target_player1_win"])
+        p = float(row["production_player1_probability"])
+        q = float(row["challenger_player1_probability"])
+        if not (0 < p < 1 and 0 < q < 1):
+            raise ValueError("Paired shadow score requires pre-match probabilities")
+        eps = 1e-15
+        p, q = max(eps, min(1-eps, p)), max(eps, min(1-eps, q))
+        components["accuracy"].append(float((q >= .5) == bool(y)) - float((p >= .5) == bool(y)))
+        components["brier_score"].append((q-y)**2 - (p-y)**2)
+        components["log_loss"].append(-log(q if y else 1-q) + log(p if y else 1-p))
+    result = {}
+    for key, values in components.items():
+        n = len(values)
+        mean = sum(values)/n if n else None
+        variance = sum((v-mean)**2 for v in values)/(n-1) if n > 1 else None
+        margin = 1.96 * sqrt(variance/n) if n >= 30 and variance is not None else None
+        result[key] = {"n": n, "delta": mean,
+                       "lower": mean-margin if margin is not None else None,
+                       "upper": mean+margin if margin is not None else None}
+    return result
+
+
 def build_shadow_report(
     ledger: Iterable[dict],
     *,
@@ -284,6 +317,15 @@ def build_shadow_report(
             "challenger_only_correct": challenger_only,
             "production_only_correct": production_only,
             "discordant": challenger_only + production_only,
+        },
+        "paired_uncertainty": _paired_uncertainty(settled),
+        "tour_diagnostics": {
+            tour: {
+                "n": len(sample),
+                "paired_log_loss": _paired_uncertainty(sample)["log_loss"],
+            } for tour in ("ATP", "WTA")
+            for sample in [[row for row in settled
+                            if str(row.get("tour") or "").upper() == tour]]
         },
         "gate": {
             "minimum_matches_met": min_matches_met,

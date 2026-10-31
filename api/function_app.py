@@ -2747,13 +2747,29 @@ def _feed_asset_health(raw_feed: dict) -> dict:
     }
 
 
-@app.route(route="v1/internal/model-calibration-snapshot", methods=["POST"])
+@app.route(route="v1/internal/model-calibration-snapshot", methods=["GET", "POST"])
 def internal_model_calibration_snapshot(req):
     """Receive signed read-only calibration evidence from GitHub Actions."""
     if not str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip():
         return response({"error": "calibration_worker_not_configured"}, 503)
     if not _live_worker_token_ok(req):
         return response({"error": "forbidden"}, 403)
+    if req.method == "GET":
+        try:
+            saved = load_model_calibration_status()
+            if not saved:
+                return response({"error": "calibration_snapshot_pending"}, 503)
+            return response({
+                "production_version": saved["production_version"],
+                "candidate_version": saved["candidate_version"],
+                "source_generated_at": saved["source_generated_at"],
+                "snapshot_sha256": saved.get("snapshot_sha256"),
+                "shadow": {k: saved["shadow"][k] for k in ("captured", "settled", "pending")},
+                "unseen": {"eligible_rows": saved["unseen"]["eligible_rows"]},
+                "updated_at": saved["updated_at"],
+            })
+        except AdminStorageUnavailable:
+            return response({"error": "calibration_storage_unavailable"}, 503)
     if len(req.get_body()) > 32_000:
         return response({"error": "calibration_payload_too_large"}, 413)
     try:
@@ -2764,6 +2780,8 @@ def internal_model_calibration_snapshot(req):
             "production_version": saved["production_version"],
             "candidate_version": saved["candidate_version"],
             "offline_candidate_version": (saved.get("offline_candidate") or {}).get("candidate_version"),
+            "snapshot_sha256": saved["snapshot_sha256"],
+            "source_generated_at": saved["source_generated_at"],
             "updated_at": saved["updated_at"],
         })
     except (ValueError, TypeError) as exc:

@@ -5856,6 +5856,7 @@ by BlinQ Stat Engine</pre><small>Ilustračné tipy. BlinQ Stat Engine bude v Tel
     </article>`:active?`<article class="admin-calibration-panel admin-calibration-empty"><h3>${escapeHtml(shadowCandidateName)} · offline kvalita zatiaľ neoverená</h3><p>Kandidát ${escapeHtml(shadowVersion)} je v uloženom shadow páre, ale nemá dostupné nezávislé offline holdout porovnanie s aktuálnym championom. Tréning ani zachytené predzápasové snapshoty samy nepreukazujú zlepšenie modelu. Po vyhodnotení zápasov sa zobrazia výhradne skutočné výsledky tohto páru.</p></article>`:`<article class="admin-calibration-panel admin-calibration-empty"><h3>Ďalší model · čaká na vyhodnotenie</h3><p>Aktuálny champion je ${escapeHtml(productionName)}. Nový kandidát sa zobrazí až po nezávislom tréningu a overení holdoutu. Historické shadow porovnanie sa nezapočítava do nového páru.</p></article>`;
     return `<section class="admin-ux-section admin-calibration">${head}
       <div class="admin-calibration-status${anyStale?' is-stale':''}" role="status"><strong>${escapeHtml(status)}</strong><span>${d.stale?'Synchronizácia z GitHubu je staršia než 8 hodín. ':''}${reportStale?'Zdrojový shadow report je starší než 8 hodín alebo nemá čas. ':''}Uložené v Azure: ${escapeHtml(fmtStamp(d.updated_at))} · Shadow report: ${escapeHtml(fmtStamp(d.shadow_generated_at))}. Tlačidlo Obnoviť načíta uložený stav, nie nové výsledky z GitHubu.</span></div>
+      ${(d.health_warnings||[]).length?'<p class="admin-calibration-foot" role="alert">Monitoring: '+(d.health_warnings||[]).map(w=>escapeHtml(({shadow_report_stale:'Shadow report je zastaraný',source_report_stale:'Synchronizácia je zastaraná',readiness_audit_stale:'Audit CDB je zastaraný',pending_shadow_requires_review:'Čakajúce shadow zápasy vyžadujú kontrolu'}[w]||w))).join(' · ')+'</p>':''}
       ${shadowAwaitingPair?'<p role="status" class="admin-calibration-foot">Produkčný model bol zmenený. Staré shadow metriky a počty predchádzajúceho páru sa nezapočítavajú do nového championa. Historický pár: '+escapeHtml(String(d.historical_shadow_pair?.production_version||'—'))+' / '+escapeHtml(String(d.historical_shadow_pair?.candidate_version||'—'))+'.</p>':''}
       <div class="admin-calibration-grid">
         ${card('Aktívny champion',productionName,productionHint)}
@@ -5873,19 +5874,31 @@ by BlinQ Stat Engine</pre><small>Ilustračné tipy. BlinQ Stat Engine bude v Tel
           <p>Rovnaké zápasy, skutočné výsledky, zmrazené pravdepodobnosti pred štartom. Počet: ${numberOrDash(shadow.settled)} · dni: ${numberOrDash(shadow.settled_utc_days)}</p>
           ${shadowAwaitingPair?'<p class="admin-calibration-empty" role="status">Pre nový produkčný model zatiaľ neexistuje porovnateľná shadow vzorka. Staré metriky sú historické; nové budú dostupné po zachytení a vyhodnotení predzápasových predikcií.</p>':`<div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Metrika</th><th>Champion</th><th>Kandidát</th><th>Rozdiel</th></tr></thead><tbody>${rows}</tbody></table></div>`}
           <p class="admin-calibration-foot">${incomplete?'Na vyhodnotenie brány zatiaľ iba '+numberOrDash(settledShadow)+' uzavretých zápasov počas '+numberOrDash(shadow.settled_utc_days)+' dní; '+numberOrDash(pendingShadow)+' predzápasových snapshotov čaká na výsledok.':'Zelený rozdiel je lepší; pri log loss, Brier a ECE je lepšia nižšia hodnota.'} Žiadne automatické povýšenie modelu.</p>
+          ${shadow.paired_uncertainty?.log_loss?.lower!=null?'<p class="admin-calibration-foot">Párový rozdiel log loss (7.2.2 − champion), orientačný 95 % interval: '+escapeHtml(Number(shadow.paired_uncertainty.log_loss.lower).toFixed(4))+' až '+escapeHtml(Number(shadow.paired_uncertainty.log_loss.upper).toFixed(4))+'. Interval používa tie isté zápasy; nie je samostatným kritériom povýšenia.</p>':''}
+          ${Object.keys(shadow.tour_diagnostics||{}).length?'<p class="admin-calibration-foot">Podskupiny (výhradne skutočné shadow výsledky): '+['ATP','WTA'].filter(t=>shadow.tour_diagnostics?.[t]).map(t=>t+' '+numberOrDash(shadow.tour_diagnostics[t].n)).join(' · ')+'.</p>':''}
         </article>
         <article class="admin-calibration-panel"><h3>Brána kalibrácie</h3><div class="admin-calibration-gates">
+          <p class="admin-calibration-foot"><strong>Rozhodovacie podmienky</strong> · iba na odborné posúdenie, bez automatického povýšenia.</p>
           ${[
             ['200 vyhodnotených zápasov',gate.minimum_matches_met,false],
             ['Aspoň 3 samostatné dni',gate.minimum_days_met,false],
-            ['Úspešnosť nie horšia',gate.accuracy_not_worse,true],
             ['Lepší log loss',gate.log_loss_better,true],
-            ['Lepší Brier score',gate.brier_better,true],
-            ['ECE nie horšia',gate.ece_not_worse,true],
+            ['Úspešnosť: pokles najviac 1 pp',gate.accuracy_within_tolerance,true],
+            ['Brier: zhoršenie najviac 0,003',gate.brier_within_tolerance,true],
           ].map(([label,pass,metric])=>{
             const assessed=metric&&gate.minimum_matches_met===true&&gate.minimum_days_met===true&&settledShadow>0;
             const verdict=pass?'Splnené':assessed?'Nesplnené':metric?'Čaká na vzorku':'Čaká na výsledky';
             return `<div><span>${escapeHtml(label)}</span><strong class="${pass?'is-good':assessed?'is-worse':'is-pending'}" title="${escapeHtml(verdict)}" aria-label="${escapeHtml(verdict)}">${pass?'✓':assessed?'✕':'Čaká'}</strong></div>`;
+          }).join('')}
+          <p class="admin-calibration-foot"><strong>Doplnkové diagnostiky (nie veto)</strong></p>
+          ${[
+            ['Úspešnosť bez poklesu',gate.accuracy_not_worse],
+            ['Brier skutočne lepší',gate.brier_better],
+            ['ECE nie horšia',gate.ece_not_worse],
+          ].map(([label,pass])=>{
+            const ready=settledShadow>0;
+            const verdict=!ready?'Čaká':pass?'Áno':'Nie';
+            return `<div><span>${escapeHtml(label)}</span><strong title="${escapeHtml(verdict)}" class="${!ready?'is-pending':pass?'is-good':'is-pending'}">${escapeHtml(verdict)}</strong></div>`;
           }).join('')}
         </div><p class="admin-calibration-foot">Audit nových zápasov: ${escapeHtml(fmtStamp(unseen.readiness_generated_at))}. ${unseen.available?'Cohort nezávislý od už spotrebovaných rozhodnutí.':'Pozor: audit nových zápasov zatiaľ nepatrí aktuálnemu championovi.'}</p></article>
       </div>
@@ -7627,11 +7640,17 @@ by BlinQ Stat Engine</pre><small>Ilustračné tipy. BlinQ Stat Engine bude v Tel
   function showAccessHint(target,planId='elite',sectionLabel='',autoHide=false){
     const hint=$('accessHint'),title=$('accessHintTitle'),text=$('accessHintText'),button=$('accessHintUpgrade');if(!hint||!target||!target.isConnected||hint.contains(target)||$('upgradeDialog')?.open)return;
     clearTimeout(accessHintHoverTimer);
-    const d=accessHintDetails(planId,sectionLabel);accessHintTarget=target;accessHintPinnedByClick=autoHide;
+    // A focus/hover event after the explicit click must not downgrade the
+    // pinned hint to an ephemeral one: pointerout would otherwise hide it.
+    const wasPinned=accessHintPinnedByClick&&accessHintTarget===target&&!hint.hidden;
+    const pinned=autoHide||wasPinned;
+    const d=accessHintDetails(planId,sectionLabel);accessHintTarget=target;accessHintPinnedByClick=pinned;
     if(title)title.textContent=d.title;if(text)text.textContent=d.text;
     if(button){button.textContent=`Upgrade na ${d.levelName}`;button.dataset.upgradePlan=planId;button.dataset.upgradeSection=sectionLabel||d.levelName;}
     hint.hidden=false;positionAccessHint(target);
-    clearTimeout(accessHintTimer);if(autoHide)accessHintTimer=setTimeout(()=>hideAccessHint(),4300);
+    // Keep the original click timeout if another focus/hover event follows.
+    if(autoHide){clearTimeout(accessHintTimer);accessHintTimer=setTimeout(()=>hideAccessHint(),4300);}
+    else if(!pinned)clearTimeout(accessHintTimer);
   }
 
   function upgradePlanFeatureList(planId){

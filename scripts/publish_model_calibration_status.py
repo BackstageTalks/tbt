@@ -132,6 +132,11 @@ def publish(payload: dict, base_url: str, worker_token: str) -> dict:
     base = base_url.strip().rstrip("/")
     if not base.startswith("https://") or not base.endswith(".azurestaticapps.net") and not base.endswith(".blinq.sk"):
         raise RuntimeError("Calibration target URL must be the configured HTTPS BlinQ deployment")
+    from tbt.services.model_calibration_status import (
+        normalize_model_calibration_snapshot, calibration_fingerprint,
+    )
+    expected = normalize_model_calibration_snapshot(payload)
+    expected_hash = calibration_fingerprint(expected)
     raw = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
     if len(raw) > 32_000:
         raise RuntimeError("Calibration snapshot payload exceeds size limit")
@@ -166,6 +171,26 @@ def publish(payload: dict, base_url: str, worker_token: str) -> dict:
     )
     if result.get("offline_candidate_version") != expected_offline:
         raise RuntimeError("Admin backend did not independently confirm offline candidate")
+    if result.get("snapshot_sha256") != expected_hash:
+        raise RuntimeError("Calibration POST receipt checksum mismatch")
+    # GET is an independent Azure storage read, not the POST response echoed.
+    read_request = Request(
+        base + "/api/v1/internal/model-calibration-snapshot",
+        method="GET", headers={"X-Blinq-Worker-Token": worker_token},
+    )
+    try:
+        with urlopen(read_request, timeout=35) as response:
+            confirmed = json.loads(response.read(32_000).decode("utf-8"))
+    except (HTTPError, URLError) as exc:
+        raise RuntimeError("Calibration independent read-back failed") from exc
+    if (confirmed.get("snapshot_sha256") != expected_hash
+            or confirmed.get("production_version") != expected["production_version"]
+            or confirmed.get("candidate_version") != expected["candidate_version"]
+            or confirmed.get("source_generated_at") != expected["source_generated_at"]
+            or any(confirmed.get("shadow", {}).get(key) != expected["shadow"][key]
+                   for key in ("captured", "settled", "pending"))
+            or confirmed.get("unseen", {}).get("eligible_rows") != expected["unseen"]["eligible_rows"]):
+        raise RuntimeError("Calibration Azure read-back differs from signed source")
     return result
 
 

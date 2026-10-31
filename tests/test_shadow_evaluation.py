@@ -162,3 +162,21 @@ def test_shadow_review_requires_three_distinct_utc_days():
     assert report["gate"]["minimum_matches_met"] is True
     assert report["gate"]["minimum_days_met"] is False
     assert report["gate"]["ready_for_promotion_review"] is False
+
+def test_exact_pair_confidence_diagnostics_are_descriptive_only():
+    rows = _settled_rows(200)
+    for i, row in enumerate(rows):
+        row["tour"] = "ATP" if i % 2 else "WTA"
+    report = build_shadow_report(rows, production_model_version="prod-v1",
+                                 challenger_model_version="chal-v1")
+    band = report["paired_uncertainty"]["log_loss"]
+    assert band["n"] == 200
+    assert band["delta"] < 0  # challenger has lower loss on this synthetic cohort
+    assert band["lower"] <= band["delta"] <= band["upper"]
+    assert report["tour_diagnostics"]["ATP"]["n"] == 100
+    assert report["tour_diagnostics"]["WTA"]["n"] == 100
+    assert report["gate"]["automatic_promotion"] is False
+    too_few = build_shadow_report(rows[:10], production_model_version="prod-v1",
+                                  challenger_model_version="chal-v1")
+    assert too_few["paired_uncertainty"]["log_loss"]["lower"] is None
+    assert not too_few["gate"]["ready_for_promotion_review"]
