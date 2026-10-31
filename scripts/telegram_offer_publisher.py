@@ -131,6 +131,67 @@ def _name_map(rows):
     return {full:(full if len(used[display.casefold()])>1 else display)
             for full,display in names_out.items()}
 
+def _ace_publication(row):
+    """Resolve the exact issued ACES contract, not just its player ID.
+
+    A player can have several totals/lines on one event. An unrelated
+    match-winner quote or another ACES line must never supply the price.
+    """
+    publications=row.get("market_publications")
+    if not publications:
+        return None, False
+    if not isinstance(publications,list):
+        return None, True
+    selector=str(row.get("selection_id") or (row.get("betting") or {}).get("selection_id") or row.get("winner_id") or "")
+    contract=str(row.get("price_contract") or "").lower()
+    side=str(row.get("ou_side") or "").lower()
+    line=num(row.get("market_line"))
+    matches=[]
+    for pub in publications:
+        if not isinstance(pub,dict) or pub.get("section")!="ace" or str(pub.get("market"))!="aces":
+            continue
+        if str(pub.get("selection_id") or pub.get("winner_id") or "")!=selector:
+            continue
+        if str(pub.get("price_contract") or "").lower()!=contract:
+            continue
+        if contract=="player_total_ou":
+            pub_line=num(pub.get("market_line"))
+            if str(pub.get("ou_side") or "").lower()!=side or pub_line is None or line is None or abs(pub_line-line)>0.000001:
+                continue
+        matches.append(pub)
+    return (matches[0] if len(matches)==1 else None), True
+
+
+def _ace_issued_quote(row):
+    """Only exact, published-priced ACES quotes are allowed in TG and receipts.
+
+    Never fall back to betting.odds: that field can be a match-winner quote.
+    If the restored issued publication disagrees with the display row, hide
+    the quote rather than inventing or silently substituting a price.
+    """
+    pub, has_publications=_ace_publication(row)
+    contract=str(row.get("price_contract") or "").lower()
+    if str(row.get("price_status") or "")!="priced_projection":
+        return None, pub
+    if contract not in {"player_superiority","player_total_ou"}:
+        return None, pub
+    if contract=="player_total_ou":
+        side=str(row.get("ou_side") or "").lower()
+        line=num(row.get("market_line"))
+        if side not in {"under","over"} or line is None or not 0<=line<=100:
+            return None, pub
+    price=num(row.get("odds"))
+    if price is None or not 1<price<float("inf"):
+        return None, pub
+    if has_publications:
+        if pub is None or pub.get("price_status")!="priced_projection":
+            return None, pub
+        quoted=num(pub.get("odds"))
+        if quoted is None or not 1<quoted<float("inf") or abs(price-quoted)>0.000001:
+            return None, pub
+    return price, pub
+
+
 def fmt(r,k,c,index=1,name_map=None,prefix_override=None):
     bet=r.get("betting") or {}
     selected=_selection_name(r)
@@ -156,7 +217,7 @@ def fmt(r,k,c,index=1,name_map=None,prefix_override=None):
     else:
         prob=num(bet.get("blinq_probability") or bet.get("model_probability") or r.get("blinq_probability") or r.get("probability"))
         values=[f"{(prob*100 if abs(prob)<=1 else prob):.1f}%" if prob is not None else "—"] if c.get("show_probability",True) else []
-    odds=num(bet.get("odds") or r.get("odds"))
+    odds=_ace_issued_quote(r)[0] if k=="aces" else num(bet.get("odds") or r.get("odds"))
     if c.get("show_odds",True):
         values.append(f"{odds:.2f}" if odds is not None and odds>1 else "—")
     prefix=prefix_override or OFFER_ICONS[k]
@@ -188,7 +249,7 @@ def select_groups(x,c,now):
             if start.astimezone(TZ).date().isoformat()!=today or day(start)!=today:continue
             if not c.get("include_started",False) and start<=now:continue
             selector=str((r.get("betting") or {}).get("selection_id") or r.get("selection_id") or r.get("winner_id") or r.get("pick") or "")
-            ident=(str(r["event_id"]),"aces" if k=="aces" else "match_winner",selector)
+            ident=(str(r["event_id"]),"aces",selector,str(r.get("price_contract") or ""),str(r.get("ou_side") or ""),str(r.get("market_line") or "")) if k=="aces" else (str(r["event_id"]),"match_winner",selector)
             if not selector or ident in seen:continue
             seen.add(ident);rows.append(r)
             # FREE pick can select among the whole confirmed TOP shortlist,
@@ -267,12 +328,15 @@ def result_reference(row,section):
     real_section={"top":"top_daily","value":"value","aces":"ace","free":"top_daily"}[section]
     market="aces" if section=="aces" else "match_winner"
     selection=str(betting.get("selection_id") or row.get("selection_id") or row.get("winner_id") or "")
-    pubs=[p for p in row.get("market_publications") or [] if isinstance(p,dict)
-          and p.get("section")==real_section and str(p.get("market") or market)==market
-          and str(p.get("selection_id") or p.get("winner_id") or "")==selection]
-    pub=pubs[0] if len(pubs)==1 else {}
-    odds=num(pub.get("odds") or betting.get("odds") or row.get("odds"))
-    if section=="aces" and pub and pub.get("price_status")!="priced_projection":odds=None
+    if section=="aces":
+        odds, pub=_ace_issued_quote(row)
+        pub=pub or {}
+    else:
+        pubs=[p for p in row.get("market_publications") or [] if isinstance(p,dict)
+              and p.get("section")==real_section and str(p.get("market") or market)==market
+              and str(p.get("selection_id") or p.get("winner_id") or "")==selection]
+        pub=pubs[0] if len(pubs)==1 else {}
+        odds=num(pub.get("odds") or betting.get("odds") or row.get("odds"))
     return {"event_id":str(row["event_id"]), "section":real_section,
             "channel":section, "market":market, "selection_id":selection,
             "publication_key":str(pub.get("publication_key") or ""),
