@@ -16,7 +16,11 @@ def main():
     directory = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
     start = time.perf_counter()
     norrie = next(row for row in search_players(directory, "Cameron Norrie", tour="atp") if row["name"] == "Cameron Norrie")
-    svrcina = next(row for row in search_players(directory, "Dalibor Svrčina", tour="atp") if row["name"] == "Dalibor Svrčina")
+    # The parent compares the first matching canonical identity; an accent-free
+    # display alias in the current snapshot must not change that selection.
+    svrcina = next(iter(search_players(directory, "Dalibor Svrčina", tour="atp")), None)
+    if svrcina is None:
+        raise RuntimeError("Dalibor Svrčina not found in indexed comparator player directory")
     artifact = load_pair_artifact(index, directory, player1=norrie["player_id"], player2=svrcina["player_id"], tour="atp")
     result = compare_from_artifact(artifact, player1=norrie["player_id"], player2=svrcina["player_id"], tour="atp", surface="hard", best_of=3)
     json.dumps(result, allow_nan=False)
