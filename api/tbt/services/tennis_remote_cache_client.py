@@ -88,7 +88,8 @@ class HttpRawResponseCache:
             event = (payload.get("event", payload) if isinstance(payload, dict) else {})
             if kind == "finished_detail" and (
                     not isinstance(event, dict)
-                    or (event.get("status") or {}).get("type") != "finished"):
+                    or not isinstance(event.get("status"), dict)
+                    or event["status"].get("type") != "finished"):
                 self.metrics["negative_not_cached"] += 1
                 self._request("POST", body={"action": "abort", "key": key, "owner": owner})
                 return payload
