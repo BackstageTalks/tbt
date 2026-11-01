@@ -574,3 +574,18 @@ def test_injected_offline_budget_still_does_not_require_remote_pace(monkeypatch)
     result = shared_budget.reserve("history", now=NOW, table=table)
     assert "rate_pace" not in result
     assert result["global_spent"] == 1
+
+
+def test_implicit_azure_pace_failure_never_writes_daily_budget(monkeypatch):
+    from tbt.providers import shared_rate
+    from tbt.services import admin_storage
+
+    table = AtomicFakeTable()
+    monkeypatch.setenv("FUNCTIONS_WORKER_RUNTIME", "python")
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    def denied(**kwargs):
+        raise shared_rate.SharedRateUnavailable("Coordinator unavailable")
+    monkeypatch.setattr(shared_rate, "reserve_pace", denied)
+    with pytest.raises(shared_rate.SharedRateUnavailable):
+        shared_budget.reserve("history", now=NOW)
+    assert table.version == 0
