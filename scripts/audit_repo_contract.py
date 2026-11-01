@@ -319,7 +319,7 @@ if 'workflow_dispatch:' not in account_yml or 'BLINQ_ACCOUNT_WORKER_TOKEN' not i
     fail('externally dispatched account inactivity workflow contract missing')
 # Native GitHub schedules can be restored without weakening runtime guards.
 native_schedules = {
-    'account-inactivity.yml': "cron: '20 6 * * *'",
+    'account-inactivity.yml': "cron: '30 7 * * *'",
     'live-radar.yml': "cron: '0 * * * *'",
     'match-status.yml': "cron: '0,15,30,45 * * * *'",
     'morning-refresh.yml': "cron: '15 5 * * *'",
