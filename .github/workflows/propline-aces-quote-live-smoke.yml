@@ -7,29 +7,38 @@ on:
       - .github/workflows/propline-aces-quote-live-smoke.yml
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: propline-aces-quote-live-smoke
   cancel-in-progress: false
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 5
     env:
       PROPL: ${{ secrets.PROPL }}
       PYTHONPATH: api
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Offline fixture test
         run: python scripts/propline_aces_quote_probe.py --self-test
       - name: Read-only PropLine live ACES odds (5 calls maximum, no production writes)
+        continue-on-error: true
         run: python scripts/propline_aces_quote_probe.py --live --max-calls 5 --event-fallback 3
-      - name: Save exact read-only provider results
+      - name: Archive quote probe in isolated audit branch
+        if: always()
+        run: |
+          if test -s propline_aces_live_probe.json; then
+            cp propline_aces_live_probe.json propline_aces_last_probe.json
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add propline_aces_last_probe.json
+            git diff --cached --quiet || (git commit -m 'audit: record read-only PropLine ACES quote probe' && git push origin HEAD:audit/propline-aces-50calls-20261101)
+          fi
+      - name: Save read-only provider evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
