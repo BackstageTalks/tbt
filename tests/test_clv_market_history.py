@@ -108,6 +108,30 @@ def test_provider_native_american_h2h_odds_are_real_decimal_prices():
     assert quotes[0]["bookmaker"] == "AdmiralBet"
 
 
+def test_private_ingestion_preserves_next_day_issued_offer_before_public_display():
+    # Historical quotes must be collected BEFORE tomorrow's betting day is
+    # visible; this does not authorize a member to see tomorrow's picks.
+    from tbt.services.feed import visible_feed
+    from pathlib import Path
+
+    now = datetime(2026, 11, 1, 13, tzinfo=timezone.utc)
+    issued = offer()
+    issued["upcoming"] = []
+    issued["generated_at"] = "2026-11-01T06:00:00Z"
+    archived = sample(captured="2026-11-01T12:00:00Z")
+    early, rejected = clv.extract_verified_quotes(archived, issued, now=now)
+    assert rejected == 0
+    assert len(early) == 1
+    public_today = visible_feed(issued, now=now)
+    assert public_today["top_daily_picks"] == []
+    assert public_today["value_picks"] == []
+    source = (Path(__file__).resolve().parents[1] / "api/function_app.py").read_text()
+    endpoint = source.split('def internal_clv_snapshot(req):', 1)[1].split(
+        'def _membership_allowed(', 1)[0]
+    assert 'issued_feed = read_feed(FEED)' in endpoint
+    assert 'visible_feed(read_feed(FEED))' not in endpoint
+
+
 def test_value_is_in_scope_but_prime_is_not():
     now = datetime(2026, 11, 2, 13, tzinfo=timezone.utc)
     v, _ = clv.extract_verified_quotes(
