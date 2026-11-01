@@ -1,10 +1,6 @@
 name: CLV TOP VALUE linkage audit (no provider calls)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/clv-linkage-audit.yml'
   workflow_dispatch:
 
 permissions:

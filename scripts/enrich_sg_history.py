@@ -103,6 +103,12 @@ def _coverage(matches, player_ids: set[str], cutoff: datetime) -> dict[str, int]
     return counts
 
 
+def _has_unmet_sg_target(participants: set[str], coverage: dict[str, int],
+                         target_samples: int) -> bool:
+    """Live threshold check; the initial SG candidate queue can become stale."""
+    return any(coverage[player_id] < target_samples for player_id in participants)
+
+
 def _normalize_existing_formats(matches) -> dict[str, object]:
     """Migrate existing structured scores to the explicit format contract.
 
@@ -296,7 +302,7 @@ def main() -> None:
         if not args.rebuild_existing:
             if ready:
                 continue
-            if not any(current[player_id] < args.target_samples for player_id in participants):
+            if not _has_unmet_sg_target(participants, current, args.target_samples):
                 continue
 
         raw = match.provider_payload if isinstance(match.provider_payload, dict) else {}
@@ -373,6 +379,12 @@ def main() -> None:
     try:
         for match in candidates:
             participants = {str(match.player1_id), str(match.player2_id)} & player_ids
+            # Preserve explicit rebuild semantics; normal incremental jobs
+            # should not keep paying once these participants reach their goals.
+            if (not args.rebuild_existing
+                    and not _has_unmet_sg_target(participants, current, args.target_samples)):
+                report["target_gap_satisfied_during_run"] += 1
+                continue
             before_ready = _training_ready(match)
             try:
                 status = enricher.enrich(match)

@@ -1,9 +1,6 @@
 name: BlinQ live 2022-2026 Serve Return NULL audit (private receipt)
 # Restricted to trusted main, no public artifacts or canonical writer.
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/blinq-cdb-live-pairwise-current-readonly.yml']
   workflow_dispatch:
 
 permissions:

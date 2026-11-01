@@ -1,10 +1,6 @@
 name: BlinQ CDB Source Completion Dashboard (read only)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/blinq-cdb-source-completion.yml
   workflow_dispatch:
 
 permissions:
