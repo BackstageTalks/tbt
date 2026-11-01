@@ -93,6 +93,24 @@ class UiWatchdogTests(unittest.TestCase):
         self.assertEqual(checked, original)
         self.assertNotEqual(checked["app.js"], (web / "app.js").read_bytes())
 
+    def test_direct_cli_import_can_load_optimizer(self):
+        # Reproduce the standalone invocation used by the production watchdog.
+        script = Path(__file__).resolve().parents[1] / "scripts" / "check_live_ui_revision.py"
+        completed = subprocess.run(
+            [__import__("sys").executable, "-c",
+             "import importlib.util, pathlib; "
+             f"p=pathlib.Path({str(script)!r}); "
+             "s=importlib.util.spec_from_file_location('check_live_ui_revision', p); "
+             "m=importlib.util.module_from_spec(s); s.loader.exec_module(m); "
+             "m.build_optimized_revision.__globals__['__package__']=''; "
+             "import builtins; real=builtins.__import__; "
+             "m.build_optimized_revision({'app.js':b'x','blinq-app.css':b'x','release.json':b'{}'})"],
+            cwd=self.web, capture_output=True, text=True,
+        )
+        # The import must succeed; the deliberately invalid fixture may fail
+        # later when the optimizer attempts to parse the release metadata.
+        self.assertNotIn("ModuleNotFoundError", completed.stderr)
+
     def test_exact_optimized_deployment_passes_and_modified_js_is_rejected(self):
         # The production pipeline intentionally rewrites whitespace in JS/CSS.
         # Trust neither the live checksum manifest nor the CDN without
