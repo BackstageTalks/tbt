@@ -1,9 +1,7 @@
 name: BlinQ ATP Leaderboards cached HTML diagnosis (no source requests)
 
 on:
-  push:
-    branches: [main]
-    paths: [.github/workflows/blinq-leaderboard-offline-diagnosis.yml]
+  # Manual-only audit; retired redundant self-file push trigger.
   workflow_dispatch:
 
 permissions:
