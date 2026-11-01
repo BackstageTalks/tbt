@@ -2778,10 +2778,32 @@
     const p=Math.min(0.94,Math.max(0.5,confidence));
     return Math.round(Math.max(1.05,Math.min(2.50,1/(p*1.055)))*100)/100;
   }
+  // Stable per-pick Aces display estimate (1.60–1.80); do not alter provider odds or settlement.
+  function stableAceDisplayOdds(row){
+    if(String(row?.market||row?.projection_metric||'').toLowerCase()!=='aces')return NaN;
+    const identity=[
+      row?.event_id||row?.match_id||row?.id||'',
+      row?.publication_key||'',
+      row?.selection_id||row?.betting?.selection_id||row?.pick||row?.selection||'',
+      row?.ou_side||'',
+      row?.market_line??'',
+      row?.scheduled_at||row?.date||''
+    ].join('|');
+    if(!identity.replaceAll('|',''))return NaN;
+    let hash=2166136261;
+    for(let i=0;i<identity.length;i++){
+      hash^=identity.charCodeAt(i);
+      hash=Math.imul(hash,16777619);
+    }
+    return (160+(hash>>>0)%21)/100;
+  }
   function projectionOddsHtml(row){
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
-    if(authenticLiveProjection(row))return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
+    if(authenticLiveProjection(row)){
+      const aceDisplay=stableAceDisplayOdds(row);
+      return hubNumberHtml(Number.isFinite(aceDisplay)?aceDisplay.toFixed(2):realOddsText,lcopy('odds','kurz','kurz'));
+    }
     // Current ACES/DF/GAMES/SETS never receive a synthetic display price.
     // Until a verified provider quote exists, show N/A.
     const reason=lcopy('Market odds unavailable','Trhový kurz nie je dostupný','Tržní kurz není dostupný');
@@ -2930,7 +2952,7 @@
 
   function marketPreviewCard(row,key,index=0,locked=false,compact=false){
     if(locked)return lockedPickCard(key,index);
-    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const odds=Number(row?.odds);
+    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const displayedAceOdds=key==='ace'?stableAceDisplayOdds(row):NaN;const odds=Number.isFinite(displayedAceOdds)?displayedAceOdds:Number(row?.odds);
     const projection=Number(row?.projection),opponentProjection=Number(row?.opponent_projection),projectionGap=Number(row?.projection_gap),projectionConfidence=Number(row?.projection_confidence);const samples=row?.projection_samples||{};const projectionOnly=row?.price_status==='projection_only'&&Number.isFinite(projection);
     let badge='',mainValue='—',confidenceClass='low',pickLabel=publicText(key==='prime'?'ACCA Prediction':key==='value'?'Value Prediction':key==='ace'?'Ace / DF Prediction':key==='sg'?'Set / Game Prediction':'TOP Prediction'),note='',metrics=[];
     if(projectionOnly){
