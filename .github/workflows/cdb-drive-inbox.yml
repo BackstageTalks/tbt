@@ -38,6 +38,7 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
       - scripts/moviodds_cdb_batch.py
       - scripts/moviodds_cdb_link.py
       - tests/test_moviodds_cdb_batch.py
+      - tests/test_moviodds_cdb_retry.py
       - scripts/cdb_drive_identity_registry.py
       - scripts/link_offline_serve_return.py
       - tests/test_cdb_drive_multischema.py
@@ -62,6 +63,7 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
       - scripts/moviodds_cdb_batch.py
       - scripts/moviodds_cdb_link.py
       - tests/test_moviodds_cdb_batch.py
+      - tests/test_moviodds_cdb_retry.py
       - scripts/cdb_drive_identity_registry.py
       - scripts/link_offline_serve_return.py
       - tests/test_cdb_drive_multischema.py
@@ -97,8 +99,8 @@ jobs:
         env:
           PYTHONPATH: .:api:scripts
         run: |
-          python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py scripts/moviodds_cdb_batch.py scripts/moviodds_cdb_link.py scripts/cdb_native_7z_unpack.py scripts/cdb_native_sackmann_stage.py scripts/cdb_native_slam_pbp_stage.py scripts/cdb_drive_identity_registry.py scripts/cdb_large_source_stage.py scripts/cdb_wta_lookback_guard.py scripts/link_offline_serve_return.py
-          python -m pytest tests/test_moviodds_cdb_batch.py tests/test_moviodds_cdb_link.py tests/test_cdb_native_7z_unpack.py tests/test_cdb_native_sackmann_stage.py tests/test_cdb_native_slam_pbp_stage.py tests/test_cdb_inbox_adapter.py tests/test_cdb_drive_identity_registry.py tests/test_cdb_drive_multischema.py tests/test_cdb_large_source_stage.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py tests/test_cdb_date_provenance.py tests/test_cdb_wta_lookback_guard.py -q
+          python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py scripts/moviodds_cdb_batch.py scripts/moviodds_cdb_link.py scripts/moviodds_cdb_retry.py scripts/cdb_native_7z_unpack.py scripts/cdb_native_sackmann_stage.py scripts/cdb_native_slam_pbp_stage.py scripts/cdb_drive_identity_registry.py scripts/cdb_large_source_stage.py scripts/cdb_wta_lookback_guard.py scripts/link_offline_serve_return.py
+          python -m pytest tests/test_moviodds_cdb_batch.py tests/test_moviodds_cdb_link.py tests/test_moviodds_cdb_retry.py tests/test_cdb_native_7z_unpack.py tests/test_cdb_native_sackmann_stage.py tests/test_cdb_native_slam_pbp_stage.py tests/test_cdb_inbox_adapter.py tests/test_cdb_drive_identity_registry.py tests/test_cdb_drive_multischema.py tests/test_cdb_large_source_stage.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py tests/test_cdb_date_provenance.py tests/test_cdb_wta_lookback_guard.py -q
 
   guarded-import:
     # Source preparation may proceed while immutable candidate training owns CDB.
@@ -253,6 +255,16 @@ jobs:
               stream.write('ready='+ready+'\n')
           print('CDB_INBOX_WRITER_'+status+'_AFTER_SOURCE_PREP',flush=True)
           PY
+      - name: Fail closed and allow scheduled MoviOdds retry if CDB writer is busy
+        # Unlike Drive inbox, MoviOdds doesn't persist a private pending batch.
+        # A success here would silently lose a week's seven-day source window.
+        # The existing Match Status clock retries the failed weekly run later.
+        if: env.SOURCE_MODE == 'moviodds' && steps.source.outputs.eligible == 'true' && steps.writer_gate.outputs.ready == 'false'
+        shell: bash
+        run: |
+          echo '::error::MOVIODDS_CDB_DEFERRED_WRITER_BUSY_NOT_IMPORTED'
+          echo 'MoviOdds CDB import deferred: global writer BUSY; no canonical changes. Scheduled retry required.' >> "$GITHUB_STEP_SUMMARY"
+          exit 1
       - name: Persist prepared batch privately and free runner when writer busy
         if: env.SOURCE_MODE == 'drive' && steps.source.outputs.eligible == 'true' && steps.writer_gate.outputs.ready == 'false'
         shell: bash

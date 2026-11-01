@@ -190,11 +190,10 @@ jobs:
           gh workflow run cdb-drive-inbox.yml --repo "$GITHUB_REPOSITORY" --ref main
           echo 'CDB_INBOX_DISPATCH_SUBMITTED_NOT_IMPORT_VERIFIED'
 
-      - name: Dispatch MoviOdds guarded CDB import each Sunday 06 UTC
-        # External Match Status clock already runs each 30 minutes.
-        # Reuse the SAME verified Drive Inbox writer, lock, CAS, backup,
-        # NULL-only exact importer, local and remote full-partition readback.
-        # No new GitHub schedule or external cron is needed.
+      - name: Dispatch or retry guarded weekly MoviOdds CDB import after Sunday 06 UTC
+        # Keep existing external Match Status 30-minute cron unchanged.
+        # Retry failure including BUSY writer after two-hour cooldown.
+        # A verified successful run closes the week; no duplicate writer.
         if: always() && github.event_name == 'workflow_dispatch'
         continue-on-error: true
         env:
@@ -202,17 +201,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$(date -u +%u)" == "7" ]] || { echo 'MOVIODDS_WEEKLY_CDB_NOT_SUNDAY'; exit 0; }
-          [[ "$(date -u +%H)" == "06" ]] || { echo 'MOVIODDS_WEEKLY_CDB_NOT_DUE'; exit 0; }
-          (( 10#$(date -u +%M) < 30 )) || { echo 'MOVIODDS_WEEKLY_CDB_NOT_FIRST_SLOT'; exit 0; }
-          day="$(date -u +%Y-%m-%d)"
-          request_id="moviodds-$day"
-          runs="$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/cdb-drive-inbox.yml/runs" -f event=workflow_dispatch -f per_page=100)"
-          if printf '%s' "$runs" | jq -e --arg title "CDB guarded import $request_id" \
-              '.workflow_runs | any(.display_title == $title)' >/dev/null; then
-            echo 'MOVIODDS_WEEKLY_CDB_ALREADY_DISPATCHED'
+          day_of_week="$(date -u +%u)"
+          sunday="$(date -u -d "$(date -u +%F) -$((day_of_week % 7)) days" +%F)"
+          next_sunday="$(date -u -d "$sunday +7 days" +%F)"
+          gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/cdb-drive-inbox.yml/runs" \
+            -f event=workflow_dispatch -f per_page=100 \
+            -f created="$sunday..$next_sunday" > "$RUNNER_TEMP/moviodds-week-runs.json"
+          python scripts/moviodds_cdb_retry.py \
+            --runs-file "$RUNNER_TEMP/moviodds-week-runs.json" \
+            --output "$GITHUB_OUTPUT"
+          if ! grep -qx 'dispatch=true' "$GITHUB_OUTPUT"; then
+            echo 'MOVIODDS_WEEKLY_CDB_NOT_DUE_OR_ALREADY_HANDLED'
             exit 0
           fi
+          request_id="$(sed -n 's/^request_id=//p' "$GITHUB_OUTPUT" | tail -1)"
+          [[ "$request_id" =~ ^moviodds-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || {
+            echo 'MOVIODDS_WEEKLY_CDB_INVALID_REQUEST_ID'
+            exit 1
+          }
           gh workflow run cdb-drive-inbox.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f source_mode=moviodds -f moviodds_days_back=7 -f request_id="$request_id"
           echo 'MOVIODDS_WEEKLY_CDB_GUARDED_WRITER_DISPATCHED_READBACK_REQUIRED'
