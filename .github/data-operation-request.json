@@ -1,15 +1,19 @@
 {
   "schema": 1,
-  "mode": "comparator-build",
+  "mode": "history",
   "promote": false,
-  "source": "comparator_P0_P1_PR1197_verified_canonical_replay",
-  "purpose": "No-provider comparator schema-v2 rebuild and Azure deployment after PR #1197 and #1202, preserving audited ATP/WTA rank evidence, immutable release manifest, issuer ledger and readback. No CDB/model changes.",
+  "source": "tennisapi1_provider_native",
+  "purpose": "Fill canonical 2016 Wimbledon July 9–10 via existing protected CDB history writer after SHA-verified native event 7115726; isolate unrelated 2026 provider-ID conflicts without shrinking canonical partitions; do not train/switch champion.",
   "requested_on": "2026-11-01",
-  "max_requests": 1,
+  "start": "2016-07-09",
+  "end": "2016-07-10",
+  "recheck_completed_history_days": true,
+  "max_requests": 40,
   "targeted_statistics": false,
   "high_yield_statistics": false,
   "model_training": false,
   "pre_reset_provider_header_override": false,
-  "run_scope": "post_PR1202_verified_rank_sources_20261101",
-  "status": "OPERATOR_APPROVED_COMPARATOR_REBUILD_AND_DEPLOY"
+  "requested_event_id": "7115726",
+  "run_scope": "2016-07-09_to_2016-07-10_native_identity_safe",
+  "status": "OPERATOR_APPROVED_BOUNDED_HISTORY_CDB_IMPORT_PENDING_READBACK"
 }
