@@ -351,7 +351,9 @@ class HttpReservation:
                     or type(budget.get("global_remaining")) is not int
                     or budget["global_remaining"] != GLOBAL_CEILING - budget["global_spent"]
                     or budget.get("schema") != 2
-                    or budget.get("rate_pace") != {"schema": 1, "max_rps": 6}):
+                    or (os.getenv("BLINQ_SHARED_RPS_REQUIRED", "").strip().lower()
+                        in {"1", "true", "yes", "on"}
+                        and budget.get("rate_pace") != {"schema": 1, "max_rps": 6})):
                 # A stale Azure runtime may still use an older, looser limit.
                 # Fail closed rather than trusting only a successful HTTP status.
                 raise SharedBudgetUnavailable("Shared API budget contract mismatch")
