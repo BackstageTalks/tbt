@@ -82,6 +82,46 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                 "timestamp" in str(k).lower() or "observed" in str(k).lower()
                 for k in obj
             )
+    elif name.startswith("year_stats_") or name == "team_year_stats_doc_example":
+        groups = obj.get("statistics")
+        if isinstance(groups, list):
+            known = (
+                "aces", "doubleFaults", "firstServePointsScored",
+                "firstServePointsTotal", "secondServePointsScored",
+                "secondServePointsTotal", "breakPointsScored",
+                "breakPointsTotal", "opponentBreakPointsScored",
+                "opponentBreakPointsTotal", "matches",
+            )
+            result["season_stat_groups"] = len(groups)
+            result["non_null_fields"] = {
+                key: sum(
+                    isinstance(group, dict) and group.get(key) is not None
+                    for group in groups
+                ) for key in known
+            }
+            pairs = (
+                ("firstServePointsScored", "firstServePointsTotal"),
+                ("secondServePointsScored", "secondServePointsTotal"),
+                ("breakPointsScored", "breakPointsTotal"),
+                ("opponentBreakPointsScored", "opponentBreakPointsTotal"),
+            )
+            observed = 0
+            violations = 0
+            for group in groups:
+                if not isinstance(group, dict):
+                    continue
+                for scored, total in pairs:
+                    a, b = group.get(scored), group.get(total)
+                    if (isinstance(a, (int, float)) and not isinstance(a, bool)
+                            and isinstance(b, (int, float)) and not isinstance(b, bool)):
+                        observed += 1
+                        if a < 0 or b < 0 or a > b:
+                            violations += 1
+            result["statistic_pairs_compared"] = observed
+            result["statistic_bound_violations"] = violations
+            # Positive results are season aggregates, NOT match-level
+            # candidate cells and NOT time-valid within their own season.
+            result["point_in_time_match_eligibility"] = False
     elif name == "point_by_point":
         try:
             result["inventory"] = point_by_point_inventory(payload, event_id=event_id)
@@ -103,7 +143,8 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
               phase: str = "full", case: str | None = None) -> dict:
     if not 1 <= max_requests <= 30:
         raise ValueError("max_requests must be 1..30")
-    if phase not in {"full", "metadata", "odds", "doubles", "quality"}:
+    if phase not in {"full", "metadata", "odds", "doubles", "quality",
+                     "historical", "identity"}:
         raise ValueError("Unknown preapproved TennisApi probe phase")
     if case is not None and phase == "full":
         raise ValueError("Focused case requires a named phase")
@@ -205,6 +246,17 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
                 ("graph_sequence", f"/api/tennis/event/{event_id}/graph/sequence"),
                 ("win_probability", f"/api/tennis/event/{event_id}/win-probability"),
             ],
+            "identity": [
+                ("player_details_doc_example", "/api/tennis/player/69208"),
+                ("team_details_doc_example", "/api/tennis/team/69208"),
+            ],
+            "historical": [
+                ("year_stats_2024", "/api/tennis/team/69208/year-statistics/2024"),
+                ("year_stats_2022", "/api/tennis/team/69208/year-statistics/2022"),
+                ("year_stats_2020", "/api/tennis/team/69208/year-statistics/2020"),
+                ("year_stats_2016", "/api/tennis/team/69208/year-statistics/2016"),
+                ("year_stats_2026", "/api/tennis/team/69208/year-statistics/2026"),
+            ],
         }
         report["context_origin"] = "verified_provider_event_or_documentation"
         report["identity_validated_for_import"] = False
@@ -273,7 +325,8 @@ def main() -> None:
     parser.add_argument("--event-id", type=int, default=14494928)
     parser.add_argument("--max-requests", type=int, default=24)
     parser.add_argument("--phase", choices=["full", "metadata", "odds", "doubles",
-                                            "quality"], default="full")
+                                            "quality", "historical", "identity"],
+                        default="full")
     parser.add_argument("--case", default=None)
     parser.add_argument("--out", default=".cache/tbt/tennisapi-contract/live-probe.json")
     args = parser.parse_args()
