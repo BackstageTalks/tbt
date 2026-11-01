@@ -9,6 +9,7 @@ excluded from model/prediction input and must be reported to the operator.
 """
 
 from collections import Counter
+from datetime import date
 from typing import Iterable
 
 from tbt.schemas import MatchRecord
@@ -48,6 +49,38 @@ def _changed_years(before: list[MatchRecord], after: list[MatchRecord]) -> list[
         if left != right:
             changed.append(year)
     return changed
+
+
+
+def guard_scoped_history_identity_repair(
+    affected_years: Iterable[int], *, start: date, end: date,
+) -> dict:
+    """Isolate pre-existing collisions outside a bounded history import window.
+
+    Existing CDB partitions with ambiguous identities stay byte-for-byte intact;
+    they are excluded from the provider merge's in-memory trusted candidate set.
+    In-scope ambiguity is a hard blocker, not permission to drop existing rows.
+    """
+    if not isinstance(start, date) or not isinstance(end, date) or start > end:
+        raise ValueError("Invalid scoped history import date window")
+    requested = set(range(start.year, end.year + 1))
+    changed = {int(year) for year in affected_years}
+    unsafe = sorted(changed & requested)
+    if unsafe:
+        raise ValueError(
+            "CDB_HISTORY_SCOPE_IDENTITY_CONFLICT years="
+            + ",".join(map(str, unsafe))
+            + ": refusing to rewrite or drop existing canonical rows"
+        )
+    return {
+        "schema": 1,
+        "scope_years": sorted(requested),
+        "preserved_out_of_scope_years": sorted(changed),
+        "canonical_conflict_year_writes": 0,
+        "existing_rows_deleted": 0,
+        "in_scope_history_import_allowed": True,
+        "identity_collisions_resolved": False,
+    }
 
 
 def quarantine_budget(
