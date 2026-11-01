@@ -7729,7 +7729,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     // point corresponds to a completed match, not an equal amount of time.
     const surfaceTrend=x=>{
       const rows=(Array.isArray(x?.surface_recent_results)?x.surface_recent_results:[])
-        .filter(row=>(row?.result==='W'||row?.result==='L')&&/^\\d{4}-\\d{2}-\\d{2}T/.test(String(row?.played_at||'')))
+        .filter(row=>(row?.result==='W'||row?.result==='L')&&/^\d{4}-\d{2}-\d{2}T/.test(String(row?.played_at||'')))
         .slice(-20);
       const label=lcopy('Selected-surface form trend','Trend formy na povrchu','Trend formy na povrchu');
       if(rows.length<5)return `<div class="comparator-trend-empty">${escapeHtml(label)} · ${escapeHtml(lcopy('At least 5 recorded matches required','Treba aspoň 5 evidovaných zápasov','Je třeba alespoň 5 evidovaných zápasů'))}</div>`;
