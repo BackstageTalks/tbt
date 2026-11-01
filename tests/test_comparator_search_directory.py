@@ -151,10 +151,12 @@ def test_search_duplicate_full_names_from_two_providers_fail_closed():
         {"player_id": "provider-one", "name": "Alexander Bublik", "tour": "atp", "rank": 13},
         {"player_id": "provider-two", "name": "Alexander Bublik", "tour": "atp", "rank": 14},
     ]}
-    ids = {row["player_id"] for row in search_players(directory, "bublik", tour="atp")}
-    assert "hist-js:atp:short" in ids
-    assert "provider-one" in ids
-    assert "provider-two" in ids
+    rows = search_players(directory, "bublik", tour="atp")
+    assert len(rows) == 1
+    assert rows[0]["name"] == "Alexander Bublik"
+    assert rows[0]["ambiguous_identity"] is True
+    # The full directory remains unmodified: no guessed identity/ID merge.
+    assert len(directory["players"]) == 3
 
 
 def test_search_works_with_diacritics_and_historical_name_same_spelling():
@@ -164,3 +166,50 @@ def test_search_works_with_diacritics_and_historical_name_same_spelling():
         {"player_id": "64580", "name": "Borna Ćorić", "tour": "atp", "rank": 27},
     ]}
     assert [x["player_id"] for x in search_players(directory, "coric", tour="atp")] == ["64580"]
+
+
+
+def test_search_suppresses_identical_provider_historical_name_without_merging_source():
+    directory = {"players": [
+        {"player_id": "95935", "name": "Cameron Norrie", "tour": "atp",
+         "matches_seen": 598, "rank": 27},
+        {"player_id": "hist-js:atp:N771", "name": "Cameron Norrie", "tour": "atp",
+         "matches_seen": 8},
+        {"player_id": "other", "name": "Simon Norman", "tour": "atp",
+         "matches_seen": 55},
+    ]}
+    results = search_players(directory, "norr", tour="atp")
+    assert [item["name"] for item in results].count("Cameron Norrie") == 1
+    norrie = next(item for item in results if item["name"] == "Cameron Norrie")
+    assert norrie["player_id"] == "95935"
+    assert norrie["ambiguous_identity"] is False
+    assert directory["players"][1]["player_id"] == "hist-js:atp:N771"
+
+
+def test_search_two_historical_ids_or_two_provider_ids_never_selects_by_guess():
+    for ids in (("hist-js:atp:1", "hist-js:atp:2"), ("provider-1", "provider-2")):
+        directory = {"players": [
+            {"player_id": id_, "name": "Alex Example", "tour": "atp",
+             "matches_seen": 100 - i}
+            for i, id_ in enumerate(ids)
+        ]}
+        found = search_players(directory, "alex", tour="atp")
+        assert len(found) == 1
+        assert found[0]["ambiguous_identity"] is True
+        assert len(directory["players"]) == 2
+
+
+def test_search_limit_counts_unique_visible_names_not_duplicate_ids():
+    rows = [
+        {"player_id": f"provider-{i}", "name": "Alex Example", "tour": "atp",
+         "matches_seen": 1000 - i}
+        for i in range(20)
+    ] + [
+        {"player_id": f"fresh-{i}", "name": f"Alex New{i}", "tour": "atp",
+         "matches_seen": 50 - i}
+        for i in range(15)
+    ]
+    found = search_players({"players": rows}, "alex", tour="atp", limit=12)
+    assert len(found) == 12
+    assert len({row["name"] for row in found}) == len(found)
+    assert sum(row["name"] == "Alex Example" for row in found) == 1
