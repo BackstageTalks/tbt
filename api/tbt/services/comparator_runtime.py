@@ -221,6 +221,9 @@ def _artifact_freshness(artifact: Mapping, now: datetime) -> dict:
         "cutoff_utc": cutoff.isoformat(),
         "age_hours": round(age_hours, 2),
         "stale": age_hours > 24.0,
+        "cutoff_age_hours": round(max(0.0, (now - cutoff).total_seconds() / 3600.0), 2),
+        "latest_canonical_completed_match_utc": (artifact.get("source") or {}).get("latest_canonical_completed_match_utc"),
+        "latest_market_stat_match_by_tour": (artifact.get("source") or {}).get("latest_market_stat_match_by_tour") or {},
     }
 
 
@@ -277,6 +280,7 @@ def _player_stats(builder: FeatureBuilder, match: MatchRecord, *, first: bool) -
                 "matches": len(known), "window": int(state.recent.maxlen or 80)}
 
     return {
+        "last_completed_match_utc": state.last_played.isoformat() if state.last_played else None,
         "history_matches": int(state.matches),
         "surface_matches": int(state.surface_matches.get(surface, 0)),
         "overall_elo": round(float(state.overall_elo), 1),

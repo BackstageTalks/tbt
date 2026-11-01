@@ -7648,12 +7648,19 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     };
     const marketRows=(key,label)=>{
       const data=result.markets?.[key],v1=data?.player1,v2=data?.player2;
-      const estimate=x=>valid(x?.estimate)?num(x.estimate,1)+' · n='+num(x.samples):'—';
+      const estimate=x=>valid(x?.estimate)?num(x.estimate,1)+' · n='+num(x.samples)+' ('+lcopy('effective','efekt.','efekt.')+' '+num(x.effective_samples,1)+')':'—';
       const total=valid(data?.total_estimate)?num(data.total_estimate,1):'—';
+      const evidence=x=>x&&valid(x.estimate)
+        ?lcopy('Last stat','Posledná štat.','Poslední stat.')+': '+String(x.last_stat_match||'—').slice(0,10)
+          +' · '+lcopy('Reliability','Spoľahlivosť','Spolehlivost')+': '+String(x.quality_band||'—')
+          +(Array.isArray(x.illustrative_range)?' · '+lcopy('Approx. range','Orientačný rozsah','Orientační rozsah')+' '+num(x.illustrative_range[0],1)+'–'+num(x.illustrative_range[1],1):'')
+        :lcopy('Insufficient or outdated verified statistics','Nedostatočné alebo zastarané overené štatistiky','Nedostatečné nebo zastaralé ověřené statistiky');
       return `<article class="comparator-market-card">
         <h5>${escapeHtml(label)}</h5>
         <div class="comparator-market-values"><span>${escapeHtml(p1.name||'—')}<strong>${escapeHtml(estimate(v1))}</strong></span><span>${escapeHtml(p2.name||'—')}<strong>${escapeHtml(estimate(v2))}</strong></span></div>
         <p>${escapeHtml(lcopy('Projected combined total','Projekcia spolu','Projekce celkem'))}: <b>${escapeHtml(total)}</b></p>
+        <p>${escapeHtml(p1.name||'—')}: <small>${escapeHtml(evidence(v1))}</small></p>
+        <p>${escapeHtml(p2.name||'—')}: <small>${escapeHtml(evidence(v2))}</small></p>
         <small>${escapeHtml(lcopy('Historical estimate, not a bookmaker line. Minimum 6 recorded matches per player.','Odhad z histórie, nie vypísaná stávková hranica. Min. 6 zápasov so štatistikou na hráča.','Odhad z historie, ne sázková hranice. Min. 6 zápasů se statistikou na hráče.'))}</small>
       </article>`;
     };
@@ -7662,6 +7669,9 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const evidenceCutoff=String(fresh.cutoff_utc||result.evidence?.history_cutoff_utc||'');
     const ageNote=valid(fresh.age_hours)?' · '+num(fresh.age_hours,1)+' h':'';
     const cutoffNote=evidenceCutoff?evidenceCutoff.slice(0,16).replace('T',' ')+' UTC':'—';
+    const canonicalLatest=String(fresh.latest_canonical_completed_match_utc||'').slice(0,10)||'—';
+    const statLatest=String(fresh.latest_market_stat_match_by_tour?.[result.tour]||'').slice(0,10)||'—';
+    const lastDate=x=>String(x?.last_completed_match_utc||'').slice(0,10)||'—';
     return `<section class="comparator-result comparator-analytics" aria-live="polite">
       <header class="comparator-result-head"><small>${escapeHtml(lcopy('MATCH ANALYSIS','ANALÝZA ZÁPASU','ANALÝZA ZÁPASU'))}</small><h3>${escapeHtml(p1.name||'—')} <em>vs</em> ${escapeHtml(p2.name||'—')}</h3><p>${escapeHtml(lcopy('Model favourite','Favorit modelu','Favorit modelu'))}: <b>${escapeHtml(result.winner?.name||'—')}</b></p></header>
       <div class="comparator-prob-grid">
@@ -7671,7 +7681,9 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       <div class="comparator-prob-meter" role="img" aria-label="${escapeHtml(`${p1.name}: ${pct(p1.probability)}, ${p2.name}: ${pct(p2.probability)}`)}"><span style="width:${left.toFixed(2)}%"></span></div>
       <div class="comparator-quality"><b>${escapeHtml(sample)}</b><span>${escapeHtml(String(result.tour||'').toUpperCase())} · ${escapeHtml(String(result.surface||'').replace('_',' '))} · ${escapeHtml(lcopy('max sets','max. setov','max. setů'))} ${escapeHtml(String(result.best_of||3))}</span></div>
       <div class="comparator-analytics-body">
-        <div class="comparator-evidence-time" role="status">${escapeHtml(lcopy('Verified snapshot cutoff','Cutoff overeného snapshotu','Cutoff ověřeného snapshotu'))}: <strong>${escapeHtml(cutoffNote)}</strong>${escapeHtml(ageNote)} ${fresh.stale?escapeHtml(lcopy('· older snapshot','· starší snapshot','· starší snapshot')):''}</div>
+        <div class="comparator-evidence-time" role="status">${escapeHtml(lcopy('Verified snapshot cutoff','Cutoff overeného snapshotu','Cutoff ověřeného snapshotu'))}: <strong>${escapeHtml(cutoffNote)}</strong>${escapeHtml(ageNote)} ${fresh.stale?escapeHtml(lcopy('· older snapshot','· starší snapshot','· starší snapshot')):''}
+          <span> · ${escapeHtml(lcopy('Last canonical match','Posledný zápas CDB','Poslední zápas CDB'))}: ${escapeHtml(canonicalLatest)}</span>
+          <span> · ${escapeHtml(lcopy('Last market stats for tour','Posledná štatistika okruhu','Poslední statistika okruhu'))}: ${escapeHtml(statLatest)}</span></div>
         <div class="comparator-section-head"><h4>${escapeHtml(lcopy('Recent form','Aktuálna forma','Aktuální forma'))}</h4><small>${escapeHtml(lcopy('Completed matches before snapshot · oldest → newest','Zápasy pred snapshotom · od najstaršieho','Zápasy před snapshotem · od nejstaršího'))}</small></div>
         <div class="comparator-form-cards">${playerForm(p1,a)}${playerForm(p2,b)}</div>
         <div class="comparator-insight-grid">
@@ -7682,6 +7694,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
           </article>
           <article class="comparator-insight-card"><h4>${escapeHtml(lcopy('Rest & sample depth','Oddych a vzorka','Odpočinek a vzorek'))}</h4>
             ${stat(lcopy('Days since last match','Dni od posledného zápasu','Dny od posledního zápasu'),rest(a.days_since_last_match),rest(b.days_since_last_match))}
+            ${stat(lcopy('Last completed match','Posledný započítaný zápas','Poslední započtený zápas'),lastDate(a),lastDate(b))}
             ${stat(lcopy('Recorded matches','Evidované zápasy','Evidované zápasy'),num(a.history_matches),num(b.history_matches))}
             ${stat(lcopy('Matches on surface','Zápasy na povrchu','Zápasy na povrchu'),num(a.surface_matches),num(b.surface_matches))}
           </article>
@@ -7694,6 +7707,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
           ${stat(lcopy('Ranking','Rebríček','Žebříček'),valid(p1.rank)&&Number(p1.rank)>0?'#'+num(p1.rank):'—',valid(p2.rank)&&Number(p2.rank)>0?'#'+num(p2.rank):'—')}
           ${stat(lcopy('Overall Elo','Celkové Elo','Celkové Elo'),num(a.overall_elo,1),num(b.overall_elo,1))}
           ${stat(lcopy('Surface Elo','Povrchové Elo','Povrchové Elo'),num(a.surface_elo,1),num(b.surface_elo,1))}
+          ${stat(lcopy('Wins · last 5','Výhry · posledných 5','Výhry · posledních 5'),form(a.recent_5),form(b.recent_5))}
           ${stat(lcopy('Wins · last 10','Výhry · posledných 10','Výhry · posledních 10'),form(a.recent_10),form(b.recent_10))}
           ${stat(lcopy('Wins · last 20','Výhry · posledných 20','Výhry · posledních 20'),form(a.recent_20),form(b.recent_20))}
           ${stat(lcopy('Wins · surface last 10','Výhry · povrch/10','Výhry · povrch/10'),form(a.surface_recent_10),form(b.surface_recent_10))}
