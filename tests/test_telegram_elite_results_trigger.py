@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def test_match_status_dispatches_results_after_successful_reconciliation():
     text=(ROOT/".github/workflows/match-status.yml").read_text()
     assert "Dispatch completed Telegram ELITE results check after settlement" in text
-    assert "if: success() && github.event_name == 'workflow_dispatch'" in text
+    assert "if: success() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')" in text
     assert "gh workflow run telegram-results.yml" in text
 
 
