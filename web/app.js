@@ -2811,6 +2811,9 @@
     for(const result of feed?.results||[]){
       for(const publication of result?.market_publications||[]){
         if(!publication||publication.market!=='aces')continue;
+        // Apply to this betting day onward; issued historical results remain immutable.
+        const issued=Date.parse(String(publication?.issued_at||result?.scheduled_at||result?.date||''));
+        if(!Number.isFinite(issued)||issued<Date.parse('2026-11-01T05:00:00Z'))continue;
         const value=stableAceDisplayOdds({
           ...publication,
           event_id:result?.event_id||result?.match_id||result?.id,
