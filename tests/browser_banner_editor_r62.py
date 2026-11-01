@@ -60,6 +60,22 @@ def main():
             assert background_editor == {
                 'desktop':True,'mobile':True,'upload':True,'previews':2,
                 'defaultMobile':'/assets/blinq_mobile_court.webp'},background_editor
+            sizing=page.evaluate("""() => {
+              const host=document.getElementById('routePanel');
+              const cards=[...host.querySelectorAll('.admin-page-background-editor .admin-background-size-item')].map(el=>el.textContent.trim());
+              const note=host.querySelector('.admin-page-background-editor .admin-background-size-note')?.textContent||'';
+              const heading=host.querySelector('.admin-ux-heading')?.textContent||'';
+              const display= getComputedStyle(host.querySelector('.admin-page-background-editor .admin-background-size-guide')).gridTemplateColumns;
+              return {cards,note,heading,display};
+            }""")
+            assert len(sizing['cards'])==2,sizing
+            assert '1920 × 1080 px' in sizing['cards'][0],sizing
+            assert '1080 × 1920 px' in sizing['cards'][1],sizing
+            assert '600 px' in sizing['cards'][1],sizing
+            assert '601 px' in sizing['note'],sizing
+            assert 'Horný banner' in sizing['heading'],sizing
+            assert len(sizing['display'].split(' '))==2,sizing
+
             # Fire real bubbling DOM input/change events together, avoiding
             # unrelated async boot re-renders between Playwright commands.
             mobile_change=page.evaluate("""() => {
