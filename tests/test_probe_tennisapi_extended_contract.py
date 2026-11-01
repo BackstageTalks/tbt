@@ -152,3 +152,22 @@ def test_phased_unknown_request_is_rejected_before_api_calls():
     with pytest.raises(ValueError, match="phase"):
         run_probe(client, event_id=14494928, max_requests=1, phase="other")
     assert client.request_count == 0
+
+def test_targeted_case_runs_only_preapproved_route():
+    client = StubClient()
+    result = run_probe(client, event_id=14494928, max_requests=10,
+                       phase="odds", case="season_odds")
+    assert result["request_count"] == 1
+    assert result["case"] == "season_odds"
+    assert client.paths == [
+        ("/api/odds/season/67287/provider/1/all", None),
+    ]
+
+
+def test_targeted_case_cannot_call_undeclared_endpoint():
+    import pytest
+    client = StubClient()
+    with pytest.raises(ValueError, match="allowlist"):
+        run_probe(client, event_id=14494928, max_requests=10,
+                  phase="odds", case="../../api/live")
+    assert client.request_count == 0
