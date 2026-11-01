@@ -256,7 +256,12 @@ def export_final(*, days: list[str], table=None) -> dict:
     for day in days:
         parsed = date.fromisoformat(str(day))
         partition = parsed.strftime("%Y%m%d")
-        records = table.query_entities(query_filter=f"PartitionKey eq '{partition}'")
+        # Azure Table query_entities is a ONE-SHOT ItemPaged iterator.
+        # The first pass scans receipts, the second reads final rows; without
+        # materializing it, the second pass silently returns zero matches.
+        records = list(table.query_entities(query_filter=f"PartitionKey eq '{partition}'"))
+        if len(records) > 15000:
+            raise AdminStorageUnavailable("MoviOdds finalized daily partition exceeds export guard")
         # A day may legitimately have zero valid stats, but a missing verified
         # post-day provider poll is NOT evidence for a zero-result archive.
         scan_times = [_when(row.get("scanned_at")) for row in records
