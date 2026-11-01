@@ -283,7 +283,6 @@ jobs:
           path: |
             .cache/tbt/cdb-sackmann-bp/source-snapshot.json
             .cache/tbt/cdb-sackmann-bp/stage/report.json
-            .cache/tbt/cdb-sackmann-bp/stage/stage.jsonl
             .cache/tbt/cdb-sackmann-bp/write/report.json
             .cache/tbt/cdb-sackmann-bp/local-readback/report.json
             .cache/tbt/cdb-sackmann-bp/persisted-download.json

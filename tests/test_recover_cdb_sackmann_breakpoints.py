@@ -196,3 +196,42 @@ def test_breakpoint_quarantine_opt_in_is_fail_closed(monkeypatch):
     ):
         with pytest.raises(ValueError):
             bp.load_canonical_for_mode(Path("/offline/canonical"), **opts)
+
+
+def test_strict_lineage_diagnostics_keep_non_native_player_ids_rejected():
+    from recover_cdb_sackmann_breakpoints import lineage_rejection_reason
+
+    row = original()
+    path = Path("atp_matches_2020.csv")
+    match = canonical(row)
+    assert lineage_rejection_reason(match, row, "atp", "main", path) == "unclassified_strict_rejection"  # Diagnostic cannot approve a candidate.
+    match = canonical(row)
+    match.player1_id = "mapped:provider:1001"
+    match.winner_id = match.player1_id  # Keep completed winner orientation valid; test only the namespace.
+    before = deepcopy(match.to_storage_dict())
+    assert candidate(match, row, "atp", path, 2, "a" * 64)[1] == "lineage_rejected"
+    assert lineage_rejection_reason(match, row, "atp", "main", path) == "source_native_player_id_mapping"
+    assert match.to_storage_dict() == before
+
+
+def test_strict_lineage_diagnostics_reject_changed_provenance_or_date():
+    from recover_cdb_sackmann_breakpoints import lineage_rejection_reason
+
+    row = original()
+    path = Path("atp_matches_2020.csv")
+    match = canonical(row)
+    match.provider_payload["_tbt_statistics"]["source"] = "unrelated"
+    assert candidate(match, row, "atp", path, 2, "a" * 64)[1] == "lineage_rejected"
+    assert lineage_rejection_reason(match, row, "atp", "main", path) == "source_statistics_provenance"
+
+    match = canonical(row)
+    row["tourney_date"] = "20200107"
+    assert lineage_rejection_reason(match, row, "atp", "main", path) == "historical_source_date"
+
+
+def test_public_bp_workflow_artifact_contains_no_raw_stage_identifiers():
+    source = (Path(__file__).resolve().parents[1]
+              / ".github" / "workflows" / "cdb-sackmann-bp-guarded.yml").read_text()
+    artifact_section = source.split("name: cdb-sackmann-bp-", 1)[-1]
+    assert "stage/stage.jsonl" not in artifact_section.split("if-no-files-found:", 1)[0]
+    assert "stage/report.json" in artifact_section
