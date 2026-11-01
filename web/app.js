@@ -4305,8 +4305,13 @@
         <label><span>Popiska · farba</span><select data-simple-banner-field="eyebrow_color">${bannerColorOptions(c.eyebrow_color)}</select></label>
       </div></div>
       <div class="admin-form-section admin-page-background-editor" data-simple-banner="HERO_BANNER_1"><div class="admin-form-section-title"><strong>Pozadie hlavnej stránky</strong><span>Desktop a mobil majú samostatné pozadia. Obrázok nahraj alebo zadaj adresu, skontroluj náhľad a klikni na Publikovať.</span></div><div class="admin-form-grid">
-        <label class="span-2">Desktop pozadie · 1920 × 1080<input data-simple-banner-field="site_background_url" value="${escapeHtml(hero1.site_background_url||bg)}" placeholder="/assets/blinq_page_background.webp"></label>
-        <label class="span-2">Mobilné pozadie · do 600 px (odporúčaný portrét 1080 × 1920)<input data-simple-banner-field="site_mobile_background_url" value="${escapeHtml(hero1.site_mobile_background_url||mobileBg)}" placeholder="/assets/blinq_mobile_court.webp"></label>
+        <div class="admin-background-size-guide span-2" aria-label="Odporúčané rozmery pozadia">
+          <div><strong>Desktop · na šírku</strong><b>1920 × 1080 px</b><small>Pomer strán 16 : 9 · odporúčané rozlíšenie</small></div>
+          <div><strong>Mobil · na výšku</strong><b>1080 × 1920 px</b><small>Pomer strán 9 : 16 · používa sa pri šírke obrazovky do 600 px</small></div>
+          <p>Rozmery sú odporúčané, nie povinné. Desktop a mobil majú vlastné obrázky, nahrávanie, URL aj náhľady. Zmeny na webe uvidíš po publikovaní.</p>
+        </div>
+        <label class="span-2">Desktop pozadie · odporúčané 1920 × 1080 px<input data-simple-banner-field="site_background_url" value="${escapeHtml(hero1.site_background_url||bg)}" placeholder="/assets/blinq_page_background.webp"></label>
+        <label class="span-2">Mobilné pozadie · odporúčané 1080 × 1920 px · do šírky 600 px<input data-simple-banner-field="site_mobile_background_url" value="${escapeHtml(hero1.site_mobile_background_url||mobileBg)}" placeholder="/assets/blinq_mobile_court.webp"></label>
         <div class="admin-page-background-previews span-2"><figure><img src="${escapeHtml(safePhotoUrl(bg)||'/assets/blinq_page_background.webp')}" alt="Náhľad desktopového pozadia" loading="lazy"><figcaption>Desktop · stránka</figcaption></figure><figure><img src="${escapeHtml(mobileBg)}" alt="Náhľad mobilného pozadia" loading="lazy"><figcaption>Mobil · stránka (karty zostávajú čitateľné)</figcaption></figure></div>
       </div></div>
       <div class="admin-banner-save-note"><span></span><strong>Zmeny sú zatiaľ iba v koncepte.</strong><small>Po kontrole klikni hore na Publikovať.</small></div>
