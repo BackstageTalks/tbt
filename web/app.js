@@ -6926,6 +6926,16 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         if(events)events.innerHTML=renderAdminActivityEventRows();
         return;
       }
+      // Preserve URL edits immediately in the admin draft, before blur.
+      if(field==='site_mobile_background_url'){
+        const wrap=t.closest('[data-simple-banner]'),item=elements()?.[wrap?.dataset?.simpleBanner];
+        if(!item)return;
+        item.content=item.content||{};
+        item.content.site_mobile_background_url=String(t.value||'').trim();
+        const image=wrap.querySelector('.admin-page-background-previews img[alt="Náhľad mobilného pozadia"]');
+        if(image)image.src=safePhotoUrl(t.value)||'/assets/blinq_mobile_court.webp';
+        return;
+      }
       const liveFields=['eyebrow','headline','text','button_text','desktop_image_x','desktop_image_y','mobile_image_x','mobile_image_y','desktop_text_x','desktop_text_y','desktop_text_width','mobile_text_x','mobile_text_y','mobile_text_width','desktop_headline_size','mobile_headline_size','desktop_text_size','mobile_text_size','desktop_eyebrow_size','mobile_eyebrow_size','desktop_social_x','desktop_social_y','mobile_social_x','mobile_social_y','desktop_social_size','mobile_social_size','desktop_shadow_strength','mobile_shadow_strength'];
       if(!field||!liveFields.includes(field))return;
       const wrap=t.closest('[data-simple-banner]'),item=elements()?.[wrap?.dataset?.simpleBanner];
