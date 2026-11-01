@@ -273,9 +273,17 @@ def _player_stats(builder: FeatureBuilder, match: MatchRecord, *, first: bool) -
         else None
     )
     def observed_rate(field):
-        known = [float(getattr(row, field)) for row in surface_all
-                 if getattr(row, field, None) is not None
-                 and math.isfinite(float(getattr(row, field)))]
+        # Rich-rate inputs are proportions, not arbitrary numerical features.
+        # Quarantine malformed historic values rather than allowing one
+        # out-of-range sample to distort a player comparison.
+        known = []
+        for row in surface_all:
+            try:
+                value = float(getattr(row, field, None))
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if math.isfinite(value) and 0.0 <= value <= 1.0:
+                known.append(value)
         return {"mean": round(sum(known) / len(known), 4) if known else None,
                 "matches": len(known), "window": int(state.recent.maxlen or 80)}
 
