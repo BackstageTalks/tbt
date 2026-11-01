@@ -6,6 +6,7 @@ The store never issues provider requests itself and never contains credentials.
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
 import json
 import re
 import sqlite3
@@ -55,6 +56,7 @@ class RawResponseCache:
         self.path = str(path)
         try:
             with self._connect() as db:
+                db.execute("PRAGMA journal_mode=WAL")
                 db.executescript("""
                     CREATE TABLE IF NOT EXISTS responses (
                         key TEXT PRIMARY KEY, provider TEXT NOT NULL,
@@ -76,9 +78,22 @@ class RawResponseCache:
                 """)
         except sqlite3.Error as exc:
             raise RawCacheUnavailable("Private cache initialization failed") from exc
+        try:
+            Path(self.path).chmod(0o600)
+        except OSError as exc:
+            raise RawCacheUnavailable("Private cache permissions could not be secured") from exc
 
+    @contextmanager
     def _connect(self):
-        return sqlite3.connect(self.path, timeout=10.0)
+        db = sqlite3.connect(self.path, timeout=10.0)
+        try:
+            yield db
+            db.commit()
+        except BaseException:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
     def _lookup(self, key, max_age, now):
         try:
@@ -144,6 +159,12 @@ class RawResponseCache:
             result = loader()
             if not isinstance(result, (dict, list)):
                 raise RawCacheUnavailable("Only JSON objects/arrays are cacheable")
+            # Empty statistics from 200 responses are not durable coverage
+            # evidence. Preserve normal provider cooldown instead of replaying
+            # a 30-day false miss.
+            if kind == "finished_statistics" and (not isinstance(result, dict)
+                    or not result.get("statistics")):
+                return result
             body = json.dumps(result, sort_keys=True, separators=(",", ":"),
                               ensure_ascii=True, allow_nan=False)
             digest = hashlib.sha256(body.encode()).hexdigest()
