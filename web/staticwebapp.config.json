@@ -21,31 +21,43 @@
     {
       "route": "/blinq-app.css",
       "headers": {
-        "Cache-Control": "no-store, max-age=0, must-revalidate"
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
       }
     },
     {
       "route": "/auth.js",
       "headers": {
-        "Cache-Control": "no-store, max-age=0, must-revalidate"
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
       }
     },
     {
       "route": "/app.js",
       "headers": {
-        "Cache-Control": "no-store, max-age=0, must-revalidate"
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
       }
     },
     {
       "route": "/insight-media.js",
       "headers": {
-        "Cache-Control": "no-store, max-age=0, must-revalidate"
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
       }
     },
     {
       "route": "/responsive.js",
       "headers": {
-        "Cache-Control": "no-store, max-age=0, must-revalidate"
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
+      }
+    },
+    {
+      "route": "/blinq-mobile.js",
+      "headers": {
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
+      }
+    },
+    {
+      "route": "/blinq-mobile.css",
+      "headers": {
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
       }
     },
     {
