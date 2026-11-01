@@ -117,22 +117,26 @@ def main():
                 sizes = [cards.nth(i).bounding_box() for i in range(4)]
                 assert all(sizes), (width, sizes)
                 assert max(b['width'] for b in sizes)-min(b['width'] for b in sizes) <= 1
-                if width <= 1100:
-                    # Two clean rows, two equal-width cards per row on tablet/mobile.
+                if 600 < width <= 1100:
+                    # Tablet keeps its existing two-by-two layout.
                     assert abs(sizes[0]['y'] - sizes[1]['y']) <= 1, (width, sizes)
                     assert abs(sizes[2]['y'] - sizes[3]['y']) <= 1, (width, sizes)
                     assert sizes[2]['y'] > sizes[0]['y'], (width, sizes)
                     assert abs(sizes[0]['x'] - sizes[2]['x']) <= 1, (width, sizes)
                     assert abs(sizes[1]['x'] - sizes[3]['x']) <= 1, (width, sizes)
                 else:
-                    # Desktop shows the complete four-card row without wrapping.
+                    # Desktop and the compact phone strip show all four values.
                     assert len({b['y'] for b in sizes}) == 1, (width, sizes)
                 if width <= 900:
-                    assert abs(sizes[0]['x'] - (boxes[0]['x'] + 12)) <= 1, (width, boxes[0], sizes)
-                    assert abs((sizes[-1]['x'] + sizes[-1]['width']) - (boxes[0]['x'] + boxes[0]['width'] - 12)) <= 1, (width, boxes[0], sizes)
+                    inset = 3 if width <= 600 else 12
+                    assert abs(sizes[0]['x'] - (boxes[0]['x'] + inset)) <= 1, (width, boxes[0], sizes)
+                    assert abs((sizes[-1]['x'] + sizes[-1]['width']) - (boxes[0]['x'] + boxes[0]['width'] - inset)) <= 1, (width, boxes[0], sizes)
                 else:
                     assert abs(sizes[-1]['x']+sizes[-1]['width']-boxes[0]['x']-boxes[0]['width']) <= 1
-                assert page.locator('body').evaluate('(e)=>getComputedStyle(e).backgroundImage') == login_background
+                if width <= 600:
+                    assert 'blinq_mobile_court.webp' in page.locator('body').evaluate('(e)=>getComputedStyle(e,"::before").backgroundImage')
+                else:
+                    assert page.locator('body').evaluate('(e)=>getComputedStyle(e).backgroundImage') == login_background
                 # Homepage has no global, hero, footer or prediction watermarks.
                 assert page.locator('#dashboardHero').evaluate(
                     '(e) => getComputedStyle(e, "::after").display'

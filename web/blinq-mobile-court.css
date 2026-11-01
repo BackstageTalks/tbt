@@ -26,7 +26,7 @@
     box-shadow:none !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis {
-    grid-template-columns:repeat(4,minmax(0,1fr)) !important; gap:0 !important; padding:10px 2px !important; margin:8px 10px !important; border:1px solid var(--bq-court-line) !important; border-radius:11px !important; background:rgba(3,23,17,.48) !important; width:auto !important;
+    grid-template-columns:repeat(4,minmax(0,1fr)) !important; gap:0 !important; padding:10px 2px !important; margin:8px 0 !important; border:1px solid var(--bq-court-line) !important; border-radius:11px !important; background:rgba(3,23,17,.48) !important; width:auto !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis[data-kpi-count="3"] {
     grid-template-columns:repeat(3,minmax(0,1fr)) !important;
