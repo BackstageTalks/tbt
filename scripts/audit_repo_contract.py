@@ -268,7 +268,7 @@ if rookie_plan.get('enabled') is not True or rookie_plan.get('unlimited') is not
 goat_plan = plans.get('goat') or {}
 if goat_plan.get('lifetime') is not False or goat_plan.get('unlimited') is True or not isinstance(goat_plan.get('duration_days'), int) or goat_plan.get('duration_days') <= 0:
     fail('GOAT must use a finite editable default duration')
-if 'applyV6514AdminCleanup();\n      const result=await BlinqAuth.adminSaveUiConfig(state.ui);' not in app:
+if 'applyV6514AdminCleanup();\n      const result=await BlinqAuth.adminSaveUiConfig(state.ui' not in app:
     fail('publish must sanitize retired visual fields before saving')
 for tier in ('rookie', 'pro', 'elite', 'legend', 'goat'):
     if not isinstance((plans.get(tier) or {}).get('eyebrow', ''), str):
