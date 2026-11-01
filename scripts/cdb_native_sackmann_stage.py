@@ -73,21 +73,49 @@ def prepare(source_root: Path, output_dir: Path, start_year: int = 2016,
             reader = csv.DictReader(stream)
             if not REQUIRED.issubset(reader.fieldnames or []):
                 raise ValueError(f"Not a native Sackmann match table: {path.name}")
-            # Tour/season/family and source file SHA disambiguate provider keys.
-            # A source tournament ID + match_num can repeat; never resolve
-            # such rows to a canonical CDB match automatically.
+            # Preserve the original CSV ordinal and source SHA. DictReader
+            # stores surplus columns under the None key; passing that key to
+            # DictWriter would fail on otherwise valid uploaded CSV rows.
             rows = list(reader)
-        occurrences = Counter((r.get("tourney_id"), r.get("match_num")) for r in rows)
+        prepared = []
+        for index, row in enumerate(rows, 2):
+            metrics["raw_match_rows"] += 1
+            extras = row.pop(None, None)
+            nonempty_extras = bool(extras and any(
+                str(value or "").strip() for value in extras
+            ))
+            if extras and not nonempty_extras:
+                metrics["trimmed_empty_trailing_columns_rows"] += 1
+            blank = not any(str(value or "").strip() for value in row.values())
+            truncated = any(value is None for value in row.values())
+            prepared.append((index, row, nonempty_extras, blank, truncated))
+
+        # Count ALL nonblank native keys, including malformed rows. A bad
+        # duplicate must never make the good-looking sibling unambiguous.
+        occurrences = Counter(
+            (row.get("tourney_id"), row.get("match_num"))
+            for _, row, _, blank, _ in prepared
+            if not blank and row.get("tourney_id") and row.get("match_num")
+        )
         output = linker_dir / f"{tour}_{family}_{year}_{digest[:16]}.csv"
         accepted = 0
         with output.open("w", encoding="utf-8", newline="") as handle:
             fields = list(reader.fieldnames or []) + ["league", "source_record_id"]
             writer = csv.DictWriter(handle, fieldnames=fields)
             writer.writeheader()
-            for index, row in enumerate(rows, 2):
-                metrics["raw_match_rows"] += 1
-                if occurrences[(row.get("tourney_id"), row.get("match_num"))] != 1:
+            for index, row, nonempty_extras, blank, truncated in prepared:
+                if blank:
+                    metrics["quarantined_blank_padding_rows"] += 1
+                    continue
+                if (row.get("tourney_id") and row.get("match_num") and
+                        occurrences[(row.get("tourney_id"), row.get("match_num"))] != 1):
                     metrics["quarantined_ambiguous_native_match_key"] += 1
+                    continue
+                if nonempty_extras:
+                    metrics["quarantined_nonempty_trailing_columns_rows"] += 1
+                    continue
+                if truncated:
+                    metrics["quarantined_truncated_rows"] += 1
                     continue
                 if (not row.get("winner_id") or not row.get("loser_id")
                         or row["winner_id"] == row["loser_id"]
