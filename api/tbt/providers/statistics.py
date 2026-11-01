@@ -89,6 +89,43 @@ COUNT_ALIASES = {
     "doublefaulterrors": "double_faults",
 }
 
+def inventory_statistics_keys(payload: dict) -> dict[str, object]:
+    """Inventory every ALL-period key, including partly successful responses.
+
+    Read-only diagnostics: no raw values, credentials or player identities enter
+    the report. Non-ALL set keys are kept separately so they cannot be mistaken
+    for whole-match features. Unknown envelopes do not become trusted inputs.
+    """
+    periods = payload.get("statistics") if isinstance(payload, dict) else None
+    if not isinstance(periods, list):
+        return {"supported": [], "unsupported": [], "set_only": [], "invalid_envelope": True}
+    supported, unsupported, set_only = set(), set(), set()
+    for period in periods:
+        if not isinstance(period, dict):
+            continue
+        period_name = str(period.get("period", "")).upper()
+        groups = period.get("groups")
+        if not isinstance(groups, list):
+            continue
+        for group in groups:
+            if not isinstance(group, dict) or not isinstance(group.get("statisticsItems"), list):
+                continue
+            for item in group["statisticsItems"]:
+                if not isinstance(item, dict):
+                    continue
+                key = re.sub(r"[^a-z0-9]", "", str(item.get("key") or item.get("name") or "").lower())
+                if not key:
+                    continue
+                if period_name != "ALL":
+                    set_only.add(key)
+                elif key in RATE_ALIASES or key in COUNT_ALIASES:
+                    supported.add(key)
+                else:
+                    unsupported.add(key)
+    return {"supported": sorted(supported), "unsupported": sorted(unsupported),
+            "set_only": sorted(set_only), "invalid_envelope": False}
+
+
 def complete_opponent_service_rates(values: dict[str, float]) -> bool:
     """Recover missing complementary whole-match service and return rates.
 
