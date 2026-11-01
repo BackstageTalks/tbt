@@ -51,6 +51,7 @@ from tbt.services.propline_live import (
     PropLineClient, discover_propline_fallback,
     PROVIDER_DAILY_PLAN_LIMIT, MIN_PROVIDER_REMAINING,
 )
+from tbt.services.moviodds_live import discover_moviodds_fallback
 from tbt.services.doubles_selection import (
     build_predictions as build_doubles_predictions,
     select_picks as select_doubles_picks,
@@ -1708,6 +1709,80 @@ def main():
                         "PROPL_secret_missing" if not prop_key else "disabled_by_event_cap"
                     ), "calls": 0,
                 }
+        # Free MoviOdds/bet365 fallback: one read-only, pre-match snapshot
+        # after API Pro and PropLine. Existing verified prices always win.
+        # The external archive holds price movements, so no permanent socket
+        # or new RapidAPI calls are required for the morning odds snapshot.
+        if projection_odds_cap and predictions:
+            mov_existing = {
+                event_id: set(markets)
+                for event_id, markets in available_projection_markets.items()
+            }
+            for event_id, by_metric in prop_market_payloads.items():
+                mov_existing.setdefault(event_id, set()).update(by_metric)
+            for row in predictions:
+                eid = str(row.get("event_id") or "")
+                betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+                if eid and betting.get("market") == "match_winner" and betting.get("odds"):
+                    mov_existing.setdefault(eid, set()).add("match_winner")
+
+            mov_market_payloads, mov_report = discover_moviodds_fallback(
+                predictions, mov_existing, now=datetime.now(timezone.utc),
+            )
+            mov_winner_attached = 0
+            for index, row in enumerate(predictions):
+                eid = str(row.get("event_id") or "")
+                betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+                if not eid or (betting.get("market") == "match_winner" and betting.get("odds")):
+                    continue
+                quote = (mov_market_payloads.get(eid) or {}).get("match_winner")
+                if not isinstance(quote, dict):
+                    continue
+                p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
+                p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
+                market = extract_match_winner_odds(
+                    quote["payload"], str(p1.get("name") or ""), str(p2.get("name") or ""),
+                )
+                if market is None:
+                    continue
+                captured_at = datetime.fromisoformat(quote["captured_at"])
+                enriched = attach_match_winner_market(
+                    row, market, captured_at=captured_at, provider_id=3,
+                    betting_day=(odds_report or {}).get("betting_day"),
+                )
+                provenance = {
+                    "source": "moviodds", "bookmaker": "bet365",
+                    "provider_event_id": quote["provider_event_id"],
+                }
+                if isinstance(enriched.get("match_winner_market"), dict):
+                    enriched["match_winner_market"].update(provenance)
+                if isinstance(enriched.get("betting"), dict):
+                    enriched["betting"].update({
+                        "odds_source": "moviodds",
+                        "odds_bookmaker": "bet365",
+                        "odds_provider_event_id": quote["provider_event_id"],
+                    })
+                predictions[index] = enriched
+                mov_winner_attached += 1
+
+            for rapid_id, by_metric in mov_market_payloads.items():
+                for metric, quote in by_metric.items():
+                    if metric == "match_winner":
+                        continue
+                    if metric in prop_market_payloads.get(rapid_id, {}):
+                        continue
+                    prop_market_payloads.setdefault(rapid_id, {})[metric] = quote
+                    available_projection_markets.setdefault(rapid_id, set()).add(metric)
+                    if metric in ("games", "sets"):
+                        bookmaker_lines_by_event.setdefault(rapid_id, {})[metric] = [
+                            float(line["line"]) for line in
+                            extract_match_total_odds(quote["payload"], metric)
+                        ]
+            mov_report["match_winner_attached"] = mov_winner_attached
+            projection_discovery_report["moviodds"] = mov_report
+            print(json.dumps({"moviodds_market_audit": mov_report},
+                             ensure_ascii=False), flush=True)
+
         # Doubles selection is performed only after both trusted H2H providers
         # have had the chance to price an otherwise eligible fixture.
         doubles_picks, doubles_selection_report = select_doubles_picks(doubles_predictions)
@@ -1785,6 +1860,11 @@ def main():
                                 source == "propline"
                                 and provider == 2
                                 and bool(row.get("odds_bookmaker"))
+                            )
+                            or (
+                                source == "moviodds"
+                                and provider == 3
+                                and row.get("odds_bookmaker") == "bet365"
                             )
                         )
                     )
