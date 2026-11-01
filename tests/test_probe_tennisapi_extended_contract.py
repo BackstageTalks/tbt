@@ -96,3 +96,78 @@ def test_shared_budget_exhaustion_halts_subsequent_calls():
         "RequestBudgetExceeded")
     assert report["observations"]["odds_providers_sk_web"]["state"] == (
         "shared_budget_guard_halted")
+
+def test_phased_metadata_and_odds_have_separate_guarded_calls():
+    metadata = StubClient()
+    report = run_probe(metadata, event_id=14494928, max_requests=6,
+                       phase="metadata")
+    assert report["phase"] == "metadata"
+    assert report["request_count"] == 6
+    assert report["eligible_for_cdb_import"] is False
+    assert report["identity_validated_for_import"] is False
+    assert metadata.paths[0][0] == (
+        "/api/tennis/tournament/2449/season/67287/rounds")
+    assert not any("/api/odds/" in p for p, _ in metadata.paths)
+    odds = StubClient()
+    result = run_probe(odds, event_id=14494928, max_requests=3, phase="odds")
+    assert result["request_count"] == 3
+    assert odds.paths[0][0] == "/api/tennis/event/14494928/odds/1/all"
+    assert odds.paths[1][0] == "/api/odds/season/67287/provider/1/all"
+    assert odds.paths[2][0] == "/api/odds/providers/SK/web-odds"
+
+
+def test_phased_double_examples_stay_research_only():
+    client = StubClient()
+    report = run_probe(client, event_id=14494928, max_requests=8,
+                       phase="doubles")
+    assert report["request_count"] == 2
+    assert report["identity_validated_for_import"] is False
+    assert report["eligible_for_cdb_import"] is False
+    assert client.paths == [
+        ("/api/tennis/team/39234/players", None),
+        ("/api/tennis/team/69208/year-statistics/2025", None),
+    ]
+
+
+def test_phased_budget_termination_remains_fail_closed():
+    class RequestBudgetExceeded(Exception):
+        pass
+    class Blocked(StubClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            self.request_count += 1
+            raise RequestBudgetExceeded("Provider rate-limit remaining header missing")
+    client = Blocked()
+    report = run_probe(client, event_id=14494928, max_requests=10,
+                       phase="metadata")
+    assert report["request_count"] == 1
+    assert report["observations"]["tournament_rounds"]["reason_code"] == (
+        "missing_provider_header")
+    assert report["observations"]["player_rankings"]["state"] == (
+        "shared_budget_guard_halted")
+
+
+def test_phased_unknown_request_is_rejected_before_api_calls():
+    client = StubClient()
+    import pytest
+    with pytest.raises(ValueError, match="phase"):
+        run_probe(client, event_id=14494928, max_requests=1, phase="other")
+    assert client.request_count == 0
+
+def test_targeted_case_runs_only_preapproved_route():
+    client = StubClient()
+    result = run_probe(client, event_id=14494928, max_requests=10,
+                       phase="odds", case="season_odds")
+    assert result["request_count"] == 1
+    assert result["case"] == "season_odds"
+    assert client.paths == [
+        ("/api/odds/season/67287/provider/1/all", None),
+    ]
+
+
+def test_targeted_case_cannot_call_undeclared_endpoint():
+    import pytest
+    client = StubClient()
+    with pytest.raises(ValueError, match="allowlist"):
+        run_probe(client, event_id=14494928, max_requests=10,
+                  phase="odds", case="../../api/live")
+    assert client.request_count == 0

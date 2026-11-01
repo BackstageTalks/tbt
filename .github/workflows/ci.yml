@@ -8,6 +8,8 @@ on:
     paths-ignore:
       - '.github/hourly-api-gapfill-tick.json'
       - '.github/hourly-api-gapfill-smoke.json'
+      # Research-only request: avoid deploying unchanged application or feeds.
+      - '.github/tennisapi-contract-probe-request.json'
       - '.github/elo-weekly-trigger.json'
   pull_request:
   workflow_dispatch:

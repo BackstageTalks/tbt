@@ -46,6 +46,21 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
         "shape": type(payload).__name__,
     }
     obj = _obj(payload)
+    # Keep only structural evidence from nested provider collections; never
+    # export full odds, identities, raw event records or undeclared metrics.
+    result["collections"] = {}
+    for field, value in list(obj.items())[:30]:
+        if isinstance(value, list):
+            first = next((row for row in value if isinstance(row, dict)), None)
+            result["collections"][str(field)] = {
+                "kind": "list", "count": len(value),
+                "sample_keys": sorted(map(str, first))[:22] if first else [],
+            }
+        elif isinstance(value, dict):
+            result["collections"][str(field)] = {
+                "kind": "dict", "keys": sorted(map(str, value))[:22],
+                "count": len(value),
+            }
     if name == "event_odds":
         markets = obj.get("markets")
         if isinstance(markets, list):
@@ -84,9 +99,14 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
     return result
 
 
-def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int) -> dict:
+def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
+              phase: str = "full", case: str | None = None) -> dict:
     if not 1 <= max_requests <= 30:
         raise ValueError("max_requests must be 1..30")
+    if phase not in {"full", "metadata", "odds", "doubles", "quality"}:
+        raise ValueError("Unknown preapproved TennisApi probe phase")
+    if case is not None and phase == "full":
+        raise ValueError("Focused case requires a named phase")
     client.request_limit = max_requests
     client.retry_attempts = 1  # deterministic bound, no surprise retries
     report = {
@@ -94,12 +114,25 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int) ->
         "scope": "read_only_research_no_cdb_writes",
         "started_utc": datetime.now(timezone.utc).isoformat(),
         "target_event": event_id, "max_requests": max_requests,
+        "phase": phase, "case": case or "all",
         "observations": {}, "request_count": 0,
         "provider_quote_timestamp_verified": False,
         "eligible_for_cdb_import": False,
     }
 
     guard_halted = False
+    last_http: dict[str, object] = {}
+
+    def observe_response(response: Any) -> None:
+        # Passive HTTP metadata only; never read, log or persist credentials or
+        # raw response bodies. The existing provider header guard stays intact.
+        last_http["http_status"] = int(response.status_code)
+        last_http["quota_header_present"] = (
+            "x-ratelimit-requests-remaining" in response.headers)
+
+    http = getattr(client, "client", None)
+    if http is not None and isinstance(getattr(http, "event_hooks", None), dict):
+        http.event_hooks.setdefault("response", []).append(observe_response)
 
     def read(name: str, path: str, *, params: dict | None = None) -> Any:
         nonlocal guard_halted
@@ -110,8 +143,10 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int) ->
             report["observations"][name] = {"state": "budget_cap"}
             return {}
         try:
+            last_http.clear()
             payload = client._get(path, params=params, enrichment=True)
-            report["observations"][name] = summarize(name, payload, event_id=event_id)
+            report["observations"][name] = {
+                **summarize(name, payload, event_id=event_id), **last_http}
             return payload
         except Exception as exc:
             reason = str(exc).lower()
@@ -128,10 +163,58 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int) ->
                 guard_halted = True
             report["observations"][name] = {
                 "state": "error", "error_type": type(exc).__name__,
-                "reason_code": reason_code,
+                "reason_code": reason_code, **last_http,
                 # Avoid copying provider response bodies or secrets into artifact.
             }
             return {}
+
+    def finish() -> dict:
+        report["request_count"] = client.request_count
+        report["provider_header_remaining"] = client.rate_limit_remaining
+        report["completed_utc"] = datetime.now(timezone.utc).isoformat()
+        report["counts"] = dict(Counter(
+            x.get("state") for x in report["observations"].values()))
+        return report
+
+    if phase != "full":
+        # Proven event context: event 14494928 / season 67287 /
+        # tournament 2449 / player 206570. Team IDs are DOCUMENTATION
+        # examples only, never identity-verified CDB matches.
+        routes = {
+            "metadata": [
+                ("tournament_rounds", "/api/tennis/tournament/2449/season/67287/rounds"),
+                ("tournament_seasons", "/api/tennis/tournament/2449/seasons"),
+                ("tournament_draw", "/api/tennis/tournament/2449/season/67287/cup-trees"),
+                ("tournament_venues", "/api/tennis/tournament/2449/season/67287/venues"),
+                ("player_rankings", "/api/tennis/player/206570/rankings"),
+                ("singles_last_player_matches", "/api/tennis/player/206570/events/singles/last/0"),
+            ],
+            "odds": [
+                ("event_odds", f"/api/tennis/event/{event_id}/odds/1/all"),
+                ("season_odds", "/api/odds/season/67287/provider/1/all"),
+                ("odds_providers_sk_web_odds", "/api/odds/providers/SK/web-odds"),
+                ("odds_providers_gb_web", "/api/odds/providers/GB/web"),
+                ("odds_providers_sk_web", "/api/odds/providers/SK/web"),
+            ],
+            "doubles": [
+                ("team_roster_doc_example", "/api/tennis/team/39234/players"),
+                ("team_year_stats_doc_example", "/api/tennis/team/69208/year-statistics/2025"),
+            ],
+            "quality": [
+                ("match_streak", f"/api/tennis/event/{event_id}/streak"),
+                ("graph_sequence", f"/api/tennis/event/{event_id}/graph/sequence"),
+                ("win_probability", f"/api/tennis/event/{event_id}/win-probability"),
+            ],
+        }
+        report["context_origin"] = "verified_provider_event_or_documentation"
+        report["identity_validated_for_import"] = False
+        names = {name for name, _ in routes[phase]}
+        if case is not None and case not in names:
+            raise ValueError("Focused case not in the preapproved route allowlist")
+        for name, route in routes[phase]:
+            if case is None or name == case:
+                read(name, route)
+        return finish()
 
     # Known event and post-match CDB fields first. Country odds provider
     # lookup may legitimately return 204 without the required quota header.
@@ -182,18 +265,16 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int) ->
     read("odds_providers_sk_web_odds", "/api/odds/providers/SK/web-odds")
     read("odds_providers_gb_web", "/api/odds/providers/GB/web")
 
-    report["request_count"] = client.request_count
-    report["provider_header_remaining"] = client.rate_limit_remaining
-    report["completed_utc"] = datetime.now(timezone.utc).isoformat()
-    report["counts"] = dict(Counter(
-        x.get("state") for x in report["observations"].values()))
-    return report
+    return finish()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--event-id", type=int, default=14494928)
     parser.add_argument("--max-requests", type=int, default=24)
+    parser.add_argument("--phase", choices=["full", "metadata", "odds", "doubles",
+                                            "quality"], default="full")
+    parser.add_argument("--case", default=None)
     parser.add_argument("--out", default=".cache/tbt/tennisapi-contract/live-probe.json")
     args = parser.parse_args()
     if args.event_id <= 0 or not 1 <= args.max_requests <= 30:
@@ -203,7 +284,8 @@ def main() -> None:
     client = RapidTennisClient()
     try:
         result = run_probe(client, event_id=args.event_id,
-                           max_requests=args.max_requests)
+                           max_requests=args.max_requests, phase=args.phase,
+                           case=args.case)
     finally:
         client.close()
     path = Path(args.out)
