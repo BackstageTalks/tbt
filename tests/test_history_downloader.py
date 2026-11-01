@@ -164,3 +164,30 @@ def test_reopen_history_gap_days_does_not_touch_healthy_partition(match_factory)
     assert result["partial_partition_years"] == []
     assert result["reopened_days"] == []
     assert progress["completed_days"] == completed
+
+
+def test_history_monthly_category_prefetch_preserves_original_daily_work():
+    class Provider:
+        request_count = 0
+        batches = []
+        calls = []
+        calendar_batch_metrics = {"invalid_responses": 0}
+        def prefetch_calendar_categories(self, days):
+            self.batches.append([d.isoformat() for d in days])
+            self.request_count += 1
+            return len(days)
+        def matches_for_day(self, tour, day, historical):
+            self.calls.append((tour, day.isoformat(), historical))
+            return []
+    provider = Provider()
+    progress = {"completed_days": []}
+    download_days(provider, {}, progress, date(2026, 11, 1),
+                  date(2026, 11, 5), lambda *args: None)
+    assert provider.batches[0] == [
+        "2026-11-05", "2026-11-04", "2026-11-03",
+        "2026-11-02", "2026-11-01"]
+    assert len(provider.calls) == 10
+    assert all(call[2] is True for call in provider.calls)
+    assert progress["completed_days"] == [
+        "2026-11-01", "2026-11-02", "2026-11-03",
+        "2026-11-04", "2026-11-05"]
