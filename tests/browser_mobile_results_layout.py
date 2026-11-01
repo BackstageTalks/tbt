@@ -28,7 +28,7 @@ def route_request(route):
 
 
 def main():
-    widths = (320, 360, 390, 430, 768, 900, 1024, 1440)
+    widths = (320, 360, 390, 430, 520, 600, 768, 900, 1024, 1440)
     with sync_playwright() as pw:
         executable = os.getenv("BLINQ_BROWSER") or browser_path()
         browser = (
@@ -157,7 +157,7 @@ def main():
                     assert report["filterBarDisplay"]=="none",(width,report)
                     assert report["cardClass"],(width,report)
                     if width <= 600:
-                        assert report["cardBg"] == "rgba(3, 23, 17, 0.58)", (width,report)
+                        assert report["cardBg"] == "rgba(3, 23, 17, 0.74)", (width,report)
                         assert report["cardRadius"] == "11px", (width,report)
                     assert report["projectChip"]["top"]>=report["header"]["top"]-2,(width,report)
                     assert report["projectChip"]["bottom"]<=report["header"]["bottom"]+2,(width,report)
@@ -202,7 +202,7 @@ def main():
                     page.get_by_role('button',name='Zavrieť menu').click()
                 assert not errors,(width,errors)
                 page.close()
-            print("Mobile Results 320/360/390/430/768/900 + desktop 1024/1440 geometry: PASS")
+            print("Mobile Results 320/360/390/430/520/600/768/900 + desktop 1024/1440 geometry: PASS")
         finally:
             browser.close()
 
