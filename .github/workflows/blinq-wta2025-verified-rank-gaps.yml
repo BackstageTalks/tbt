@@ -65,6 +65,8 @@ jobs:
           test "$(jq -r .canonical_mutated "$ROOT/report.json")" = false
           test "$(jq -r .model_promoted "$ROOT/report.json")" = false
           test "$(jq -r .provider_api_requests "$ROOT/report.json")" = 0
+          test "$(jq -r .excluded_ambiguous_provider_rows "$ROOT/report.json")" = 6
+          test "$(jq -r '.canonical_raw_rows == (.canonical_rows + 6)' "$ROOT/report.json")" = true
       - name: Save immutable private source stage and independently read back SHA-256
         run: |
           set -euo pipefail
