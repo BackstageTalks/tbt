@@ -134,7 +134,7 @@ def main():
             assert studio['panels']==2 and studio['desktopFields']==4 and studio['mobileFields']==4,studio
             assert studio['desktopFieldsExist'] and studio['mobileFieldsExist'],studio
             assert abs(studio['desktopTop']-studio['mobileTop'])<5 and studio['panelWidth']>350,studio
-            assert studio['numericCount']==18 and studio['numericHeight']>=44,studio
+            assert studio['numericCount']==20 and studio['numericHeight']>=44,studio  # cover zoom inputs
             assert 'blinq_page_background.webp' in studio['background'],studio
             page.evaluate("""() => {
               const s=bannerHarness.state;
@@ -399,6 +399,75 @@ def main():
                 assert placement['previewPosition']==position,(mode,placement)
                 assert placement['persisted']==list(expect),(mode,placement)
                 print(f'PASS: {mode} editor X/Y/width and image crop reflected in public + preview',flush=True)
+            # Cover/contain and independent zoom must render the same on public
+            # banner and each editor preview. Zoom makes X positioning visible
+            # even when artwork has the same aspect ratio as its banner frame.
+            for viewport, mode, expected_zoom, expected_fit in [
+                (1440,'desktop',1.4,'cover'),(390,'mobile',1.6,'contain')
+            ]:
+                page.set_viewport_size({'width':viewport,'height':900})
+                cover=page.evaluate("""({mode}) => {
+                  const h=bannerHarness,s=h.state;
+                  s.route='admin';s.adminTab='banners';
+                  h.setSelectedElement('HERO_BANNER_1');
+                  const c=s.ui.elements.HERO_BANNER_1.content;
+                  Object.assign(c,{enabled:true,type:'promo',show_copy:true,
+                    headline:'Cover test',
+                    image_url:'/assets/hero-reference-exact-v680.webp',
+                    mobile_image_url:'/assets/tennis-hero-v6524.webp'});
+                  const edit=(field,value,event='input')=>{
+                    const e=document.querySelector('[data-simple-banner-field="'+field+'"]');
+                    if(!e)throw Error('Missing '+field);
+                    e.value=String(value);
+                    e.dispatchEvent(new Event(event,{bubbles:true}));
+                  };
+                  edit('desktop_image_fit','cover','change');
+                  edit('mobile_image_fit','contain','change');
+                  edit('desktop_image_zoom',140);
+                  edit('mobile_image_zoom',160);
+                  edit('desktop_image_x',20);
+                  edit('desktop_image_y',70);
+                  edit('mobile_image_x',20);
+                  edit('mobile_image_y',65);
+                  const stateImage=()=>{
+                    // Every live edit repaints the preview DOM; always re-query.
+                    const preview=document.querySelector('[data-admin-preview-card="'+mode+'"] .lean-admin-preview');
+                    const previewImg=preview.querySelector('img');
+                    return {
+                      preview:getComputedStyle(previewImg).scale,
+                      fit:getComputedStyle(previewImg).objectFit,
+                      transformOrigin:getComputedStyle(previewImg).transformOrigin,
+                      left:previewImg.getBoundingClientRect().left-preview.getBoundingClientRect().left
+                    };
+                  };
+                  const before=stateImage();
+                  edit(mode+'_image_x',80);
+                  const after=stateImage();
+                  const host=document.querySelector('#dashboardHero');
+                  host.hidden=false;host.innerHTML=h.heroSlideHtml({id:'HERO_BANNER_1',...s.ui.elements.HERO_BANNER_1},0);
+                  const oldClass=document.body.className;
+                  document.body.classList.remove('blinq-admin');
+                  document.body.classList.add('blinq-home','bqm-enabled');
+                  const liveImg=host.querySelector('.hero-slide-image');
+                  const computed=getComputedStyle(liveImg);
+                  const live={fit:computed.objectFit,zoom:computed.scale,
+                    origin:computed.transformOrigin};
+                  document.body.className=oldClass;
+                  return {before,after,live,
+                    savedFit:c[mode+'_image_fit'],
+                    savedZoom:c[mode+'_image_zoom'],savedX:c[mode+'_image_x']};
+                }""",{'mode':mode})
+                assert cover['savedFit']==expected_fit,cover
+                assert cover['savedZoom']==round(expected_zoom*100),cover
+                assert cover['savedX']==80,cover
+                assert abs(float(cover['before']['preview'])-expected_zoom)<0.01,cover
+                assert abs(float(cover['after']['preview'])-expected_zoom)<0.01,cover
+                assert abs(float(cover['live']['zoom'])-expected_zoom)<0.01,cover
+                assert cover['before']['fit']==expected_fit and cover['live']['fit']==expected_fit,cover
+                # Raising the crop anchor from 20% to 80% shifts a zoomed
+                # image left. It would have no effect with zoom=100%.
+                assert cover['after']['left']<cover['before']['left']-10,cover
+                print(f'PASS: {mode} cover/contain zoom and crop anchor in preview + live',flush=True)
             assert not errors,errors
             print('PASS: live carousel, text, grayscale and no hidden accent')
         finally:
