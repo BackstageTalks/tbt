@@ -5,10 +5,7 @@ name: BlinQ uploaded 2025-26 direct native event clock discrepancy audit
       - scripts/audit_uploaded_clock_bridge.py
       - tests/test_audit_uploaded_clock_bridge.py
       - .github/workflows/blinq-uploaded-2025-26-clock-bridge-probe.yml
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/blinq-uploaded-2025-26-clock-bridge-probe.yml
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
