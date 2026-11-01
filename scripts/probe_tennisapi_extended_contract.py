@@ -368,6 +368,40 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         "player_id": player_id, "event_id_matched": (
             str(event.get("id", event.get("eventId", ""))) == str(event_id))}
 
+    # Public provider-native identity witness for a ONE-call focused archive
+    # audit. No names/IDs from this report are approved for CDB writes without
+    # independent canonical crosswalk, score/winner, round and date validation.
+    tournament = _obj(event.get("tournament"))
+    category = _obj(tournament.get("category"))
+    unique = _obj(tournament.get("uniqueTournament"))
+    home = _obj(event.get("homeTeam"))
+    away = _obj(event.get("awayTeam"))
+    status = _obj(event.get("status"))
+    round_info = _obj(event.get("roundInfo"))
+    source_category_id = _nested_int(tournament, "category", "id")
+    report["source_event_identity"] = {
+        "event_id": str(event.get("id", event.get("eventId", ""))),
+        "event_id_matches_request": (
+            str(event.get("id", event.get("eventId", ""))) == str(event_id)),
+        "home_id": _nested_int(event, "homeTeam", "id"),
+        "away_id": _nested_int(event, "awayTeam", "id"),
+        "home_name": str(home.get("name") or ""),
+        "away_name": str(away.get("name") or ""),
+        "status": str(status.get("type") or ""),
+        "start_timestamp": event.get("startTimestamp"),
+        "tournament_name": str(tournament.get("name") or unique.get("name") or ""),
+        "tournament_id": _nested_int(event, "tournament", "id"),
+        "unique_tournament_id": _nested_int(event, "tournament", "uniqueTournament", "id"),
+        "category_id": source_category_id,
+        "category_name": str(category.get("name") or ""),
+        "round": str(round_info.get("name") or round_info.get("round") or ""),
+        "winner_code": event.get("winnerCode"),
+        "singles_structure": RapidTennisClient._is_singles_event(event),
+        "derived_tour": RapidTennisClient._event_tour(
+            event, source_category_id, str(category.get("name") or "")),
+        "identity_validated_for_cdb": False,
+    }
+
     read("event_statistics", f"/api/tennis/event/{event_id}/statistics")
     read("point_by_point", f"/api/tennis/event/{event_id}/point-by-point")
     read("monthly_categories", "/api/tennis/calendar/11/2026/categories",

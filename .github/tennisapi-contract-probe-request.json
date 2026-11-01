@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "requested_date": "2026-11-01",
-  "reason": "Read-only 2016 Wimbledon category-native archive verification after PR #1157; all discovered categories; 10-call guard; no CDB/model writes",
+  "reason": "Read-only one-call source-native identity witness for archived 2016 Wimbledon event; CDB crosswalk pending",
   "provider_requests_allowed": true,
-  "max_requests": 10,
-  "event_id": 14494928,
+  "max_requests": 1,
+  "event_id": 7115726,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ technical audit",
-  "diagnostic_attempt": 16,
-  "phase": "archive_2016",
+  "diagnostic_attempt": 17,
+  "phase": "full",
   "case": null
 }
