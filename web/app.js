@@ -1753,10 +1753,15 @@
   }
   function renderSystemFooterStatus(){
     const host=$('footerSystemStatus'),time=$('footerLastUpdate');if(!host||!time)return;
+    // Match-status worker snapshot time is provided by the authenticated feed.
+    // Do not substitute feed generation or LIVE radar timestamps for a match scan.
+    const matchScanAt=state.feed?.match_status_updated_at||'';
+    time.textContent=Number.isFinite(Date.parse(matchScanAt))
+      ?lcopy(`Last scan: ${fmtTime(matchScanAt)}`,`Posledný scan: ${fmtTime(matchScanAt)}`,`Poslední sken: ${fmtTime(matchScanAt)}`)
+      :lcopy('Last scan: —','Posledný scan: —','Poslední sken: —');
     const heartbeat=state.liveRadarHeartbeat||state.userLiveRadarStatus||{};
     const raw=heartbeat?.scanned_at||heartbeat?.updated_at||state.feed?.generated_at||'';
     const parsed=Date.parse(raw);
-    time.textContent=Number.isFinite(parsed)?`Last Update: ${fmtTime(raw)}`:'Last Update: —';
     const fresh=heartbeat?.fresh===true||(Number.isFinite(parsed)&&Date.now()-parsed<=180000);
     host.classList.toggle('is-stale',!fresh);
   }
