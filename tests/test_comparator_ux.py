@@ -153,3 +153,24 @@ def test_comparator_surface_form_is_distinct_from_overall_form():
     assert 'comparator-surface-form' in segment
     assert 'nejde o istotu predikcie' in segment
     assert '.comparator-surface-form .comparator-win-meter' in css
+
+
+def test_comparator_surface_trend_uses_only_recorded_surface_results():
+    app = Path("web/app.js").read_text(encoding="utf-8")
+    css = Path("web/blinq-app.css").read_text(encoding="utf-8")
+    runtime = Path("api/tbt/services/comparator_runtime.py").read_text(encoding="utf-8")
+    segment = app.split("function comparatorResultHtml(result){", 1)[1].split("function renderComparatorRoute()", 1)[0]
+    assert 'surface_recent_results' in segment
+    assert "rows.slice(i,i+5)" in segment
+    assert "rows.slice(-5)" in segment
+    assert "rows.length<5" in segment
+    assert "surfaceTrend(x)" in segment
+    assert "comparator-trend-line" in segment
+    assert "not equally spaced calendar time" in segment
+    assert "Pokrytie vzoriek, nie spoľahlivosť modelu" in segment
+    assert "surface_quality_samples?.serve" in segment
+    assert "break_point_save?.matches" in segment
+    assert ".comparator-trend-line" in css
+    assert ".comparator-evidence-badge.thin" in css
+    assert "for row in surface_all[-20:]" in runtime
+    assert '"played_at": row.played_at.isoformat()' in runtime

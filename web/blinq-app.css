@@ -11066,3 +11066,23 @@ body#blinqPremium.blinq-admin .admin-dashboard-slot .admin-kpi-period-toggle inp
 .comparator-surface-form .comparator-win-meter{margin:8px 0 6px}
 .comparator-surface-form .comparator-win-meter>span{background:linear-gradient(90deg,#568cdb,#7eb8f3)}
 .comparator-surface-form>small{display:block;color:#94abb7;font-size:9px;line-height:1.5}
+
+/* Comparator: historical surface trend and per-metric coverage (display only). */
+.comparator-trend{margin-top:12px;padding:11px 10px 10px;border:1px solid rgba(94,145,173,.22);border-radius:9px;background:rgba(7,25,39,.67)}
+.comparator-trend-head{display:flex;justify-content:space-between;align-items:baseline;gap:9px;color:#bdcfd9;font-size:10px;font-weight:750}
+.comparator-trend-head strong{color:#82c3fc;font-size:13px;font-variant-numeric:tabular-nums}
+.comparator-trend svg{display:block;width:100%;height:74px;margin:7px 0 3px;overflow:visible}
+.comparator-trend-grid{stroke:rgba(115,167,190,.25);stroke-width:.8;stroke-dasharray:3 4;fill:none}
+.comparator-trend-line{stroke:#7bb7fa;stroke-width:2.3;fill:none;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.comparator-trend-end{fill:#bfe8ff;stroke:#25608c;stroke-width:1.2}
+.comparator-trend-axis{display:flex;justify-content:space-between;gap:8px;color:#a5b9c5;font-size:9px;font-variant-numeric:tabular-nums}
+.comparator-trend>small{display:block;margin-top:7px;color:#8da7b7;font-size:9px;line-height:1.5}
+.comparator-trend-empty{margin-top:12px;padding:10px;border:1px dashed rgba(95,140,167,.3);border-radius:8px;color:#9cb5c2;font-size:10px;line-height:1.5}
+.comparator-evidence-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:13px}
+.comparator-evidence-badge{font-size:9px;padding:5px 7px;border:1px solid rgba(105,151,165,.34);border-radius:6px;color:#c6d9e1;background:rgba(10,40,50,.65);font-variant-numeric:tabular-nums}
+.comparator-evidence-badge b{font-weight:850}
+.comparator-evidence-badge.strong{border-color:rgba(65,188,141,.35);color:#a4e2c8}
+.comparator-evidence-badge.partial{border-color:rgba(184,161,99,.42);color:#e1d1a6}
+.comparator-evidence-badge.thin{border-color:rgba(179,122,120,.4);color:#d6aaa8}
+.comparator-form-card .comparator-evidence-caption{display:block;margin-top:7px;font-size:9px;color:#879eae}
+@media(max-width:650px){.comparator-trend svg{height:68px}.comparator-evidence-badge{font-size:9px}}
