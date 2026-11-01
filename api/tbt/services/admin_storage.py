@@ -1539,7 +1539,16 @@ def validate_ui_config(payload: object) -> dict:
     return payload
 
 
-def save_runtime_ui_config(payload: object, *, actor_id: str = "") -> dict:
+def ui_config_revision(config: object) -> str:
+    """Stable public-config fingerprint for optimistic Admin publishing."""
+    if not isinstance(config, dict):
+        return ""
+    canonical = json.dumps(config, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def save_runtime_ui_config(payload: object, *, actor_id: str = "",
+                           expected_revision: str | None = None) -> dict:
     """Save published UI only after a durable snapshot of the previous version.
 
     Release JSON and source-code ZIPs cannot restore Azure-published banner
@@ -1566,6 +1575,17 @@ def save_runtime_ui_config(payload: object, *, actor_id: str = "") -> dict:
             if not _storage_not_found(exc):
                 raise
             previous = None
+        if expected_revision is not None:
+            # The GET response contains the effective published configuration,
+            # not merely the raw row. Compare exactly that representation.
+            actual = resolve_ui_access_config(
+                _decode_runtime_ui_payload(previous.get("payload")) if previous else None
+            )
+            if ui_config_revision(actual) != expected_revision:
+                raise ValueError("UI configuration changed; reload before publishing")
+            etag = getattr(previous, "metadata", {}).get("etag") if previous else None
+            if previous and not etag:
+                raise ValueError("UI configuration version unavailable; refusing unsafe publish")
         if previous and _decode_runtime_ui_payload(previous.get("payload")) is not None:
             snapshot_id = "before-" + datetime.now(timezone.utc).strftime(
                 "%Y%m%dT%H%M%S%fZ"
@@ -1580,7 +1600,27 @@ def save_runtime_ui_config(payload: object, *, actor_id: str = "") -> dict:
                 "saved_at": now,
                 "saved_by": str(actor_id or "")[:256],
             })
-        client.upsert_entity(entity, mode="replace")
+        if expected_revision is not None:
+            if previous:
+                from azure.core import MatchConditions
+                try:
+                    client.update_entity(entity, mode="merge", etag=etag,
+                                         match_condition=MatchConditions.IfNotModified)
+                except Exception as exc:
+                    if getattr(exc, "status_code", None) in (409, 412):
+                        raise ValueError("UI configuration changed during publishing") from exc
+                    raise
+            else:
+                try:
+                    client.create_entity(entity)
+                except Exception as exc:
+                    if getattr(exc, "status_code", None) in (409, 412):
+                        raise ValueError("UI configuration was created in another session") from exc
+                    raise
+        else:
+            client.upsert_entity(entity, mode="replace")
+    except ValueError:
+        raise
     except Exception as exc:
         raise AdminStorageUnavailable(
             "Unable to snapshot previous UI configuration or save new configuration"
