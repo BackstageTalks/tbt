@@ -11039,3 +11039,22 @@ body#blinqPremium.blinq-admin .admin-dashboard-slot .admin-kpi-period-toggle inp
 .comparator-market-card p b{color:#f0f9f6}
 .comparator-market-card small{display:block;color:#8ba6b3;font-size:10px;line-height:1.5}
 @media(max-width:720px){.comparator-market-grid{grid-template-columns:minmax(0,1fr)}.comparator-market-card{padding:12px}}
+
+/* Comparator: one safe search suggestion per display name, no unsafe ID choice. */
+.comparator-search-results .comparator-search-primary.is-unavailable,
+.comparator-search-results .comparator-search-primary:disabled{
+  opacity:.68;cursor:not-allowed;background:rgba(55,78,93,.13);
+}
+.comparator-search-results .comparator-search-primary.is-unavailable span{
+  color:#d6b38d;font-weight:700;
+}
+.comparator-search-results .comparator-search-primary:focus-visible{
+  outline:2px solid #5cd6ab;outline-offset:-2px;
+}
+/* Actual projected counts only; each market has its own comparable scale. */
+.comparator-market-bars{display:grid;gap:7px;margin:3px 0 12px;padding:0 2px}
+.comparator-market-bar{height:7px;overflow:hidden;display:block;background:rgba(104,153,171,.15);border-radius:999px}
+.comparator-market-bar i{display:block;height:100%;border-radius:inherit;min-width:0;transition:width .2s ease}
+.comparator-market-bar-first i{background:linear-gradient(90deg,#189a77,#55e2ad)}
+.comparator-market-bar-second i{background:linear-gradient(90deg,#397da3,#8ac9eb)}
+@media(prefers-reduced-motion:reduce){.comparator-market-bar i{transition:none}}
