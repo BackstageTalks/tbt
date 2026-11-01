@@ -1,10 +1,6 @@
 name: BlinQ Private Consolidated CDB Staging Handoff
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/blinq-cdb-private-handoff.yml
   workflow_dispatch:
 
 permissions:
