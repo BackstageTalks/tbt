@@ -1,0 +1,72 @@
+name: CLV TOP VALUE linkage audit (no provider calls)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/clv-linkage-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch only private issued feed and archived CLV snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          mkdir -p /tmp/clv-linkage-audit
+          gh release download tbt-predictions-v1 --repo BackstageTalks/tbt-data \
+            --pattern feed.json --pattern daily_offer_snapshot.json \
+            --dir /tmp/clv-linkage-audit --clobber
+          gh api '/repos/BackstageTalks/tbt-data/contents/research/propline_clv/2026-11-01/144951-41318097547-calls-25.json.gz' \
+            --jq .content | base64 -d | gzip -d > /tmp/clv-linkage-audit/clv.json
+      - name: Diagnose strict TOP/VALUE identities before any write
+        shell: bash
+        env:
+          PYTHONPATH: api
+        run: |
+          python - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from tbt.services.clv_market_history import _offer_rows, extract_verified_quotes, _pair, _time
+          from tbt.services.feed import visible_feed
+          base='/tmp/clv-linkage-audit/'
+          src=json.load(open(base+'feed.json'))
+          offered=json.load(open(base+'daily_offer_snapshot.json'))
+          clv=json.load(open(base+'clv.json'))
+          print('SOURCE_FEED_KEYS', sorted(src.keys())[:60])
+          print('SOURCE_FEED_COUNTS', {key:len(src.get(key) or []) if isinstance(src.get(key),list) else None
+            for key in ('daily_picks','top_daily_picks','value_picks','prime_picks','results')})
+          print('SNAPSHOT_COUNTS', {key:len(offered.get(key) or []) if isinstance(offered.get(key),list) else None
+            for key in ('daily_picks','top_daily_picks','value_picks','prime_picks')})
+          public=visible_feed(src)
+          rows=_offer_rows(public)
+          quote, rejected=extract_verified_quotes(clv,public,now=datetime(2026,11,1,16,tzinfo=timezone.utc))
+          print('EXTRACT', {'offer_rows':len(rows),'archived_events':len(clv.get('events') or []),
+             'accepted_quotes':len(quote),'rejected':rejected})
+          for key in ('top_daily_picks','value_picks'):
+            examples=[]
+            for row in (src.get(key) or [])[:5]:
+              if not isinstance(row,dict):continue
+              p1=row.get('player1');p2=row.get('player2')
+              examples.append({'event':row.get('event_id'),
+                'p1': p1.get('name') if isinstance(p1,dict) else str(p1)[:50],
+                'p2': p2.get('name') if isinstance(p2,dict) else str(p2)[:50],
+                'scheduled_at':row.get('scheduled_at'), 'keys':sorted(row)[:18]})
+            print('FEED_EXAMPLES',key,examples)
+          for ev in (clv.get('events') or [])[:7]:
+            pair=_pair(ev.get('home_team'), ev.get('away_team'))
+            matches=[(eid,round(abs((k-_time(ev.get('commence_time'))).total_seconds())/3600,2))
+                for (eid,p),(k,_,_) in rows.items() if p==pair]
+            print('ARCHIVE_MATCH',ev.get('event_id'),ev.get('home_team'),ev.get('away_team'),
+                  ev.get('commence_time'),'matching_pair_start_delta',matches[:6])
+          PY
