@@ -14,7 +14,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const app = fs.readFileSync('web/app.js', 'utf8');
-const start = app.indexOf('  function stableAceDisplayOdds(');
+const start = app.indexOf('  function aceDfResultKpiOdds(');
 const end = app.indexOf('  function dailyHubRow(', start);
 assert(start > 0 && end > start, 'ACES pricing helper must be available');
 const sandbox = {
@@ -23,7 +23,8 @@ const sandbox = {
   firstFinite: value => value == null ? NaN : Number(value),
   hubNumberHtml: (value, label) => value + ' ' + label,
   lcopy: (_en, sk) => sk,
-  escapeHtml: value => value
+  escapeHtml: value => value,
+  aceDfLegacyResultDisplayOdds: () => NaN
 };
 vm.createContext(sandbox);
 vm.runInContext(app.slice(start, end), sandbox);
@@ -35,13 +36,26 @@ const row = {
 };
 const original = JSON.stringify(row);
 const value = sandbox.stableAceDisplayOdds(row);
+sandbox.normalizeFeedAceOdds({ace_picks:[row],results:[]});
+assert.equal(row.statistical_ace_odds, value);
 assert(Number.isInteger(Math.round(value * 100)));
 assert(value >= 1.60 && value <= 1.80, 'ACES display range');
 assert.equal(value, sandbox.stableAceDisplayOdds({...row}));
 assert.equal(sandbox.stableAceDisplayOdds({...row, market: 'games'}).toString(), 'NaN');
 assert.equal(row.odds, 2.00, 'underlying provider quote unchanged');
-assert.equal(JSON.stringify(row), original, 'input is not mutated');
+assert.equal(row.odds, JSON.parse(original).odds, 'original provider price unchanged');
 assert(sandbox.projectionOddsHtml(row).includes(value.toFixed(2)));
+const result = {
+  event_id:'ace-1',scheduled_at:row.scheduled_at,
+  market_publications:[{
+    market:'aces',selection_id:'player-1',odds:2.0,
+    price_status:'priced_projection',result:{status:'win',profit_units:1.0}
+  }]
+};
+sandbox.normalizeFeedAceOdds({ace_picks:[],results:[result]});
+assert.equal(result.market_publications[0].statistical_ace_odds,value);
+assert.equal(sandbox.aceDfResultKpiOdds(result.market_publications[0]),value);
+assert.equal(result.market_publications[0].odds,2.0);
 assert(sandbox.projectionOddsHtml({...row, market: 'double_faults'}).includes('2.00'));
 assert(sandbox.projectionOddsHtml({...row, market: 'aces', price_status: 'projection_only'}).includes('N/A'));
 const values = new Set();
