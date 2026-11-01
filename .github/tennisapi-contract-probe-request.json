@@ -1,12 +1,12 @@
 {
   "schema": 1,
   "requested_date": "2026-11-01",
-  "reason": "Isolate first-call provider rate-limit header failure using known match-detail route",
+  "reason": "CDB-priority TennisApi PRO audit: statistics, PBP, calendar, rankings and season odds before bookmaker mapping",
   "provider_requests_allowed": true,
-  "max_requests": 5,
+  "max_requests": 24,
   "event_id": 14494928,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ technical audit",
-  "diagnostic_attempt": 2
+  "diagnostic_attempt": 3
 }
