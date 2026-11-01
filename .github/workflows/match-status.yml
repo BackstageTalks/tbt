@@ -23,6 +23,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # The weekly CDB retry gate reads scripts/moviodds_cdb_retry.py from this
+      # checkout. Without it the external clock falsely reported green.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Reconcile upcoming match times and settled outcomes
         env:
           BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
@@ -195,7 +200,7 @@ jobs:
         # Retry failure including BUSY writer after two-hour cooldown.
         # A verified successful run closes the week; no duplicate writer.
         if: always() && github.event_name == 'workflow_dispatch'
-        continue-on-error: true
+        # A failed dispatch must fail this job, not a green workflow.
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
