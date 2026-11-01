@@ -80,16 +80,29 @@ def coverage(matches) -> dict:
     }
 
 
-def run(history_dir: Path, output: Path) -> dict:
+def run(history_dir: Path, output: Path, *, expected_provider_quarantine: int = 0) -> dict:
     from _bootstrap import ROOT  # noqa: F401
     from tbt.data.history_snapshot import load_partitions
     from tbt.data.history_safety import sanitize_history_identities
+    from recover_cdb_opponent_service_rates import verified_provider_collision_quarantine
     if output.exists():
         raise ValueError("Output report already exists")
-    matches, safety = sanitize_history_identities(load_partitions(history_dir))
-    if safety.get("quarantined_rows") or safety.get("merged_rows_removed"):
-        raise ValueError("Canonical identity safety correction required; fail closed")
+    original = load_partitions(history_dir)
+    matches, safety = sanitize_history_identities(original)
+    isolated = int(safety.get("quarantined_rows") or 0)
+    if isolated or safety.get("changed"):
+        if not verified_provider_collision_quarantine(safety, expected_provider_quarantine):
+            raise ValueError("Canonical identity quarantine differs from pinned provider collision; fail closed")
+    elif expected_provider_quarantine:
+        raise ValueError("Expected provider-ID quarantine disappeared; repeat full identity audit")
+    if len(original) != len(matches) + isolated:
+        raise ValueError("CDB raw/safe row conservation failed")
     report = coverage(matches)
+    report["canonical_raw_rows"] = len(original)
+    report["excluded_ambiguous_provider_rows"] = isolated
+    report["identity_policy"] = "read_only_exact_provider_collision_quarantine"
+    if report["canonical_rows"] + isolated != report["canonical_raw_rows"]:
+        raise ValueError("CDB aggregate report row conservation failed")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
                       encoding="utf-8")
@@ -100,9 +113,14 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--history-dir", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--expected-provider-quarantine", type=int, default=0,
+                   help="Exact known 2026 provider-ID collision rows to exclude in this read-only census")
     args = p.parse_args()
-    result = run(args.history_dir, args.output)
+    result = run(args.history_dir, args.output,
+                 expected_provider_quarantine=args.expected_provider_quarantine)
     print(json.dumps({"state": result["state"], "canonical_rows": result["canonical_rows"],
+                      "canonical_raw_rows": result["canonical_raw_rows"],
+                      "excluded_ambiguous_provider_rows": result["excluded_ambiguous_provider_rows"],
                       "year_tour_groups": len(result["year_tour"]),
                       "production_mutated": False, "api_requests": 0}, sort_keys=True))
 
