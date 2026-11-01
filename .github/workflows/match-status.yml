@@ -1,6 +1,8 @@
 name: Prediction fixture schedule and match status
 
 on:
+  schedule:
+    - cron: '0,30 * * * *'
   workflow_dispatch:
   push:
     branches: [main]
@@ -19,6 +21,7 @@ jobs:
     # main push provides a safe one-shot catch-up without bypassing budget guards.
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
       (github.event_name == 'push' && contains(github.event.head_commit.message, '[match-status-now]'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -67,7 +70,7 @@ jobs:
         # Reuse the existing externally scheduled 30-minute match-status clock.
         # Result evaluation is read-only; no second provider/API budget.
         # Only dispatch after a successful match-status worker read-back.
-        if: success() && github.event_name == 'workflow_dispatch'
+        if: success() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -129,7 +132,7 @@ jobs:
       - name: Dispatch prospective frozen 7.2.1 settlement every two UTC hours
         # Reuse the existing external match-status clock. No paid provider
         # requests or duplicate CDB writers; settlement uses the same lock.
-        if: always() && github.event_name == 'workflow_dispatch'
+        if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -173,7 +176,7 @@ jobs:
       - name: Dispatch CDB Drive Inbox at UTC 02 and 14 from active external clock
         # Reuse the verified 30-minute external Match Status scheduler.
         # No internal GitHub cron, sports API calls or canonical CDB writes here.
-        if: always() && github.event_name == 'workflow_dispatch'
+        if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -235,7 +238,7 @@ jobs:
       - name: Dispatch read-only production UI revision watchdog
         # Reuse the governed external 30-minute clock, even when match-status
         # reconciliation fails. Never consume tennis API quota or write to CDB.
-        if: always() && github.event_name == 'workflow_dispatch'
+        if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -249,7 +252,7 @@ jobs:
         # strictly read-only and NEVER acquires the global CDB writer lock.
         # Source is the protected Azure DB final archive; Drive upload
         # availability does not block CDB-ready candidate preparation.
-        if: always() && github.event_name == 'workflow_dispatch'
+        if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -276,7 +279,7 @@ jobs:
         # Existing externally driven half-hour clock; CDB imports remain manual.
         # Automatically attempts once at UTC 04:00. Missing folder Editor
         # permission fails only this archive job, never the match-status job.
-        if: always() && github.event_name == 'workflow_dispatch'
+        if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
