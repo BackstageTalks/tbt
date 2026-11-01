@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
-      DRY_RUN: "true"
+      DRY_RUN: "false"
       CUTOFF_UTC: "2026-10-02T00:00:00Z"
     steps:
       - name: Inventory only two retired no-op PR check types
