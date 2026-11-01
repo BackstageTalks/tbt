@@ -191,3 +191,39 @@ def test_history_monthly_category_prefetch_preserves_original_daily_work():
     assert progress["completed_days"] == [
         "2026-11-01", "2026-11-02", "2026-11-03",
         "2026-11-04", "2026-11-05"]
+
+
+def test_history_monthly_prefetch_propagates_shared_budget_stop():
+    class Provider:
+        request_count = 0
+        calendar_batch_metrics = {"invalid_responses": 0}
+        def prefetch_calendar_categories(self, days):
+            raise RequestBudgetExceeded("shared reserve exhausted")
+        def matches_for_day(self, tour, day, historical):
+            raise AssertionError("daily work must not run after global quota stop")
+    progress = {"completed_days": []}
+    with pytest.raises(RequestBudgetExceeded, match="shared reserve exhausted"):
+        download_days(Provider(), {}, progress, date(2026, 11, 1),
+                      date(2026, 11, 2), lambda *args: None)
+    assert progress["completed_days"] == []
+
+
+def test_history_monthly_provider_error_falls_back_to_daily():
+    from tbt.errors import ProviderError
+
+    class Provider:
+        request_count = 0
+        calendar_batch_metrics = {"invalid_responses": 0}
+        calls = []
+        def prefetch_calendar_categories(self, days):
+            raise ProviderError("optional monthly calendar unavailable")
+        def matches_for_day(self, tour, day, historical):
+            self.calls.append((tour, day.isoformat(), historical))
+            return []
+    provider = Provider()
+    progress = {"completed_days": []}
+    download_days(provider, {}, progress, date(2026, 11, 1),
+                  date(2026, 11, 2), lambda *args: None)
+    assert len(provider.calls) == 4
+    assert all(row[2] is True for row in provider.calls)
+    assert progress["completed_days"] == ["2026-11-01", "2026-11-02"]
