@@ -2810,6 +2810,11 @@
     if(realApiContract&&Number.isFinite(realApiOdds)&&realApiOdds>1)return NaN;
     const market=String(row?.market||row?.projection_metric||'').toLowerCase();
     if(!['aces','double_faults'].includes(market))return NaN;
+    if(market==='aces'){
+      // 1.50-1.70 is historical only: the new Aces policy starts 1 Nov.
+      const issued=Date.parse(String(row?.issued_at||row?.scheduled_at||row?.date||''));
+      if(!Number.isFinite(issued)||issued>=Date.parse('2026-11-01T05:00:00Z'))return NaN;
+    }
     const identity=[
       row?.event_id||row?.match_id||row?.id||'',
       market,
@@ -3818,7 +3823,10 @@
     if(Number.isFinite(normalized)&&normalized>=1.60&&normalized<=1.80)return normalized;
     if(Number.isFinite(actual)&&actual>1)return actual;
     const synthetic=publication?.historical_display_placeholder_odds==null?NaN:Number(publication.historical_display_placeholder_odds);
-    if(publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
+    const legacyAces=String(publication?.market||'').toLowerCase()==='aces';
+    const issued=Date.parse(String(publication?.issued_at||publication?.scheduled_at||publication?.date||''));
+    const historicalEligible=!legacyAces||(Number.isFinite(issued)&&issued<Date.parse('2026-11-01T05:00:00Z'));
+    if(historicalEligible&&publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
       &&Number.isFinite(synthetic)&&synthetic>=1.50&&synthetic<=1.70)return synthetic;
     return projectionIndicativeOdds(publication);
   }
@@ -4084,7 +4092,10 @@
         // mistake the unrelated 1.50–1.70 filler for model EV or bookmaker odds.
         const placeholderRaw=publication?.historical_display_placeholder_odds;
         const placeholderOdds=placeholderRaw==null?NaN:Number(placeholderRaw);
-        const illustrativeOnly=publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
+        const legacyAces=String(publication?.market||'').toLowerCase()==='aces';
+        const issued=Date.parse(String(publication?.issued_at||r?.scheduled_at||r?.date||''));
+        const historicalEligible=!legacyAces||(Number.isFinite(issued)&&issued<Date.parse('2026-11-01T05:00:00Z'));
+        const illustrativeOnly=historicalEligible&&publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
           &&Number.isFinite(placeholderOdds)&&placeholderOdds>=1.50&&placeholderOdds<=1.70;
         const normalizedAceOdds=String(publication?.market||'').toLowerCase()==='aces'
           ?aceDfResultKpiOdds(publication):NaN;
