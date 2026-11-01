@@ -11086,3 +11086,7 @@ body#blinqPremium.blinq-admin .admin-dashboard-slot .admin-kpi-period-toggle inp
 .comparator-evidence-badge.thin{border-color:rgba(179,122,120,.4);color:#d6aaa8}
 .comparator-form-card .comparator-evidence-caption{display:block;margin-top:7px;font-size:9px;color:#879eae}
 @media(max-width:650px){.comparator-trend svg{height:68px}.comparator-evidence-badge{font-size:9px}}
+
+/* Explicit disabled state for the champion refresh (primary theme uses !important). */
+body#blinqPremium.blinq-admin .admin-model-input-refresh .btn:disabled{opacity:.42!important;filter:grayscale(.55);box-shadow:none!important;cursor:not-allowed!important}
+.admin-model-input-refresh .admin-model-refresh-status{margin:8px 0 0;font-size:12px;line-height:1.45;color:#a8beca}
