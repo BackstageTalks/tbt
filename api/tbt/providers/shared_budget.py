@@ -189,7 +189,7 @@ def _conflict(exc: Exception) -> bool:
 
 
 def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
-            table: Any = None) -> dict:
+            table: Any = None, paced: bool | None = None, pace_table: Any = None) -> dict:
     """Atomic reservation in the same durable store used by BlinQ admin.
 
     Table may be injected in tests. Retries only on optimistic write races,
@@ -203,6 +203,17 @@ def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
             table = _table(TABLE)
         except Exception as exc:
             raise SharedBudgetUnavailable("API budget storage unavailable") from exc
+    # Reserve a global time slot before the independent provider-day quota.
+    # A failed daily budget may waste a time slot but cannot spend quota on a
+    # request that never happens. Both operations fail closed on store errors.
+    pace_proof = None
+    if paced is None:
+        # Runtime direct storage reservations must not silently bypass the
+        # distributed limiter. Injected synthetic tables keep old test rules.
+        paced = table is None and bool(os.getenv("FUNCTIONS_WORKER_RUNTIME", "").strip())
+    if paced:
+        from .shared_rate import reserve_pace
+        pace_proof = reserve_pace(table=pace_table)
     for attempt in range(MAX_RETRIES):
         try:
             entity = table.get_entity(partition_key=PARTITION, row_key=ROW)
@@ -246,6 +257,9 @@ def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
                             )
             except Exception:
                 pass
+            if pace_proof is not None:
+                result["rate_pace"] = {"schema": pace_proof["pace_schema"],
+                                       "max_rps": pace_proof["max_rps"]}
             return result
         except SharedBudgetExhausted:
             raise
@@ -300,13 +314,30 @@ class HttpReservation:
 
     def __call__(self, client=None, cfg=None, *, enrichment=False) -> None:
         try:
-            response = self._http.post(
-                self.endpoint,
-                headers={"X-Blinq-Worker-Token": self.token},
-                json={"purpose": self.purpose, "requests": 1},
-            )
-            if response.status_code == 429:
-                raise SharedBudgetExhausted("Shared Tennis API budget exhausted")
+            # A distributed pace denial must never count as a paid attempt.
+            # Wait only for the server-provided short slot and re-reserve.
+            for pace_retry in range(24):
+                response = self._http.post(
+                    self.endpoint,
+                    headers={"X-Blinq-Worker-Token": self.token},
+                    json={"purpose": self.purpose, "requests": 1},
+                )
+                if response.status_code == 429:
+                    try:
+                        is_pace = response.json().get("error") == "api_rate_busy"
+                    except (ValueError, AttributeError):
+                        is_pace = False
+                    if is_pace:
+                        if pace_retry == 23:
+                            raise SharedBudgetUnavailable("Shared API pace queue exhausted")
+                        try:
+                            delay = float(response.headers.get("Retry-After", "0.18"))
+                        except (TypeError, ValueError):
+                            delay = 0.18
+                        time.sleep(max(0.02, min(delay, 0.5)))
+                        continue
+                    raise SharedBudgetExhausted("Shared Tennis API budget exhausted")
+                break
             if response.status_code != 200:
                 raise SharedBudgetUnavailable("Shared API budget verification failed")
             payload = response.json()
@@ -323,7 +354,10 @@ class HttpReservation:
                     or not 1 <= budget["global_spent"] <= GLOBAL_CEILING
                     or type(budget.get("global_remaining")) is not int
                     or budget["global_remaining"] != GLOBAL_CEILING - budget["global_spent"]
-                    or budget.get("schema") != 2):
+                    or budget.get("schema") != 2
+                    or (os.getenv("BLINQ_SHARED_RPS_REQUIRED", "").strip().lower()
+                        in {"1", "true", "yes", "on"}
+                        and budget.get("rate_pace") != {"schema": 1, "max_rps": 6})):
                 # A stale Azure runtime may still use an older, looser limit.
                 # Fail closed rather than trusting only a successful HTTP status.
                 raise SharedBudgetUnavailable("Shared API budget contract mismatch")
