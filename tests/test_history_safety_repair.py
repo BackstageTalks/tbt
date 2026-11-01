@@ -87,3 +87,58 @@ def test_quarantine_budget_is_bounded():
 
     assert quarantine_budget(10) == 20
     assert quarantine_budget(500_000) == 500
+
+
+def test_scoped_history_identity_isolation_preserves_outside_year():
+    from datetime import date
+    from tbt.data.history_safety import guard_scoped_history_identity_repair
+
+    result = guard_scoped_history_identity_repair(
+        [2026], start=date(2016, 7, 9), end=date(2016, 7, 10))
+    assert result["scope_years"] == [2016]
+    assert result["preserved_out_of_scope_years"] == [2026]
+    assert result["existing_rows_deleted"] == 0
+    assert result["canonical_conflict_year_writes"] == 0
+    assert result["identity_collisions_resolved"] is False
+
+
+def test_scoped_history_identity_isolation_refuses_in_scope_collision():
+    from datetime import date
+    import pytest
+    from tbt.data.history_safety import guard_scoped_history_identity_repair
+
+    with pytest.raises(ValueError, match="CDB_HISTORY_SCOPE_IDENTITY_CONFLICT years=2026"):
+        guard_scoped_history_identity_repair(
+            [2026], start=date(2026, 10, 25), end=date(2026, 10, 26))
+    with pytest.raises(ValueError, match="Invalid scoped"):
+        guard_scoped_history_identity_repair(
+            [2026], start=date(2016, 7, 10), end=date(2016, 7, 9))
+
+
+def test_scoped_history_preserves_all_canonical_rows_in_disjoint_year(match_factory):
+    from datetime import date
+    from tbt.data.history_safety import (
+        guard_scoped_history_identity_repair, sanitize_history_identities)
+    from datetime import datetime, timezone
+
+    first = replace(
+        match_factory("bakersfield-a", "A", "B", "A", tour="wta"),
+        scheduled_at=datetime(2026, 10, 23, 18, 55, tzinfo=timezone.utc),
+        provider_payload={"_tbt_provider_event_id": "itf-collision"},
+    )
+    other = replace(
+        match_factory("bakersfield-b", "C", "D", "C", tour="wta"),
+        scheduled_at=first.scheduled_at,
+        provider_payload={"_tbt_provider_event_id": "itf-collision"},
+    )
+    old = match_factory("2016-safe", "X", "Y", "X", tour="wta")
+    old = replace(old, scheduled_at=datetime(2016, 7, 9, tzinfo=timezone.utc))
+    original = [old, first, other]
+    clean, safety = sanitize_history_identities(original)
+    assert len(original) == 3
+    assert [m.match_id for m in clean] == ["2016-safe"]
+    assert safety["quarantined_rows"] == 2
+    disposition = guard_scoped_history_identity_repair(
+        safety["affected_years"], start=date(2016, 7, 9), end=date(2016, 7, 10))
+    assert disposition["preserved_out_of_scope_years"] == [2026]
+    assert len(original) == 3  # publication must retain original remote 2026
