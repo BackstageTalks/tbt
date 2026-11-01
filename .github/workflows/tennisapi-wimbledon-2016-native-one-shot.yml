@@ -114,5 +114,6 @@ jobs:
             -f start=2016-07-09 \
             -f end=2016-07-10 \
             -f max_requests=40 \
+            -f recheck_completed_history_days=true \
             -f promote=false
           echo 'EXISTING_GUARDED_DATA_YML_HISTORY_DISPATCHED_NOT_CDB_VERIFIED'
