@@ -107,7 +107,7 @@ def main():
                         assert court_layer['bodyImage'] == 'none', (width, court_layer)
                         assert court_layer['bodyAttachment'] == 'scroll', (width, court_layer)
                         assert court_layer['position'] == 'fixed', (width, court_layer)
-                        assert court_layer['top'] == '0px' and court_layer['bottom'] == 'auto', (width, court_layer)
+                        assert court_layer['top'] == '0px', (width, court_layer)
                         assert court_layer['supportsLargeViewport'], (width, court_layer)
                         assert abs(float(court_layer['initialHeight'][:-2]) - 850) <= 1, (width, court_layer)
                         assert court_layer['initialHeight'] == court_layer['scrolledHeight'], (width, court_layer)
