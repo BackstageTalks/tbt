@@ -42,6 +42,7 @@ def safe_float(value: Any) -> float | None:
 
 
 RATE_STAT_SUFFIXES = frozenset({
+    "first_serve_in",
     "first_serve_win",
     "second_serve_win",
     "service_points_won",

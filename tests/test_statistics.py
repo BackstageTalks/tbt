@@ -248,7 +248,8 @@ def test_real_tennisapi_rates_are_weighted_and_serve_placement_is_not_quality():
     assert stats["p1_return_points_won"] == 31 / 67
     assert stats["p2_return_points_won"] == 25 / 64
     assert stats["p1_aces"] == 5 and stats["p2_double_faults"] == 3
-    assert "p1_first_serve_in" not in stats
+    assert stats["p1_first_serve_in"] == 45 / 64
+    assert stats["p2_first_serve_in"] == 42 / 67
     assert FeatureBuilder._extract_quality(stats, "p1") == (39 / 64, 31 / 67)
 
 
@@ -267,8 +268,12 @@ def test_first_serve_placement_alone_never_becomes_serve_quality():
         {"key": "secondServeAccuracy", "homeValue": 15, "homeTotal": 19,
          "awayValue": 22, "awayTotal": 25},
     ]}]}]}
-    with pytest.raises(ProviderError):
-        parse_statistics(raw, home_is_player1=True)
+    stats = parse_statistics(raw, home_is_player1=True)
+    assert stats["p1_first_serve_in"] == 45 / 64
+    assert stats["p2_first_serve_in"] == 42 / 67
+    assert "p1_first_serve_win" not in stats
+    assert "p1_service_points_won" not in stats
+    assert "p1_return_points_won" not in stats
 
 
 def test_schema_two_count_only_marker_is_retried_for_quality_rates(match_factory, tmp_path):
@@ -423,3 +428,27 @@ def test_direct_return_rate_cannot_be_silently_overwritten_by_split_rates():
     ]}]}]}
     with pytest.raises(ProviderError, match="Conflicting whole-match statistic: p1_return_points_won"):
         parse_statistics(raw, home_is_player1=True)
+
+
+def test_direct_service_rate_cannot_be_silently_disagreed_with_by_split_rates():
+    raw = {"statistics": [{"period": "ALL", "groups": [{"statisticsItems": [
+        {"key": "servicePointsWon", "homeValue": 20, "homeTotal": 50},
+        {"key": "firstServePointsAccuracy", "homeValue": 12, "homeTotal": 25},
+        {"key": "secondServePointsAccuracy", "homeValue": 13, "homeTotal": 25},
+    ]}]}]}
+    with pytest.raises(ProviderError, match="Conflicting whole-match statistic: p1_service_points_won"):
+        parse_statistics(raw, home_is_player1=True)
+
+
+def test_first_serve_placement_is_a_bounded_standalone_cdb_rate():
+    from tbt.data.history_snapshot import _validate_stats
+    assert _validate_stats({"p1_first_serve_in": 0.75})["p1_first_serve_in"] == .75
+    with pytest.raises(ValueError, match="Rate statistic out of range"):
+        _validate_stats({"p1_first_serve_in": 75.0})
+
+
+def test_first_serve_accuracy_is_never_counted_as_first_serve_points_won():
+    raw = {"statistics": [{"period": "ALL", "groups": [{"statisticsItems": [
+        {"key": "firstServeAccuracy", "homeValue": 12, "homeTotal": 20}
+    ]}]}]}
+    assert parse_statistics(raw, home_is_player1=True) == {"p1_first_serve_in": .6}

@@ -75,6 +75,7 @@ RATE_ALIASES = {
     "breakpointssaved": "break_point_serve_win",
     # TennisApi names verified in provider-probe 2026-09-23. Serve placement
     # (firstServeAccuracy) is NOT the same as points won on first serve.
+    "firstserveaccuracy": "first_serve_in",
     "firstservepointsaccuracy": "first_serve_win",
     "secondservepointsaccuracy": "second_serve_win",
     "firstreturnpoints": "first_return_win",
@@ -219,7 +220,10 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
         first, second = (rate_counts.get(f"{prefix}_{kind}_serve_win") for kind in ("first", "second"))
         if first is not None and second is not None and first[1] + second[1] > 0:
             service = (first[0] + second[0]) / (first[1] + second[1])
-            values.setdefault(f"{prefix}_service_points_won", service)
+            service_field = f"{prefix}_service_points_won"
+            if service_field in values and abs(values[service_field] - service) > 1e-6:
+                raise ProviderError(f"Conflicting whole-match statistic: {service_field}")
+            values.setdefault(service_field, service)
             values.setdefault(f"{opponent}_return_points_won", 1 - service)
 
     # A verified opponent's whole-match return rate also tells us the fraction
