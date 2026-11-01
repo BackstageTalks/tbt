@@ -8,7 +8,7 @@ from browser_runtime_r43 import WEB, ORIGIN, static_route, browser_path
 def route_request(route):
     if urlparse(route.request.url).path == '/app.js':
         source=(WEB/'app.js').read_text(encoding='utf-8')
-        source=source.replace('  boot();','  window.mobileTest={state,dailyHubRow,renderProjectGroupBar,renderInsightBell};\n  boot();')
+        source=source.replace('  boot();','  window.mobileTest={state,dailyHubRow,renderProjectGroupBar,renderInsightBell,applyManagedPageBackground};\n  boot();')
         route.fulfill(content_type='application/javascript',body=source)
     else:
         static_route(route)
@@ -62,6 +62,28 @@ def main():
                             assert box and box['width'] >= 43 and box['height'] >= 43, (width, control, box)
                             assert 0 <= box['x'] and box['x']+box['width'] <= width+1, (width, control, box)
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 2'), width
+                    if width <= 600:
+                        # A published mobile field changes only the phone court
+                        # layer; missing or unsafe values retain its original art.
+                        backgrounds = page.evaluate("""() => {
+                          const h=mobileTest, hero=h.state.ui.elements.HERO_BANNER_1.content;
+                          const old=hero.site_mobile_background_url;
+                          const before=getComputedStyle(document.body,'::before').backgroundImage;
+                          hero.site_mobile_background_url='/assets/blinq_page_background.webp';
+                          h.applyManagedPageBackground();
+                          const custom=getComputedStyle(document.body,'::before').backgroundImage;
+                          hero.site_mobile_background_url='javascript:alert(1)';
+                          h.applyManagedPageBackground();
+                          const unsafe=getComputedStyle(document.body,'::before').backgroundImage;
+                          if(old===undefined)delete hero.site_mobile_background_url;
+                          else hero.site_mobile_background_url=old;
+                          h.applyManagedPageBackground();
+                          return {before,custom,unsafe};
+                        }""")
+                        assert 'blinq_mobile_court.webp' in backgrounds['before'], (width, backgrounds)
+                        assert 'blinq_page_background.webp' in backgrounds['custom'], (width, backgrounds)
+                        assert 'blinq_mobile_court.webp' in backgrounds['unsafe'], (width, backgrounds)
+
                     if width <= 600:
                         # Actual Chromium-computed surfaces, including locked TG cards.
                         surfaces = page.evaluate("""() => {
