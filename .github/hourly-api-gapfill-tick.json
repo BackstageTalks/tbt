@@ -1,7 +1,8 @@
 {
   "schema": 1,
-  "local_day": "2026-10-16",
-  "local_hour": 18,
-  "requested_utc": "2026-10-16T16:47:04Z",
-  "source": "operator-request-97pct-closeout"
+  "local_day": "2026-11-01",
+  "local_hour": 17,
+  "requested_utc": "2026-11-01T16:10:00Z",
+  "source": "operator-request-90pct-before-1709utc-reset",
+  "purpose": "Queue guarded CDB API gapfill behind existing production and canonical writer jobs without cancelling any in-progress run. Recheck shared provider budget, 500 reserve, 6rps limit and global CDB lock at execution; use verified eligible missing fields only."
 }
