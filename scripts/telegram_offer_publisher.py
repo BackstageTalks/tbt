@@ -289,18 +289,22 @@ def result_reference(row,section):
             "price_basis":PRICE_BASIS if market=="aces" and odds else None,
             "projection":num(row.get("projection")) if market=="aces" else None}
 
-def _same_frozen_selection(current, frozen):
+def _same_frozen_selection(current, frozen, *, allow_aces_price_update=False):
     """No change to exact sent identity, price or O/U settlement contract."""
     for key in ("event_id","section","channel","market","selection_id",
                 "publication_key","market_line","projection_direction"):
         if str(current.get(key) or "")!=str(frozen.get(key) or ""):
             return False
+    if allow_aces_price_update and frozen.get("channel")=="aces":
+        return (current.get("price_basis")==PRICE_BASIS
+                and (num(current.get("odds")) or 0)>=1.60
+                and (num(current.get("odds")) or 0)<=1.80)
     old_price=num(frozen.get("odds"));new_price=num(current.get("odds"))
     return (old_price is None and new_price is None) or (
         old_price is not None and new_price is not None
         and abs(old_price-new_price)<0.00001)
 
-def _original_offer_only(confirmed, sent, now):
+def _original_offer_only(confirmed, sent, now, *, allow_aces_price_update=False):
     """Make a reformat of the previously issued offer, never new model picks."""
     source=select_groups(confirmed,{"sections":{k:True for k in SECTIONS},
         "free_top_pick":True,"include_started":True,"max_per_section":0},now)
@@ -313,7 +317,8 @@ def _original_offer_only(confirmed, sent, now):
         if section not in SECTIONS:
             raise RuntimeError("Unexpected original Telegram section")
         matches=[row for row in source.get(section,[])
-                 if _same_frozen_selection(result_reference(row,section),frozen)]
+                 if _same_frozen_selection(result_reference(row,section),frozen,
+                       allow_aces_price_update=allow_aces_price_update)]
         if len(matches)!=1:
             raise RuntimeError("Original issued Telegram pick no longer matches a unique confirmed snapshot row")
         identity=(section,str(frozen["event_id"]),str(frozen["selection_id"]))
@@ -410,8 +415,13 @@ def prepare(a):
     out=Path(a.output)
     sticky=old.get("free_picks") if isinstance(old.get("free_picks"),dict) else {}
     confirmed=snapshot(out/"assets")
-    if repost:confirmed=_original_offer_only(confirmed,previous,now)
+    price_correction=repost and revision=="aces-local-prices-20261101-v1"
+    if repost:confirmed=_original_offer_only(confirmed,previous,now,
+        allow_aces_price_update=price_correction)
     msg=messages(confirmed,v,now,free_event_id=sticky.get(day(now)))
+    if price_correction:
+        for item in msg:
+            item["text"]="🔄 AKTUALIZÁCIA KURZOV ESÁ | 1.11.2026 | rovnaké tipy\\n\\n"+item["text"]
     if not msg:print('{"status":"skipped","reason":"no_eligible_rows"}');return
     if repost and len(msg)!=len(previous["message_ids"]):
         raise RuntimeError("Reformatted message count does not match original receipts")
@@ -432,7 +442,8 @@ def prepare(a):
     if repost:
         original=previous["rows"]
         if len(sent_rows)!=len(original) or any(
-                not _same_frozen_selection(now_row,old_row)
+                not _same_frozen_selection(now_row,old_row,
+                    allow_aces_price_update=price_correction)
                 for now_row,old_row in zip(sent_rows,original)):
             raise RuntimeError("Preview would change previously published picks")
     save(out/"messages.json",msg)
