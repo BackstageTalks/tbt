@@ -48,6 +48,22 @@ jobs:
           python scripts/prepare_feed.py
           test -s api/data/feed.json
           python scripts/verify_presentation_feed.py api/data/feed.json --summary
+
+      # Preserve the same pinned, whitespace-only asset build as ci.yml.
+      # Never let a UI hotfix silently replace optimized production files
+      # with the larger raw Git sources.
+      - name: Set up Node for pinned frontend optimization
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Optimize and validate exact hotfix assets before upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/optimize_web_assets.py --web web --output-dir /tmp/blinq-hotfix-optimized --apply
+          node --check web/app.js
+          node tests/live_aces_price_verification.cjs web/app.js
           python scripts/stamp_web_deployment.py --web web --sha "$GITHUB_SHA"
 
       - name: Deploy current UI/API to Azure
@@ -84,3 +100,44 @@ jobs:
             sleep 8
           done
           test "$ok" = 1
+
+      - name: Read back all four production frontend hashes
+        if: ${{ vars.TBT_PRODUCTION_URL != '' }}
+        env:
+          TBT_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${TBT_PRODUCTION_URL%/}"
+          for attempt in 1 2 3 4 5 6 7 8; do
+            mkdir -p /tmp/hotfix-readback
+            fetched=1
+            for name in deployment.json app.js blinq-app.css auth.js responsive.js; do
+              curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache'                 "$base/$name?hotfix_sha=$GITHUB_SHA-$attempt"                 -o "/tmp/hotfix-readback/$name" || fetched=0
+            done
+            if [[ "$fetched" == "1" ]] && python - <<'PYREAD'
+          import hashlib, json, os
+          from pathlib import Path
+          base = Path('/tmp/hotfix-readback')
+          dep = json.loads((base / 'deployment.json').read_text(encoding='utf-8'))
+          assert dep.get('git_sha') == os.environ['GITHUB_SHA'], 'Wrong production release SHA'
+          digests = dep.get('files_sha256') or {}
+          for name in ('app.js', 'blinq-app.css', 'auth.js', 'responsive.js'):
+              actual = hashlib.sha256((base / name).read_bytes()).hexdigest()
+              assert actual == digests.get(name), f'Live {name} hash mismatch'
+          source = (base / 'app.js').read_text(encoding='utf-8')
+          css = (base / 'blinq-app.css').read_text(encoding='utf-8')
+          release = json.loads(Path('web/release.json').read_text(encoding='utf-8'))
+          visual = release['visual_revision']
+          assert f'BlinQ visual revision: {visual}' in source, 'JS visual revision missing'
+          assert f'BlinQ visual revision {visual}' in css, 'CSS visual revision missing'
+          print('Exact deployed SHA, four frontend SHA-256 hashes and both visual markers: PASS')
+          PYREAD
+            then
+              exit 0
+            fi
+            [[ "$attempt" != "8" ]] || break
+            sleep $((attempt * 2))
+          done
+          echo '::error::Production optimized frontend read-back did not converge'
+          exit 1

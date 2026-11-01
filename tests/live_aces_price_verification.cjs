@@ -6,8 +6,11 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(process.argv[2] || 'web/app.js', 'utf8');
-const start = source.indexOf('  function verifiedAceProviderOdds(');
-const end = source.indexOf('  function projectionOddsHtml(', start);
+// Whitespace-only esbuild optimization removes source indentation. Find the
+// named function boundaries without coupling this production check to spacing.
+const start = source.search(/\bfunction\s+verifiedAceProviderOdds\s*\(/);
+const endRelative = start < 0 ? -1 : source.slice(start).search(/\bfunction\s+projectionOddsHtml\s*\(/);
+const end = endRelative < 0 ? -1 : start + endRelative;
 assert(start >= 0 && end > start, 'Missing ACES price normalization from served app.js');
 const sandbox = {};
 vm.createContext(sandbox);
