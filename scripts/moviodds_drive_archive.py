@@ -4,7 +4,8 @@
 Read-only from BlinQ's independently read-backed Azure Table export endpoint.
 Never writes CDB. Immutable SHA-addressed JSON archives: same bytes -> skip,
 changed results -> new revision; every uploaded byte is independently reread.
-Requires a folder-scoped writer credential (BLINQ_DRIVE_WRITER_JSON).
+Keeps provider payloads and verified source digests alongside CDB-linkable,
+NOT import-ready normalized rows. Drive writer credentials are environment-bound.
 """
 from __future__ import annotations
 
@@ -14,6 +15,8 @@ import json
 import os
 from datetime import date, datetime, timezone
 from pathlib import Path
+
+from moviodds_cdb_format import format_cdb_archive, verify_cdb_archive
 
 DEFAULT_FOLDER = "13kDDxOaQ0L1Jr5ZjbSNjbDFJiNSz9uwx"
 MAX_DOWNLOAD_BYTES = 12 * 1024 * 1024
@@ -138,6 +141,7 @@ def upload_archive(session, *, date_utc: str, folder_id: str, export: dict) -> d
     date.fromisoformat(date_utc)
     if not folder_id or not isinstance(export, dict) or export.get("days") != [date_utc]:
         raise ValueError("Archive target/export mismatch")
+    verify_cdb_archive(export)
     # Keep empty day exports as reports too, because their absence differs from
     # a successful verified zero-result collection.
     body = _json_bytes(export)
@@ -204,12 +208,14 @@ def main() -> None:
     requested = date.fromisoformat(a.date)
     if requested > now or (now - requested).days > 7:
         ap.error("Only recent finished dates may be archived")
-    export = fetch_daily_final(
+    source_export = fetch_daily_final(
         date_utc=a.date,
         base_url=os.getenv("BLINQ_PUBLIC_BASE_URL",
                            "https://agreeable-sky-011a7fe10.7.azurestaticapps.net"),
         token=os.environ.get("BLINQ_LIVE_WORKER_TOKEN", ""),
     )
+    export = format_cdb_archive(source_export)
+    verify_cdb_archive(export)
     a.out_dir.mkdir(parents=True, exist_ok=True)
     local_bytes = _json_bytes(export)
     filename = f"moviodds-tennis-final-{a.date}-{_sha(local_bytes)[:16]}.json"
