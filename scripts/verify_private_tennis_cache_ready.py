@@ -10,12 +10,18 @@ import json
 import os
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
-from urllib.request import Request, urlopen
+from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError, URLError
 
 
 class CacheCapabilityError(RuntimeError):
     pass
+
+
+class DenyWorkerTokenRedirect(HTTPRedirectHandler):
+    """Never forward the internal worker token to a redirected host."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 def cache_endpoint(budget_url, explicit=""):
@@ -31,7 +37,9 @@ def cache_endpoint(budget_url, explicit=""):
     return target
 
 
-def verify_cache_service(endpoint, token, *, explicit=False, opener=urlopen):
+def verify_cache_service(endpoint, token, *, explicit=False, opener=None):
+    if opener is None:
+        opener = build_opener(DenyWorkerTokenRedirect()).open
     if not token:
         raise CacheCapabilityError("Missing internal worker credential")
     req = Request(endpoint + "?key=" + "0" * 64 + "&max_age=0",
