@@ -2,8 +2,24 @@
   "schema": 2,
   "telegram_bot": {
     "enabled": false,
-    "sections": {"top": true, "value": true, "aces": true},
-    "schedule": {"enabled": false, "time": "08:15", "weekdays": [0, 1, 2, 3, 4, 5, 6]},
+    "sections": {
+      "top": true,
+      "value": true,
+      "aces": true
+    },
+    "schedule": {
+      "enabled": false,
+      "time": "08:15",
+      "weekdays": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
     "layout": "combined",
     "max_per_section": 0,
     "include_started": false,
@@ -876,54 +892,6 @@
         "opacity": 0.42,
         "size": 1
       }
-    },
-    "SIDEBAR_TOP200": {
-      "label": "TOP200",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 2,
-      "content": {
-        "label": "TOP200",
-        "route": "top200",
-        "icon": "200"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "active",
-        "elite": "active",
-        "legend": "active",
-        "goat": "active"
-      }
-    },
-    "TOP200_PANEL": {
-      "label": "TOP200 panel",
-      "zone": "predictions",
-      "kind": "panel",
-      "order": 55,
-      "content": {
-        "label": "TOP200 panel"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "active",
-        "expired": "locked",
-        "rookie": "active",
-        "pro": "active",
-        "elite": "active",
-        "legend": "active",
-        "goat": "active"
-      }
     }
   },
   "admin": {
@@ -1097,7 +1065,6 @@
     "match_winner_assignment": {
       "exclusive": true,
       "priority": [
-        "top200",
         "value",
         "top_daily",
         "prime"
@@ -1110,26 +1077,6 @@
       "enabled": false,
       "presentation_preview_limit": 10,
       "note": "Separate doubles model; singles predictions are never reused."
-    },
-    "top200": {
-      "label": "TOP200",
-      "internal_key": "top200",
-      "markets": [
-        "match_winner"
-      ],
-      "requires_odds": true,
-      "objective": "rank_first_quality_guarded",
-      "max_player_rank": 200,
-      "rank_rule": "at_least_one_player_point_in_time_rank_1_to_200",
-      "min_probability": 0.65,
-      "min_data_depth": 0.8,
-      "min_surface_matches": 5,
-      "min_odds": null,
-      "max_odds": null,
-      "limit": 5,
-      "force_fill": false,
-      "sort": "probability_desc_then_data_depth_then_surface_sample_then_overall_sample",
-      "presentation_preview_limit": 5
     }
   },
   "assets": {
@@ -1557,64 +1504,10 @@
             "order": 8
           }
         }
-      },
-      "top200": {
-        "label": "TOP200",
-        "panel_id": "top200Panel",
-        "sidebar_element": "SIDEBAR_TOP200",
-        "sidebar_enabled": true,
-        "dashboard_enabled": true,
-        "dashboard_order": 1,
-        "preview_limit": 5,
-        "plans": {
-          "trial": {
-            "visible_picks": 2,
-            "blur_remaining": true,
-            "see_all": false,
-            "order": 1
-          },
-          "expired": {
-            "visible_picks": 0,
-            "blur_remaining": true,
-            "see_all": false,
-            "order": 1
-          },
-          "rookie": {
-            "visible_picks": 2,
-            "blur_remaining": true,
-            "see_all": false,
-            "order": 1
-          },
-          "pro": {
-            "visible_picks": 3,
-            "blur_remaining": true,
-            "see_all": false,
-            "order": 1
-          },
-          "elite": {
-            "visible_picks": "ALL",
-            "blur_remaining": false,
-            "see_all": true,
-            "order": 1
-          },
-          "legend": {
-            "visible_picks": "ALL",
-            "blur_remaining": false,
-            "see_all": true,
-            "order": 1
-          },
-          "goat": {
-            "visible_picks": "ALL",
-            "blur_remaining": false,
-            "see_all": true,
-            "order": 1
-          }
-        }
       }
     },
     "show_live_chip": false,
     "section_order": [
-      "top200",
       "prime",
       "top_daily",
       "ace",
@@ -1632,7 +1525,7 @@
     "detail_pick_limit": 5,
     "daily_hub": {
       "enabled": true,
-      "default_tab": "top200",
+      "default_tab": "daily",
       "tab_order": [
         "daily",
         "prime",
@@ -2413,75 +2306,6 @@
               "row_overrides": {}
             }
           }
-        },
-        "top200": {
-          "label": "TOP200",
-          "enabled": true,
-          "plans": {
-            "trial": {
-              "visible_rows": 2,
-              "blur_remaining": true,
-              "tab_enabled": true,
-              "see_all": false,
-              "selection_mode": "stable_random",
-              "display_state": "active",
-              "row_overrides": {}
-            },
-            "expired": {
-              "visible_rows": 0,
-              "blur_remaining": true,
-              "tab_enabled": true,
-              "see_all": false,
-              "selection_mode": "first",
-              "display_state": "active",
-              "row_overrides": {}
-            },
-            "rookie": {
-              "visible_rows": 1,
-              "blur_remaining": true,
-              "tab_enabled": true,
-              "see_all": false,
-              "selection_mode": "stable_random",
-              "display_state": "active",
-              "row_overrides": {}
-            },
-            "pro": {
-              "visible_rows": 3,
-              "blur_remaining": true,
-              "tab_enabled": true,
-              "see_all": false,
-              "selection_mode": "first",
-              "display_state": "active",
-              "row_overrides": {}
-            },
-            "elite": {
-              "visible_rows": "ALL",
-              "blur_remaining": false,
-              "tab_enabled": true,
-              "see_all": true,
-              "selection_mode": "first",
-              "display_state": "active",
-              "row_overrides": {}
-            },
-            "legend": {
-              "visible_rows": "ALL",
-              "blur_remaining": false,
-              "tab_enabled": true,
-              "see_all": true,
-              "selection_mode": "first",
-              "display_state": "active",
-              "row_overrides": {}
-            },
-            "goat": {
-              "visible_rows": "ALL",
-              "blur_remaining": false,
-              "tab_enabled": true,
-              "see_all": true,
-              "selection_mode": "first",
-              "display_state": "active",
-              "row_overrides": {}
-            }
-          }
         }
       }
     },
@@ -2523,7 +2347,12 @@
     },
     "fourth_card_enabled": true,
     "show_roi_period": true,
-    "kpi_period_visibility": [false, false, false, true]
+    "kpi_period_visibility": [
+      false,
+      false,
+      false,
+      true
+    ]
   },
   "ui_revision": "7.3.6",
   "watermark_presets": {
