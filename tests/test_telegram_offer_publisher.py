@@ -77,7 +77,7 @@ def test_aces_prediction_contracts_and_mobile_compaction():
     superiority=dict(count, price_contract="player_superiority",price_status="priced_projection",
                      odds=2.0)
     priced=tg.fmt(superiority,"aces",cfg,index=6)
-    assert "najviac | ≈8.3 | 2.00" in priced
+    assert f"najviac | ≈8.3 | {tg._demo_ace_display_price(superiority):.2f}" in priced
     assert "72.0%" not in priced  # the optional confidence was dropped to fit mobile
     assert len(priced)<=65  # still one compact row; confidence is removed first
 
@@ -85,11 +85,11 @@ def test_aces_prediction_contracts_and_mobile_compaction():
               market_line=8.5,ou_side="over",model_probability=0.65,odds=1.9)
     text=tg.fmt(over,"aces",cfg,index=2)
     assert "O 8.5" in text
-    assert "O 8.5 | ≈8.3 | 1.90" in text
+    assert f"O 8.5 | ≈8.3 | {tg._demo_ace_display_price(over):.2f}" in text
     assert "Over 8.5" not in text
     under=dict(over,ou_side="under")
     under_text=tg.fmt(under,"aces",cfg,index=2)
-    assert "U 8.5 | ≈8.3 | 1.90" in under_text
+    assert f"U 8.5 | ≈8.3 | {tg._demo_ace_display_price(under):.2f}" in under_text
     assert "Under 8.5" not in under_text
     assert "72.0%" not in text  # model O/U probability differs from most-aces confidence
     assert "EV" not in text
@@ -110,7 +110,7 @@ def test_ace_projection_is_player_specific_and_missing_data_is_not_fabricated():
     ace["odds"]=1.85
     rendered=tg.fmt(ace,"aces",cfg)
     assert "Player | " in rendered
-    assert "najviac | ≈8.3 | 1.85" in rendered
+    assert f"najviac | ≈8.3 | {tg._demo_ace_display_price(ace):.2f}" in rendered
     assert "5.4" not in rendered  # opponent's projection is never substituted
     assert "\n" not in rendered
 
@@ -480,3 +480,21 @@ def test_full_offer_reserves_every_exact_publication_for_daily_results(tmp_path,
     assert len(selected)==25
     assert [sum(x["channel"]==section for x in selected) for section in ("top","value","aces")]==[17,5,3]
     assert len(tg.load(out/"messages.json"))>=1
+
+
+def test_aces_demo_price_is_stable_display_only_and_never_changes_receipts():
+    cfg=settings()
+    ace=row(991,"Test Ace","aces")
+    ace.update(price_contract="player_total_ou", price_status="priced_projection",
+               ou_side="under", market_line=12.5, odds=2.00, captured_at=NOW.isoformat())
+    original=json.loads(json.dumps(ace))
+    display=tg._demo_ace_display_price(ace)
+    assert 1.50 <= display <= 1.80
+    rendered=tg.fmt(ace,"aces",cfg)
+    assert rendered.endswith(f" | {display:.2f}")
+    assert tg.fmt(ace,"aces",cfg)==rendered
+    assert ace == original
+    assert tg.result_reference(ace,"aces")["odds"] == 2.00
+    # Different categories must keep their exact original odds.
+    top=row(991,"Test Ace")
+    assert tg.fmt(top,"top",cfg).endswith(" | 1.80")
