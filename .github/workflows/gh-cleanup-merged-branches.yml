@@ -1,0 +1,164 @@
+name: One-time archival cleanup of fully merged research branches
+
+on:
+  push:
+    branches:
+      - maintenance/gh-cleanup-20261101-30d
+    paths:
+      - .github/workflows/gh-cleanup-merged-branches.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blinq-github-merged-research-branch-cleanup
+  cancel-in-progress: false
+
+jobs:
+  safe-branch-cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DRY_RUN: "true"
+      MAX_DELETE: "40"
+      CUTOFF_UTC: "2026-10-01T00:00:00Z"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit old fully merged, unreferenced research-only branches
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime as dt
+          import json, os, pathlib, re, subprocess, urllib.error, urllib.parse, urllib.request
+          repo=os.environ["GITHUB_REPOSITORY"]
+          root=f"https://api.github.com/repos/{repo}"
+          cutoff=dt.datetime.fromisoformat(os.environ["CUTOFF_UTC"].replace("Z","+00:00"))
+          max_delete=int(os.environ["MAX_DELETE"])
+          deny=re.compile(r"(?:cdb|dil|identity|data|training|model|backup|restore|rollback|release|deploy|production|live|history|raw|snapshot|writer|lock|import|provider|api|feed|quota|recovery|security|protected|driv[e]|shadow)",re.I)
+          headers={"Authorization":"Bearer "+os.environ["GH_TOKEN"],"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"blinq-branch-cleanup"}
+          def request(method,path):
+              q=urllib.request.Request(root+path,method=method,headers=headers)
+              try:
+                  with urllib.request.urlopen(q,timeout=30) as f:
+                      body=f.read()
+                      return f.status,json.loads(body) if body else None
+              except urllib.error.HTTPError as e:
+                  if e.code==404:return 404,None
+                  raise
+          def esc(s):return urllib.parse.quote(s,safe="")
+          def branch_safe(name):
+              return (name.startswith("analysis/") or name.startswith("audit/")) and not deny.search(name)
+          branches=[]
+          for page in range(1,16):
+              status,data=request("GET",f"/branches?per_page=100&page={page}")
+              assert status==200
+              branches+=data
+              if len(data)<100:break
+          assert len(branches)<1500, "Branch count greater than expected; abort"
+          status,main=request("GET","/branches/main")
+          assert status==200
+          main_sha=main["commit"]["sha"]
+          open_pr_heads=set()
+          for page in range(1,9):
+              status,data=request("GET",f"/pulls?state=open&per_page=100&page={page}")
+              assert status==200
+              open_pr_heads.update(x["head"]["ref"] for x in data if x["head"]["repo"] and x["head"]["repo"].get("full_name")==repo)
+              if len(data)<100:break
+          assert not subprocess.run(["git","grep","-n","-E",r"^[[:space:]]*delete:[[:space:]]*$","--",".github/workflows"],capture_output=True).stdout, "Repo has delete event listeners"
+          candidates=[]
+          inspected=0
+          for b in branches:
+              name=b["name"]
+              if not branch_safe(name) or b["protected"] or name in open_pr_heads:continue
+              if name=="main" or name=="maintenance/gh-cleanup-20261101-30d":continue
+              if subprocess.run(["git","grep","-F","-q","--",name],capture_output=True).returncode==0:continue
+              inspected+=1
+              if inspected>130:break
+              sha=b["commit"]["sha"]
+              status,commit=request("GET","/git/commits/"+sha)
+              assert status==200
+              stamp=dt.datetime.fromisoformat(commit["committer"]["date"].replace("Z","+00:00"))
+              if stamp>=cutoff:continue
+              status,cmp=request("GET","/compare/main..."+esc(name))
+              assert status==200
+              if cmp.get("ahead_by")!=0 or cmp.get("status") not in {"behind","identical"}:continue
+              if cmp.get("base_commit",{}).get("sha")!=main_sha: # compare main base ref should be exact main
+                  continue
+              # No active or queued runs on the candidate branch.
+              busy=False
+              for st in ("in_progress","queued"):
+                  query=urllib.parse.urlencode({"branch":name,"status":st,"per_page":1})
+                  status,runs=request("GET","/actions/runs?"+query)
+                  assert status==200
+                  if runs.get("total_count",0):busy=True
+              if busy:continue
+              candidates.append({"branch":name,"sha":sha,"head_committer_date":commit["committer"]["date"],"ahead_by":0,"protected":False,"restorable_from_main_sha":main_sha})
+              if len(candidates)>=max_delete:break
+          assert len(candidates)<=40
+          manifest={"schema":1,"repository":repo,"dry_run":os.environ["DRY_RUN"]=="true","main_sha_at_audit":main_sha,
+                    "cutoff_utc":os.environ["CUTOFF_UTC"],"branches_scanned":len(branches),
+                    "eligible_inspected":inspected,"candidates":candidates,"count":len(candidates),
+                    "restore": "Recreate any deleted branch at its saved sha (ancestor of main). SHA and manifest held 30 days."}
+          pathlib.Path("gh-merged-branch-manifest.json").write_text(json.dumps(manifest,indent=2,sort_keys=True)+"\n")
+          print(json.dumps({"branch_count":len(branches),"inspected":inspected,"eligible":len(candidates),"dry_run":manifest["dry_run"],
+             "candidates":[x["branch"] for x in candidates]},sort_keys=True))
+          PY
+      - name: Retain exact SHA restoration manifest for 30 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: gh-merged-research-branch-restoration-manifest
+          path: gh-merged-branch-manifest.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Remove only SHA-verified ancestor branches with no current use
+        if: env.DRY_RUN == 'false'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime as dt
+          import json,os,urllib.error,urllib.parse,urllib.request
+          manifest=json.load(open("gh-merged-branch-manifest.json"))
+          base="https://api.github.com/repos/"+os.environ["GITHUB_REPOSITORY"]
+          hdr={"Authorization":"Bearer "+os.environ["GH_TOKEN"],"Accept":"application/vnd.github+json",
+               "X-GitHub-Api-Version":"2022-11-28","User-Agent":"blinq-safe-branch-pruner"}
+          def call(method,path):
+              req=urllib.request.Request(base+path,method=method,headers=hdr)
+              try:
+                  with urllib.request.urlopen(req,timeout=25) as res:
+                      raw=res.read()
+                      return res.status,json.loads(raw) if raw else None
+              except urllib.error.HTTPError as e:
+                  if e.code==404:return 404,None
+                  raise
+          status,main=call("GET","/branches/main")
+          assert status==200 and main["commit"]["sha"]==manifest["main_sha_at_audit"], "Main moved; abort"
+          names=set()
+          verified=[]
+          for item in manifest["candidates"]:
+              name=item["branch"]
+              assert name not in names
+              names.add(name)
+              assert name.startswith(("audit/","analysis/")) and name!="main"
+              assert item["ahead_by"]==0 and item["protected"]==False
+              path=urllib.parse.quote(name,safe="")
+              status,b=call("GET","/branches/"+path)
+              assert status==200 and not b["protected"] and b["commit"]["sha"]==item["sha"]
+              status,c=call("GET","/compare/main..."+path)
+              assert status==200 and c["ahead_by"]==0 and c["status"] in {"behind","identical"}
+              for st in ("in_progress","queued"):
+                  status,r=call("GET","/actions/runs?"+urllib.parse.urlencode({"branch":name,"status":st,"per_page":1}))
+                  assert status==200 and r["total_count"]==0
+              status,p=call("GET","/pulls?state=open&head="+urllib.parse.quote(os.environ["GITHUB_REPOSITORY"].split("/")[0]+":"+name,safe=""))
+              assert status==200 and not p
+              verified.append((name,path))
+          deleted=[]
+          for name,path in verified:
+              status,_=call("DELETE","/git/refs/heads/"+path)
+              assert status==204,(name,status)
+              deleted.append((name,path))
+          for name,path in deleted:
+              status,_=call("GET","/branches/"+path)
+              assert status==404, (name,status)
+          print(json.dumps({"deleted_branches":len(deleted),"readback_404":len(deleted),"manifest_30d":True,"all_commits_ancestor_of_main":True},sort_keys=True))
+          PY
