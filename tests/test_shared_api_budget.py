@@ -540,3 +540,37 @@ def test_provider_budget_local_reset_date_rolls_over_without_drift():
         snap = shared_budget._summary([], shared_budget._now_slot(before))
         assert snap["next_reset_utc"] == expected_utc
         assert datetime.fromisoformat(snap["next_reset_bratislava"]).astimezone(timezone.utc).isoformat() == expected_utc
+
+
+
+def test_direct_azure_runtime_implicitly_reserves_global_pace(monkeypatch):
+    from tbt.providers import shared_rate
+    from tbt.services import admin_storage
+
+    table = AtomicFakeTable()
+    pacing_calls = []
+    monkeypatch.setenv("FUNCTIONS_WORKER_RUNTIME", "python")
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    monkeypatch.setattr(shared_rate, "reserve_pace",
+                        lambda **kwargs: (
+                            pacing_calls.append(kwargs)
+                            or {"pace_schema": 1, "max_rps": 6}
+                        ))
+    result = shared_budget.reserve("history", now=NOW)
+    assert pacing_calls == [{"table": None}]
+    assert result["rate_pace"] == {"schema": 1, "max_rps": 6}
+    assert result["global_spent"] == 1
+    assert table.version == 1
+
+
+def test_injected_offline_budget_still_does_not_require_remote_pace(monkeypatch):
+    from tbt.providers import shared_rate
+
+    monkeypatch.setenv("FUNCTIONS_WORKER_RUNTIME", "python")
+    def must_not_call_pace(**kwargs):
+        raise AssertionError("Injected budget table must not require Azure pacing")
+    monkeypatch.setattr(shared_rate, "reserve_pace", must_not_call_pace)
+    table = AtomicFakeTable()
+    result = shared_budget.reserve("history", now=NOW, table=table)
+    assert "rate_pace" not in result
+    assert result["global_spent"] == 1
