@@ -156,7 +156,7 @@ jobs:
               raise SystemExit("MOVIODDS_ONE_SHOT_AUTHORIZATION_INVALID")
           print("AUTHORIZED_MOVIODDS_SINGLE_WRITER_SOURCE_SMOKE")
           PY
-      - name: Enforce explicit one-shot Drive source authorization (push only)
+      - name: Enforce explicit one-shot source authorization (push only)
         if: github.event_name == 'push' && env.SOURCE_MODE == 'drive'
         shell: bash
         run: |
