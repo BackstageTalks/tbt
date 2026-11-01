@@ -1,0 +1,55 @@
+name: ACES display-only test
+on:
+  push:
+    branches: [fix/aces-demo-display-150-180-20261101]
+    paths:
+      - .github/workflows/aces-demo-display-test.yml
+      - scripts/telegram_offer_publisher.py
+      - tests/test_telegram_offer_publisher.py
+      - web/app.js
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  demo-display:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test runtime
+        run: python -m pip install pytest
+      - name: Compile Telegram publisher
+        run: python -m py_compile scripts/telegram_offer_publisher.py
+      - name: Validate web JavaScript syntax
+        run: node --check web/app.js
+      - name: Verify shared deterministic display price in JS and Python
+        env:
+          PYTHONPATH: api
+        run: |
+          PY_VAL="$(python - <<'PY'
+          import importlib.util
+          spec=importlib.util.spec_from_file_location('t', 'scripts/telegram_offer_publisher.py')
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          row={'event_id':'991','selection_id':'p1','market_line':12.5,'ou_side':'under'}
+          print(f'{module._demo_ace_display_price(row):.2f}')
+          PY
+          )"
+          JS_VAL="$(node <<'JS'
+          const fs=require('fs');
+          const text=fs.readFileSync('web/app.js','utf8');
+          const match=text.match(/function aceDemoDisplayOdds\(row\)\{[\s\S]*?\n  \}/);
+          if(!match)throw Error('ACE display-only function missing');
+          const fn=Function('return '+match[0])();
+          console.log(fn({event_id:'991',selection_id:'p1',market_line:12.5,ou_side:'under'}).toFixed(2));
+          JS
+          )"
+          test "$PY_VAL" = "$JS_VAL"
+          echo "ACE display parity verified."
+      - name: Regression tests for Telegram delivery and receipt integrity
+        env:
+          PYTHONPATH: api
+        run: python -m pytest tests/test_telegram_offer_publisher.py -q
