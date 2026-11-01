@@ -202,6 +202,34 @@ jobs:
           gh workflow run blinq-ui-production-watchdog.yml --repo "$GITHUB_REPOSITORY" --ref main
           echo 'BLINQ_UI_WATCHDOG_DISPATCH_SUBMITTED'
 
+      - name: Dispatch autonomous MoviOdds CDB candidate preparation once daily
+        # Existing external half-hour clock already runs. The new workflow is
+        # strictly read-only and NEVER acquires the global CDB writer lock.
+        # Source is the protected Azure DB final archive; Drive upload
+        # availability does not block CDB-ready candidate preparation.
+        if: always() && github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          hour="$(date -u +%H)"
+          minute="$(date -u +%M)"
+          if [[ "$hour" != "05" ]] || (( 10#$minute >= 30 )); then
+            echo 'MOVIODDS_CDB_STAGE_NOT_DUE'
+            exit 0
+          fi
+          today="$(date -u +%Y-%m-%d)"
+          runs="$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/moviodds-cdb-stage.yml/runs" -f event=workflow_dispatch -f per_page=40)"
+          if printf '%s' "$runs" | jq -e --arg day "$today" '.workflow_runs | any(.created_at | startswith($day))' >/dev/null; then
+            echo 'MOVIODDS_CDB_STAGE_ALREADY_DISPATCHED_TODAY'
+            exit 0
+          fi
+          gh workflow run moviodds-cdb-stage.yml --repo "$GITHUB_REPOSITORY" \
+            --ref main -f days_back=3
+          echo 'MOVIODDS_CDB_STAGE_DISPATCHED_VERIFY_DRY_RUN_AND_ARTIFACT'
+
       - name: Archive completed MoviOdds source JSON to the user's Drive once daily
         # Existing externally driven half-hour clock; CDB imports remain manual.
         # Automatically attempts once at UTC 04:00. Missing folder Editor

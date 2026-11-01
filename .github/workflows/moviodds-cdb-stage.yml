@@ -1,0 +1,216 @@
+name: MoviOdds to CDB verified candidate staging (no canonical writes)
+
+'on':
+  # One-shot launch only from the exact read-only smoke marker.
+  push:
+    branches: [main]
+    paths:
+      - ops/moviodds-cdb-stage-smoke-20261101.json
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: 'Number of completed UTC days to stage (1-3), 0=3'
+        required: false
+        type: number
+        default: 3
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moviodds-cdb-stage
+  cancel-in-progress: false
+
+jobs:
+  link:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+      CDB_REPO: BackstageTalks/tbt-data
+      CDB_TAG: tbt-data-v1
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate existing read-only prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'CDB_PRIVATE_TOKEN_MISSING'; exit 1; }
+          test -n "$BLINQ_LIVE_WORKER_TOKEN" || { echo 'MOVIODDS_WORKER_TOKEN_MISSING'; exit 1; }
+          test "$GITHUB_REF" = "refs/heads/main" || {
+            echo 'CDB_AUTONOMOUS_STAGE_MAIN_ONLY'; exit 1;
+          }
+          gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" --jq '.tag_name' >/dev/null
+          echo 'CDB_STAGING_AUTH_READ_ONLY_OK'
+
+      - name: Install read-only snapshot and provenance validation dependencies
+        run: |
+          python -m pip install --disable-pip-version-check requests pandas pyarrow pydantic numpy
+
+      - name: Select completed source dates, require 1-3 day scope
+        shell: bash
+        env:
+          DAYS_BACK: ${{ inputs.days_back || 3 }}
+        run: |
+          set -euo pipefail
+          n="$DAYS_BACK"
+          [[ "$n" =~ ^[0-9]+$ ]] || { echo 'INVALID_DAYS_BACK'; exit 1; }
+          (( n >= 1 && n <= 3 )) || { echo 'DAYS_BACK_OUTSIDE_BOUNDED_RANGE'; exit 1; }
+          mkdir -p work/moviodds-stage/source work/moviodds-stage/history
+          for ((i=1; i<=n; i++)); do date -u -d "$i days ago" +%F; done \
+            > work/moviodds-stage/days.txt
+          cat work/moviodds-stage/days.txt
+
+      - name: Export actual final source and independently verify CDB-ready JSON v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, pathlib
+          from moviodds_drive_archive import fetch_daily_final, _json_bytes
+          from moviodds_cdb_format import format_cdb_archive, verify_cdb_archive
+          folder=pathlib.Path("work/moviodds-stage/source")
+          dates=pathlib.Path("work/moviodds-stage/days.txt").read_text().splitlines()
+          for day in dates:
+              original=fetch_daily_final(
+                  date_utc=day, base_url=os.environ["BLINQ_BASE_URL"],
+                  token=os.environ["BLINQ_LIVE_WORKER_TOKEN"],
+              )
+              converted=format_cdb_archive(original)
+              verify_cdb_archive(converted)
+              if original["count"] != converted["count"]:
+                  raise SystemExit("Source record loss during normalization")
+              file=folder/f"moviodds-{day}.json"
+              file.write_bytes(_json_bytes(converted))
+              verify_cdb_archive(json.loads(file.read_bytes()))
+              print("MOVIODDS_CDB_SOURCE_VERIFIED",day,converted["count"],
+                    converted["summary"],flush=True)
+          PY
+
+      - name: Obtain authoritative canonical private release and original asset digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          folder=work/moviodds-stage/history
+          gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" > "$folder/release-before.json"
+          gh release download "$CDB_TAG" -R "$CDB_REPO" \
+            -p history_manifest.json -p _tbt_bundle_manifest.json -p 'history-*.parquet' \
+            -D "$folder" --clobber
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          folder=Path("work/moviodds-stage/history")
+          release=json.loads((folder/"release-before.json").read_text())
+          assets={x["name"]:x for x in release["assets"]}
+          bundle=json.loads((folder/"_tbt_bundle_manifest.json").read_text())["files"]
+          manifest=json.loads((folder/"history_manifest.json").read_text())["years"]
+          names=["history_manifest.json",*(f"history-{int(y):04d}.parquet" for y in manifest)]
+          for name in names:
+              file=folder/name
+              digest=hashlib.sha256(file.read_bytes()).hexdigest()
+              if (not file.is_file() or name not in assets
+                  or assets[name].get("digest") != "sha256:"+digest
+                  or bundle[name]["sha256"] != digest):
+                  raise SystemExit("CDB_CANONICAL_SNAPSHOT_SHA_INVALID:"+name)
+              if name.endswith(".parquet") and manifest[name[8:12]]["sha256"] != digest:
+                  raise SystemExit("CDB_YEAR_MANIFEST_SHA_INVALID:"+name)
+          print("CDB_FULL_CANONICAL_SNAPSHOT_SHA_PASS",len(manifest),flush=True)
+          PY
+
+      - name: Link complete-source scores against CDB identity and produce exact importer stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/moviodds-stage/staged
+          while IFS= read -r day; do
+            python scripts/moviodds_cdb_link.py \
+              --archive "work/moviodds-stage/source/moviodds-$day.json" \
+              --history-dir work/moviodds-stage/history \
+              --out-dir "work/moviodds-stage/staged/$day"
+          done < work/moviodds-stage/days.txt
+          python - <<'PY'
+          import pathlib,json
+          folder=pathlib.Path("work/moviodds-stage/staged")
+          all_rows=[]
+          all_review=[]
+          for f in sorted(folder.glob("*/eligible.jsonl")):
+              all_rows.extend(json.loads(x) for x in f.read_text().splitlines() if x.strip())
+          for f in sorted(folder.glob("*/review.jsonl")):
+              all_review.extend(json.loads(x) for x in f.read_text().splitlines() if x.strip())
+          mids=[str(x["match_id"]) for x in all_rows]
+          if len(mids)!=len(set(mids)):
+              raise SystemExit("CDB_MULTI_DAY_DUPLICATE_MATCH_ID_QUARANTINE_REQUIRED")
+          archive=folder/"eligible.jsonl"
+          archive.write_text("".join(json.dumps(r,ensure_ascii=False,sort_keys=True)+"\n" for r in all_rows))
+          (folder/"review.jsonl").write_text(
+              "".join(json.dumps(r,ensure_ascii=False,sort_keys=True)+"\n" for r in all_review))
+          print("MOVIODDS_STRICT_LINKED",len(all_rows),"REVIEW",len(all_review),flush=True)
+          PY
+
+      - name: Run existing CDB importer IN DRY-RUN ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/moviodds-stage/staged/eligible.jsonl \
+            --history-dir work/moviodds-stage/history \
+            --out-dir work/moviodds-stage/dry-run
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          folder=Path("work/moviodds-stage")
+          report=json.loads((folder/"dry-run/report.json").read_text())
+          rows=[json.loads(line) for line in (folder/"staged/eligible.jsonl").read_text().splitlines() if line]
+          if report.get("production_mutated") is not False or report.get("local_partitions_written") is not False:
+              raise SystemExit("CDB_DRY_RUN_MUTATED_HISTORY")
+          count=report.get("counts") or {}
+          if count.get("updated",0) != len(rows):
+              raise SystemExit("CDB_STAGING_UNEXPECTED_IMPORTER_REJECTION")
+          additions=sum(sum(row["baseline_stats"].get(key) is None
+                             for key in row["incoming_stats"]) for row in rows)
+          if count.get("stat_fields_added",0) != additions:
+              raise SystemExit("CDB_STAGING_FIELD_COUNTS_INCORRECT")
+          (folder/"summary.json").write_text(json.dumps({
+              "schema":1,"state":"CDB_DRY_RUN_VERIFIED","source":"moviodds",
+              "candidate_rows":len(rows),"candidate_new_fields":additions,
+              "cdb_values_written":0,"production_mutated":False,
+              "canonical_score_note":"provider set-vectors internally verified; independent CDB winner confirmed",
+          },indent=2)+"\n")
+          print("CDB_STAGING_DRY_RUN_PASS",len(rows),"NEW_VALUES",additions)
+          PY
+
+      - name: CAS recheck canonical release before publishing read-only results
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" > work/moviodds-stage/history/release-after.json
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          folder=Path("work/moviodds-stage/history")
+          before=json.loads((folder/"release-before.json").read_text())
+          after=json.loads((folder/"release-after.json").read_text())
+          sha=lambda d: {a["name"]:a.get("digest") for a in d["assets"]}
+          if sha(before)!=sha(after):
+              raise SystemExit("CDB_CHANGED_DURING_STAGING_RETRY_ON_NEXT_SCHEDULE")
+          print("CDB_SOURCE_CAS_READBACK_STABLE")
+          PY
+
+      - name: Preserve verified import batch for the existing guarded writer
+        uses: actions/upload-artifact@v4
+        with:
+          name: moviodds-cdb-dry-run-${{ github.run_id }}
+          path: |
+            work/moviodds-stage/staged/eligible.jsonl
+            work/moviodds-stage/staged/review.jsonl
+            work/moviodds-stage/staged/*/report.json
+            work/moviodds-stage/dry-run/report.json
+            work/moviodds-stage/summary.json
+          retention-days: 7
+          if-no-files-found: error
