@@ -150,3 +150,20 @@ def test_independent_remote_clients_reuse_paid_body_without_new_provider_call(mo
     assert second.metrics["cache_hits"] == 1
     first.close()
     second.close()
+
+
+def test_remote_token_never_sent_to_untrusted_service_origin(monkeypatch):
+    from tbt.services.tennis_remote_cache_client import HttpRawResponseCache
+    from tbt.services.tennis_response_cache import RawCacheUnavailable
+    monkeypatch.setenv(
+        "BLINQ_SHARED_API_BUDGET_URL",
+        "https://trusted.azurestaticapps.net/api/v1/internal/api-budget/reserve",
+    )
+    with pytest.raises(RawCacheUnavailable, match="verified budget origin"):
+        HttpRawResponseCache("https://attacker.test/api/v1/internal/tennis-raw-cache",
+                             "secret-worker-token")
+    allowed = HttpRawResponseCache(
+        "https://trusted.azurestaticapps.net/api/v1/internal/tennis-raw-cache",
+        "secret-worker-token",
+    )
+    allowed.close()
