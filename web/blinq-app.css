@@ -5130,6 +5130,13 @@ body#blinqPremium .admin-hero-selected-head small{color:#5f7770!important;font-s
 body#blinqPremium .admin-hero-selected-head strong{color:#e8f4ef!important;font-size:11px!important}
 body#blinqPremium .admin-hero-selected-head>span{padding:5px 7px!important;border:1px solid rgba(104,176,157,.11)!important;border-radius:999px!important;color:#748c84!important;font-size:7px!important;background:rgba(255,255,255,.012)!important}
 body#blinqPremium .admin-page-background-editor{background:linear-gradient(135deg,rgba(27,171,126,.024),rgba(255,255,255,.008))!important}
+body#blinqPremium .admin-background-size-guide{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;min-width:0}
+body#blinqPremium .admin-background-size-guide>div{display:flex;flex-direction:column;gap:5px;padding:13px 15px;border:1px solid rgba(79,183,147,.22);border-radius:12px;background:rgba(3,25,22,.65)}
+body#blinqPremium .admin-background-size-guide strong{font-size:11px;color:#adcfbe;font-weight:800}
+body#blinqPremium .admin-background-size-guide b{font-size:19px;color:#edf9f2;font-weight:850;letter-spacing:-.02em}
+body#blinqPremium .admin-background-size-guide small{font-size:10px;line-height:1.5;color:#a9beb6}
+body#blinqPremium .admin-background-size-guide p{grid-column:1/-1;margin:0;color:#a9beb6;font-size:11px;line-height:1.5}
+@media(max-width:600px){body#blinqPremium .admin-background-size-guide{grid-template-columns:1fr}}
 
 /* Dot navigation becomes a restrained premium progress control on the public hero. */
 body#blinqPremium.blinq-home .hero-dots{gap:5px!important;padding:5px 7px!important;border:1px solid rgba(121,242,177,.11)!important;border-radius:999px!important;background:rgba(2,15,12,.58)!important;backdrop-filter:blur(12px)!important}
