@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/tennisapi-pace-readback.yml'
+      - '.github/tennisapi-runtime-readback-tick.json'
 
 permissions:
   contents: read
@@ -94,10 +94,26 @@ jobs:
                   or b.get("global_remaining") != 14500 - b["global_spent"]):
               raise SystemExit("Production shared budget readback failed")
 
+          # Read-only private cache probe after the same production deployment.
+          # An impossible opaque key cannot be linked to a player or CDB record.
+          cache_url = url.replace("/api/v1/internal/api-budget/reserve",
+                                  "/api/v1/internal/tennis-raw-cache")
+          if urlsplit(cache_url).netloc != parsed.netloc:
+              raise SystemExit("Private cache origin mismatch")
+          cache_req = Request(cache_url + "?key=" + "0" * 64 + "&max_age=1",
+                              method="GET", headers={
+                                  "X-Blinq-Worker-Token": token,
+                                  "Accept": "application/json",
+                              })
+          with opener.open(cache_req, timeout=15) as cache_response:
+              cache = json.load(cache_response)
+              if cache_response.status != 200 or cache.get("ok") is not True or cache.get("status") != "miss":
+                  raise SystemExit("Private Azure cache read-only smoke failed")
+
           message = (
               "Protected live 6/s CAS receipt: PASS; "
               "shared budget 15000/day, 500 reserve, 14500 ceiling: PASS; "
-              "reservation/readback: PASS; provider requests: 0"
+              "reservation/readback: PASS; private cache: PASS; provider requests: 0"
           )
           print(message)
           if os.environ.get("GITHUB_STEP_SUMMARY"):
