@@ -181,6 +181,30 @@ def download_days(provider, matches, progress, start, end, checkpoint, quarantin
 
 
 
+def reopen_explicit_history_days(progress, start: date, end: date) -> dict:
+    """Re-fetch explicitly requested historic dates despite old checkpoints.
+
+    Operator opt-in only. The existing two-tour completion and API budget
+    checks still apply; this resets no other progress dates.
+    """
+    completed = progress.get("completed_days", [])
+    if not isinstance(completed, list):
+        raise ValueError("Malformed history completed_days")
+    scope = set()
+    current = start
+    while current <= end:
+        scope.add(current.isoformat())
+        current += timedelta(days=1)
+    before = set(completed)
+    progress["completed_days"] = sorted(
+        day for day in before if isinstance(day, str) and day not in scope)
+    return {
+        "schema": 1, "requested_days": len(scope),
+        "previously_completed_reopened": len(before & scope),
+        "scope_start": start.isoformat(), "scope_end": end.isoformat(),
+    }
+
+
 def reopen_history_gap_days(matches, progress, start, end, existing_years):
     """Re-open progress dates when a requested year is missing or catastrophically partial."""
     requested_years = set(range(start.year, end.year + 1))
@@ -525,6 +549,8 @@ def _extras_candidates(matches, start, end):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start", default=None, help="Optional oldest date; overrides lookback")
+    parser.add_argument("--recheck-completed-days", action="store_true",
+                        help="Explicit bounded history window: re-fetch already checkpointed dates")
     parser.add_argument("--end", default=None, help="Optional newest date; default yesterday UTC")
     parser.add_argument("--lookback-days", type=int, default=1095)
     parser.add_argument("--mode", choices=["history", "statistics", "extras", "identity"], default="history")
@@ -542,6 +568,9 @@ def main():
     args = parser.parse_args()
     if args.targeted_statistics and args.mode != "statistics":
         parser.error("--targeted-statistics requires statistics mode")
+    if args.recheck_completed_days and (
+            args.mode != "history" or not args.start or not args.end):
+        parser.error("--recheck-completed-days requires history mode and explicit start/end")
     if args.target_tour and (args.mode != "statistics" or not args.targeted_statistics):
         parser.error("--target-tour requires targeted statistics mode")
     high_yield_setting = os.environ.get("BLINQ_AUTOFILL_HIGH_YIELD", "false").lower()
@@ -616,6 +645,11 @@ def main():
     progress = read_json(progress_file, {"schema": 1, "completed_days": []})
     if progress.get("schema") != 1:
         raise ValueError("Unsupported download progress schema")
+    if args.recheck_completed_days:
+        recheck = reopen_explicit_history_days(progress, start, end)
+        progress["explicit_history_recheck"] = recheck
+        write_json(progress_file, progress)
+        print(json.dumps({"explicit_history_recheck": recheck}, sort_keys=True), flush=True)
 
     # Recovery guard: an interrupted/partial release upload can leave
     # download_progress.json ahead of the physical yearly parquet.
