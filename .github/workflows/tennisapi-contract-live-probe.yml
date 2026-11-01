@@ -65,7 +65,8 @@ jobs:
           set -euo pipefail
           jq -e '.eligible_for_cdb_import == false and
                  .provider_quote_timestamp_verified == false and
-                 .request_count <= .max_requests' \
+                 .request_count <= .max_requests and
+                 ((.counts.available // 0) + (.counts.no_content // 0)) > 0' \
             .cache/tbt/tennisapi-contract/live-probe.json >/dev/null
       - name: Upload read-only evidence
         if: always()

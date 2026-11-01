@@ -114,15 +114,28 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int) ->
             report["observations"][name] = summarize(name, payload, event_id=event_id)
             return payload
         except Exception as exc:
+            reason = str(exc).lower()
+            reason_code = (
+                "missing_provider_header" if "header missing" in reason else
+                "invalid_provider_header" if "invalid provider remaining header" in reason else
+                "provider_reserve_reached" if "provider reserve" in reason else
+                "shared_budget_exhausted" if "budget" in reason or "limit" in reason else
+                "other"
+            )
             if type(exc).__name__ in {
                     "RequestBudgetExceeded", "SharedBudgetExhausted",
                     "SharedBudgetUnavailable", "ConfigurationError"}:
                 guard_halted = True
             report["observations"][name] = {
                 "state": "error", "error_type": type(exc).__name__,
+                "reason_code": reason_code,
                 # Avoid copying provider response bodies or secrets into artifact.
             }
             return {}
+
+    # Probe an existing documented event route FIRST to distinguish a general
+    # account/header failure from an optional country-specific odds 204.
+    detail = read("event_detail", f"/api/tennis/event/{event_id}")
 
     # Provider-country mapping must be checked *before* assuming 1 = any named book.
     read("odds_providers_sk_web", "/api/odds/providers/SK/web")
@@ -135,7 +148,6 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int) ->
     read("monthly_calendar", "/api/tennis/calendar/11/2026")
     read("daily_categories", "/api/tennis/calendar/1/11/2026/categories")
 
-    detail = read("event_detail", f"/api/tennis/event/{event_id}")
     event = _obj(_obj(detail).get("event", detail))
     season_id = _nested_int(event, "season", "id")
     tournament_id = _nested_int(event, "tournament", "uniqueTournament", "id")
