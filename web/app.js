@@ -3720,6 +3720,11 @@
   }
   function resultVisibleUnits(publication,outcome,odds){
     if(outcome.kind==='void')return 0;
+    const localAceOdds=String(publication?.market||'').toLowerCase()==='aces'
+      ?Number(publication?.statistical_ace_odds):NaN;
+    if(Number.isFinite(localAceOdds)&&localAceOdds>=1.60&&localAceOdds<=1.80
+      &&['win','loss'].includes(outcome.kind))
+      return outcome.kind==='win'?localAceOdds-1:-1;
     const stake=publication?.result?.staked_units==null?NaN:Number(publication.result.staked_units);
     const profit=publication?.result?.profit_units==null?NaN:Number(publication.result.profit_units);
     if(Number.isFinite(stake)&&stake>0&&Number.isFinite(profit))return profit;
