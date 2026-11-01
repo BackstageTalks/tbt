@@ -227,3 +227,21 @@ def test_history_monthly_provider_error_falls_back_to_daily():
     assert len(provider.calls) == 4
     assert all(row[2] is True for row in provider.calls)
     assert progress["completed_days"] == ["2026-11-01", "2026-11-02"]
+
+
+def test_explicit_history_recheck_reopens_only_requested_days():
+    from download_tennis_history import reopen_explicit_history_days
+    progress = {"completed_days": [
+        "2016-07-08", "2016-07-09", "2016-07-10", "2016-07-11"]}
+    report = reopen_explicit_history_days(
+        progress, date(2016, 7, 9), date(2016, 7, 10))
+    assert report["requested_days"] == 2
+    assert report["previously_completed_reopened"] == 2
+    assert progress["completed_days"] == ["2016-07-08", "2016-07-11"]
+
+
+def test_explicit_history_recheck_requires_valid_completed_days():
+    from download_tennis_history import reopen_explicit_history_days
+    with pytest.raises(ValueError, match="Malformed history completed_days"):
+        reopen_explicit_history_days(
+            {"completed_days": "2016-07-09"}, date(2016, 7, 9), date(2016, 7, 10))
