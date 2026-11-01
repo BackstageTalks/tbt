@@ -6,7 +6,6 @@ on:
     paths:
       - scripts/audit_tennisexplorer_wta2024_cdb_overlap.py
       - tests/test_tennisexplorer_wta2024_cdb_overlap.py
-      - .github/workflows/blinq-wta2024-current-cdb-overlap.yml
   pull_request:
     paths:
       - scripts/audit_tennisexplorer_wta2024_cdb_overlap.py
