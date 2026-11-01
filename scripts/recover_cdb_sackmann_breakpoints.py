@@ -97,7 +97,7 @@ def lineage_rejection_reason(match, row: dict, tour: str, kind: str, file: Path)
             or match.scheduled_at >= datetime.now(timezone.utc)):
         return "canonical_tour_status_or_time"
     original_date = str(row.get("tourney_date") or "").strip()
-    if (not re.fullmatch(r"\\d{8}", original_date)
+    if (not re.fullmatch(r"\d{8}", original_date)
             or match.scheduled_at.strftime("%Y%m%d") != original_date):
         return "historical_source_date"
     winner_id = str(row.get("winner_id") or "").strip()
