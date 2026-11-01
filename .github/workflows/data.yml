@@ -110,6 +110,8 @@ jobs:
       RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
       BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
       BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      # Opt-in only after private Azure endpoint deployment/readback.
+      BLINQ_TENNIS_RAW_CACHE_URL: ${{ vars.BLINQ_TENNIS_RAW_CACHE_URL || '' }}
       BLINQ_SHARED_API_BUDGET_PURPOSE: ${{ (github.event_name == 'push' || inputs.mode == 'refresh') && 'refresh' || 'history' }}
       PROPL: ${{ secrets.PROPL }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
