@@ -61,6 +61,7 @@ def main():
                 'desktop':True,'mobile':True,'upload':True,'previews':2,
                 'defaultMobile':'/assets/blinq_mobile_court.webp'},background_editor
             page.locator('[data-simple-banner-field="site_mobile_background_url"]').fill('/assets/blinq_page_background.webp')
+            assert page.evaluate("bannerHarness.state.ui.elements.HERO_BANNER_1.content.site_mobile_background_url") == '/assets/blinq_page_background.webp', 'input must update admin draft before blur'
             page.locator('[data-simple-banner-field="site_mobile_background_url"]').dispatch_event('change')
             assert page.evaluate("bannerHarness.state.ui.elements.HERO_BANNER_1.content.site_mobile_background_url") == '/assets/blinq_page_background.webp'
             assert page.locator('.admin-page-background-previews img[alt="Náhľad mobilného pozadia"]').get_attribute('src') == '/assets/blinq_page_background.webp'
