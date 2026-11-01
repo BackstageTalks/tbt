@@ -141,3 +141,15 @@ def test_comparator_rejects_same_person_on_both_sides_and_labels_ambiguity():
     assert "comparator-market-bars" in app
     assert "comparator-market-bar-first" in css
     assert "prefers-reduced-motion:reduce" in css
+
+
+def test_comparator_surface_form_is_distinct_from_overall_form():
+    app = Path("web/app.js").read_text(encoding="utf-8")
+    css = Path("web/blinq-app.css").read_text(encoding="utf-8")
+    segment = app.split("function comparatorResultHtml(result){", 1)[1].split("function renderComparatorRoute()", 1)[0]
+    assert 'bar(x.recent_10)' in segment
+    assert 'bar(x.surface_recent_10)' in segment
+    assert 'form(x.surface_recent_10)' in segment
+    assert 'comparator-surface-form' in segment
+    assert 'nejde o istotu predikcie' in segment
+    assert '.comparator-surface-form .comparator-win-meter' in css
