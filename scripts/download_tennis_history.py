@@ -150,9 +150,12 @@ def download_days(provider, matches, progress, start, end, checkpoint, quarantin
                         if getattr(provider, "calendar_batch_metrics", {}).get(
                                 "invalid_responses", 0):
                             monthly_enabled = False
+                    except RequestBudgetExceeded:
+                        # This is a subclass of ProviderError. Never mask the
+                        # global quota stop as an optional calendar fallback.
+                        raise
                     except ProviderError:
-                        # Optional monthly path unavailable: use daily contract.
-                        # Shared quota failures remain fatal, not suppressed.
+                        # Optional monthly discovery unavailable: daily fallback.
                         monthly_enabled = False
             rows = []
             for tour in ("atp", "wta"):
