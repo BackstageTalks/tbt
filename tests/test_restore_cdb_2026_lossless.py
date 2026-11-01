@@ -57,5 +57,18 @@ def test_duplicate_backup_identity_fails_closed():
 
 
 def test_schema_drift_fails_closed():
-    with pytest.raises(ValueError, match="schema differs"):
+    with pytest.raises(ValueError, match="schema differs") as exc:
         merge_preserving_live(table(["a"]), table(["a"]).drop(["stats_json"]))
+    assert '"backup_only": {"stats_json": "string"}' in str(exc.value)
+    assert "player_a" not in str(exc.value)
+    assert "2026-04-15" not in str(exc.value)
+
+
+def test_schema_type_difference_reported_without_coercion():
+    old = table(["old_id"])
+    current = table(["new_id"]).set_column(
+        4, "stats_json", pa.array(["{}"], type=pa.large_string()))
+    with pytest.raises(ValueError, match="type_differences") as exc:
+        merge_preserving_live(old, current)
+    assert '"backup": "string", "current": "large_string"' in str(exc.value)
+    assert "old_id" not in str(exc.value)
