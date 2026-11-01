@@ -1,0 +1,104 @@
+name: ATP 2025 Flashscore to current CDB read-only proof audit
+
+on:
+  pull_request:
+    paths:
+      - scripts/audit_uploaded_atp2025_current_cdb.py
+      - tests/test_audit_uploaded_atp2025_current_cdb.py
+      - tests/test_audit_atp2025_metadata_candidates.py
+      - scripts/audit_atp2025_metadata_candidates.py
+      - .github/workflows/audit-uploaded-atp2025-current-cdb.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/audit_uploaded_atp2025_current_cdb.py
+      - tests/test_audit_uploaded_atp2025_current_cdb.py
+      - tests/test_audit_atp2025_metadata_candidates.py
+      - scripts/audit_atp2025_metadata_candidates.py
+      - .github/workflows/audit-uploaded-atp2025-current-cdb.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: atp2025-flashscore-cdb-research-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify read-only identity/NULL and score test gates
+        run: |
+          set -euo pipefail
+          python -m pip install -q pytest
+          python -m py_compile scripts/audit_uploaded_atp2025_current_cdb.py
+          python -m pytest -q tests/test_audit_uploaded_atp2025_current_cdb.py tests/test_audit_atp2025_metadata_candidates.py
+          python -m pytest -q tests/test_cdb_uploaded_2025_source_stage.py \
+            tests/test_cdb_uploaded_2025_l2_bridge.py \
+            tests/test_link_uploaded_flashscore_verified.py
+
+      - name: Read-only source, private index and canonical snapshot download
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view BackstageTalks/tbt-data --json visibility -q .visibility)" = PRIVATE
+          mkdir -p .cache/tbt/atp2025-flashscore-audit/history
+          curl --fail --location --silent --show-error \
+            --retry 3 --retry-delay 2 \
+            'https://huggingface.co/datasets/minmaxxxer/atp-wta-matches-with-odds/resolve/main/atp_matches_2025.csv?download=true' \
+            -o .cache/tbt/atp2025-flashscore-audit/atp_matches_2025.csv
+          echo '958cd93216075165895b5764d63499193a91993bb30dc00822f262713f7b31e1  .cache/tbt/atp2025-flashscore-audit/atp_matches_2025.csv' | sha256sum -c -
+          gh release download tbt-data-v1 -R BackstageTalks/tbt-data \
+            -p blinq-flashscore-event-index-2026.jsonl.gz \
+            -D .cache/tbt/atp2025-flashscore-audit
+          echo '328f9c36c0f4021c745ca7119ea904a4ae7cadb66cee17cc63f2ca6f5774a952  .cache/tbt/atp2025-flashscore-audit/blinq-flashscore-event-index-2026.jsonl.gz' | sha256sum -c -
+          gh release download tbt-data-v1 -R BackstageTalks/tbt-data \
+            -p history-2024.parquet -p history-2025.parquet \
+            -p history_manifest.json -p _tbt_bundle_manifest.json \
+            -D .cache/tbt/atp2025-flashscore-audit/history
+
+      - name: Compare exact Flashscore events with SHA-pinned canonical CDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -q 'pandas>=2,<3' 'pyarrow>=14,<23'
+          python scripts/audit_uploaded_atp2025_current_cdb.py \
+            --source-csv .cache/tbt/atp2025-flashscore-audit/atp_matches_2025.csv \
+            --flashscore-index .cache/tbt/atp2025-flashscore-audit/blinq-flashscore-event-index-2026.jsonl.gz \
+            --history-dir .cache/tbt/atp2025-flashscore-audit/history \
+            --out .cache/tbt/atp2025-flashscore-audit/report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path(".cache/tbt/atp2025-flashscore-audit/report.json")
+          r=json.loads(p.read_text())
+          assert r["state"] == "READ_ONLY_NO_INDEPENDENT_CROSS_PROVIDER_EVENT_AND_TWO_PLAYER_WITNESS"
+          assert r["counts"]["raw"] == 3001
+          assert r["counts"]["source_only_passed_quality"] == 2501
+          assert r["counts"]["source_quality_review"] == 500
+          assert r["verified_links_authorized"] == r["canonical_writes"] == 0
+          assert r["import_ready"] is False and r["writer_invoked"] is False
+          assert r["metadata_research"]["import_ready"] is False
+          assert r["metadata_research"]["canonical_links_authorized"] == 0
+          print("RESEARCH_ONLY_AUDIT_PASS", json.dumps(r,sort_keys=True))
+          PY
+
+      - name: Upload aggregate report only (no raw sources, no canonical rows)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atp2025-flashscore-current-cdb-audit-${{ github.run_id }}
+          path: .cache/tbt/atp2025-flashscore-audit/report.json
+          if-no-files-found: ignore
+          retention-days: 30
