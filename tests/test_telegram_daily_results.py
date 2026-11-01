@@ -330,3 +330,14 @@ def test_elite_preview_is_clearly_synthetic_and_uses_the_real_formatter():
     assert "ℹ️ Analytical preview by BlinQ Stat Engine" in text
     assert tg.telegram_link_entities(text)[0]["url"]==tg.BRAND_URL
 
+
+def test_current_damm_junior_result_name_is_preserved():
+    sample=sent("top","damm-20261101")
+    sample["name"]="Martin Damm Jr."
+    combined=r.combined_daily_report([sample],[],DAY,tg.branded_footer())
+    assert combined and "🅃 Damm junior |" in combined[0]["text"]
+    legacy=r.report_rows([sample],[],"top",DAY,tg.branded_footer())
+    assert "Damm junior |" in legacy["text"]
+    assert sample["name"]=="Martin Damm Jr."
+    assert r.evaluate(sample,[])["status"]=="pending"
+
