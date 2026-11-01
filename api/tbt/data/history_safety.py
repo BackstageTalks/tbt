@@ -141,6 +141,68 @@ def merge_trusted_history_batch(
 
     trusted = list(existing)
     additions = list(incoming)
+    # The private canonical release can already contain conflicting claims
+    # about one provider event ID (e.g. three 2026 ITF pairs). Preserve their
+    # exact original rows and isolate them from the provider merge. Do NOT
+    # silently delete these six rows: CDB's row-monotonicity gate forbids it.
+    protected_ids = _duplicates(str(m.match_id or "") for m in trusted)
+    protected_provider_ids = _duplicates(
+        str(_provider_event_id(m) or "") for m in trusted
+    )
+    if protected_ids or protected_provider_ids:
+        protected, clean = [], []
+        for match in trusted:
+            pid = str(_provider_event_id(match) or "")
+            (protected if (
+                str(match.match_id or "") in protected_ids
+                or (pid and pid in protected_provider_ids)
+            ) else clean).append(match)
+
+        # Never accept an incoming claim against a protected identity,
+        # including its canonical fallback ID. Review is required to decide
+        # which of the original provider claims is authentic.
+        protected_canonical_ids = {
+            str(_canonical_match_id(m) or "") for m in protected
+        }
+        protected_match_ids = {str(m.match_id or "") for m in protected}
+        rejected, eligible = [], []
+        for match in additions:
+            pid = str(_provider_event_id(match) or "")
+            ids = {str(match.match_id or ""), str(_canonical_match_id(match) or "")}
+            if ((pid and pid in protected_provider_ids)
+                    or bool(ids & (protected_match_ids | protected_canonical_ids))):
+                rejected.append(match)
+            else:
+                eligible.append(match)
+        merged_clean, accepted, incoming_report = merge_trusted_history_batch(clean, eligible)
+        if len(merged_clean) < len(clean):
+            raise ValueError("Existing CDB clean rows would shrink; refuse provider write")
+        result = sorted([*protected, *merged_clean],
+                        key=lambda row: (row.scheduled_at, str(row.match_id)))
+        if len(result) < len(trusted):
+            raise ValueError("Existing CDB rows would shrink; refuse provider write")
+        details = [{
+            "match_id": str(m.match_id or ""),
+            "canonical_match_id": str(_canonical_match_id(m) or ""),
+            "provider_event_id": str(_provider_event_id(m) or ""),
+            "scheduled_at": m.scheduled_at.isoformat(),
+            "tour": str(m.tour or ""), "tournament": str(m.tournament or ""),
+            "player1_id": str(m.player1_id or ""),
+            "player2_id": str(m.player2_id or ""),
+            "reason": "incoming_hits_preexisting_cdb_identity_quarantine",
+        } for m in rejected]
+        return result, accepted, {
+            "schema": 1,
+            "quarantined_rows": len(details) + int(incoming_report["quarantined_rows"]),
+            "rows": details + list(incoming_report.get("rows") or []),
+            "protected_existing_rows": len(protected),
+            "protected_existing_provider_id_collisions": len(protected_provider_ids),
+            "collision": {
+                "existing_duplicate_match_ids": sorted(protected_ids),
+                "existing_duplicate_provider_event_ids": sorted(protected_provider_ids),
+                "incoming": incoming_report.get("collision"),
+            },
+        }
     merged = merge_matches(trusted, additions)
     safe, report = sanitize_history_identities(merged)
     if not report.get("quarantined_rows"):
