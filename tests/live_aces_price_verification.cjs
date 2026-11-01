@@ -6,11 +6,10 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(process.argv[2] || 'web/app.js', 'utf8');
-const start = source.indexOf('  function stableAceDisplayOdds(');
+const start = source.indexOf('  function verifiedAceProviderOdds(');
 const end = source.indexOf('  function projectionOddsHtml(', start);
 assert(start >= 0 && end > start, 'Missing ACES price normalization from served app.js');
-const sandbox = {verifiedAceProviderOdds: row =>
-  row.market === 'aces' && row.price_status === 'priced_projection' ? Number(row.odds) : NaN};
+const sandbox = {};
 vm.createContext(sandbox);
 vm.runInContext(source.slice(start, end), sandbox);
 
@@ -28,8 +27,14 @@ for (const {name, event_id, selection_id, scheduled_at, expected} of actualDay) 
   sandbox.normalizeFeedAceOdds({ace_picks:[row], results:[]});
   assert.equal(row.statistical_ace_odds, expected, name + ' visible web display');
   assert.equal(row.odds, 2.0, name + ' frozen source unchanged');
-  const tomorrow = {...row, scheduled_at:'2026-11-02T14:30:00Z', statistical_ace_odds:undefined};
-  sandbox.normalizeFeedAceOdds({ace_picks:[tomorrow], results:[]});
-  assert.equal(tomorrow.statistical_ace_odds, undefined, name + ' future verified quote unchanged');
+  for (const scheduled_at of ['2026-11-02T14:30:00Z', '2027-05-02T14:30:00Z']) {
+    const future = {...row, scheduled_at, statistical_ace_odds:undefined};
+    sandbox.normalizeFeedAceOdds({ace_picks:[future], results:[]});
+    assert.equal(future.statistical_ace_odds, expected, name + ' permanent 2.00 fallback');
+    assert.equal(future.odds, 2.0, name + ' future raw price unchanged');
+  }
+  const genuine = {...row, odds:2.125, statistical_ace_odds:undefined};
+  sandbox.normalizeFeedAceOdds({ace_picks:[genuine], results:[]});
+  assert.equal(genuine.statistical_ace_odds, undefined, name + ' independently verified non-placeholder provider quote preserved');
   process.stdout.write(name + ' ' + expected.toFixed(2) + ' PASS\\n');
 }

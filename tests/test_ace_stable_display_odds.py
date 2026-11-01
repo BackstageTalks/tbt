@@ -66,7 +66,7 @@ const novemberPicks = [
 ];
 for(const [event_id,selection_id,scheduled_at,telegramOdds] of novemberPicks){
   const pick = {...real, event_id, selection_id, scheduled_at, odds:2.00};
-  assert.equal(sandbox.verifiedAceProviderOdds(pick),2.00);
+  assert(Number.isNaN(sandbox.verifiedAceProviderOdds(pick)), '2.00 must never be considered a verified ACES provider price');
   const expected=sandbox.stableAceDisplayOdds(pick);
   assert.equal(expected,telegramOdds,'Must reproduce frozen Telegram pick identity odds');
   sandbox.normalizeFeedAceOdds({ace_picks:[pick],results:[]});
@@ -81,8 +81,19 @@ for(const [event_id,selection_id,scheduled_at,telegramOdds] of novemberPicks){
   assert.equal(sandbox.aceDfResultKpiOdds(results.market_publications[0]),expected);
   const future={...pick,statistical_ace_odds:undefined,scheduled_at:'2026-11-02T13:00:00Z'};
   sandbox.normalizeFeedAceOdds({ace_picks:[future],results:[]});
-  assert.equal(future.statistical_ace_odds,undefined,'no override of subsequent verified quotes');
-  assert(sandbox.projectionOddsHtml(future).includes('2.00'));
+  assert.equal(future.statistical_ace_odds,expected,'permanent fallback covers subsequent 2.00 placeholders');
+  assert(sandbox.projectionOddsHtml(future).includes(expected.toFixed(2)));
+  assert(!sandbox.projectionOddsHtml(future).includes('2.00'));
+  const nextYear={...pick,statistical_ace_odds:undefined,scheduled_at:'2027-05-02T13:00:00Z'};
+  sandbox.normalizeFeedAceOdds({ace_picks:[nextYear],results:[]});
+  assert.equal(nextYear.statistical_ace_odds,expected,'fallback must not expire after 2026');
+  assert(sandbox.projectionOddsHtml(nextYear).includes(expected.toFixed(2)));
+  const futureResults={
+    event_id,scheduled_at:nextYear.scheduled_at,
+    market_publications:[{...nextYear,statistical_ace_odds:undefined}]
+  };
+  sandbox.normalizeFeedAceOdds({ace_picks:[],results:[futureResults]});
+  assert.equal(futureResults.market_publications[0].statistical_ace_odds,expected);
 }
 
 const unverified = {...real, odds_bookmaker: ''};

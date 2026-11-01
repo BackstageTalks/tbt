@@ -21,7 +21,8 @@ def working_ace_odds(row: Mapping[str, Any], *, selection_id: str | None = None)
         return None
     betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
     event = str(row.get("event_id") or row.get("match_id") or row.get("id") or "")
-    selection = str(selection_id or row.get("selection_id") or betting.get("selection_id")
+    # The frozen Telegram contract uses betting.selection_id first.
+    selection = str(selection_id or betting.get("selection_id") or row.get("selection_id")
                     or row.get("winner_id") or row.get("pick") or row.get("selection") or "")
     if not event and not selection:
         return None
@@ -53,6 +54,12 @@ def verified_ace_odds(row: Mapping[str, Any]) -> float | None:
         return None
     from math import isfinite
     if not isfinite(odds) or not 1.50 <= odds <= 100:
+        return None
+    # Until independently bettable Aces API quotes are reliable, treat the
+    # legacy exact-2.00 feed value as an unverified placeholder, regardless
+    # of its old "priced_projection" marker. This is a permanent fallback
+    # for future offers; preserve raw provider prices and immutable ledgers.
+    if odds == 2.0:
         return None
     source = str(row.get("odds_source") or "").lower()
     valid = ((source == "rapidapi" and provider == 1)
