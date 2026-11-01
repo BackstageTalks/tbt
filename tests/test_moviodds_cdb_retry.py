@@ -116,8 +116,16 @@ def test_match_status_checks_out_retry_script_and_does_not_hide_failure():
     assert "continue-on-error: true" not in retry_block
     assert "python scripts/moviodds_cdb_retry.py" in retry_block
     assert "set -euo pipefail" in retry_block
-    # Other existing half-hour tasks continue under their own always() gates.
-    assert "if: always() && github.event_name == 'workflow_dispatch'" in retry_block
+    # Quality hold must prevent weekly CDB dispatch regardless of cron.
+    assert "if: ${{ false }}" in retry_block
+    assert "QUALITY HOLD 2026-11-01" in retry_block
+    assert "0 verified CDB additions" in retry_block
+    # Keep already working final source capture and research-only stage enabled.
+    final_capture = steps.split("      - name: Capture finalized MoviOdds tennis statistics in DB", 1)[1].split("      - name: Dispatch completed Telegram", 1)[0]
+    stage = steps.split("      - name: Dispatch autonomous MoviOdds CDB candidate preparation once daily", 1)[1].split("      - name: Archive completed MoviOdds", 1)[0]
+    assert "if: ${{ false }}" not in final_capture
+    assert "if: ${{ false }}" not in stage
+    assert "gh workflow run moviodds-cdb-stage.yml" in stage
 
 
 def test_late_global_writer_race_cannot_report_moviodds_import_success():
