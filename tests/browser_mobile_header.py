@@ -110,7 +110,7 @@ def main():
                             heroRadius:document.querySelector('#dashboardHero')?getComputedStyle(document.querySelector('#dashboardHero')).borderRadius:null,navBg,navLine};
                         }""")
                         assert 'sports-intelligence=20261030-1' in premium['css'], premium
-                        assert premium['rowBg'] == 'none' and premium['rowBgColor'] == 'rgba(3, 23, 17, 0.58)', premium
+                        assert premium['rowBg'] == 'none' and premium['rowBgColor'] == 'rgba(3, 23, 17, 0.74)', premium
                         assert premium['pickBg'] == 'rgba(0, 0, 0, 0)', premium
                         assert premium['heroRadius'] == '11px', premium
                         assert premium['navBg'] == 'none', premium
@@ -118,7 +118,7 @@ def main():
                         assert premium['kpiBg'] == 'none' and premium['kpiBgColor'] == 'rgba(0, 0, 0, 0)', premium
                         assert premium['kpiAccent'] == 'none', premium
                         assert premium['kpiRadius'] == '0px', premium
-                        assert 20 <= float(premium['kpiValueSize'].replace('px','')) <= 26, premium
+                        assert 18 <= float(premium['kpiValueSize'].replace('px','')) <= 23, premium
                         assert premium['kpiIconSize'] == '16px', premium
                         assert len(premium['cards']) == 4, premium
                         # Approved compact four-slot strip: all values on one row.
