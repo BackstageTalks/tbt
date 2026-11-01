@@ -1754,13 +1754,9 @@
   function renderSystemFooterStatus(){
     const host=$('footerSystemStatus'),time=$('footerLastUpdate');if(!host||!time)return;
     const heartbeat=state.liveRadarHeartbeat||state.userLiveRadarStatus||{};
-    const liveAt=heartbeat?.last_success_at||heartbeat?.scanned_at||heartbeat?.updated_at||'';
-    const feedAt=state.feed?.generated_at||'';
-    const parts=[];
-    if(Number.isFinite(Date.parse(feedAt)))parts.push(lcopy('Offer updated','Ponuka aktualizovaná','Nabídka aktualizována')+': '+fmtTime(feedAt));
-    if(Number.isFinite(Date.parse(liveAt)))parts.push(lcopy('Last LIVE scan','Posledný LIVE scan','Poslední LIVE scan')+': '+fmtTime(liveAt));
-    time.textContent=parts.join(' · ')||lcopy('Updates: —','Aktualizácie: —','Aktualizace: —');
-    const parsed=Date.parse(liveAt||feedAt);
+    const raw=heartbeat?.scanned_at||heartbeat?.updated_at||state.feed?.generated_at||'';
+    const parsed=Date.parse(raw);
+    time.textContent=Number.isFinite(parsed)?`Last Update: ${fmtTime(raw)}`:'Last Update: —';
     const fresh=heartbeat?.fresh===true||(Number.isFinite(parsed)&&Date.now()-parsed<=180000);
     host.classList.toggle('is-stale',!fresh);
   }
