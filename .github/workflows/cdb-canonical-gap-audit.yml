@@ -32,7 +32,7 @@ jobs:
         env:
           PYTHONPATH: .:api:scripts
         run: |
-          python -m pip install --disable-pip-version-check pytest
+          python -m pip install --disable-pip-version-check pytest pandas pyarrow pydantic numpy
           python -m compileall -q scripts/cdb_canonical_gap_audit.py
           python -m pytest tests/test_cdb_canonical_gap_audit.py -q
 
