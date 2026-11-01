@@ -1,10 +1,6 @@
 name: BlinQ CDB offline OddsTrader staging (24 private shards)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/blinq-cdb-oddstrader-offline-stage.yml
   workflow_dispatch:
 
 permissions:
