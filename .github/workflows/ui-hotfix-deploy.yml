@@ -73,8 +73,9 @@ jobs:
           for attempt in 1 2 3 4 5 6 7 8; do
             bust="$GITHUB_SHA-$attempt"
             if curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/deployment.json?__blinq_ui=$bust" -o /tmp/deployment.json &&
-               curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/app.js?__blinq_ui=$bust" -o /tmp/app.js; then
-              python -c "import json,pathlib,sys; sha=sys.argv[1]; dep=json.loads(pathlib.Path('/tmp/deployment.json').read_text()); app=pathlib.Path('/tmp/app.js').read_text(); assert dep.get('git_sha')==sha,(dep.get('git_sha'),sha); assert 'Max. počet setov' in app; assert 'function comparatorAutoPlayer' in app; assert 'comparatorDefaultBestOf' in app" "$GITHUB_SHA"
+               curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/app.js?__blinq_ui=$bust" -o /tmp/app.js &&
+               curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/?__blinq_ui=$bust" -o /tmp/blinq-index.html; then
+              python -c "import json,pathlib,sys; sha=sys.argv[1]; dep=json.loads(pathlib.Path('/tmp/deployment.json').read_text()); app=pathlib.Path('/tmp/app.js').read_text(); idx=pathlib.Path('/tmp/blinq-index.html').read_text(); assert dep.get('git_sha')==sha,(dep.get('git_sha'),sha); assert 'Max. počet setov' in app; assert 'function comparatorAutoPlayer' in app; assert 'comparatorDefaultBestOf' in app; assert 'ace-odds-sync=20261101-1' in idx, 'Stale ACES JS cache key'; assert 'function stableAceDisplayOdds' in app; assert 'state.feed=normalizeFeedAceOdds(feed)' in app; assert 'Number(row?.statistical_ace_odds)' in app" "$GITHUB_SHA"
               ok=1
               break
             fi
