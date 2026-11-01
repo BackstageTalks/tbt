@@ -148,7 +148,8 @@ def extract_player_superiority_odds(payload: Any, metric: str, player1: str, pla
 
 
 
-def extract_player_total_ou(payload: Any, metric: str, player_name: str, *, player_slot: int | None = None) -> list[dict[str, Any]]:
+def extract_player_total_ou(payload: Any, metric: str, player_name: str, *, player_slot: int | None = None,
+                            allow_single_side: bool = False) -> list[dict[str, Any]]:
     """Extract two-sided individual player Aces / Double Faults O/U markets.
 
     Only the named player's complete markets count. A match-total or Most Aces
@@ -194,7 +195,8 @@ def extract_player_total_ou(payload: Any, metric: str, player_name: str, *, play
             "player_name": player_name,
         })
         item.setdefault(side, float(price))
-    return [item for item in candidates.values() if "over" in item and "under" in item]
+    return [item for item in candidates.values() if (("over" in item and "under" in item)
+            or (allow_single_side and ("over" in item or "under" in item)))]
 
 
 def _player_ou_probability(mean: float, metric: str, line: float) -> float:
@@ -278,8 +280,11 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
         return out, False, "selection_not_resolved_to_market_side"
 
     # Keep the identical Most Aces / Most DF wager where the bookmaker offers it.
+    options = extract_player_total_ou(payload, metric, selected_name, player_slot=slot,
+                                      allow_single_side=(metric == "aces"))
     superiority = extract_player_superiority_odds(payload, metric, name1, name2)
-    if superiority:
+    # For ACES a bookmaker player-total O/U line is the preferred contract.
+    if superiority and not (metric == "aces" and options):
         odds = superiority["player1_odds"] if slot == 1 else superiority["player2_odds"]
         out.update({
             "odds": round(float(odds), 3), "price_status": "priced_projection",
@@ -292,7 +297,6 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
 
     # Otherwise convert the COUNT prediction, not the superiority confidence,
     # to a new player-specific O/U contract with a REAL provider price.
-    options = extract_player_total_ou(payload, metric, selected_name, player_slot=slot)
     mean = _number(out.get("projection"))
     if mean is None or mean < 0:
         return out, False, "missing_player_count_projection"
@@ -300,6 +304,8 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
     for option in options:
         p_over = _player_ou_probability(mean, metric, option["line"])
         for direction in ("over", "under"):
+            if direction not in option:
+                continue
             probability = p_over if direction == "over" else 1 - p_over
             odds = float(option[direction])
             ev = probability * odds - 1
@@ -396,9 +402,11 @@ def prefetch_projection_market_board(
             if ((name1 and name2 and extract_player_superiority_odds(
                     payload, metric, name1, name2))
                 or (name1 and extract_player_total_ou(
-                    payload, metric, name1, player_slot=1))
+                    payload, metric, name1, player_slot=1,
+                    allow_single_side=(metric == "aces")))
                 or (name2 and extract_player_total_ou(
-                    payload, metric, name2, player_slot=2))):
+                    payload, metric, name2, player_slot=2,
+                    allow_single_side=(metric == "aces")))):
                 supported.add(metric)
         if supported:
             markets_by_event[event_id] = supported
