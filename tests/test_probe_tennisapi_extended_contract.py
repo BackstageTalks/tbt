@@ -289,17 +289,70 @@ def test_archive_2016_no_calendar_coverage_is_not_2016_no_matches():
     assert all("/api/tennis/events/" not in p for p, _ in client.paths)
 
 
-def test_archive_2016_missing_grand_slam_category_does_not_guess_id():
-    class OtherCategory(StubClient):
+def test_archive_2016_scans_provider_observed_atp_and_wta_categories():
+    class NestedCategories(StubClient):
         def _get(self, path, params=None, *, enrichment=False):
             self.request_count += 1
             self.paths.append((path, params))
-            return {"categories": [{"id": 3, "name": "ATP"}]}
-    client = OtherCategory()
-    result = run_probe(client, event_id=14494928, max_requests=4,
+            if path == "/api/tennis/calendar/10/7/2016/categories":
+                return {"categories": [
+                    {"category": {"id": 3, "name": "ATP"}},
+                    {"category": {"id": 6, "name": "WTA"}},
+                ]}
+            if path == "/api/tennis/category/3/events/10/7/2016":
+                return {"events": [{"id": 800, "homeTeam": {"id": 31},
+                    "awayTeam": {"id": 32}, "status": {"type": "finished"},
+                    "tournament": {"name": "Wimbledon"}}]}
+            if path == "/api/tennis/category/6/events/10/7/2016":
+                return {"events": []}
+            return {"statistics": []}
+    client = NestedCategories()
+    result = run_probe(client, event_id=14494928, max_requests=6,
                        phase="archive_2016")
-    assert result["historical_sample_policy"] == "grand_slam_category_missing"
+    assert result["historical_sample_event_id"] == 800
+    assert result["historical_sample_policy"] == "wimbledon_finished"
+    assert result["historical_source_category_ids"] == [3, 6]
+    assert result["archived_category_scan_complete"] is True
+    assert result["request_count"] == 6
+    assert client.paths[:3] == [
+        ("/api/tennis/calendar/10/7/2016/categories", None),
+        ("/api/tennis/category/3/events/10/7/2016", None),
+        ("/api/tennis/category/6/events/10/7/2016", None),
+    ]
+
+
+def test_archive_2016_ambiguous_calendar_ids_fail_closed_without_guesses():
+    class Ambiguous(StubClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            self.request_count += 1
+            self.paths.append((path, params))
+            return {"categories": [
+                {"category": {"id": 3}},
+                {"category": {"id": 3}},
+            ]}
+    client = Ambiguous()
+    result = run_probe(client, event_id=14494928, max_requests=10,
+                       phase="archive_2016")
+    assert result["historical_sample_policy"] == "category_identity_ambiguous"
     assert result["request_count"] == 1
+    assert "historical_sample_event_id" not in result
+
+
+def test_archive_2016_unavailable_category_is_not_complete_coverage():
+    class Partial(StubClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            self.request_count += 1
+            self.paths.append((path, params))
+            if path == "/api/tennis/calendar/10/7/2016/categories":
+                return {"categories": [{"id": 3}, {"id": 6}]}
+            if path.endswith("category/3/events/10/7/2016"):
+                return {}  # 204
+            return {"events": []}
+    client = Partial()
+    result = run_probe(client, event_id=14494928, max_requests=10,
+                       phase="archive_2016")
+    assert result["archived_categories_unavailable"] == [3]
+    assert result["archived_category_scan_complete"] is False
     assert "historical_sample_event_id" not in result
 
 
