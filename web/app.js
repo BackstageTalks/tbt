@@ -2778,7 +2778,24 @@
     const p=Math.min(0.94,Math.max(0.5,confidence));
     return Math.round(Math.max(1.05,Math.min(2.50,1/(p*1.055)))*100)/100;
   }
+  // Test-only visual figure for ACES. Never substitute this for row.odds,
+  // market publications, settlement units, historical ROI or model inputs.
+  // A stable identity avoids random values changing on every browser refresh.
+  function aceDemoDisplayOdds(row){
+    const identity=[
+      row?.event_id||'',row?.selection_id||row?.winner_id||'',
+      row?.market_line||'',row?.ou_side||''
+    ].join('|');
+    let hash=2166136261;
+    for(let i=0;i<identity.length;i++){
+      hash^=identity.charCodeAt(i);
+      hash=Math.imul(hash,16777619);
+    }
+    return (150+((hash>>>0)%31))/100;
+  }
   function projectionOddsHtml(row){
+    if(String(row?.market||row?.projection_metric||'').toLowerCase()==='aces')
+      return hubNumberHtml(aceDemoDisplayOdds(row).toFixed(2),lcopy('odds','kurz','kurz'));
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
     if(authenticLiveProjection(row))return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
@@ -2930,7 +2947,7 @@
 
   function marketPreviewCard(row,key,index=0,locked=false,compact=false){
     if(locked)return lockedPickCard(key,index);
-    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const odds=Number(row?.odds);
+    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const odds=key==='ace'&&String(row?.market||'').toLowerCase()==='aces'?aceDemoDisplayOdds(row):Number(row?.odds);
     const projection=Number(row?.projection),opponentProjection=Number(row?.opponent_projection),projectionGap=Number(row?.projection_gap),projectionConfidence=Number(row?.projection_confidence);const samples=row?.projection_samples||{};const projectionOnly=row?.price_status==='projection_only'&&Number.isFinite(projection);
     let badge='',mainValue='—',confidenceClass='low',pickLabel=publicText(key==='prime'?'ACCA Prediction':key==='value'?'Value Prediction':key==='ace'?'Ace / DF Prediction':key==='sg'?'Set / Game Prediction':'TOP Prediction'),note='',metrics=[];
     if(projectionOnly){
