@@ -1,4 +1,4 @@
-name: One-shot read-only GitHub orphan marker audit
+name: Read-only GitHub orphan trigger and ops marker audit
 
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
           root=pathlib.Path(".")
           tracked=subprocess.check_output(["git","ls-files","-z"]).decode().split("\0")
           tracked=[p for p in tracked if p]
-          markers=[p for p in tracked if p.startswith(".github/") and "/workflows/" not in p and p!=".github/WORKFLOW_LIFECYCLE.md"]
+          markers=[p for p in tracked if (p.startswith("ops/") or (p.startswith(".github/") and "/workflows/" not in p and p!=".github/WORKFLOW_LIFECYCLE.md"))]
           candidate=[]
           for marker in markers:
               basename=marker.split("/")[-1]
@@ -49,12 +49,12 @@ jobs:
           summary=dict(collections.Counter(x["category"] for x in candidate))
           out={"schema":1,"source_head":subprocess.check_output(["git","rev-parse","HEAD"]).decode().strip(),
                "tracked":len(tracked),"marker_count":len(markers),"summary":summary,"entries":candidate}
-          pathlib.Path("gh-orphan-marker-audit.json").write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
+          pathlib.Path("gh-orphan-ops-marker-audit.json").write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
           print("AUDIT "+json.dumps({"source_head":out["source_head"],"summary":summary,"candidate_names":[x["path"] for x in candidate if x["category"]=="possible_orphan"]},sort_keys=True))
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: gh-orphan-marker-readonly-audit
+          name: gh-orphan-ops-marker-readonly-audit
           path: gh-orphan-marker-audit.json
           if-no-files-found: error
           retention-days: 30
