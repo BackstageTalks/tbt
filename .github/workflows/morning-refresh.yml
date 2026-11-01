@@ -1,6 +1,9 @@
 name: BlinQ morning prediction refresh
 
 on:
+  schedule:
+    - cron: '15 5 * * *'
+      timezone: Europe/Bratislava
   workflow_dispatch:
     inputs:
       max_requests:
@@ -25,7 +28,7 @@ concurrency:
 jobs:
   dispatch:
     # Only external/manual workflow_dispatch may start the paid refresh.
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     # Stay alive until the real data.yml refresh finishes; wrapper success must
     # mean the paid refresh/deploy itself succeeded, not only that dispatch worked.
@@ -72,7 +75,7 @@ jobs:
               current_id = int(os.environ["GITHUB_RUN_ID"])
               previous = [
                   run for run in payload.get("workflow_runs", [])
-                  if run.get("event") == "workflow_dispatch"
+                  if run.get("event") in ("workflow_dispatch", "schedule")
                   and int(run.get("id") or 0) != current_id
                   and run.get("conclusion") == "success"
                   and datetime.datetime.fromisoformat(
