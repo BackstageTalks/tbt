@@ -60,6 +60,7 @@ from tbt.services.account_storage import (
 )
 from tbt.services.admin_storage import (
     AdminStorageUnavailable,
+    UIConfigVersionConflict,
     admin_storage_backend,
     admin_storage_diagnostics,
     banner_analytics_summary,
@@ -3981,6 +3982,8 @@ def admin_ui_config(req):
             expected_revision=expected,
         )
         return response(saved)
+    except UIConfigVersionConflict as exc:
+        return response({"error": str(exc)}, 409)
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
     except AuthUnavailable:
