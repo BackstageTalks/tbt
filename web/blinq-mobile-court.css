@@ -1,5 +1,5 @@
 /* Approved mobile tennis visual, 2026-10-31.
-   Phone-only presentation. Existing values, DOM, events, locks, banner and
+   Phone-only presentation. Values, DOM, events, locks, banner content and
    desktop/tablet styles remain owned by their original implementations.
    Four IDs intentionally outrank the legacy three-ID mobile cascade. */
 @media (max-width:600px) {
