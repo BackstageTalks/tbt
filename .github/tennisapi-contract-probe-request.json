@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "requested_date": "2026-11-01",
+  "reason": "Read-only audit of newly published TennisApi endpoints after prediction release recovery",
+  "provider_requests_allowed": true,
+  "max_requests": 24,
+  "event_id": 14494928,
+  "cdb_writes_allowed": false,
+  "model_changes_allowed": false,
+  "requested_by": "BlinQ technical audit"
+}
