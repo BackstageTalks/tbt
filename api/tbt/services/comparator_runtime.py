@@ -388,7 +388,10 @@ def compare_from_artifact(
     right = _resolve(artifact, player2, tour=tour)
     left_id = str(left.get("player_id") or "")
     right_id = str(right.get("player_id") or "")
-    if left_id == right_id:
+    if (left_id == right_id or
+            normalize_player_name(left.get("name")) == normalize_player_name(right.get("name"))):
+        # Two source IDs with an identical display name are not verified
+        # different people. Reject this synthetic self-match before prediction.
         raise RuntimeComparatorError("players must be different")
 
     builder = FeatureBuilder.from_state(artifact.get("feature_state"))
