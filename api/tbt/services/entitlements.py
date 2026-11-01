@@ -141,7 +141,47 @@ def _public_result_publications(row: dict) -> list[dict]:
     return out
 
 
-def _filter_result_history(rows: list, hours: int | None, now: datetime | None = None) -> list:
+RESULT_CATEGORY_ORDER = ("top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games")
+
+
+def _result_publication_category(publication: dict) -> str:
+    # Projection market takes precedence over a stale legacy section label.
+    market = str(publication.get("market") or "").strip().lower()
+    if market in {"aces", "double_faults", "sets", "games"}:
+        return "ace" if market == "aces" else market
+    return str(publication.get("section") or "").strip().lower()
+
+
+def _allowed_result_categories(manifest: dict) -> list[str]:
+    if manifest.get("plan") == "admin":
+        return list(RESULT_CATEGORY_ORDER)
+    sections = manifest.get("sections") or {}
+    allowed = []
+    for category in RESULT_CATEGORY_ORDER:
+        # TOP is the same daily entitlement, not an independently unlocked feed.
+        ent = sections.get("daily") if category == "top_daily" else sections.get(category)
+        if not isinstance(ent, dict) or not ent.get("enabled") or ent.get("display_state") != "active":
+            continue
+        visible = ent.get("visible_picks", 0)
+        has_slots = str(visible).upper() == "ALL"
+        if not has_slots:
+            try:
+                has_slots = int(visible) > 0
+            except (ValueError, TypeError):
+                pass
+        # An explicit active position remains an entitlement with a zero base.
+        overrides = ent.get("row_overrides") or {}
+        if isinstance(overrides, dict):
+            has_slots = has_slots or any(str(v).lower() == "active" for v in overrides.values())
+        if has_slots:
+            allowed.append(category)
+    return allowed
+
+
+def _filter_result_history(
+    rows: list, hours: int | None, now: datetime | None = None,
+    allowed_categories: set[str] | None = None,
+) -> list:
     if hours is not None and hours <= 0:
         return []
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -155,6 +195,11 @@ def _filter_result_history(rows: list, hours: int | None, now: datetime | None =
             if ts is None or not (cutoff <= ts <= now + timedelta(hours=6)):
                 continue
         publications = _public_result_publications(row)
+        if allowed_categories is not None:
+            publications = [
+                publication for publication in publications
+                if _result_publication_category(publication) in allowed_categories
+            ]
         if not publications:
             continue
         copy = deepcopy(row)
@@ -162,6 +207,16 @@ def _filter_result_history(rows: list, hours: int | None, now: datetime | None =
         out.append(copy)
     return out
 
+
+
+def filter_results_for_categories(rows: list, categories: list[str] | set[str]) -> list:
+    """Recheck runtime settlement overlays before the feed leaves the API.
+
+    The first pass runs before the status overlay. This pass prevents a
+    multi-market publication nested in an authorized daily pick from widening
+    a member's Results access during response-time settlement.
+    """
+    return _filter_result_history(rows, None, allowed_categories=set(categories))
 
 
 def effective_plan(access: dict) -> str:
@@ -886,6 +941,7 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
     }
     results_allowed = _results_access_allowed(ui_config, plan)
     history_hours = _results_history_hours(ui_config, plan) if results_allowed else 0
+    result_categories = _allowed_result_categories({"plan": plan, "sections": sections}) if history_hours != 0 else []
     return {
         "plan": plan,
         "daily_pick_count": _published_daily_pick_count(payload),
@@ -893,6 +949,7 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
         "results": bool(results_allowed and history_hours != 0),
         "performance": bool(results_allowed and history_hours is None),
         "results_history_hours": history_hours,
+        "result_categories": result_categories,
     }
 
 
@@ -990,11 +1047,18 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
     # full historical array and therefore cannot recover it from the browser.
     history_hours = manifest.get("results_history_hours")
     source_results = payload.get("results") if isinstance(payload.get("results"), list) else []
-    result["results"] = _filter_result_history(source_results, history_hours)
-    if history_hours is not None:
-        # Aggregate performance in the published feed may cover all time, so do not
-        # expose it to ROOKIE/PRO. Their UI calculates metrics from the authorized
-        # 24h/48h result slice instead.
+    result["results"] = _filter_result_history(
+        source_results, history_hours,
+        allowed_categories=set(manifest.get("result_categories") or []),
+    )
+    restricted_categories = (
+        manifest["plan"] != "admin"
+        and set(manifest.get("result_categories") or []) != set(RESULT_CATEGORY_ORDER)
+    )
+    if history_hours is not None or restricted_categories:
+        # Raw performance aggregates contain every historical category.
+        # Never leak totals for disabled markets through this alternate API
+        # surface; member-facing Results/KPIs use the authorized ledger.
         if "performance" in result:
             result["performance"] = {}
         if "betting_performance" in result:

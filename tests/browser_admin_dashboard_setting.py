@@ -82,6 +82,7 @@ def main():
                 page.evaluate("""() => {
                     const h=dashboardHarness;
                     h.state.feed={
+                      account:{is_admin:true,role:'admin',plan:'admin',status:'active'},
                       entitlements:{daily_pick_count:58},daily_picks:[{odds:1.86,surface:'hard'}],
                       dashboard_model_success:{accuracy:.703},
                       performance_windows:{

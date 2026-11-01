@@ -70,22 +70,27 @@ def test_aces_prediction_contracts_and_mobile_compaction():
     count.update(price_status="projection_only")
     unpriced=tg.fmt(count,"aces",cfg,index=6)
     assert "Medvedev | " in unpriced
-    assert "najviac es" in unpriced
-    assert "aces 8.3" not in unpriced
+    assert "najviac" in unpriced
+    assert "≈8.3" in unpriced
     assert unpriced.endswith(" | 0" ) is False
 
     superiority=dict(count, price_contract="player_superiority",price_status="priced_projection",
                      odds=2.0)
     priced=tg.fmt(superiority,"aces",cfg,index=6)
-    assert "najviac es | 2.00" in priced
+    assert "najviac | ≈8.3 | 2.00" in priced
     assert "72.0%" not in priced  # the optional confidence was dropped to fit mobile
-    assert len(priced)<=48  # category label adds text; confidence is removed first
+    assert len(priced)<=65  # still one compact row; confidence is removed first
 
     over=dict(count,price_contract="player_total_ou",price_status="priced_projection",
               market_line=8.5,ou_side="over",model_probability=0.65,odds=1.9)
     text=tg.fmt(over,"aces",cfg,index=2)
-    assert "Over 8.5 es" in text
-    assert "8.3" not in text
+    assert "O 8.5" in text
+    assert "O 8.5 | ≈8.3 | 1.90" in text
+    assert "Over 8.5" not in text
+    under=dict(over,ou_side="under")
+    under_text=tg.fmt(under,"aces",cfg,index=2)
+    assert "U 8.5 | ≈8.3 | 1.90" in under_text
+    assert "Under 8.5" not in under_text
     assert "72.0%" not in text  # model O/U probability differs from most-aces confidence
     assert "EV" not in text
     bad=dict(over)
@@ -96,6 +101,33 @@ def test_aces_prediction_contracts_and_mobile_compaction():
         pass
     else:
         raise AssertionError("Invalid O/U contract rendered as valid pick")
+
+
+def test_ace_projection_is_player_specific_and_missing_data_is_not_fabricated():
+    cfg=settings()
+    ace=row(92,"Selected Player","aces")
+    ace["price_contract"]="player_superiority"
+    ace["odds"]=1.85
+    rendered=tg.fmt(ace,"aces",cfg)
+    assert "Player | " in rendered
+    assert "najviac | ≈8.3 | 1.85" in rendered
+    assert "5.4" not in rendered  # opponent's projection is never substituted
+    assert "\n" not in rendered
+
+    missing=dict(ace)
+    missing.pop("projection")
+    assert "≈" not in tg.fmt(missing,"aces",cfg)
+    for invalid in ("not-a-number", float("nan"), float("inf"), -1):
+        corrupt=dict(ace,projection=invalid)
+        assert "≈" not in tg.fmt(corrupt,"aces",cfg)
+
+    numeric_string=dict(ace,projection="6.25")
+    assert "≈6.2" in tg.fmt(numeric_string,"aces",cfg)
+    premium=tg.messages(offer(),cfg,NOW)[0]["text"]
+    aces=[line for line in premium.splitlines() if line.startswith("🄰 |")]
+    assert len(aces)==1 and "≈8.3" in aces[0]
+    assert all("≈" not in line for line in premium.splitlines()
+               if line.startswith(("🅃 |","🅅 |")))
 
 
 def test_daily_queue_is_durable_idempotent_and_full_offer_override(tmp_path, monkeypatch):
@@ -192,7 +224,7 @@ def test_one_time_format_reissue_preserves_exact_previous_picks_and_dedup(tmp_pa
     rendered=tg.load(tmp_path/"repost"/"messages.json")
     assert [m["audience"] for m in rendered]==["premium","free"]
     assert all("EV" not in m["text"] for m in rendered)
-    assert "najviac es" in rendered[0]["text"]
+    assert "najviac" in rendered[0]["text"]
     staged=tg.load(tmp_path/"repost"/"state.json")
     assert staged["attempts"][sent_id]==prior
     repost_id=tg.day(NOW)+":repost:format-v2-no-ev"
@@ -261,7 +293,7 @@ def test_classic_format_and_deterministic_free_pick():
     assert "EV" not in premium
     assert "🆓 FREE | Surname" in first[1]["text"]
     assert first[1]["text"].count("🆓") == 1
-    assert "najviac es" in first[0]["text"]
+    assert "najviac" in first[0]["text"]
     assert "aces 8.3" not in first[0]["text"]
     assert "esá" not in first[0]["text"]
     assert "Double Fault" not in first[0]["text"]
