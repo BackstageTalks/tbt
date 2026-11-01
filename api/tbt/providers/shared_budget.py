@@ -189,7 +189,7 @@ def _conflict(exc: Exception) -> bool:
 
 
 def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
-            table: Any = None) -> dict:
+            table: Any = None, paced: bool = False, pace_table: Any = None) -> dict:
     """Atomic reservation in the same durable store used by BlinQ admin.
 
     Table may be injected in tests. Retries only on optimistic write races,
@@ -203,6 +203,13 @@ def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
             table = _table(TABLE)
         except Exception as exc:
             raise SharedBudgetUnavailable("API budget storage unavailable") from exc
+    # Reserve a global time slot before the independent provider-day quota.
+    # A failed daily budget may waste a time slot but cannot spend quota on a
+    # request that never happens. Both operations fail closed on store errors.
+    pace_proof = None
+    if paced:
+        from .shared_rate import reserve_pace
+        pace_proof = reserve_pace(table=pace_table)
     for attempt in range(MAX_RETRIES):
         try:
             entity = table.get_entity(partition_key=PARTITION, row_key=ROW)
@@ -246,6 +253,9 @@ def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
                             )
             except Exception:
                 pass
+            if pace_proof is not None:
+                result["rate_pace"] = {"schema": pace_proof["pace_schema"],
+                                       "max_rps": pace_proof["max_rps"]}
             return result
         except SharedBudgetExhausted:
             raise
