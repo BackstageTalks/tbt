@@ -14,6 +14,7 @@ def sample():
         "winner_name": "Carreno Busta P.", "loser_name": "Shevchenko A.",
         "start_time_utc": "2024-12-27T02:10:00Z", "score": "6-2 6-1",
         "best_of": "3", "surface": "Hard", "round": "RR",
+        "tourney_date": "20241227", "tourney_id": "synthetic-2024",
         "tourney_name": "Synthetic United Cup",
         "w_ace": "3", "w_df": "0", "w_svpt": "40", "w_1stIn": "27",
         "w_1stWon": "21", "w_2ndWon": "9", "w_SvGms": "8",
