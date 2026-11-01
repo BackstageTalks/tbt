@@ -121,7 +121,7 @@ def main():
             assert studio['panels']==2 and studio['desktopFields']==4 and studio['mobileFields']==4,studio
             assert studio['desktopFieldsExist'] and studio['mobileFieldsExist'],studio
             assert abs(studio['desktopTop']-studio['mobileTop'])<5 and studio['panelWidth']>350,studio
-            assert studio['numericCount']==18 and studio['numericHeight']>=44,studio
+            assert studio['numericCount']==20 and studio['numericHeight']>=44,studio
             assert 'blinq_page_background.webp' in studio['background'],studio
             page.evaluate("""() => {
               const s=bannerHarness.state;
