@@ -7,7 +7,7 @@
     background:#031510 !important; isolation:isolate !important; --bq-court-line:rgba(130,196,164,.28) !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)::before {
-    content:"" !important; position:fixed !important; inset:0 !important; z-index:-1 !important; pointer-events:none !important; background:linear-gradient(rgba(2,18,13,.12),rgba(2,18,13,.32)),url("/assets/blinq_mobile_court.webp") center bottom / cover no-repeat !important; opacity:1 !important;
+    content:"" !important; position:fixed !important; inset:0 !important; z-index:-1 !important; pointer-events:none !important; background:linear-gradient(rgba(2,18,13,.12),rgba(2,18,13,.32)),var(--blinq-mobile-court-bg,url("/assets/blinq_mobile_court.webp")) center bottom / cover no-repeat !important; opacity:1 !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .site-header,
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs {
