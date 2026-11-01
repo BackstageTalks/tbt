@@ -53,4 +53,12 @@ assert.ok(css.includes('.lean-admin-preview.desktop::before{\n  background:'+des
 assert.ok(css.includes('.lean-admin-preview.mobile::before{\n  background:'+mobileGradient+'!important;'),'mobile preview uses public mobile gradient');
 for(const spec of ['1396×203 px','2792×406 px','370×128 px','1110×384 px','6,88 : 1','2,89 : 1']) assert.ok(app.includes(spec),'banner help must match the actual desktop/mobile preview geometry: '+spec);
 assert.ok(!app.includes('1920×313'),'obsolete desktop banner export instructions must be removed');
+const court=fs.readFileSync('web/blinq-mobile-court.css','utf8');
+const index=fs.readFileSync('web/index.html','utf8');
+assert.equal(ui.elements.HERO_BANNER_1.content.site_mobile_background_url,'/assets/blinq_mobile_court.webp');
+assert.ok(app.includes('data-simple-banner-field="site_mobile_background_url"'),'mobile page background input beside desktop');
+assert.ok(app.includes('input[data-simple-banner-field="site_mobile_background_url"]'),'mobile background uses existing admin media uploader');
+assert.ok(app.includes("safePhotoUrl(hero.site_mobile_background_url)"),'only safe published mobile URLs reach CSS');
+assert.ok(court.includes('var(--blinq-mobile-court-bg,url("/assets/blinq_mobile_court.webp"))'),'mobile CSS has safe existing fallback');
+assert.ok(index.includes('mobile-page-background=20261101-1'),'app and CSS cache revision updated');
 console.log('PASS: banner editor contract');
