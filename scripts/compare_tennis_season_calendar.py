@@ -98,7 +98,7 @@ def compare(calendar_rows, season_rows, *, unique_id, season_id, first, last,
     mismatched = sorted(eid for eid in common if calendar[eid] != season[eid])
     absent = sorted(calendar.keys() - season.keys())
     extra = sorted(season.keys() - calendar.keys())
-    safe = bool(complete and not (mismatched or absent or extra or cr or sr))
+    safe = bool(complete and calendar and season and not (mismatched or absent or extra or cr or sr))
     return {
         "status": "EXACT_COVERAGE_VERIFIED" if safe else "REVIEW_REQUIRED",
         "unique_tournament_id": unique_id, "season_id": season_id,
@@ -139,6 +139,8 @@ def probe(provider, witness_id, first, last, *, max_pages=3):
     except (KeyError, TypeError, ValueError):
         raise ProviderError("Witness category ID unavailable")
     unique_id, season_id = ctx["unique_tournament"], ctx["season"]
+    witness_calls = provider.request_count - before
+    calendar_before = provider.request_count
     calendar_rows = []
     for offset in range((last-first).days + 1):
         day = first + timedelta(days=offset)
@@ -146,7 +148,8 @@ def probe(provider, witness_id, first, last, *, max_pages=3):
         if category_id not in {provider._category_id(x) for x in categories}:
             raise ProviderError("Witness category missing from calendar day")
         calendar_rows.extend(provider.category_events(category_id, day))
-    calendar_calls = provider.request_count-before
+    calendar_calls = provider.request_count - calendar_before
+    season_before = provider.request_count
     season_rows, complete = [], False
     for page in range(max_pages + 1):
         payload = provider._get(
@@ -161,9 +164,13 @@ def probe(provider, witness_id, first, last, *, max_pages=3):
     result = compare(calendar_rows, season_rows, unique_id=unique_id,
                      season_id=season_id, first=first, last=last,
                      calendar_calls=calendar_calls,
-                     season_calls=provider.request_count-before-calendar_calls,
+                     season_calls=provider.request_count-season_before,
                      complete=complete)
     result["witness_event_id"] = str(witness_id)
+    result["witness_requests_including_retries"] = witness_calls
+    if str(witness_id) not in result["calendar_event_ids"] or str(witness_id) not in result["season_event_ids"]:
+        result["status"] = "REVIEW_REQUIRED"
+        result["witness_missing_from_comparison"] = True
     return result
 
 
