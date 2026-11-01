@@ -876,7 +876,7 @@ def main():
                 # Counts actual provider requests and cache population; no
                 # unverified API saving is reported as a measured result.
                 output_report["calendar_batch_metrics"] = dict(
-                    provider.calendar_batch_metrics)
+                    getattr(provider, "calendar_batch_metrics", {}))
             if args.mode == "statistics":
                 requests = provider.request_count
                 output_report["statistics_data_value"] = {
