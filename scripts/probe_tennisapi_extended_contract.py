@@ -118,6 +118,18 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
     }
 
     guard_halted = False
+    last_http: dict[str, object] = {}
+
+    def observe_response(response: Any) -> None:
+        # Passive HTTP metadata only; never read, log or persist credentials or
+        # raw response bodies. The existing provider header guard stays intact.
+        last_http["http_status"] = int(response.status_code)
+        last_http["quota_header_present"] = (
+            "x-ratelimit-requests-remaining" in response.headers)
+
+    http = getattr(client, "client", None)
+    if http is not None and isinstance(getattr(http, "event_hooks", None), dict):
+        http.event_hooks.setdefault("response", []).append(observe_response)
 
     def read(name: str, path: str, *, params: dict | None = None) -> Any:
         nonlocal guard_halted
@@ -128,8 +140,10 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
             report["observations"][name] = {"state": "budget_cap"}
             return {}
         try:
+            last_http.clear()
             payload = client._get(path, params=params, enrichment=True)
-            report["observations"][name] = summarize(name, payload, event_id=event_id)
+            report["observations"][name] = {
+                **summarize(name, payload, event_id=event_id), **last_http}
             return payload
         except Exception as exc:
             reason = str(exc).lower()
@@ -146,7 +160,7 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
                 guard_halted = True
             report["observations"][name] = {
                 "state": "error", "error_type": type(exc).__name__,
-                "reason_code": reason_code,
+                "reason_code": reason_code, **last_http,
                 # Avoid copying provider response bodies or secrets into artifact.
             }
             return {}
