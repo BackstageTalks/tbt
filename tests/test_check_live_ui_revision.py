@@ -93,6 +93,43 @@ class UiWatchdogTests(unittest.TestCase):
         self.assertEqual(checked, original)
         self.assertNotEqual(checked["app.js"], (web / "app.js").read_bytes())
 
+    def test_exact_optimized_deployment_passes_and_modified_js_is_rejected(self):
+        # The production pipeline intentionally rewrites whitespace in JS/CSS.
+        # Trust neither the live checksum manifest nor the CDN without
+        # reproducing those bytes from the immutable Git sources.
+        release = json.loads(self.files["/release.json"])
+        visual = release["visual_revision"]
+        app = (f"/* BlinQ visual revision: {visual} */\n"
+               "function verifiedAceProviderOdds(){}").encode()
+        css = (b"/* BlinQ runtime patch 7.3.6-r61 */\n"
+               b"/* BlinQ visual revision green-login-loader-20260924 */\nbody{}")
+        self.files["/app.js"] = app
+        self.files["/blinq-app.css"] = css
+        meta = json.loads(self.files["/deployment.json"])
+        for name in ("app.js", "blinq-app.css"):
+            meta["files_sha256"][name] = sha256(self.files["/" + name])
+        self.files["/deployment.json"] = json.dumps(meta).encode()
+
+        calls = []
+        def reproducible_build(raw):
+            calls.append(True)
+            return {**raw, "app.js": app, "blinq-app.css": css}
+
+        self.assertEqual(verify_once(
+            self.web, "https://test.invalid", self.fetch,
+            optimized_builder=reproducible_build
+        ), SHA)
+        self.assertEqual(len(calls), 1)
+
+        # Even a forged, internally consistent deployment.json cannot pass
+        # if its JS differs from the reproducibly optimized Git source.
+        self.files["/app.js"] = app + b"malicious change"
+        meta["files_sha256"]["app.js"] = sha256(self.files["/app.js"])
+        self.files["/deployment.json"] = json.dumps(meta).encode()
+        with self.assertRaisesRegex(ValueError, "app.js"):
+            verify_once(self.web, "https://test.invalid", self.fetch,
+                        optimized_builder=reproducible_build)
+
     def test_detects_stale_app_even_with_success_http(self):
         self.files["/app.js"] = b"old_application"
         with self.assertRaisesRegex(ValueError, "app.js"):

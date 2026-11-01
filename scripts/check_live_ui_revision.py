@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 import time
+import tempfile
 import urllib.request
 from pathlib import Path
 
@@ -98,12 +99,31 @@ def revision_files(web: Path, deployed_sha: str) -> dict[str, bytes]:
         raise ValueError("Cannot verify exact deployed revision from Git history") from exc
 
 
+def build_optimized_revision(files: dict[str, bytes]) -> dict[str, bytes]:
+    """Rebuild the pinned deployment transform from the immutable Git sources.
+
+    Never trust deployment.json checksums alone when checking optimized assets:
+    independently reproduce the JS/CSS bytes first.
+    """
+    from scripts.optimize_web_assets import ASSETS, build
+
+    with tempfile.TemporaryDirectory(prefix="blinq-watchdog-") as tmp:
+        web = Path(tmp) / "web"
+        out = Path(tmp) / "optimized"
+        web.mkdir()
+        for name in (*ASSETS, "release.json"):
+            (web / name).write_bytes(files[name])
+        build(web, out)
+        return {**files, **{name: (out / name).read_bytes() for name in ASSETS}}
+
+
 def verify_once(
     web: Path,
     base_url: str,
     fetch=http_get,
     token: str = "watch",
     source_loader=revision_files,
+    optimized_builder=build_optimized_revision,
 ) -> str:
     base_url = base_url.rstrip("/")
     def get(path: str) -> bytes:
@@ -120,9 +140,32 @@ def verify_once(
     if deployed.get("visual_revision") != release.get("visual_revision"):
         raise ValueError("live visual revision differs from repository release")
 
+    actual_files = {name: get("/" + name) for name in FRONTEND_FILES}
+    asset_names = ("app.js", "blinq-app.css")
+    mismatch = any(sha256(actual_files[name]) != sha256(expected_files[name])
+                   for name in asset_names)
+    if mismatch:
+        # Only try the explicit, deterministic optimized-release format.
+        # Randomly altered JS/CSS must not turn into an accepted variant.
+        visual = str(release["visual_revision"])
+        patch = str(release["patch"]).replace("736-", "7.3.6-", 1)
+        optimized_markers = (
+            actual_files["app.js"].startswith(
+                f"/* BlinQ visual revision: {visual} */\n".encode("utf-8")
+            )
+            and actual_files["blinq-app.css"].startswith(
+                f"/* BlinQ runtime patch {patch} */\n".encode("utf-8")
+            )
+        )
+        if optimized_markers:
+            try:
+                expected_files = optimized_builder(expected_files)
+            except (OSError, RuntimeError, subprocess.SubprocessError, ValueError) as exc:
+                raise ValueError("Cannot independently rebuild optimized frontend") from exc
+
     for name in FRONTEND_FILES:
         expected = expected_files[name]
-        actual = get("/" + name)
+        actual = actual_files[name]
         if sha256(actual) != sha256(expected):
             raise ValueError(f"outdated or modified frontend file: {name}")
         if name in STAMPED_FILES and (deployed.get("files_sha256") or {}).get(name) != sha256(actual):
