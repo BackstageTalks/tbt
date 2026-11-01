@@ -28,6 +28,11 @@ class AdminStorageUnavailable(RuntimeError):
     pass
 
 
+class UIConfigVersionConflict(ValueError):
+    """An Admin write is based on an obsolete published configuration."""
+    pass
+
+
 UI_TABLE = "BlinQAdminConfig"
 UI_HISTORY_PARTITION = "ui-config-history"
 _UI_SNAPSHOT_ID = re.compile(r"^before-\d{8}T\d{12}Z-[a-f0-9]{8}$")
@@ -1582,10 +1587,10 @@ def save_runtime_ui_config(payload: object, *, actor_id: str = "",
                 _decode_runtime_ui_payload(previous.get("payload")) if previous else None
             )
             if ui_config_revision(actual) != expected_revision:
-                raise ValueError("UI configuration changed; reload before publishing")
+                raise UIConfigVersionConflict("UI configuration changed; reload before publishing")
             etag = getattr(previous, "metadata", {}).get("etag") if previous else None
             if previous and not etag:
-                raise ValueError("UI configuration version unavailable; refusing unsafe publish")
+                raise UIConfigVersionConflict("UI configuration version unavailable; refusing unsafe publish")
         if previous and _decode_runtime_ui_payload(previous.get("payload")) is not None:
             snapshot_id = "before-" + datetime.now(timezone.utc).strftime(
                 "%Y%m%dT%H%M%S%fZ"
@@ -1608,14 +1613,14 @@ def save_runtime_ui_config(payload: object, *, actor_id: str = "",
                                          match_condition=MatchConditions.IfNotModified)
                 except Exception as exc:
                     if getattr(exc, "status_code", None) in (409, 412):
-                        raise ValueError("UI configuration changed during publishing") from exc
+                        raise UIConfigVersionConflict("UI configuration changed during publishing") from exc
                     raise
             else:
                 try:
                     client.create_entity(entity)
                 except Exception as exc:
                     if getattr(exc, "status_code", None) in (409, 412):
-                        raise ValueError("UI configuration was created in another session") from exc
+                        raise UIConfigVersionConflict("UI configuration was created in another session") from exc
                     raise
         else:
             client.upsert_entity(entity, mode="replace")
