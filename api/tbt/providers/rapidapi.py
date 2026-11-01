@@ -490,6 +490,29 @@ class RapidTennisClient:
             enrichment=True,
         )
 
+    def team_year_statistics(self, provider_team_id: str | int, year: int) -> Any:
+        """Source-native season totals, never individual-match CDB statistics.
+
+        An explicit provider-native identity is required. No calendar/identity
+        fallback or canonical writer is invoked, and all requests use the same
+        reserved RapidAPI budget as existing enrichment.
+        """
+        raw_id = str(provider_team_id)
+        if isinstance(provider_team_id, bool) or not raw_id.isdecimal() or int(raw_id) <= 0:
+            raise ValueError("provider_team_id must be a positive integer")
+        if isinstance(year, bool):
+            raise ValueError("year must be an integer")
+        try:
+            season = int(year)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("year must be an integer") from exc
+        if season < 1900 or season > datetime.now(timezone.utc).year:
+            raise ValueError("year outside available historical seasons")
+        return self._get(
+            f"/api/tennis/team/{int(raw_id)}/year-statistics/{season}",
+            enrichment=True,
+        )
+
     def _get_optional_json(self, path: str) -> Any:
         """GET optional provider JSON; 204/404 mean unavailable, not fatal."""
         url = f"{self.cfg.rapidapi_base_url}{path}"
