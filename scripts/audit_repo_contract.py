@@ -332,6 +332,8 @@ for workflow_name, cron_expr in native_schedules.items():
     workflow = read(ROOT / '.github' / 'workflows' / workflow_name)
     if '  schedule:' not in workflow or cron_expr not in workflow:
         fail(f'native GitHub schedule missing: {workflow_name}')
+    if "BLINQ_NATIVE_SCHEDULES_ENABLED == 'true'" not in workflow:
+        fail(f'native GitHub schedule cutover guard missing: {workflow_name}')
 for workflow_name in ('morning-refresh.yml', 'telegram-daily-offer.yml', 'nightly-data-maintenance.yml'):
     workflow = read(ROOT / '.github' / 'workflows' / workflow_name)
     if 'timezone: Europe/Bratislava' not in workflow:
