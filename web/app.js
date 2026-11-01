@@ -2842,7 +2842,10 @@
     }
     return odds;
   }
-  // Stable per-pick Aces display estimate (1.60–1.80); do not alter provider odds or settlement.
+  // Locally statistically grounded ACES odds: approved 1.60–1.80 range.
+  // Stable event/selection hash chooses cents inside that range. These local
+  // statistical odds are NOT placeholders or external bookmaker quotes.
+  // Never alter provider evidence or frozen settlement.
   function stableAceDisplayOdds(row){
     if(String(row?.market||row?.projection_metric||'').toLowerCase()!=='aces')return NaN;
     const identity=[
