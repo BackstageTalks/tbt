@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from moviodds_cdb_format import (
     ARCHIVE_FORMAT, _digest, format_cdb_archive, verify_cdb_archive,
 )
+from moviodds_cdb_extract import extract
+
 
 
 def record(*, home="Alex De Minaur", away="Carlos Alcaraz",
@@ -151,3 +153,39 @@ def test_cdb_format_rejects_false_empty_verification():
             "schema": 1, "source": "moviodds", "verified": False,
             "days": ["2026-10-31"], "count": 0, "records": [],
         })
+
+
+def test_offline_cdb_jsonl_extractor_keeps_review_and_never_imports(tmp_path):
+    data = format_cdb_archive(archive(
+        record(),
+        record(fixture="203859195", league="UTR Pro Knoxville"),
+        record(fixture="203859196", league="ATP Paris MD",
+               home="A/B", away="C/D"),
+    ))
+    path = tmp_path / "archive.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    out = tmp_path / "staged"
+    result = extract(path, out)
+    assert result["raw"] == 3
+    assert result["link_candidates"] == 1
+    assert result["review"] == 2
+    assert result["linked"] == result["net_new"] == result["enriched"] == 0
+    assert result["cdb_values_written"] == 0
+    assert result["import_ready"] is False
+    ready = [json.loads(line) for line in (out / "link_candidates.jsonl").read_text().splitlines()]
+    review = [json.loads(line) for line in (out / "review.jsonl").read_text().splitlines()]
+    assert len(ready) == 1 and len(review) == 2
+    assert ready[0]["source_fixture_id"] == "203859194"
+    assert ready[0]["cdb_link"]["match_id"] is None
+    assert ready[0]["cdb_link"]["import_ready"] is False
+    assert all(r["source_archive_sha256"] == result["source_archive_sha256"]
+               for r in ready + review)
+
+
+def test_offline_cdb_extractor_fails_on_tampered_json(tmp_path):
+    data = format_cdb_archive(archive(record()))
+    data["records"][0]["payload"]["stats"]["home"]["aces"] = 91
+    source = tmp_path / "archive.json"
+    source.write_text(json.dumps(data))
+    with pytest.raises(ValueError):
+        extract(source, tmp_path / "out")
