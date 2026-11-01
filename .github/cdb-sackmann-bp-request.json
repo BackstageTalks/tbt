@@ -19,6 +19,6 @@
     "independent remote complete match-by-match readback"
   ],
   "write_state": "NOT_AUTHORIZED_FOR_PRODUCTION_WRITE_YET__DRY_RUN_ONLY",
-  "audit_request_id": "blinq-native-breakpoints-readonly-20261101-current-cdb",
-  "reason": "Fresh read-only stage and Parquet integrity proof against live canonical CDB; do not authorize historical source write"
+  "audit_request_id": "offline-zip-native-id-cdb-fresh-dry-run-20261101-2054",
+  "reason": "Fresh read-only deterministic native ATP/WTA BP stage after 2026 canonical release changes; uploaded ZIPs cannot be promoted without exact SHA/parity and cross-provider player provenance; no paid API, no remote writer and no CDB write unless separate positive stage and guarded approval."
 }
