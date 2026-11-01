@@ -903,6 +903,14 @@ def main():
                 output_report["calendar_batch_metrics"] = dict(
                     getattr(provider, "calendar_batch_metrics", {}))
             if args.mode == "statistics":
+                if enricher is not None and getattr(enricher, "durable", None) is not None:
+                    # A cache hit avoids an HTTP call; never include it in the
+                    # denominator of paid per-request CDB value yield.
+                    output_report["private_raw_cache"] = {
+                        **enricher.durable.metrics,
+                        "scope": "configured_private_sqlite",
+                        "paid_provider_attempts": provider.request_count,
+                    }
                 requests = provider.request_count
                 output_report["statistics_data_value"] = {
                     **dict(statistics_value),
