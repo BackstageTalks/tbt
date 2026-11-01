@@ -22,6 +22,39 @@ def event_id(match):
     return next(iter(ids)) if len(ids) == 1 else None
 
 
+
+def recent_score_identity_conflict(match, now=None, *, days=30):
+    """Skip a paid detail recheck when canonical score already proved a mismatch.
+
+    Require TWO matching saved markers with exact provider ID and a timestamp,
+    plus a still-conflicting player pair. Missing evidence never suppresses a
+    legitimate retry. After the cooldown, the provider can be checked again.
+    """
+    raw = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+    identity = raw.get("_tbt_event_identity")
+    score = raw.get("_tbt_score")
+    eid = event_id(match)
+    if (eid is None or not isinstance(identity, dict) or not isinstance(score, dict)
+            or identity.get("status") != "mismatch"
+            or identity.get("event_id") != eid
+            or score.get("status") != "identity_mismatch"
+            or score.get("event_id") != eid
+            or score.get("identity_verified") is not False):
+        return False
+    home, away = str(identity.get("home") or ""), str(identity.get("away") or "")
+    expected = {str(match.player1_id), str(match.player2_id)}
+    if not home or not away or home == away or {home, away} == expected:
+        return False
+    try:
+        checked = datetime.fromisoformat(str(score["fetched_at"]).replace("Z", "+00:00"))
+    except (KeyError, TypeError, ValueError):
+        return False
+    if checked.tzinfo is None:
+        return False
+    age = (now or datetime.now(timezone.utc)) - checked.astimezone(timezone.utc)
+    return 0 <= age.total_seconds() < days * 86400
+
+
 def retry_due(match, schema, now=None):
     now = now or datetime.now(timezone.utc)
     marker = (match.provider_payload or {}).get("_tbt_statistics", {})

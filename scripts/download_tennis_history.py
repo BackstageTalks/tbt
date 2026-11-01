@@ -24,7 +24,7 @@ from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.statistics_enrichment import StatisticsEnricher
 from tbt.services.statistics_enrichment import STATISTICS_SCHEMA_VERSION
-from tbt.services.statistics_gapfill import event_id, missing_fields, retry_due
+from tbt.services.statistics_gapfill import event_id, missing_fields, retry_due, recent_score_identity_conflict
 from tbt.services.tennisapi_extras_enrichment import needs_extras, enrich_event_extras
 
 
@@ -417,6 +417,10 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
             if event_id(match) is None:
                 skipped["missing_or_conflicting_event_id"] += 1
                 eligibility_by_cohort[cohort]["missing_or_conflicting_event_id"] += 1
+                continue
+            if recent_score_identity_conflict(match):
+                skipped["recent_identity_conflict"] += 1
+                eligibility_by_cohort[cohort]["recent_identity_conflict"] += 1
                 continue
             if not retry_due(match, STATISTICS_SCHEMA_VERSION):
                 skipped["retry_not_due"] += 1
