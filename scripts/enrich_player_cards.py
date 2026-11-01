@@ -292,6 +292,23 @@ def _recently_checked_player_details(
     return timedelta(0) <= age < timedelta(days=days)
 
 
+def _recently_checked_player_rankings(
+    profile: dict[str, Any], *, now: datetime | None = None
+) -> bool:
+    """Daily ranking snapshots always refresh; skip repeated empty player fallbacks."""
+    stamp = profile.get("ranking_fallback_checked_at")
+    if not isinstance(stamp, str):
+        return False
+    try:
+        checked = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if checked.tzinfo is None:
+        return False
+    age = (now or datetime.now(timezone.utc)) - checked.astimezone(timezone.utc)
+    return timedelta(0) <= age < timedelta(days=1)
+
+
 def _recently_unavailable_tournament_logo(profile: dict[str, Any], *, days: int = 30) -> bool:
     """Avoid spending quota repeatedly on provider-declared missing logos."""
     if profile.get("logo_status") != "unavailable":
@@ -516,6 +533,7 @@ def main() -> None:
         "ranking_snapshot_matches": 0,
         "fallback_ranking_requests": 0,
         "fallback_ranking_matches": 0,
+        "fallback_rankings_skipped_recent": 0,
         "player_detail_requests": 0,
         "player_detail_matches": 0,
         "player_details_cached_complete": 0,
@@ -569,6 +587,9 @@ def main() -> None:
             profile = profiles[player_id]
             if profile.get("rank") not in (None, "") and profile.get("country_code"):
                 continue
+            if _recently_checked_player_rankings(profile):
+                report["fallback_rankings_skipped_recent"] += 1
+                continue
             try:
                 report["fallback_ranking_requests"] += 1
                 fallback_budget -= 1
@@ -591,6 +612,9 @@ def main() -> None:
                         profile, candidates[0], source="player_rankings_fallback"
                     )
                     report["fallback_ranking_matches"] += 1
+                # Cache only a successfully parsed provider response; failures
+                # and budget stops are retried on the next job.
+                profiles[player_id]["ranking_fallback_checked_at"] = datetime.now(timezone.utc).isoformat()
             except RequestBudgetExceeded as exc:
                 report["errors"].append(f"ranking request budget stopped: {exc}")
                 break
