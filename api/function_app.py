@@ -3970,7 +3970,11 @@ def admin_ui_config(req):
         except ValueError:
             return response({"error": "invalid_json"}, 400)
         expected = req.headers.get("x-blinq-ui-revision")
-        if expected is not None and not re.fullmatch(r"[a-f0-9]{64}", expected):
+        # A still-open pre-upgrade Admin tab must never bypass optimistic
+        # concurrency by submitting the legacy unversioned PUT.
+        if expected is None:
+            return response({"error": "ui_config_revision_required"}, 409)
+        if not re.fullmatch(r"[a-f0-9]{64}", expected):
             return response({"error": "invalid_ui_config_revision"}, 400)
         saved = save_runtime_ui_config(
             payload, actor_id=str(actor.get("id") or ""),
