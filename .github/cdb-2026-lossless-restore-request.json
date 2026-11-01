@@ -7,7 +7,7 @@
   "expected_old_only": 97736,
   "provider_requests": 0,
   "model_changes": false,
-  "reason": "Repeat guarded read-only CDB 2026 recovery dry-run with schema-only drift report; never write or coerce Parquet data.",
+  "reason": "Validate verified lossless 2026 schema alignment against frozen backup and latest SHA-verified CDB; dry-run only, no provider calls or writes.",
   "write_policy": "Global lock, immutable fresh prewrite backup, CAS, existing ReleaseStore, complete independent CDB readback",
-  "diagnostic_attempt": 1
+  "diagnostic_attempt": 2
 }
