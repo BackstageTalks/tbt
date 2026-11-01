@@ -884,6 +884,11 @@ def main():
         report["stored_matches"] = len(matches)
         report["completed_days"] = len(progress["completed_days"])
         report["allocated_requests"] = allocation
+        report["existing_cdb_conflict_rows_preserved"] = int(
+            history_safety.get("quarantined_rows") or 0
+        )
+        report["existing_cdb_conflict_event_ids"] = len(protected_provider_ids)
+        report["existing_cdb_conflict_row_removals"] = 0
         if provider_quarantine:
             report["provider_identity_quarantined"] = len(provider_quarantine)
         try:
