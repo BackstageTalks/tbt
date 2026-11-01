@@ -41,6 +41,11 @@ def test_live_probe_resolves_ids_and_does_not_write_data():
     assert report["eligible_for_cdb_import"] is False
     assert report["provider_quote_timestamp_verified"] is False
     assert report["request_count"] <= 24
+    assert [p for p, _ in client.paths[:3]] == [
+        "/api/tennis/event/14494928",
+        "/api/tennis/event/14494928/statistics",
+        "/api/tennis/event/14494928/point-by-point",
+    ]
     assert report["resolved_context"] == {
         "event_id_matched": True,
         "season_id": 12345, "tournament_id": 333, "player_id": 222,
