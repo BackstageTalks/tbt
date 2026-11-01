@@ -89,12 +89,22 @@ def audit_rows(matches, ranking, year_sha, source_hashes):
         "next_gate":"Independent source-rights confirmation, fresh year SHA, per-match CAS, single-writer lock, immutable backup, complete remote readback before any rank write",
     }, stage
 
+def load_verified_rank_audit_cdb(history_dir: Path):
+    """Read-only candidate cohort: exclude only the six proven 2026 provider-ID collisions.
+
+    The private canonical release itself retains every source row unchanged.
+    The shared safety gate refuses any changed collision identity/count.
+    """
+    from recover_cdb_opponent_service_rates import _load
+    return _load(history_dir, isolate_provider_collisions=True,
+                 expected_provider_quarantine=6)
+
+
 def main():
     from _bootstrap import ROOT  # noqa: F401
     from release_store import ReleaseStore
     from rank_feature_inputs import load_rank_feature_inputs
-    from tbt.data.history_snapshot import load_manifest, load_partitions
-    from tbt.data.history_safety import sanitize_history_identities
+    from tbt.data.history_snapshot import load_manifest
     ap=argparse.ArgumentParser()
     ap.add_argument("--repo",default="BackstageTalks/tbt-data")
     ap.add_argument("--out",required=True,type=Path)
@@ -102,9 +112,9 @@ def main():
     a.out.mkdir(parents=True,exist_ok=True)
     history=a.out/"history"
     ReleaseStore(a.repo,"tbt-data-v1",history).download(require_bundle_manifest=True)
-    matches,safety=sanitize_history_identities(load_partitions(history))
-    if safety.get("quarantined_rows") or len(matches)<994101:
-        raise ValueError("Canonical history unsafe/incomplete")
+    matches=load_verified_rank_audit_cdb(history)
+    if len(matches)<994101:
+        raise ValueError("Canonical history unsafe/incomplete after exact read-only quarantine")
     rank=load_rank_feature_inputs(a.repo,a.out/"rank-inputs",matches)
     manifest=load_manifest(history)["years"][str(YEAR)]
     sha=hashlib.sha256((history/f"history-{YEAR}.parquet").read_bytes()).hexdigest()
@@ -113,6 +123,9 @@ def main():
     source_hashes={key:value["sha256"] for key,value in rank.report["sources"].items()}
     report,stage=audit_rows(matches,rank.wta,sha,source_hashes)
     report["canonical_rows"]=len(matches)
+    report["canonical_raw_rows"]=len(matches)+6
+    report["excluded_ambiguous_provider_rows"]=6
+    report["identity_scope"]="read_only_pinned_2026_provider_collision_quarantine"
     report["wta_crosswalk"]=rank.report["wta_crosswalk"]
     stage_path=a.out/"wta2025-rank-null-candidates.jsonl.gz"
     with stage_path.open("wb") as raw:
