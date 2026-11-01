@@ -24,18 +24,19 @@ def test_authenticated_feed_prefetch_overlaps_auth_and_ui_but_not_render():
     assert "const prefetchedFeed=session?BlinqAuth.feed():null;" in boot
     assert "if(prefetchedFeed)prefetchedFeed.catch(()=>{});" in boot
     assert boot.index("const prefetchedFeed=") < boot.index("await authReady")
-    assert boot.index("await uiReady") < boot.index("await loadFeed(true,prefetchedFeed);")
-    assert "const feed=(await (prefetchedFeed||BlinqAuth.feed()))||{};" in APP
+    assert boot.index("await uiReady") < boot.index("bootPrefetchedFeed=prefetchedFeed;") < boot.index("await loadFeed();")
+    assert "const pendingFeed=bootPrefetchedFeed;bootPrefetchedFeed=null;" in APP
+    assert "const feed=(await (pendingFeed||BlinqAuth.feed()))||{};" in APP
+    assert "async function loadFeed(showLoading=true){" in APP
     assert "if(generation!==feedGeneration)return;" in APP
 
 
 def test_static_resources_can_reuse_browser_cache_but_runtime_config_cannot():
     routes = {route["route"]: route["headers"].get("Cache-Control", "") for route in ROUTES}
-    for path in ("/blinq-app.css", "/blinq-mobile.css"):
-        assert routes[path] == "public, max-age=300, stale-while-revalidate=3600"
-    # Authentication/runtime scripts must always get a fresh release.
+    # Preserve the production freshness policy for both CSS and critical scripts.
     for path in ("/", "/index.html", "/release.json", "/ui-config.json",
-                 "/auth.js", "/app.js", "/responsive.js", "/insight-media.js"):
+                 "/blinq-app.css", "/auth.js", "/app.js",
+                 "/responsive.js", "/insight-media.js"):
         assert "no-store" in routes[path]
     assert "cache:'no-store'" in APP  # live config remains uncached
     assert "fast-boot=20261101-1" in HTML
