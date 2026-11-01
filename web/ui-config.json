@@ -713,7 +713,8 @@
         "route": "",
         "plan_id": "",
         "effect": "fade-up",
-        "site_background_url": "/assets/blinq_page_background.webp"
+        "site_background_url": "/assets/blinq_page_background.webp",
+        "site_mobile_background_url": "/assets/blinq_mobile_court.webp"
       },
       "watermark": {
         "enabled": false,
