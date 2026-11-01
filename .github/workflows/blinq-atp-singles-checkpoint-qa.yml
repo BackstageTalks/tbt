@@ -1,10 +1,7 @@
 name: BlinQ ATP Singles checkpoint integrity QA
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/blinq-atp-singles-checkpoint-qa.yml
+  # Manual-only audit; retired redundant self-file push trigger.
   workflow_dispatch:
 
 permissions:
