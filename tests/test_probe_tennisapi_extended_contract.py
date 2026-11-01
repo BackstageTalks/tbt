@@ -361,3 +361,38 @@ def test_archive_2016_rejects_custom_case():
     with pytest.raises(ValueError, match="case"):
         run_probe(StubClient(), event_id=14494928, max_requests=4,
                   phase="archive_2016", case="arbitrary")
+
+def test_2016_single_call_event_identity_witness_is_research_only():
+    class ArchiveEvent(StubClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            self.request_count += 1
+            self.paths.append((path, params))
+            assert self.request_count == 1
+            assert path == "/api/tennis/event/7115726"
+            return {"event": {
+                "id": 7115726,
+                "startTimestamp": 1468166400,
+                "status": {"type": "finished"},
+                "winnerCode": 2,
+                "homeTeam": {"id": 18254, "name": "Player One"},
+                "awayTeam": {"id": 18255, "name": "Player Two"},
+                "tournament": {
+                    "name": "Wimbledon",
+                    "category": {"id": 6, "name": "WTA"},
+                    "uniqueTournament": {"id": 40}},
+                "roundInfo": {"name": "Final"}}}
+    client = ArchiveEvent()
+    result = run_probe(client, event_id=7115726, max_requests=1,
+                       phase="full")
+    witness = result["source_event_identity"]
+    assert witness["event_id_matches_request"] is True
+    assert witness["home_id"] == 18254
+    assert witness["away_id"] == 18255
+    assert witness["derived_tour"] == "wta"
+    assert witness["singles_structure"] is True
+    assert witness["round"] == "Final"
+    assert witness["identity_validated_for_cdb"] is False
+    assert result["eligible_for_cdb_import"] is False
+    assert result["request_count"] == 1
+    assert client.paths == [("/api/tennis/event/7115726", None)]
+    assert result["observations"]["event_statistics"]["state"] == "budget_cap"
