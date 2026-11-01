@@ -519,6 +519,111 @@ class ReleaseStore:
                 # A leftover backup can be recovered/cleaned on the next run.
                 print(f"WARNING: retained verified rollback {backup}: {exc}", file=sys.stderr)
 
+    def _recover_verified_prediction_orphans(self, assets, groups, journals):
+        """Garbage-collect abandoned prediction transactions ONLY after read-back.
+
+        A second interrupted publication may leave several journal tokens behind.
+        Choosing one rollback token can overwrite a newer, fully committed feed.
+        Instead, first verify the current feed, ledger, daily offer and bundle
+        manifest together. No canonical asset is ever renamed or deleted here.
+        A failed read-back returns None without making any remote changes.
+        """
+        if self.tag != "tbt-predictions-v1":
+            return None
+        tokens = set(groups) | set(journals)
+        if not tokens:
+            return None
+
+        canonical = {"feed.json", "ledger.json", "daily_offer_snapshot.json",
+                     self.BUNDLE_MANIFEST}
+        if not canonical.issubset(assets):
+            return None
+        transient = {}
+        for name, asset in assets.items():
+            if name.startswith(("blinq-rollback-", "blinq-candidate-", "blinq-txn-")):
+                rollback = re.fullmatch(r"blinq-rollback-([0-9a-f]{32})-(.+)", name)
+                candidate = re.fullmatch(r"blinq-candidate-([0-9a-f]{32})-(.+)", name)
+                journal = re.fullmatch(r"blinq-txn-([0-9a-f]{32})\.json", name)
+                match = rollback or candidate or journal
+                if match is None or match.group(1) not in tokens:
+                    raise RuntimeError("Unrecognized pending prediction release asset")
+                if (rollback or candidate) and match.group(2) not in canonical:
+                    raise RuntimeError("Pending prediction asset has unexpected target")
+                transient[name] = asset
+
+        # Check the durable journals before touching anything, including SHA-256.
+        for token, asset in journals.items():
+            name = f"blinq-txn-{token}.json"
+            self._download_asset(name)
+            path = self.directory / name
+            if not self._verified_asset({name: asset}, name, path):
+                raise RuntimeError("Pending prediction journal digest mismatch")
+            evidence = json.loads(path.read_text(encoding="utf-8"))
+            created = evidence.get("created")
+            target = evidence.get("target_bundle_sha256")
+            if (evidence.get("schema") != 1 or not isinstance(created, list)
+                    or len(created) != len(set(created))
+                    or any(name not in canonical for name in created)
+                    or not isinstance(target, str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", target)):
+                raise ValueError("Invalid pending prediction journal")
+
+        try:
+            # Independent strict download checks all three serving files against
+            # the committed manifest. Never infer validity from HTTP 200 alone.
+            with tempfile.TemporaryDirectory() as directory:
+                previous_directory = self.directory
+                try:
+                    self.directory = Path(directory)
+                    self.download(required_names=(
+                        "feed.json", "ledger.json", "daily_offer_snapshot.json"))
+                finally:
+                    self.directory = previous_directory
+        except (RuntimeError, ValueError, FileNotFoundError, OSError, TypeError):
+            # A partially committed bundle must use the existing single-token
+            # rollback path, or fail closed when multiple tokens are present.
+            return None
+
+        # Do not delete rollback evidence after a concurrent release asset swap.
+        stable = {name: (asset.get("id"), asset.get("digest"), asset.get("size"))
+                  for name, asset in assets.items() if name in canonical | set(transient)}
+        latest = self._release_asset_inventory()
+        if any((latest.get(name, {}).get("id"),
+                latest.get(name, {}).get("digest"),
+                latest.get(name, {}).get("size")) != before
+               for name, before in stable.items()):
+            raise RuntimeError("Prediction release changed during orphan verification")
+
+        # Candidate first, backup second, journal last: an interrupted cleanup
+        # remains safely repeatable on the next run.
+        cleanup_names = sorted(transient, key=lambda n: (
+            0 if n.startswith("blinq-candidate-") else
+            1 if n.startswith("blinq-rollback-") else 2, n))
+        for name in cleanup_names:
+            latest = self._release_asset_inventory()
+            if any((latest.get(n, {}).get("id"),
+                    latest.get(n, {}).get("digest"),
+                    latest.get(n, {}).get("size")) != stable[n]
+                   for n in canonical):
+                raise RuntimeError("Canonical prediction bundle changed during cleanup")
+            if (latest.get(name, {}).get("id"),
+                    latest.get(name, {}).get("digest"),
+                    latest.get(name, {}).get("size")) != stable[name]:
+                raise RuntimeError("Pending prediction asset changed during cleanup")
+            self._asset_api("DELETE", int(transient[name]["id"]))
+
+        after = self._release_asset_inventory()
+        if any(name in after for name in transient):
+            raise RuntimeError("Prediction transaction debris remains after cleanup")
+        if any((after.get(n, {}).get("id"),
+                after.get(n, {}).get("digest"),
+                after.get(n, {}).get("size")) != stable[n]
+               for n in canonical):
+            raise RuntimeError("Canonical prediction bundle changed after cleanup")
+        return {"pending_transactions": len(tokens),
+                "status": "committed_generation_verified",
+                "orphan_assets_cleaned": len(transient)}
+
     def recover_interrupted_swaps(self):
         """Finish or roll back an interrupted bundle under the existing CDB lock.
 
@@ -549,6 +654,13 @@ class ReleaseStore:
         tokens = set(groups) | set(journals)
         if not tokens:
             return {"pending_transactions": 0, "status": "clean"}
+        # A healthy, read-back-verified serving generation supersedes orphaned
+        # rollback/journal tokens, even when several old transactions remain.
+        # No cleanup is attempted when that generation cannot be verified.
+        if self.tag == "tbt-predictions-v1":
+            recovered = self._recover_verified_prediction_orphans(assets, groups, journals)
+            if recovered is not None:
+                return recovered
         if len(tokens) != 1:
             raise RuntimeError("Multiple pending bundle swaps; manual review required")
         token = next(iter(tokens))
