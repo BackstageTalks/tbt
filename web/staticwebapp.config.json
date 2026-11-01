@@ -27,31 +27,25 @@
     {
       "route": "/auth.js",
       "headers": {
-        "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
       }
     },
     {
       "route": "/app.js",
       "headers": {
-        "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
       }
     },
     {
       "route": "/insight-media.js",
       "headers": {
-        "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
       }
     },
     {
       "route": "/responsive.js",
       "headers": {
-        "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
-      }
-    },
-    {
-      "route": "/blinq-mobile.js",
-      "headers": {
-        "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
       }
     },
     {
