@@ -57,7 +57,7 @@ jobs:
           from pathlib import Path
           p=Path(".github/telegram-format-resend-tick.json")
           request=json.loads(p.read_text(encoding="utf-8"))
-          assert request.get("betting_day")=="2026-10-31"
+          assert request.get("betting_day")=="2026-11-01"
           assert request.get("revision")=="aces-local-prices-20261101-v1"
           assert request.get("preserve_original_confirmed_picks") is True
           assert request.get("aces_prices_corrected") is True
