@@ -254,5 +254,12 @@ def attach_offer_clv(feed):
             if eid not in cache:
                 cache[eid] = read_event_history(eid)
             if cache[eid]:
+                previous = row.get("market_movement")
+                # Prefer an already verified native-source time-series. The
+                # independent PropLine fallback must never downgrade it.
+                if isinstance(previous, dict) and (
+                        previous.get("verified") is True
+                        and len(previous.get("history") or []) >= 2):
+                    continue
                 row["market_movement"] = cache[eid]
     return feed
