@@ -72,3 +72,21 @@ def test_suspended_and_aces_market_observed_without_becoming_cdb_value():
     assert info["has_aces_ou"] is True
     assert info["suspended_markets"] == 1
     assert info["quote_timestamp_present"] is False
+
+
+def test_shared_budget_exhaustion_halts_subsequent_calls():
+    class RequestBudgetExceeded(Exception):
+        pass
+
+    class ExhaustedClient(StubClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            self.request_count += 1
+            raise RequestBudgetExceeded("provider reserve reached")
+
+    client = ExhaustedClient()
+    report = run_probe(client, event_id=14494928, max_requests=24)
+    assert client.request_count == 1
+    assert report["observations"]["odds_providers_sk_web"]["error_type"] == (
+        "RequestBudgetExceeded")
+    assert report["observations"]["odds_providers_sk_web_odds"]["state"] == (
+        "shared_budget_guard_halted")
