@@ -413,3 +413,13 @@ def test_verified_service_and_return_denominators_are_preserved_without_guessing
     assert observed["p1_service_points_won"] == .65
     assert "p1_service_points_total" not in observed
     assert "p2_return_points_total" not in observed
+
+
+def test_direct_return_rate_cannot_be_silently_overwritten_by_split_rates():
+    raw = {"statistics": [{"period": "ALL", "groups": [{"statisticsItems": [
+        {"key": "returnPointsWon", "homeValue": 20, "homeTotal": 50},
+        {"key": "firstReturnPoints", "homeValue": 12, "homeTotal": 25},
+        {"key": "secondReturnPoints", "homeValue": 13, "homeTotal": 25},
+    ]}]}]}
+    with pytest.raises(ProviderError, match="Conflicting whole-match statistic: p1_return_points_won"):
+        parse_statistics(raw, home_is_player1=True)
