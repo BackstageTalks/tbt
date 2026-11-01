@@ -90,10 +90,10 @@ def test_untrusted_or_partial_github_inventory_fails_closed():
                  utc("2026-11-01T08:00:00Z"))
 
 
-def test_scheduler_uses_existing_external_match_status_no_new_cron():
+def test_scheduler_reuses_match_status_native_tick_without_extra_moviodds_cron():
     match_status=(ROOT/".github/workflows/match-status.yml").read_text()
     guarded=(ROOT/".github/workflows/cdb-drive-inbox.yml").read_text()
-    assert "\n  schedule:" not in match_status
+    assert "cron: '0,15,30,45 * * * *'" in match_status
     assert "\n  schedule:" not in guarded
     assert "scripts/moviodds_cdb_retry.py" in match_status
     assert "-f source_mode=moviodds -f moviodds_days_back=7" in match_status
