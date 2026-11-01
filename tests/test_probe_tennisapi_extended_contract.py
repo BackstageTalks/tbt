@@ -57,7 +57,8 @@ def test_probe_is_hard_bounded_even_when_context_is_available():
     report = run_probe(client, event_id=14494928, max_requests=5)
     assert report["request_count"] == 5
     assert len(client.paths) == 5
-    assert report["observations"]["event_detail"]["state"] == "budget_cap"
+    assert report["observations"]["event_detail"]["state"] == "available"
+    assert report["observations"]["daily_categories"]["state"] == "budget_cap"
     assert all("payload" not in o for o in report["observations"].values()
                if o["state"] == "budget_cap")
 
@@ -86,7 +87,7 @@ def test_shared_budget_exhaustion_halts_subsequent_calls():
     client = ExhaustedClient()
     report = run_probe(client, event_id=14494928, max_requests=24)
     assert client.request_count == 1
-    assert report["observations"]["odds_providers_sk_web"]["error_type"] == (
+    assert report["observations"]["event_detail"]["error_type"] == (
         "RequestBudgetExceeded")
-    assert report["observations"]["odds_providers_sk_web_odds"]["state"] == (
+    assert report["observations"]["odds_providers_sk_web"]["state"] == (
         "shared_budget_guard_halted")
