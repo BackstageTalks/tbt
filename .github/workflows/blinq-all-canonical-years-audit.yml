@@ -1,10 +1,7 @@
 name: BlinQ all 78 canonical year partitions structural row audit
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/blinq-all-canonical-years-audit.yml
+  # Manual-only audit; retired redundant self-file push trigger.
   workflow_dispatch:
 
 permissions:

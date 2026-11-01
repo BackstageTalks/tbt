@@ -1,10 +1,7 @@
 name: BlinQ print exhaustive verified CDB field names (read only)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/blinq-cdb-field-inventory-detail.yml
+  # Manual-only audit; retired redundant self-file push trigger.
   workflow_dispatch:
 
 permissions:

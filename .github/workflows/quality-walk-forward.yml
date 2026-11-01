@@ -1,9 +1,7 @@
 name: BlinQ annual quality walk-forward research
 # Annual folds select blends and calibration only on their own past data.
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/quality-walk-forward.yml']
+  # Manual-only audit; retired redundant self-file push trigger.
   workflow_dispatch:
 permissions:
   contents: read

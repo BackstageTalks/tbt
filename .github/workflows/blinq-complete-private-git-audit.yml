@@ -1,10 +1,7 @@
 name: BlinQ complete private Git byte audit (no data writes)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/blinq-complete-private-git-audit.yml
+  # Manual-only audit; retired redundant self-file push trigger.
   workflow_dispatch:
 
 permissions:

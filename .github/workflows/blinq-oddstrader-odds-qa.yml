@@ -1,9 +1,7 @@
 name: BlinQ OddsTrader private archive quality check (CheckBestOdds fallback)
 
 on:
-  push:
-    branches: [main]
-    paths: [.github/workflows/blinq-oddstrader-odds-qa.yml]
+  # Manual-only audit; retired redundant self-file push trigger.
   workflow_dispatch:
 
 permissions:
