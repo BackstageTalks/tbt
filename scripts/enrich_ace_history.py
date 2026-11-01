@@ -67,6 +67,22 @@ def _coverage(matches, player_ids: set[str], cutoff: datetime) -> dict[str, dict
     return counts
 
 
+def _needs_ace_df_request(match, participants: set[str],
+                          coverage: dict[str, dict[str, int]],
+                          target_samples: int) -> bool:
+    """A paid lookup is useful only for a *currently* unmet player/market cell.
+
+    Re-evaluate after each successful enrichment: candidate lists are created
+    upfront, but individual coverage changes during the run.
+    """
+    for player_id in participants:
+        for market in ("aces", "double_faults"):
+            if (coverage[player_id][market] < target_samples
+                    and not _has_counts(match, player_id, market)):
+                return True
+    return False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data"))
@@ -112,16 +128,15 @@ def main() -> None:
         participants = {str(match.player1_id), str(match.player2_id)} & player_ids
         if not participants:
             continue
-        if not any(
-            min(before[player_id]["aces"], before[player_id]["double_faults"]) < args.target_samples
-            for player_id in participants
-        ):
+        if not _needs_ace_df_request(match, participants, before, args.target_samples):
             continue
         candidates.append(match)
 
     provider = RapidTennisClient(request_budget=None)
     provider.request_limit = args.max_requests
-    enricher = StatisticsEnricher(provider, cache / "statistics_cache.sqlite")
+    # An old schema-3 "available" marker can lack Aces/DF. Targeted mode
+    # respects its retry cooldown but permits due, missing-field lookups.
+    enricher = StatisticsEnricher(provider, cache / "statistics_cache.sqlite", targeted=True)
     report = Counter()
     changed_years: set[int] = set()
     processed_since_checkpoint = 0
@@ -175,9 +190,14 @@ def main() -> None:
             if participants and all(all(flags.values()) for flags in before_flags.values()):
                 report["already_counted"] += 1
                 continue
+            if not _needs_ace_df_request(
+                    match, participants, current_coverage, args.target_samples):
+                report["target_gap_satisfied_during_run"] += 1
+                continue
             status = enricher.enrich(match)
             report[status] += 1
-            if status in {"enriched", "unavailable"}:
+            # Conflict quarantine markers must survive to avoid repaying the same API miss.
+            if status in {"enriched", "unavailable", "conflict"}:
                 changed_years.add(match.scheduled_at.year)
                 processed_since_checkpoint += 1
             for player_id in participants:
