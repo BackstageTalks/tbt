@@ -396,3 +396,26 @@ def test_2016_single_call_event_identity_witness_is_research_only():
     assert result["request_count"] == 1
     assert client.paths == [("/api/tennis/event/7115726", None)]
     assert result["observations"]["event_statistics"]["state"] == "budget_cap"
+
+
+def test_probe_reports_unsupported_all_statistics_from_already_read_payload():
+    payload = {"statistics": [
+        {"period": "ALL", "groups": [{"statisticsItems": [
+            {"key": "aces", "home": "4", "away": "3"},
+            {"key": "firstServeAccuracy", "homeValue": 40, "homeTotal": 80},
+            {"key": "experimentalServeMetric", "home": "sensitive"},
+        ]}]},
+        {"period": "1ST", "groups": [{"statisticsItems": [
+            {"key": "setOnlyMetric", "home": "private"}
+        ]}]},
+    ]}
+    for name in ("event_statistics", "historical_2016_match_statistics"):
+        result = summarize(name, payload, event_id=3)
+        inventory = result["statistics_key_inventory"]
+        assert "aces" in inventory["supported"]
+        assert "experimentalservemetric" in inventory["unsupported"]
+        assert inventory["set_only"] == ["setonlymetric"]
+        assert not inventory["invalid_envelope"]
+        assert "sensitive" not in str(inventory)
+        assert "private" not in str(inventory)
+        assert result["payload_sha256"]
