@@ -505,6 +505,7 @@
     state.ui=clone(state.uiSource);
 
     const runtime=runtimeResult.status==='fulfilled'?runtimeResult.value:null;
+    state.uiPublishedRevision=String(runtime?.config_revision||'');
     // "configured" also describes the server's release fallback. Only an
     // explicitly confirmed Azure row is a published admin configuration.
     const storageAvailable=runtime?.storage_available===true;
@@ -598,6 +599,7 @@
     Object.values(state.ui?.elements||{}).forEach(renameAccaLabel);
     state.ui.ui_patch='736-r61';
     applyV6514AdminCleanup();
+    state.telegramPublishedOriginal=clone(state.ui.telegram_groups||{});
     state.dashboardVisibility=null;
     renderAllUiContent();
   }
@@ -1752,9 +1754,13 @@
   function renderSystemFooterStatus(){
     const host=$('footerSystemStatus'),time=$('footerLastUpdate');if(!host||!time)return;
     const heartbeat=state.liveRadarHeartbeat||state.userLiveRadarStatus||{};
-    const raw=heartbeat?.scanned_at||heartbeat?.updated_at||state.feed?.generated_at||'';
-    const parsed=Date.parse(raw);
-    time.textContent=Number.isFinite(parsed)?lcopy(`Model update: ${fmtTime(raw)}`,`Aktualizácia modelu: ${fmtTime(raw)}`,`Aktualizace modelu: ${fmtTime(raw)}`):lcopy('Model update: —','Aktualizácia modelu: —','Aktualizace modelu: —');
+    const liveAt=heartbeat?.last_success_at||heartbeat?.scanned_at||heartbeat?.updated_at||'';
+    const feedAt=state.feed?.generated_at||'';
+    const parts=[];
+    if(Number.isFinite(Date.parse(feedAt)))parts.push(lcopy('Offer updated','Ponuka aktualizovaná','Nabídka aktualizována')+': '+fmtTime(feedAt));
+    if(Number.isFinite(Date.parse(liveAt)))parts.push(lcopy('Last LIVE scan','Posledný LIVE scan','Poslední LIVE scan')+': '+fmtTime(liveAt));
+    time.textContent=parts.join(' · ')||lcopy('Updates: —','Aktualizácie: —','Aktualizace: —');
+    const parsed=Date.parse(liveAt||feedAt);
     const fresh=heartbeat?.fresh===true||(Number.isFinite(parsed)&&Date.now()-parsed<=180000);
     host.classList.toggle('is-stale',!fresh);
   }
@@ -5400,7 +5406,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     cfg.groups=Array.isArray(cfg.groups)?cfg.groups:[];
     const optionHtml=current=>membershipHierarchy.map(id=>`<option value="${id}"${id===current?' selected':''}>${escapeHtml(String(state.ui?.plans?.[id]?.label||id).replace(/^BlinQ\s+/i,''))}</option>`).join('');
     const rows=cfg.groups.map((group,index)=>`<article class="admin-tg-card" data-tg-index="${index}"><div class="admin-tg-card-head"><div><small>SKUPINA ${index+1}</small><strong>${escapeHtml(group.title||'Telegram skupina')}</strong></div><button class="btn btn-ghost" type="button" data-admin-action="tg-remove" data-tg-index="${index}">Odstrániť</button></div><div class="admin-tg-grid"><label><span>Názov</span><input data-tg-group-field="title" value="${escapeHtml(group.title||'')}"></label><label><span>Min. level</span><select data-tg-group-field="min_plan">${optionHtml(String(group.min_plan||'rookie'))}</select></label><label><span>Popiska nad názvom <small>(prázdne = skryť)</small></span><input data-tg-group-field="badge" value="${escapeHtml(Object.prototype.hasOwnProperty.call(group,'badge')?group.badge:'')}"></label><label class="admin-tg-wide"><span>Popis</span><input data-tg-group-field="description" value="${escapeHtml(group.description||'')}"></label><label><span>Text tlačidla</span><input data-tg-group-field="cta" value="${escapeHtml(group.cta||'')}"></label><label><span>URL</span><input data-tg-group-field="url" value="${escapeHtml(group.url||'')}" placeholder="https://t.me/..."></label><label class="admin-tg-check"><input data-tg-group-field="enabled" type="checkbox" ${group.enabled!==false?'checked':''}> Zobraziť skupinu</label></div></article>`).join('');
-    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>COMMUNITY</small><h2>Telegram skupiny</h2><p>Panel pod predikciami. Zmeny sa publikujú spolu s ostatnou UI konfiguráciou.</p></div><button class="btn btn-primary" type="button" data-admin-action="tg-add">+ Pridať skupinu</button></div><div class="admin-runtime-note"><strong>Bezpečnostná poznámka</strong><span>Pri súkromnej VIP skupine nevkladaj trvalý tajný invite link. Použi radšej verejný request/contact odkaz alebo bot link.</span></div><div class="admin-form-section admin-tg-panel-settings"><div class="admin-form-section-title"><strong>Panel</strong><span>Defaulty sú v <code>web/config/telegram-groups.json</code>. Admin zmeny sa ukladajú cez existujúce UI storage.</span></div><div class="admin-tg-grid"><label><span>Popiska nad nadpisom <small>(prázdne = skryť)</small></span><input data-tg-field="eyebrow" value="${escapeHtml(Object.prototype.hasOwnProperty.call(cfg,'eyebrow')?cfg.eyebrow:'')}"></label><label><span>Nadpis</span><input data-tg-field="title" value="${escapeHtml(cfg.title||'')}"></label><label class="admin-tg-wide"><span>Popis</span><input data-tg-field="description" value="${escapeHtml(cfg.description||'')}"></label><label class="admin-tg-check"><input data-tg-field="enabled" type="checkbox" ${cfg.enabled!==false?'checked':''}> Zobraziť panel na domovskej stránke</label></div></div><div class="admin-tg-list">${rows||'<div class="admin-note"><strong>Žiadna Telegram skupina</strong><span>Pridaj prvú skupinu tlačidlom hore.</span></div>'}</div></section>`;
+    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>COMMUNITY</small><h2>Telegram skupiny</h2><p>Panel pod predikciami. Zmeny sa publikujú spolu s ostatnou UI konfiguráciou.</p></div><div class="admin-tg-actions"><button class="btn btn-primary" type="button" data-admin-action="tg-publish" ${state.uiStorageAvailable===true?'':'disabled'}>Uložiť a publikovať</button><button class="btn btn-ghost" type="button" data-admin-action="tg-add">+ Pridať skupinu</button></div></div><div class="admin-runtime-note"><strong>Bezpečnostná poznámka</strong><span>Pri súkromnej VIP skupine nevkladaj trvalý tajný invite link. Použi radšej verejný request/contact odkaz alebo bot link.</span></div><div class="admin-form-section admin-tg-panel-settings"><div class="admin-form-section-title"><strong>Panel</strong><span>Defaulty sú v <code>web/config/telegram-groups.json</code>. Admin zmeny sa ukladajú cez existujúce UI storage.</span></div><div class="admin-tg-grid"><label><span>Popiska nad nadpisom <small>(prázdne = skryť)</small></span><input data-tg-field="eyebrow" value="${escapeHtml(Object.prototype.hasOwnProperty.call(cfg,'eyebrow')?cfg.eyebrow:'')}"></label><label><span>Nadpis</span><input data-tg-field="title" value="${escapeHtml(cfg.title||'')}"></label><label class="admin-tg-wide"><span>Popis</span><input data-tg-field="description" value="${escapeHtml(cfg.description||'')}"></label><label class="admin-tg-check"><input data-tg-field="enabled" type="checkbox" ${cfg.enabled!==false?'checked':''}> Zobraziť panel na domovskej stránke</label></div></div><div class="admin-tg-list">${rows||'<div class="admin-note"><strong>Žiadna Telegram skupina</strong><span>Pridaj prvú skupinu tlačidlom hore.</span></div>'}</div></section>`;
   }
 
   // Admin-only draft preview. Full rolling windows are present only in the
