@@ -1,0 +1,161 @@
+name: CDB 2016 source-native event identity audit (read-only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/tennisapi-2016-cdb-native-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cdb-2016-native-event-audit
+  cancel-in-progress: false
+
+jobs:
+  canonical-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      CDB_REPO: BackstageTalks/tbt-data
+      CDB_TAG: tbt-data-v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install existing read-only verification runtime
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          python -m pip install --disable-pip-version-check pandas pyarrow
+          python -m py_compile scripts/cdb_global_writer_lock.py scripts/cdb_wta_verified_window.py
+      - name: Freeze and SHA-verify current 2016 canonical partition
+        run: |
+          set -euo pipefail
+          mkdir -p audit-2016/source audit-2016/view
+          python - <<'PY'
+          from cdb_global_writer_lock import _remote_lock
+          if _remote_lock("BackstageTalks/tbt-data") is not None:
+              raise SystemExit("CDB writer active; fail closed")
+          print("CDB_WRITER_LOCK_ABSENT")
+          PY
+          gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" > audit-2016/release-before.json
+          gh release download "$CDB_TAG" -R "$CDB_REPO" \
+            -p history_manifest.json -p _tbt_bundle_manifest.json \
+            -p history-2016.parquet -D audit-2016/source
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from cdb_wta_verified_window import verified_window
+          report=verified_window(Path("audit-2016/source"),Path("audit-2016/release-before.json"),
+                                 Path("audit-2016/view"),years=(2016,))
+          Path("audit-2016/snapshot.json").write_text(json.dumps(report,sort_keys=True,indent=2)+"\n")
+          print("SHA_VERIFIED_CDB_2016",report["partitions"]["2016"]["sha256"])
+          PY
+          gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" > audit-2016/release-after.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          before=json.loads(Path("audit-2016/release-before.json").read_text())
+          after=json.loads(Path("audit-2016/release-after.json").read_text())
+          names={"history-2016.parquet","history_manifest.json","_tbt_bundle_manifest.json"}
+          def pins(record):
+              return {a["name"]:(a["id"],a["digest"]) for a in record["assets"] if a["name"] in names}
+          if len(pins(before))!=3 or pins(before)!=pins(after):
+              raise SystemExit("Canonical release changed during SHA verification")
+          from cdb_global_writer_lock import _remote_lock
+          if _remote_lock("BackstageTalks/tbt-data") is not None:
+              raise SystemExit("Writer started during audit; fail closed")
+          print("CDB_SNAPSHOT_STABLE_AFTER_READBACK")
+          PY
+      - name: Audit exact source-native ID and nearby Wimbledon 2016 candidates
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import pandas as pd
+          from datetime import date
+          target="7115726"
+          path=Path("audit-2016/view/history-2016.parquet")
+          df=pd.read_parquet(path)
+          required={"match_id","scheduled_at","tour","tournament","round_name",
+                    "player1_id","player2_id","player1_name","player2_name",
+                    "winner_id","provider_context_json","stats_json"}
+          if not required.issubset(df.columns):
+              raise SystemExit("CDB schema missing required columns")
+          if df["match_id"].duplicated().any():
+              raise SystemExit("Canonical 2016 match_id not unique")
+          hits=[]
+          nearby=[]
+          claims=0
+          for raw in df.to_dict("records"):
+              when=pd.Timestamp(raw["scheduled_at"])
+              if pd.isna(when) or when.year!=2016:
+                  raise SystemExit("Invalid 2016 partition date")
+              context=raw.get("provider_context_json")
+              try:
+                  context=json.loads(context) if isinstance(context,str) else {}
+              except (ValueError,TypeError):
+                  raise SystemExit("Malformed canonical provider context")
+              if not isinstance(context,dict):
+                  raise SystemExit("Unexpected canonical provider context")
+              witness=context.get("_tbt_event_identity")
+              witness=witness if isinstance(witness,dict) else {}
+              scoped={str(x) for x in (context.get("_tbt_provider_event_id"),
+                                      witness.get("event_id")) if x not in (None,"")}
+              claims+=int(bool(scoped))
+              ident={"match_id":str(raw["match_id"]), "utc":when.isoformat(),
+                     "tour":str(raw["tour"]), "tournament":str(raw["tournament"]),
+                     "round":str(raw["round_name"]), "player1_id":str(raw["player1_id"]),
+                     "player2_id":str(raw["player2_id"]), "player1":str(raw["player1_name"]),
+                     "player2":str(raw["player2_name"]), "winner_id":str(raw["winner_id"]),
+                     "native_event_claims":sorted(scoped),
+                     "source_category_id":context.get("_tbt_source_category_id"),
+                     "existing_stats_keys":sorted(json.loads(raw["stats_json"]).keys())
+                        if isinstance(raw["stats_json"],str) else []}
+              if target in scoped:
+                  hits.append(ident)
+              if (abs((when.date()-date(2016,7,10)).days)<=1
+                      and "wimbledon" in str(raw["tournament"]).lower()):
+                  nearby.append(ident)
+          nearby.sort(key=lambda x:(x["utc"],x["match_id"]))
+          if len(hits)>1:
+              state="QUARANTINE_DUPLICATE_PROVIDER_EVENT_ID"
+          elif len(hits)==1:
+              state="CANDIDATE_EXACT_PROVIDER_ID_NEEDS_EVENT_WITNESS"
+          else:
+              state="UNLINKED_NEEDS_PROVIDER_NATIVE_IDENTITY"
+          report={"schema":1,"state":state,"source_event_id":target,
+                  "canonical_year":2016,"canonical_rows":len(df),
+                  "canonical_native_event_claim_rows":claims,
+                  "exact_native_id_claims":len(hits),"exact_claims":hits,
+                  "nearby_wimbledon_candidates_count":len(nearby),
+                  "nearby_wimbledon_candidates":nearby[:40],
+                  "candidate_list_truncated":len(nearby)>40,
+                  "source_event_identity_independently_verified":False,
+                  "provider_api_requests":0,"cdb_writes":0,"model_changes":0,
+                  "cdb_import_approved":False,
+                  "release_snapshot":json.loads(Path("audit-2016/snapshot.json").read_text())}
+          out=Path("audit-2016/native-identity-report.json")
+          out.write_text(json.dumps(report,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
+          print(json.dumps({k:report[k] for k in ("state","canonical_rows","canonical_native_event_claim_rows",
+             "exact_native_id_claims","nearby_wimbledon_candidates_count","cdb_writes")} ,sort_keys=True))
+          PY
+          (cd audit-2016 && sha256sum snapshot.json native-identity-report.json > SHA256SUMS && sha256sum -c SHA256SUMS)
+      - name: Preserve audit evidence without raw CDB data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdb-2016-event-7115726-identity-${{ github.run_id }}
+          path: |
+            audit-2016/snapshot.json
+            audit-2016/native-identity-report.json
+            audit-2016/SHA256SUMS
+          if-no-files-found: warn
+          retention-days: 14
