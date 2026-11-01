@@ -190,6 +190,19 @@ jobs:
           timeout 150s python scripts/audit_cdb_external_registry.py
           timeout 480s python scripts/build_cdb_verified_player_crosswalk.py
 
+      # Read-only replay of real issued ACE UNDER quotes from the private release.
+      - name: Audit historical Aces UNDER filter (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'No release read token'; exit 1; }
+          mkdir -p "$RUNNER_TEMP/ace-under-audit"
+          gh release download tbt-predictions-v1 --repo BackstageTalks/tbt-data --pattern ledger.json --dir "$RUNNER_TEMP/ace-under-audit" --clobber
+          PYTHONPATH=api:scripts python scripts/audit_ace_under_buffer.py "$RUNNER_TEMP/ace-under-audit/ledger.json"
+
       - name: Run backend tests
         env:
           PYTHONPATH: api:scripts
