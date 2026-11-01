@@ -75,7 +75,7 @@ def index(table, source):
             *(table.column(k).to_pylist() for k in names))):
         if (not mid or not p1 or not p2 or p1 == p2 or mid in found
                 or when is None or when.astimezone(timezone.utc).year != 2026):
-            raise ValueError(f"Invalid 2026 canonical identity: {source}")
+            raise ValueError(f"Invalid or duplicate 2026 canonical identity: {source}")
         found[str(mid)] = i
     return found
 
