@@ -10,7 +10,7 @@ def read(path):
 def test_provider_exposes_player_history_contract():
     text = read("api/tbt/providers/rapidapi.py")
     assert "def previous_player_matches" in text
-    assert "/api/tennis/player/{player_id}/events/last/{page}" in text
+    assert "/api/tennis/player/{player_id}/events/previous/{page}" in text
     assert "def upcoming_player_matches" in text
     assert "def player_near_matches" in text
 
