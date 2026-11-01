@@ -1142,6 +1142,7 @@
       && configuredElementAccess('SIDEBAR_RESULTS',plan)==='active';
   }
   function elementAccess(id, plan=accountPlan()){
+    if(plan==='admin' && !state.previewPlan) return 'active';
     // A published UI configuration can change independently of this frontend.
     // For Results, the authenticated server entitlement is authoritative.
     if(id==='SIDEBAR_RESULTS' && !state.previewPlan && plan===accountPlan()){
