@@ -16,7 +16,7 @@ def test_r31_release_and_footer_live_heartbeat_contract():
     assert 'content="736-r61"' in INDEX
     assert 'id="footerSystemStatus"' in INDEX
     assert 'id="footerHealthLabel">BlinQ —' in INDEX
-    assert 'id="footerLastUpdate">Scan —' in INDEX
+    assert 'id="footerFeedUpdate">Aktualizácia —' in INDEX
     assert "function renderSystemFooterStatus()" in APP
     assert "state.feed?.match_status_updated_at" in APP
     assert 'fmtTime(matchAt)' in APP
