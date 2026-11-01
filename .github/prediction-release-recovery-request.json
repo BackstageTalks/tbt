@@ -1,7 +1,11 @@
 {
   "schema": 1,
-  "requested_date": "2026-10-31",
-  "reason": "verify and clean interrupted tbt-predictions-v1 rollback journal",
+  "requested_date": "2026-11-01",
+  "reason": "Recover multi-token stale prediction release after PR #1127, verify canonical feed/ledger/daily snapshot and preserve SHA-256",
   "provider_requests_allowed": 0,
-  "expected_transaction": "9b0b2e1df2a24fcea9714092ccc97891"
+  "expected_transaction_tokens": [
+    "4975d41e13474c26bd82766dae051533",
+    "9a18204925f046a2b4dc5ca01b92a319"
+  ],
+  "change_policy": "clean_transient_only_after_strict_readback"
 }
