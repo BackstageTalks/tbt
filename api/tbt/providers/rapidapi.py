@@ -564,13 +564,13 @@ class RapidTennisClient:
     def previous_player_matches(self, player_id: str | int, page: int = 0) -> Any:
         """Previous matches for one player, newest first.
 
-        TennisApi exposes this endpoint as getPreviousPlayerMatches.  These rows
+        TennisApi documents this route as events/previous/{page}; the old\n        events/last/{page} route does not provide usable quota headers. These rows
         are presentation/research enrichment only; the predictive model continues
         to use the immutable point-in-time history replay used by training.
         """
         page = max(0, int(page))
         return self._get(
-            f"/api/tennis/player/{player_id}/events/last/{page}",
+            f"/api/tennis/player/{player_id}/events/previous/{page}",
             enrichment=True,
         )
 
