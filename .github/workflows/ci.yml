@@ -624,6 +624,21 @@ jobs:
           PYSMOKE
 
 
+      - name: Replay existing TOP/VALUE CLV observations (zero provider spend)
+        # Only the scoped CLV release invokes the one-shot archive replay.
+        if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[clv-detail]') }}
+        timeout-minutes: 8
+        env:
+          TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PUBLIC_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          CLV_REPLAY_DAYS: "2"
+        run: |
+          set -euo pipefail
+          python scripts/replay_clv_detail_archives.py
+
+
       # Calibration snapshots are published by model-calibration-monitor.yml
       # only after it loads the current production model, checks its SHA-256,
       # and freshly audits unseen rows. Never send stale readiness to Admin
