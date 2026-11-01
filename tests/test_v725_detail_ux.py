@@ -12,8 +12,8 @@ def test_footer_is_minimal_with_live_worker_heartbeat_status():
     assert "footer.live_ok" not in APP
     assert ".site-footer-minimal" in CSS
     assert 'id="footerSystemStatus"' in INDEX
-    assert "Všetky systémy funkčné" in INDEX
-    assert "Posledný scan: —" in INDEX
+    assert 'id="footerHealthLabel">BlinQ —' in INDEX
+    assert 'id="footerLastUpdate">Scan —' in INDEX
     assert "renderSystemFooterStatus" in APP
 
 
