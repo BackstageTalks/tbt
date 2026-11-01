@@ -83,7 +83,26 @@ def index(table, source):
 def merge_preserving_live(old, live):
     import pyarrow as pa
     if not old.schema.equals(live.schema, check_metadata=False):
-        raise ValueError("Old/current schema differs; refuse coercion")
+        # Diagnostics are column names/types only: no canonical identities,
+        # player information, row contents or private raw values in CI logs.
+        def fields(table):
+            return {field.name: str(field.type) for field in table.schema}
+        a, b = fields(old), fields(live)
+        schema_delta = {
+            "backup_only": {k: a[k] for k in sorted(a.keys() - b.keys())},
+            "current_only": {k: b[k] for k in sorted(b.keys() - a.keys())},
+            "type_differences": {
+                k: {"backup": a[k], "current": b[k]}
+                for k in sorted(a.keys() & b.keys()) if a[k] != b[k]
+            },
+            "field_order_differs": list(a) != list(b),
+            "nullability_differs": [
+                k for k in sorted(a.keys() & b.keys())
+                if old.schema.field(k).nullable != live.schema.field(k).nullable
+            ],
+        }
+        raise ValueError("Old/current schema differs; refuse coercion. "
+                         + "Column-only delta: " + json.dumps(schema_delta, sort_keys=True))
     oi, ci = index(old, "backup"), index(live, "current")
     missing = set(oi) - set(ci)
     conflicts = null_old = current_new = 0
