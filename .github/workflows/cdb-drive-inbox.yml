@@ -386,6 +386,30 @@ jobs:
                 "candidate_matches",record["candidate_match_count"],
                 "strict_eligible",record["strict_eligible_match_count"])
           PY
+      - name: Preserve immutable MoviOdds source and SHA-linked stage in PRIVATE repo
+        # Existing CDB importer does not persist provider-native proofs inside
+        # canonical Parquet. Keep the exact source + staged evidence privately
+        # before acquiring the writer; loss of proof prevents any mutation.
+        if: env.SOURCE_MODE == 'moviodds' && steps.stage.outputs.additions == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          folder=work/moviodds-private-evidence
+          mkdir -p "$folder" work/moviodds-evidence-readback
+          cp work/source/report.json "$folder/source-batch-report.json"
+          cp work/stage/report.json "$folder/link-stage-report.json"
+          cp work/stage/eligible.jsonl "$folder/eligible.jsonl"
+          cp work/stage/review.jsonl "$folder/review.jsonl"
+          cp work/source/source/moviodds-*.json "$folder/"
+          (cd "$folder" && sha256sum -- * > SHA256SUMS && sha256sum -c SHA256SUMS)
+          tag="blinq-moviodds-cdb-evidence-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" "$folder"/* -R "$CDB_REPO" --target main \
+            --title "PRIVATE SHA-verified MoviOdds CDB import proof $GITHUB_RUN_ID" \
+            --notes "Verified raw provider payloads + exact null-only canonical stage. Immutable prewrite evidence; existing CDB writer remains authoritative."
+          gh release download "$tag" -R "$CDB_REPO" -D work/moviodds-evidence-readback
+          (cd work/moviodds-evidence-readback && sha256sum -c SHA256SUMS)
+          echo 'MOVIODDS_PRIVATE_PREWRITE_SOURCE_PROOF_READBACK_PASS'
+
       - name: Acquire global single writer ONLY for a positive, validated delta
         if: steps.stage.outputs.additions == 'true'
         id: writer
