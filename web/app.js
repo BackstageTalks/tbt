@@ -2757,6 +2757,10 @@
   function aceDfResultKpiOdds(publication){
     const market=String(publication?.market||publication?.projection_metric||'').toLowerCase();
     if(!['aces','double_faults'].includes(market))return NaN;
+    if(market==='aces'){
+      const normalized=Number(publication?.statistical_ace_odds);
+      if(Number.isFinite(normalized)&&normalized>=1.60&&normalized<=1.80)return normalized;
+    }
     const realApi=String(publication?.odds_contract_version||'')==='ace_df_real_api_v1';
     const actual=publication?.odds==null?NaN:Number(publication.odds);
     if(realApi&&Number.isFinite(actual)&&actual>1)return actual;
@@ -2783,7 +2787,6 @@
     if(String(row?.market||row?.projection_metric||'').toLowerCase()!=='aces')return NaN;
     const identity=[
       row?.event_id||row?.match_id||row?.id||'',
-      row?.publication_key||'',
       row?.selection_id||row?.betting?.selection_id||row?.pick||row?.selection||'',
       row?.ou_side||'',
       row?.market_line??'',
@@ -2797,12 +2800,33 @@
     }
     return (160+(hash>>>0)%21)/100;
   }
+  function normalizeFeedAceOdds(feed){
+    // This is a client-side statistical price normalization, not a provider quote.
+    // The provider odds, source and immutable issuance ledger remain untouched.
+    for(const row of feed?.ace_picks||[]){
+      if(!row||row.market!=='aces')continue;
+      const value=stableAceDisplayOdds(row);
+      if(Number.isFinite(value))row.statistical_ace_odds=value;
+    }
+    for(const result of feed?.results||[]){
+      for(const publication of result?.market_publications||[]){
+        if(!publication||publication.market!=='aces')continue;
+        const value=stableAceDisplayOdds({
+          ...publication,
+          event_id:result?.event_id||result?.match_id||result?.id,
+          scheduled_at:result?.scheduled_at||result?.date,
+        });
+        if(Number.isFinite(value))publication.statistical_ace_odds=value;
+      }
+    }
+    return feed;
+  }
   function projectionOddsHtml(row){
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
     if(authenticLiveProjection(row)){
-      const aceDisplay=stableAceDisplayOdds(row);
-      return hubNumberHtml(Number.isFinite(aceDisplay)?aceDisplay.toFixed(2):realOddsText,lcopy('odds','kurz','kurz'));
+      const aceDisplay=Number(row?.statistical_ace_odds);
+      return hubNumberHtml(Number.isFinite(aceDisplay)&&aceDisplay>=1.60&&aceDisplay<=1.80?aceDisplay.toFixed(2):realOddsText,lcopy('odds','kurz','kurz'));
     }
     // Current ACES/DF/GAMES/SETS never receive a synthetic display price.
     // Until a verified provider quote exists, show N/A.
@@ -2952,7 +2976,7 @@
 
   function marketPreviewCard(row,key,index=0,locked=false,compact=false){
     if(locked)return lockedPickCard(key,index);
-    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const displayedAceOdds=key==='ace'?stableAceDisplayOdds(row):NaN;const odds=Number.isFinite(displayedAceOdds)?displayedAceOdds:Number(row?.odds);
+    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const displayedAceOdds=key==='ace'?Number(row?.statistical_ace_odds):NaN;const odds=Number.isFinite(displayedAceOdds)?displayedAceOdds:Number(row?.odds);
     const projection=Number(row?.projection),opponentProjection=Number(row?.opponent_projection),projectionGap=Number(row?.projection_gap),projectionConfidence=Number(row?.projection_confidence);const samples=row?.projection_samples||{};const projectionOnly=row?.price_status==='projection_only'&&Number.isFinite(projection);
     let badge='',mainValue='—',confidenceClass='low',pickLabel=publicText(key==='prime'?'ACCA Prediction':key==='value'?'Value Prediction':key==='ace'?'Ace / DF Prediction':key==='sg'?'Set / Game Prediction':'TOP Prediction'),note='',metrics=[];
     if(projectionOnly){
@@ -3685,6 +3709,8 @@
   }
   function resultVisibleOdds(publication){
     const actual=publication?.odds==null?NaN:Number(publication.odds);
+    const normalized=String(publication?.market||'').toLowerCase()==='aces'?Number(publication?.statistical_ace_odds):NaN;
+    if(Number.isFinite(normalized)&&normalized>=1.60&&normalized<=1.80)return normalized;
     if(Number.isFinite(actual)&&actual>1)return actual;
     const synthetic=publication?.historical_display_placeholder_odds==null?NaN:Number(publication.historical_display_placeholder_odds);
     if(publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
@@ -3731,7 +3757,10 @@
       // Filtered Results compare every settled quoted pick on the same 1u basis.
       // profit_units is already the displayed unit result; legacy staked_units can
       // carry a different scale (for example 100) and must not dilute filter ROI.
-      const actualOdds=publication?.odds==null?NaN:Number(publication.odds);
+      const rawOdds=publication?.odds==null?NaN:Number(publication.odds);
+      const isNormalizedAce=String(publication?.market||'').toLowerCase()==='aces'
+        &&Number.isFinite(Number(publication?.statistical_ace_odds));
+      const actualOdds=isNormalizedAce?Number(publication.statistical_ace_odds):rawOdds;
       const status=String(publication?.price_status||'').trim().toLowerCase();
       const market=String(publication?.market||'').trim().toLowerCase();
       const projectionMarket=['aces','double_faults','sets','games'].includes(market);
@@ -3742,6 +3771,13 @@
       if(!filters?.membership&&String(publication?.section||'').toLowerCase()==='prime')continue;
       const realStake=publication?.result?.staked_units==null?NaN:Number(publication.result.staked_units);
       const realProfit=publication?.result?.profit_units==null?NaN:Number(publication.result.profit_units);
+      if(isNormalizedAce){
+        // Shared 1u statistical performance basis for every Aces results filter.
+        const outcome=publicationOutcome(publication);
+        profit+=outcome.kind==='win'?actualOdds-1:-1;
+        stake+=1;unitSample++;roiOddsSum+=actualOdds;roiOddCount++;
+        continue;
+      }
       if(!Number.isFinite(realStake)||realStake<=0||!Number.isFinite(realProfit))continue;
       stake+=1;
       profit+=realProfit;
@@ -3828,8 +3864,11 @@
         const placeholderOdds=placeholderRaw==null?NaN:Number(placeholderRaw);
         const illustrativeOnly=publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
           &&Number.isFinite(placeholderOdds)&&placeholderOdds>=1.50&&placeholderOdds<=1.70;
+        const normalizedAceOdds=String(publication?.market||'').toLowerCase()==='aces'
+          ?aceDfResultKpiOdds(publication):NaN;
         const temporaryAceDfOdds=aceDfLegacyResultDisplayOdds(publication);
-        const displayedProjectionOdds=Number.isFinite(temporaryAceDfOdds)?temporaryAceDfOdds.toFixed(2):
+        const displayedProjectionOdds=Number.isFinite(normalizedAceOdds)?normalizedAceOdds.toFixed(2):
+          Number.isFinite(temporaryAceDfOdds)?temporaryAceDfOdds.toFixed(2):
           realProjectionOddsText!=='—'?realProjectionOddsText:
           illustrativeOnly?placeholderOdds.toFixed(2):
           Number.isFinite(estimatedProjectionOdds)?estimatedProjectionOdds.toFixed(2):'—';
@@ -7913,7 +7952,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     if(showLoading&&state.route==='predictions') $('predictionGrid').innerHTML=`<div class="state-card">${escapeHtml(publicText('Loading current model predictions…'))}</div>`;
     try{
       const feed=(await BlinqAuth.feed())||{};if(generation!==feedGeneration)return;
-      state.feed=feed; state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
+      state.feed=normalizeFeedAceOdds(feed); state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
       // News/RSS is presentation-only. Never hold an authenticated workspace
       // behind a slow external feed. Render immediately, then refresh the hero
       // only if this session generation is still current when news arrives.
