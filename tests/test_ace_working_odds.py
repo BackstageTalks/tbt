@@ -89,6 +89,15 @@ def test_provider_quote_first_fallback_only_when_not_verified():
     }
     assert verified_ace_odds(base) == 2.125
     assert selected_ace_odds(base) == (2.125, True)
+    placeholder = {**base, "odds": 2.0}
+    assert verified_ace_odds(placeholder) is None
+    assert selected_ace_odds(placeholder) == (
+        working_ace_odds(placeholder), False)
+    for future in ("2026-11-02T13:00:00Z", "2027-05-02T13:00:00Z"):
+        assert selected_ace_odds({**placeholder, "scheduled_at": future}) == (
+            working_ace_odds(placeholder), False)
+    # A concrete non-placeholder, independently matched API quote still wins.
+    assert selected_ace_odds({**base, "odds": 1.93}) == (1.93, True)
     assert selected_ace_odds({**base, "provider_id": 1})[1] is False
     assert selected_ace_odds({**base, "odds_bookmaker": ""})[1] is False
     assert selected_ace_odds({**base, "market_line": float("nan")})[1] is False
@@ -129,3 +138,12 @@ def test_telegram_prices_verified_aces_and_fallback_without_model_changes():
     local_reference = tg.result_reference(local, "aces")
     assert local_reference["odds"] == price
     assert local_reference["price_basis"] == PRICE_BASIS
+    # Even provider-labelled 2.00 remains a placeholder on ALL future days.
+    for date in ("2026-11-02T13:00:00Z", "2027-05-02T13:00:00Z"):
+        placeholder = {**base, "odds": 2.0, "scheduled_at": date}
+        price = working_ace_odds(placeholder)
+        assert f"{price:.2f}" in tg.fmt(placeholder, "aces", {"show_odds": True})
+        issued = tg.result_reference(placeholder, "aces")
+        assert issued["odds"] == price
+        assert issued["price_basis"] == PRICE_BASIS
+        assert placeholder["odds"] == 2.0
