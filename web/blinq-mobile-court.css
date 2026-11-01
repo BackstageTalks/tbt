@@ -4,10 +4,20 @@
    Four IDs intentionally outrank the legacy three-ID mobile cascade. */
 @media (max-width:600px) {
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) {
-    background:#031510 !important; isolation:isolate !important; --bq-court-line:rgba(130,196,164,.28) !important;
+    /* The phone court is painted only by ::before, never on the scrolling body. */
+    background:#031510 !important; background-image:none !important; background-attachment:scroll !important;
+    isolation:isolate !important; --bq-court-line:rgba(130,196,164,.28) !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)::before {
-    content:"" !important; position:fixed !important; inset:0 !important; z-index:-1 !important; pointer-events:none !important; background:linear-gradient(rgba(2,18,13,.12),rgba(2,18,13,.32)),var(--blinq-mobile-court-bg,url("/assets/blinq_mobile_court.webp")) center bottom / cover no-repeat !important; opacity:1 !important;
+    /* Android Chrome collapses its address bar while scrolling. An inset:0 fixed
+       layer resizes and re-crops cover artwork, creating a visible jump.
+       Use the stable LARGE viewport height, including the area under browser UI. */
+    content:"" !important; position:fixed !important;
+    top:0 !important; right:0 !important; bottom:auto !important; left:0 !important;
+    height:100vh !important; height:100lvh !important;
+    z-index:-1 !important; pointer-events:none !important;
+    background:linear-gradient(rgba(2,18,13,.12),rgba(2,18,13,.32)),var(--blinq-mobile-court-bg,url("/assets/blinq_mobile_court.webp")) center bottom / cover no-repeat !important;
+    opacity:1 !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .site-header,
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #mobileTabs {
