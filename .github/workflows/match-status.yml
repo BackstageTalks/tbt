@@ -201,3 +201,35 @@ jobs:
           set -euo pipefail
           gh workflow run blinq-ui-production-watchdog.yml --repo "$GITHUB_REPOSITORY" --ref main
           echo 'BLINQ_UI_WATCHDOG_DISPATCH_SUBMITTED'
+
+      - name: Archive completed MoviOdds source JSON to the user's Drive once daily
+        # Existing externally driven half-hour clock; CDB imports remain manual.
+        # Explicit repository variable activates after a scoped Drive writer is
+        # independently provisioned, tested and SHA-readback verified.
+        if: always() && github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRIVE_ARCHIVE_ENABLED: ${{ vars.BLINQ_MOVIODDS_DRIVE_ENABLED || 'false' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$DRIVE_ARCHIVE_ENABLED" != "true" ]]; then
+            echo 'MOVIODDS_DRIVE_NOT_ENABLED_WRITER_AUTH_UNVERIFIED'
+            exit 0
+          fi
+          hour="$(date -u +%H)"
+          minute="$(date -u +%M)"
+          if [[ "$hour" != "04" ]] || (( 10#$minute >= 30 )); then
+            echo 'MOVIODDS_DRIVE_ARCHIVE_NOT_DUE'
+            exit 0
+          fi
+          yesterday="$(date -u -d 'yesterday' +%F)"
+          runs="$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/moviodds-drive-archive.yml/runs" -f event=workflow_dispatch -f per_page=30)"
+          if printf '%s' "$runs" | jq -e --arg d "$(date -u +%Y-%m-%d)" '.workflow_runs | any(.created_at | startswith($d))' >/dev/null; then
+            echo 'MOVIODDS_DRIVE_ARCHIVE_ALREADY_DISPATCHED_TODAY'
+            exit 0
+          fi
+          gh workflow run moviodds-drive-archive.yml --repo "$GITHUB_REPOSITORY" \
+            --ref main -f date="$yesterday"
+          echo 'MOVIODDS_DRIVE_ARCHIVE_DISPATCH_ONLY_VERIFY_WORKFLOW_READBACK'
