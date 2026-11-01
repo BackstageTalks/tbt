@@ -413,8 +413,14 @@ jobs:
             echo 'locked=false' >> "$GITHUB_OUTPUT"
             if [[ "$SOURCE_MODE" == "drive" ]]; then
               python scripts/cdb_inbox_pending_batch.py persist --folder-id "$INBOX_FOLDER_ID"
+              echo 'CDB_INBOX_DEFERRED_LATE_LOCK_RACE_RETRY_ON_NEXT_SCHEDULE'
+            else
+              # The MoviOdds weekly job has no private persisted checkpoint.
+              # Treat late lock races as failed/deferred so the existing UTC
+              # half-hour scheduler can retry; a green job would lose a week.
+              echo '::error::MOVIODDS_CDB_DEFERRED_LATE_LOCK_RACE_NOT_IMPORTED'
+              exit 1
             fi
-            echo 'CDB_INBOX_DEFERRED_LATE_LOCK_RACE_RETRY_ON_NEXT_SCHEDULE'
           else
             cat work/writer-lock.log
             exit 1
