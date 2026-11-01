@@ -6346,12 +6346,22 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     try{
       const status=await getJSON('/api/v1/ui-config',{timeoutMs:3500});
       if(status?.storage_available!==true
-          ||(state.runtimeConfigLoaded&&status?.runtime_configured!==true)){
+          ||(state.runtimeConfigLoaded&&status?.runtime_configured!==true)
+          || !/^[a-f0-9]{64}$/.test(String(status?.config_revision||''))){
         throw new Error('Aktuálnu publikovanú konfiguráciu nemožno bezpečne overiť. Zmeny sa neuložili.');
       }
+      if(state.uiPublishedRevision&&state.uiPublishedRevision!==status.config_revision)
+        throw new Error('Nastavenia sa medzičasom zmenili. Obnov stránku a zopakuj zmenu.');
       applyV6514AdminCleanup();
-      const result=await BlinqAuth.adminSaveUiConfig(state.ui);
+      const result=await BlinqAuth.adminSaveUiConfig(state.ui,status.config_revision);
       if(!result?.saved)throw new Error('Server nepotvrdil uloženie konfigurácie.');
+      const verified=await getJSON('/api/v1/ui-config?readback='+Date.now(),{timeoutMs:5000});
+      if(!verified?.runtime_configured||!/^[a-f0-9]{64}$/.test(String(verified?.config_revision||''))){
+        showStatus('Zápis bol prijatý, ale nezávislý read-back neprešiel. Pred ďalším publikovaním obnov stránku.');
+        return false;
+      }
+      state.uiPublishedRevision=String(verified.config_revision);
+      state.telegramPublishedOriginal=clone(verified.config?.telegram_groups||{});
       try{localStorage.removeItem(draftKey());}catch{}
       state.runtimeConfigLoaded=true;
       state.uiStorageAvailable=true;
