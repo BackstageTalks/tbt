@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "requested_date": "2026-11-01",
-  "reason": "Isolate TennisApi annual doubles/team statistics route using documented 69208 sample, research-only",
+  "reason": "Verify documented source identity 69208 at player/team endpoints before historical year-stat interpretation",
   "provider_requests_allowed": true,
-  "max_requests": 1,
+  "max_requests": 2,
   "event_id": 14494928,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ technical audit",
-  "diagnostic_attempt": 10,
-  "phase": "doubles",
-  "case": "team_year_stats_doc_example"
+  "diagnostic_attempt": 11,
+  "phase": "identity",
+  "case": null
 }
