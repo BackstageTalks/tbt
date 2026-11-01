@@ -14,6 +14,7 @@ from typing import Any
 
 from ..errors import ProviderError
 from .statistics import parse_statistics
+from .odds_quality import odds_unavailable
 from ..services.market_selection import decimal_odds
 
 
@@ -47,9 +48,13 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
         raise ProviderError("TennisApi markets must be a list")
     quotes: list[dict] = []
     seen = {}
+    if odds_unavailable(raw):
+        markets = []
     for market in markets:
         if not isinstance(market, dict):
             raise ProviderError("Malformed TennisApi market")
+        if odds_unavailable(market):
+            continue
         ident = market.get("marketId")
         try:
             market_id = int(ident)
@@ -78,6 +83,8 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
         for choice in choices:
             if not isinstance(choice, dict):
                 raise ProviderError("Malformed TennisApi choice")
+            if odds_unavailable(choice):
+                continue
             side = str(choice.get("name", "")).strip()
             if side not in required:
                 continue

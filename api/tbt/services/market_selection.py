@@ -15,6 +15,7 @@ from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
 from ..providers.budget import RequestBudgetExceeded
+from ..providers.odds_quality import odds_unavailable
 
 
 MATCH_WINNER_MARKET_NAMES = {
@@ -131,6 +132,8 @@ def _walk_market_rows(value: Any, inherited_market: str = "") -> Iterable[tuple[
             yield from _walk_market_rows(item, inherited_market)
         return
     if not isinstance(value, dict):
+        return
+    if odds_unavailable(value):
         return
 
     explicit_market = value.get("marketName") or value.get("market_name") or value.get("market")
@@ -252,11 +255,17 @@ def extract_match_winner_odds(payload: Any, player1_name: str, player2_name: str
                 "odds": price,
                 "opening_odds": _opening_price(row),
                 "change": row.get("change"),
-                "source_id": row.get("sourceId") or row.get("source_id"),
+                "source_id": row.get("sourceId", row.get("source_id")),
             },
         )
 
     if 1 not in prices or 2 not in prices:
+        return None
+    source1, source2 = prices[1].get("source_id"), prices[2].get("source_id")
+    # Do not present two explicitly different sources as a single two-way book.
+    # One-sided provenance is also insufficient to attribute the pair.
+    known1, known2 = source1 not in (None, ""), source2 not in (None, "")
+    if known1 != known2 or (known1 and str(source1) != str(source2)):
         return None
     o1, o2 = prices[1]["odds"], prices[2]["odds"]
     raw1, raw2 = 1.0 / o1, 1.0 / o2
@@ -273,7 +282,8 @@ def extract_match_winner_odds(payload: Any, player1_name: str, player2_name: str
         "raw_overround": total - 1.0,
         "player1_change": prices[1].get("change"),
         "player2_change": prices[2].get("change"),
-        "source_id": prices[1].get("source_id") or prices[2].get("source_id"),
+        "source_id": source1 if known1 else None,
+        "source_id_known": known1 and known2,
     }
 
 

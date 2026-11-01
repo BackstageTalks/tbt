@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import pytest
 
 from tbt.services.market_selection import (
     betting_day_bounds,
@@ -86,6 +87,45 @@ def test_decimal_odds_supports_fractional_and_decimal():
     assert decimal_odds('7/10') == 1.7
     assert decimal_odds(1.85) == 1.85
     assert decimal_odds('0.85') is None
+
+
+@pytest.mark.parametrize('level', ['envelope', 'market', 'choice'])
+@pytest.mark.parametrize('flag', [True, 'true', 'false', None, 0, 1])
+def test_unavailable_odds_never_enter_current_market(level, flag):
+    payload = {'markets': [{'marketName': 'Full time', 'suspended': False, 'choices': [
+        {'name': '1', 'fractionalValue': '4/5', 'suspended': False},
+        {'name': '2', 'fractionalValue': '1/1', 'suspended': False},
+    ]}]}
+    target = {'envelope': payload, 'market': payload['markets'][0],
+              'choice': payload['markets'][0]['choices'][0]}[level]
+    target['suspended'] = flag
+    assert extract_match_winner_odds(payload, 'Alpha', 'Beta') is None
+
+
+def test_suspended_market_does_not_hide_separate_available_market():
+    choices = [{'name': '1', 'fractionalValue': '4/5'},
+               {'name': '2', 'fractionalValue': '1/1'}]
+    payload = {'markets': [
+        {'marketName': 'Full time', 'suspended': True, 'choices': choices},
+        {'marketName': 'Full time', 'suspended': False, 'choices': choices},
+    ]}
+    assert extract_match_winner_odds(payload, 'Alpha', 'Beta')['player1_odds'] == 1.8
+
+
+@pytest.mark.parametrize('sources,accepted', [
+    ((7, 8), False), ((7, None), False), ((None, 7), False),
+    ((7, '7'), True), ((0, 0), True), ((None, None), True),
+])
+def test_two_way_odds_do_not_invent_source_attribution(sources, accepted):
+    payload = {'markets': [{'marketName': 'Full time', 'choices': [
+        {'name': '1', 'fractionalValue': '4/5', 'sourceId': sources[0]},
+        {'name': '2', 'fractionalValue': '1/1', 'sourceId': sources[1]},
+    ]}]}
+    result = extract_match_winner_odds(payload, 'Alpha', 'Beta')
+    assert (result is not None) is accepted
+    if accepted:
+        assert result['source_id'] == sources[0]
+        assert result['source_id_known'] is (sources[0] is not None)
 
 
 def test_extract_match_winner_odds_from_nested_provider_shape():
