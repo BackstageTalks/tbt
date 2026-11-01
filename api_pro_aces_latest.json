@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "mode": "api_pro_targeted_read_only",
+  "captured_at_utc": "2026-11-01T06:49:06.932789+00:00",
+  "snapshot_day": "2026-11-01",
+  "snapshot_confirmed": true,
+  "ace_picks_in_snapshot": 10,
+  "eligible_targeted_picks": 10,
+  "max_paid_requests": 5,
+  "events": [
+    {
+      "event_id": "17453662",
+      "player": "Kyoka Okamura",
+      "player_slot": 1,
+      "projection": 2.08,
+      "scheduled_at": "2026-11-01T08:30:00+00:00",
+      "priority": 1,
+      "ace_market_samples": [],
+      "individual_bookmaker_selections": []
+    },
+    {
+      "event_id": "17377322",
+      "player": "Carlos Alcaraz",
+      "player_slot": 2,
+      "projection": 5.5,
+      "scheduled_at": "2026-11-01T13:00:00+00:00",
+      "priority": 1,
+      "ace_market_samples": [],
+      "individual_bookmaker_selections": []
+    },
+    {
+      "event_id": "17377323",
+      "player": "Valentin Vacherot",
+      "player_slot": 2,
+      "projection": 9.62,
+      "scheduled_at": "2026-11-01T14:30:00+00:00",
+      "priority": 1,
+      "ace_market_samples": [],
+      "individual_bookmaker_selections": []
+    },
+    {
+      "event_id": "17452315",
+      "player": "Alycia Parks",
+      "player_slot": 1,
+      "projection": 5.75,
+      "scheduled_at": "2026-11-02T02:00:00+00:00",
+      "priority": 1,
+      "ace_market_samples": [],
+      "individual_bookmaker_selections": []
+    },
+    {
+      "event_id": "17452320",
+      "player": "Leylah Fernandez",
+      "player_slot": 1,
+      "projection": 4.51,
+      "scheduled_at": "2026-11-02T02:00:00+00:00",
+      "priority": 1,
+      "ace_market_samples": [],
+      "individual_bookmaker_selections": []
+    }
+  ],
+  "requests_used": 5,
+  "verified_player_ace_selections": 0,
+  "production_writes": 0,
+  "published_picks_changed": 0
+}
