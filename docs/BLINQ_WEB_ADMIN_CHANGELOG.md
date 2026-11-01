@@ -30,3 +30,10 @@
 - Added compact horizontal banner creative specs, minimum sizes, safe areas, mobile creative, fit and positioning controls.
 - Retained per-banner editable watermark overlay (`COMING SOON` by default).
 - Added market rule configuration for Prime threshold, Top 10 limit, Value odds/gap guardrails, Ace/DF and Sets/Games limits.
+
+## 2026-11-01 — Banner position fixes (PR #1140)
+
+- Removed legacy desktop hero text insets and fixed mobile horizontal padding that ignored Admin X/Y settings.
+- Mobile banner text width now respects the Admin percentage rather than the former 75% maximum.
+- Updated CSS cache keys and added Chromium checks for public and Admin desktop/mobile coordinates and image crop positions.
+- Full PR CI passed; keep published Azure banner values unchanged during UI deployment.
