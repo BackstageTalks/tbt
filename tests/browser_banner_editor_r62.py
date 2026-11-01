@@ -357,10 +357,12 @@ def main():
                   const slide=host.querySelector('.hero-slide');
                   const relative=(root,elem)=>{
                     const bounds=root.getBoundingClientRect(),cs=getComputedStyle(elem);
-                    return {x:100*parseFloat(cs.left)/bounds.width,
-                      y:100*parseFloat(cs.top)/bounds.height,
-                      width:100*parseFloat(cs.width)/bounds.width,
-                      maxWidth:100*parseFloat(cs.maxWidth)/bounds.width};
+                    const pct=(value,dimension)=>String(value).trim().endsWith('%')
+                      ?parseFloat(value):100*parseFloat(value)/dimension;
+                    return {x:pct(cs.left,bounds.width),
+                      y:pct(cs.top,bounds.height),
+                      width:pct(cs.width,bounds.width),
+                      maxWidth:pct(cs.maxWidth,bounds.width)};
                   };
                   const live=relative(slide,slide.querySelector('.dashboard-hero-copy'));
                   const imagePosition=getComputedStyle(slide.querySelector('.hero-slide-image')).objectPosition;
