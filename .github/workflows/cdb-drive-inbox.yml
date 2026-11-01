@@ -253,6 +253,16 @@ jobs:
               stream.write('ready='+ready+'\n')
           print('CDB_INBOX_WRITER_'+status+'_AFTER_SOURCE_PREP',flush=True)
           PY
+      - name: Fail closed and allow scheduled MoviOdds retry if CDB writer is busy
+        # Unlike Drive inbox, MoviOdds doesn't persist a private pending batch.
+        # A success here would silently lose a week's seven-day source window.
+        # The existing Match Status clock retries the failed weekly run later.
+        if: env.SOURCE_MODE == 'moviodds' && steps.source.outputs.eligible == 'true' && steps.writer_gate.outputs.ready == 'false'
+        shell: bash
+        run: |
+          echo '::error::MOVIODDS_CDB_DEFERRED_WRITER_BUSY_NOT_IMPORTED'
+          echo 'MoviOdds CDB import deferred: global writer BUSY; no canonical changes. Scheduled retry required.' >> "$GITHUB_STEP_SUMMARY"
+          exit 1
       - name: Persist prepared batch privately and free runner when writer busy
         if: env.SOURCE_MODE == 'drive' && steps.source.outputs.eligible == 'true' && steps.writer_gate.outputs.ready == 'false'
         shell: bash
