@@ -10975,3 +10975,10 @@ body#blinqPremium.blinq-admin .admin-dashboard-slot .admin-kpi-period-toggle{
 body#blinqPremium.blinq-admin .admin-dashboard-slot .admin-kpi-period-toggle input[type="checkbox"]{
   flex:none;width:16px;height:16px;min-width:16px;accent-color:#32dca1;cursor:pointer;
 }
+
+/* Admin > Bannery: separate desktop and mobile page background previews. */
+.admin-page-background-previews{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;min-width:0}
+.admin-page-background-previews figure{margin:0;min-width:0}
+.admin-page-background-previews img{display:block;width:100%;height:112px;object-fit:cover;border:1px solid rgba(130,196,164,.28);border-radius:10px}
+.admin-page-background-previews figcaption{margin-top:6px;color:#adc4b6;font-size:11px}
+@media(max-width:600px){.admin-page-background-previews{grid-template-columns:1fr}}
