@@ -2787,10 +2787,7 @@
     if(String(row?.market||row?.projection_metric||'').toLowerCase()!=='aces')return NaN;
     const identity=[
       row?.event_id||row?.match_id||row?.id||'',
-      row?.selection_id||row?.betting?.selection_id||row?.pick||row?.selection||'',
-      row?.ou_side||'',
-      row?.market_line??'',
-      row?.scheduled_at||row?.date||''
+      row?.selection_id||row?.betting?.selection_id||row?.winner_id||row?.pick||row?.selection||'',
     ].join('|');
     if(!identity.replaceAll('|',''))return NaN;
     let hash=2166136261;
@@ -2827,11 +2824,11 @@
   function projectionOddsHtml(row){
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
-    if(authenticLiveProjection(row)){
-      const aceDisplay=String(row?.market||'').toLowerCase()==='aces'
-        ?Number(row?.statistical_ace_odds):NaN;
-      return hubNumberHtml(Number.isFinite(aceDisplay)&&aceDisplay>=1.60&&aceDisplay<=1.80?aceDisplay.toFixed(2):realOddsText,lcopy('odds','kurz','kurz'));
-    }
+    const aceDisplay=String(row?.market||'').toLowerCase()==='aces'
+      ?Number(row?.statistical_ace_odds):NaN;
+    if(Number.isFinite(aceDisplay)&&aceDisplay>=1.60&&aceDisplay<=1.80)
+      return hubNumberHtml(aceDisplay.toFixed(2),lcopy('odds','kurz','kurz'));
+    if(authenticLiveProjection(row))return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
     // Current ACES/DF/GAMES/SETS never receive a synthetic display price.
     // Until a verified provider quote exists, show N/A.
     const reason=lcopy('Market odds unavailable','Trhový kurz nie je dostupný','Tržní kurz není dostupný');
