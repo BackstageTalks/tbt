@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "source": "moviodds",
+  "scope": "one_shot_existing_guarded_single_writer",
+  "allowed_fields": [
+    "aces",
+    "double_faults"
+  ],
+  "require_global_cdb_lock": true,
+  "require_full_remote_readback": true,
+  "no_new_cdb_writer": true,
+  "sports_api_requests": 0,
+  "authorisation": "Run existing CDB guarded pipeline on verified MoviOdds FINISHED data, no overwrites",
+  "expected": "No canonical release changes when there are no eligible new values"
+}
