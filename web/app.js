@@ -1752,7 +1752,9 @@
     return `<button class="hub-detail is-locked" type="button" data-detail-locked data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}" aria-label="${escapeHtml(lcopy(`Match detail available from ${required}`,`Detail zápasu dostupný od ${required}`,`Detail zápasu dostupný od ${required}`))}" title="${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od ${required}`,`Dostupné od ${required}`))}"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span><i aria-hidden="true"><svg viewBox="0 0 20 20"><rect x="4" y="8" width="12" height="9" rx="2"/><path d="M6.5 8V5a3.5 3.5 0 0 1 7 0v3"/></svg></i></button>`;
   }
   function renderSystemFooterStatus(){
-    const host=$('footerSystemStatus'),time=$('footerLastUpdate'),feedTime=$('footerFeedUpdate');if(!host||!time||!feedTime)return;
+    const host=$('footerSystemStatus'),time=$('footerLastUpdate'),feedTime=$('footerFeedUpdate'),modelTime=$('footerModelVersion');if(!host||!time||!feedTime||!modelTime)return;
+    const modelVersion=shortModelVersion(state.feed?.model?.version||state.feed?.model_version||'');
+    modelTime.textContent=lcopy(`Model version ${modelVersion||'—'}`,`Verzia modelu ${modelVersion||'—'}`,`Verze modelu ${modelVersion||'—'}`);
     const feedGeneratedAt=state.feed?.generated_at||'';
     feedTime.textContent=Number.isFinite(Date.parse(feedGeneratedAt))
       ?lcopy(`Update ${fmtTime(feedGeneratedAt)}`,`Aktualizácia ${fmtTime(feedGeneratedAt)}`,`Aktualizace ${fmtTime(feedGeneratedAt)}`)
