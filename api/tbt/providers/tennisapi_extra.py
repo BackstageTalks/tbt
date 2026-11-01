@@ -14,11 +14,12 @@ from typing import Any
 
 from ..errors import ProviderError
 from .statistics import parse_statistics
-from ..services.market_selection import decimal_odds
+from ..services.market_selection import decimal_odds, _quote_is_unavailable
 
 
 MARKET_LABELS = {1: "match_winner", 11: "first_set_winner",
-                 12: "total_games", 15: "current_set_winner"}
+                 12: "total_games", 13: "tie_break_in_match",
+                 15: "current_set_winner"}
 
 
 def _check_event(payload: Any, event_id: str | int) -> dict:
@@ -32,7 +33,7 @@ def _check_event(payload: Any, event_id: str | int) -> dict:
 
 def normalize_market_snapshot(payload: Any, *, event_id: str | int,
                               observed_at: datetime | None = None) -> dict:
-    """Only explicit marketIds 1/11/12/15; never infer a missing line.
+    """Only explicit marketIds 1/11/12/13/15; never infer a missing line.
 
     observed_at is the time OUR client read the record, not the book's price
     timestamp. Both historical opening and latest are ineligible for backtested
@@ -50,6 +51,8 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
     for market in markets:
         if not isinstance(market, dict):
             raise ProviderError("Malformed TennisApi market")
+        if _quote_is_unavailable(market):
+            continue
         ident = market.get("marketId")
         try:
             market_id = int(ident)
@@ -74,10 +77,13 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
         if not isinstance(choices, list):
             raise ProviderError("TennisApi market choices must be a list")
         valid = []
-        required = {"Over", "Under"} if market_id == 12 else {"1", "2"}
+        required = ({"Over", "Under"} if market_id == 12 else
+                    {"Yes", "No"} if market_id == 13 else {"1", "2"})
         for choice in choices:
             if not isinstance(choice, dict):
                 raise ProviderError("Malformed TennisApi choice")
+            if _quote_is_unavailable(choice):
+                continue
             side = str(choice.get("name", "")).strip()
             if side not in required:
                 continue
