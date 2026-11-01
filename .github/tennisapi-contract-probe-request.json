@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "requested_date": "2026-11-01",
-  "reason": "Read-only source-native 2016 Grand Slam sample via supported calendar categories route; match statistics/PBP, max 4 paid calls; no CDB writes",
+  "reason": "Read-only production odds quality evidence for PR #1151: provider-1 event market, suspension and source provenance; 1 guarded call; no CDB writes",
   "provider_requests_allowed": true,
-  "max_requests": 4,
+  "max_requests": 1,
   "event_id": 14494928,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ technical audit",
-  "diagnostic_attempt": 14,
-  "phase": "archive_2016",
-  "case": null
+  "diagnostic_attempt": 15,
+  "phase": "odds",
+  "case": "event_odds"
 }
