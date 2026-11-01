@@ -14,6 +14,7 @@ import json
 import math
 import os
 import tempfile
+from datetime import date
 from collections import Counter
 from numbers import Real
 from pathlib import Path
@@ -26,7 +27,8 @@ from tbt.data.history_snapshot import (
     load_snapshot, write_year_partition, load_manifest,
     _interpret_wimbledon_2023_count_fields,
 )
-from tbt.data.history_safety import sanitize_history_identities, quarantine_budget
+from tbt.data.history_safety import (sanitize_history_identities, quarantine_budget,
+    guard_scoped_history_identity_repair)
 from tbt.services.data_quality import audit_history
 from tbt.utils import is_rate_stat_field
 
@@ -137,7 +139,19 @@ def main() -> None:
     parser.add_argument("--max-quarantine-ratio", type=float, default=0.001)
     parser.add_argument("--min-quarantine-budget", type=int, default=20)
     parser.add_argument("--max-quarantine-rows", type=int, default=500)
+    parser.add_argument("--scope-start", default=None,
+                        help="Bound a read-only integrity preflight to the target history years")
+    parser.add_argument("--scope-end", default=None,
+                        help="Required with --scope-start; no canonical repair is published")
     args = parser.parse_args()
+    if bool(args.scope_start) != bool(args.scope_end):
+        parser.error("--scope-start and --scope-end must be supplied together")
+    scope = None
+    if args.scope_start:
+        try:
+            scope = (date.fromisoformat(args.scope_start), date.fromisoformat(args.scope_end))
+        except ValueError as exc:
+            parser.error(f"Invalid scoped history date: {exc}")
 
     directory = ROOT / ".cache/tbt/history-repair-all"
     directory.mkdir(parents=True, exist_ok=True)
@@ -228,6 +242,30 @@ def main() -> None:
         raise SystemExit(
             f"History repair blocked: {total_quarantined} quarantined rows exceed safety budget {limit}."
         )
+
+    if scope is not None:
+        # A historical one-off must not rewrite unrelated (e.g. 2026) CDB
+        # partitions to "repair" unresolved native-ID collisions. The
+        # canonical release remains unchanged; only a local QA report is saved.
+        disposition = guard_scoped_history_identity_repair(
+            changed_years, start=scope[0], end=scope[1])
+        report["scoped_history_disposition"] = disposition
+        report["status"] = ("scoped_out_of_scope_identity_quarantine"
+                            if changed_years else "clean")
+        report["canonical_writes"] = 0
+        report_path = directory / "history_repair_report.json"
+        report_path.write_text(
+            json.dumps(report, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+        print(json.dumps({
+            "status": report["status"],
+            "scope": disposition,
+            "input_rows": report["input_rows"],
+            "total_quarantined": report["total_quarantined"],
+            "canonical_writes": 0,
+        }, sort_keys=True), flush=True)
+        return
 
     if not changed_years:
         print(json.dumps(report, indent=2, ensure_ascii=False, default=str))
