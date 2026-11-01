@@ -31,6 +31,10 @@ on:
         description: Newest date; blank means yesterday UTC
         type: string
         default: ''
+      recheck_completed_history_days:
+        description: Re-fetch explicitly selected history dates even if checkpoint says complete
+        type: boolean
+        default: false
       max_requests:
         description: Per-run Tennis RapidAPI allowance, including retries (maximum 14500; shared provider-day ceiling is authoritative).
         type: number
@@ -379,6 +383,7 @@ jobs:
           elif [[ "$MODE" == history || "$MODE" == statistics || "$MODE" == extras || "$MODE" == identity ]]; then
             args=(--publish --data-repository "$TBT_DATA_REPOSITORY" --mode "$MODE" --lookback-days "$LOOKBACK_DAYS" --max-requests "$MAX_REQUESTS")
             if [[ "$MODE" == statistics && ( "${{ inputs.hourly_autofill || 'false' }}" == "true" || "${BLINQ_TARGETED_STATISTICS:-false}" == "true" ) ]]; then args+=(--targeted-statistics); fi
+            if [[ "$MODE" == history && "${{ inputs.recheck_completed_history_days || 'false' }}" == "true" ]]; then args+=(--recheck-completed-days); fi
             if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
             if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
             if [[ -n "${BLINQ_TARGET_STATS_TOUR:-}" ]]; then args+=(--target-tour "$BLINQ_TARGET_STATS_TOUR"); fi
