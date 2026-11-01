@@ -55,6 +55,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: gh-orphan-ops-marker-readonly-audit
-          path: gh-orphan-marker-audit.json
+          path: gh-orphan-ops-marker-audit.json
           if-no-files-found: error
           retention-days: 30
