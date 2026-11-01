@@ -39,11 +39,11 @@ def test_comparator_access_contract_is_shared_frontend_backend():
     web = json.loads(Path("web/ui-config.json").read_text(encoding="utf-8"))
     server = json.loads(Path("api/tbt/assets/ui_access_defaults.json").read_text(encoding="utf-8"))
     expected = {
-        "trial": True,
+        "trial": False,
         "expired": False,
-        "rookie": True,
-        "pro": True,
-        "elite": True,
+        "rookie": False,
+        "pro": False,
+        "elite": False,
         "legend": True,
         "goat": True,
     }
