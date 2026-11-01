@@ -2,7 +2,7 @@ name: BlinQ 26 CDB private read-only matching
 'on':
   push:
     branches: [main]
-    paths: ['.github/workflows/blinq-cdb-26-live-private-scan.yml', 'scripts/cdb_26_live_candidate_scan.py', 'tests/test_cdb_26_live_candidate_scan.py']
+    paths: ['scripts/cdb_26_live_candidate_scan.py', 'tests/test_cdb_26_live_candidate_scan.py']
   workflow_dispatch:
 permissions:
   contents: read
