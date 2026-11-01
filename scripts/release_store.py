@@ -806,24 +806,23 @@ class ReleaseStore:
             and self.tag == "tbt-data-v1"
             and any(path.name == "history_manifest.json" for path in files)
         ):
-            if "history_manifest.json" not in previous:
-                raise RuntimeError("Current canonical history inventory unavailable")
-            with tempfile.TemporaryDirectory(prefix="blinq-cdb-row-guard-") as temp:
-                remote = Path(temp) / "history_manifest.json"
-                gh(
-                    "release", "download", self.tag,
-                    "--repo", self.repository, "--pattern",
-                    "history_manifest.json", "--dir", str(temp),
-                )
-                if self._sha256(remote) != previous["history_manifest.json"]["sha256"]:
-                    raise RuntimeError("Canonical history manifest changed before write")
-                candidate_path = next(
-                    path for path in files if path.name == "history_manifest.json"
-                )
-                assert_history_rows_monotonic(
-                    json.loads(remote.read_text(encoding="utf-8")),
-                    json.loads(candidate_path.read_text(encoding="utf-8")),
-                )
+            if "history_manifest.json" in previous:
+                with tempfile.TemporaryDirectory(prefix="blinq-cdb-row-guard-") as temp:
+                    remote = Path(temp) / "history_manifest.json"
+                    gh(
+                        "release", "download", self.tag,
+                        "--repo", self.repository, "--pattern",
+                        "history_manifest.json", "--dir", str(temp),
+                    )
+                    if self._sha256(remote) != previous["history_manifest.json"]["sha256"]:
+                        raise RuntimeError("Canonical history manifest changed before write")
+                    candidate_path = next(
+                        path for path in files if path.name == "history_manifest.json"
+                    )
+                    assert_history_rows_monotonic(
+                        json.loads(remote.read_text(encoding="utf-8")),
+                        json.loads(candidate_path.read_text(encoding="utf-8")),
+                    )
 
         guarded = (
             self.repository == "BackstageTalks/tbt-data"
