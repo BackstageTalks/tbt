@@ -1,17 +1,11 @@
 {
   "schema": 1,
-  "kind": "operator-approved-one-time-format-reissue",
-  "betting_day": "2026-10-31",
-  "revision": "format-aces-compact-v5",
-  "format": {
-    "ace_category": "🄰",
-    "over": "O",
-    "under": "U",
-    "projection": "≈",
-    "ace_unit": "implicit",
-    "preserve_odds": true
-  },
+  "kind": "operator-approved-one-time-aces-price-correction",
+  "betting_day": "2026-11-01",
+  "revision": "aces-local-prices-20261101-v1",
+  "aces_prices_corrected": true,
   "preserve_original_confirmed_picks": true,
+  "scope": "ACES odds only, all original TOP VALUE ACES FREE picks frozen",
   "requested_by": "operator",
-  "note": "Reformat previously Telegram-confirmed 31 Oct daily selections; never issue new selections. Prevent any second send under the same revision."
+  "note": "Resend today with corrected locally calibrated ACES odds 1.60-1.80, visibly label update; unique ledger reservation."
 }
