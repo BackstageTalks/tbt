@@ -56,6 +56,15 @@ sandbox.normalizeFeedAceOdds({ace_picks:[],results:[result]});
 assert.equal(result.market_publications[0].statistical_ace_odds,value);
 assert.equal(sandbox.aceDfResultKpiOdds(result.market_publications[0]),value);
 assert.equal(result.market_publications[0].odds,2.0);
+const historical = {
+  event_id:'old-ace', scheduled_at:'2026-10-31T18:00:00Z',
+  market_publications:[{
+    market:'aces',selection_id:'player-1',odds:2.0,
+    issued_at:'2026-10-31T12:00:00Z',price_status:'priced_projection'
+  }]
+};
+sandbox.normalizeFeedAceOdds({ace_picks:[],results:[historical]});
+assert.equal(historical.market_publications[0].statistical_ace_odds,undefined);
 assert(sandbox.projectionOddsHtml({...row, market: 'double_faults'}).includes('2.00'));
 assert(sandbox.projectionOddsHtml({...row, market: 'aces', price_status: 'projection_only'}).includes('N/A'));
 const values = new Set();
