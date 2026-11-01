@@ -2828,7 +2828,8 @@
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
     if(authenticLiveProjection(row)){
-      const aceDisplay=Number(row?.statistical_ace_odds);
+      const aceDisplay=String(row?.market||row?.projection_metric||'').toLowerCase()==='aces'
+        ?Number(row?.statistical_ace_odds):NaN;
       return hubNumberHtml(Number.isFinite(aceDisplay)&&aceDisplay>=1.60&&aceDisplay<=1.80?aceDisplay.toFixed(2):realOddsText,lcopy('odds','kurz','kurz'));
     }
     // Current ACES/DF/GAMES/SETS never receive a synthetic display price.
