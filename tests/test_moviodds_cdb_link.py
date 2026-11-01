@@ -141,7 +141,8 @@ def test_equal_existing_stat_null_only_additions_staged():
     ready, review, report = link(batch(source()), [canonical(stats={"p1_aces": 4})])
     assert len(ready) == 1 and not review
     assert report["new_values_candidates"] == 3
-    assert ready[0]["incoming_stats"]["p1_aces"] == 4
+    assert "p1_aces" not in ready[0]["incoming_stats"]
+    assert ready[0]["baseline_stats"]["p1_aces"] == 4
 
 
 def test_doubles_and_other_tours_are_always_reviewed():

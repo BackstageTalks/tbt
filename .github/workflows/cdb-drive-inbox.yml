@@ -1,4 +1,4 @@
-name: CDB Drive Inbox - guarded external file import
+name: CDB guarded import - existing single writer for Drive and MoviOdds
 run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
 
 'on':
@@ -19,11 +19,25 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
         required: false
         type: string
         default: ''
+      source_mode:
+        description: Source family for the EXISTING guarded writer
+        required: false
+        type: choice
+        options: [drive, moviodds]
+        default: drive
+      moviodds_days_back:
+        description: Completed UTC days to examine (1..21); MoviOdds source only
+        required: false
+        type: number
+        default: 14
   pull_request:
     paths:
       - scripts/cdb_large_source_stage.py
       - tests/test_cdb_large_source_stage.py
       - scripts/cdb_inbox_*.py
+      - scripts/moviodds_cdb_batch.py
+      - scripts/moviodds_cdb_link.py
+      - tests/test_moviodds_cdb_batch.py
       - scripts/cdb_drive_identity_registry.py
       - scripts/link_offline_serve_return.py
       - tests/test_cdb_drive_multischema.py
@@ -45,6 +59,9 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
       - scripts/cdb_large_source_stage.py
       - tests/test_cdb_large_source_stage.py
       - scripts/cdb_inbox_*.py
+      - scripts/moviodds_cdb_batch.py
+      - scripts/moviodds_cdb_link.py
+      - tests/test_moviodds_cdb_batch.py
       - scripts/cdb_drive_identity_registry.py
       - scripts/link_offline_serve_return.py
       - tests/test_cdb_drive_multischema.py
@@ -56,6 +73,7 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
       - scripts/cdb_wta_lookback_guard.py
       - tests/test_cdb_wta_lookback_guard.py
       - ops/cdb-import-requests/wta-safe-batch-20261020.json
+      - ops/cdb-import-requests/moviodds-guarded-smoke-20261101.json
       - .github/workflows/cdb-drive-inbox.yml
 
 permissions:
@@ -75,13 +93,13 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install parser test dependencies
-        run: python -m pip install --disable-pip-version-check pytest openpyxl pandas pyarrow pydantic
+        run: python -m pip install --disable-pip-version-check pytest openpyxl pandas pyarrow pydantic requests
       - name: Run source and evidence safety tests
         env:
           PYTHONPATH: .:api:scripts
         run: |
-          python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py scripts/cdb_native_7z_unpack.py scripts/cdb_native_sackmann_stage.py scripts/cdb_native_slam_pbp_stage.py scripts/cdb_drive_identity_registry.py scripts/cdb_large_source_stage.py scripts/cdb_wta_lookback_guard.py scripts/link_offline_serve_return.py
-          python -m pytest tests/test_cdb_native_7z_unpack.py tests/test_cdb_native_sackmann_stage.py tests/test_cdb_native_slam_pbp_stage.py tests/test_cdb_inbox_adapter.py tests/test_cdb_drive_identity_registry.py tests/test_cdb_drive_multischema.py tests/test_cdb_large_source_stage.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py tests/test_cdb_date_provenance.py tests/test_cdb_wta_lookback_guard.py -q
+          python -m compileall -q scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py scripts/moviodds_cdb_batch.py scripts/moviodds_cdb_link.py scripts/cdb_native_7z_unpack.py scripts/cdb_native_sackmann_stage.py scripts/cdb_native_slam_pbp_stage.py scripts/cdb_drive_identity_registry.py scripts/cdb_large_source_stage.py scripts/cdb_wta_lookback_guard.py scripts/link_offline_serve_return.py
+          python -m pytest tests/test_moviodds_cdb_batch.py tests/test_moviodds_cdb_link.py tests/test_cdb_native_7z_unpack.py tests/test_cdb_native_sackmann_stage.py tests/test_cdb_native_slam_pbp_stage.py tests/test_cdb_inbox_adapter.py tests/test_cdb_drive_identity_registry.py tests/test_cdb_drive_multischema.py tests/test_cdb_large_source_stage.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py tests/test_cdb_date_provenance.py tests/test_cdb_wta_lookback_guard.py -q
 
   guarded-import:
     # Source preparation may proceed while immutable candidate training owns CDB.
@@ -91,7 +109,8 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'push' &&
-        startsWith(github.event.head_commit.message, 'chore(cdb): authorized one-shot Drive import 2026-10-20')))
+        (startsWith(github.event.head_commit.message, 'chore(cdb): authorized one-shot Drive import 2026-10-20') ||
+         startsWith(github.event.head_commit.message, 'test(ops): authorize one-shot MoviOdds CDB import 2026-11-01'))))
     needs: synthetic-contract-tests
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -106,14 +125,39 @@ jobs:
       CDB_TAG: tbt-data-v1
       INBOX_FOLDER_ID: 1jzdzztz8cXquO8VDswqE19PHupQau-xM
       REPLAY_DRIVE_IDS: ${{ inputs.replay_drive_ids || '' }}
+      SOURCE_MODE: ${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'test(ops): authorize one-shot MoviOdds CDB import 2026-11-01') && 'moviodds' || inputs.source_mode || 'drive' }}
+      MOVIODDS_DAYS_BACK: ${{ inputs.moviodds_days_back || 14 }}
+      BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
       PYTHONPATH: api:scripts
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Enforce exact MoviOdds one-shot source scope (push only)
+        if: github.event_name == 'push' && env.SOURCE_MODE == 'moviodds'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("ops/cdb-import-requests/moviodds-guarded-smoke-20261101.json")
+          data=json.loads(p.read_text())
+          if (data.get("schema") != 1 or
+              data.get("source") != "moviodds" or
+              data.get("scope") != "one_shot_existing_guarded_single_writer" or
+              data.get("allowed_fields") != ["aces","double_faults"] or
+              data.get("require_global_cdb_lock") is not True or
+              data.get("require_full_remote_readback") is not True or
+              data.get("no_new_cdb_writer") is not True or
+              data.get("sports_api_requests") != 0):
+              raise SystemExit("MOVIODDS_ONE_SHOT_AUTHORIZATION_INVALID")
+          print("AUTHORIZED_MOVIODDS_SINGLE_WRITER_SOURCE_SMOKE")
+          PY
       - name: Enforce explicit one-shot source authorization (push only)
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && env.SOURCE_MODE == 'drive'
         shell: bash
         run: |
           set -euo pipefail
@@ -136,12 +180,22 @@ jobs:
       - name: Install exact linker and Drive reader dependencies
         run: |
           python -m pip install --disable-pip-version-check google-auth requests pandas pyarrow pydantic openpyxl numpy
-      - name: Verify private connectivity prerequisites
+      - name: Verify source-specific private connectivity prerequisites
+        shell: bash
         run: |
+          set -euo pipefail
           test -n "$GH_TOKEN" || { echo BLOCKED_PRIVATE_CDB_TOKEN_MISSING; exit 1; }
-          test -n "$BLINQ_DRIVE_READER_JSON" || { echo BLOCKED_DRIVE_READER_MISSING; exit 1; }
+          case "$SOURCE_MODE" in
+            drive) test -n "$BLINQ_DRIVE_READER_JSON" || { echo BLOCKED_DRIVE_READER_MISSING; exit 1; } ;;
+            moviodds)
+              test -n "$BLINQ_LIVE_WORKER_TOKEN" || { echo BLOCKED_MOVIODDS_EXPORT_TOKEN_MISSING; exit 1; }
+              [[ "$MOVIODDS_DAYS_BACK" =~ ^[0-9]+$ ]] && (( MOVIODDS_DAYS_BACK >= 1 && MOVIODDS_DAYS_BACK <= 21 )) || exit 1
+              test -z "$REPLAY_DRIVE_IDS" || { echo MOVIODDS_CANNOT_REPLAY_DRIVE_IDS; exit 1; } ;;
+            *) echo UNSUPPORTED_IMPORT_SOURCE; exit 1 ;;
+          esac
           gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" --jq '.tag_name' > /dev/null
       - name: Restore private Drive-wide import progress
+        if: env.SOURCE_MODE == 'drive'
         shell: bash
         run: |
           set -euo pipefail
@@ -165,18 +219,19 @@ jobs:
               print("CDB_INBOX_PRIVATE_PROGRESS_RESTORED")
           PY
       - name: Restore prepared PRIVATE batch when another writer blocked prior work
+        if: env.SOURCE_MODE == 'drive'
         id: prepared
         shell: bash
         run: |
           set -euo pipefail
           python scripts/cdb_inbox_pending_batch.py restore --folder-id "$INBOX_FOLDER_ID"
       - name: Reject replay when deferred private staged batch must resume
-        if: inputs.replay_drive_ids != '' && steps.prepared.outputs.restored == 'true'
+        if: env.SOURCE_MODE == 'drive' && inputs.replay_drive_ids != '' && steps.prepared.outputs.restored == 'true'
         run: |
           echo '::error::Complete the existing protected staged import before explicit source replay.'
           exit 1
       - name: Read all BlinQ_data descendants; ingest bounded new/changed files
-        if: steps.prepared.outputs.restored != 'true'
+        if: env.SOURCE_MODE == 'drive' && steps.prepared.outputs.restored != 'true'
         run: |
           set -euo pipefail
           mkdir -p work/input
@@ -186,6 +241,13 @@ jobs:
             --replay-ids "$REPLAY_DRIVE_IDS"
           python scripts/cdb_inbox_adapter.py --input-dir work/input --out-dir work/source --max-files 100 \
             --drive-manifest work/drive_manifest.json
+      - name: Retrieve verified MoviOdds final days (no tennis API quota)
+        if: env.SOURCE_MODE == 'moviodds'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/moviodds_cdb_batch.py fetch --out-dir work/source --days-back "$MOVIODDS_DAYS_BACK"
+
       - name: Avoid downloading CDB for empty or entirely unsupported sources
         id: source
         run: |
@@ -215,7 +277,7 @@ jobs:
           print('CDB_INBOX_WRITER_'+status+'_AFTER_SOURCE_PREP',flush=True)
           PY
       - name: Persist prepared batch privately and free runner when writer busy
-        if: steps.source.outputs.eligible == 'true' && steps.writer_gate.outputs.ready == 'false'
+        if: env.SOURCE_MODE == 'drive' && steps.source.outputs.eligible == 'true' && steps.writer_gate.outputs.ready == 'false'
         shell: bash
         run: |
           set -euo pipefail
@@ -252,8 +314,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/cdb_inbox_stage.py --normalized-report work/source/report.json \
-            --history-dir work/before --out-dir work/stage
+          if [[ "$SOURCE_MODE" == "moviodds" ]]; then
+            python - <<'PY'
+          import json,subprocess,sys
+          from pathlib import Path
+          data=json.loads(Path("work/source/report.json").read_text())
+          for row in data["normalized"]:
+              day=row["date_utc"]
+              subprocess.run([sys.executable,"scripts/moviodds_cdb_link.py",
+                  "--archive",f"work/source/source/moviodds-{day}.json",
+                  "--history-dir","work/before",
+                  "--out-dir",f"work/moviodds-linked/{day}"],check=True)
+          PY
+            python scripts/moviodds_cdb_batch.py combine \
+              --source-dir work/source --stage-root work/moviodds-linked --out-dir work/stage
+          else
+            python scripts/cdb_inbox_stage.py --normalized-report work/source/report.json \
+              --history-dir work/before --out-dir work/stage
+          fi
           python scripts/import_offline_linked_serve_return.py \
             --stage work/stage/eligible.jsonl --history-dir work/before --out-dir work/dry-run
           python - <<'PY'
@@ -274,7 +352,7 @@ jobs:
                 "filtered",a["filtered_matches"],"conflicts",a["conflict_matches"])
           PY
       - name: Preserve exact-source private player ID review without identity promotion
-        if: steps.source.outputs.eligible == 'true' && steps.stage.conclusion == 'success'
+        if: env.SOURCE_MODE == 'drive' && steps.source.outputs.eligible == 'true' && steps.stage.conclusion == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -308,6 +386,30 @@ jobs:
                 "candidate_matches",record["candidate_match_count"],
                 "strict_eligible",record["strict_eligible_match_count"])
           PY
+      - name: Preserve immutable MoviOdds source and SHA-linked stage in PRIVATE repo
+        # Existing CDB importer does not persist provider-native proofs inside
+        # canonical Parquet. Keep the exact source + staged evidence privately
+        # before acquiring the writer; loss of proof prevents any mutation.
+        if: env.SOURCE_MODE == 'moviodds' && steps.stage.outputs.additions == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          folder=work/moviodds-private-evidence
+          mkdir -p "$folder" work/moviodds-evidence-readback
+          cp work/source/report.json "$folder/source-batch-report.json"
+          cp work/stage/report.json "$folder/link-stage-report.json"
+          cp work/stage/eligible.jsonl "$folder/eligible.jsonl"
+          cp work/stage/review.jsonl "$folder/review.jsonl"
+          cp work/source/source/moviodds-*.json "$folder/"
+          (cd "$folder" && sha256sum -- * > SHA256SUMS && sha256sum -c SHA256SUMS)
+          tag="blinq-moviodds-cdb-evidence-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" "$folder"/* -R "$CDB_REPO" --target main \
+            --title "PRIVATE SHA-verified MoviOdds CDB import proof $GITHUB_RUN_ID" \
+            --notes "Verified raw provider payloads + exact null-only canonical stage. Immutable prewrite evidence; existing CDB writer remains authoritative."
+          gh release download "$tag" -R "$CDB_REPO" -D work/moviodds-evidence-readback
+          (cd work/moviodds-evidence-readback && sha256sum -c SHA256SUMS)
+          echo 'MOVIODDS_PRIVATE_PREWRITE_SOURCE_PROOF_READBACK_PASS'
+
       - name: Acquire global single writer ONLY for a positive, validated delta
         if: steps.stage.outputs.additions == 'true'
         id: writer
@@ -320,8 +422,10 @@ jobs:
             echo 'locked=true' >> "$GITHUB_OUTPUT"
           elif grep -Fq 'CDB global writer busy; refusing concurrent release writes' work/writer-lock.log; then
             echo 'locked=false' >> "$GITHUB_OUTPUT"
-            python scripts/cdb_inbox_pending_batch.py persist --folder-id "$INBOX_FOLDER_ID"
-            echo 'CDB_INBOX_DEFERRED_LATE_LOCK_RACE_NO_RUNNER_WAIT'
+            if [[ "$SOURCE_MODE" == "drive" ]]; then
+              python scripts/cdb_inbox_pending_batch.py persist --folder-id "$INBOX_FOLDER_ID"
+            fi
+            echo 'CDB_INBOX_DEFERRED_LATE_LOCK_RACE_RETRY_ON_NEXT_SCHEDULE'
           else
             cat work/writer-lock.log
             exit 1
@@ -454,7 +558,7 @@ jobs:
           print("CDB_PRODUCTION_READBACK_VERIFIED",result["enriched_matches"],result["added_values"],"overwritten",result["existing_values_overwritten"])
           PY
       - name: Commit private ingestion progress only after successful guarded work
-        if: success() && (steps.source.outputs.eligible != 'true' || (steps.writer_gate.outputs.ready == 'true' && (steps.stage.outputs.additions != 'true' || steps.writer.outputs.locked == 'true')))
+        if: env.SOURCE_MODE == 'drive' && success() && (steps.source.outputs.eligible != 'true' || (steps.writer_gate.outputs.ready == 'true' && (steps.stage.outputs.additions != 'true' || steps.writer.outputs.locked == 'true')))
         shell: bash
         run: |
           set -euo pipefail
@@ -489,7 +593,7 @@ jobs:
           print("CDB_INBOX_PROGRESS_PRIVATE_READBACK_VERIFIED")
           PY
       - name: Clear PRIVATE prepared batch only after checkpoint readback
-        if: success() && (steps.source.outputs.eligible != 'true' || (steps.writer_gate.outputs.ready == 'true' && (steps.stage.outputs.additions != 'true' || steps.writer.outputs.locked == 'true')))
+        if: env.SOURCE_MODE == 'drive' && success() && (steps.source.outputs.eligible != 'true' || (steps.writer_gate.outputs.ready == 'true' && (steps.stage.outputs.additions != 'true' || steps.writer.outputs.locked == 'true')))
         shell: bash
         run: |
           set -euo pipefail
@@ -499,6 +603,7 @@ jobs:
         run: python scripts/cdb_global_writer_lock.py release --if-held
       - name: Queue bounded continuation after authorized one-shot push
         if: >-
+          env.SOURCE_MODE == 'drive' &&
           success() &&
           github.event_name == 'push' &&
           steps.prepared.outputs.restored != 'true' &&
@@ -535,6 +640,7 @@ jobs:
         # cleared pending batch and owner-scoped writer release.
         # No chained dispatch if another CDB writer deferred this batch.
         if: >-
+          env.SOURCE_MODE == 'drive' &&
           success() &&
           github.event_name == 'workflow_dispatch' &&
           steps.prepared.outputs.restored != 'true' &&

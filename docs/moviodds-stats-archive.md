@@ -163,3 +163,33 @@ setov MoviOdds a **nezávisle potvrdzuje víťaza v CDB**. Oboje je osobitne
 zaznamenané v \`provenance\`. Ak budú dostupné ďalšie nezávislé finálne
 skóre, môže sa pridať prísnejší full-score gate bez zmeny writeru.
 
+
+## Automatický guarded import MoviOdds do CDB
+
+**Žiadny nový externý cron.** Existujúci Match Status job (každých 30 minút
+pod externým cron plánovačom) raz týždenne, **v nedeľu o 06:00 UTC**,
+dispatchuje \`cdb-drive-inbox.yml\` s
+\`source_mode=moviodds\`, \`moviodds_days_back=14\`,
+\`request_id=moviodds-YYYY-MM-DD\`. GitHub run-name kontrola zabráni
+druhému dispatchu toho istého týždňa.
+
+MoviOdds používa presne **existujúci** CDB single-writer z Drive Inbox:
+- chránený Azure FINAL export; samostatne označené nedostupné (503) dni,
+  žiadne tiché nahradenie nulovým úspechom; iné HTTP chyby sú fatálne;
+- SHA-256 overený source CDB JSON v2, striktné priradenie ATP/WTA
+  hráčov, súťaže, skóre a orientácie p1/p2, konflikty v karanténe;
+- iba nové **NULL-only** bunky v \`eligible.jsonl\`, bez prepisu;
+- ten istý súkromný kanonický snapshot/manifest audit, guarded importer
+  v dry-run, CDB global lock, CAS, immutable backup s readback,
+  \`import_offline_linked_serve_return.py --exact-stats-only\`,
+  celé lokálne partition overenie, release store s CAS a nezávislý
+  vzdialený readback každého zmeneného riadku;
+- keď je delta prázdna, žiadny lock, publish ani CDB mutation;
+- pri obsadenom zámku sa MoviOdds dávka na CDB **nezapisuje**; source
+  zostáva v durable Azure a je znovu spracovateľný pri ďalšom behu.
+
+Denný read-only \`moviodds-cdb-stage.yml\` o 05:00 UTC zostáva nezmenený.
+Google Drive archivácia a pôvodný Drive Inbox režim zostávajú oddelené.
+MoviOdds import je aktívny iba keď sa explicitly dispatchuje
+\`cdb-drive-inbox.yml\` s \`source_mode=moviodds\`; implicitný režim je
+vždy \`drive\`. Žiadne nové tenisové API quota čerpanie.
