@@ -320,7 +320,7 @@ if 'workflow_dispatch:' not in account_yml or 'BLINQ_ACCOUNT_WORKER_TOKEN' not i
 # Native GitHub schedules can be restored without weakening runtime guards.
 native_schedules = {
     'account-inactivity.yml': "cron: '20 6 * * *'",
-    'live-radar.yml': "cron: '*/5 * * * *'",
+    'live-radar.yml': "cron: '0 * * * *'",
     'match-status.yml': "cron: '0,30 * * * *'",
     'morning-refresh.yml': "cron: '15 5 * * *'",
     'telegram-daily-offer.yml': "cron: '20 6 * * *'",
