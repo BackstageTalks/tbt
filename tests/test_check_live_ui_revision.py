@@ -103,11 +103,19 @@ class UiWatchdogTests(unittest.TestCase):
         self.assertTrue(optimizer.is_file())
         isolated = subprocess.run(
             [sys.executable, "-I", "-c",
-             "import sys; from pathlib import Path; "
-             "sys.path.insert(0, str(Path(sys.argv[1]).parent)); "
-             "from check_live_ui_revision import build_optimized_revision; "
-             "import inspect; "
-             "assert 'scripts.optimize_web_assets' in inspect.getsource(build_optimized_revision)",
+             "import sys; from pathlib import Path; from unittest.mock import patch\n"
+             "sys.path.insert(0, str(Path(sys.argv[1]).parent))\n"
+             "from check_live_ui_revision import build_optimized_revision\n"
+             "files={'app.js': b'function f(){}'*100, "
+             "'blinq-app.css': b'body{}'*100, "
+             "'release.json': b'{\"patch\":\"736-r61\",\"visual_revision\":\"test\"}'}\n"
+             "with patch('subprocess.run', side_effect=FileNotFoundError('offline sentinel')):\n"
+             "  try:\n"
+             "    build_optimized_revision(files)\n"
+             "  except FileNotFoundError as exc:\n"
+             "    assert 'offline sentinel' in str(exc)\n"
+             "  else:\n"
+             "    raise AssertionError('expected optimizer to be reached')\n",
              str(script)],
             cwd=self.tmp.name, capture_output=True, text=True,
         )
