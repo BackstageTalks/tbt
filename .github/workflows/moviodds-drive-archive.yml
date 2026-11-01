@@ -47,13 +47,20 @@ jobs:
           REQUESTED_DAY: ${{ inputs.date }}
         run: |
           set -euo pipefail
-          day="$REQUESTED_DAY"
-          if [[ -z "$day" ]]; then
-            day="$(date -u -d 'yesterday' +%F)"
+          if [[ -n "$REQUESTED_DAY" ]]; then
+            days=("$REQUESTED_DAY")
+          else
+            # Automatically repair one/two missed archive days and capture
+            # late-provider finalized records as immutable new versions.
+            days=("$(date -u -d 'yesterday' +%F)"
+                  "$(date -u -d '2 days ago' +%F)"
+                  "$(date -u -d '3 days ago' +%F)")
           fi
-          python scripts/moviodds_drive_archive.py --date "$day" \
-            --folder-id 13kDDxOaQ0L1Jr5ZjbSNjbDFJiNSz9uwx \
-            --out-dir work/moviodds
+          for day in "${days[@]}"; do
+            python scripts/moviodds_drive_archive.py --date "$day" \
+              --folder-id 13kDDxOaQ0L1Jr5ZjbSNjbDFJiNSz9uwx \
+              --out-dir work/moviodds
+          done
       - name: Preserve independent troubleshooting artifact
         if: always()
         uses: actions/upload-artifact@v4
