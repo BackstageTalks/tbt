@@ -78,12 +78,16 @@ jobs:
       - name: Count exact canonical missing stats without exposing private rows
         run: |
           python scripts/cdb_canonical_gap_audit.py \
-            --history-dir work/local-view --output cdb-gap-audit.json
+            --history-dir work/local-view --output cdb-gap-audit.json \
+            --expected-provider-quarantine 6
           python - <<'PY'
           import json
           report=json.load(open("cdb-gap-audit.json"))
           if report.get("production_mutated") is not False or report.get("api_requests") != 0:
               raise SystemExit("Unsafe gap audit contract")
+          if (report.get("excluded_ambiguous_provider_rows") != 6
+                  or report.get("canonical_raw_rows") != report.get("canonical_rows", -1) + 6):
+              raise SystemExit("Known CDB provider-ID quarantine/row conservation drift")
           for row in report["year_tour"]:
               if row["matches"] < 0 or row["core_complete_matches"] > row["matches"]:
                   raise SystemExit("Invalid canonical gap report count")
