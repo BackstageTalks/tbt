@@ -1,0 +1,7 @@
+{
+  "reason": "verify production CLV Detail TOP/VALUE",
+  "source_pr": 1201,
+  "source_merge_commit": "8685b5c7769255644fe5f0174e57c2f1b433093f",
+  "scope": "reuse archived PropLine snapshots, no new paid API requests",
+  "replay_days": 2
+}
