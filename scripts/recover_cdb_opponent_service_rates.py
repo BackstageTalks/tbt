@@ -324,8 +324,31 @@ def write_exact_stats_partition(history_dir: Path, year: int, staged: list[dict]
             temporary.unlink()
 
 
-def _load(directory):
+def identity_safety_aggregate(safety: dict) -> dict:
+    """Non-identifying diagnostic only; never a waiver for the writer gate."""
+    return {
+        "schema": 1,
+        "status": "IDENTITY_REVIEW_REQUIRED" if safety.get("quarantined_rows") or safety.get("changed") else "IDENTITY_SAFE",
+        "input_rows": int(safety.get("input_rows", 0)),
+        "rows_after_proven_merges": int(safety.get("rows_after_proven_merges", 0)),
+        "output_rows": int(safety.get("output_rows", 0)),
+        "merged_rows_removed": int(safety.get("merged_rows_removed", 0)),
+        "quarantined_rows": int(safety.get("quarantined_rows", 0)),
+        "duplicate_match_id_count": len(safety.get("duplicate_match_ids") or []),
+        "duplicate_provider_event_id_count": len(safety.get("duplicate_provider_event_ids") or []),
+        "affected_years": list(safety.get("affected_years") or []),
+        "production_mutated": False,
+        "provider_requests": 0,
+    }
+
+
+def _load(directory, *, safety_report: Path | None = None):
     rows, safety = sanitize_history_identities(load_partitions(directory))
+    aggregate = identity_safety_aggregate(safety)
+    if safety_report is not None:
+        safety_report.parent.mkdir(parents=True, exist_ok=True)
+        safety_report.write_text(json.dumps(aggregate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print("CDB_IDENTITY_SAFETY_AGGREGATE", json.dumps(aggregate, sort_keys=True), flush=True)
     if safety.get("quarantined_rows") or safety.get("changed"):
         raise ValueError("Canonical identity sanitizer changed or quarantined history")
     return rows
@@ -344,7 +367,7 @@ def main():
     if a.mode == "stage":
         if not a.history_dir:
             p.error("--history-dir is required")
-        staged, counts = stage(_load(a.history_dir), pairwise=a.pairwise)
+        staged, counts = stage(_load(a.history_dir, safety_report=a.out_dir / "identity-safety.json"), pairwise=a.pairwise)
         with (a.out_dir / "stage.jsonl").open("w", encoding="utf-8") as fh:
             for row in staged:
                 fh.write(json.dumps(row, sort_keys=True) + "\n")

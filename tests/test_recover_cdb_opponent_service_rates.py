@@ -293,3 +293,35 @@ def test_opt_in_pairwise_exact_parquet_patch_and_idempotence(tmp_path):
     assert frame_before.loc[frame_before.match_id=="other"].equals(
            frame_after.loc[frame_after.match_id=="other"])
     assert stage(after,pairwise=True)[0]==[]
+
+
+def test_identity_safety_aggregate_excludes_private_match_and_event_ids():
+    from scripts.recover_cdb_opponent_service_rates import identity_safety_aggregate
+    original = {
+        "input_rows": 100, "rows_after_proven_merges": 98, "output_rows": 96,
+        "merged_rows_removed": 2, "quarantined_rows": 2, "changed": True,
+        "duplicate_match_ids": ["private-match-id"],
+        "duplicate_provider_event_ids": ["private-event-id"],
+        "affected_years": [2026],
+        "quarantine": [{"match_id": "private-match-id", "reason": "collision"}],
+    }
+    report = identity_safety_aggregate(original)
+    assert report["status"] == "IDENTITY_REVIEW_REQUIRED"
+    assert report["merged_rows_removed"] == 2
+    assert report["quarantined_rows"] == 2
+    assert report["duplicate_match_id_count"] == 1
+    assert report["duplicate_provider_event_id_count"] == 1
+    assert report["production_mutated"] is False
+    assert report["provider_requests"] == 0
+    assert "private-match-id" not in json.dumps(report)
+    assert "private-event-id" not in json.dumps(report)
+
+
+def test_identity_safety_aggregate_safe_case():
+    from scripts.recover_cdb_opponent_service_rates import identity_safety_aggregate
+    report = identity_safety_aggregate({
+        "input_rows": 5, "rows_after_proven_merges": 5,
+        "output_rows": 5, "changed": False, "quarantined_rows": 0,
+    })
+    assert report["status"] == "IDENTITY_SAFE"
+    assert report["input_rows"] == 5

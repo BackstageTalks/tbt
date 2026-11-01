@@ -45,6 +45,15 @@ jobs:
             --repository "$TBT_DATA_REPOSITORY" \
             --out .cache/tbt/cdb-complements/history \
             --report .cache/tbt/cdb-complements/source-snapshot.json
+      - name: Measure current serve/return gaps independently (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/audit_cdb_serve_return_coverage.py \
+            --history-dir .cache/tbt/cdb-complements/history \
+            --snapshot-report .cache/tbt/cdb-complements/source-snapshot.json \
+            --out .cache/tbt/cdb-complements/current-coverage.json
+          echo "Coverage is descriptive only; stage and identity gates still decide import eligibility."
       - name: Stage exact observed opponent complement only
         shell: bash
         run: |
@@ -115,6 +124,9 @@ jobs:
         with:
           name: cdb-service-complement-stage-${{ github.run_id }}
           path: |
+            .cache/tbt/cdb-complements/source-snapshot.json
+            .cache/tbt/cdb-complements/current-coverage.json
+            .cache/tbt/cdb-complements/stage/identity-safety.json
             .cache/tbt/cdb-complements/stage/report.json
             .cache/tbt/cdb-complements/pairwise/report.json
             .cache/tbt/cdb-complements/preflight-receipt.json
