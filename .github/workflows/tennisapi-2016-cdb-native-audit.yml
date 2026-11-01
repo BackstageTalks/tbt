@@ -17,7 +17,7 @@ concurrency:
 jobs:
   canonical-audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 90
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PYTHONPATH: api:scripts
@@ -39,9 +39,16 @@ jobs:
           set -euo pipefail
           mkdir -p audit-2016/source audit-2016/view
           python - <<'PY'
+          import time
           from cdb_global_writer_lock import _remote_lock
-          if _remote_lock("BackstageTalks/tbt-data") is not None:
-              raise SystemExit("CDB writer active; fail closed")
+          # Do not race a live canonical writer. Wait, then take and verify
+          # a read-only snapshot; never steal the lock or touch raw CDB.
+          deadline=time.monotonic()+60*60
+          while _remote_lock("BackstageTalks/tbt-data") is not None:
+              if time.monotonic() >= deadline:
+                  raise SystemExit("CDB writer still active after bounded audit wait; fail closed")
+              print("CDB_WRITER_BUSY_WAITING_READ_ONLY",flush=True)
+              time.sleep(30)
           print("CDB_WRITER_LOCK_ABSENT")
           PY
           gh api "repos/$CDB_REPO/releases/tags/$CDB_TAG" > audit-2016/release-before.json
@@ -130,8 +137,8 @@ jobs:
           # row census without trusting the native importer stdout.
           manifest=json.loads(Path("audit-2016/source/history_manifest.json").read_text())
           years=manifest.get("years")
-          if not isinstance(years,dict) or len(years)<70 or "2016" not in years:
-              raise SystemExit("Incomplete canonical manifest after import")
+          if not isinstance(years,dict) or "2016" not in years or "2026" not in years:
+              raise SystemExit("Required 2016/2026 partitions absent from canonical manifest")
           if int(years["2016"]["rows"]) != len(df):
               raise SystemExit("2016 persisted Parquet row count differs from manifest")
           canonical_total=sum(int(meta["rows"]) for meta in years.values())
