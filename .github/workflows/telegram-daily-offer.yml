@@ -19,6 +19,7 @@ permissions:
 
 jobs:
   queue:
+    if: ${{ github.event_name != 'schedule' || vars.BLINQ_NATIVE_SCHEDULES_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
