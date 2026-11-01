@@ -1,0 +1,118 @@
+name: One-shot guarded 2016 Wimbledon provider-native history backfill
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/tennisapi-wimbledon-2016-native-one-shot.yml
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: tbt-wimbledon-2016-native-one-shot
+  cancel-in-progress: false
+
+jobs:
+  preflight-and-dispatch:
+    if: >-
+      github.repository == 'BackstageTalks/tbt' &&
+      github.ref == 'refs/heads/main' &&
+      contains(github.event.head_commit.message, '[wimbledon-2016-native-one-shot-7115726]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CDB_READ_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail-closed CDB writer, concurrent data jobs, shared provider-day quota preflight
+        id: preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$CDB_READ_TOKEN" && test -n "$WORKER_TOKEN"
+          python - <<'PY'
+          import json,os,sys,urllib.request,subprocess
+          from cdb_global_writer_lock import _remote_lock
+          from datetime import datetime,timezone
+          private=os.environ['CDB_READ_TOKEN']
+          # Read the actual private tag; never assume a missing/unauthorized lock.
+          original=os.environ['GH_TOKEN']
+          os.environ['GH_TOKEN']=private
+          try:
+              lock=_remote_lock("BackstageTalks/tbt-data")
+          finally:
+              os.environ['GH_TOKEN']=original
+          if lock is not None:
+              print('CDB_WRITER_ACTIVE_NO_DISPATCH',flush=True)
+              sys.exit(0)
+          # Check all active data/prediction writer workflows, including queued.
+          writer_paths={'data.yml','training-data-enrichment.yml',
+                        'training-db-rebuild.yml','nightly-data-maintenance.yml',
+                        'environment-enrichment.yml','valuebet-market-history.yml',
+                        'offline-uploaded-history-enrichment.yml',
+                        'kaggle-wta-2016-2017-odds.yml'}
+          for state in ('queued','pending','in_progress','waiting','requested'):
+              result=subprocess.run(['gh','api',
+                   'repos/BackstageTalks/tbt/actions/runs',
+                   '-f','status='+state,'-f','per_page=100','--method','GET'],
+                   text=True,capture_output=True,env=os.environ.copy(),check=True)
+              body=json.loads(result.stdout)
+              if int(body.get('total_count',0))>100:
+                  raise SystemExit('Active runs list incomplete; no dispatch')
+              for run in body.get('workflow_runs',[]):
+                  path=str(run.get('path') or '').split('@')[0].split('/')[-1]
+                  if path in writer_paths:
+                      print('DATA_WRITER_RUN_ACTIVE_NO_DISPATCH',
+                            run.get('id'),state,path,flush=True)
+                      sys.exit(0)
+          url=os.environ['BUDGET_URL']
+          if not url.startswith('https://'):
+              raise SystemExit('Shared budget URL invalid')
+          req=urllib.request.Request(url,headers={
+              'X-Blinq-Worker-Token':os.environ['WORKER_TOKEN']},method='GET')
+          with urllib.request.urlopen(req,timeout=20) as handle:
+              response=json.load(handle)
+          budget=response.get('budget')
+          if response.get('ok') is not True or not isinstance(budget,dict):
+              raise SystemExit('Unverified shared budget')
+          if (budget.get('window')!='provider_day_17_09_utc'
+              or budget.get('provider_plan_limit')!=15000
+              or budget.get('global_limit')!=14500
+              or budget.get('reserved_provider_headroom')!=500
+              or budget.get('schema')!=2):
+              raise SystemExit('Unexpected shared budget contract')
+          expected=40
+          if (int(budget['global_remaining'])<expected or
+              int(budget['remaining']['history'])<expected):
+              print('PROVIDER_ALLOWANCE_INSUFFICIENT_NO_DISPATCH',flush=True)
+              sys.exit(0)
+          now=datetime.now(timezone.utc)
+          if now.hour==17 and 0<=now.minute<=12:
+              print('PROVIDER_RESET_WINDOW_NO_DISPATCH',flush=True)
+              sys.exit(0)
+          print('GUARDED_WIMBLEDON_2016_DISPATCH_ALLOWED',json.dumps({
+              'global_remaining':int(budget['global_remaining']),
+              'max_requests':expected,'start':'2016-07-09','end':'2016-07-10',
+              'model_promote':False}),flush=True)
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
+              output.write('allowed=true\n')
+          PY
+      - name: Dispatch ONLY existing locked provider-native CDB history importer
+        if: steps.preflight.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "BackstageTalks/tbt"
+          gh workflow run data.yml -R "$GITHUB_REPOSITORY" --ref main \
+            -f mode=history \
+            -f start=2016-07-09 \
+            -f end=2016-07-10 \
+            -f max_requests=40 \
+            -f promote=false
+          echo 'EXISTING_GUARDED_DATA_YML_HISTORY_DISPATCHED_NOT_CDB_VERIFIED'
