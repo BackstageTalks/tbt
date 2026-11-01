@@ -5,6 +5,7 @@ on:
       - audit/propline-aces-50calls-20261101
     paths:
       - .github/workflows/propline-aces-quote-live-smoke.yml
+      - scripts/propline_aces_quote_probe.py
   workflow_dispatch:
 permissions:
   contents: write
@@ -25,7 +26,7 @@ jobs:
           python-version: "3.11"
       - name: Offline fixture test
         run: python scripts/propline_aces_quote_probe.py --self-test
-      - name: Read-only PropLine live ACES odds (5 calls maximum, no production writes)
+      - name: Check any one-sided ACES quote for Fritz Medvedev Zverev (5 calls maximum)
         continue-on-error: true
         run: python scripts/propline_aces_quote_probe.py --live --max-calls 5 --event-fallback 3
       - name: Archive quote probe in isolated audit branch
