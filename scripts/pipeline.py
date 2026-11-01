@@ -1541,6 +1541,18 @@ def main():
             if args.market_odds_max_events == -1
             else max(0, int(args.market_odds_max_events))
         )
+        # Freeze BlinQ's own statistically ranked Aces/DF picks before any
+        # bookmaker market discovery. Quotes can attach to these identities,
+        # never determine which matches the model originally selects.
+        ace_picks, ace_report = select_ace_picks(
+            matches, predictions, now=selection_now,
+            per_market_limit=10, total_limit=20, target_count=10,
+            allow_local_aces_fallback=True,
+        )
+        if isinstance(ace_report, dict):
+            ace_report["selection_policy"] = "blinq_model_first_then_odds_attachment"
+            ace_report["pre_odds_selected"] = len(ace_picks)
+
         market_odds_cap = projection_odds_cap
         # current-refresh now uses the same complete market discovery as a normal
         # refresh. The shared provider budget and per-run cap are the safety rails;
@@ -1794,22 +1806,10 @@ def main():
             "selection": doubles_selection_report,
         }
 
-        # In odds-first mode the projection models operate only on events
-        # that have a complete matching market from the provider. Keep an
-        # expanded *eligible* pool so publication can independently rank each
-        # of the four categories without one consuming the others' slots.
+        # Sets/Games retain their established market-aware selection. Aces/DF
+        # were chosen earlier, independent of provider market availability.
         projection_pool_per_market = (
             max(30, min(200, projection_odds_cap)) if projection_odds_cap else 10
-        )
-        ace_picks, ace_report = select_ace_picks(
-            matches, predictions, now=selection_now,
-            per_market_limit=projection_pool_per_market,
-            total_limit=2 * projection_pool_per_market,
-            target_count=projection_pool_per_market,
-            available_markets_by_event=(
-                available_projection_markets if projection_odds_cap else None
-            ),
-            allow_local_aces_fallback=True,
         )
         sg_picks, sg_report = select_sg_picks(
             matches, predictions, now=selection_now,
@@ -1912,7 +1912,7 @@ def main():
                 **ace_report, "odds_attachment": projection_odds_report,
                 "published_selected": len(ace_picks),
                 "aces_local_fallback_published": sum(eligible_local_ace_projection(row) for row in ace_picks),
-                "priced_selection_policy": "verified_api_pro_propline_moviodds_then_local_aces_only",
+                "priced_selection_policy": "blinq_model_first_api_pro_propline_moviodds_then_local_aces_only",
             }
         if isinstance(sg_report, dict):
             sg_report = {
