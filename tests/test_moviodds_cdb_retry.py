@@ -1,0 +1,103 @@
+"""Guarantee weekly MoviOdds import cannot silently skip a BUSY CDB writer."""
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import sys
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from moviodds_cdb_retry import decision, COOLDOWN_SECONDS
+
+
+def utc(day: str) -> datetime:
+    return datetime.fromisoformat(day.replace("Z", "+00:00"))
+
+
+def runs(*items, total_count=None):
+    items = list(items)
+    return {"workflow_runs": items,
+            "total_count": len(items) if total_count is None else total_count}
+
+
+def attempt(*, status="completed", conclusion="failure",
+            created="2026-11-01T06:01:00Z",
+            title="CDB guarded import moviodds-2026-11-01",
+            branch="main", event="workflow_dispatch"):
+    return {"display_title": title, "status": status,
+            "conclusion": conclusion, "head_branch": branch, "event": event,
+            "created_at": created}
+
+
+def test_first_weekly_slot_only_after_sunday_06_utc():
+    assert decision(runs(), utc("2026-11-01T05:59:00Z"))["dispatch"] is False
+    row = decision(runs(), utc("2026-11-01T06:00:00Z"))
+    assert row == {"dispatch": True, "reason": "first_weekly_attempt",
+                   "request_id": "moviodds-2026-11-01"}
+    # Missed Sunday 06 dispatch can be safely recovered next morning.
+    assert decision(runs(), utc("2026-11-02T06:00:00Z"))["request_id"] == "moviodds-2026-11-01"
+    assert decision(runs(), utc("2026-11-02T06:00:00Z"))["dispatch"] is True
+
+
+def test_active_queued_or_in_progress_attempt_never_duplicated():
+    for status in ("queued", "in_progress", "waiting", "pending"):
+        r = decision(runs(attempt(status=status, conclusion=None)),
+                     utc("2026-11-01T09:00:00Z"))
+        assert r["dispatch"] is False
+        assert r["reason"] == "existing_attempt_active"
+
+
+def test_success_is_terminal_for_the_week_and_does_not_overwrite_cdb():
+    result = decision(runs(attempt(status="completed", conclusion="success")),
+                      utc("2026-11-07T23:30:00Z"))
+    assert result["dispatch"] is False
+    assert result["reason"] == "weekly_import_verified_complete"
+
+
+def test_failed_busy_attempt_not_green_and_retry_after_cooldown():
+    r = runs(attempt())
+    before = utc("2026-11-01T06:01:00Z") + timedelta(seconds=COOLDOWN_SECONDS - 1)
+    after = before + timedelta(seconds=1)
+    assert decision(r, before)["reason"] == "failed_attempt_cooldown"
+    assert decision(r, after)["reason"] == "retry_failed_or_busy_attempt"
+    assert decision(r, after)["dispatch"] is True
+
+
+def test_previous_failure_cannot_force_duplicate_after_success():
+    obj = runs(attempt(), attempt(created="2026-11-01T09:01:00Z",
+                                  conclusion="success"))
+    assert decision(obj, utc("2026-11-04T12:00:00Z"))["dispatch"] is False
+
+
+def test_foreign_or_old_weekly_run_does_not_confirm_current_week():
+    old = attempt(title="CDB guarded import moviodds-2026-10-25",
+                  created="2026-10-26T06:00:00Z", conclusion="success")
+    foreign = attempt(event="push", conclusion="success")
+    assert decision(runs(old, foreign),
+                    utc("2026-11-01T08:00:00Z"))["dispatch"] is True
+
+
+def test_untrusted_or_partial_github_inventory_fails_closed():
+    with pytest.raises(ValueError, match="missing workflow_runs"):
+        decision({}, utc("2026-11-01T08:00:00Z"))
+    with pytest.raises(ValueError, match="Incomplete"):
+        decision(runs(total_count=101), utc("2026-11-01T08:00:00Z"))
+    with pytest.raises(ValueError, match="timestamp"):
+        decision(runs(attempt(created="2026-10-31T06:00:00Z")),
+                 utc("2026-11-01T08:00:00Z"))
+
+
+def test_scheduler_uses_existing_external_match_status_no_new_cron():
+    match_status=(ROOT/".github/workflows/match-status.yml").read_text()
+    guarded=(ROOT/".github/workflows/cdb-drive-inbox.yml").read_text()
+    assert "\n  schedule:" not in match_status
+    assert "\n  schedule:" not in guarded
+    assert "scripts/moviodds_cdb_retry.py" in match_status
+    assert "-f source_mode=moviodds -f moviodds_days_back=7" in match_status
+    assert "-f created=" in match_status
+    assert "MOVIODDS_CDB_DEFERRED_WRITER_BUSY_NOT_IMPORTED" in guarded
+    assert "env.SOURCE_MODE == 'moviodds' && steps.source.outputs.eligible == 'true' && steps.writer_gate.outputs.ready == 'false'" in guarded
+    assert "exit 1" in guarded
