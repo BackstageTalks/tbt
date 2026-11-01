@@ -3,13 +3,13 @@
   "mode": "comparator-build",
   "promote": false,
   "source": "comparator_P0_P1_PR1197_verified_canonical_replay",
-  "purpose": "Zero-provider, read-only CDB replay to publish a checksum-verified schema-v2 match comparator artifact for ace/double-fault projections, point-in-time freshness and BO3/BO5 empirical format quality. No champion or CDB writes.",
+  "purpose": "No-provider comparator schema-v2 rebuild and Azure deployment after PR #1197 and #1202, preserving audited ATP/WTA rank evidence, immutable release manifest, issuer ledger and readback. No CDB/model changes.",
   "requested_on": "2026-11-01",
   "max_requests": 1,
   "targeted_statistics": false,
   "high_yield_statistics": false,
   "model_training": false,
   "pre_reset_provider_header_override": false,
-  "run_scope": "post_merge_PR1197_release_refresh",
-  "status": "OPERATOR_APPROVED_COMPARATOR_READONLY_REBUILD"
+  "run_scope": "post_PR1202_verified_rank_sources_20261101",
+  "status": "OPERATOR_APPROVED_COMPARATOR_REBUILD_AND_DEPLOY"
 }
