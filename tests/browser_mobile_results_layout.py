@@ -157,7 +157,7 @@ def main():
                     assert report["filterBarDisplay"]=="none",(width,report)
                     assert report["cardClass"],(width,report)
                     if width <= 600:
-                        assert report["cardBg"] == "rgb(13, 33, 28)", (width,report)
+                        assert report["cardBg"] == "rgba(3, 23, 17, 0.58)", (width,report)
                         assert report["cardRadius"] == "11px", (width,report)
                     assert report["projectChip"]["top"]>=report["header"]["top"]-2,(width,report)
                     assert report["projectChip"]["bottom"]<=report["header"]["bottom"]+2,(width,report)

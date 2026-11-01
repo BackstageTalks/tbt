@@ -56,6 +56,8 @@ GEOMETRY = r"""() => {
     depthHidden:getComputedStyle(row.querySelector('.hub-data-depth')).display==='none',
     startedInline:getComputedStyle(row.querySelector('.hub-mobile-started')).display!=='none',
     startedTimeHidden:getComputedStyle(row.querySelector('.hub-time .hub-offer-status')).display==='none',
+    confidenceFont:getComputedStyle(row.querySelector('.hub-confidence strong')).fontSize,
+    oddsFont:getComputedStyle(items[5].querySelector('strong')).fontSize,
   };
 }"""
 
@@ -80,7 +82,7 @@ def test_mobile_market_cards():
                     assert g['row']['h']<530,(width,market,'over-tall card',g)
                     assert g['pick']['w']>=100,(width,market,'collapsed prediction',g)
                     if width <= 600 and market in ('daily','value'):
-                        assert 'match confidence' in g['areas'] and 'pick action' in g['areas'],(width,market,g)
+                        assert 'match confidence number' in g['areas'] and 'pick pick action' in g['areas'],(width,market,g)
                     if width<=600:
                         for name in ('time','confidence','odds','action'):
                             assert g[name]['r']<=g['row']['r']+1,(width,market,name,g)
@@ -88,9 +90,10 @@ def test_mobile_market_cards():
                         assert g['depthHidden'],(width,market,g)
                         assert g['detailVisible'],(width,market,g)
                         assert g['confidence']['l']>=g['match']['r']-2,(width,market,g)
-                        assert abs(g['confidence']['l']-g['odds']['l'])<3,(width,market,g)
+                        assert g['odds']['l']>=g['confidence']['r']-2,(width,market,g)
                         assert abs(g['odds']['l']-g['action']['l'])<3,(width,market,g)
-                        assert g['confidence']['b']<=g['odds']['t']+2,(width,market,g)
+                        assert abs(g['confidence']['t']-g['odds']['t'])<3,(width,market,g)
+                        assert g['confidenceFont']==g['oddsFont'],(width,market,g)
                         assert g['odds']['b']<=g['action']['t']+2,(width,market,g)
                         assert not overlap(g['pick'],g['action']),(width,market,g)
                         if market in PROJECTED:
@@ -102,6 +105,27 @@ def test_mobile_market_cards():
                         assert not g['detailVisible'] if market in PROJECTED else g['detailVisible']
                     print('mobile-card',width,market,round(g['row']['h']),round(g['pick']['w']))
                 context.close()
+            # The new layer must be inert on tablet/desktop and in Admin.
+            # Compare computed geometry/surfaces with the stylesheet disabled.
+            for width, admin in ((601,False),(768,False),(1024,False),(1440,False),(390,True)):
+                page=browser.new_page(viewport={'width':width,'height':900})
+                page.route('**/*',static_route)
+                page.goto(ORIGIN+'/index.html?lang=sk',wait_until='networkidle')
+                page.evaluate(SETUP,'daily')
+                page.evaluate("document.querySelectorAll('*').forEach(n=>{n.style.setProperty('transition','none','important');n.style.setProperty('animation','none','important')})")
+                if admin:
+                    page.evaluate("document.body.classList.add('blinq-admin')")
+                page.wait_for_timeout(100)
+                snapshot = """() => [...document.querySelectorAll('body,.site-header,.site-header *,#dashboardHero,#dashboardHero *,#dashboardKpis,#dashboardKpis *,#dailyHub,#dailyHub *,#mobileTabs,#mobileTabs *')].map(n=>{
+                  const s=getComputedStyle(n),r=n.getBoundingClientRect();
+                  return [r.x,r.y,r.width,r.height,s.background,s.fontSize,s.display,s.border,s.padding,s.gridTemplateAreas];
+                })"""
+                before=page.evaluate(snapshot)
+                page.evaluate("document.querySelector('link[href*=\"blinq-mobile-court.css\"]').disabled=true")
+                after=page.evaluate(snapshot)
+                assert before==after,(width,admin,[(a,b) for a,b in zip(before,after) if a!=b][:3])
+                print('unchanged-scope',width,'admin' if admin else 'tablet/desktop')
+                page.close()
         finally:
             browser.close()
 
