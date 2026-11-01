@@ -164,3 +164,35 @@ def test_cdb_orientation_and_score_change_rejected():
     m = canonical(row)
     row = dict(row, winner_name="Someone Else")
     assert candidate(m, row, "atp", Path("atp_matches_2020.csv"), 2, "x")[1] == "lineage_rejected"
+
+
+def test_exact_provider_collision_gate_stages_only_unambiguous_and_preserves_full_readback(monkeypatch):
+    import recover_cdb_sackmann_breakpoints as bp
+
+    calls = []
+    monkeypatch.setattr(bp, "_load", lambda directory, **kwargs: calls.append(kwargs) or [])
+    for mode in ("stage", "write", "verify"):
+        assert bp.load_canonical_for_mode(
+            Path("/offline/canonical"), mode=mode,
+            isolate_provider_collisions=True, expected_provider_quarantine=6,
+        ) == []
+    assert len(calls) == 3
+    assert all(call["isolate_provider_collisions"] is True for call in calls)
+    assert all(call["expected_provider_quarantine"] == 6 for call in calls)
+    assert calls[0]["include_quarantined_for_full_readback"] is False
+    assert calls[1]["include_quarantined_for_full_readback"] is True
+    assert calls[2]["include_quarantined_for_full_readback"] is True
+
+
+def test_breakpoint_quarantine_opt_in_is_fail_closed(monkeypatch):
+    import recover_cdb_sackmann_breakpoints as bp
+
+    monkeypatch.setattr(bp, "_load", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not read")))
+    for opts in (
+        dict(mode="stage", isolate_provider_collisions=True, expected_provider_quarantine=0),
+        dict(mode="write", isolate_provider_collisions=False, expected_provider_quarantine=6),
+        dict(mode="verify", isolate_provider_collisions=True, expected_provider_quarantine=21),
+        dict(mode="unapproved", isolate_provider_collisions=True, expected_provider_quarantine=6),
+    ):
+        with pytest.raises(ValueError):
+            bp.load_canonical_for_mode(Path("/offline/canonical"), **opts)

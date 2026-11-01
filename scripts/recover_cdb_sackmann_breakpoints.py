@@ -234,6 +234,26 @@ def write_exact(history_dir: Path, matches, staged):
         write_exact_stats_partition(history_dir, year, matches, ids)
 
 
+def load_canonical_for_mode(directory: Path, *, mode: str,
+                            isolate_provider_collisions: bool = False,
+                            expected_provider_quarantine: int = 0):
+    """Read-only stage excludes exact collisions; write/readback preserve all rows."""
+    if mode not in ("stage", "write", "verify"):
+        raise ValueError("Unsupported breakpoint import mode")
+    if isolate_provider_collisions:
+        if type(expected_provider_quarantine) is not int or not 0 < expected_provider_quarantine <= 20:
+            raise ValueError("Explicit exact provider quarantine count required")
+    elif expected_provider_quarantine:
+        raise ValueError("Quarantine count without explicit isolation is forbidden")
+    return _load(
+        directory, isolate_provider_collisions=isolate_provider_collisions,
+        expected_provider_quarantine=expected_provider_quarantine,
+        include_quarantined_for_full_readback=(
+            isolate_provider_collisions and mode in ("write", "verify")
+        ),
+    )
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--mode", choices=("stage", "write", "verify"), required=True)
@@ -242,12 +262,28 @@ def main():
     p.add_argument("--before-dir", type=Path)
     p.add_argument("--stage-file", type=Path)
     p.add_argument("--out-dir", type=Path, required=True)
+    p.add_argument("--isolate-provider-collisions", action="store_true",
+                   help="Only six proven 2026 provider-ID collisions; all six preserved in writer/readback")
+    p.add_argument("--expected-provider-quarantine", type=int, default=0)
     args = p.parse_args()
+    try:
+        load_args = dict(mode=args.mode,
+                         isolate_provider_collisions=args.isolate_provider_collisions,
+                         expected_provider_quarantine=args.expected_provider_quarantine)
+        # Validate options before touching canonical data.
+        if args.isolate_provider_collisions and not 0 < args.expected_provider_quarantine <= 20:
+            raise ValueError("Explicit exact provider quarantine count required")
+        if not args.isolate_provider_collisions and args.expected_provider_quarantine:
+            raise ValueError("Quarantine count without explicit isolation is forbidden")
+    except ValueError as exc:
+        p.error(str(exc))
     args.out_dir.mkdir(parents=True, exist_ok=True)
     if args.mode == "stage":
         if args.source_dir is None:
             p.error("--source-dir required for stage")
-        staged, counts, sources = stage(_load(args.history_dir), args.source_dir)
+        staged, counts, sources = stage(load_canonical_for_mode(args.history_dir, **load_args), args.source_dir)
+        if args.isolate_provider_collisions:
+            counts["excluded_ambiguous_provider_rows"] = args.expected_provider_quarantine
         with (args.out_dir / "stage.jsonl").open("w", encoding="utf-8") as fh:
             for row in staged:
                 fh.write(json.dumps(row, sort_keys=True, allow_nan=False) + "\n")
@@ -259,7 +295,7 @@ def main():
         if not args.stage_file or not args.source_dir:
             p.error("--stage-file and --source-dir required for write")
         staged = [json.loads(x) for x in args.stage_file.read_text().splitlines() if x.strip()]
-        matches = _load(args.history_dir)
+        matches = load_canonical_for_mode(args.history_dir, **load_args)
         years = write_local(matches, staged, args.source_dir)
         write_exact(args.history_dir, matches, staged)
         report = {"schema": 1, "mode": "write", "updated": len(staged),
@@ -269,7 +305,12 @@ def main():
         if not args.before_dir or not args.stage_file:
             p.error("--before-dir and --stage-file required for verify")
         staged = [json.loads(x) for x in args.stage_file.read_text().splitlines() if x.strip()]
-        report = verify_readback(_load(args.before_dir), _load(args.history_dir), staged)
+        report = verify_readback(
+            load_canonical_for_mode(args.before_dir, **load_args),
+            load_canonical_for_mode(args.history_dir, **load_args), staged,
+        )
+        if args.isolate_provider_collisions:
+            report["quarantined_rows_proven_unchanged"] = args.expected_provider_quarantine
     (args.out_dir / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
 

@@ -103,6 +103,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/recover_cdb_sackmann_breakpoints.py \
+            --isolate-provider-collisions --expected-provider-quarantine 6 \
             --mode stage --source-dir source \
             --history-dir .cache/tbt/cdb-sackmann-bp/history \
             --out-dir .cache/tbt/cdb-sackmann-bp/stage
@@ -113,6 +114,7 @@ jobs:
           report=json.loads((root/"stage/report.json").read_text())
           counts=report["counts"]
           assert report["production_mutated"] is False and report["provider_requests"] == 0
+          assert counts.get("excluded_ambiguous_provider_rows") == 6
           assert counts["source_files"] > 0 and counts["matching_cdb_id"] > 0, "No verified historical CDB candidates"
           assert counts.get("lineage_rejected",0) >= 0
           assert counts.get("new_stat_values",0) <= 2 * counts.get("staged_matches",0)
@@ -137,10 +139,12 @@ jobs:
           root=.cache/tbt/cdb-sackmann-bp
           cp -a "$root/history" "$root/rehearsal-before"
           python scripts/recover_cdb_sackmann_breakpoints.py \
+            --isolate-provider-collisions --expected-provider-quarantine 6 \
             --mode write --source-dir source --history-dir "$root/history" \
             --stage-file "$root/stage/stage.jsonl" \
             --out-dir "$root/rehearsal"
           python scripts/recover_cdb_sackmann_breakpoints.py \
+            --isolate-provider-collisions --expected-provider-quarantine 6 \
             --mode verify --history-dir "$root/history" \
             --before-dir "$root/rehearsal-before" \
             --stage-file "$root/stage/stage.jsonl" \
@@ -157,6 +161,7 @@ jobs:
           assert checked["enriched_matches"]==staged["staged_matches"]
           assert checked["new_stat_values"]==staged["new_stat_values"]
           assert checked["existing_values_overwritten"]==0
+          assert checked["quarantined_rows_proven_unchanged"]==6
           print("BP DRY-RUN exact-stat local mutation, full readback verified, no remote publication.")
           PY
 
@@ -194,9 +199,11 @@ jobs:
           set -euo pipefail
           root=.cache/tbt/cdb-sackmann-bp
           python scripts/recover_cdb_sackmann_breakpoints.py \
+            --isolate-provider-collisions --expected-provider-quarantine 6 \
             --mode write --source-dir source --history-dir "$root/history" \
             --stage-file "$root/stage/stage.jsonl" --out-dir "$root/write"
           python scripts/recover_cdb_sackmann_breakpoints.py \
+            --isolate-provider-collisions --expected-provider-quarantine 6 \
             --mode verify --history-dir "$root/history" --before-dir "$root/before" \
             --stage-file "$root/stage/stage.jsonl" --out-dir "$root/local-readback"
           python - <<'PY'
@@ -209,6 +216,7 @@ jobs:
           assert write["changed_years"]==stage["changed_years"]
           assert write["updated"]==stage["counts"]["staged_matches"]
           assert gate["status"]=="verified" and gate["existing_values_overwritten"]==0
+          assert gate["quarantined_rows_proven_unchanged"]==6
           assert gate["enriched_matches"]==write["updated"]
           PY
 
@@ -250,6 +258,7 @@ jobs:
           python scripts/download_stable_cdb.py --repository "$TBT_DATA_REPOSITORY" \
             --out "$root/persisted" --report "$root/persisted-download.json"
           python scripts/recover_cdb_sackmann_breakpoints.py \
+            --isolate-provider-collisions --expected-provider-quarantine 6 \
             --mode verify --history-dir "$root/persisted" --before-dir "$root/before" \
             --stage-file "$root/stage/stage.jsonl" --out-dir "$root/persisted-readback"
           python - <<'PY'
@@ -260,6 +269,7 @@ jobs:
           s=json.loads((root/"stage/report.json").read_text())["counts"]
           assert r["status"]=="verified" and r["unverified_identities"]==0
           assert r["existing_values_overwritten"]==0
+          assert r["quarantined_rows_proven_unchanged"]==6
           assert r["enriched_matches"]==s["staged_matches"]
           assert r["new_stat_values"]==s["new_stat_values"]
           print("COMMITTED CDB BREAKPOINTS VERIFIED:",r,flush=True)
