@@ -238,25 +238,31 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
             report["historical_sample_policy"] = "category_calendar_unavailable"
             return finish()
         report["archived_category_count"] = len(categories)
-        grand_slam = [
-            category for category in categories
-            if RapidTennisClient._category_id(category)
-                == RapidTennisClient.CATEGORY_GRAND_SLAM
-        ]
-        if len(grand_slam) != 1:
-            report["historical_sample_policy"] = (
-                "grand_slam_category_ambiguous" if len(grand_slam) > 1
-                else "grand_slam_category_missing")
+        # The provider may group old Slam fixtures under ATP/WTA rather than
+        # a synthetic -100 Grand Slam category. Scan the exact categories
+        # returned by this historical calendar; never invent category IDs.
+        category_ids = [RapidTennisClient._category_id(row)
+                        for row in categories]
+        if (not category_ids
+                or any(value is None for value in category_ids)
+                or len(category_ids) != len(set(category_ids))):
+            report["historical_sample_policy"] = "category_identity_ambiguous"
             return finish()
-        events_response = read(
-            "archived_day_events",
-            "/api/tennis/category/-100/events/10/7/2016")
-        try:
-            events = RapidTennisClient._response_rows(
-                events_response, "events")
-        except ProviderError:
-            report["historical_sample_policy"] = "category_events_unavailable"
-            return finish()
+        report["historical_source_category_ids"] = category_ids
+        events = []
+        unavailable_categories = []
+        for category_id in category_ids:
+            day = read(
+                f"archived_category_events_{category_id}",
+                f"/api/tennis/category/{category_id}/events/10/7/2016")
+            try:
+                rows = RapidTennisClient._response_rows(day, "events")
+            except ProviderError:
+                unavailable_categories.append(category_id)
+                continue
+            events.extend(rows)
+        report["archived_categories_unavailable"] = unavailable_categories
+        report["archived_category_scan_complete"] = not unavailable_categories
         report["archived_event_count"] = len(events)
         valid = [
             e for e in events
