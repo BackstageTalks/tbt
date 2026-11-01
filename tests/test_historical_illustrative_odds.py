@@ -1,6 +1,10 @@
 """Historical fillers must NEVER masquerade as archived bookmaker quotes."""
 from copy import deepcopy
 from pathlib import Path
+import shutil
+import subprocess
+
+import pytest
 
 from tbt.services.indicative_odds import (
     annotate_feed_indicative_odds,
@@ -72,7 +76,8 @@ def test_ui_never_renders_filler_as_a_real_quote():
     assert "aceDfLegacyResultDisplayOdds(publication)" in results
     live = APP[APP.index("function projectionOddsHtml("):APP.index("function dailyHubRow(")]
     assert "aceDfLegacyResultDisplayOdds" not in live
-    assert "historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'" in APP
+    assert "historicalEligible&&publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'" in APP
+    assert "2026-11-01T05:00:00Z" in APP
     assert "illustrativeOnly?placeholderOdds.toFixed(2)" in APP
     # The source provenance and KPI guards remain; the user removed the four visible odds tooltips.
     assert "not an archived bookmaker price or model estimate" not in APP
@@ -105,3 +110,62 @@ def test_ace_df_results_kpis_use_displayed_normalized_or_real_api_odds_without_r
     assert "historical_display_placeholder_scope" in historical_display_placeholder(publication(), event_id="1001")
     assert round(1.66 - 1, 2) == .66
     assert round(1.52 - 1, 2) == .52
+
+
+def test_aces_legacy_price_is_historical_only_from_november_betting_day():
+    old = publication(market="aces")
+    old["issued_at"] = "2026-11-01T04:59:59Z"
+    boundary = {**old, "issued_at": "2026-11-01T05:00:00Z"}
+    future = {**old, "issued_at": "2026-11-02T10:00:00+00:00"}
+    invalid = {**old, "issued_at": "not-a-timestamp"}
+    september = publication(market="aces")
+    assert historical_display_placeholder(september, event_id="1001") is not None
+    assert historical_display_placeholder(old, event_id="1001") is not None
+    for item in (boundary, future, invalid):
+        assert historical_display_placeholder(item, event_id="1001") is None
+    assert historical_display_placeholder(
+        publication(market="double_faults") | {"issued_at": future["issued_at"]},
+        event_id="1001",
+    ) is not None
+    feed = {"results": [{"event_id": "1001", "market_publications": [
+        deepcopy(old), deepcopy(boundary), deepcopy(future),
+    ]}]}
+    decorated, audit = annotate_feed_indicative_odds(feed)
+    results = decorated["results"][0]["market_publications"]
+    assert "historical_display_placeholder_odds" in results[0]
+    assert all("historical_display_placeholder_odds" not in p for p in results[1:])
+    assert audit["historical_illustrative_only_by_market"]["aces"] == 1
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js required")
+def test_browser_legacy_ace_fallback_cannot_price_new_results():
+    script = r"""
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const code=fs.readFileSync('web/app.js','utf8');
+const start=code.indexOf('  function aceDfLegacyResultDisplayOdds(');
+const end=code.indexOf('  function aceDfResultKpiOdds(',start);
+assert(start>=0&&end>start);
+const sandbox={};
+vm.createContext(sandbox);
+vm.runInContext(code.slice(start,end),sandbox);
+const sample={
+    market:'aces',event_id:'1001',selection_id:'p1',
+    issued_at:'2026-10-31T18:00:00Z'
+};
+const before=sandbox.aceDfLegacyResultDisplayOdds(sample);
+assert(before>=1.50&&before<=1.70);
+assert(Number.isNaN(sandbox.aceDfLegacyResultDisplayOdds({...sample,issued_at:'2026-11-01T05:00:00Z'})));
+assert(Number.isNaN(sandbox.aceDfLegacyResultDisplayOdds({...sample,issued_at:'2026-11-02T12:00:00Z'})));
+assert(Number.isNaN(sandbox.aceDfLegacyResultDisplayOdds({...sample,issued_at:null})));
+const df=sandbox.aceDfLegacyResultDisplayOdds({...sample,market:'double_faults',issued_at:'2026-11-02T12:00:00Z'});
+assert(df>=1.50&&df<=1.70);
+console.log('legacy ACES cutover: PASS');
+"""
+    result = subprocess.run(
+        ["node", "-e", script], cwd=Path(__file__).resolve().parents[1],
+        capture_output=True, text=True, timeout=20,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "PASS" in result.stdout
