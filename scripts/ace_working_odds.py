@@ -54,6 +54,12 @@ def verified_ace_odds(row: Mapping[str, Any]) -> float | None:
     from math import isfinite
     if not isfinite(odds) or not 1.50 <= odds <= 100:
         return None
+    # Until independently bettable Aces API quotes are reliable, treat the
+    # legacy exact-2.00 feed value as an unverified placeholder, regardless
+    # of its old "priced_projection" marker. This is a permanent fallback
+    # for future offers; preserve raw provider prices and immutable ledgers.
+    if odds == 2.0:
+        return None
     source = str(row.get("odds_source") or "").lower()
     valid = ((source == "rapidapi" and provider == 1)
              or (source == "propline" and provider == 2
