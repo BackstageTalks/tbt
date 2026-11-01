@@ -471,6 +471,9 @@
     const style=document.documentElement.style;
     if(bg)style.setProperty('--blinq-page-bg',`url("${bg.replaceAll('\"','')}")`);
     if(fallback)style.setProperty('--blinq-page-bg-fallback',`url("${fallback.replaceAll('\"','')}")`);
+    // The court background is a separate admin-published setting for phones only.
+    const mobileBg=safePhotoUrl(hero.site_mobile_background_url)||'/assets/blinq_mobile_court.webp';
+    style.setProperty('--blinq-mobile-court-bg',`url("${mobileBg.replaceAll('"','%22').replaceAll('\\','%5C')}")`);
   }
 
   const VERIFIED_RUNTIME_UI_KEY='blinq_last_verified_runtime_ui_v1';
@@ -4157,6 +4160,7 @@
     const previewEntry=adminPreviewEntry(entries);
     const hero1=elements()?.HERO_BANNER_1?.content||{};
     const bg=safePhotoUrl(hero1.site_background_url||'')||String(state.presentationConfig?.theme?.background?.image||'/assets/blinq_page_background.webp');
+    const mobileBg=safePhotoUrl(hero1.site_mobile_background_url)||'/assets/blinq_mobile_court.webp';
     const effects=['fade-up','fade-down','fade','slide-up','slide-down','zoom-in','zoom-out','blur-in','diagonal-wipe','vertical-wipe','curtain-open','mosaic-grid','parallax','ken-burns','reveal-left','reveal-right','flip-in','tilt-in','focus-pulse','soft-glitch'];
     const tabs=heroIds.map((id,index)=>{
       const slot=elements()?.[id]||{},content=slot.content||{},active=index<activeCount,selected=id===selectedId,ready=Boolean(String(content.image_url||'').trim());
@@ -4228,8 +4232,10 @@
         <label><span>Podnadpis · farba</span><select data-simple-banner-field="text_color">${bannerColorOptions(c.text_color)}</select></label>
         <label><span>Popiska · farba</span><select data-simple-banner-field="eyebrow_color">${bannerColorOptions(c.eyebrow_color)}</select></label>
       </div></div>
-      <div class="admin-form-section admin-page-background-editor" data-simple-banner="HERO_BANNER_1"><div class="admin-form-section-title"><strong>Pozadie hlavnej stránky</strong><span>Predvolené je rovnaké zelené tenisové pozadie ako pri prihlásení a loadingu, bez watermarku.</span></div><div class="admin-form-grid">
-        <label class="span-2">Background · 1920 × 1080<input data-simple-banner-field="site_background_url" value="${escapeHtml(hero1.site_background_url||bg)}" placeholder="/assets/blinq_page_background.webp"></label>
+      <div class="admin-form-section admin-page-background-editor" data-simple-banner="HERO_BANNER_1"><div class="admin-form-section-title"><strong>Pozadie hlavnej stránky</strong><span>Desktop a mobil majú samostatné pozadia. Obrázok nahraj alebo zadaj adresu, skontroluj náhľad a klikni na Publikovať.</span></div><div class="admin-form-grid">
+        <label class="span-2">Desktop pozadie · 1920 × 1080<input data-simple-banner-field="site_background_url" value="${escapeHtml(hero1.site_background_url||bg)}" placeholder="/assets/blinq_page_background.webp"></label>
+        <label class="span-2">Mobilné pozadie · do 600 px (odporúčaný portrét 1080 × 1920)<input data-simple-banner-field="site_mobile_background_url" value="${escapeHtml(hero1.site_mobile_background_url||mobileBg)}" placeholder="/assets/blinq_mobile_court.webp"></label>
+        <div class="admin-page-background-previews span-2"><figure><img src="${escapeHtml(safePhotoUrl(bg)||'/assets/blinq_page_background.webp')}" alt="Náhľad desktopového pozadia" loading="lazy"><figcaption>Desktop · stránka</figcaption></figure><figure><img src="${escapeHtml(mobileBg)}" alt="Náhľad mobilného pozadia" loading="lazy"><figcaption>Mobil · stránka (karty zostávajú čitateľné)</figcaption></figure></div>
       </div></div>
       <div class="admin-banner-save-note"><span></span><strong>Zmeny sú zatiaľ iba v koncepte.</strong><small>Po kontrole klikni hore na Publikovať.</small></div>
     </section>`;
@@ -6278,6 +6284,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       'input[data-simple-banner-field="image_url"]',
       'input[data-simple-banner-field="mobile_image_url"]',
       'input[data-simple-banner-field="site_background_url"]',
+      'input[data-simple-banner-field="site_mobile_background_url"]',
       'input[data-simple-banner-field$="_icon_url"]',
     ].join(',');
     host.querySelectorAll(selector).forEach(input=>{
@@ -6917,6 +6924,16 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         state.adminActivitySearch=t.value;
         const events=host.querySelector('.admin-activity-events');
         if(events)events.innerHTML=renderAdminActivityEventRows();
+        return;
+      }
+      // Preserve URL edits immediately in the admin draft, before blur.
+      if(field==='site_mobile_background_url'){
+        const wrap=t.closest('[data-simple-banner]'),item=elements()?.[wrap?.dataset?.simpleBanner];
+        if(!item)return;
+        item.content=item.content||{};
+        item.content.site_mobile_background_url=String(t.value||'').trim();
+        const image=wrap.querySelector('.admin-page-background-previews img[alt="Náhľad mobilného pozadia"]');
+        if(image)image.src=safePhotoUrl(t.value)||'/assets/blinq_mobile_court.webp';
         return;
       }
       const liveFields=['eyebrow','headline','text','button_text','desktop_image_x','desktop_image_y','mobile_image_x','mobile_image_y','desktop_text_x','desktop_text_y','desktop_text_width','mobile_text_x','mobile_text_y','mobile_text_width','desktop_headline_size','mobile_headline_size','desktop_text_size','mobile_text_size','desktop_eyebrow_size','mobile_eyebrow_size','desktop_social_x','desktop_social_y','mobile_social_x','mobile_social_y','desktop_social_size','mobile_social_size','desktop_shadow_strength','mobile_shadow_strength'];

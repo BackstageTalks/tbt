@@ -45,6 +45,40 @@ def main():
             assert first['preview']==0,first
             assert 'Prvý banner' in first['desktop'] and 'Prvý banner' in first['mobile'],first
             assert first['colors']==3,first
+            # The main-page background editor shows both device surfaces and
+            # wires the new field through the existing upload + draft path.
+            background_editor=page.evaluate("""() => {
+              const host=document.getElementById('routePanel');
+              const desktop=host.querySelector('[data-simple-banner-field="site_background_url"]');
+              const mobile=host.querySelector('[data-simple-banner-field="site_mobile_background_url"]');
+              const media=mobile?.closest('.admin-media-upload');
+              return {desktop:!!desktop,mobile:!!mobile,
+                upload:!!media?.querySelector('input[type="file"]'),
+                previews:host.querySelectorAll('.admin-page-background-previews img').length,
+                defaultMobile:mobile?.value};
+            }""")
+            assert background_editor == {
+                'desktop':True,'mobile':True,'upload':True,'previews':2,
+                'defaultMobile':'/assets/blinq_mobile_court.webp'},background_editor
+            # Fire real bubbling DOM input/change events together, avoiding
+            # unrelated async boot re-renders between Playwright commands.
+            mobile_change=page.evaluate("""() => {
+              const host=document.getElementById('routePanel');
+              const input=host.querySelector('[data-simple-banner-field="site_mobile_background_url"]');
+              const before=bannerHarness.state.ui.elements.HERO_BANNER_1.content.site_mobile_background_url;
+              input.value='/assets/blinq_page_background.webp';
+              input.dispatchEvent(new Event('input',{bubbles:true}));
+              const onInput=bannerHarness.state.ui.elements.HERO_BANNER_1.content.site_mobile_background_url;
+              input.dispatchEvent(new Event('change',{bubbles:true}));
+              return {before,onInput,
+                onChange:bannerHarness.state.ui.elements.HERO_BANNER_1.content.site_mobile_background_url,
+                preview:host.querySelector('.admin-page-background-previews img[alt="Náhľad mobilného pozadia"]')?.getAttribute('src'),
+                hasOnInput:typeof host.oninput,hasOnChange:typeof host.onchange};
+            }""")
+            assert mobile_change['onInput'] == '/assets/blinq_page_background.webp', mobile_change
+            assert mobile_change['onChange'] == '/assets/blinq_page_background.webp', mobile_change
+            assert mobile_change['preview'] == '/assets/blinq_page_background.webp', mobile_change
+
             # The actual 128px public mobile hero is compact. Admin preview must
             # show the same crop aspect ratio, not the obsolete 370x190 shape.
             crop=page.evaluate("""() => {
