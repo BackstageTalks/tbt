@@ -86,3 +86,74 @@ def test_invalid_service_counts_and_missing_ids_are_not_linked(tmp_path):
     assert result["counts"]["COMPLETE_BASIC_SERVE_RETURN"] == 1
     assert result["canonical_stat_fields_written"] == 0
     assert result["api_requests"] == 0
+
+
+def test_sackmann_uploaded_trailing_empty_cells_and_blank_padding_are_safe(tmp_path):
+    root = tmp_path / "raw"
+    file = root / "atp_matches_2016.csv"
+    _write(file, [_match(tourney_date="20160104", match_num="300")])
+    original = file.read_text(encoding="utf-8").splitlines()
+    # 20 extra empty CSV columns and one padded 21-column blank record,
+    # exactly the malformed shape seen in the uploaded 2016 archive.
+    file.write_text(
+        original[0] + "\n" + original[1] + "," * 20 + "\n" +
+        "," * 20 + "\n", encoding="utf-8"
+    )
+    result = prepare(root, tmp_path / "output", 2016, 2016)
+    assert result["counts"]["raw_match_rows"] == 2
+    assert result["counts"]["trimmed_empty_trailing_columns_rows"] == 1
+    assert result["counts"]["quarantined_blank_padding_rows"] == 1
+    assert result["counts"]["linker_ready_source_rows"] == 1
+    assert result["canonical_write_authorized"] is False
+    with Path(result["files"][0]["linker_csv"]).open(newline="") as stream:
+        row = list(csv.DictReader(stream))[0]
+    assert row["winner_id"] == "126203"
+    assert row["loser_id"] == "128034"
+    assert row["source_record_id"].endswith(":2")
+    assert row["w_bpFaced"] == "3"
+
+
+def test_nonempty_surplus_and_truncated_records_are_not_promoted(tmp_path):
+    root = tmp_path / "raw"
+    file = root / "atp_matches_2017.csv"
+    _write(file, [
+        _match(tourney_date="20170102", match_num="300"),
+        _match(tourney_date="20170102", match_num="301"),
+        _match(tourney_date="20170102", match_num="302"),
+    ])
+    lines = file.read_text(encoding="utf-8").splitlines()
+    # Extra nonempty data means unknown schema: quarantine, not truncate.
+    # A short row with IDs but missing counts must also be quarantined.
+    file.write_text(
+        lines[0] + "\n" +
+        lines[1] + ",SUSPICIOUS_DATA\n" +
+        ",".join(lines[2].split(",")[:8]) + "\n" +
+        lines[3] + "\n", encoding="utf-8"
+    )
+    report = prepare(root, tmp_path / "out", 2017, 2017)
+    assert report["counts"]["raw_match_rows"] == 3
+    assert report["counts"]["quarantined_nonempty_trailing_columns_rows"] == 1
+    assert report["counts"]["quarantined_truncated_rows"] == 1
+    assert report["counts"]["linker_ready_source_rows"] == 1
+    with Path(report["files"][0]["linker_csv"]).open(newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    assert len(rows) == 1 and rows[0]["match_num"] == "302"
+    assert rows[0]["source_record_id"].endswith(":4")
+
+
+def test_malformed_duplicate_cannot_make_native_identity_unique(tmp_path):
+    root = tmp_path / "raw"
+    file = root / "atp_matches_2016.csv"
+    _write(file, [
+        _match(tourney_date="20160104", match_num="300"),
+        _match(tourney_date="20160104", match_num="300"),
+    ])
+    lines = file.read_text(encoding="utf-8").splitlines()
+    file.write_text(
+        lines[0] + "\n" + lines[1] + "\n" +
+        lines[2] + ",NONEMPTY\n", encoding="utf-8"
+    )
+    result = prepare(root, tmp_path / "out", 2016, 2016)
+    assert result["counts"]["quarantined_ambiguous_native_match_key"] == 2
+    assert result["counts"]["linker_ready_source_rows"] == 0
+    assert result["canonical_write_authorized"] is False
