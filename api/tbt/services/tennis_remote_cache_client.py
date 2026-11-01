@@ -85,6 +85,13 @@ class HttpRawResponseCache:
             payload = loader()
             if not isinstance(payload, (dict, list)):
                 raise RawCacheUnavailable("Non-JSON provider response")
+            event = (payload.get("event", payload) if isinstance(payload, dict) else {})
+            if kind == "finished_detail" and (
+                    not isinstance(event, dict)
+                    or (event.get("status") or {}).get("type") != "finished"):
+                self.metrics["negative_not_cached"] += 1
+                self._request("POST", body={"action": "abort", "key": key, "owner": owner})
+                return payload
             if kind == "finished_statistics" and (
                     not isinstance(payload, dict) or not payload.get("statistics")):
                 self.metrics["negative_not_cached"] += 1
