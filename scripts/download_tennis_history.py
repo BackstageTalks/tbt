@@ -32,6 +32,7 @@ from release_store import ReleaseStore
 from date_window import history_window
 from audit_statistics_inventory import _quality_ready, statistics_value_change
 from adaptive_statistics_queue import AdaptiveStatisticsQueue
+from adaptive_verified_prior import read_prior
 from recover_native_event_id import candidate_days, recover_day, identity_gap_inventory
 
 # Initial priorities use recent independently read-back CDB yield:
@@ -824,8 +825,11 @@ def main():
             # Only the scheduled hourly high-yield mode self-tunes; manual
             # statistics requests retain their existing deterministic order.
             if args.targeted_statistics and high_yield_setting == "true":
+                prior_path = os.getenv("BLINQ_ADAPTIVE_VERIFIED_PRIOR_FILE", "").strip()
+                prior = read_prior(prior_path, parser_version=STATISTICS_SCHEMA_VERSION)
                 statistics_adaptive_queue = AdaptiveStatisticsQueue(
-                    statistics_candidates, statistics_plan["bucket_coverage"])
+                    statistics_candidates, statistics_plan["bucket_coverage"],
+                    verified_prior=prior)
                 statistics_plan["online_adaptive_priority"] = True
             print(json.dumps({"statistics_gap_plan": statistics_plan}, ensure_ascii=False), flush=True)
             processed = 0
@@ -946,6 +950,7 @@ def main():
             if args.targeted_statistics:
                 if statistics_adaptive_queue is not None:
                     output_report["statistics_adaptive_priority"] = statistics_adaptive_queue.summary()
+                    output_report["statistics_schema_version"] = STATISTICS_SCHEMA_VERSION
                 output_report["statistics_segment_yield"] = _statistics_segment_yield(statistics_segments)
                 output_report["statistics_unavailable_reasons"] = dict(statistics_unavailable_reasons)
                 output_report["statistics_segment_yield_policy"] = (
