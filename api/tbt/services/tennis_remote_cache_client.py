@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import time
 import uuid
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -12,9 +13,14 @@ from .tennis_response_cache import RawCacheUnavailable, cache_identity, MAX_AGE
 
 class HttpRawResponseCache:
     def __init__(self, endpoint, token):
-        if (not isinstance(endpoint, str) or not endpoint.startswith("https://")
-                or "/api/v1/internal/tennis-raw-cache" not in endpoint or not token):
-            raise RawCacheUnavailable("Remote raw cache requires authenticated HTTPS")
+        uri = urlsplit(str(endpoint))
+        budget_uri = urlsplit(os.getenv("BLINQ_SHARED_API_BUDGET_URL", ""))
+        if (uri.scheme != "https" or not uri.netloc
+                or uri.path != "/api/v1/internal/tennis-raw-cache"
+                or uri.query or uri.fragment or not token
+                or (budget_uri.netloc and
+                    (uri.scheme, uri.netloc) != (budget_uri.scheme, budget_uri.netloc))):
+            raise RawCacheUnavailable("Remote raw cache must use the verified budget origin")
         self.url = endpoint
         self.token = token
         self.client = httpx.Client(timeout=7.0)
