@@ -67,6 +67,7 @@ def build(download: dict, readback: dict, *, run_id: str = "") -> dict:
         raise ValueError("Cohort paid gains do not reconcile")
     return {
         "schema": 1,
+        "parser_version": download.get("statistics_schema_version"),
         "status": "VERIFIED_CDB_GAIN" if persisted else "VERIFIED_NO_GAIN",
         "run_id": str(run_id),
         "reported_at_utc": datetime.now(timezone.utc).isoformat(),

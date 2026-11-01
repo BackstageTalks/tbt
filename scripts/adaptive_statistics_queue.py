@@ -32,7 +32,7 @@ class AdaptiveStatisticsQueue:
     LOW_YIELD_MIN_MATCHES = 20
     LOW_YIELD_SAMPLE_EVERY = 12
 
-    def __init__(self, candidates, bucket_coverage=None):
+    def __init__(self, candidates, bucket_coverage=None, *, verified_prior=None):
         self._order = {}
         self._pending = defaultdict(deque)
         self._populated = set()
@@ -76,6 +76,23 @@ class AdaptiveStatisticsQueue:
             (int(row.scheduled_at.year) for queue in self._pending.values()
              for row in queue), default=2026
         )
+        # Previously persisted evidence is bounded and separately tracked;
+        # never add it to the current run's paid requests or CDB value totals.
+        self._verified_prior = verified_prior or {}
+        self._prior_paid = Counter()
+        self._prior_reward = Counter()
+        for group in self._pending:
+            item = self._verified_prior.get(group, {})
+            if not isinstance(item, dict):
+                continue
+            requests = int(item.get('api_requests', 0))
+            fields = int(item.get('new_fields', 0))
+            ready = int(item.get('full_serve_return_rows', 0))
+            if requests >= self.MIN_COHORT_REQUESTS and 0 <= ready <= fields and fields >= 0:
+                # Bound historical influence; latest in-run observations win.
+                scale = min(requests, self.RECENT_MATCH_WINDOW) / requests
+                self._prior_paid[group] = min(requests, self.RECENT_MATCH_WINDOW)
+                self._prior_reward[group] = scale * (16 * ready + 0.75 * fields)
         self._coverage = {}
         for group in self._pending:
             bucket = group.rsplit(":", 1)[0]
@@ -128,14 +145,15 @@ class AdaptiveStatisticsQueue:
 
     def _eligible(self):
         return [group for group in sorted(self._pending)
-                if self._pending[group] and self._paid[group] >= self.MIN_COHORT_REQUESTS]
+                if self._pending[group] and
+                self._paid[group] + self._prior_paid[group] >= self.MIN_COHORT_REQUESTS]
 
     def _score(self, group):
         # Use paid, retry-adjusted recent yield as the dominant signal.
         # A bounded recency factor shifts comparable-yield work to the latest
         # three seasons, while very productive older cohorts can still win.
-        reward = self._recent_reward[group]
-        per_call = (18.0 + reward) / (6.0 + self._recent_requests[group])
+        reward = self._recent_reward[group] + self._prior_reward[group]
+        per_call = (18.0 + reward) / (6.0 + self._recent_requests[group] + self._prior_paid[group])
         age = max(0, self._reference_year - int(group.split(":")[1]))
         recency = (1.25 if age == 0 else 1.30 if age == 1 else
                    1.32 if age == 2 else 0.94 if age == 3 else 0.82)
@@ -144,7 +162,12 @@ class AdaptiveStatisticsQueue:
     def __next__(self):
         if not self._remaining:
             raise StopIteration
-        eligible = self._eligible() if self._total_paid >= self.MIN_TOTAL_REQUESTS else []
+        # A previous independently verified, parser-compatible cohort sample
+        # may unlock early exploitation, but exploration remains >=25%.
+        prior_total = sum(self._prior_paid.values())
+        eligible = self._eligible() if (
+            self._total_paid >= self.MIN_TOTAL_REQUESTS
+            or prior_total >= self.MIN_TOTAL_REQUESTS) else []
         adaptive = (self._served % self.EXPLORE_EVERY != 0 and len(eligible) >= 2)
         if adaptive:
             # sorted eligibility makes equal-score results deterministic.
@@ -222,6 +245,8 @@ class AdaptiveStatisticsQueue:
             "selected_rows": self._served,
             "remaining_rows": self._remaining,
             "observed_paid_requests": self._total_paid,
+            "verified_prior_used": bool(self._prior_paid),
+            "verified_prior_paid_requests_bounded": sum(self._prior_paid.values()),
             "baseline_choices": sum(self._baseline_choices.values()),
             "adaptive_choices": sum(self._adaptive_choices.values()),
             "online_adaptation_used": bool(self._adaptive_choices),
