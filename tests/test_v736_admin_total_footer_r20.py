@@ -28,7 +28,7 @@ def test_footer_status_replaces_legacy_watermark_and_matches_current_patch():
     css=(ROOT/'web/blinq-app.css').read_text(encoding='utf-8')
     assert 'id="footerSystemStatus"' in html
     assert 'footer-watermark-logo' not in html
-    assert 'Všetky systémy funkčné' in html
+    assert 'id="footerHealthLabel">BlinQ —' in html
     assert f"runtime patch 7.3.6-r{PATCH_NUM}" in css
     assert '@keyframes blinqStatusBreath' in css
 
