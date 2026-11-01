@@ -144,7 +144,7 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
     if not 1 <= max_requests <= 30:
         raise ValueError("max_requests must be 1..30")
     if phase not in {"full", "metadata", "odds", "doubles", "quality",
-                     "historical", "identity"}:
+                     "historical", "identity", "archive_2016"}:
         raise ValueError("Unknown preapproved TennisApi probe phase")
     if case is not None and phase == "full":
         raise ValueError("Focused case requires a named phase")
@@ -216,6 +216,51 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         report["counts"] = dict(Counter(
             x.get("state") for x in report["observations"].values()))
         return report
+
+    if phase == "archive_2016":
+        # Historical event selection is SOURCE-NATIVE and deterministic, not
+        # canonical CDB identity matching. No backdating or writes.
+        if case is not None:
+            raise ValueError("Archive phase does not accept case")
+        day = read("archived_day_events", "/api/tennis/events/10/7/2016")
+        raw_events = _obj(day).get("events")
+        events = raw_events if isinstance(raw_events, list) else []
+        report["archived_event_count"] = len(events)
+        valid = [
+            e for e in events
+            if (isinstance(e, dict)
+                and _nested_int(e, "id")
+                and _nested_int(e, "homeTeam", "id")
+                and _nested_int(e, "awayTeam", "id")
+                and _nested_int(e, "homeTeam", "id")
+                    != _nested_int(e, "awayTeam", "id")
+                and str(_obj(e.get("status")).get("type", "")).lower()
+                    == "finished")
+        ]
+        target = [
+            e for e in valid
+            if "wimbledon" in json.dumps(
+                _obj(e.get("tournament")), ensure_ascii=False).lower()
+        ]
+        choices = sorted(target or valid, key=lambda e: int(e["id"]))
+        report["historical_sample_policy"] = (
+            "wimbledon_finished" if target else
+            "other_finished" if valid else "no_valid_completed_event")
+        report["historical_candidate_count"] = len(target or valid)
+        if choices:
+            chosen = choices[0]
+            match_id = int(chosen["id"])
+            home_id = _nested_int(chosen, "homeTeam", "id")
+            report["historical_sample_event_id"] = match_id
+            report["historical_source_home_id"] = home_id
+            report["identity_validated_for_import"] = False
+            read("historical_2016_match_statistics",
+                 f"/api/tennis/event/{match_id}/statistics")
+            read("historical_2016_point_by_point",
+                 f"/api/tennis/event/{match_id}/point-by-point")
+            read("historical_2016_player_year_stats",
+                 f"/api/tennis/team/{home_id}/year-statistics/2016")
+        return finish()
 
     if phase != "full":
         # Proven event context: event 14494928 / season 67287 /
@@ -325,7 +370,8 @@ def main() -> None:
     parser.add_argument("--event-id", type=int, default=14494928)
     parser.add_argument("--max-requests", type=int, default=24)
     parser.add_argument("--phase", choices=["full", "metadata", "odds", "doubles",
-                                            "quality", "historical", "identity"],
+                                            "quality", "historical", "identity",
+                                            "archive_2016"],
                         default="full")
     parser.add_argument("--case", default=None)
     parser.add_argument("--out", default=".cache/tbt/tennisapi-contract/live-probe.json")
