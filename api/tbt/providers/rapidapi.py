@@ -164,6 +164,7 @@ class RapidTennisClient:
         self.retry_attempts = 5
         self.rate_limit_remaining = None
         self._category_cache: dict[str, list[dict[str, Any]]] = {}
+        self.calendar_batch_metrics = {"requests": 0, "days_cached": 0, "invalid_responses": 0}
         self._event_cache: dict[tuple[str, int], list[dict[str, Any]]] = {}
         # Provider payloads occasionally contain an impossible self-match
         # (home.id == away.id). Keep an explicit diagnostic quarantine so one
@@ -1035,6 +1036,57 @@ class RapidTennisClient:
                 return False
 
         return True
+
+    def prefetch_calendar_categories(self, days: Iterable[date]) -> int:
+        """Use a validated up-to-five-day monthly calendar as a cache only.
+
+        This never marks a match/day complete. Each ATP/WTA match is still fetched
+        and normalized via the established provider-native category/day route.
+        """
+        requested = list(days)
+        if (not 2 <= len(requested) <= 5
+                or any(not isinstance(day, date) or isinstance(day, datetime)
+                       for day in requested)
+                or len(set(requested)) != len(requested)
+                or len({(day.year, day.month) for day in requested}) != 1):
+            raise ValueError("Need 2..5 distinct dates within one month")
+        if not hasattr(self, "calendar_batch_metrics"):
+            self.calendar_batch_metrics = {
+                "requests": 0, "days_cached": 0, "invalid_responses": 0}
+        pending = sorted(day for day in requested
+                         if day.isoformat() not in self._category_cache)
+        if len(pending) < 2:
+            return 0
+        month, year = pending[0].month, pending[0].year
+        self.calendar_batch_metrics["requests"] += 1
+        payload = self._get(
+            f"/api/tennis/calendar/{month}/{year}/categories",
+            params={"days": ",".join(str(day.day) for day in pending)},
+        )
+        if (not isinstance(payload, dict) or payload.get("error")
+                or payload.get("success") is False):
+            self.calendar_batch_metrics["invalid_responses"] += 1
+            return 0
+        staged = {}
+        for day in pending:
+            raw = payload.get(day.isoformat())
+            if raw is None:
+                self.calendar_batch_metrics["invalid_responses"] += 1
+                return 0
+            try:
+                categories = self._response_rows(raw, "categories")
+            except ProviderError:
+                self.calendar_batch_metrics["invalid_responses"] += 1
+                return 0
+            ids = [self._category_id(row) for row in categories]
+            if (any(ident is None for ident in ids)
+                    or len(ids) != len(set(ids))):
+                self.calendar_batch_metrics["invalid_responses"] += 1
+                return 0
+            staged[day.isoformat()] = categories
+        self._category_cache.update(staged)
+        self.calendar_batch_metrics["days_cached"] += len(staged)
+        return len(staged)
 
     def calendar_categories(self, day: date) -> list[dict[str, Any]]:
         key = day.isoformat()
