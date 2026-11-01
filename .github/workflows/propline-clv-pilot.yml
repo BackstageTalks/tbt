@@ -1,6 +1,10 @@
 name: PropLine CLV research pilot
 
 on:
+  # Capture two comparable pre-match observations for issued TOP/VALUE picks.
+  # The collector enforces the existing daily budget and provider reserve.
+  schedule:
+    - cron: '17 * * * *'
   push:
     branches: [main]
     paths:
