@@ -83,6 +83,35 @@ def main():
                         assert 'blinq_mobile_court.webp' in backgrounds['before'], (width, backgrounds)
                         assert 'blinq_page_background.webp' in backgrounds['custom'], (width, backgrounds)
                         assert 'blinq_mobile_court.webp' in backgrounds['unsafe'], (width, backgrounds)
+                        # Chrome hides its address bar during scrolling. The court's
+                        # cover geometry must be tied to a stable viewport, not
+                        # inset:0 (which changes its image crop as bars move).
+                        court_layer = page.evaluate("""() => {
+                          const body = document.body;
+                          const start = getComputedStyle(body, '::before');
+                          const initialHeight = start.height;
+                          const initialImage = start.backgroundImage;
+                          window.scrollTo(0, Math.min(400, document.documentElement.scrollHeight - innerHeight));
+                          const scrolled = getComputedStyle(body, '::before');
+                          const snapshot = {
+                            bodyImage: getComputedStyle(body).backgroundImage,
+                            bodyAttachment: getComputedStyle(body).backgroundAttachment,
+                            position: start.position, top: start.top, bottom: start.bottom,
+                            initialHeight, scrolledHeight: scrolled.height,
+                            initialImage, scrolledImage: scrolled.backgroundImage,
+                            supportsLargeViewport: CSS.supports('height', '100lvh')
+                          };
+                          window.scrollTo(0, 0);
+                          return snapshot;
+                        }""")
+                        assert court_layer['bodyImage'] == 'none', (width, court_layer)
+                        assert court_layer['bodyAttachment'] == 'scroll', (width, court_layer)
+                        assert court_layer['position'] == 'fixed', (width, court_layer)
+                        assert court_layer['top'] == '0px', (width, court_layer)
+                        assert court_layer['supportsLargeViewport'], (width, court_layer)
+                        assert abs(float(court_layer['initialHeight'][:-2]) - 850) <= 1, (width, court_layer)
+                        assert court_layer['initialHeight'] == court_layer['scrolledHeight'], (width, court_layer)
+                        assert court_layer['initialImage'] == court_layer['scrolledImage'], (width, court_layer)
 
                     if width <= 600:
                         # Screenshot regression: the hero creative must touch its
