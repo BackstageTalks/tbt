@@ -212,7 +212,8 @@ jobs:
             [[ "$(jq -r '.source_event_date // empty' "$request")" == "2016-07-09" ]] || {
               echo "Wrong historical event date"; exit 1;
             }
-            [[ "$(jq -r '.model_changes // empty' "$request")" == "false" ]] || {
+            # jq's // operator also discards false; require the JSON boolean.
+            jq -e '.model_changes == false' "$request" > /dev/null || {
               echo "Model changes are forbidden"; exit 1;
             }
             [[ "$(jq -r '.cdb_writes_allowed // empty' "$request")" == "true" ]] || {
