@@ -7725,6 +7725,47 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const strip=x=>(x.recent_results||[]).length?(x.recent_results||[]).map(item=>`<span class="comparator-form-chip ${item.result==='W'?'won':'lost'}" title="${escapeHtml((item.result==='W'?lcopy('Win','Výhra','Výhra'):lcopy('Loss','Prehra','Prohra'))+' · '+String(item.surface||''))}">${item.result==='W'?'W':'L'}</span>`).join(''):`<small>${escapeHtml(lcopy('No verified results','Bez dostupných výsledkov','Bez dostupných výsledků'))}</small>`;
     const winRate=x=>Number(x?.matches)>0&&Number.isFinite(Number(x?.wins))?Math.max(0,Math.min(100,100*Number(x.wins)/Number(x.matches))):null;
     const bar=x=>winRate(x)===null?'':`<div class="comparator-win-meter" role="img" aria-label="${escapeHtml(lcopy('Win rate','Úspešnosť','Úspěšnost')+' '+num(winRate(x))+' %')}"><span style="width:${winRate(x).toFixed(1)}%"></span></div>`;
+    // A descriptive rolling win-rate chart, not a predicted probability. Each
+    // point corresponds to a completed match, not an equal amount of time.
+    const surfaceTrend=x=>{
+      const rows=(Array.isArray(x?.surface_recent_results)?x.surface_recent_results:[])
+        .filter(row=>(row?.result==='W'||row?.result==='L')&&/^\\d{4}-\\d{2}-\\d{2}T/.test(String(row?.played_at||'')))
+        .slice(-20);
+      const label=lcopy('Selected-surface form trend','Trend formy na povrchu','Trend formy na povrchu');
+      if(rows.length<5)return `<div class="comparator-trend-empty">${escapeHtml(label)} · ${escapeHtml(lcopy('At least 5 recorded matches required','Treba aspoň 5 evidovaných zápasov','Je třeba alespoň 5 evidovaných zápasů'))}</div>`;
+      const points=rows.slice(4).map((row,i)=>{
+        const five=rows.slice(i,i+5);
+        const rate=five.filter(item=>item.result==='W').length/5;
+        const px=13+274*(rows.length===5?0.5:i/(rows.length-5));
+        return [px.toFixed(1),(65-55*rate).toFixed(1)];
+      });
+      const line=points.map(p=>p.join(',')).join(' ');
+      const first=rows[4].played_at.slice(0,10),last=rows[rows.length-1].played_at.slice(0,10);
+      const lastRate=rows.slice(-5).filter(item=>item.result==='W').length*20;
+      const summary=`${label}: ${lastRate} %, ${rows.length} ${lcopy('matches','zápasov','zápasů')}, ${first} – ${last}`;
+      return `<div class="comparator-trend">
+        <div class="comparator-trend-head"><span>${escapeHtml(label)}</span><strong>${lastRate} %</strong></div>
+        <svg viewBox="0 0 300 76" role="img" aria-label="${escapeHtml(summary)}" focusable="false" preserveAspectRatio="none">
+          <path d="M13 10H287 M13 37.5H287 M13 65H287" class="comparator-trend-grid"/>
+          <polyline class="comparator-trend-line" points="${line}"/>
+          <circle class="comparator-trend-end" cx="${points[points.length-1][0]}" cy="${points[points.length-1][1]}" r="3"/>
+        </svg>
+        <div class="comparator-trend-axis"><time>${escapeHtml(first)}</time><time>${escapeHtml(last)}</time></div>
+        <small>${escapeHtml(lcopy('Rolling 5-match win rate · chronological matches, not equally spaced calendar time · n=','Úspešnosť za 5 zápasov · chronologicky podľa zápasov, nie kalendárnych odstupov · n=','Úspěšnost za 5 zápasů · chronologicky podle zápasů, ne kalendářních odstupů · n='))}${rows.length}</small>
+      </div>`;
+    };
+    const coverageBadge=(label,value)=>{
+      const n=Number(value);
+      const count=Number.isFinite(n)&&n>=0?Math.floor(n):0;
+      const cls=count>=10?'strong':count>=3?'partial':'thin';
+      return `<span class="comparator-evidence-badge ${cls}" title="${escapeHtml(lcopy('Coverage only, not calibrated predictive confidence','Iba pokrytie dát, nie kalibrovaná istota predikcie','Jen pokrytí dat, ne kalibrovaná jistota predikce'))}"><b>${escapeHtml(label)}</b> n=${count}</span>`;
+    };
+    const playerCoverage=x=>`<div class="comparator-evidence-badges" aria-label="${escapeHtml(lcopy('Recorded statistics by type','Počty zaznamenaných štatistík','Počty zaznamenaných statistik'))}">
+      ${coverageBadge(lcopy('Serve','Servis','Servis'),x?.surface_quality_samples?.serve)}
+      ${coverageBadge(lcopy('Return','Return','Return'),x?.surface_quality_samples?.return)}
+      ${coverageBadge(lcopy('BP saved','Záchr. BP','Odvr. BP'),x?.surface_special_rates?.break_point_save?.matches)}
+      ${coverageBadge(lcopy('BP won','Prem. BP','Prom. BP'),x?.surface_special_rates?.break_point_convert?.matches)}
+    </div>`;
     const playerForm=(player,x)=>`<article class="comparator-form-card">
       <h5>${escapeHtml(player.name||'—')}</h5>
       <div class="comparator-form-numbers"><span>${escapeHtml(lcopy('Last 5','Posledných 5','Posledních 5'))}<b>${escapeHtml(form(x.recent_5))}</b></span><span>${escapeHtml(lcopy('Last 10','Posledných 10','Posledních 10'))}<b>${escapeHtml(form(x.recent_10))}</b></span></div>
@@ -7735,6 +7776,9 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         ${bar(x.surface_recent_10)}
         <small>${escapeHtml(lcopy('Only completed matches on selected surface; not a prediction confidence score.','Len dokončené zápasy na vybranom povrchu; nejde o istotu predikcie.','Jen dokončené zápasy na vybraném povrchu; nejde o jistotu predikce.'))}</small>
       </div>
+      ${surfaceTrend(x)}
+      ${playerCoverage(x)}
+      <small class="comparator-evidence-caption">${escapeHtml(lcopy('Sample coverage, not model reliability','Pokrytie vzoriek, nie spoľahlivosť modelu','Pokrytí vzorků, ne spolehlivost modelu'))}</small>
     </article>`;
     const h2h=(record,label)=>`<div class="comparator-h2h-line"><span>${escapeHtml(label)}</span><strong>${Number(record?.matches)>0?escapeHtml(`${num(record.player1_wins)} : ${num(record.player2_wins)}`):'—'}</strong><small>${Number(record?.matches)>0?escapeHtml(`${num(record.matches)} ${lcopy('matches','zápasov','zápasů')}`):escapeHtml(lcopy('No recorded meetings','Bez evidovaných zápasov','Bez evidovaných zápasů'))}</small></div>`;
     const signals=(result.factors||[]).map(item=>`<span class="comparator-factor"><span>${escapeHtml(item.label||'')}</span><b>${escapeHtml(String(item.advantage_player_id)===String(p1.player_id)?p1.name:p2.name)}</b></span>`).join('');
