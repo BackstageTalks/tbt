@@ -1,8 +1,12 @@
-"""Stable internal Aces working price for the locally calibrated line.
+"""Locally statistically grounded ACES working odds (1.60–1.80).
 
-The value is an operative price assumption (not an external bookmaker quote).
-Keep the existing feed/issuance provider price intact for auditability.  All
-current Aces consumer calculations use the same deterministic price basis.
+The approved range comes from local statistical analysis: these are local
+statistical odds, NOT placeholders. The exact cents within the range are
+assigned deterministically by frozen event/selection identity, not calculated
+as a separate bookmaker or per-pick probability estimate. Never present them
+as externally quoted bookmaker odds. Keep the source feed, API evidence and
+immutable issuance ledger intact. Web, Telegram and statistical presentation
+reuse this same price basis.
 """
 from __future__ import annotations
 
