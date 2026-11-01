@@ -6,7 +6,7 @@ name: BlinQ targeted CDB API gapfill (UTC 17:09 reset, 98% closeout)
 # A single canonical writer runs at once.
 on:
   schedule:
-    - cron: '17 * * * *'
+    - cron: '3 * * * *'
     - cron: '41 16 * * *'
     - cron: '11 17 * * *'
   push:
