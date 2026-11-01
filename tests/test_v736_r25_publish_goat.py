@@ -42,7 +42,7 @@ def test_stale_hero_access_is_migrated_instead_of_blocking_publish():
     assert cleaned is stale
     assert "access" not in cleaned["elements"]["HERO_BANNER_1"]
     assert "click_access" not in cleaned["elements"]["HERO_BANNER_1"]
-    assert "applyV6514AdminCleanup();\n      const result=await BlinqAuth.adminSaveUiConfig(state.ui);" in APP
+    assert "applyV6514AdminCleanup();\n      const result=await BlinqAuth.adminSaveUiConfig(state.ui,status.config_revision);" in APP
 
 
 def test_goat_is_finite_and_admin_editable():

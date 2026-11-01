@@ -43,6 +43,74 @@ def test_runtime_ui_config_round_trip(monkeypatch):
     assert table.single["updated_by"] == "admin"
 
 
+def test_conditional_admin_ui_publish_checks_revision_and_version(monkeypatch):
+    from azure.core import MatchConditions
+
+    class VersionedFakeTable(FakeTable):
+        version = "etag-v1"
+
+        def get_entity(self, partition_key, row_key):
+            return admin_storage._VersionedStorageEntity(
+                super().get_entity(partition_key, row_key), self.version
+            )
+
+        def update_entity(self, entity, *, mode, etag, match_condition):
+            assert mode == "merge"
+            assert etag == self.version
+            assert match_condition == MatchConditions.IfNotModified
+            self.single = dict(entity)
+            self.version = "etag-v2"
+
+    table = VersionedFakeTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    payload = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    admin_storage.save_runtime_ui_config(payload, actor_id="admin")
+    previous = admin_storage.load_runtime_ui_config()
+    revision = admin_storage.ui_config_revision(admin_storage.resolve_ui_access_config(previous))
+    next_config = json.loads(json.dumps(previous))
+    next_config["telegram_groups"] = {"schema": 1, "enabled": True, "groups": []}
+    saved = admin_storage.save_runtime_ui_config(
+        next_config, actor_id="admin", expected_revision=revision
+    )
+    assert saved["saved"]
+    assert table.version == "etag-v2"
+    assert admin_storage.load_runtime_ui_config()["telegram_groups"] == next_config["telegram_groups"]
+    try:
+        admin_storage.save_runtime_ui_config(
+            payload, actor_id="old-browser", expected_revision=revision
+        )
+        assert False, "stale publish should have failed"
+    except ValueError as exc:
+        assert "changed" in str(exc)
+    assert table.single["updated_by"] == "admin"
+
+
+def test_conditional_ui_publish_rejects_concurrent_storage_write(monkeypatch):
+    class ConcurrentTable(FakeTable):
+        version = "etag-v1"
+
+        def get_entity(self, partition_key, row_key):
+            return admin_storage._VersionedStorageEntity(
+                super().get_entity(partition_key, row_key), self.version
+            )
+
+        def update_entity(self, entity, *, mode, etag, match_condition):
+            raise admin_storage._StorageWriteConflict("changed between GET and PUT")
+
+    table = ConcurrentTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    payload = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    admin_storage.save_runtime_ui_config(payload)
+    revision = admin_storage.ui_config_revision(admin_storage.resolve_ui_access_config(payload))
+    try:
+        admin_storage.save_runtime_ui_config(
+            payload, expected_revision=revision,
+        )
+        assert False, "CAS conflict should have failed"
+    except ValueError as exc:
+        assert "changed during publishing" in str(exc)
+
+
 def test_runtime_ui_config_is_compressed_for_azure_table_property(monkeypatch):
     table = FakeTable()
     monkeypatch.setattr(admin_storage, "_table", lambda name: table)
