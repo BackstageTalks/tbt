@@ -1755,14 +1755,14 @@
     const host=$('footerSystemStatus'),time=$('footerLastUpdate'),feedTime=$('footerFeedUpdate');if(!host||!time||!feedTime)return;
     const feedGeneratedAt=state.feed?.generated_at||'';
     feedTime.textContent=Number.isFinite(Date.parse(feedGeneratedAt))
-      ?lcopy(`Last update: ${fmtTime(feedGeneratedAt)}`,`Posledná aktualizácia: ${fmtTime(feedGeneratedAt)}`,`Poslední aktualizace: ${fmtTime(feedGeneratedAt)}`)
-      :lcopy('Last update: —','Posledná aktualizácia: —','Poslední aktualizace: —');
+      ?lcopy(`Update: ${fmtTime(feedGeneratedAt)}`,`Aktualizácia: ${fmtTime(feedGeneratedAt)}`,`Aktualizace: ${fmtTime(feedGeneratedAt)}`)
+      :lcopy('Update: —','Aktualizácia: —','Aktualizace: —');
     // Match-status worker snapshot time is provided by the authenticated feed.
     // Do not substitute feed generation or LIVE radar timestamps for a match scan.
     const matchScanAt=state.feed?.match_status_updated_at||'';
     time.textContent=Number.isFinite(Date.parse(matchScanAt))
-      ?lcopy(`Last scan: ${fmtTime(matchScanAt)}`,`Posledný scan: ${fmtTime(matchScanAt)}`,`Poslední sken: ${fmtTime(matchScanAt)}`)
-      :lcopy('Last scan: —','Posledný scan: —','Poslední sken: —');
+      ?lcopy(`Scan: ${fmtTime(matchScanAt)}`,`Scan: ${fmtTime(matchScanAt)}`,`Sken: ${fmtTime(matchScanAt)}`)
+      :lcopy('Scan: —','Scan: —','Sken: —');
     const heartbeat=state.liveRadarHeartbeat||state.userLiveRadarStatus||{};
     const raw=heartbeat?.scanned_at||heartbeat?.updated_at||state.feed?.generated_at||'';
     const parsed=Date.parse(raw);
