@@ -7729,7 +7729,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       <div class="comparator-form-numbers"><span>${escapeHtml(lcopy('Last 5','Posledných 5','Posledních 5'))}<b>${escapeHtml(form(x.recent_5))}</b></span><span>${escapeHtml(lcopy('Last 10','Posledných 10','Posledních 10'))}<b>${escapeHtml(form(x.recent_10))}</b></span></div>
       ${bar(x.recent_10)}
       <div class="comparator-form-tape" aria-label="${escapeHtml(lcopy('Results oldest to newest','Výsledky od najstaršieho','Výsledky od nejstaršího'))}">${strip(x)}</div>
-      <p>${escapeHtml(lcopy('Surface last 10','Povrch · posledných 10','Povrch · posledních 10'))}: <b>${escapeHtml(form(x.surface_recent_10))}</b></p>
+      <div class="comparator-surface-form">
+        <div class="comparator-surface-caption"><span>${escapeHtml(lcopy('Surface last 10','Povrch · posledných 10','Povrch · posledních 10'))}</span><b>${escapeHtml(form(x.surface_recent_10))}</b></div>
+        ${bar(x.surface_recent_10)}
+        <small>${escapeHtml(lcopy('Only completed matches on selected surface; not a prediction confidence score.','Len dokončené zápasy na vybranom povrchu; nejde o istotu predikcie.','Jen dokončené zápasy na vybraném povrchu; nejde o jistotu predikce.'))}</small>
+      </div>
     </article>`;
     const h2h=(record,label)=>`<div class="comparator-h2h-line"><span>${escapeHtml(label)}</span><strong>${Number(record?.matches)>0?escapeHtml(`${num(record.player1_wins)} : ${num(record.player2_wins)}`):'—'}</strong><small>${Number(record?.matches)>0?escapeHtml(`${num(record.matches)} ${lcopy('matches','zápasov','zápasů')}`):escapeHtml(lcopy('No recorded meetings','Bez evidovaných zápasov','Bez evidovaných zápasů'))}</small></div>`;
     const signals=(result.factors||[]).map(item=>`<span class="comparator-factor"><span>${escapeHtml(item.label||'')}</span><b>${escapeHtml(String(item.advantage_player_id)===String(p1.player_id)?p1.name:p2.name)}</b></span>`).join('');
