@@ -232,6 +232,21 @@ def main():
                 assert page.locator("#comparatorSearch0 .comparator-search-primary").is_disabled()
                 assert "Identitu treba overiť" in page.locator("#comparatorSearch0").inner_text()
 
+                # Re-select the canonical entry after checking ambiguous
+                # suggestions (editing a search clears that side's selection).
+                page.evaluate("""() => {
+                    window.BlinqAuth.comparatorPlayers=async()=>({players:[
+                        {player_id:'163480',name:'Alexander Bublik',tour:'atp',rank:13},
+                        {player_id:'other-test',name:'Bubli Example',tour:'atp'}
+                    ]});
+                }""")
+                page.locator("#comparatorPlayer0").fill("bubli")
+                page.locator("#comparatorSearch0 [data-player-id='163480']").wait_for()
+                page.locator("#comparatorSearch0 [data-player-id='163480']").click()
+                assert page.evaluate(
+                    "comparatorHarness.state.comparator.players[0].player_id"
+                ) == "163480"
+
                 # Neither field can select the same person twice, even when
                 # the second field receives a different historical source ID.
                 page.evaluate("""() => {
