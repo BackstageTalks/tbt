@@ -60,6 +60,7 @@ jobs:
           set -euo pipefail
           python scripts/recover_cdb_opponent_service_rates.py \
             --mode stage \
+            --isolate-provider-collisions --expected-provider-quarantine 6 \
             --history-dir .cache/tbt/cdb-complements/history \
             --out-dir .cache/tbt/cdb-complements/stage
           python - <<'PY'
@@ -68,6 +69,7 @@ jobs:
           r=json.loads(Path(".cache/tbt/cdb-complements/stage/report.json").read_text())
           c=r["counts"]
           assert r["production_mutated"] is False and r["provider_requests"] == 0
+          assert c.get("excluded_ambiguous_provider_rows") == 6
           assert c["examined"] >= 993759, "Canonical regression"
           assert c.get("staged_matches", 0) < c["examined"]
           assert c.get("new_stat_values", 0) >= c.get("staged_matches", 0)
@@ -80,6 +82,7 @@ jobs:
           set -euo pipefail
           python scripts/recover_cdb_opponent_service_rates.py \
             --mode stage --pairwise \
+            --isolate-provider-collisions --expected-provider-quarantine 6 \
             --history-dir .cache/tbt/cdb-complements/history \
             --out-dir .cache/tbt/cdb-complements/pairwise
           python - <<'PY'
@@ -95,6 +98,7 @@ jobs:
           assert isinstance(sha,str) and re.fullmatch("[a-f0-9]{64}",sha)
           for result in (strict,pairwise):
             assert result["schema"]==1 and result["production_mutated"] is False
+            assert result["counts"].get("excluded_ambiguous_provider_rows") == 6
             assert result["provider_requests"]==0
             counts=result["counts"]
             assert counts["examined"]>=993759
