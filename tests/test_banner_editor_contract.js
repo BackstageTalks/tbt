@@ -70,4 +70,12 @@ assert.ok(!css.includes('.dashboard-hero-copy{left:40px!important}'),'old fixed 
 assert.ok(mobileVisual.includes('max-width:var(--hero-copy-mobile-width,70%)!important'),'mobile copy width must respect Admin, not cap at 75%');
 assert.ok(!mobileVisual.includes('.dashboard-hero-copy{padding:8px 18px!important;}'),'mobile fixed inset must not displace Admin coordinates');
 assert.ok(index.includes('banner-position-fix=20261101-1'),'updated banner style cache revision');
+for(const field of ['desktop_image_fit','mobile_image_fit','desktop_image_zoom','mobile_image_zoom'])
+  assert.ok(app.includes('data-simple-banner-field="'+field+'"'),'missing crop field: '+field);
+for(const token of ['--hero-img-fit:','--hero-img-mobile-fit:','--hero-img-zoom:','--hero-img-mobile-zoom:'])
+  assert.ok(app.includes(token),'missing device crop variable: '+token);
+for(const token of ['object-fit:var(--hero-img-fit,cover)!important','object-fit:var(--hero-img-mobile-fit,cover)!important',
+  'scale:var(--hero-img-zoom,1)!important','scale:var(--hero-img-mobile-zoom,1)!important'])
+  assert.ok(css.includes(token),'missing crop CSS: '+token);
+assert.ok(index.includes('banner-cover-controls=20261101-2'),'banner JS/CSS cache must be versioned');
 console.log('PASS: banner editor contract');

@@ -9198,6 +9198,25 @@ body#blinqPremium .results-mobile-filter-toggle{display:none}
    --hero-copy-x / --hero-copy-mobile-x or add a preview-only text offset. */
 
 
+/* Per-device hero fit and anchored crop zoom, identical in Admin and public.
+   Individual scale stays independent of image-effect animation transforms. */
+body#blinqPremium #dashboardHero .hero-slide-image{
+  object-fit:var(--hero-img-fit,cover)!important;
+  scale:var(--hero-img-zoom,1)!important;
+  transform-origin:var(--hero-img-x,50%) var(--hero-img-y,50%)!important;
+}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview{overflow:hidden!important}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.desktop>img{
+  object-fit:var(--hero-img-fit,cover)!important;
+  scale:var(--hero-img-zoom,1)!important;
+  transform-origin:var(--hero-img-x,50%) var(--hero-img-y,50%)!important;
+}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile>img{
+  object-fit:var(--hero-img-mobile-fit,cover)!important;
+  scale:var(--hero-img-mobile-zoom,1)!important;
+  transform-origin:var(--hero-img-mobile-x,50%) var(--hero-img-mobile-y,50%)!important;
+}
+
 /* 7.3.7 — Admin-controlled hero crop/copy layout + Results density */
 body#blinqPremium #dashboardHero .hero-slide-image,
 body#blinqPremium #dashboardHero .hero-media img{
@@ -9298,6 +9317,11 @@ body#blinqPremium .admin-banner-copy-editor textarea[data-simple-banner-field="h
   body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-slide-image,
   body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-media img{
     object-position:var(--hero-img-mobile-x,50%) var(--hero-img-mobile-y,50%)!important;
+  }
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-slide-image{
+    object-fit:var(--hero-img-mobile-fit,cover)!important;
+    scale:var(--hero-img-mobile-zoom,1)!important;
+    transform-origin:var(--hero-img-mobile-x,50%) var(--hero-img-mobile-y,50%)!important;
   }
   body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero-copy,
   body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-copy{
