@@ -61,6 +61,9 @@ assert.ok(app.includes('input[data-simple-banner-field="site_mobile_background_u
 assert.ok(app.includes("safePhotoUrl(hero.site_mobile_background_url)"),'only safe published mobile URLs reach CSS');
 assert.ok(court.includes('var(--blinq-mobile-court-bg,url("/assets/blinq_mobile_court.webp"))'),'mobile CSS has safe existing fallback');
 assert.ok(index.includes('mobile-page-background=20261101-1'),'app and CSS cache revision updated');
+for(const spec of ['Horný banner · Hero bannery','Odporúčané rozmery pozadia','1920 × 1080 px','1080 × 1920 px','do 600 px','601 px a viac','nie obrázok horného hero bannera']) assert.ok(app.includes(spec),'background guide missing: '+spec);
+assert.ok(css.includes('.admin-background-size-guide{'),'background guide needs distinct layout');
+assert.ok(index.includes('background-size-help=20261101-1'),'browser must load updated admin UI and CSS');
 const mobileVisual=fs.readFileSync('web/blinq-mobile-visual.css','utf8');
 assert.ok(!css.includes('left:48px!important;padding-inline:0!important;'),'old fixed desktop hero offset must not override Admin X');
 assert.ok(!css.includes('.dashboard-hero-copy{left:40px!important}'),'old fixed mobile hero offset must not override Admin X');
