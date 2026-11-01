@@ -63,7 +63,7 @@ jobs:
       BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
       BLINQ_SHARED_API_BUDGET_PURPOSE: history
       BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'
-      BLINQ_PROVIDER_REQUEST_RESERVE: '750'
+      BLINQ_PROVIDER_REQUEST_RESERVE: '500'  # Same protected headroom as the shared 14,500/15,000 contract
 
     steps:
       - uses: actions/checkout@v4
@@ -138,9 +138,12 @@ jobs:
           print('')
           print(f"- Players in current feed: **{report['players_requested']:,}**")
           print(f"- Rank available: **{report['players_with_rank']:,}**")
+          print(f"- Per-player ranking lookups skipped (fresh fallback cache): **{report.get('fallback_rankings_skipped_recent', 0):,}**")
           print(f"- Country/flag available: **{report['players_with_country']:,}**")
           print(f"- New photos downloaded: **{report['photos_downloaded']:,}**")
           print(f"- Cached photos reused: **{report['photos_cached']:,}**")
+          print(f"- Player detail lookups skipped (complete static profile): **{report.get('player_details_cached_complete', 0):,}**")
+          print(f"- Player detail lookups skipped (fresh prior response): **{report.get('player_details_skipped_recent', 0):,}**")
           print(f"- Photo unavailable: **{report['photos_unavailable']:,}**")
           print(f"- Tournaments in current feed: **{report.get('tournaments_requested', 0):,}**")
           print(f"- Tournament logos downloaded: **{report.get('tournament_logos_downloaded', 0):,}**")

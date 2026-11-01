@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import enrich_player_cards as enrichment
 
 
@@ -75,3 +77,47 @@ def test_current_players_are_unique_and_prioritised_by_confidence():
     players = enrichment._current_players(feed)
     assert [row["id"] for row in players] == ["10", "30", "20"]
     assert players[0]["priority"] == 0.95
+
+
+def test_player_details_complete_does_not_need_repeat_api_fetch():
+    profile = {
+        "birth_date": "1999-01-01", "height_cm": 185, "hand": "R",
+        "birthplace": "City A", "residence": "City B", "country_code": "SK",
+    }
+    assert enrichment._player_details_complete(profile)
+    assert not enrichment._player_details_complete({**profile, "hand": None})
+
+
+def test_optional_player_details_cooldown_does_not_hide_future_or_stale_gaps():
+    now = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
+    profile = {"player_detail_checked_at": (now - timedelta(days=1)).isoformat()}
+    assert enrichment._recently_checked_player_details(profile, now=now)
+    assert not enrichment._recently_checked_player_details(
+        {"player_detail_checked_at": (now - timedelta(days=8)).isoformat()}, now=now
+    )
+    assert not enrichment._recently_checked_player_details(
+        {"player_detail_checked_at": (now + timedelta(minutes=1)).isoformat()}, now=now
+    )
+    assert not enrichment._recently_checked_player_details(
+        {"player_detail_checked_at": "invalid"}, now=now
+    )
+    assert not enrichment._recently_checked_player_details(
+        {"player_detail_checked_at": "2026-11-01T10:00:00"}, now=now
+    )
+    assert not enrichment._recently_checked_player_details({}, now=now)
+
+
+def test_missing_player_ranking_fallback_retries_after_one_day():
+    now = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
+    stamp = {"ranking_fallback_checked_at": (now - timedelta(hours=6)).isoformat()}
+    assert enrichment._recently_checked_player_rankings(stamp, now=now)
+    assert not enrichment._recently_checked_player_rankings(
+        {"ranking_fallback_checked_at": (now - timedelta(days=2)).isoformat()}, now=now
+    )
+    assert not enrichment._recently_checked_player_rankings(
+        {"ranking_fallback_checked_at": (now + timedelta(minutes=1)).isoformat()}, now=now
+    )
+    assert not enrichment._recently_checked_player_rankings(
+        {"ranking_fallback_checked_at": "bad"}, now=now
+    )
+    assert not enrichment._recently_checked_player_rankings({}, now=now)
