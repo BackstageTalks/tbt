@@ -1,10 +1,7 @@
 name: BlinQ read-only actual audited-source vs current CDB gap probe
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/blinq-actual-repo-to-cdb-gap-probe.yml
+  # Manual-only audit; retired redundant self-file push trigger.
   workflow_dispatch:
 
 permissions:
