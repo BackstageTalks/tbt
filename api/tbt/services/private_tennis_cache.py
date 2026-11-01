@@ -19,7 +19,7 @@ TABLE = "BlinQTennisRawCache"
 PARTITION = "tennisapi1"
 LEASE_SECONDS = 900
 MAX_RAW_BYTES = 256_000
-MAX_COMPRESSED_BYTES = 42_000
+MAX_COMPRESSED_BYTES = 28_000  # Azure Table string properties are UTF-16 (64 KiB cap)
 
 
 class CacheStoreUnavailable(RuntimeError):
@@ -75,8 +75,11 @@ def _unpack(row):
         packed = str(row["body"])
         if len(packed) > 65_000:
             raise ValueError("Stored body too large")
-        raw = zlib.decompress(base64.b64decode(packed, validate=True))
-        if len(raw) > MAX_RAW_BYTES or hashlib.sha256(raw).hexdigest() != row["digest"]:
+        zipped = base64.b64decode(packed, validate=True)
+        inflater = zlib.decompressobj()
+        raw = inflater.decompress(zipped, MAX_RAW_BYTES + 1)
+        if (not inflater.eof or inflater.unconsumed_tail or len(raw) > MAX_RAW_BYTES
+                or hashlib.sha256(raw).hexdigest() != row["digest"]):
             raise ValueError("Invalid stored raw digest")
         value = json.loads(raw)
         if not isinstance(value, (dict, list)):
