@@ -684,7 +684,7 @@ def test_match_status_accepts_native_and_external_24_7_scheduler():
     from pathlib import Path
     workflow = (Path(__file__).resolve().parents[1] /
                 ".github/workflows/match-status.yml").read_text()
-    assert "cron: '0,30 * * * *'" in workflow
+    assert "cron: '0,15,30,45 * * * *'" in workflow
     assert "timezone:" not in workflow
     assert "workflow_dispatch:" in workflow
 
