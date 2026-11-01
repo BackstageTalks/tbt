@@ -1,6 +1,12 @@
 name: MoviOdds verified tennis JSON archive to Drive
 
 on:
+  # One-shot integration smoke, scoped to this exact operator probe marker.
+  # No other push is permitted to dispatch the archive upload.
+  push:
+    branches: [main]
+    paths:
+      - 'ops/moviodds-archive-smoke-20261101.json'
   workflow_dispatch:
     inputs:
       date:
@@ -45,9 +51,13 @@ jobs:
         shell: bash
         env:
           REQUESTED_DAY: ${{ inputs.date }}
+          RUN_EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          if [[ -n "$REQUESTED_DAY" ]]; then
+          if [[ "$RUN_EVENT" == "push" ]]; then
+            # Dedicated smoke trigger verifies the last fully finished UTC day.
+            days=("$(date -u -d 'yesterday' +%F)")
+          elif [[ -n "$REQUESTED_DAY" ]]; then
             days=("$REQUESTED_DAY")
           else
             # Automatically repair one/two missed archive days and capture
