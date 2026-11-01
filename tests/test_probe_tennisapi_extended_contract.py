@@ -220,7 +220,9 @@ def test_archive_2016_selects_provider_native_finished_event():
         def _get(self, path, params=None, *, enrichment=False):
             self.request_count += 1
             self.paths.append((path, params))
-            if path == "/api/tennis/events/10/7/2016":
+            if path == "/api/tennis/calendar/10/7/2016/categories":
+                return {"categories": [{"id": -100, "name": "Grand Slam"}]}
+            if path == "/api/tennis/category/-100/events/10/7/2016":
                 return {"events": [
                     {"id": 900, "homeTeam": {"id": 4},
                      "awayTeam": {"id": 5}, "status": {"type": "finished"},
@@ -228,39 +230,76 @@ def test_archive_2016_selects_provider_native_finished_event():
                     {"id": 800, "homeTeam": {"id": 31},
                      "awayTeam": {"id": 32}, "status": {"type": "finished"},
                      "tournament": {"name": "Wimbledon"}},
+                    {"id": 700, "homeTeam": {"id": 3, "name": "A / B"},
+                     "awayTeam": {"id": 4}, "status": {"type": "finished"},
+                     "tournament": {"name": "Wimbledon Doubles"}},
                     {"id": 100, "homeTeam": {"id": 1},
                      "awayTeam": {"id": 2}, "status": {"type": "inprogress"},
                      "tournament": {"name": "Wimbledon"}},
                 ]}
             return {"statistics": []}
+
     client = Historical()
     report = run_probe(client, event_id=14494928, max_requests=4,
                        phase="archive_2016")
     assert report["historical_sample_event_id"] == 800
     assert report["historical_sample_policy"] == "wimbledon_finished"
     assert report["historical_source_home_id"] == 31
+    assert report["archived_category_count"] == 1
     assert report["request_count"] == 4
     assert client.paths == [
-        ("/api/tennis/events/10/7/2016", None),
+        ("/api/tennis/calendar/10/7/2016/categories", None),
+        ("/api/tennis/category/-100/events/10/7/2016", None),
         ("/api/tennis/event/800/statistics", None),
         ("/api/tennis/event/800/point-by-point", None),
-        ("/api/tennis/team/31/year-statistics/2016", None),
     ]
+    assert report["observations"]["historical_2016_player_year_stats"]["state"] == "budget_cap"
     assert report["eligible_for_cdb_import"] is False
     assert report["identity_validated_for_import"] is False
 
 
-def test_archive_2016_empty_day_never_invents_a_match_id():
+def test_archive_2016_empty_category_day_never_invents_a_match_id():
     class Empty(StubClient):
         def _get(self, path, params=None, *, enrichment=False):
             self.request_count += 1
             self.paths.append((path, params))
+            if path == "/api/tennis/calendar/10/7/2016/categories":
+                return {"categories": [{"id": -100, "name": "Grand Slam"}]}
             return {"events": []}
     client = Empty()
     result = run_probe(client, event_id=14494928, max_requests=4,
                        phase="archive_2016")
-    assert result["request_count"] == 1
+    assert result["request_count"] == 2
     assert result["historical_sample_policy"] == "no_valid_completed_event"
+    assert "historical_sample_event_id" not in result
+
+
+def test_archive_2016_no_calendar_coverage_is_not_2016_no_matches():
+    class Unsupported(StubClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            self.request_count += 1
+            self.paths.append((path, params))
+            return {}  # Provider HTTP 204 normalized by client
+    client = Unsupported()
+    result = run_probe(client, event_id=14494928, max_requests=4,
+                       phase="archive_2016")
+    assert result["request_count"] == 1
+    assert result["historical_sample_policy"] == "category_calendar_unavailable"
+    assert "historical_sample_event_id" not in result
+    assert all("/api/tennis/events/" not in p for p, _ in client.paths)
+
+
+def test_archive_2016_missing_grand_slam_category_does_not_guess_id():
+    class OtherCategory(StubClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            self.request_count += 1
+            self.paths.append((path, params))
+            return {"categories": [{"id": 3, "name": "ATP"}]}
+    client = OtherCategory()
+    result = run_probe(client, event_id=14494928, max_requests=4,
+                       phase="archive_2016")
+    assert result["historical_sample_policy"] == "grand_slam_category_missing"
+    assert result["request_count"] == 1
     assert "historical_sample_event_id" not in result
 
 
