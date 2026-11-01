@@ -7,6 +7,7 @@
   "expected_old_only": 97736,
   "provider_requests": 0,
   "model_changes": false,
-  "reason": "Only stage backup-only canonical 2026 identities without changing live 2,927 rows or any other partitions; quarantine 9 old/current conflicts",
-  "write_policy": "Global lock, immutable fresh prewrite backup, CAS, existing ReleaseStore, complete independent CDB readback"
+  "reason": "Repeat guarded read-only CDB 2026 recovery dry-run with schema-only drift report; never write or coerce Parquet data.",
+  "write_policy": "Global lock, immutable fresh prewrite backup, CAS, existing ReleaseStore, complete independent CDB readback",
+  "diagnostic_attempt": 1
 }
