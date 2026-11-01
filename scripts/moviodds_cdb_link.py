@@ -238,7 +238,7 @@ def link_archive(data: dict, matches: list, *, archive_sha256: str) -> tuple[lis
                                     "canonical": _signature(m),
                                     # Include all observed values so dry-run
                                     # detects conflicts introduced after stage.
-                                    "incoming_stats": values,
+                                    "incoming_stats": added,
                                     "baseline_stats": dict(old),
                                     "provenance": [{
                                         "source": "moviodds",
