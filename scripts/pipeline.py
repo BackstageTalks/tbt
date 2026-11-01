@@ -1713,7 +1713,7 @@ def main():
         # after API Pro and PropLine. Existing verified prices always win.
         # The external archive holds price movements, so no permanent socket
         # or new RapidAPI calls are required for the morning odds snapshot.
-        if projection_odds_cap and predictions:
+        if predictions:
             mov_existing = {
                 event_id: set(markets)
                 for event_id, markets in available_projection_markets.items()
@@ -1822,7 +1822,7 @@ def main():
             ),
         )
         projection_odds_report["discovery"] = projection_discovery_report
-        if projection_odds_cap and (ace_picks or sg_picks):
+        if (projection_odds_cap or prop_market_payloads) and (ace_picks or sg_picks):
             ace_picks, sg_picks, attachment_report = enrich_projection_odds(
                 provider, ace_picks, sg_picks,
                 max_events=projection_odds_cap, provider_id=1,
