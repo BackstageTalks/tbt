@@ -169,7 +169,7 @@ jobs:
           test -s "$request" || { echo "Missing controlled data request"; exit 1; }
           mode="$(jq -r '.mode // empty' "$request")"
           case "$mode" in
-            train|backtest|feature-audit|production-preflight|comparator-build|deploy-current|ace-statistics|statistics|extras|identity) ;;
+            train|backtest|feature-audit|production-preflight|comparator-build|deploy-current|ace-statistics|statistics|extras|identity|history) ;;
             *) echo "Push data request forbids mode: $mode"; exit 1 ;;
           esac
           promote="$(jq -r '.promote // false' "$request")"
@@ -193,6 +193,32 @@ jobs:
           fi
           start_date="$(jq -r '.start // empty' "$request")"
           end_date="$(jq -r '.end // empty' "$request")"
+          # Only this independently witnessed archived source event may use
+          # the existing native history importer through a push request.
+          # All other history windows still require ordinary workflow_dispatch.
+          if [[ "$mode" == "history" ]]; then
+            [[ "$start_date" == "2016-07-09" && "$end_date" == "2016-07-10" ]] || {
+              echo "History push request restricted to witnessed Wimbledon 2016 window"; exit 1;
+            }
+            [[ "$promote" == "false" ]] || { echo "History request forbids model promotion"; exit 1; }
+            (( 10#$max_requests <= 40 )) || { echo "History witness request limit is 40"; exit 1; }
+            [[ "$(jq -r '.source // empty' "$request")" == "tennisapi1" ]] || {
+              echo "Native history source must be tennisapi1"; exit 1;
+            }
+            [[ "$(jq -r '.source_event_id // empty' "$request")" == "7115726" ]] || {
+              echo "Missing proven 2016 source event"; exit 1;
+            }
+            [[ "$(jq -r '.source_event_date // empty' "$request")" == "2016-07-09" ]] || {
+              echo "Wrong historical event date"; exit 1;
+            }
+            [[ "$(jq -r '.model_changes // empty' "$request")" == "false" ]] || {
+              echo "Model changes are forbidden"; exit 1;
+            }
+            [[ "$(jq -r '.cdb_writes_allowed // empty' "$request")" == "true" ]] || {
+              echo "Explicit canonical import approval missing"; exit 1;
+            }
+            echo "BLINQ_SHARED_API_BUDGET_PURPOSE=history" >> "$GITHUB_ENV"
+          fi
           pre_reset_override="$(jq -r '.pre_reset_provider_header_override // false' "$request")"
           if [[ "$pre_reset_override" == "true" ]]; then
             [[ "$mode" == "statistics" ]] || { echo "Provider-header override is statistics-only"; exit 1; }
