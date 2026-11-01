@@ -5,5 +5,12 @@
   "cdb_write_authorized": false,
   "production_model_change_authorized": false,
   "requested_dates": "last_3_completed_utc_days",
-  "trigger_kind": "single_read_only_smoke"
+  "trigger_kind": "single_read_only_smoke",
+  "probe_revision": 2,
+  "expected_verified_utc_days": [
+    "2026-10-31",
+    "2026-10-30"
+  ],
+  "missing_source_day": "2026-10-29",
+  "reason": "Continue available dates while quarantining 503 unverified historical day; verify actual CDB dry-run"
 }
