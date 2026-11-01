@@ -220,6 +220,7 @@ jobs:
           node --check web/auth.js
           node --check web/responsive.js
           node tests/test_projection_display.cjs
+          node tests/test_match_detail_clv.cjs
           node tests/test_frontend_runtime_contract.js
           node tests/test_player_avatar_fallback.cjs
           node tests/test_auth_refresh_race.js
