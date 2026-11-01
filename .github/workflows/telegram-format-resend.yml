@@ -58,12 +58,12 @@ jobs:
           p=Path(".github/telegram-format-resend-tick.json")
           request=json.loads(p.read_text(encoding="utf-8"))
           assert request.get("betting_day")=="2026-11-01"
-          assert request.get("revision")=="aces-local-prices-20261101-v1"
+          assert request.get("revision")=="aces-standard-feed-20261101-v2"
           assert request.get("preserve_original_confirmed_picks") is True
           assert request.get("aces_prices_corrected") is True
           print("Approved one-time 1 Nov ACES price correction trigger verified")
           PY
-          python scripts/telegram_offer_publisher.py prepare --preview-format --preview-revision aces-local-prices-20261101-v1 \
+          python scripts/telegram_offer_publisher.py prepare --preview-format --preview-revision aces-standard-feed-20261101-v2 \
             --state .private-telegram/ops/telegram-bot-state.json \
             --config-url "$BLINQ_URL/api/v1/ui-config"
           if [[ -s /tmp/blinq-telegram/ready ]]; then
