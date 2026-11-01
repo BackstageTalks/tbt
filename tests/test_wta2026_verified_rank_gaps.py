@@ -52,3 +52,34 @@ def test_same_day_future_or_stale_week_fails_closed(week):
 def test_duplicate_canonical_match_id_refused():
     with pytest.raises(ValueError,match="Duplicate"):
         audit_rows([match(),match()],Rank(),SHA,{})
+
+
+
+def test_private_rank_census_uses_pinned_six_row_readonly_identity_view(monkeypatch, tmp_path):
+    import sys
+    from types import SimpleNamespace
+    from audit_wta2026_verified_rank_gaps import load_verified_rank_audit_cdb
+
+    calls = []
+    safe = [match()]
+    def load(directory, **kwargs):
+        calls.append((directory, kwargs))
+        return safe
+    monkeypatch.setitem(sys.modules, "recover_cdb_opponent_service_rates",
+                        SimpleNamespace(_load=load))
+    assert load_verified_rank_audit_cdb(tmp_path) is safe
+    assert calls == [(tmp_path, {"isolate_provider_collisions": True,
+                                 "expected_provider_quarantine": 6})]
+
+
+def test_private_rank_census_fails_closed_on_quarantine_drift(monkeypatch, tmp_path):
+    import sys
+    from types import SimpleNamespace
+    from audit_wta2026_verified_rank_gaps import load_verified_rank_audit_cdb
+
+    def reject(*_, **__):
+        raise ValueError("Expected provider-ID quarantine disappeared")
+    monkeypatch.setitem(sys.modules, "recover_cdb_opponent_service_rates",
+                        SimpleNamespace(_load=reject))
+    with pytest.raises(ValueError, match="quarantine"):
+        load_verified_rank_audit_cdb(tmp_path)
