@@ -2,10 +2,6 @@ name: CDB WTA canonical snapshot preflight (read only)
 
 'on':
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/cdb-wta-snapshot-preflight.yml
 
 permissions:
   contents: read

@@ -1,8 +1,5 @@
 name: BlinQ CDB 2026 old-vs-current identity audit (read only)
 'on':
-  push:
-    branches: [main]
-    paths: ['.github/workflows/cdb-2026-loss-audit.yml']
   workflow_dispatch:
 permissions:
   contents: read
