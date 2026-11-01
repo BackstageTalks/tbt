@@ -11,7 +11,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from ace_working_odds import PRICE_BASIS, working_ace_odds, verified_ace_odds, selected_ace_odds  # noqa: E402
+from ace_working_odds import PRICE_BASIS, working_ace_odds, verified_ace_odds, selected_ace_odds, eligible_local_ace_projection  # noqa: E402
 import telegram_daily_results as daily  # noqa: E402
 
 
@@ -149,3 +149,40 @@ def test_telegram_prices_verified_aces_and_fallback_without_model_changes():
         assert issued["odds"] == price
         assert issued["price_basis"] == PRICE_BASIS
         assert placeholder["odds"] == 2.0
+
+
+def test_local_aces_publishes_only_qualified_new_model_predictions():
+    base = {
+        "event_id": "fixture-20261102", "scheduled_at": "2026-11-02T14:00:00Z",
+        "market": "aces", "price_status": "projection_only", "odds": None,
+        "projection_model": "ace-count-projection-v4",
+        "player1": {"id": "p1", "name": "Alpha"},
+        "player2": {"id": "p2", "name": "Beta"}, "selection_id": "p1",
+        "projection": 8.4, "opponent_projection": 4.2,
+        "projection_confidence": 0.79,
+    }
+    assert eligible_local_ace_projection(base)
+    price, external = selected_ace_odds(base)
+    assert not external and 1.60 <= price <= 1.80
+    for patch in (
+        {"scheduled_at": "2026-10-31T13:00:00Z"},
+        {"scheduled_at": "2026-11-02T14:00:00"},
+        {"selection_id": "unmatched"},
+        {"price_status": "priced_projection"},
+        {"odds": 2.0},
+        {"market": "double_faults"},
+        {"projection_model": "other"},
+        {"projection_confidence": 0.59},
+        {"projection": None},
+        {"opponent_projection": float("nan")},
+        {"event_id": ""},
+    ):
+        assert not eligible_local_ace_projection({**base, **patch}), patch
+    provider = {
+        **base, "odds": 1.93, "price_status": "priced_projection",
+        "odds_contract_version": "ace_df_real_api_v1",
+        "provider_id": 2, "odds_source": "propline",
+        "odds_bookmaker": "BookA", "captured_at": "2026-11-02T08:00:00Z",
+    }
+    assert not eligible_local_ace_projection(provider)
+    assert selected_ace_odds(provider) == (1.93, True)
