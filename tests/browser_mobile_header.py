@@ -85,6 +85,48 @@ def main():
                         assert 'blinq_mobile_court.webp' in backgrounds['unsafe'], (width, backgrounds)
 
                     if width <= 600:
+                        # Screenshot regression: the hero creative must touch its
+                        # rounded frame, not sit 10px below a dark top strip.
+                        hero_gap = page.evaluate("""() => {
+                          const frame=document.querySelector('#dashboardHero');
+                          const slide=frame?.querySelector('.hero-slide.is-active');
+                          if (!slide) return null;
+                          return {margin:getComputedStyle(slide).marginTop,
+                            top:slide.getBoundingClientRect().top-frame.getBoundingClientRect().top};
+                        }""")
+                        assert hero_gap and hero_gap['margin'] == '0px', (width, hero_gap)
+                        assert abs(hero_gap['top']) <= 2, (width, hero_gap)
+
+                        # Real ace card renderer: show its unchanged numeric value,
+                        # but never repeat the lower 'projekcia' label on mobile.
+                        ace_caption = page.evaluate("""() => {
+                          const hub=document.getElementById('dailyHub');
+                          const body=document.getElementById('dailyHubBody');
+                          const oldTab=hub.dataset.tab, oldHtml=body.innerHTML;
+                          try {
+                            const row={event_id:'ace-mobile-css-test',
+                              scheduled_at:new Date(Date.now()+3600000).toISOString(),
+                              tour:'ATP',tournament:'Basel, Switzerland',surface:'hard',
+                              player1:{id:'p1',name:'Jiri Lehecka'},
+                              player2:{id:'p2',name:'Valentin Vacherot'},
+                              market:'aces',projection:9.62,
+                              selection:'Valentin Vacherot Under 14.5 Aces',
+                              projection_confidence:.66,odds:2};
+                            body.innerHTML=mobileTest.dailyHubRow(row,'ace',false,0);
+                            hub.dataset.tab='ace';
+                            const tr=body.querySelector('tr[data-hub-market="ace"]');
+                            tr?.classList.remove('hub-row-locked');
+                            const cell=tr?.querySelector('td:nth-child(7)');
+                            const number=cell?.querySelector('.hub-number-stack strong');
+                            const caption=cell?.querySelector('.hub-number-stack small');
+                            return {value:number?.textContent?.trim(),caption:caption?.textContent?.trim(),
+                              display:caption?getComputedStyle(caption).display:null};
+                          } finally {body.innerHTML=oldHtml;hub.dataset.tab=oldTab;}
+                        }""")
+                        assert ace_caption and ace_caption['value'] == '9.62', (width, ace_caption)
+                        assert ace_caption['display'] == 'none', (width, ace_caption)
+
+                    if width <= 600:
                         # Actual Chromium-computed surfaces, including locked TG cards.
                         surfaces = page.evaluate("""() => {
                           const panel = document.getElementById('telegramGroupsPanel');
