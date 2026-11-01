@@ -54,7 +54,7 @@ class RawResponseCache:
         if not path.parent.is_dir():
             raise RawCacheUnavailable("Private cache directory is not mounted")
         self.path = str(path)
-        self.metrics = {"cache_hits": 0, "upstream_loads": 0, "inflight_waits": 0,
+        self.metrics = {"cache_hits": 0, "upstream_loads": 0, "inflight_wait_polls": 0,
                         "negative_not_cached": 0}
         try:
             with self._connect() as db:
@@ -152,7 +152,7 @@ class RawResponseCache:
                 break
             if time.monotonic() >= deadline:
                 raise RawCacheUnavailable("Concurrent raw request still in flight")
-            self.metrics["inflight_waits"] += 1
+            self.metrics["inflight_wait_polls"] += 1
             time.sleep(0.1)
         try:
             # Check again after claiming; a prior owner may have completed
