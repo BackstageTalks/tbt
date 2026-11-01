@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
-      DRY_RUN: "true"
+      DRY_RUN: "false"
       MAX_DELETE: "40"
       CUTOFF_UTC: "2026-10-01T00:00:00Z"
     steps:
@@ -35,7 +35,7 @@ jobs:
           root=f"https://api.github.com/repos/{repo}"
           cutoff=dt.datetime.fromisoformat(os.environ["CUTOFF_UTC"].replace("Z","+00:00"))
           max_delete=int(os.environ["MAX_DELETE"])
-          deny=re.compile(r"(?:cdb|dil|identity|data|training|model|backup|restore|rollback|release|deploy|production|live|history|raw|snapshot|writer|lock|import|provider|api|feed|quota|recovery|security|protected|driv[e]|shadow)",re.I)
+          deny=re.compile(r"(?:cdb|dil|identity|data|training|model|backup|restore|rollback|release|deploy|production|live|history|raw|snapshot|writer|lock|import|provider|api|feed|quota|recovery|security|protected|driv[e]|shadow|serve|return|point|sackmann|tennis)",re.I)
           headers={"Authorization":"Bearer "+os.environ["GH_TOKEN"],"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"blinq-branch-cleanup"}
           def request(method,path):
               q=urllib.request.Request(root+path,method=method,headers=headers)
