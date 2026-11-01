@@ -10,6 +10,7 @@ from ..providers.statistics import (NoSupportedStatisticsError, complete_opponen
 from ..providers.tennisapi_extra import normalize_set_statistics_home_away
 from .statistics_gapfill import event_id as resolve_event_id, missing_fields, retry_due, recent_score_identity_conflict
 from .tennis_response_cache import RawResponseCache
+from .tennis_remote_cache_client import HttpRawResponseCache
 
 
 # V3 re-reads previously count-only V2 rows to capture the provider's
@@ -28,10 +29,17 @@ class StatisticsEnricher:
         private_path = os.getenv("BLINQ_TENNIS_RAW_CACHE_SQLITE", "").strip()
         # The caller must mount a private persistent directory. A bad mount
         # fails closed rather than silently reverting to paid requests.
-        self.durable = RawResponseCache(private_path) if private_path else None
+        remote_url = os.getenv("BLINQ_TENNIS_RAW_CACHE_URL", "").strip()
+        if remote_url:
+            token = os.getenv("BLINQ_SHARED_API_BUDGET_TOKEN", "").strip()
+            self.durable = HttpRawResponseCache(remote_url, token)
+        else:
+            self.durable = RawResponseCache(private_path) if private_path else None
 
     def close(self):
         self.cache.close()
+        if self.durable is not None and hasattr(self.durable, "close"):
+            self.durable.close()
 
     def _get(self, path, max_age=7 * 86400):
         if self.durable is not None:

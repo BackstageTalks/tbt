@@ -168,6 +168,13 @@ class RawResponseCache:
             # Empty statistics from 200 responses are not durable coverage
             # evidence. Preserve normal provider cooldown instead of replaying
             # a 30-day false miss.
+            event = (result.get("event", result) if isinstance(result, dict) else {})
+            if kind == "finished_detail" and (
+                    not isinstance(event, dict)
+                    or not isinstance(event.get("status"), dict)
+                    or event["status"].get("type") != "finished"):
+                self.metrics["negative_not_cached"] += 1
+                return result
             if kind == "finished_statistics" and (not isinstance(result, dict)
                     or not result.get("statistics")):
                 self.metrics["negative_not_cached"] += 1
