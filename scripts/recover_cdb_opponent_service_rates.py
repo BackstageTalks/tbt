@@ -377,8 +377,10 @@ def verified_provider_collision_quarantine(safety: dict, expected_rows: int) -> 
 
 def _load(directory, *, safety_report: Path | None = None,
           isolate_provider_collisions: bool = False,
-          expected_provider_quarantine: int = 0):
-    rows, safety = sanitize_history_identities(load_partitions(directory))
+          expected_provider_quarantine: int = 0,
+          include_quarantined_for_full_readback: bool = False):
+    original = load_partitions(directory)
+    rows, safety = sanitize_history_identities(original)
     aggregate = identity_safety_aggregate(safety)
     if safety_report is not None:
         safety_report.parent.mkdir(parents=True, exist_ok=True)
@@ -391,6 +393,16 @@ def _load(directory, *, safety_report: Path | None = None,
     elif isolate_provider_collisions and expected_provider_quarantine:
         # Never silently treat a missing expected quarantine as approval to widen scope.
         raise ValueError("Expected provider-ID quarantine disappeared; repeat full audit")
+    if include_quarantined_for_full_readback:
+        # Only the exact pinned provider-ID collision may be isolated for staging.
+        # Local mutation and independent readback MUST include all canonical rows,
+        # including the six untouched ambiguities. No identity may be dropped.
+        if not isolate_provider_collisions or not verified_provider_collision_quarantine(
+                safety, expected_provider_quarantine):
+            raise ValueError("Full-row readback exception requires exact provider-ID quarantine")
+        if len({str(m.match_id) for m in original}) != len(original):
+            raise ValueError("Canonical match IDs are not unique in full-row readback")
+        return original
     return rows
 
 
@@ -407,9 +419,10 @@ def main():
     p.add_argument("--out-dir", required=True, type=Path)
     a = p.parse_args()
     a.out_dir.mkdir(parents=True, exist_ok=True)
-    if a.isolate_provider_collisions and (a.mode != "stage"
-            or not 0 < a.expected_provider_quarantine <= 20):
-        p.error("Provider-collision isolation requires stage mode and exact 1..20 quarantine pin")
+    if a.isolate_provider_collisions and not 0 < a.expected_provider_quarantine <= 20:
+        p.error("Provider-collision isolation requires an exact 1..20 quarantine pin")
+    if not a.isolate_provider_collisions and a.expected_provider_quarantine:
+        p.error("Quarantine count cannot be passed without explicit isolation")
     if a.mode == "stage":
         if not a.history_dir:
             p.error("--history-dir is required")
@@ -432,7 +445,11 @@ def main():
         staged = [json.loads(s) for s in a.stage_file.read_text(encoding="utf-8").splitlines()
                   if s.strip()]
         if a.mode == "write":
-            matches = _load(a.history_dir)
+            matches = _load(
+                a.history_dir, isolate_provider_collisions=a.isolate_provider_collisions,
+                expected_provider_quarantine=a.expected_provider_quarantine,
+                include_quarantined_for_full_readback=a.isolate_provider_collisions,
+            )
             years = write_local(matches, staged)
             for year in years:
                 write_exact_stats_partition(a.history_dir, year, staged)
@@ -441,7 +458,19 @@ def main():
         else:
             if not a.before_dir:
                 p.error("--before-dir required for independent verification")
-            result = verify_readback(_load(a.before_dir), _load(a.history_dir), staged)
+            original = _load(
+                a.before_dir, isolate_provider_collisions=a.isolate_provider_collisions,
+                expected_provider_quarantine=a.expected_provider_quarantine,
+                include_quarantined_for_full_readback=a.isolate_provider_collisions,
+            )
+            persisted = _load(
+                a.history_dir, isolate_provider_collisions=a.isolate_provider_collisions,
+                expected_provider_quarantine=a.expected_provider_quarantine,
+                include_quarantined_for_full_readback=a.isolate_provider_collisions,
+            )
+            result = verify_readback(original, persisted, staged)
+            if a.isolate_provider_collisions:
+                result["quarantined_rows_proven_unchanged"] = a.expected_provider_quarantine
     (a.out_dir / "report.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps(result, indent=2))
 
