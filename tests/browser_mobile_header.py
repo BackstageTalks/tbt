@@ -17,7 +17,7 @@ def main():
     with sync_playwright() as pw:
         browser=pw.chromium.launch(headless=True,executable_path=os.getenv('BLINQ_BROWSER') or browser_path())
         try:
-            for width in (320,360,390,430,500,768,900,1440):
+            for width in (320,360,390,430,500,520,600,768,900,1440):
                 page=browser.new_page(viewport={'width':width,'height':850})
                 errors=[]
                 page.on('pageerror',lambda e:errors.append(str(e)))
@@ -62,6 +62,53 @@ def main():
                             assert box and box['width'] >= 43 and box['height'] >= 43, (width, control, box)
                             assert 0 <= box['x'] and box['x']+box['width'] <= width+1, (width, control, box)
                     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 2'), width
+                    if width <= 600:
+                        # Actual Chromium-computed surfaces, including locked TG cards.
+                        surfaces = page.evaluate("""() => {
+                          const panel = document.getElementById('telegramGroupsPanel');
+                          if (!panel) return null;
+                          const open = document.createElement('div');
+                          open.className = 'tg-group-card';
+                          open.textContent = 'TEST OPEN';
+                          const locked = document.createElement('div');
+                          locked.className = 'tg-group-card is-locked';
+                          locked.textContent = 'TEST LOCKED';
+                          panel.append(open, locked);
+                          const bg = el => getComputedStyle(el).backgroundColor;
+                          const snapshot = {panel:bg(panel), open:bg(open), locked:bg(locked),
+                            panelBorder:getComputedStyle(panel).borderRadius,
+                            openBorder:getComputedStyle(open).borderRadius};
+                          open.remove(); locked.remove();
+                          return snapshot;
+                        }""")
+                        assert surfaces is not None, (width, 'missing Telegram panel')
+                        assert surfaces['panel'] == 'rgba(3, 23, 17, 0.35)', (width, surfaces)
+                        assert surfaces['open'] == 'rgba(3, 23, 17, 0.6)', (width, surfaces)
+                        assert surfaces['locked'] == 'rgba(3, 23, 17, 0.6)', (width, surfaces)
+                        assert surfaces['panelBorder'] == '11px' and surfaces['openBorder'] == '11px', (width, surfaces)
+                        # Check glyph bounds, not just CSS font-size or card boxes:
+                        # KPI values must stay inside dividers even at 320px.
+                        kpi_fit = page.evaluate("""() => {
+                          const cells = [...document.querySelectorAll('#dashboardKpis .dashboard-kpi')];
+                          if (cells.length !== 4) return {count:cells.length, fits:false};
+                          const data = ['+19.92u', '+51.78u'];
+                          return {count:cells.length, fits:data.every((value, i) => {
+                            const el = cells[i].querySelector('strong');
+                            if (!el) return false;
+                            const previous = el.textContent;
+                            el.textContent = value;
+                            const range=document.createRange();
+                            range.selectNodeContents(el);
+                            const text=range.getBoundingClientRect();
+                            const bounds=cells[i].getBoundingClientRect();
+                            el.textContent=previous;
+                            return text.left >= bounds.left+2 &&
+                                   text.right <= bounds.right-2 &&
+                                   text.width <= bounds.width-4;
+                          })};
+                        }""")
+                        assert kpi_fit['count'] == 4 and kpi_fit['fits'], (width, kpi_fit)
+
                     live = page.locator('#insightShortcut')
                     assert live.get_attribute('data-upgrade-plan') == 'elite', width
                     assert 'is-access-locked' in (live.get_attribute('class') or ''), width
