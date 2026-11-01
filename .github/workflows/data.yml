@@ -173,7 +173,7 @@ jobs:
           test -s "$request" || { echo "Missing controlled data request"; exit 1; }
           mode="$(jq -r '.mode // empty' "$request")"
           case "$mode" in
-            train|backtest|feature-audit|production-preflight|comparator-build|deploy-current|ace-statistics|statistics|extras|identity) ;;
+            train|backtest|feature-audit|production-preflight|comparator-build|deploy-current|ace-statistics|history|statistics|extras|identity) ;;
             *) echo "Push data request forbids mode: $mode"; exit 1 ;;
           esac
           promote="$(jq -r '.promote // false' "$request")"
@@ -185,7 +185,7 @@ jobs:
           # The existing history/statistics downloader enforces a stricter
           # per-run ceiling than the generic workflow input. Reject excess
           # before loading the million-row CDB or acquiring the writer lease.
-          if [[ "$mode" == "statistics" || "$mode" == "extras" || "$mode" == "identity" ]]; then
+          if [[ "$mode" == "history" || "$mode" == "statistics" || "$mode" == "extras" || "$mode" == "identity" ]]; then
             (( 10#$max_requests <= 12000 )) || { echo "History statistics import caps max_requests at 12000"; exit 1; }
           fi
           if [[ "$mode" == "extras" ]]; then
@@ -197,6 +197,29 @@ jobs:
           fi
           start_date="$(jq -r '.start // empty' "$request")"
           end_date="$(jq -r '.end // empty' "$request")"
+          recheck_history="$(jq -r '.recheck_completed_history_days // false' "$request")"
+          [[ "$recheck_history" == true || "$recheck_history" == false ]] || {
+            echo "Invalid recheck_completed_history_days flag"; exit 1;
+          }
+          if [[ "$mode" == history ]]; then
+            [[ "$promote" == false && -n "$start_date" && -n "$end_date" ]] || {
+              echo "Controlled historical import requires explicit start/end and promote=false"; exit 1;
+            }
+            python - "$start_date" "$end_date" <<'PY'
+          import sys
+          from datetime import date
+          try:
+              start, end = date.fromisoformat(sys.argv[1]), date.fromisoformat(sys.argv[2])
+          except ValueError as exc:
+              raise SystemExit("Invalid bounded history date") from exc
+          if end < start:
+              raise SystemExit("Historical start must precede end")
+          print("CONTROLLED_HISTORY_DATE_WINDOW", start, end)
+          PY
+          elif [[ "$recheck_history" == true ]]; then
+            echo "Only history mode may force a completed-day recheck"; exit 1;
+          fi
+          echo "BLINQ_RECHECK_COMPLETED_HISTORY_DAYS=$recheck_history" >> "$GITHUB_ENV"
           pre_reset_override="$(jq -r '.pre_reset_provider_header_override // false' "$request")"
           if [[ "$pre_reset_override" == "true" ]]; then
             [[ "$mode" == "statistics" ]] || { echo "Provider-header override is statistics-only"; exit 1; }
@@ -383,7 +406,7 @@ jobs:
           elif [[ "$MODE" == history || "$MODE" == statistics || "$MODE" == extras || "$MODE" == identity ]]; then
             args=(--publish --data-repository "$TBT_DATA_REPOSITORY" --mode "$MODE" --lookback-days "$LOOKBACK_DAYS" --max-requests "$MAX_REQUESTS")
             if [[ "$MODE" == statistics && ( "${{ inputs.hourly_autofill || 'false' }}" == "true" || "${BLINQ_TARGETED_STATISTICS:-false}" == "true" ) ]]; then args+=(--targeted-statistics); fi
-            if [[ "$MODE" == history && "${{ inputs.recheck_completed_history_days || 'false' }}" == "true" ]]; then args+=(--recheck-completed-days); fi
+            if [[ "$MODE" == history && ( "${{ inputs.recheck_completed_history_days || 'false' }}" == "true" || "${BLINQ_RECHECK_COMPLETED_HISTORY_DAYS:-false}" == "true" ) ]]; then args+=(--recheck-completed-days); fi
             if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
             if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
             if [[ -n "${BLINQ_TARGET_STATS_TOUR:-}" ]]; then args+=(--target-tour "$BLINQ_TARGET_STATS_TOUR"); fi
