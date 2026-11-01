@@ -1,20 +1,15 @@
 {
   "schema": 1,
-  "mode": "identity",
+  "mode": "comparator-build",
   "promote": false,
-  "source": "tennisapi1_native_calendar_existing_cdb_identity_provenance",
-  "purpose": "First controlled native-ID recovery with full 2022-2026 blocker census and explicitly bounded same-provider calendar calls. Zero guesses, preserve conflicting claims for manual independent evidence, no external provider namespace equivalence; current CDB and independent readback mandatory.",
-  "requested_on": "2026-10-21",
-  "max_requests": 1200,
-  "start": "2022-01-01",
-  "end": "2026-10-20",
+  "source": "comparator_P0_P1_PR1197_verified_canonical_replay",
+  "purpose": "Zero-provider, read-only CDB replay to publish a checksum-verified schema-v2 match comparator artifact for ace/double-fault projections, point-in-time freshness and BO3/BO5 empirical format quality. No champion or CDB writes.",
+  "requested_on": "2026-11-01",
+  "max_requests": 1,
   "targeted_statistics": false,
   "high_yield_statistics": false,
   "model_training": false,
   "pre_reset_provider_header_override": false,
-  "historical_match_winner_odds_as_model_feature": false,
-  "source_only_tml_write_authorized": false,
-  "audit_only_unmatched_identity_summary": true,
-  "run_scope": "follow_up_after_verified_zero_gain_39645757308",
-  "status": "OPERATOR_APPROVED_CONTROLLED_IDENTITY_RECOVERY"
+  "run_scope": "post_merge_PR1197_release_refresh",
+  "status": "OPERATOR_APPROVED_COMPARATOR_READONLY_REBUILD"
 }
