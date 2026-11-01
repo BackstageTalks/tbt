@@ -4,6 +4,7 @@
 One sport-wide request first; optional per-event fallback is quota guarded.
 Prints exact real-bookmaker O/U lines with sources, never synthetic DFS payouts.
 """
+# UTC quota-reset single-run check 2026-11-01: research-only, do not alter production picks.
 from __future__ import annotations
 
 from collections import Counter
