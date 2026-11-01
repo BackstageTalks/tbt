@@ -26,9 +26,10 @@ def test_footer_does_not_call_feed_generation_model_training():
     end = js.index("function insightTypeLabel", start)
     footer = js[start:end]
     assert "state.feed?.match_status_updated_at" in footer
-    assert "state.feed?.generated_at" in footer
-    assert "fmtTime(feedAt)" in footer
+    assert "state.feed?.generated_at" not in footer
     assert "fmtTime(matchAt)" in footer
+    assert "footerFeedUpdate" in footer
+    assert "footerLastUpdate" not in footer
     assert "const matchMs=Date.parse(matchAt)" in footer
     assert "ageMs<=30*60*1000" in footer
     assert "state.liveRadarHeartbeat" not in footer
