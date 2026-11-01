@@ -1,8 +1,0 @@
-{
-  "kind": "schedule-snapshot-independent-readback",
-  "date": "2026-10-19",
-  "source_pr": 868,
-  "source_commit": "68fff71b1b1d6840e9b1909dbde42c417b12168c",
-  "parent_deployment": 39233070718,
-  "readback_expected": true
-}

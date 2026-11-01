@@ -1,5 +1,0 @@
-BlinQ UI/API hotfix deploy request — 2026-10-18
-Change: exact Europe/Bratislava 06:00 inclusive to next-day 06:00 exclusive public-predictions filter.
-Validated source revision: e5c5de7279f227cc61b3cc4de4f058d0af0ff42e
-Full mandatory CI checks on that revision: success (workflow 39111689781, checks job 117629007332).
-This marker requests an isolated hotfix deployment without changing the ML model, CDB or feed release.

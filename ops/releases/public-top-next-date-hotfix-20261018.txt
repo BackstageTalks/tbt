@@ -1,5 +1,0 @@
-BlinQ public daily board same-date fix — 2026-10-18
-Validated PR #845, source SHA 268c782b7867baa931f47eaa42aaaed817a47e9b.
-PR full CI workflow 39112666981: success, backend + frontend + real-browser checks.
-Deploy independently via the existing UI/API hotfix workflow.
-No ML champion, canonical CDB, historical ledger or provider API change.
