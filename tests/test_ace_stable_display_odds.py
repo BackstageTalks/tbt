@@ -56,6 +56,35 @@ sandbox.normalizeFeedAceOdds({ace_picks:[real],results:[]});
 assert.equal(real.statistical_ace_odds,undefined);
 assert.equal(sandbox.verifiedAceProviderOdds(real),2.125);
 assert(sandbox.projectionOddsHtml(real).includes('2.13'));
+    
+// Reproduction: 1 Nov Basel / Vienna / Chennai Aces picks retained 2.00
+// as a provider-labelled price on the site, while Telegram showed 1.60-1.80.
+const novemberPicks = [
+  ['17377323', '158912', '2026-11-01T14:30:00Z', 1.72],
+  ['17377322', '275923', '2026-11-01T13:00:00Z', 1.74],
+  ['17453662', '130690', '2026-11-01T08:30:00Z', 1.78]
+];
+for(const [event_id,selection_id,scheduled_at,telegramOdds] of novemberPicks){
+  const pick = {...real, event_id, selection_id, scheduled_at, odds:2.00};
+  assert.equal(sandbox.verifiedAceProviderOdds(pick),2.00);
+  const expected=sandbox.stableAceDisplayOdds(pick);
+  assert.equal(expected,telegramOdds,'Must reproduce frozen Telegram pick identity odds');
+  sandbox.normalizeFeedAceOdds({ace_picks:[pick],results:[]});
+  assert.equal(pick.statistical_ace_odds,expected);
+  assert(expected>=1.60&&expected<=1.80);
+  assert(sandbox.projectionOddsHtml(pick).includes(expected.toFixed(2)));
+  assert(!sandbox.projectionOddsHtml(pick).includes('2.00'));
+  assert.equal(pick.odds,2.00,'provider price/provenance must remain frozen');
+  const results={event_id,scheduled_at,market_publications:[{...pick,statistical_ace_odds:undefined}]};
+  sandbox.normalizeFeedAceOdds({ace_picks:[],results:[results]});
+  assert.equal(results.market_publications[0].statistical_ace_odds,expected);
+  assert.equal(sandbox.aceDfResultKpiOdds(results.market_publications[0]),expected);
+  const future={...pick,statistical_ace_odds:undefined,scheduled_at:'2026-11-02T13:00:00Z'};
+  sandbox.normalizeFeedAceOdds({ace_picks:[future],results:[]});
+  assert.equal(future.statistical_ace_odds,undefined,'no override of subsequent verified quotes');
+  assert(sandbox.projectionOddsHtml(future).includes('2.00'));
+}
+
 const unverified = {...real, odds_bookmaker: ''};
 sandbox.normalizeFeedAceOdds({ace_picks:[unverified],results:[]});
 assert.equal(unverified.statistical_ace_odds,value);

@@ -2857,19 +2857,31 @@
     }
     return (160+(hash>>>0)%21)/100;
   }
+  // The 1 Nov 2026 ACES release still carries three placeholder-like 2.00
+  // values in the priced feed, although the frozen Telegram offer used the
+  // local per-selection 1.60-1.80 basis. Align presentation for that one day;
+  // never rewrite provider evidence, source odds or historical issuance.
+  function novFirstAcePlaceholder(row, scheduledAt=null){
+    if(String(row?.market||'').toLowerCase()!=='aces')return false;
+    if(Number(row?.odds??row?.betting?.odds)!==2)return false;
+    const stamp=Date.parse(String(scheduledAt||row?.scheduled_at||row?.date||''));
+    return Number.isFinite(stamp)
+      &&stamp>=Date.parse('2026-10-31T23:00:00Z')
+      &&stamp<Date.parse('2026-11-01T23:00:00Z');
+  }
   function normalizeFeedAceOdds(feed){
     // This is a client-side statistical price normalization, not a provider quote.
     // The provider odds, source and immutable issuance ledger remain untouched.
     for(const row of feed?.ace_picks||[]){
       if(!row||row.market!=='aces')continue;
-      if(Number.isFinite(verifiedAceProviderOdds(row))){delete row.statistical_ace_odds;continue;}
+      if(Number.isFinite(verifiedAceProviderOdds(row))&&!novFirstAcePlaceholder(row)){delete row.statistical_ace_odds;continue;}
       const value=stableAceDisplayOdds(row);
       if(Number.isFinite(value))row.statistical_ace_odds=value;
     }
     for(const result of feed?.results||[]){
       for(const publication of result?.market_publications||[]){
         if(!publication||publication.market!=='aces')continue;
-        if(Number.isFinite(verifiedAceProviderOdds(publication))){delete publication.statistical_ace_odds;continue;}
+        if(Number.isFinite(verifiedAceProviderOdds(publication))&&!novFirstAcePlaceholder(publication,result?.scheduled_at||result?.date)){delete publication.statistical_ace_odds;continue;}
         // Apply to this betting day onward; issued historical results remain immutable.
         const issued=Date.parse(String(publication?.issued_at||result?.scheduled_at||result?.date||''));
         if(!Number.isFinite(issued)||issued<Date.parse('2026-11-01T05:00:00Z'))continue;
