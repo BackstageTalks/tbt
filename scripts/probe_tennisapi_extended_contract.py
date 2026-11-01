@@ -46,6 +46,21 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
         "shape": type(payload).__name__,
     }
     obj = _obj(payload)
+    # Keep only structural evidence from nested provider collections; never
+    # export full odds, identities, raw event records or undeclared metrics.
+    result["collections"] = {}
+    for field, value in list(obj.items())[:30]:
+        if isinstance(value, list):
+            first = next((row for row in value if isinstance(row, dict)), None)
+            result["collections"][str(field)] = {
+                "kind": "list", "count": len(value),
+                "sample_keys": sorted(map(str, first))[:22] if first else [],
+            }
+        elif isinstance(value, dict):
+            result["collections"][str(field)] = {
+                "kind": "dict", "keys": sorted(map(str, value))[:22],
+                "count": len(value),
+            }
     if name == "event_odds":
         markets = obj.get("markets")
         if isinstance(markets, list):
