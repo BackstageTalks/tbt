@@ -117,3 +117,49 @@ an explicit separate guarded batch:
 
 Neither collection nor Drive archive triggers model training or a canonical
 writer.
+
+## Autonómna príprava importných dávok (bez zápisu do CDB)
+
+\`moviodds-cdb-stage.yml\` sa automaticky spúšťa o **05:00 UTC**
+prostredníctvom existujúceho externého plánovača \`match-status.yml\`;
+nie je potrebné vytvárať ďalší cron. Každý deň spracuje posledné **tri
+dokončené UTC dni** z chráneného MoviOdds Azure DB exportu, aj keď Google
+Drive export zlyhá alebo je dočasne nedostupný.
+
+1. Overí source export + normalizovaný JSON v2 vrátane SHA-256 a vnútornej
+   súdržnosti súboru.
+2. Z privátneho autoritatívneho \`BackstageTalks/tbt-data\` stiahne celý
+   manifest a všetky požadované CDB ročné partition súbory. Overí každé
+   SHA-256 proti súkromnej release manifest a asset digest.
+3. Linkuje plné mená hráčov bez skrátených aliasov, ATP/WTA tour, presnú
+   súťaž alebo celú súvislú source frázu, zhodný povrch, jedinečný zápas,
+   datum dokončenia (48h) a víťaza z CDB. Zdrojové setové skóre musí
+   korešpondovať s kompletnými číselnými setmi oboch strán.
+4. Zachová **home/away → canonical p1/p2**, pôvodné source IDs,
+   source/archive SHA-256, UTC časové pečiatky a originálny source score.
+   Konflikty s už vyplnenými CDB hodnotami sú quarantine, kvalitné
+   existujúce hodnoty sa nikdy neprepisujú.
+5. Zapíše \`eligible.jsonl\` **v presnom stage kontrakte existujúceho
+   \`import_offline_linked_serve_return.py\`**, \`review.jsonl\` pre
+   neisté identity/konflikty a \`report.json\` s raw/linked/kandidátmi
+   doplnených polí a nulovým počtom zápisov do CDB.
+6. Existujúci CDB importer sa automaticky vykoná v **dry-run režime**
+   (bez \`--write-partitions\`). Očakávaný počet riadkov a doplnených
+   polí sa musí presne zhodovať s nezávislým linkovaním.
+7. Pred uložením artefaktu prebehne kontrola nemennosti privátneho CDB
+   release (CAS). Výstup import-ready prejde GitHub Actions artefaktom
+   s retenciou 7 dní; trvalá evidencia zostáva v Azure DB a denných
+   MoviOdds JSON archívoch, takže dávka sa dá znova vygenerovať.
+
+**Samotný finálny CDB zápis ostáva v existujúcom single-writer importéri**,
+ktorý pri následnom schválenom importe opäť nezávisle porovná aktuálny
+kanonický podpis, spustí globálny lock, CAS, backup a read-back. Denné
+staging workflow ani Drive collector **nikdy nepoužívajú CDB writer**.
+
+Zdrojový set score nie je plne nezávisle reprodukovaný v samotnej CDB,
+pretože jej kanonický snapshot ho historicky nemá ako samostatnú povinnú
+položku. Predpísaný automatický gate potvrdzuje internú súdržnosť
+setov MoviOdds a **nezávisle potvrdzuje víťaza v CDB**. Oboje je osobitne
+zaznamenané v \`provenance\`. Ak budú dostupné ďalšie nezávislé finálne
+skóre, môže sa pridať prísnejší full-score gate bez zmeny writeru.
+
