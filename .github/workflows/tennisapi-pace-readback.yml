@@ -1,0 +1,122 @@
+name: Tennis API production pace contract readback
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/tennisapi-runtime-readback-tick.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-tennisapi-pace-readback
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+    steps:
+      - name: Verify exact protected Azure pacing proof and budget readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, time
+          from urllib.parse import urlsplit
+          from urllib.request import Request, build_opener, HTTPRedirectHandler
+          from urllib.error import HTTPError
+
+          url = os.environ["BUDGET_URL"].strip()
+          token = os.environ["WORKER_TOKEN"].strip()
+          parsed = urlsplit(url)
+          if not token or parsed.scheme != "https" or not parsed.netloc or parsed.path != "/api/v1/internal/api-budget/reserve" or parsed.query or parsed.fragment:
+              raise SystemExit("Protected budget origin/credential missing; no reservation")
+
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+          opener = build_opener(NoRedirect)
+          def call(method, payload=None):
+              body = None if payload is None else json.dumps(payload).encode()
+              request = Request(url, method=method, data=body, headers={
+                  "X-Blinq-Worker-Token": token,
+                  "Accept": "application/json",
+                  "Content-Type": "application/json",
+              })
+              try:
+                  with opener.open(request, timeout=15) as response:
+                      return response.status, json.load(response)
+              except HTTPError as exc:
+                  try:
+                      value = json.load(exc)
+                  except Exception:
+                      value = {}
+                  return exc.code, value
+
+          status, before = call("GET")
+          if status != 200 or before.get("ok") is not True:
+              raise SystemExit("Protected read-only budget preflight failed")
+          a = before.get("budget") or {}
+          if (a.get("schema") != 2
+                  or a.get("window") != "provider_day_17_09_utc"
+                  or a.get("provider_plan_limit") != 15000
+                  or a.get("global_limit") != 14500
+                  or a.get("reserved_provider_headroom") != 500
+                  or type(a.get("global_spent")) is not int):
+              raise SystemExit("Stale or invalid shared provider budget contract")
+
+          # Exactly one quota reservation; no Tennis API HTTP/provider call.
+          # Busy global 6/s time slots cost no shared daily capacity.
+          for attempt in range(24):
+              code, received = call("POST", {"purpose": "history", "requests": 1})
+              if code == 429 and received.get("error") == "api_rate_busy":
+                  time.sleep(0.2)
+                  continue
+              break
+          if (code != 200 or received.get("ok") is not True
+                  or (received.get("budget") or {}).get("rate_pace") !=
+                      {"schema": 1, "max_rps": 6}):
+              raise SystemExit("Production 6/s CAS pace receipt unverified")
+
+          status, after = call("GET")
+          b = after.get("budget") or {}
+          if (status != 200 or after.get("ok") is not True
+                  or b.get("next_reset_utc") != a.get("next_reset_utc")
+                  or type(b.get("global_spent")) is not int
+                  or b["global_spent"] < a["global_spent"] + 1
+                  or b.get("global_remaining") != 14500 - b["global_spent"]):
+              raise SystemExit("Production shared budget readback failed")
+
+          # Read-only private cache probe after the same production deployment.
+          # An impossible opaque key cannot be linked to a player or CDB record.
+          cache_url = url.replace("/api/v1/internal/api-budget/reserve",
+                                  "/api/v1/internal/tennis-raw-cache")
+          if urlsplit(cache_url).netloc != parsed.netloc:
+              raise SystemExit("Private cache origin mismatch")
+          cache_req = Request(cache_url + "?key=" + "0" * 64 + "&max_age=1",
+                              method="GET", headers={
+                                  "X-Blinq-Worker-Token": token,
+                                  "Accept": "application/json",
+                              })
+          with opener.open(cache_req, timeout=15) as cache_response:
+              cache = json.load(cache_response)
+              if cache_response.status != 200 or cache.get("ok") is not True or cache.get("status") != "miss":
+                  raise SystemExit("Private Azure cache read-only smoke failed")
+
+          message = (
+              "Protected live 6/s CAS receipt: PASS; "
+              "shared budget 15000/day, 500 reserve, 14500 ceiling: PASS; "
+              "reservation/readback: PASS; private cache: PASS; provider requests: 0"
+          )
+          print(message)
+          if os.environ.get("GITHUB_STEP_SUMMARY"):
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as out:
+                  out.write("### Tennis API production proof\n" + message + "\n")
+          PY

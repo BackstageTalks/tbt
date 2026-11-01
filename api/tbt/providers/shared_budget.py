@@ -4,7 +4,7 @@ The provider allowance resets at 17:09 UTC (19:09 summer / 18:09 winter Bratisla
 One ETag-protected
 Azure Table row coordinates every BlinQ TennisAPI caller. Reserve BEFORE every
 billable attempt, including retries; never refund an ambiguous network failure.
-A 300-request provider reserve is kept untouched, so BlinQ hard-stops at 14,700 of 15,000.
+A 500-request provider reserve is kept untouched, so BlinQ hard-stops at 14,500 of 15,000.
 This guard is production-critical and must be deployed before provider work resumes.
 """
 from __future__ import annotations
@@ -197,6 +197,10 @@ def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
     """
     if purpose not in PURPOSE_CAPS:
         raise ValueError("Unknown budget purpose")
+    # Capture runtime provenance before resolving the Azure Table client.
+    # Otherwise a direct Azure caller could silently miss the default pace.
+    runtime_default_paced = (table is None and bool(
+        os.getenv("FUNCTIONS_WORKER_RUNTIME", "").strip()))
     if table is None:
         from ..services.admin_storage import _table
         try:
@@ -210,7 +214,7 @@ def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
     if paced is None:
         # Runtime direct storage reservations must not silently bypass the
         # distributed limiter. Injected synthetic tables keep old test rules.
-        paced = table is None and bool(os.getenv("FUNCTIONS_WORKER_RUNTIME", "").strip())
+        paced = runtime_default_paced
     if paced:
         from .shared_rate import reserve_pace
         pace_proof = reserve_pace(table=pace_table)
