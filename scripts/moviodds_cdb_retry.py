@@ -37,6 +37,11 @@ def decision(runs: dict, now: datetime) -> dict:
     rows = runs.get("workflow_runs")
     if not isinstance(rows, list):
         raise ValueError("GitHub Actions runs response missing workflow_runs")
+    # The query filters to this UTC week. Never mistake a truncated page
+    # for zero successful attempts and dispatch an unsafe duplicate.
+    total = runs.get("total_count", len(rows))
+    if not isinstance(total, int) or total < len(rows) or total > len(rows):
+        raise ValueError("Incomplete GitHub Actions weekly run inventory")
     sunday = (now - timedelta(days=(now.weekday() + 1) % 7)).date()
     slot = datetime(sunday.year, sunday.month, sunday.day, 6, tzinfo=timezone.utc)
     request_id = f"moviodds-{sunday.isoformat()}"
