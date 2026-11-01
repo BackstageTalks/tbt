@@ -175,7 +175,8 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
     if http is not None and isinstance(getattr(http, "event_hooks", None), dict):
         http.event_hooks.setdefault("response", []).append(observe_response)
 
-    def read(name: str, path: str, *, params: dict | None = None) -> Any:
+    def read(name: str, path: str, *, params: dict | None = None,
+             source_event_id: int | None = None) -> Any:
         nonlocal guard_halted
         if guard_halted:
             report["observations"][name] = {"state": "shared_budget_guard_halted"}
@@ -187,7 +188,8 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
             last_http.clear()
             payload = client._get(path, params=params, enrichment=True)
             report["observations"][name] = {
-                **summarize(name, payload, event_id=event_id), **last_http}
+                **summarize(name, payload, event_id=source_event_id or event_id),
+                **last_http}
             return payload
         except Exception as exc:
             reason = str(exc).lower()
@@ -257,7 +259,8 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
             read("historical_2016_match_statistics",
                  f"/api/tennis/event/{match_id}/statistics")
             read("historical_2016_point_by_point",
-                 f"/api/tennis/event/{match_id}/point-by-point")
+                 f"/api/tennis/event/{match_id}/point-by-point",
+                 source_event_id=match_id)
             read("historical_2016_player_year_stats",
                  f"/api/tennis/team/{home_id}/year-statistics/2016")
         return finish()
