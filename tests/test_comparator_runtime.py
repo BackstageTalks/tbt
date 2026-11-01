@@ -178,3 +178,23 @@ def test_runtime_h2h_orientation_on_reverse_order():
         tour="atp", surface="clay", now=NOW)
     assert clay["h2h"]["surface"]["matches"] == 0
     assert clay["h2h"]["overall"]["matches"] == 1
+
+
+
+def test_surface_special_rate_ignores_corrupt_historical_values():
+    """Untrusted historical rich stats cannot pollute displayed percentages."""
+    artifact = build_serving_artifact(_model(), _history(), now=NOW)
+    history = artifact["feature_state"]["players"]["atp:a"]["recent"]
+    hard = [row for row in history if row["surface"] == "hard"]
+    assert len(hard) >= 4
+    for row, value in zip(hard, [0.75, 1.3, -0.4, float("nan"), "invalid"]):
+        row["break_point_serve"] = value
+    result = compare_from_artifact(
+        artifact, player1="a", player2="b", tour="atp",
+        surface="hard", now=NOW,
+    )
+    special = result["player1"]["stats"]["surface_special_rates"]["break_point_save"]
+    assert special["mean"] == 0.75
+    assert special["matches"] == 1
+    assert result["winner"]["player_id"] in {"a", "b"}
+    assert result["api_requests"] == 0
