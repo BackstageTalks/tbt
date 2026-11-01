@@ -109,17 +109,36 @@ def _selection_name(row):
             return str(player["name"]).strip()
     return str(row.get("pick") or row.get("selection") or sid).strip()
 
+def _compact_player_name(full):
+    """Never render a generational suffix or an initial as the surname."""
+    parts=str(full or "").strip().split()
+    if not parts:
+        return "—"
+    suffixes={"jr", "junior", "sr", "senior", "ii", "iii", "iv", "v"}
+    def bare(part):
+        return part.strip(".,").casefold()
+    if len(parts)>=2 and bare(parts[-1]) in suffixes:
+        # The actual family name precedes the generation suffix.
+        family=parts[-2]
+        suffix="junior" if bare(parts[-1]) in {"jr", "junior"} else (
+            "senior" if bare(parts[-1]) in {"sr", "senior"} else parts[-1])
+        return family+" "+suffix
+    if len(parts)>=2 and len(parts[-1].strip("."))==1:
+        return parts[-2]+" "+parts[-1]
+    return parts[-1]
+
+
 def _name_map(rows):
     # Preserve compact surname-style Telegram names while disambiguating collisions.
     names=list(dict.fromkeys(_selection_name(row) for row in rows))
     surnames={}
     for full in names:
-        surname=full.split()[-1] if full.split() else "—"
+        surname=_compact_player_name(full)
         surnames.setdefault(surname.casefold(),[]).append(full)
     names_out={}
     for full in names:
         parts=full.split()
-        surname=parts[-1] if parts else "—"
+        surname=_compact_player_name(full)
         if len(surnames[surname.casefold()])>1 and len(parts)>1:
             initials="".join(item[:1].upper()+"." for item in parts[:-1])
             names_out[full]=initials+" "+surname
@@ -135,7 +154,7 @@ def _name_map(rows):
 def fmt(r,k,c,index=1,name_map=None,prefix_override=None):
     bet=r.get("betting") or {}
     selected=_selection_name(r)
-    name=(name_map or {}).get(selected) or selected.split()[-1] if selected else "—"
+    name=((name_map or {}).get(selected) or _compact_player_name(selected)) if selected else "—"
     time=stamp(r["scheduled_at"]).astimezone(TZ).strftime("%H:%M")
     if k=="aces":
         contract=str(r.get("price_contract") or "").lower()
