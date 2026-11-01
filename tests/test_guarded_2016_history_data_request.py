@@ -42,3 +42,27 @@ def test_only_fixed_source_window_can_be_triggered_by_push_request():
         assert invariant in workflow
     assert "BLINQ_PROVIDER_REQUEST_RESERVE: '500'" in workflow
     assert "github.event_name == 'push'" in workflow
+
+def test_model_changes_false_gate_distinguishes_missing_and_true():
+    # jq's // operator treats false as empty. The authorization gate must
+    # instead require an explicitly present JSON false, not an absent value.
+    import shutil
+    import subprocess
+    import pytest
+
+    if shutil.which("jq") is None:
+        pytest.skip("jq runtime not present locally")
+    expression = 'has("model_changes") and (.model_changes == false)'
+    workflow = (ROOT / ".github/workflows/data.yml").read_text()
+    assert expression in workflow
+    for payload, expected in (
+        ({"model_changes": False}, "true"),
+        ({"model_changes": True}, "false"),
+        ({"model_changes": None}, "false"),
+        ({}, "false"),
+    ):
+        result = subprocess.run(
+            ["jq", "-r", expression], input=json.dumps(payload),
+            capture_output=True, text=True, check=True,
+        )
+        assert result.stdout.strip() == expected
