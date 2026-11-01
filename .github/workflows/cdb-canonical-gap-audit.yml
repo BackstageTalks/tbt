@@ -11,7 +11,6 @@ name: CDB 2016–2026 serve/return gaps - private read-only audit
     branches: [main]
     paths:
       - scripts/cdb_canonical_gap_audit.py
-      - .github/workflows/cdb-canonical-gap-audit.yml
 
 permissions:
   contents: read
