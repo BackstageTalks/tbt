@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from ..errors import ProviderError
 from ..providers.statistics import (NoSupportedStatisticsError, complete_opponent_service_rates, parse_statistics)
 from ..providers.tennisapi_extra import normalize_set_statistics_home_away
-from .statistics_gapfill import event_id as resolve_event_id, missing_fields, retry_due
+from .statistics_gapfill import event_id as resolve_event_id, missing_fields, retry_due, recent_score_identity_conflict
 
 
 # V3 re-reads previously count-only V2 rows to capture the provider's
@@ -63,6 +63,10 @@ class StatisticsEnricher:
                             and marker.get("status") == "available")
         if legacy_available or not retry_due(match, STATISTICS_SCHEMA_VERSION):
             return "cached"
+        # An independently recorded score/identity mismatch cannot safely
+        # yield canonical statistics. Reuse that evidence during its cooldown.
+        if recent_score_identity_conflict(match):
+            return "cached"
         # Resolve identity from the same event ID as the statistics. Canonical
         # match order can differ from provider home/away, including archived rows.
         identity = raw.get("_tbt_event_identity", {})
@@ -90,7 +94,28 @@ class StatisticsEnricher:
                     "status": "unavailable", "reason": "provider_event_not_finished",
                 }}
                 return "unavailable"
-        if {home, away} != {match.player1_id, match.player2_id} or home == away:
+        if {str(home), str(away)} != {str(match.player1_id), str(match.player2_id)} or home == away:
+            # If score enrichment already recorded this SAME conflict, a
+            # recheck after cooldown must not abort the entire statistics run
+            # and repeatedly pay for the same impossible match each hour.
+            prior = raw.get("_tbt_event_identity")
+            score = raw.get("_tbt_score")
+            known = (
+                isinstance(prior, dict) and isinstance(score, dict)
+                and prior.get("status") == "mismatch"
+                and prior.get("event_id") == str(event_id)
+                and score.get("status") == "identity_mismatch"
+                and score.get("event_id") == str(event_id)
+                and score.get("identity_verified") is False
+            )
+            if known:
+                match.provider_payload = {**raw, "_tbt_statistics": {
+                    "schema": STATISTICS_SCHEMA_VERSION,
+                    "event_id": str(event_id), "source": "tennisapi1",
+                    "fetched_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "conflict", "reason": "provider_identity_mismatch",
+                }}
+                return "conflict"
             raise ProviderError("Event player identity mismatch; refusing statistics attachment")
         # Retain verified detail identity so later missing-field retries need
         # only the statistics endpoint, including after the runner is replaced.
