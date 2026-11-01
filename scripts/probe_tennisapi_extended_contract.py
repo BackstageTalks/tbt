@@ -224,9 +224,39 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         # canonical CDB identity matching. No backdating or writes.
         if case is not None:
             raise ValueError("Archive phase does not accept case")
-        day = read("archived_day_events", "/api/tennis/events/10/7/2016")
-        raw_events = _obj(day).get("events")
-        events = raw_events if isinstance(raw_events, list) else []
+        # The retired flat /api/tennis/events/{date} route returns 204 even
+        # when category-scoped historical events are available. Resolve the
+        # provider's documented category calendar first; do not claim an empty
+        # 2016 archive from an unavailable discovery response.
+        from tbt.errors import ProviderError
+        categories_response = read(
+            "archived_categories", "/api/tennis/calendar/10/7/2016/categories")
+        try:
+            categories = RapidTennisClient._response_rows(
+                categories_response, "categories")
+        except ProviderError:
+            report["historical_sample_policy"] = "category_calendar_unavailable"
+            return finish()
+        report["archived_category_count"] = len(categories)
+        grand_slam = [
+            category for category in categories
+            if RapidTennisClient._category_id(category)
+                == RapidTennisClient.CATEGORY_GRAND_SLAM
+        ]
+        if len(grand_slam) != 1:
+            report["historical_sample_policy"] = (
+                "grand_slam_category_ambiguous" if len(grand_slam) > 1
+                else "grand_slam_category_missing")
+            return finish()
+        events_response = read(
+            "archived_day_events",
+            "/api/tennis/category/-100/events/10/7/2016")
+        try:
+            events = RapidTennisClient._response_rows(
+                events_response, "events")
+        except ProviderError:
+            report["historical_sample_policy"] = "category_events_unavailable"
+            return finish()
         report["archived_event_count"] = len(events)
         valid = [
             e for e in events
@@ -237,7 +267,8 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
                 and _nested_int(e, "homeTeam", "id")
                     != _nested_int(e, "awayTeam", "id")
                 and str(_obj(e.get("status")).get("type", "")).lower()
-                    == "finished")
+                    == "finished"
+                and RapidTennisClient._is_singles_event(e))
         ]
         target = [
             e for e in valid
