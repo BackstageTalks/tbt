@@ -325,3 +325,61 @@ def test_identity_safety_aggregate_safe_case():
     })
     assert report["status"] == "IDENTITY_SAFE"
     assert report["input_rows"] == 5
+
+
+def test_only_exact_six_ambiguous_2026_provider_rows_can_be_isolated_for_staging():
+    from scripts.recover_cdb_opponent_service_rates import verified_provider_collision_quarantine
+    data = {
+        "input_rows": 100, "output_rows": 94, "quarantined_rows": 6,
+        "merged_rows_removed": 0, "duplicate_match_ids": [],
+        "duplicate_provider_event_ids": ["event1", "event2", "event3"],
+        "affected_years": [2026], "changed": True,
+        "quarantine": [
+            {"match_id": "match" + str(i), "provider_event_id": "event" + str(i // 2 + 1),
+             "reason": "ambiguous_duplicate_identity"}
+            for i in range(6)
+        ],
+    }
+    assert verified_provider_collision_quarantine(data, 6)
+    assert not verified_provider_collision_quarantine(data, 5)
+    assert not verified_provider_collision_quarantine(data, 7)
+    from copy import deepcopy
+    cases = [
+        ("merged_rows_removed", 1), ("duplicate_match_ids", ["duplicate"]),
+        ("affected_years", [2025, 2026]), ("output_rows", 95),
+        ("changed", False), ("quarantined_rows", 7),
+        ("duplicate_provider_event_ids", []),
+    ]
+    for key, value in cases:
+        changed = deepcopy(data)
+        changed[key] = value
+        assert not verified_provider_collision_quarantine(changed, 6), key
+    for key, value in (("reason", "unknown"), ("provider_event_id", "unverified-event"),
+                       ("match_id", "")):
+        changed = deepcopy(data)
+        changed["quarantine"][0][key] = value
+        assert not verified_provider_collision_quarantine(changed, 6), key
+
+
+def test_provider_quarantine_not_approved_without_explicit_stage_mode(monkeypatch, tmp_path):
+    from scripts import recover_cdb_opponent_service_rates as mod
+    example = match(stats={"p1_first_serve_win": .64})
+    safety = {
+        "input_rows": 7, "output_rows": 1, "quarantined_rows": 6,
+        "merged_rows_removed": 0, "changed": True, "affected_years": [2026],
+        "duplicate_match_ids": [], "duplicate_provider_event_ids": ["a", "b", "c"],
+        "quarantine": [
+            {"match_id": "m" + str(i), "provider_event_id": ("a", "b", "c")[i // 2],
+             "reason": "ambiguous_duplicate_identity"}
+            for i in range(6)
+        ],
+    }
+    monkeypatch.setattr(mod, "load_partitions", lambda directory: [example])
+    monkeypatch.setattr(mod, "sanitize_history_identities", lambda rows: ([example], safety))
+    with pytest.raises(ValueError, match="Canonical identity sanitizer"):
+        mod._load(tmp_path)
+    assert mod._load(tmp_path, isolate_provider_collisions=True,
+                     expected_provider_quarantine=6) == [example]
+    with pytest.raises(ValueError, match="Canonical identity sanitizer"):
+        mod._load(tmp_path, isolate_provider_collisions=True,
+                  expected_provider_quarantine=5)
