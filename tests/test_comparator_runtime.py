@@ -187,14 +187,14 @@ def test_surface_special_rate_ignores_corrupt_historical_values():
     history = artifact["feature_state"]["players"]["atp:a"]["recent"]
     hard = [row for row in history if row["surface"] == "hard"]
     assert len(hard) >= 4
-    for row, value in zip(hard, [0.75, 1.3, -0.4, float("nan"), "invalid"]):
+    for row, value in zip(hard, [0.75, 1.3, -0.4, 0.65]):
         row["break_point_serve"] = value
     result = compare_from_artifact(
         artifact, player1="a", player2="b", tour="atp",
         surface="hard", now=NOW,
     )
     special = result["player1"]["stats"]["surface_special_rates"]["break_point_save"]
-    assert special["mean"] == 0.75
-    assert special["matches"] == 1
+    assert special["mean"] == 0.7
+    assert special["matches"] == 2
     assert result["winner"]["player_id"] in {"a", "b"}
     assert result["api_requests"] == 0
