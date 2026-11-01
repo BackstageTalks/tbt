@@ -15,11 +15,11 @@ def test_r31_release_and_footer_live_heartbeat_contract():
     assert UI["ui_patch"] == "736-r61"
     assert 'content="736-r61"' in INDEX
     assert 'id="footerSystemStatus"' in INDEX
-    assert "Všetky systémy funkčné" in INDEX
-    assert 'id="footerLastUpdate">Posledný scan: —' in INDEX
+    assert 'id="footerHealthLabel">BlinQ —' in INDEX
+    assert 'id="footerLastUpdate">Scan —' in INDEX
     assert "function renderSystemFooterStatus()" in APP
     assert "state.feed?.match_status_updated_at" in APP
-    assert "Posledný scan" in APP
+    assert 'fmtTime(matchAt)' in APP
     assert "state.liveRadarHeartbeat=data?.live_radar_status" in APP
     assert 'payload["live_radar_status"] = _public_live_worker_heartbeat()' in FUNCTION_APP
     assert '"fresh": fresh' in FUNCTION_APP
