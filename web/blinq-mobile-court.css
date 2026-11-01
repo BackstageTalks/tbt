@@ -169,22 +169,22 @@
   }
   /* Daily predictions rail: modest contrast, touch height and typography adjustments (2026-11-01). */
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-panel-head h2 {
-    font-size:16px !important;
+    font-size:14px !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-tabs-row {
-    background:rgba(3,23,17,.72) !important;
+    background:rgba(3,23,17,.75) !important;
     border-color:rgba(130,196,164,.35) !important;
-    min-height:56px !important;
+    min-height:66px !important;
     padding:2px 7px !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub #dailyHubTabs {
-    height:48px !important;
+    height:58px !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab,
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab:first-child {
-    min-height:48px !important;
-    height:48px !important;
-    font-size:11.5px !important;
+    min-height:58px !important;
+    height:58px !important;
+    font-size:13px !important;
     font-weight:700 !important;
     color:#d1e2d8 !important;
   }
