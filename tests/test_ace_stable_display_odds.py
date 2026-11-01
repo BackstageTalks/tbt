@@ -60,14 +60,15 @@ assert(sandbox.projectionOddsHtml(real).includes('2.13'));
 // Reproduction: 1 Nov Basel / Vienna / Chennai Aces picks retained 2.00
 // as a provider-labelled price on the site, while Telegram showed 1.60-1.80.
 const novemberPicks = [
-  ['basel-vacherot', 'valentin-vacherot', '2026-11-01T14:30:00Z'],
-  ['vienna-alcaraz', 'carlos-alcaraz', '2026-11-01T13:00:00Z'],
-  ['chennai-okamura', 'kyoka-okamura', '2026-11-01T08:30:00Z']
+  ['17377323', '158912', '2026-11-01T14:30:00Z', 1.72],
+  ['17377322', '275923', '2026-11-01T13:00:00Z', 1.74],
+  ['17453662', '130690', '2026-11-01T08:30:00Z', 1.78]
 ];
-for(const [event_id,selection_id,scheduled_at] of novemberPicks){
+for(const [event_id,selection_id,scheduled_at,telegramOdds] of novemberPicks){
   const pick = {...real, event_id, selection_id, scheduled_at, odds:2.00};
   assert.equal(sandbox.verifiedAceProviderOdds(pick),2.00);
   const expected=sandbox.stableAceDisplayOdds(pick);
+  assert.equal(expected,telegramOdds,'Must reproduce frozen Telegram pick identity odds');
   sandbox.normalizeFeedAceOdds({ace_picks:[pick],results:[]});
   assert.equal(pick.statistical_ace_odds,expected);
   assert(expected>=1.60&&expected<=1.80);
