@@ -1,10 +1,7 @@
 name: BlinQ every private Release asset full byte SHA256 audit
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/blinq-private-release-byte-audit.yml
+  # Manual-only audit; retired redundant self-file push trigger.
   workflow_dispatch:
 
 permissions:
