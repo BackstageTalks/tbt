@@ -117,6 +117,23 @@ def test_bo5_without_verified_format_duration_does_not_invent_cross_format_aces(
     assert state["provider_requests"] == 0
 
 
+def test_bo5_missing_target_baseline_and_duration_must_abstain():
+    # A partial/rebuilt serving artifact can contain BO5 player samples but
+    # lack an independently verified BO5 population mean and game calibration.
+    # Never reuse the all-format ATP average for BO5 in this state.
+    rows = [match(i, best_of=5, games=None) for i in range(1, 16)]
+    state = build_market_state(rows, {"atp:a", "atp:b"}, CUTOFF)
+    assert state["baselines"]["atp"]["aces"] is not None
+    state["format_baselines"]["atp"]["5"]["aces"] = None
+    value = project_market_state(
+        state, left_key="atp:a", right_key="atp:b", tour="atp",
+        surface="hard", best_of=5, now=CUTOFF + timedelta(hours=4), cutoff=CUTOFF,
+    )
+    assert value["aces"] is None
+    # Other markets keep their own independently verified baseline.
+    assert value["double_faults"]["total_estimate"] is not None
+
+
 def test_indoor_hard_shares_verified_hard_surface_bucket():
     rows = [match(i, surface="indoor_hard") for i in range(1, 16)]
     state = build_market_state(rows, {"atp:a", "atp:b"}, CUTOFF)
