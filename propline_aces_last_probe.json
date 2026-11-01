@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "mode": "read_only_aces_real_quote_probe",
+  "captured_at_utc": "2026-11-01T06:31:52.583156+00:00",
+  "provider_calls": 5,
+  "call_limit": 5,
+  "provider_remaining_header": 374,
+  "events_checked": 31,
+  "real_two_sided_pairs": 0,
+  "real_books": {},
+  "rejected": {
+    "fantasy_pairs": 79,
+    "one_sided": 24
+  },
+  "samples": [],
+  "writes_to_cdb_or_feed": 0,
+  "published_picks_changed": 0
+}
