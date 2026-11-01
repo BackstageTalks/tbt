@@ -13,7 +13,7 @@ def test_footer_is_minimal_with_live_worker_heartbeat_status():
     assert ".site-footer-minimal" in CSS
     assert 'id="footerSystemStatus"' in INDEX
     assert "Všetky systémy funkčné" in INDEX
-    assert "Aktualizácie: —" in INDEX
+    assert "Posledný scan: —" in INDEX
     assert "renderSystemFooterStatus" in APP
 
 
