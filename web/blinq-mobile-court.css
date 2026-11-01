@@ -177,6 +177,9 @@
     min-height:56px !important;
     padding:2px 7px !important;
   }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub #dailyHubTabs {
+    height:48px !important;
+  }
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab,
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab:first-child {
     min-height:48px !important;
