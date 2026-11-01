@@ -213,3 +213,97 @@ def test_interrupted_cleanup_preserves_verified_new_bundle(tmp_path, monkeypatch
     assert remote["_tbt_bundle_manifest.json"]["body"] == bundle.read_bytes()
     assert not any(n.startswith("blinq-rollback-") or n.startswith("blinq-txn-")
                    for n in remote)
+
+
+def _prediction_orphans_fixture(tmp_path, *, corrupt_manifest=False):
+    """Two orphaned tokens surrounding a valid current production bundle."""
+    import json
+
+    canonical = ("feed.json", "ledger.json", "daily_offer_snapshot.json",
+                 "_tbt_bundle_manifest.json")
+    store, remote = make_store(tmp_path, existing=canonical)
+    store.tag = "tbt-predictions-v1"
+    def put(name, content):
+        path = tmp_path / name
+        path.write_bytes(content)
+        store.upload([path])
+
+    manifest = {"schema": 1, "files": {
+        name: {"sha256": remote[name]["digest"][7:],
+               "bytes": remote[name]["size"]}
+        for name in canonical if name != "_tbt_bundle_manifest.json"}}
+    put("_tbt_bundle_manifest.json", json.dumps(manifest).encode())
+    original_ids = {name: remote[name]["id"] for name in canonical}
+    original_digests = {name: remote[name]["digest"] for name in canonical}
+    for token in ("a" * 32, "b" * 32):
+        put(f"blinq-txn-{token}.json", json.dumps({
+            "schema": 1, "created": [],
+            "target_bundle_sha256": "f" * 64,
+        }).encode())
+        put(f"blinq-rollback-{token}-daily_offer_snapshot.json",
+            b"old preserved release asset")
+    put(f"blinq-candidate-{'a' * 32}-daily_offer_snapshot.json",
+        b"abandoned staged bytes")
+
+    def fake_download(*, required_names=()):
+        if corrupt_manifest:
+            raise RuntimeError("Release bundle checksum mismatch")
+        remote_manifest = json.loads(remote["_tbt_bundle_manifest.json"]["body"])
+        for name in required_names:
+            assert hashlib.sha256(remote[name]["body"]).hexdigest() == (
+                remote_manifest["files"][name]["sha256"])
+            assert len(remote[name]["body"]) == remote_manifest["files"][name]["bytes"]
+        return list(required_names)
+
+    store._download_asset = lambda name: (
+        (store.directory / name).write_bytes(remote[name]["body"]))
+    store.download = fake_download
+    return store, remote, original_ids, original_digests
+
+
+def test_multiple_prediction_orphans_cleaned_only_after_verified_bundle(tmp_path):
+    store, remote, ids, digests = _prediction_orphans_fixture(tmp_path)
+    report = store.recover_interrupted_swaps()
+    assert report == {
+        "pending_transactions": 2,
+        "status": "committed_generation_verified",
+        "orphan_assets_cleaned": 5,
+    }
+    assert all(remote[name]["id"] == ids[name] for name in ids)
+    assert all(remote[name]["digest"] == digests[name] for name in digests)
+    assert not any(name.startswith(("blinq-candidate-", "blinq-rollback-",
+                                    "blinq-txn-")) for name in remote)
+    assert store.recover_interrupted_swaps()["status"] == "clean"
+
+
+def test_multiple_prediction_orphans_block_without_canonical_readback(tmp_path):
+    store, remote, ids, _ = _prediction_orphans_fixture(
+        tmp_path, corrupt_manifest=True)
+    before = set(remote)
+    with pytest.raises(RuntimeError, match="Multiple pending bundle swaps"):
+        store.recover_interrupted_swaps()
+    assert set(remote) == before
+    assert all(remote[name]["id"] == ids[name] for name in ids)
+
+
+def test_unrecognized_prediction_candidate_prevents_cleanup(tmp_path):
+    store, remote, _, _ = _prediction_orphans_fixture(tmp_path)
+    path = tmp_path / f"blinq-candidate-{'c' * 32}-feed.json"
+    path.write_bytes(b"unknown transaction")
+    store.upload([path])
+    before = set(remote)
+    with pytest.raises(RuntimeError, match="Unrecognized pending"):
+        store.recover_interrupted_swaps()
+    assert set(remote) == before
+
+
+def test_single_stale_prediction_journal_does_not_rollback_verified_bundle(tmp_path):
+    store, remote, ids, digests = _prediction_orphans_fixture(tmp_path)
+    for name in list(remote):
+        if ("b" * 32) in name:
+            store._asset_api("DELETE", remote[name]["id"])
+    report = store.recover_interrupted_swaps()
+    assert report["status"] == "committed_generation_verified"
+    assert report["pending_transactions"] == 1
+    assert all(remote[name]["id"] == ids[name] for name in ids)
+    assert all(remote[name]["digest"] == digests[name] for name in digests)
