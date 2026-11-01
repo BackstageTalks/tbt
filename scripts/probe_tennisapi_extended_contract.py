@@ -82,7 +82,7 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                 "timestamp" in str(k).lower() or "observed" in str(k).lower()
                 for k in obj
             )
-    elif name.startswith("year_stats_") or name == "team_year_stats_doc_example":
+    elif name.startswith("year_stats_") or name in ("team_year_stats_doc_example", "historical_2016_player_year_stats"):
         groups = obj.get("statistics")
         if isinstance(groups, list):
             known = (
@@ -122,7 +122,7 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
             # Positive results are season aggregates, NOT match-level
             # candidate cells and NOT time-valid within their own season.
             result["point_in_time_match_eligibility"] = False
-    elif name == "point_by_point":
+    elif name in ("point_by_point", "historical_2016_point_by_point"):
         try:
             result["inventory"] = point_by_point_inventory(payload, event_id=event_id)
         except Exception as exc:
