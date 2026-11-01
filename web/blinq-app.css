@@ -6428,6 +6428,10 @@ body#blinqPremium .footer-system-divider{color:rgba(108,145,132,.42)!important;f
 body#blinqPremium .footer-system-dot{display:inline-block!important;width:8px!important;height:8px!important;min-width:8px!important;border-radius:50%!important;background:#38efa5!important;animation:blinqStatusBreath 2.7s ease-in-out infinite!important;transform-origin:center!important}
 body#blinqPremium .footer-system-status.is-stale .footer-system-dot{animation:none!important;background:#6e837b!important;box-shadow:none!important;opacity:.62!important}
 body#blinqPremium .footer-system-status.is-stale strong{color:#8da099!important}
+/* Match updater status: healthy dots breathe, delayed dots turn amber, unknown stays neutral. */
+body#blinqPremium .footer-system-status.is-delayed .footer-system-dot{background:#e9b366!important;opacity:1!important}
+body#blinqPremium .footer-system-status.is-delayed strong{color:#e9b366!important}
+@media (prefers-reduced-motion: reduce){body#blinqPremium .footer-system-status .footer-system-dot{animation:none!important}}
 
 /* No icon/dot decoration on the selected market tab: glow + underline only. */
 body#blinqPremium .daily-hub-tab.active span::before,

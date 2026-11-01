@@ -1752,18 +1752,29 @@
     return `<button class="hub-detail is-locked" type="button" data-detail-locked data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}" aria-label="${escapeHtml(lcopy(`Match detail available from ${required}`,`Detail zápasu dostupný od ${required}`,`Detail zápasu dostupný od ${required}`))}" title="${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od ${required}`,`Dostupné od ${required}`))}"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span><i aria-hidden="true"><svg viewBox="0 0 20 20"><rect x="4" y="8" width="12" height="9" rx="2"/><path d="M6.5 8V5a3.5 3.5 0 0 1 7 0v3"/></svg></i></button>`;
   }
   function renderSystemFooterStatus(){
-    const host=$('footerSystemStatus'),time=$('footerLastUpdate');if(!host||!time)return;
-    // Match-status worker snapshot time is provided by the authenticated feed.
-    // Do not substitute feed generation or LIVE radar timestamps for a match scan.
-    const matchScanAt=state.feed?.match_status_updated_at||'';
-    time.textContent=Number.isFinite(Date.parse(matchScanAt))
-      ?lcopy(`Last scan: ${fmtTime(matchScanAt)}`,`Posledný scan: ${fmtTime(matchScanAt)}`,`Poslední sken: ${fmtTime(matchScanAt)}`)
-      :lcopy('Last scan: —','Posledný scan: —','Poslední sken: —');
-    const heartbeat=state.liveRadarHeartbeat||state.userLiveRadarStatus||{};
-    const raw=heartbeat?.scanned_at||heartbeat?.updated_at||state.feed?.generated_at||'';
-    const parsed=Date.parse(raw);
-    const fresh=heartbeat?.fresh===true||(Number.isFinite(parsed)&&Date.now()-parsed<=180000);
-    host.classList.toggle('is-stale',!fresh);
+    const host=$('footerSystemStatus'),scan=$('footerLastUpdate'),update=$('footerFeedUpdate'),label=$('footerHealthLabel');
+    if(!host||!scan||!update||!label)return;
+    const feedAt=state.feed?.generated_at||'';
+    const updateCopy=Number.isFinite(Date.parse(feedAt))
+      ?lcopy(`Update ${fmtTime(feedAt)}`,`Aktualizácia ${fmtTime(feedAt)}`,`Aktualizace ${fmtTime(feedAt)}`)
+      :lcopy('Update —','Aktualizácia —','Aktualizace —');
+    if(update.textContent!==updateCopy)update.textContent=updateCopy;
+    // The authenticated match-status updater is the only source of scan time and health.
+    const matchAt=state.feed?.match_status_updated_at||'';
+    const scanCopy=Number.isFinite(Date.parse(matchAt))
+      ?lcopy(`Scan ${fmtTime(matchAt)}`,`Scan ${fmtTime(matchAt)}`,`Sken ${fmtTime(matchAt)}`)
+      :lcopy('Scan —','Scan —','Sken —');
+    if(scan.textContent!==scanCopy)scan.textContent=scanCopy;
+    const matchMs=Date.parse(matchAt),ageMs=Date.now()-matchMs;
+    const valid=Number.isFinite(matchMs)&&ageMs>=0;
+    const healthy=valid&&ageMs<=30*60*1000;
+    const delayed=valid&&!healthy;
+    const version=shortModelVersion(state.feed?.model?.version||state.feed?.model_version||'');
+    const status=healthy?'ONLINE':delayed?'DELAY':lcopy('UNKNOWN','NEZNÁMY STAV','NEZNÁMÝ STAV');
+    const statusCopy=`BlinQ${version?' '+version:''} ${status}`;
+    if(label.textContent!==statusCopy)label.textContent=statusCopy;
+    host.classList.toggle('is-stale',!healthy);
+    host.classList.toggle('is-delayed',delayed);
   }
   function insightTypeLabel(type){return ({info:'Info',insight:'Premium Info',alert:'LIVE · COMEBACK',live_watch:'LIVE · WATCH',set2:'LIVE · 2. SET',vip:'Premium Info'})[String(type||'').toLowerCase()]||'Insight';}
   function insightAudienceText(levels){
@@ -8548,6 +8559,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const refresh=()=>{if(document.hidden||!navigator.onLine||document.activeElement?.matches('input,select,textarea')||$('appShell').hidden||state.route==='admin'||state.demoMode||document.querySelector('dialog[open]')||Date.now()-lastAttempt<60000)return;lastAttempt=Date.now();refreshWorkspace(false).catch(()=>{});};
     const privateRefresh=()=>{if(!document.hidden&&navigator.onLine&&!$('appShell')?.hidden)refreshPrivateUpdates(false).catch(()=>{});};
     setInterval(refresh,5*60*1000);setInterval(privateRefresh,30*1000);
+    // Update footer health on elapsed time without extra provider/API calls.
+    setInterval(renderSystemFooterStatus,30*1000);
     setInterval(()=>{pollAdminModelFactory().catch(()=>{});},30*1000);
     document.addEventListener('visibilitychange',()=>{refresh();if(!document.hidden)refreshPrivateUpdates(true).catch(()=>{});});
     window.addEventListener('online',()=>{lastAttempt=0;refresh();refreshPrivateUpdates(true).catch(()=>{});});
