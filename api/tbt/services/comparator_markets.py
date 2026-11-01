@@ -258,15 +258,19 @@ def project_market_state(state: Mapping | None, *, left_key: str, right_key: str
     for market in MARKETS:
         baseline = _count(((formatted.get(tour) or {}).get(str(best_of)) or {}).get(market))
         if baseline is None:
-            baseline = _count(tour_base.get(market))
-            # When no verified target-format baseline exists, use only the
-            # empirically calibrated cross-format baseline, not an unscaled BO3
-            # population average for a BO5 target.
-            source3 = _count(((formatted.get(tour) or {}).get("3") or {}).get(market))
-            target_games = _length_mean(lengths, tour, surface, best_of)
-            source_games = _length_mean(lengths, tour, surface, 3)
-            if best_of == 5 and source3 is not None and target_games and source_games:
-                baseline = source3 * target_games / source_games
+            if best_of == 3:
+                # Same-format tour fallback is valid when a BO3-specific
+                # aggregate has too few samples.
+                baseline = _count(tour_base.get(market))
+            else:
+                # Never transfer an unscaled all-format tour mean into BO5.
+                # Cross-format fallback is allowed only when both observed
+                # game-length aggregates and BO3 counts support calibration.
+                source3 = _count(((formatted.get(tour) or {}).get("3") or {}).get(market))
+                target_games = _length_mean(lengths, tour, surface, 5)
+                source_games = _length_mean(lengths, tour, surface, 3)
+                if source3 is not None and target_games and source_games:
+                    baseline = source3 * target_games / source_games
         if baseline is None:
             result[market] = None
             continue
