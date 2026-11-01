@@ -167,4 +167,26 @@
   #dailyHub:is([data-tab="ace"],[data-tab="double_faults"]) .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] > td:nth-child(7) .hub-number-stack small {
     display:none !important;
   }
+  /* Daily predictions rail: modest contrast, touch height and typography adjustments (2026-11-01). */
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-panel-head h2 {
+    font-size:16px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-tabs-row {
+    background:rgba(3,23,17,.72) !important;
+    border-color:rgba(130,196,164,.35) !important;
+    min-height:56px !important;
+    padding:2px 7px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab,
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab:first-child {
+    min-height:48px !important;
+    height:48px !important;
+    font-size:11.5px !important;
+    font-weight:700 !important;
+    color:#d1e2d8 !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab.active {
+    color:#f7fff9 !important;
+  }
+
 }
