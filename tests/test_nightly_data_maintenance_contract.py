@@ -4,11 +4,13 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = (ROOT / ".github/workflows/nightly-data-maintenance.yml").read_text(encoding="utf-8")
 
 
-def test_nightly_maintenance_is_zero_tennisapi_and_external_scheduler_safe():
+def test_nightly_maintenance_is_zero_tennisapi_and_native_scheduler_safe():
     assert "RAPIDAPI_KEY" not in WORKFLOW
     assert "RapidTennis" not in WORKFLOW
     assert "Europe/Bratislava" in WORKFLOW
-    assert "  schedule:" not in WORKFLOW
+    assert "cron: '30 0 * * *'" in WORKFLOW
+    assert "timezone: Europe/Bratislava" in WORKFLOW
+    assert 'event in ("push", "schedule")' in WORKFLOW
     assert "  push:" in WORKFLOW
     assert ".github/nightly-data-maintenance-request.json" in WORKFLOW
     assert "time(4, 0)" in WORKFLOW

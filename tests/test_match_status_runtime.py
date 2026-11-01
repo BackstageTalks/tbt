@@ -680,11 +680,11 @@ def test_production_worker_drops_prior_day_pending_and_terminal_snapshot_rows():
     assert set(result["pending"]) == {"current-day"}
 
 
-def test_match_status_accepts_external_24_7_scheduler():
+def test_match_status_accepts_native_and_external_24_7_scheduler():
     from pathlib import Path
     workflow = (Path(__file__).resolve().parents[1] /
                 ".github/workflows/match-status.yml").read_text()
-    assert "  schedule:" not in workflow
+    assert "cron: '0,15,30,45 * * * *'" in workflow
     assert "timezone:" not in workflow
     assert "workflow_dispatch:" in workflow
 

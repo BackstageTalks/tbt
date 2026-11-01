@@ -1,11 +1,14 @@
 name: BlinQ targeted CDB API gapfill (UTC 17:09 reset, 98% closeout)
 
-# GitHub cron is intentionally forbidden by the repository contract.
-# Manual workflow_dispatch is intended for an external hourly schedule with
-# progressive hourly caps, 14,700-call closeout 35–7 minutes before the fixed 17:09 UTC
+# Native GitHub cron and manual dispatch reuse the same quota and writer guards.
+# Progressive hourly caps and guarded closeout before the fixed 17:09 UTC
 # reset (18:09 winter / 19:09 summer), and 17:10–17:13 UTC new-day start.
 # A single canonical writer runs at once.
 on:
+  schedule:
+    - cron: '3 * * * *'
+    - cron: '41 16 * * *'
+    - cron: '11 17 * * *'
   push:
     branches: [main]
     paths:
@@ -28,6 +31,7 @@ concurrency:
 
 jobs:
   guard-plan-dispatch:
+    if: ${{ github.event_name != 'schedule' || vars.BLINQ_NATIVE_SCHEDULES_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 350
     env:

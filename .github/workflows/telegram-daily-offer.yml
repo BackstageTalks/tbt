@@ -2,6 +2,9 @@ name: BlinQ Telegram complete daily offer (06:20 queue)
 # External scheduler calls repository_dispatch in Europe/Bratislava at 06:20.
 # The job retries while data writers run; no native GitHub cron.
 on:
+  schedule:
+    - cron: '20 6 * * *'
+      timezone: Europe/Bratislava
   repository_dispatch:
     types: [telegram-daily-offer-tick]
   workflow_dispatch:
@@ -16,6 +19,7 @@ permissions:
 
 jobs:
   queue:
+    if: ${{ github.event_name != 'schedule' || vars.BLINQ_NATIVE_SCHEDULES_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:

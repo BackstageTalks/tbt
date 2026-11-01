@@ -317,16 +317,28 @@ if 'run-name: "BlinQ CI · ${{ github.sha }}"' not in ci_yml:
     fail('CI run name does not expose commit SHA')
 if 'workflow_dispatch:' not in account_yml or 'BLINQ_ACCOUNT_WORKER_TOKEN' not in account_yml or '/api/v1/internal/account-inactivity-worker' not in account_yml:
     fail('externally dispatched account inactivity workflow contract missing')
-# All recurring timings now belong to the external cron scheduler. Preserve
-# GitHub push/PR checks and explicit workflow_dispatch without internal timers.
-scheduled_workflows = [
-    path.name for path in sorted((ROOT / '.github' / 'workflows').iterdir())
-    if path.suffix in {'.yml', '.yaml'}
-    and re.search(r'(?m)^  schedule:\s*$', path.read_text(encoding='utf-8'))
-]
-if scheduled_workflows:
-    fail('GitHub cron schedules must be external-only: ' + ', '.join(scheduled_workflows))
-ok('workflow stale-deploy + stale-rerun + externally dispatched worker safeguards present')
+# Native GitHub schedules can be restored without weakening runtime guards.
+native_schedules = {
+    'account-inactivity.yml': "cron: '30 7 * * *'",
+    'live-radar.yml': "cron: '0 * * * *'",
+    'match-status.yml': "cron: '0,15,30,45 * * * *'",
+    'morning-refresh.yml': "cron: '15 5 * * *'",
+    'telegram-daily-offer.yml': "cron: '20 6 * * *'",
+    'telegram-offer.yml': "cron: '12,42 * * * *'",
+    'data-hourly-quota-gapfill.yml': "cron: '3 * * * *'",
+    'nightly-data-maintenance.yml': "cron: '30 0 * * *'",
+}
+for workflow_name, cron_expr in native_schedules.items():
+    workflow = read(ROOT / '.github' / 'workflows' / workflow_name)
+    if '  schedule:' not in workflow or cron_expr not in workflow:
+        fail(f'native GitHub schedule missing: {workflow_name}')
+    if "BLINQ_NATIVE_SCHEDULES_ENABLED == 'true'" not in workflow:
+        fail(f'native GitHub schedule cutover guard missing: {workflow_name}')
+for workflow_name in ('morning-refresh.yml', 'telegram-daily-offer.yml', 'nightly-data-maintenance.yml'):
+    workflow = read(ROOT / '.github' / 'workflows' / workflow_name)
+    if 'timezone: Europe/Bratislava' not in workflow:
+        fail(f'Bratislava timezone missing: {workflow_name}')
+ok('workflow stale-deploy + stale-rerun + native schedules and account-inactivity safeguards present')
 
 # 9. Production tree cleanliness.
 # In CI the checkout itself necessarily contains .git/.git metadata.  The audit must
