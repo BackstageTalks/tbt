@@ -105,3 +105,19 @@ def test_optional_player_details_cooldown_does_not_hide_future_or_stale_gaps():
         {"player_detail_checked_at": "2026-11-01T10:00:00"}, now=now
     )
     assert not enrichment._recently_checked_player_details({}, now=now)
+
+
+def test_missing_player_ranking_fallback_retries_after_one_day():
+    now = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
+    stamp = {"ranking_fallback_checked_at": (now - timedelta(hours=6)).isoformat()}
+    assert enrichment._recently_checked_player_rankings(stamp, now=now)
+    assert not enrichment._recently_checked_player_rankings(
+        {"ranking_fallback_checked_at": (now - timedelta(days=2)).isoformat()}, now=now
+    )
+    assert not enrichment._recently_checked_player_rankings(
+        {"ranking_fallback_checked_at": (now + timedelta(minutes=1)).isoformat()}, now=now
+    )
+    assert not enrichment._recently_checked_player_rankings(
+        {"ranking_fallback_checked_at": "bad"}, now=now
+    )
+    assert not enrichment._recently_checked_player_rankings({}, now=now)
