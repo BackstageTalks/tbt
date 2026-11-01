@@ -49,7 +49,8 @@ jobs:
             (.event_id | type == "number" and . > 0) and
             .cdb_writes_allowed == false and
             (.phase == "full" or .phase == "metadata" or .phase == "odds" or
-             .phase == "doubles" or .phase == "quality")' "$request" >/dev/null
+             .phase == "doubles" or .phase == "quality") and
+            (.case == null or (.case | type == "string" and length > 0 and length < 64))' "$request" >/dev/null
       - name: Install existing API dependencies
         run: python -m pip install -r api/requirements-train.txt
       - name: Run guarded read-only provider sample
@@ -59,8 +60,10 @@ jobs:
           requests="$(jq -r .max_requests .github/tennisapi-contract-probe-request.json)"
           event_id="$(jq -r .event_id .github/tennisapi-contract-probe-request.json)"
           phase="$(jq -r .phase .github/tennisapi-contract-probe-request.json)"
-          python scripts/probe_tennisapi_extended_contract.py \
-            --event-id "$event_id" --max-requests "$requests" --phase "$phase" \
+          probe_case="$(jq -r '.case // empty' .github/tennisapi-contract-probe-request.json)"
+          options=(--event-id "$event_id" --max-requests "$requests" --phase "$phase")
+          [[ -z "$probe_case" ]] || options+=(--case "$probe_case")
+          python scripts/probe_tennisapi_extended_contract.py "${options[@]}" \
             --out .cache/tbt/tennisapi-contract/live-probe.json
       - name: Validate result is research-only
         shell: bash
