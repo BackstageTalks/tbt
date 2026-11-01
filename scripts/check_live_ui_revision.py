@@ -105,7 +105,11 @@ def build_optimized_revision(files: dict[str, bytes]) -> dict[str, bytes]:
     Never trust deployment.json checksums alone when checking optimized assets:
     independently reproduce the JS/CSS bytes first.
     """
-    from scripts.optimize_web_assets import ASSETS, build
+    if __package__:
+        from scripts.optimize_web_assets import ASSETS, build
+    else:
+        # GitHub Actions invokes this file directly: sys.path starts at scripts/.
+        from optimize_web_assets import ASSETS, build
 
     with tempfile.TemporaryDirectory(prefix="blinq-watchdog-") as tmp:
         web = Path(tmp) / "web"
