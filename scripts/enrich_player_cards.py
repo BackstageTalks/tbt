@@ -263,6 +263,35 @@ def _recently_unavailable(profile: dict[str, Any], *, days: int = 30) -> bool:
     return datetime.now(timezone.utc) - checked.astimezone(timezone.utc) < timedelta(days=days)
 
 
+_PLAYER_DETAIL_FIELDS = ("birth_date", "height_cm", "hand", "birthplace", "residence", "country_code")
+
+
+def _player_details_complete(profile: dict[str, Any]) -> bool:
+    """Static profile details are already present; rankings refresh independently."""
+    return all(profile.get(field) not in (None, "") for field in _PLAYER_DETAIL_FIELDS)
+
+
+def _recently_checked_player_details(
+    profile: dict[str, Any], *, now: datetime | None = None, days: int = 7
+) -> bool:
+    """Avoid repeating a completed optional details lookup on every job run.
+
+    Missing fields are retried after seven days; malformed or future timestamps
+    never suppress a request. Errors are not cached by the caller.
+    """
+    stamp = profile.get("player_detail_checked_at")
+    if not isinstance(stamp, str):
+        return False
+    try:
+        checked = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if checked.tzinfo is None:
+        return False
+    age = (now or datetime.now(timezone.utc)) - checked.astimezone(timezone.utc)
+    return timedelta(0) <= age < timedelta(days=days)
+
+
 def _recently_unavailable_tournament_logo(profile: dict[str, Any], *, days: int = 30) -> bool:
     """Avoid spending quota repeatedly on provider-declared missing logos."""
     if profile.get("logo_status") != "unavailable":
@@ -489,6 +518,8 @@ def main() -> None:
         "fallback_ranking_matches": 0,
         "player_detail_requests": 0,
         "player_detail_matches": 0,
+        "player_details_cached_complete": 0,
+        "player_details_skipped_recent": 0,
         "photo_requests": 0,
         "photos_downloaded": 0,
         "photos_cached": 0,
@@ -570,20 +601,33 @@ def main() -> None:
 
         detail_budget = args.max_player_detail_requests
         for item in players:
+            player_id = item["id"]
+            profile = profiles[player_id]
+            if _player_details_complete(profile):
+                report["player_details_cached_complete"] += 1
+                continue
+            if _recently_checked_player_details(profile):
+                report["player_details_skipped_recent"] += 1
+                continue
             if detail_budget <= 0:
                 break
-            player_id = item["id"]
             try:
                 report["player_detail_requests"] += 1
                 detail_budget -= 1
                 detail = profile_from_player_details(
                     provider.player_details(player_id), assumed_player_id=player_id
                 )
+                if detail.get("id") != player_id:
+                    report["errors"].append(f"player details {player_id}: provider identity mismatch")
+                    continue
                 if any(detail.get(key) not in (None, "") for key in ("birth_date", "height_cm", "hand", "country_code", "birthplace", "residence")):
                     profiles[player_id] = _merge_profile(
-                        profiles[player_id], detail, source=profiles[player_id].get("ranking_source") or "player_details"
+                        profile, detail, source=profile.get("ranking_source") or "player_details"
                     )
                     report["player_detail_matches"] += 1
+                # Cache only successfully decoded, identity-matched provider responses.
+                # Even a valid empty response should not consume calls every run.
+                profiles[player_id]["player_detail_checked_at"] = datetime.now(timezone.utc).isoformat()
             except RequestBudgetExceeded as exc:
                 report["errors"].append(f"player detail request budget stopped: {exc}")
                 break
