@@ -17,7 +17,7 @@ from typing import Mapping
 from ..data.player_identity import normalize_player_name
 
 
-INDEX_SCHEMA = 2
+INDEX_SCHEMA = 3
 H2H_BUCKETS = 256
 
 
@@ -62,8 +62,12 @@ def build_comparator_index(artifact: Mapping, target: Path) -> dict:
     if not allowed or not allowed.issubset(states):
         raise ComparatorIndexError("canonical directory and feature states disagree")
 
-    core = {key: value for key, value in artifact.items() if key not in {"feature_state", "players"}}
+    core = {key: value for key, value in artifact.items() if key not in {"feature_state", "players", "market_state"}}
     core["schema"] = 1
+    market_state = artifact.get("market_state") or {}
+    market_players = market_state.get("players") or {}
+    if not isinstance(market_players, dict):
+        raise ComparatorIndexError("invalid market evidence")
     source_schema = source.get("schema_version")
     if source_schema is None:
         raise ComparatorIndexError("missing feature state schema")
@@ -77,15 +81,21 @@ def build_comparator_index(artifact: Mapping, target: Path) -> dict:
         conn.execute("PRAGMA synchronous=OFF")
         conn.execute("CREATE TABLE metadata(key TEXT PRIMARY KEY, value BLOB NOT NULL)")
         conn.execute("CREATE TABLE player_states(player_key TEXT PRIMARY KEY, payload BLOB NOT NULL)")
+        conn.execute("CREATE TABLE market_states(player_key TEXT PRIMARY KEY, payload BLOB NOT NULL)")
         conn.execute("CREATE TABLE h2h_buckets(bucket INTEGER PRIMARY KEY, payload BLOB NOT NULL)")
         conn.executemany("INSERT INTO metadata(key,value) VALUES (?,?)", [
             ("schema", _encode(INDEX_SCHEMA)),
             ("core", _encode(core)),
             ("feature_state_schema", _encode(int(source_schema))),
+            ("market_core", _encode({key: value for key, value in market_state.items() if key != "players"})),
         ])
         conn.executemany(
             "INSERT INTO player_states(player_key,payload) VALUES (?,?)",
             ((key, _encode(states[key])) for key in sorted(allowed)),
+        )
+        conn.executemany(
+            "INSERT INTO market_states(player_key,payload) VALUES (?,?)",
+            ((key, _encode(market_players[key])) for key in sorted(allowed) if key in market_players),
         )
         total_h2h = 0
         buckets = [[] for _ in range(H2H_BUCKETS)]
@@ -177,6 +187,12 @@ def load_pair_artifact(path: Path, directory: Mapping, *, player1: str, player2:
             if row is None:
                 raise ComparatorIndexError("canonical_player_state_missing")
             states[key] = _decode(row[0])
+        market_core = metadata("market_core")
+        markets = {}
+        for key in (key1, key2):
+            row = conn.execute("SELECT payload FROM market_states WHERE player_key=?", (key,)).fetchone()
+            if row:
+                markets[key] = _decode(row[0])
         bucket = conn.execute(
             "SELECT payload FROM h2h_buckets WHERE bucket=?",
             (_pair_bucket(key1, key2),),
@@ -197,6 +213,7 @@ def load_pair_artifact(path: Path, directory: Mapping, *, player1: str, player2:
         return {
             **core,
             "players": [left, right],
+            "market_state": {**market_core, "players": markets} if market_core else None,
             "feature_state": {
                 "schema_version": metadata("feature_state_schema"),
                 "players": states,
