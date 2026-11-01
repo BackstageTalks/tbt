@@ -169,7 +169,21 @@ def upload_archive(session, *, date_utc: str, folder_id: str, export: dict) -> d
         "supportsAllDrives": "true",
     }, headers={"Content-Type": f"multipart/related; boundary={boundary}"},
        data=upload, timeout=90)
-    response.raise_for_status()
+    if not response.ok:
+        # Do not print entire Google response, request, service-account key
+        # or token. The documented Google reason is sufficient for root cause.
+        try:
+            error = response.json().get("error") or {}
+            reasons = error.get("errors") or []
+            reason = str(reasons[0].get("reason") or "") if reasons else ""
+            if not reason:
+                reason = str(error.get("status") or "unknown")
+        except (ValueError, AttributeError, TypeError, IndexError):
+            reason = "unavailable"
+        raise RuntimeError(
+            f"MoviOdds Drive upload denied HTTP {response.status_code} "
+            f"reason={reason[:80]}"
+        )
     result = response.json()
     if (result.get("name") != name or folder_id not in (result.get("parents") or [])
         or not result.get("id")):
