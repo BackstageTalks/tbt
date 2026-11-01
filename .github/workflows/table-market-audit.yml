@@ -1,9 +1,6 @@
 name: BlinQ verified table market audit
 # Post-fitting model probabilities and a checksum-pinned canonical year.
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/table-market-audit.yml']
   workflow_dispatch:
 permissions:
   contents: read

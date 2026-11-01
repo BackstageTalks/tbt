@@ -1,9 +1,6 @@
 name: BlinQ all-category issued evidence audit
 # Include priced-sample uncertainty separately from win-rate sample size.
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/issued-evidence-audit.yml']
   workflow_dispatch:
 permissions:
   contents: read

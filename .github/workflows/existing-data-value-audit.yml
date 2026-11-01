@@ -1,9 +1,6 @@
 name: BlinQ existing-data recovery and market audit
 # Strict post-fitting evaluation excludes later calibration and model selection.
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/existing-data-value-audit.yml']
   workflow_dispatch:
 permissions:
   contents: read
