@@ -45,6 +45,21 @@ assert.equal(sandbox.stableAceDisplayOdds({...row, market: 'games'}).toString(),
 assert.equal(row.odds, 2.00, 'underlying provider quote unchanged');
 assert.equal(row.odds, JSON.parse(original).odds, 'original provider price unchanged');
 assert(sandbox.projectionOddsHtml(row).includes(value.toFixed(2)));
+
+// A provider-backed PropLine quote must NOT be overwritten by working odds.
+const real = {
+  ...row, odds: 2.125, odds_contract_version: 'ace_df_real_api_v1',
+  odds_source: 'propline', odds_bookmaker: 'bookA',
+  price_contract: 'player_total_ou', market_line: 7.5, ou_side: 'over'
+};
+sandbox.normalizeFeedAceOdds({ace_picks:[real],results:[]});
+assert.equal(real.statistical_ace_odds,undefined);
+assert.equal(sandbox.verifiedAceProviderOdds(real),2.125);
+assert(sandbox.projectionOddsHtml(real).includes('2.13'));
+const unverified = {...real, odds_bookmaker: ''};
+sandbox.normalizeFeedAceOdds({ace_picks:[unverified],results:[]});
+assert.equal(unverified.statistical_ace_odds,value);
+assert(sandbox.projectionOddsHtml(unverified).includes(value.toFixed(2)));
 const result = {
   event_id:'ace-1',scheduled_at:row.scheduled_at,
   market_publications:[{
@@ -56,6 +71,17 @@ sandbox.normalizeFeedAceOdds({ace_picks:[],results:[result]});
 assert.equal(result.market_publications[0].statistical_ace_odds,value);
 assert.equal(sandbox.aceDfResultKpiOdds(result.market_publications[0]),value);
 assert.equal(result.market_publications[0].odds,2.0);
+
+const realResult = {
+  event_id:'ace-1', scheduled_at:row.scheduled_at,
+  market_publications:[{
+    ...real, market:'aces', selection_id:'player-1', issued_at:row.scheduled_at
+  }]
+};
+sandbox.normalizeFeedAceOdds({ace_picks:[],results:[realResult]});
+assert.equal(realResult.market_publications[0].statistical_ace_odds,undefined);
+assert.equal(sandbox.aceDfResultKpiOdds(realResult.market_publications[0]),2.125);
+assert.equal(realResult.market_publications[0].odds,2.125);
 const historical = {
   event_id:'old-ace', scheduled_at:'2026-10-31T18:00:00Z',
   market_publications:[{
