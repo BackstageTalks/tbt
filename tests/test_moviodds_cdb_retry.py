@@ -101,3 +101,33 @@ def test_scheduler_uses_existing_external_match_status_no_new_cron():
     assert "MOVIODDS_CDB_DEFERRED_WRITER_BUSY_NOT_IMPORTED" in guarded
     assert "env.SOURCE_MODE == 'moviodds' && steps.source.outputs.eligible == 'true' && steps.writer_gate.outputs.ready == 'false'" in guarded
     assert "exit 1" in guarded
+
+
+def test_match_status_checks_out_retry_script_and_does_not_hide_failure():
+    workflow = (ROOT / ".github/workflows/match-status.yml").read_text()
+    steps = workflow.split("    steps:", 1)[1]
+    checkout = "      - uses: actions/checkout@v4"
+    retry_step = "      - name: Dispatch or retry guarded weekly MoviOdds CDB import after Sunday 06 UTC"
+    assert checkout in steps
+    assert steps.index(checkout) < steps.index(retry_step)
+    retry_block = steps.split(retry_step, 1)[1].split(
+        "      - name: Dispatch read-only production UI revision watchdog", 1
+    )[0]
+    assert "continue-on-error: true" not in retry_block
+    assert "python scripts/moviodds_cdb_retry.py" in retry_block
+    assert "set -euo pipefail" in retry_block
+    # Other existing half-hour tasks continue under their own always() gates.
+    assert "if: always() && github.event_name == 'workflow_dispatch'" in retry_block
+
+
+def test_late_global_writer_race_cannot_report_moviodds_import_success():
+    workflow = (ROOT / ".github/workflows/cdb-drive-inbox.yml").read_text()
+    late = workflow.split(
+        "      - name: Acquire global single writer ONLY for a positive, validated delta", 1
+    )[1].split(
+        "      - name: Atomic CAS verification and select immutable backup years", 1
+    )[0]
+    assert 'if [[ "$SOURCE_MODE" == "drive" ]]; then' in late
+    assert "python scripts/cdb_inbox_pending_batch.py persist" in late
+    assert "MOVIODDS_CDB_DEFERRED_LATE_LOCK_RACE_NOT_IMPORTED" in late
+    assert "exit 1" in late.split("MOVIODDS_CDB_DEFERRED_LATE_LOCK_RACE_NOT_IMPORTED", 1)[1]
