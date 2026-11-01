@@ -38,7 +38,7 @@ jobs:
           import json
           from datetime import datetime, timezone
           from tbt.services.clv_market_history import _offer_rows, extract_verified_quotes, _pair, _time
-                    base='/tmp/clv-linkage-audit/'
+          base='/tmp/clv-linkage-audit/'
           src=json.load(open(base+'feed.json'))
           offered=json.load(open(base+'daily_offer_snapshot.json'))
           clv=json.load(open(base+'clv.json'))
