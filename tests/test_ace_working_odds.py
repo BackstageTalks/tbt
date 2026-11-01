@@ -37,6 +37,8 @@ def test_js_and_python_prices_match_across_unicode_picks():
         {"market": "aces", "event_id": "ace-100", "selection_id": "player-a"},
         {"market": "aces", "event_id": "ace-101", "selection_id": "hráč-šíp"},
         {"market": "aces", "event_id": "ace-102", "selection_id": "😃"},
+        {"market": "aces", "event_id": "ace-103",
+         "selection_id": "stale", "betting": {"selection_id": "confirmed"}},
     ]
     program = r"""
 const fs=require('node:fs'),vm=require('node:vm');
