@@ -172,7 +172,11 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
     for prefix in ("p1", "p2"):
         first, second = (rate_counts.get(f"{prefix}_{kind}_return_win") for kind in ("first", "second"))
         if first is not None and second is not None and first[1] + second[1] > 0:
-            values[f"{prefix}_return_points_won"] = (first[0] + second[0]) / (first[1] + second[1])
+            field = f"{prefix}_return_points_won"
+            derived = (first[0] + second[0]) / (first[1] + second[1])
+            if field in values and abs(values[field] - derived) > 1e-6:
+                raise ProviderError(f"Conflicting whole-match statistic: {field}")
+            values.setdefault(field, derived)
 
     for prefix, opponent in (("p1", "p2"), ("p2", "p1")):
         first, second = (rate_counts.get(f"{prefix}_{kind}_serve_win") for kind in ("first", "second"))
