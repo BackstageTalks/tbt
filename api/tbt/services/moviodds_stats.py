@@ -121,7 +121,7 @@ def _hash(data: dict) -> str:
 
 def save_observations(table, records: list[dict], *, completed: bool,
                       collected_at: datetime) -> dict[str, int]:
-    """One final record per fixture, append-only live snapshots (15m buckets).
+    """One final record per fixture, append-only timestamped live snapshots.
 
     Existing final differing payloads are review conflicts; a later source
     correction cannot silently replace a previously accepted observation.
@@ -179,6 +179,32 @@ def save_observations(table, records: list[dict], *, completed: bool,
     return report
 
 
+def save_final_scan_receipt(table, *, date_utc: str, raw_count: int,
+                            accepted_count: int, collected_at: datetime) -> None:
+    """Record and verify that /results had been successfully polled.
+
+    Without this proof an empty source DB could be falsely archived as
+    a verified zero-result day after a failed collector.
+    """
+    date.fromisoformat(date_utc)
+    partition = date_utc.replace("-", "")
+    clock = collected_at.astimezone(timezone.utc).isoformat()
+    receipt = {
+        "PartitionKey": partition,
+        "RowKey": "scan:" + collected_at.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%S%f"),
+        "kind": "scan_final", "source": "moviodds",
+        "source_day": date_utc, "scanned_at": clock,
+        "raw_count": int(raw_count), "accepted_count": int(accepted_count),
+    }
+    try:
+        table.create_entity(receipt)
+        saved = table.get_entity(partition_key=partition, row_key=receipt["RowKey"])
+        if any(saved.get(k) != v for k, v in receipt.items()):
+            raise AdminStorageUnavailable("MoviOdds final scan receipt readback mismatch")
+    except Exception as exc:
+        raise AdminStorageUnavailable("MoviOdds final scan receipt unavailable") from exc
+
+
 def collect(*, now: datetime | None = None, opener=None, table=None,
             collect_live: bool = True, collect_finished: bool = True) -> dict:
     now = now or datetime.now(timezone.utc)
@@ -209,6 +235,10 @@ def collect(*, now: datetime | None = None, opener=None, table=None,
                     raise ValueError("Missing finished results")
                 report["final"][key] = save_observations(
                     table, data["results"], completed=True, collected_at=now)
+                save_final_scan_receipt(
+                    table, date_utc=key, raw_count=len(data["results"]),
+                    accepted_count=report["final"][key]["valid"],
+                    collected_at=now)
             except Exception as exc:
                 report["errors"].append("results_" + key + "_" + type(exc).__name__)
     report["ok"] = not report["errors"]
@@ -225,6 +255,17 @@ def export_final(*, days: list[str], table=None) -> dict:
         parsed = date.fromisoformat(str(day))
         partition = parsed.strftime("%Y%m%d")
         records = table.query_entities(query_filter=f"PartitionKey eq '{partition}'")
+        # A day may legitimately have zero valid stats, but a missing verified
+        # post-day provider poll is NOT evidence for a zero-result archive.
+        scan_times = [_when(row.get("scanned_at")) for row in records
+                      if row.get("kind") == "scan_final"
+                      and row.get("source") == "moviodds"
+                      and row.get("source_day") == day]
+        scan_times = [when for when in scan_times if when is not None]
+        after_end = datetime.combine(parsed + timedelta(days=1),
+                                     datetime.min.time(), timezone.utc)
+        if not any(when >= after_end for when in scan_times):
+            raise AdminStorageUnavailable("MoviOdds final day has no post-day verified scan")
         for row in records:
             if row.get("kind") != "final" or row.get("source") != "moviodds":
                 continue
