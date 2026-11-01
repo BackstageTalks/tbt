@@ -60,19 +60,24 @@ def main():
             assert background_editor == {
                 'desktop':True,'mobile':True,'upload':True,'previews':2,
                 'defaultMobile':'/assets/blinq_mobile_court.webp'},background_editor
-            page.locator('[data-simple-banner-field="site_mobile_background_url"]').fill('/assets/blinq_page_background.webp')
-            input_debug=page.evaluate("""() => {
+            # Fire real bubbling DOM input/change events together, avoiding
+            # unrelated async boot re-renders between Playwright commands.
+            mobile_change=page.evaluate("""() => {
               const host=document.getElementById('routePanel');
               const input=host.querySelector('[data-simple-banner-field="site_mobile_background_url"]');
-              return {value:input?.value, field:input?.dataset.simpleBannerField,
-                ancestor:input?.closest('[data-simple-banner]')?.dataset.simpleBanner,
-                inputHandler:typeof host.oninput, changeHandler:typeof host.onchange,
-                state:bannerHarness.state.ui.elements.HERO_BANNER_1.content.site_mobile_background_url};
+              const before=bannerHarness.state.ui.elements.HERO_BANNER_1.content.site_mobile_background_url;
+              input.value='/assets/blinq_page_background.webp';
+              input.dispatchEvent(new Event('input',{bubbles:true}));
+              const onInput=bannerHarness.state.ui.elements.HERO_BANNER_1.content.site_mobile_background_url;
+              input.dispatchEvent(new Event('change',{bubbles:true}));
+              return {before,onInput,
+                onChange:bannerHarness.state.ui.elements.HERO_BANNER_1.content.site_mobile_background_url,
+                preview:host.querySelector('.admin-page-background-previews img[alt="Náhľad mobilného pozadia"]')?.getAttribute('src'),
+                hasOnInput:typeof host.oninput,hasOnChange:typeof host.onchange};
             }""")
-            assert input_debug['state'] == '/assets/blinq_page_background.webp', input_debug
-            page.locator('[data-simple-banner-field="site_mobile_background_url"]').dispatch_event('change')
-            assert page.evaluate("bannerHarness.state.ui.elements.HERO_BANNER_1.content.site_mobile_background_url") == '/assets/blinq_page_background.webp'
-            assert page.locator('.admin-page-background-previews img[alt="Náhľad mobilného pozadia"]').get_attribute('src') == '/assets/blinq_page_background.webp'
+            assert mobile_change['onInput'] == '/assets/blinq_page_background.webp', mobile_change
+            assert mobile_change['onChange'] == '/assets/blinq_page_background.webp', mobile_change
+            assert mobile_change['preview'] == '/assets/blinq_page_background.webp', mobile_change
 
             # The actual 128px public mobile hero is compact. Admin preview must
             # show the same crop aspect ratio, not the obsolete 370x190 shape.
