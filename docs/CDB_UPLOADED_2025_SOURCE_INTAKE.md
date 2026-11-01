@@ -70,3 +70,42 @@ The earlier `atp_tennis.csv` archive has a separate historical odds linker
 opening/closing quotes without observation-time evidence. The
 `matches.csv`/Elo archive is a separate provider namespace and Elo should
 remain research/shadow until point-in-time corroboration.
+
+## Existing private L2 gate integration (source-only)
+
+The source-only stage can now be converted without inventing cross-provider IDs:
+
+```bash
+python scripts/cdb_uploaded_2025_l2_bridge.py \
+  --source-report /private/atp2025-source-stage/report.json \
+  --stage /private/atp2025-source-stage/source_only.jsonl \
+  --original /private/atp_matches_2025.csv \
+  --out /private/uploaded-atp2025-existing-l2.zip
+```
+
+The adapter rechecks every eligible staged identity, claimed UTC start time,
+complete score, integer serve counts, and derived statistic against the exact
+original SHA-pinned CSV line. It refuses modified raw files, forged stage
+values, supposedly `import_ready` rows, duplicates or inconsistent counts.
+Output holds two player-side rows per source match and implements
+`tbt-data/scripts/research/reconcile_uploaded_serve_return.py`'s existing
+`serve_return_source_only.csv.gz` contract with per-member SHA.
+
+The private gate may be run in read-only mode with this ZIP:
+
+```bash
+python scripts/research/reconcile_uploaded_serve_return.py \
+  --bundle /private/uploaded-atp2025-existing-l2.zip \
+  --out /private/atp2025-existing-l2-review
+```
+
+Without real independent source-native event AND both-player ID attestations,
+the private gate deliberately quarantines all source pairs. The adapter never
+creates approval files, attestation records, canonical IDs, `import_ready`
+candidates or a writer stage. Exact current CDB snapshot and fresh NULL-only
+preflight remain mandatory before the existing guarded canonical writer.
+Keep all ZIPs and per-match review details private; do not commit them.
+
+Read-only local verified run on the provided 3,001-row original:
+2,501 qualified source records, 5,002 player-side rows, 39,546 observed
+statistic cells. This is NOT 39,546 CDB additions.
