@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "requested_date": "2026-11-01",
-  "reason": "Continue TennisApi PRO audit: validated event tournament metadata, rounds, bracket, venues, player ranking",
+  "reason": "Read-only TennisApi odds markets and season-wide odds availability with provider-country lookup last",
   "provider_requests_allowed": true,
-  "max_requests": 6,
+  "max_requests": 5,
   "event_id": 14494928,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ technical audit",
-  "diagnostic_attempt": 4,
-  "phase": "metadata",
+  "diagnostic_attempt": 5,
+  "phase": "odds",
   "case": null
 }
