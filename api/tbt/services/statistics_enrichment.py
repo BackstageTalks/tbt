@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 
@@ -8,6 +9,7 @@ from ..errors import ProviderError
 from ..providers.statistics import (NoSupportedStatisticsError, complete_opponent_service_rates, parse_statistics)
 from ..providers.tennisapi_extra import normalize_set_statistics_home_away
 from .statistics_gapfill import event_id as resolve_event_id, missing_fields, retry_due, recent_score_identity_conflict
+from .tennis_response_cache import RawResponseCache
 
 
 # V3 re-reads previously count-only V2 rows to capture the provider's
@@ -23,11 +25,26 @@ class StatisticsEnricher:
         self.targeted = targeted
         self.cache = sqlite3.connect(str(cache_path))
         self.cache.execute("CREATE TABLE IF NOT EXISTS responses (path TEXT PRIMARY KEY, fetched REAL, body TEXT)")
+        private_path = os.getenv("BLINQ_TENNIS_RAW_CACHE_SQLITE", "").strip()
+        # The caller must mount a private persistent directory. A bad mount
+        # fails closed rather than silently reverting to paid requests.
+        self.durable = RawResponseCache(private_path) if private_path else None
 
     def close(self):
         self.cache.close()
 
     def _get(self, path, max_age=7 * 86400):
+        if self.durable is not None:
+            payload = self.durable.get_or_load(
+                provider="tennisapi1", host=self.provider.cfg.rapidapi_host,
+                endpoint=path, kind=("finished_statistics" if path.endswith("/statistics")
+                                     else "finished_detail"),
+                parser_version=STATISTICS_SCHEMA_VERSION, max_age=max_age,
+                loader=lambda: self.provider._get(path, enrichment=True),
+            )
+            if not isinstance(payload, dict):
+                raise ProviderError("Expected object from event/statistics endpoint")
+            return payload
         now = datetime.now(timezone.utc).timestamp()
         row = self.cache.execute("SELECT fetched, body FROM responses WHERE path=?", (path,)).fetchone()
         if row is not None and now - row[0] < max_age:
@@ -122,7 +139,7 @@ class StatisticsEnricher:
         raw = {**raw, "_tbt_event_identity": {
             "event_id": str(event_id), "home": home, "away": away, "status": "finished",
         }}
-        payload = self._get(f"/api/tennis/event/{event_id}/statistics", max_age=86400)
+        payload = self._get(f"/api/tennis/event/{event_id}/statistics", max_age=30 * 86400)
         try:
             stats = parse_statistics(payload, home_is_player1=home == match.player1_id)
         except NoSupportedStatisticsError:
