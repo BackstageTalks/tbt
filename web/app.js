@@ -1763,11 +1763,16 @@
     time.textContent=Number.isFinite(Date.parse(matchScanAt))
       ?lcopy(`Scan ${fmtTime(matchScanAt)}`,`Scan ${fmtTime(matchScanAt)}`,`Sken ${fmtTime(matchScanAt)}`)
       :lcopy('Scan —','Scan —','Sken —');
-    const heartbeat=state.liveRadarHeartbeat||state.userLiveRadarStatus||{};
-    const raw=heartbeat?.scanned_at||heartbeat?.updated_at||state.feed?.generated_at||'';
-    const parsed=Date.parse(raw);
-    const fresh=heartbeat?.fresh===true||(Number.isFinite(parsed)&&Date.now()-parsed<=180000);
+    // Match updater is the sole health signal for this footer. Missing,
+    // future-dated, or older-than-30-minute snapshots are not healthy.
+    const matchScanMs=Date.parse(matchScanAt);
+    const ageMs=Date.now()-matchScanMs;
+    const fresh=Number.isFinite(matchScanMs)&&ageMs>=0&&ageMs<=30*60*1000;
     host.classList.toggle('is-stale',!fresh);
+    const label=host.querySelector('strong');
+    if(label)label.textContent=fresh
+      ?lcopy('All systems operational','Všetky systémy funkčné','Všechny systémy funkční')
+      :lcopy('Match updater delayed','Match updater mešká','Aktualizace zápasů má zpoždění');
   }
   function insightTypeLabel(type){return ({info:'Info',insight:'Premium Info',alert:'LIVE · COMEBACK',live_watch:'LIVE · WATCH',set2:'LIVE · 2. SET',vip:'Premium Info'})[String(type||'').toLowerCase()]||'Insight';}
   function insightAudienceText(levels){
