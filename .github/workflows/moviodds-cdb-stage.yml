@@ -1,6 +1,11 @@
 name: MoviOdds to CDB verified candidate staging (no canonical writes)
 
 'on':
+  # One-shot launch only from the exact read-only smoke marker.
+  push:
+    branches: [main]
+    paths:
+      - ops/moviodds-cdb-stage-smoke-20261101.json
   workflow_dispatch:
     inputs:
       days_back:
