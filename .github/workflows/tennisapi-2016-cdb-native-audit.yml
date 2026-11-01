@@ -125,6 +125,20 @@ jobs:
                       and "wimbledon" in str(raw["tournament"]).lower()):
                   nearby.append(ident)
           nearby.sort(key=lambda x:(x["utc"],x["match_id"]))
+          # Independent post-import persistence proof from the live, SHA-checked
+          # release: validate the 2016 physical partition and all-year manifest
+          # row census without trusting the native importer stdout.
+          manifest=json.loads(Path("audit-2016/source/history_manifest.json").read_text())
+          years=manifest.get("years")
+          if not isinstance(years,dict) or len(years)<70 or "2016" not in years:
+              raise SystemExit("Incomplete canonical manifest after import")
+          if int(years["2016"]["rows"]) != len(df):
+              raise SystemExit("2016 persisted Parquet row count differs from manifest")
+          canonical_total=sum(int(meta["rows"]) for meta in years.values())
+          if canonical_total < 1003037:
+              raise SystemExit("Persisted all-year manifest below previously published history job count")
+          if len(df)<1:
+              raise SystemExit("Empty canonical 2016 after history import")
           if len(hits)>1:
               state="QUARANTINE_DUPLICATE_PROVIDER_EVENT_ID"
           elif len(hits)==1:
@@ -134,17 +148,20 @@ jobs:
           report={"schema":1,"state":state,"source_event_id":target,
                   "canonical_year":2016,"canonical_rows":len(df),
                   "canonical_native_event_claim_rows":claims,
-                  "exact_native_id_claims":len(hits),"exact_claims":hits,
+                  "exact_native_id_claims":len(hits),
                   "nearby_wimbledon_candidates_count":len(nearby),
-                  "nearby_wimbledon_candidates":nearby[:40],
                   "candidate_list_truncated":len(nearby)>40,
+                  "canonical_manifest_total_rows":canonical_total,
+                  "canonical_manifest_partitions":len(years),
+                  "post_import_floor_source":"history_run_41324038345",
+                  "private_player_or_match_ids_exposed":False,
                   "source_event_identity_independently_verified":False,
                   "provider_api_requests":0,"cdb_writes":0,"model_changes":0,
                   "cdb_import_approved":False,
                   "release_snapshot":json.loads(Path("audit-2016/snapshot.json").read_text())}
           out=Path("audit-2016/native-identity-report.json")
           out.write_text(json.dumps(report,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
-          print(json.dumps({k:report[k] for k in ("state","canonical_rows","canonical_native_event_claim_rows",
+          print(json.dumps({k:report[k] for k in ("state","canonical_rows","canonical_manifest_total_rows","canonical_manifest_partitions",
              "exact_native_id_claims","nearby_wimbledon_candidates_count","cdb_writes")} ,sort_keys=True))
           PY
           (cd audit-2016 && sha256sum snapshot.json native-identity-report.json > SHA256SUMS && sha256sum -c SHA256SUMS)
