@@ -186,3 +186,44 @@ def test_propline_is_used_only_when_primary_contract_is_not_exact():
     assert out[0]["odds_bookmaker"] == "FallbackBook"
     assert out[0]["odds_contract_version"] == "ace_df_real_api_v1"
     assert report["attached_by_provider"]["propline"] == 1
+
+
+def test_unverified_aces_2_00_does_not_preempt_propline_or_local_projection():
+    class NoExtraRequests:
+        def event_odds(self, event_id, provider_id=1):
+            raise AssertionError("Already prefetched")
+
+    card = {
+        **_prediction("100"), "market": "aces", "selection_id": "11",
+        "projection": 9.0, "opponent_projection": 3.0,
+        "price_status": "projection_only", "odds": None,
+    }
+    unverified = {"markets": [
+        {"marketName": "Most Aces", "choiceName": "Alpha", "decimalOdds": 2.0},
+        {"marketName": "Most Aces", "choiceName": "Beta", "decimalOdds": 2.0},
+    ]}
+    with_propline = {"100": {"aces": {
+        "provider_id": 2, "source": "propline", "bookmaker": "BookA",
+        "provider_event_id": "prop-100", "captured_at": NOW.isoformat(),
+        "payload": {"markets": [
+            {"marketName": "Most Aces", "choiceName": "Alpha", "decimalOdds": 1.93},
+            {"marketName": "Most Aces", "choiceName": "Beta", "decimalOdds": 1.84},
+        ]},
+    }}}
+    priced, _, report = enrich_projection_odds(
+        NoExtraRequests(), [card], [], max_events=1,
+        prefetched_payloads={"100": unverified},
+        alternate_market_payloads=with_propline,
+    )
+    assert priced[0]["odds"] == 1.93
+    assert priced[0]["odds_source"] == "propline"
+    assert report["attached_by_provider"]["propline"] == 1
+
+    local, _, report = enrich_projection_odds(
+        NoExtraRequests(), [card], [], max_events=1,
+        prefetched_payloads={"100": unverified},
+    )
+    assert local[0]["price_status"] == "projection_only"
+    assert local[0]["odds"] is None
+    assert local[0]["selection_id"] == card["selection_id"]
+    assert report["priced_cards"]["aces"] == 0
