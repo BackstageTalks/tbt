@@ -10,7 +10,6 @@ on:
     paths:
       - scripts/audit_wta2026_excel_readonly.py
       - tests/test_audit_wta2026_excel_readonly.py
-      - .github/workflows/blinq-wta2026-drive-cdb-readonly.yml
 permissions:
   contents: read
 concurrency:

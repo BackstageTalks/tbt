@@ -12,7 +12,6 @@ on:
     paths:
       - scripts/audit_wimbledon2023_recovery_readonly.py
       - tests/test_wimbledon2023_recovery_readonly.py
-      - .github/workflows/blinq-wimbledon2023-recovery-readonly.yml
 permissions:
   contents: read
   actions: read

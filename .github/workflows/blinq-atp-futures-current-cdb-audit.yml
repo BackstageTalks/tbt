@@ -10,7 +10,6 @@ on:
     paths:
       - scripts/audit_atp_futures_current_cdb.py
       - tests/test_atp_futures_current_cdb.py
-      - .github/workflows/blinq-atp-futures-current-cdb-audit.yml
 permissions:
   contents: read
   actions: read

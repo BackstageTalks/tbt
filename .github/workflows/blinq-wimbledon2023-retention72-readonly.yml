@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
     paths:
-      - .github/workflows/blinq-wimbledon2023-retention72-readonly.yml
       - scripts/audit_wimbledon2023_retention72.py
       - tests/test_audit_wimbledon2023_retention72.py
   workflow_dispatch:

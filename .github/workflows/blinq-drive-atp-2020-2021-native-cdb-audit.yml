@@ -3,7 +3,6 @@ name: BlinQ Drive ATP 2020-2021 native CDB identity pilot (private read-only)
   push:
     branches: [main]
     paths:
-      - .github/workflows/blinq-drive-atp-2020-2021-native-cdb-audit.yml
       - scripts/audit_drive_atp_2020_2021_current_cdb.py
       - tests/test_drive_atp_2020_2021_current_cdb.py
   workflow_dispatch:

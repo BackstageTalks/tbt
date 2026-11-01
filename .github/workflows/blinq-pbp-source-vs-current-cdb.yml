@@ -3,7 +3,6 @@ on:
   push:
     branches: [main]
     paths:
-      - .github/workflows/blinq-pbp-source-vs-current-cdb.yml
       - scripts/audit_pbp_source_vs_current_cdb.py
   workflow_dispatch:
     inputs:

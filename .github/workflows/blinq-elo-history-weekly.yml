@@ -6,7 +6,6 @@ on:
   push:
     branches: [main]
     paths:
-      - ".github/workflows/blinq-elo-history-weekly.yml"
       - ".github/elo-weekly-trigger.json"
       - "scripts/build_blinq_cdb_elo.py"
       - "scripts/compare_blinq_elo_ta.py"
