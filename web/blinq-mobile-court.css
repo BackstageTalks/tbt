@@ -133,4 +133,17 @@
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"]) .daily-hub-table tbody tr:not(.hub-row-locked) > td:nth-child(7) {
     background:transparent !important; border-top:1px solid var(--bq-court-line) !important; border-radius:0 !important;
   }
+
+  /* A legacy .dashboard-hero margin-top pushed the image 10px below its frame.
+     Only the outer hero keeps page spacing; slides fill the full rounded frame. */
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero > .dashboard-hero.hero-slide {
+    margin-top:0 !important;
+  }
+
+  /* Aces and double faults already have a mobile PROJEKCIA column heading.
+     Keep the numeric model projection, hide only its redundant lower caption. */
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"]) .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] > td:nth-child(7) .hub-number-stack small {
+    display:none !important;
+  }
 }
