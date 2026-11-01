@@ -151,9 +151,15 @@ def evaluate(sent, archive_rows):
         return {"status":"pending","units":None,"stake":0,"odds":sent.get("odds")}
     odds=tg.num(sent.get("odds"))
     archived_odds=tg.num(record.get("odds"))
+    calibrated_aces = (
+        sent.get("market") == "aces"
+        and sent.get("price_basis") == tg.PRICE_BASIS
+        and odds is not None
+        and abs(odds - (tg.working_ace_odds(sent) or 0)) < 0.000001
+    )
     priced=(odds is not None and odds>1 and archived_odds is not None
-            and abs(odds-archived_odds)<0.000001)
-    if sent["market"]=="aces" and record.get("price_status")!="priced_projection":
+            and abs(odds-archived_odds)<0.000001) or calibrated_aces
+    if sent["market"]=="aces" and not calibrated_aces and record.get("price_status")!="priced_projection":
         priced=False
     units=(odds-1 if good else -1.0) if priced else None
     return {"status":"won" if good else "lost",
