@@ -31,15 +31,18 @@ https://drive.google.com/drive/folders/13kDDxOaQ0L1Jr5ZjbSNjbDFJiNSz9uwx
 - Filename is \`moviodds-tennis-final-YYYY-MM-DD-SHA16.json\`.
   Identical bytes are idempotent; a changed dataset gets an additional version.
   Upload is verified by independent Drive binary download and exact SHA-256.
-- Automated daily dispatch is inactive unless repository variable
-  \`BLINQ_MOVIODDS_DRIVE_ENABLED=true\` is explicitly set.
-- Drive archive job needs secret \`BLINQ_DRIVE_WRITER_JSON\` with
-  restricted write access to this folder (authorized-user OAuth credentials
-  with Drive write scope, or a suitably delegated service account).
-- **Existing \`BLINQ_DRIVE_READER_JSON\` must not be reused for write**.
-  At inspection on 2026-11-01, the existing BlinQ Drive reader identity
-  was only a *reader* in this exact folder. This is a configuration blocker,
-  not a successful verified Drive export.
+- Automatic daily dispatch uses the existing external Match Status clock
+  at 04:00 UTC (exporting the previous UTC date). No extra cron or switch.
+- The archive job can reuse existing `BLINQ_DRIVE_READER_JSON` credentials,
+  requesting write scope ONLY within its own archive script. The other
+  importers retain their existing read-only scope.
+- **One-time operator setup:** change the permission on the linked MoviOdds
+  folder for `blinq-drive-reader@blinq-drive-audit.iam.gserviceaccount.com`
+  from Viewer to Editor. Do not modify any parent or CDB folder permission.
+  A separate `BLINQ_DRIVE_WRITER_JSON` remains supported if desired.
+- As checked on 2026-11-01, the existing service account has reader access
+  only. The daily Drive export will fail until folder Editor access is granted;
+  no successful upload is claimed.
 - The archive job also retains 14-day troubleshooting artifacts, without
   publishing private source JSON into the public repository.
 
