@@ -53,3 +53,9 @@ def test_morning_odds_event_caps_are_disabled_but_daily_quota_is_hard():
     assert "default: -1" in DATA
     assert "10#$MAX_REQUESTS > 14500" in DATA
     assert "BLINQ_PROVIDER_REQUEST_RESERVE=500" in DATA
+
+
+def test_external_request_override_is_ignored():
+    assert "MORNING_MAX_REQUESTS: '14500'" in MORNING
+    assert "Ignoring legacy external max_requests" in MORNING
+    assert '-f max_requests="$MORNING_MAX_REQUESTS"' in MORNING
