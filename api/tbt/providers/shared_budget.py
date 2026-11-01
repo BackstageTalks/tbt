@@ -310,13 +310,30 @@ class HttpReservation:
 
     def __call__(self, client=None, cfg=None, *, enrichment=False) -> None:
         try:
-            response = self._http.post(
-                self.endpoint,
-                headers={"X-Blinq-Worker-Token": self.token},
-                json={"purpose": self.purpose, "requests": 1},
-            )
-            if response.status_code == 429:
-                raise SharedBudgetExhausted("Shared Tennis API budget exhausted")
+            # A distributed pace denial must never count as a paid attempt.
+            # Wait only for the server-provided short slot and re-reserve.
+            for pace_retry in range(24):
+                response = self._http.post(
+                    self.endpoint,
+                    headers={"X-Blinq-Worker-Token": self.token},
+                    json={"purpose": self.purpose, "requests": 1},
+                )
+                if response.status_code == 429:
+                    try:
+                        is_pace = response.json().get("error") == "api_rate_busy"
+                    except (ValueError, AttributeError):
+                        is_pace = False
+                    if is_pace:
+                        if pace_retry == 23:
+                            raise SharedBudgetUnavailable("Shared API pace queue exhausted")
+                        try:
+                            delay = float(response.headers.get("Retry-After", "0.18"))
+                        except (TypeError, ValueError):
+                            delay = 0.18
+                        time.sleep(max(0.02, min(delay, 0.5)))
+                        continue
+                    raise SharedBudgetExhausted("Shared Tennis API budget exhausted")
+                break
             if response.status_code != 200:
                 raise SharedBudgetUnavailable("Shared API budget verification failed")
             payload = response.json()
@@ -333,7 +350,8 @@ class HttpReservation:
                     or not 1 <= budget["global_spent"] <= GLOBAL_CEILING
                     or type(budget.get("global_remaining")) is not int
                     or budget["global_remaining"] != GLOBAL_CEILING - budget["global_spent"]
-                    or budget.get("schema") != 2):
+                    or budget.get("schema") != 2
+                    or budget.get("rate_pace") != {"schema": 1, "max_rps": 6}):
                 # A stale Azure runtime may still use an older, looser limit.
                 # Fail closed rather than trusting only a successful HTTP status.
                 raise SharedBudgetUnavailable("Shared API budget contract mismatch")
