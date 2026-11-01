@@ -165,7 +165,7 @@ jobs:
               "live_sha256":report["canonical_sha256"],
           }
           Path("work/collision-context.json").write_text(
-              json.dumps(context,ensure_ascii=False,indent=2,sort_keys=True)+"\\n")
+              json.dumps(context,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
           print("CDB_COLLISION_PAIR_SHAPES",
                 json.dumps([{"rows":x["rows"],"cross_tour":x["cross_tour"],
                  "different_players":x["different_players"],
