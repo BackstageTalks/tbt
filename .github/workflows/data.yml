@@ -520,6 +520,17 @@ jobs:
             python scripts/pipeline.py "${args[@]}"
           fi
 
+      - name: Refresh comparator snapshot from latest canonical history
+        # The paid morning refresh completed before this step. Do not introduce
+        # per-visitor provider calls or block unrelated offer publication when
+        # optional comparator sources are temporarily unavailable.
+        if: ${{ success() && (env.MODE == 'refresh' || env.MODE == 'current-refresh') }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python scripts/build_comparator_artifact.py --data-repository "$TBT_DATA_REPOSITORY"
+          echo "::notice::Comparator read-back verified for this UTC day."
+
       - name: Independently verify every targeted CDB statistics publication
         # Push-triggered operator batches and hourly runs both publish canonical
         # data; neither may claim success without exact remote partition readback.

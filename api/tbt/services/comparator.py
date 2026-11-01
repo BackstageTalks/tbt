@@ -460,12 +460,18 @@ def build_serving_artifact(
         ],
     }
 
+    # Canonical, pre-cutoff Aces/DF evidence is indexed separately at serving.
+    # Keep champion probabilities and feature contracts unchanged.
+    from .comparator_markets import build_market_state
+    market_state = build_market_state(replay, allowed_state_keys, cutoff)
+
     artifact = {
         "schema": 1,
         "generated_at": now.isoformat(),
         "cutoff_utc": cutoff.isoformat(),
         "model": export_portable_model(model),
         "feature_state": feature_state,
+        "market_state": market_state,
         "players": players,
         "source": {
             "canonical_matches_replayed": len(replay),
@@ -475,6 +481,7 @@ def build_serving_artifact(
             "point_in_time": True,
             "canonical_read_only": True,
             "provider_requests_per_user_compare": 0,
+            "market_stat_matches": market_state["canonical_stat_matches"],
         },
     }
     if atp_leaderboards is not None:
