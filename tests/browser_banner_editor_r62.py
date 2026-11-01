@@ -55,11 +55,14 @@ def main():
               return {desktop:!!desktop,mobile:!!mobile,
                 upload:!!media?.querySelector('input[type="file"]'),
                 previews:host.querySelectorAll('.admin-page-background-previews img').length,
-                defaultMobile:mobile?.value};
+                defaultMobile:mobile?.value,
+                dimensions:host.querySelector('.admin-background-size-guide')?.innerText||''};
             }""")
-            assert background_editor == {
-                'desktop':True,'mobile':True,'upload':True,'previews':2,
-                'defaultMobile':'/assets/blinq_mobile_court.webp'},background_editor
+            assert background_editor['desktop'] and background_editor['mobile'],background_editor
+            assert background_editor['upload'] and background_editor['previews']==2,background_editor
+            assert background_editor['defaultMobile']=='/assets/blinq_mobile_court.webp',background_editor
+            for token in ('1920 × 1080 px','1080 × 1920 px','16 : 9','9 : 16','600 px'):
+                assert token in background_editor['dimensions'],background_editor
             # Fire real bubbling DOM input/change events together, avoiding
             # unrelated async boot re-renders between Playwright commands.
             mobile_change=page.evaluate("""() => {
@@ -383,6 +386,67 @@ def main():
                 assert placement['previewPosition']==position,(mode,placement)
                 assert placement['persisted']==list(expect),(mode,placement)
                 print(f'PASS: {mode} editor X/Y/width and image crop reflected in public + preview',flush=True)
+            # Cover/Contain and zoom are independently editable for PC/mobile,
+            # survive the Admin change event and match the public CSS cascade.
+            image_modes=page.evaluate("""() => {
+              const h=bannerHarness,s=h.state;
+              s.route='admin';s.adminTab='banners';
+              h.setSelectedElement('HERO_BANNER_1');
+              const edit=(field,value)=>{
+                const el=document.querySelector('[data-simple-banner-field="'+field+'"]');
+                if(!el)throw Error('Missing crop editor field '+field);
+                el.value=String(value);
+                el.dispatchEvent(new Event('change',{bubbles:true}));
+              };
+              edit('desktop_image_fit','contain');
+              edit('desktop_image_zoom',145);
+              edit('desktop_image_x',25);
+              edit('desktop_image_y',75);
+              edit('mobile_image_fit','cover');
+              edit('mobile_image_zoom',160);
+              edit('mobile_image_x',60);
+              edit('mobile_image_y',20);
+              const c=s.ui.elements.HERO_BANNER_1.content;
+              const sample=mode=>{
+                const img=document.querySelector('[data-admin-preview-card="'+mode+'"] .lean-admin-preview>img');
+                const css=getComputedStyle(img);
+                return {fit:css.objectFit,scale:css.scale,position:css.objectPosition};
+              };
+              return {desktop:sample('desktop'),mobile:sample('mobile'),values:{
+                desktopFit:c.desktop_image_fit,desktopZoom:c.desktop_image_zoom,
+                mobileFit:c.mobile_image_fit,mobileZoom:c.mobile_image_zoom}};
+            }""")
+            assert image_modes['values']=={
+                'desktopFit':'contain','desktopZoom':145,'mobileFit':'cover','mobileZoom':160
+            },image_modes
+            for mode,fit,scale,position in [
+                ('desktop','contain',1.45,'25% 75%'),
+                ('mobile','cover',1.60,'60% 20%')]:
+                img=image_modes[mode]
+                assert img['fit']==fit,(mode,img)
+                assert abs(float(img['scale'])-scale)<.02,(mode,img)
+                assert img['position']==position,(mode,img)
+            for viewport,mode in [(1440,'desktop'),(390,'mobile')]:
+                page.set_viewport_size({'width':viewport,'height':900})
+                live_mode=page.evaluate("""() => {
+                  const h=bannerHarness,s=h.state;
+                  const host=document.querySelector('#dashboardHero');
+                  host.hidden=false;
+                  host.innerHTML=h.heroSlideHtml({id:'HERO_BANNER_1',...s.ui.elements.HERO_BANNER_1},0);
+                  const original=document.body.className;
+                  document.body.classList.remove('blinq-admin');
+                  document.body.classList.add('blinq-home','bqm-enabled');
+                  const img=host.querySelector('.hero-slide-image');
+                  const css=getComputedStyle(img);
+                  const result={fit:css.objectFit,scale:css.scale,position:css.objectPosition};
+                  document.body.className=original;
+                  return result;
+                }""")
+                expected=image_modes[mode]
+                assert live_mode['fit']==expected['fit'],(mode,live_mode,expected)
+                assert abs(float(live_mode['scale'])-float(expected['scale']))<.02,(mode,live_mode,expected)
+                assert live_mode['position']==expected['position'],(mode,live_mode,expected)
+            print('PASS: independent device Cover/Contain and zoom match published hero',flush=True)
             assert not errors,errors
             print('PASS: live carousel, text, grayscale and no hidden accent')
         finally:
