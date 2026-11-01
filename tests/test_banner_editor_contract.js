@@ -61,4 +61,10 @@ assert.ok(app.includes('input[data-simple-banner-field="site_mobile_background_u
 assert.ok(app.includes("safePhotoUrl(hero.site_mobile_background_url)"),'only safe published mobile URLs reach CSS');
 assert.ok(court.includes('var(--blinq-mobile-court-bg,url("/assets/blinq_mobile_court.webp"))'),'mobile CSS has safe existing fallback');
 assert.ok(index.includes('mobile-page-background=20261101-1'),'app and CSS cache revision updated');
+const mobileVisual=fs.readFileSync('web/blinq-mobile-visual.css','utf8');
+assert.ok(!css.includes('left:48px!important;padding-inline:0!important;'),'old fixed desktop hero offset must not override Admin X');
+assert.ok(!css.includes('.dashboard-hero-copy{left:40px!important}'),'old fixed mobile hero offset must not override Admin X');
+assert.ok(mobileVisual.includes('max-width:var(--hero-copy-mobile-width,70%)!important'),'mobile copy width must respect Admin, not cap at 75%');
+assert.ok(!mobileVisual.includes('.dashboard-hero-copy{padding:8px 18px!important;}'),'mobile fixed inset must not displace Admin coordinates');
+assert.ok(index.includes('banner-position-fix=20261101-1'),'updated banner style cache revision');
 console.log('PASS: banner editor contract');
