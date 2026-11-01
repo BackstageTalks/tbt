@@ -16,6 +16,8 @@ from tbt.services.moviodds_stats import save_observations, save_final_scan_recei
 from moviodds_drive_archive import (
     _json_bytes, fetch_daily_final, upload_archive, _sha,
 )
+from moviodds_cdb_format import format_cdb_archive, verify_cdb_archive
+
 
 NOW = datetime(2026, 11, 1, 9, 0, tzinfo=timezone.utc)
 
@@ -179,8 +181,10 @@ class ArchiveSession:
 
 
 def test_drive_archive_upload_and_full_remote_readback():
-    export = {"schema": 1, "source": "moviodds", "verified": True,
-              "days": ["2026-11-01"], "count": 0, "records": []}
+    export = format_cdb_archive({
+        "schema": 1, "source": "moviodds", "verified": True,
+        "days": ["2026-11-01"], "count": 0, "records": [],
+    })
     body = _json_bytes(export)
     fake = ArchiveSession(content=body)
     fake.file_name = f"moviodds-tennis-final-2026-11-01-{_sha(body)[:16]}.json"
@@ -191,8 +195,10 @@ def test_drive_archive_upload_and_full_remote_readback():
 
 
 def test_drive_archive_unchanged_duplicate_is_readback_verified():
-    export = {"schema": 1, "source": "moviodds", "verified": True,
-              "days": ["2026-11-01"], "count": 0, "records": []}
+    export = format_cdb_archive({
+        "schema": 1, "source": "moviodds", "verified": True,
+        "days": ["2026-11-01"], "count": 0, "records": [],
+    })
     body = _json_bytes(export)
     fake = ArchiveSession(existing=[{"id": "old-file"}], content=body)
     result = upload_archive(fake, date_utc="2026-11-01",
@@ -202,8 +208,10 @@ def test_drive_archive_unchanged_duplicate_is_readback_verified():
 
 
 def test_drive_corrupted_prior_archive_fails_closed():
-    export = {"schema": 1, "source": "moviodds", "verified": True,
-              "days": ["2026-11-01"], "count": 0, "records": []}
+    export = format_cdb_archive({
+        "schema": 1, "source": "moviodds", "verified": True,
+        "days": ["2026-11-01"], "count": 0, "records": [],
+    })
     fake = ArchiveSession(existing=[{"id": "old-file"}], content=b"tampered")
     with pytest.raises(ValueError, match="readback mismatch"):
         upload_archive(fake, date_utc="2026-11-01",
@@ -217,8 +225,10 @@ def test_drive_403_reports_google_api_reason_without_leaking_response():
                 "message": "do not leak this diagnostic body",
             }}, status=403)
 
-    export = {"schema": 1, "source": "moviodds", "verified": True,
-              "days": ["2026-11-01"], "count": 0, "records": []}
+    export = format_cdb_archive({
+        "schema": 1, "source": "moviodds", "verified": True,
+        "days": ["2026-11-01"], "count": 0, "records": [],
+    })
     with pytest.raises(RuntimeError, match=r"403 reason=storageQuotaExceeded") as info:
         upload_archive(Forbidden(), date_utc="2026-11-01",
                        folder_id="folder", export=export)
