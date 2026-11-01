@@ -42,12 +42,26 @@ def _pair(first, second):
 
 
 def _price(value):
-    # Only unambiguous decimal Match Winner prices; never infer American odds.
+    """Normalize the provider-native h2h price into decimal odds.
+
+    PropLine research archives use American moneyline prices (+150, -222).
+    This is the same conversion as the existing propline_clv_report.decimal,
+    not a synthetic, model-derived or placeholder price. Already-decimal
+    provider values (1.001..10) are preserved without double conversion.
+    """
     try:
         n = float(value)
     except (ValueError, TypeError):
         return None
-    return round(n, 4) if 1.001 <= n < 10 else None
+    if not (n == n and abs(n) < 1000000):
+        return None
+    if n >= 10:
+        decimal = 1 + n / 100
+    elif n <= -10:
+        decimal = 1 + 100 / abs(n)
+    else:
+        decimal = n
+    return round(decimal, 4) if 1.001 <= decimal < 100 else None
 
 
 def _offer_rows(feed):
