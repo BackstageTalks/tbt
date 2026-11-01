@@ -255,6 +255,12 @@ jobs:
           python tests/browser_results_betting_day.py
           python tests/browser_profile_chip_fit.py
 
+      - name: Verify optimized JS/CSS in real Chromium with tier fixtures
+        run: |
+          set -euo pipefail
+          python scripts/optimize_web_assets.py --output-dir /tmp/blinq-optimized-web
+          BLINQ_OPTIMIZED_ASSET_DIR=/tmp/blinq-optimized-web python tests/browser_optimized_assets.py
+
       - name: Publish actual mobile Chromium screenshots (PR evidence)
         if: ${{ always() && github.event_name == 'pull_request' }}
         uses: actions/upload-artifact@v4
@@ -326,6 +332,16 @@ jobs:
           python scripts/prepare_feed.py
           test -s api/data/feed.json
           python scripts/verify_presentation_feed.py api/data/feed.json --summary
+
+      - name: Set up Node for pinned frontend optimization
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build safe whitespace-only optimized production JS/CSS
+        run: |
+          set -euo pipefail
+          python scripts/optimize_web_assets.py --web web --output-dir /tmp/blinq-optimized-web --apply
 
       # A run that passed tests hours ago may be queued behind a newer deploy.
       # Recheck main while holding the production lock, immediately before upload.

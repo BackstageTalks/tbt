@@ -38,7 +38,7 @@ def test_r32_top_short_odds_boundary_is_gapless_and_only_probability_relaxes():
     assert [x["min_probability"] for x in top["dynamic_fallback_tiers"]] == [.78, .75, .70]
     assert {x["min_odds"] for x in top["dynamic_fallback_tiers"]} == {1.5}
     assert UI["market_rules"]["match_winner_assignment"]["exclusive"] is True
-    assert UI["market_rules"]["match_winner_assignment"]["priority"][:2] == ["top200", "value"]
+    assert UI["market_rules"]["match_winner_assignment"]["priority"][:2] == ["value", "top_daily"]
 
 
 def test_r32_results_are_public_categories_only_and_admin_window_is_configurable():
