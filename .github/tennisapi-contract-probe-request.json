@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "requested_date": "2026-11-01",
-  "reason": "Targeted tennis bookmaker providers SK/web-odds, isolate HTTP status and quote provenance",
+  "reason": "Test documented odds provider registry country GB as fallback after SK registry 404",
   "provider_requests_allowed": true,
   "max_requests": 1,
   "event_id": 14494928,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ technical audit",
-  "diagnostic_attempt": 8,
+  "diagnostic_attempt": 9,
   "phase": "odds",
-  "case": "odds_providers_sk_web_odds"
+  "case": "odds_providers_gb_web"
 }
