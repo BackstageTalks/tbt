@@ -100,18 +100,21 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
 
 
 def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
-              phase: str = "full") -> dict:
+              phase: str = "full", case: str | None = None) -> dict:
     if not 1 <= max_requests <= 30:
         raise ValueError("max_requests must be 1..30")
     if phase not in {"full", "metadata", "odds", "doubles", "quality"}:
         raise ValueError("Unknown preapproved TennisApi probe phase")
+    if case is not None and phase == "full":
+        raise ValueError("Focused case requires a named phase")
     client.request_limit = max_requests
     client.retry_attempts = 1  # deterministic bound, no surprise retries
     report = {
         "schema": 1, "source": "tennisapi1",
         "scope": "read_only_research_no_cdb_writes",
         "started_utc": datetime.now(timezone.utc).isoformat(),
-        "target_event": event_id, "max_requests": max_requests, "phase": phase,
+        "target_event": event_id, "max_requests": max_requests,
+        "phase": phase, "case": case or "all",
         "observations": {}, "request_count": 0,
         "provider_quote_timestamp_verified": False,
         "eligible_for_cdb_import": False,
@@ -205,8 +208,12 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         }
         report["context_origin"] = "verified_provider_event_or_documentation"
         report["identity_validated_for_import"] = False
+        names = {name for name, _ in routes[phase]}
+        if case is not None and case not in names:
+            raise ValueError("Focused case not in the preapproved route allowlist")
         for name, route in routes[phase]:
-            read(name, route)
+            if case is None or name == case:
+                read(name, route)
         return finish()
 
     # Known event and post-match CDB fields first. Country odds provider
@@ -267,6 +274,7 @@ def main() -> None:
     parser.add_argument("--max-requests", type=int, default=24)
     parser.add_argument("--phase", choices=["full", "metadata", "odds", "doubles",
                                             "quality"], default="full")
+    parser.add_argument("--case", default=None)
     parser.add_argument("--out", default=".cache/tbt/tennisapi-contract/live-probe.json")
     args = parser.parse_args()
     if args.event_id <= 0 or not 1 <= args.max_requests <= 30:
@@ -276,7 +284,8 @@ def main() -> None:
     client = RapidTennisClient()
     try:
         result = run_probe(client, event_id=args.event_id,
-                           max_requests=args.max_requests, phase=args.phase)
+                           max_requests=args.max_requests, phase=args.phase,
+                           case=args.case)
     finally:
         client.close()
     path = Path(args.out)
