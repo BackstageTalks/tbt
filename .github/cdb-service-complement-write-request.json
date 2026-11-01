@@ -1,10 +1,10 @@
 {
   "schema": 2,
-  "mode": "dry-run",
+  "mode": "write",
   "workflow": "cdb-service-complement-write.yml",
   "purpose": "2026-11-01 standalone private CDB rehearsal for exact observed opponent serve/return rate complements; zero canonical publications, no paid API, no training/model changes.",
-  "approved_by_operator": false,
-  "write_authorized": false,
+  "approved_by_operator": true,
+  "write_authorized": true,
   "source": "canonical_existing_post_match_rate_complements_only",
   "provider_requests": 0,
   "model_changes": false,
@@ -27,11 +27,23 @@
   ],
   "evidence_run_id": 41316477152,
   "previous_one_shot_request_identifier": "blinq-cdb-exact-253-complements-20261014-38616584213",
-  "new_authorization_required_before_write": true,
+  "new_authorization_required_before_write": false,
   "rehearsal_requirements": [
     "private SHA and count pins",
     "exact non-NULL precedence",
     "full 1002087-row before/after readback including six quarantined identities",
     "no publish, model changes, or provider calls"
-  ]
+  ],
+  "authorization_basis": "Explicit 2026-11-01 operator request 'ok, skus zapisat' after verified complete rehearsal #41317955089. No changes to provider quotas or model.",
+  "execution_id": "serve-return-full-15365-exact-20261101-once",
+  "prior_complete_local_parquet_dryrun_run_id": 41317955089,
+  "expected_full_local_readback": {
+    "status": "verified",
+    "canonical_matches": 1002087,
+    "enriched_matches": 3867,
+    "new_stat_values": 15365,
+    "existing_values_overwritten": 0,
+    "quarantined_rows_proven_unchanged": 6
+  },
+  "one_shot_rule": "Do not repeat this writer if any publication occurred; require new canonical SHA-bound audit after any CDB state change. Enforce global lock, immutable backup, CAS, independent persisted read-back."
 }
