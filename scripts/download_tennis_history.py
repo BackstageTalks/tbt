@@ -872,6 +872,11 @@ def main():
             report["provider_identity_quarantined"] = len(provider_quarantine)
         try:
             output_report = dict(report)
+            if args.mode == "history":
+                # Counts actual provider requests and cache population; no
+                # unverified API saving is reported as a measured result.
+                output_report["calendar_batch_metrics"] = dict(
+                    provider.calendar_batch_metrics)
             if args.mode == "statistics":
                 requests = provider.request_count
                 output_report["statistics_data_value"] = {
