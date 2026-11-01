@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "requested_date": "2026-11-01",
-  "reason": "Check TennisApi doubles team roster and yearly statistics, documentation IDs research-only",
+  "reason": "Read-only TennisApi match streak, momentum and win probability provider evidence",
   "provider_requests_allowed": true,
-  "max_requests": 2,
+  "max_requests": 3,
   "event_id": 14494928,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ technical audit",
-  "diagnostic_attempt": 6,
-  "phase": "doubles",
+  "diagnostic_attempt": 7,
+  "phase": "quality",
   "case": null
 }
