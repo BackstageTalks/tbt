@@ -145,6 +145,9 @@ def test_append_only_idempotent_verified_and_single_book(monkeypatch):
     history = clv.read_event_history("321", now=now)
     assert history["bookmaker"] == "Book A"
     assert len(history["history"]) == 2
+    direct_read = clv.read_event_history
+    monkeypatch.setattr(clv, "read_event_history",
+                        lambda eid: direct_read(eid, now=now))
     rendered = clv.attach_offer_clv(offer())
     assert rendered["top_daily_picks"][0]["market_movement"]["verified"]
     assert "market_movement" not in rendered["prime_picks"][0]
