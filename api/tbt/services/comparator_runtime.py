@@ -323,6 +323,15 @@ def _player_stats(builder: FeatureBuilder, match: MatchRecord, *, first: bool) -
         "recent_10": _window(recent),
         "surface_recent_10": _window(surface_recent),
         "surface_recent_20": _window(surface_all[-20:]),
+        # Display-only, time ordered and strictly pre-cutoff. Never fed into
+        # model features, probabilities or training.
+        "surface_recent_results": [
+            {
+                "result": "W" if float(row.won) >= .5 else "L",
+                "played_at": row.played_at.isoformat(),
+            }
+            for row in surface_all[-20:]
+        ],
         "recent_results": [
             {"result": "W" if float(row.won) >= .5 else "L", "surface": stats_surface_key(row.surface)}
             for row in recent
