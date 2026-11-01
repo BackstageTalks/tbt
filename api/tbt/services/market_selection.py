@@ -125,12 +125,39 @@ def decimal_odds(value: Any) -> float | None:
     return number if 1.01 <= number <= 1000 else None
 
 
+def _quote_is_unavailable(row: dict[str, Any]) -> bool:
+    """Reject explicitly closed/suspended markets and choices.
+
+    A losing settled choice (winning=False) or an omitted activity flag
+    is not evidence of suspension. Unknown statuses remain unclassified.
+    """
+    if not isinstance(row, dict):
+        return False
+    for key in ("suspended", "isSuspended", "is_suspended", "blocked", "isBlocked"):
+        value = row.get(key)
+        if value is True or (isinstance(value, str) and value.strip().lower() == "true"):
+            return True
+    for key in ("active", "isActive", "is_active", "enabled", "isEnabled"):
+        value = row.get(key)
+        if value is False or (isinstance(value, str) and value.strip().lower() == "false"):
+            return True
+    status = row.get("status")
+    if isinstance(status, str) and status.strip().lower() in {
+        "suspended", "closed", "inactive", "disabled", "blocked", "settled",
+    }:
+        return True
+    return False
+
+
 def _walk_market_rows(value: Any, inherited_market: str = "") -> Iterable[tuple[dict[str, Any], str]]:
     if isinstance(value, list):
         for item in value:
             yield from _walk_market_rows(item, inherited_market)
         return
     if not isinstance(value, dict):
+        return
+    # An unavailable market container invalidates every nested choice.
+    if _quote_is_unavailable(value):
         return
 
     explicit_market = value.get("marketName") or value.get("market_name") or value.get("market")
