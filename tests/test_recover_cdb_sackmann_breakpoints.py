@@ -204,14 +204,12 @@ def test_strict_lineage_diagnostics_keep_non_native_player_ids_rejected():
     row = original()
     path = Path("atp_matches_2020.csv")
     match = canonical(row)
-    assert lineage_rejection_reason(match, row, "atp", "matches", path) in (
-        "unclassified_strict_rejection", "source_category",
-    )  # The helper only explains failed gates and never authorizes writes.
+    assert lineage_rejection_reason(match, row, "atp", "main", path) == "unclassified_strict_rejection"  # Diagnostic cannot approve a candidate.
     match = canonical(row)
     match.player1_id = "mapped:provider:1001"
     before = deepcopy(match.to_storage_dict())
     assert candidate(match, row, "atp", path, 2, "a" * 64)[1] == "lineage_rejected"
-    assert lineage_rejection_reason(match, row, "atp", "matches", path) == "source_native_player_id_mapping"
+    assert lineage_rejection_reason(match, row, "atp", "main", path) == "source_native_player_id_mapping"
     assert match.to_storage_dict() == before
 
 
@@ -223,11 +221,11 @@ def test_strict_lineage_diagnostics_reject_changed_provenance_or_date():
     match = canonical(row)
     match.provider_payload["_tbt_statistics"]["source"] = "unrelated"
     assert candidate(match, row, "atp", path, 2, "a" * 64)[1] == "lineage_rejected"
-    assert lineage_rejection_reason(match, row, "atp", "matches", path) == "source_statistics_provenance"
+    assert lineage_rejection_reason(match, row, "atp", "main", path) == "source_statistics_provenance"
 
     match = canonical(row)
     row["tourney_date"] = "20200107"
-    assert lineage_rejection_reason(match, row, "atp", "matches", path) == "historical_source_date"
+    assert lineage_rejection_reason(match, row, "atp", "main", path) == "historical_source_date"
 
 
 def test_public_bp_workflow_artifact_contains_no_raw_stage_identifiers():
