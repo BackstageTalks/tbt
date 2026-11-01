@@ -1,0 +1,77 @@
+name: BlinQ TennisApi extended contract probe (read-only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/tennisapi-contract-probe-request.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-tennisapi-contract-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_SHARED_API_BUDGET_PURPOSE: history
+      BLINQ_PROVIDER_REQUEST_RESERVE: '500'
+      BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'
+      BLINQ_RAPIDAPI_MAX_RPS: '3'
+      PYTHONPATH: api:scripts
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Validate strict budget and credentials before installing
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$RAPIDAPI_KEY" && test -n "$BLINQ_SHARED_API_BUDGET_TOKEN"
+          request=".github/tennisapi-contract-probe-request.json"
+          test -s "$request"
+          jq -e '.schema == 1 and .provider_requests_allowed == true and
+            (.max_requests | type == "number" and . >= 1 and . <= 30) and
+            (.event_id | type == "number" and . > 0) and
+            .cdb_writes_allowed == false' "$request" >/dev/null
+      - name: Install existing API dependencies
+        run: python -m pip install -r api/requirements-train.txt
+      - name: Run guarded read-only provider sample
+        shell: bash
+        run: |
+          set -euo pipefail
+          requests="$(jq -r .max_requests .github/tennisapi-contract-probe-request.json)"
+          event_id="$(jq -r .event_id .github/tennisapi-contract-probe-request.json)"
+          python scripts/probe_tennisapi_extended_contract.py \
+            --event-id "$event_id" --max-requests "$requests" \
+            --out .cache/tbt/tennisapi-contract/live-probe.json
+      - name: Validate result is research-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '.eligible_for_cdb_import == false and
+                 .provider_quote_timestamp_verified == false and
+                 .request_count <= .max_requests' \
+            .cache/tbt/tennisapi-contract/live-probe.json >/dev/null
+      - name: Upload read-only evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tennisapi-contract-live-probe-${{ github.run_id }}
+          path: .cache/tbt/tennisapi-contract/live-probe.json
+          if-no-files-found: warn
+          retention-days: 14
