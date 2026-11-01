@@ -66,7 +66,7 @@ const historical = {
 sandbox.normalizeFeedAceOdds({ace_picks:[],results:[historical]});
 assert.equal(historical.market_publications[0].statistical_ace_odds,undefined);
 assert(sandbox.projectionOddsHtml({...row, market: 'double_faults'}).includes('2.00'));
-assert(sandbox.projectionOddsHtml({...row, market: 'aces', price_status: 'projection_only'}).includes('N/A'));
+assert(sandbox.projectionOddsHtml({...row, market: 'aces', price_status: 'projection_only'}).includes(value.toFixed(2)));
 const values = new Set();
 for(let i=0;i<200;i++){
   const v = sandbox.stableAceDisplayOdds({
