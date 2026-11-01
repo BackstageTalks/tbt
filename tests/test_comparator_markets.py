@@ -140,3 +140,19 @@ def test_market_projections_reject_cross_tour_keys_without_implicit_link():
     rows = [match(i) for i in range(1, 15)]
     state = build_market_state(rows, {"atp:a", "atp:b"}, CUTOFF)
     assert project(state, left="wta:a")["aces"] is None
+
+def test_existing_schema_one_market_release_retains_aces_without_cross_format_guesses():
+    rows = [match(i, best_of=3) for i in range(1, 15)]
+    legacy = build_market_state(rows, {"atp:a", "atp:b"}, CUTOFF)
+    legacy["schema"] = 1
+    legacy.pop("format_baselines")
+    legacy.pop("format_lengths")
+    value = project(legacy)["aces"]
+    assert value["player1"]["estimate"] > 0
+    assert value["format_adjustment"] == "legacy_same_format_only"
+    assert value["not_betting_odds"] is True
+    future = project_market_state(
+        legacy, left_key="atp:a", right_key="atp:b", tour="atp",
+        surface="hard", best_of=5, now=CUTOFF + timedelta(hours=4), cutoff=CUTOFF,
+    )
+    assert future["aces"]["total_estimate"] is None

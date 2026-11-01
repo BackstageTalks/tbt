@@ -10,9 +10,12 @@ from pathlib import Path
 
 from _bootstrap import ROOT
 from release_store import ReleaseStore
+from rank_feature_inputs import load_rank_feature_inputs
 from tbt.data.atp_leaderboards import ATPLeaderboardPriors
+from tbt.data.atp_rank_history import ATP_RANK_HISTORY_FEATURE_NAMES
 from tbt.data.history_safety import sanitize_history_identities
 from tbt.data.history_snapshot import load_partitions
+from tbt.data.wta_rank_history import WTA_RANK_HISTORY_FEATURE_NAMES
 from tbt.data.wta_season_stats import WTASeasonPriors
 from tbt.models.artifact import load_model
 from tbt.services.comparator import build_serving_artifact
@@ -39,6 +42,14 @@ def _download_required(store: ReleaseStore, names: tuple[str, ...]) -> None:
         required_names=names,
         require_bundle_manifest=True,
     )
+
+
+def _rank_inputs_required(model) -> bool:
+    """Use the same production model feature contract as scripts/pipeline.py."""
+    features = set(getattr(model, "feature_names", None) or ())
+    return bool(features & (
+        set(ATP_RANK_HISTORY_FEATURE_NAMES) | set(WTA_RANK_HISTORY_FEATURE_NAMES)
+    ))
 
 
 def main() -> None:
@@ -77,12 +88,37 @@ def main() -> None:
     _download_required(wta_store, (WTA_ASSET,))
     wta = WTASeasonPriors.from_csv(wta_dir / WTA_ASSET)
 
+    # Model 7.2.1+ may require point-in-time ATP/WTA weekly ranks. The
+    # comparator must load the exact checksum-verified production rank sources
+    # used by pipeline.py; a model without these inputs must never publish.
+    atp_rank_history = None
+    wta_rank_history = None
+    rank_report = None
+    if _rank_inputs_required(model):
+        rank_inputs = load_rank_feature_inputs(
+            args.data_repository, cache / "rank-feature-inputs", matches,
+        )
+        rank_report = rank_inputs.report
+        if (rank_report.get("status") != "verified"
+                or int(rank_report.get("provider_requests", -1)) != 0):
+            raise RuntimeError("Rank inputs failed checksum/zero-provider gate")
+        atp_rank_history = rank_inputs.atp
+        wta_rank_history = rank_inputs.wta
+        print(json.dumps({"comparator_rank_inputs": {
+            "status": rank_report["status"],
+            "provider_requests": rank_report["provider_requests"],
+            "research_release": rank_report["research_release"],
+            "wta_crosswalk": rank_report["wta_crosswalk"],
+        }}, ensure_ascii=False), flush=True)
+
     now = datetime.now(timezone.utc)
     artifact = build_serving_artifact(
         model,
         matches,
         now=now,
         atp_leaderboards=atp,
+        atp_rank_history=atp_rank_history,
+        wta_rank_history=wta_rank_history,
         wta_season_stats=wta,
     )
     artifact = clean(artifact)
@@ -95,6 +131,11 @@ def main() -> None:
         raise RuntimeError("Comparator artifact violated zero-provider serving contract")
     if not artifact.get("players"):
         raise RuntimeError("Comparator artifact contains no searchable players")
+    if _rank_inputs_required(model) and (
+        not isinstance(artifact.get("atp_rank_history"), dict)
+        or not isinstance(artifact.get("wta_rank_history"), dict)
+    ):
+        raise RuntimeError("Missing audited ATP/WTA ranking sources in serving snapshot")
 
     prediction_store = ReleaseStore(
         args.data_repository,
@@ -132,6 +173,8 @@ def main() -> None:
         "cutoff_utc": persisted.get("cutoff_utc") == artifact.get("cutoff_utc"),
         "players": len(persisted.get("players") or []) == len(artifact.get("players") or []),
         "zero_provider_per_compare": int(persisted_source.get("provider_requests_per_user_compare", -1)) == 0,
+        "atp_rank_required_present": not _rank_inputs_required(model) or isinstance(persisted.get("atp_rank_history"), dict),
+        "wta_rank_required_present": not _rank_inputs_required(model) or isinstance(persisted.get("wta_rank_history"), dict),
     }
     if not all(checks.values()):
         raise RuntimeError("Persisted comparator read-back failed: " + json.dumps(checks, sort_keys=True))
@@ -144,6 +187,7 @@ def main() -> None:
             "generated_at": artifact.get("generated_at"),
             "cutoff_utc": artifact.get("cutoff_utc"),
             "players": len(artifact.get("players") or []),
+            "rank_inputs_verified": bool(rank_report is not None),
             "canonical_matches_replayed": source.get("canonical_matches_replayed"),
             "active_window_days": source.get("active_window_days"),
             "compressed_bytes": out.stat().st_size,
