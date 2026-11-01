@@ -415,13 +415,10 @@ def prepare(a):
     out=Path(a.output)
     sticky=old.get("free_picks") if isinstance(old.get("free_picks"),dict) else {}
     confirmed=snapshot(out/"assets")
-    price_correction=repost and revision=="aces-local-prices-20261101-v1"
+    price_correction=repost and revision in ("aces-local-prices-20261101-v1","aces-standard-feed-20261101-v2")
     if repost:confirmed=_original_offer_only(confirmed,previous,now,
         allow_aces_price_update=price_correction)
     msg=messages(confirmed,v,now,free_event_id=sticky.get(day(now)))
-    if price_correction:
-        for item in msg:
-            item["text"]="🔄 AKTUALIZÁCIA KURZOV ESÁ | 1.11.2026 | rovnaké tipy\\n\\n"+item["text"]
     if not msg:print('{"status":"skipped","reason":"no_eligible_rows"}');return
     if repost and len(msg)!=len(previous["message_ids"]):
         raise RuntimeError("Reformatted message count does not match original receipts")
