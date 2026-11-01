@@ -82,7 +82,7 @@ def _writer():
     elif info.get("type") == "authorized_user":
         from google.oauth2.credentials import Credentials
         credentials = Credentials.from_authorized_user_info(
-            info, scopes=["https://www.googleapis.com/auth/drive.file"])
+            info, scopes=["https://www.googleapis.com/auth/drive"])
     else:
         raise ValueError("Unrecognized Drive writer credential type")
     return AuthorizedSession(credentials)
