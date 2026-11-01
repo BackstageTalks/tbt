@@ -101,7 +101,7 @@ jobs:
               'max_requests':expected,'start':'2016-07-09','end':'2016-07-10',
               'model_promote':False}),flush=True)
           with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
-              output.write('allowed=true\\n')
+              output.write('allowed=true\n')
           PY
       - name: Dispatch ONLY existing locked provider-native CDB history importer
         if: steps.preflight.outputs.allowed == 'true'
