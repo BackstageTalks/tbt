@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "kind": "operator-approved-one-time-aces-price-correction",
+  "kind": "operator-approved-standard-feed-reissue",
   "betting_day": "2026-11-01",
-  "revision": "aces-local-prices-20261101-v1",
+  "revision": "aces-standard-feed-20261101-v2",
   "aces_prices_corrected": true,
   "preserve_original_confirmed_picks": true,
   "scope": "ACES odds only, all original TOP VALUE ACES FREE picks frozen",
   "requested_by": "operator",
-  "note": "Operator-approved corrected 1 Nov ACES odds reissue; date assertion fixed. Same confirmed picks, single reserve before send."
+  "note": "Send Nov 1 confirmed picks in the usual morning format, no special update header, with 1.60-1.80 ACES odds. Unique reservation and message readback."
 }
