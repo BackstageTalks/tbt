@@ -7044,9 +7044,10 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
             if(results[1].status==='fulfilled')state.adminTraining=results[1].value;
             if(results.some(item=>item.status==='rejected')||!readyNow()){
               const reason=results.find(item=>item.status==='rejected')?.reason?.message||
-                state.adminModelLab?.reason||state.adminTraining?.reason||
                 (!/^[0-9a-f]{64}$/.test(String(state.adminModelLab?.feed_sha256||''))?
                   'Chýba overený SHA-256 feedu. Skontroluj synchronizáciu workeru a API.':
+                  state.adminModelLab?.can_start!==true?(state.adminModelLab?.reason||'Stav Model Labu nie je dostupný.'):
+                  state.adminTraining?.can_start!==true?(state.adminTraining?.reason||'Tréningová fronta nie je dostupná.'):
                   'Prepočet blokuje aktívna operácia.');
               state.adminModelLabMessage='Prepočet nebol odoslaný: '+String(reason);
               rerenderAdmin();showStatus(state.adminModelLabMessage);return;
