@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "purpose": "verify deployed distributed 6/s pace, shared 14500 daily guard and private raw cache availability",
+  "deployment_sha": "065a28cfcc19ea1b46d6a87559993e0aa0e8d996",
+  "provider_requests_expected": 0
+}
