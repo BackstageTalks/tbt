@@ -61,7 +61,15 @@ def main():
                 'desktop':True,'mobile':True,'upload':True,'previews':2,
                 'defaultMobile':'/assets/blinq_mobile_court.webp'},background_editor
             page.locator('[data-simple-banner-field="site_mobile_background_url"]').fill('/assets/blinq_page_background.webp')
-            assert page.evaluate("bannerHarness.state.ui.elements.HERO_BANNER_1.content.site_mobile_background_url") == '/assets/blinq_page_background.webp', 'input must update admin draft before blur'
+            input_debug=page.evaluate("""() => {
+              const host=document.getElementById('routePanel');
+              const input=host.querySelector('[data-simple-banner-field="site_mobile_background_url"]');
+              return {value:input?.value, field:input?.dataset.simpleBannerField,
+                ancestor:input?.closest('[data-simple-banner]')?.dataset.simpleBanner,
+                inputHandler:typeof host.oninput, changeHandler:typeof host.onchange,
+                state:bannerHarness.state.ui.elements.HERO_BANNER_1.content.site_mobile_background_url};
+            }""")
+            assert input_debug['state'] == '/assets/blinq_page_background.webp', input_debug
             page.locator('[data-simple-banner-field="site_mobile_background_url"]').dispatch_event('change')
             assert page.evaluate("bannerHarness.state.ui.elements.HERO_BANNER_1.content.site_mobile_background_url") == '/assets/blinq_page_background.webp'
             assert page.locator('.admin-page-background-previews img[alt="Náhľad mobilného pozadia"]').get_attribute('src') == '/assets/blinq_page_background.webp'
