@@ -1,10 +1,6 @@
 name: BlinQ ATP Archive CDB offline staging (structured stats QA v2)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/blinq-cdb-atptour-archive-stage.yml
   workflow_dispatch:
 
 permissions:
