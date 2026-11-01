@@ -27,7 +27,7 @@ def test_browser_prefers_worker_snapshot_and_only_falls_back_to_scan():
 
 def test_worker_supports_native_and_manual_dispatch():
     assert 'workflow_dispatch:' in WORKFLOW
-    assert "cron: '*/5 * * * *'" in WORKFLOW
+    assert "cron: '0 * * * *'" in WORKFLOW
     assert 'for scan in 1 2 3 4 5 6' in WORKFLOW
     assert 'sleep 50' in WORKFLOW
     assert 'X-Blinq-Worker-Token' in WORKFLOW
