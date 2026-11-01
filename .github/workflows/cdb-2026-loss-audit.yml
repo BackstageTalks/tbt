@@ -1,0 +1,126 @@
+name: BlinQ CDB 2026 old-vs-current identity audit (read only)
+'on':
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cdb-2026-loss-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cdb-2026-loss-audit-readonly
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      CDB_REPO: BackstageTalks/tbt-data
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fetch immutable backup and live Parquet by exact source release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/$CDB_REPO --jq .private)" = true
+          python -m pip install --quiet 'pyarrow>=17,<25'
+          mkdir -p work/cdb2026/old work/cdb2026/live
+          gh api "repos/$CDB_REPO/releases/tags/blinq-full-training-backup-40554915730-1" > work/cdb2026/old-release.json
+          gh api "repos/$CDB_REPO/releases/tags/tbt-data-v1" > work/cdb2026/live-before.json
+          gh release download blinq-full-training-backup-40554915730-1 -R "$CDB_REPO" -D work/cdb2026/old -p frozen__history__history_manifest.json -p frozen__history__history-2026.parquet
+          gh release download tbt-data-v1 -R "$CDB_REPO" -D work/cdb2026/live -p history_manifest.json -p history-2026.parquet
+      - name: SHA, row and identity audit (no source or CDB writes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          import pyarrow.parquet as pq
+          root=Path('work/cdb2026')
+          names={'old':('frozen__history__history_manifest.json','frozen__history__history-2026.parquet'),'live':('history_manifest.json','history-2026.parquet')}
+          manifests={}
+          for side in names:
+              info=json.loads((root/('old-release.json' if side=='old' else 'live-before.json')).read_text())
+              assets={a['name']:a for a in info['assets']}
+              for name in names[side]:
+                  p=root/side/name
+                  h=hashlib.sha256(p.read_bytes()).hexdigest()
+                  assert assets[name]['digest']=='sha256:'+h and assets[name]['size']==p.stat().st_size, 'Bad private CDB asset SHA/size'
+              manifests[side]=json.loads((root/side/names[side][0]).read_text())
+              h=hashlib.sha256((root/side/names[side][1]).read_bytes()).hexdigest()
+              assert manifests[side]['years']['2026']['sha256']==h,'Manifest/partition SHA mismatch'
+          def read(side):
+              path=root/side/names[side][1]
+              f=pq.ParquetFile(path)
+              cols=('match_id','player1_id','player2_id','scheduled_at','stats_json')
+              assert set(cols).issubset(f.schema_arrow.names)
+              rows={}
+              for batch in f.iter_batches(batch_size=4096,columns=list(cols)):
+                  values=batch.to_pydict()
+                  for valueset in zip(*(values[c] for c in cols)):
+                      row=dict(zip(cols,valueset));key=str(row['match_id'] or '')
+                      assert key and key not in rows and row['player1_id'] and row['player2_id'],'Invalid canonical ID'
+                      rows[key]=row
+              assert len(rows)==int(manifests[side]['years']['2026']['rows']), 'Parquet rows disagree with manifest'
+              return rows
+          old=read('old');live=read('live');a=set(old);b=set(live)
+          identity_conflicts=stats_missing=stats_conflicts=stats_new=0
+          for key in a & b:
+              x,y=old[key],live[key]
+              if any(str(x[z])!=str(y[z]) for z in ('player1_id','player2_id','scheduled_at')):
+                  identity_conflicts+=1
+              p=json.loads(x['stats_json']) if x['stats_json'] else {}
+              q=json.loads(y['stats_json']) if y['stats_json'] else {}
+              assert isinstance(p,dict) and isinstance(q,dict)
+              for field,value in p.items():
+                  if value is None:continue
+                  if q.get(field) is None:stats_missing+=1
+                  elif q[field]!=value:stats_conflicts+=1
+              stats_new+=sum(v is not None and p.get(k) is None for k,v in q.items())
+          oc={int(y):int(v['rows']) for y,v in manifests['old']['years'].items()}
+          nc={int(y):int(v['rows']) for y,v in manifests['live']['years'].items()}
+          report={'schema':1,'scope':'immutable_backup_vs_live_2026','backup_total_rows':sum(oc.values()),'live_total_rows':sum(nc.values()),
+                  'year_row_reductions':[{'year':y,'old':n,'current':nc.get(y,0)} for y,n in sorted(oc.items()) if nc.get(y,0)<n],
+                  'backup_2026_rows':len(old),'live_2026_rows':len(live),'old_only_match_ids':len(a-b),'live_only_match_ids':len(b-a),
+                  'overlap_match_ids':len(a&b),'identity_conflicts':identity_conflicts,'overlap_old_stats_missing':stats_missing,
+                  'overlap_existing_stats_changed':stats_conflicts,'overlap_new_stats_added':stats_new,
+                  'source_backup_manifest_sha256':hashlib.sha256((root/'old'/names['old'][0]).read_bytes()).hexdigest(),
+                  'source_live_manifest_sha256':hashlib.sha256((root/'live'/names['live'][0]).read_bytes()).hexdigest(),
+                  'canonical_writes':0,'paid_api_calls':0,'blind_restore_allowed':False}
+          report['status']='CDB_LOSS_REVIEW_REQUIRED' if len(a-b) or identity_conflicts or stats_missing or stats_conflicts else 'ROW_LOSS_NOT_OBSERVED'
+          (root/'report.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print('CDB_2026_IMMUTABLE_BACKUP_COMPARISON',json.dumps(report,sort_keys=True))
+          if report['status']!='ROW_LOSS_NOT_OBSERVED':raise SystemExit(2)
+          PY
+      - name: Verify current release did not move during snapshot audit
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$CDB_REPO/releases/tags/tbt-data-v1" > work/cdb2026/live-after.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('work/cdb2026')
+          def stamps(path):
+              r=json.loads(path.read_text())
+              a={x['name']:x for x in r['assets']}
+              return [(a[k]['id'],a[k]['digest'],a[k]['size']) for k in ('history_manifest.json','history-2026.parquet')]
+          assert stamps(root/'live-before.json')==stamps(root/'live-after.json'),'Live canonical CDB changed while reading; retry'
+          print('CDB_LIVE_MANIFEST_CAS_STABLE')
+          PY
+      - name: Retain aggregate only, no private match identifiers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdb-2026-row-regression-${{ github.run_id }}
+          path: work/cdb2026/report.json
+          if-no-files-found: warn
+          retention-days: 30
