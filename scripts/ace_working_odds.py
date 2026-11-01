@@ -66,7 +66,8 @@ def verified_ace_odds(row: Mapping[str, Any]) -> float | None:
         if str(row.get("ou_side") or "").lower() not in ("over", "under"):
             return None
         try:
-            if float(row.get("market_line")) < 0:
+            line = float(row.get("market_line"))
+            if not isfinite(line) or line < 0:
                 return None
         except (TypeError, ValueError, OverflowError):
             return None
