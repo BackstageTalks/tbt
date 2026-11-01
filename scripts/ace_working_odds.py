@@ -21,7 +21,8 @@ def working_ace_odds(row: Mapping[str, Any], *, selection_id: str | None = None)
         return None
     betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
     event = str(row.get("event_id") or row.get("match_id") or row.get("id") or "")
-    selection = str(selection_id or row.get("selection_id") or betting.get("selection_id")
+    # The frozen Telegram contract uses betting.selection_id first.
+    selection = str(selection_id or betting.get("selection_id") or row.get("selection_id")
                     or row.get("winner_id") or row.get("pick") or row.get("selection") or "")
     if not event and not selection:
         return None
