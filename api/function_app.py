@@ -348,9 +348,11 @@ def _comparator_access(account: dict, runtime_ui: dict) -> tuple[bool, str]:
     plan = "rookie" if status == "trial" else str((account or {}).get("plan") or "expired").lower()
     if status not in {"active", "lifetime", "trial"}:
         plan = "expired"
+    # Fail closed to the current published LEGEND+ baseline if runtime admin
+    # storage is missing. Runtime admin rules remain authoritative when present.
     defaults = {
-        "trial": True, "expired": False, "rookie": True, "pro": True,
-        "elite": True, "legend": True, "goat": True,
+        "trial": False, "expired": False, "rookie": False, "pro": False,
+        "elite": False, "legend": True, "goat": True,
     }
     plans = ((((runtime_ui or {}).get("dashboard") or {}).get("comparator") or {}).get("plans") or {})
     effective = {**defaults, **(plans if isinstance(plans, dict) else {})}

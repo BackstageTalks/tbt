@@ -213,7 +213,7 @@ def main():
                 t.renderRoute('results');
                 const text=document.querySelector('#routePanel')?.textContent||'';
                 return {period:s.resultsFilters.window,rows:t.filteredResults().length,
-                    empty:text.includes('Zatiaľ nie sú dostupné vyhodnotené'),
+                    empty:text.includes('Pre zvolené filtre nie sú dostupné vyhodnotené predikcie.'),
                     selector:document.querySelector('#resultsWindow')?.value};
             }""")
             assert empty_today=={'period':'today','rows':0,'empty':True,'selector':'today'},empty_today

@@ -59,10 +59,10 @@ def test_final_rookie_and_pro_offer_contract_is_server_enforced_by_defaults():
     assert rm["results"] is False and pm["results"] is False
 
 
-def test_results_default_to_legend_plus_in_static_config():
+def test_results_static_presentation_fallback_matches_published_pro_plus():
     access = UI["elements"]["SIDEBAR_RESULTS"]["access"]
-    assert access["rookie"] == access["pro"] == access["elite"] == "locked"
-    assert access["legend"] == access["goat"] == "active"
+    assert access["rookie"] == "locked"
+    assert all(access[plan] == "active" for plan in ("pro", "elite", "legend", "goat"))
 
 
 def test_legacy_runtime_access_matrix_is_migrated_once():

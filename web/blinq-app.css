@@ -10918,13 +10918,15 @@ body#blinqPremium.blinq-admin .admin-model-lab select:focus-visible{
 
 /* Comparator access: Live-style nav lock and compact deep-link notice. */
 body#blinqPremium .reference-navigation a.comparator-nav-locked,
-body#blinqPremium .mobile-icon-nav a.comparator-nav-locked{
+body#blinqPremium .mobile-icon-nav a.comparator-nav-locked,
+body#blinqPremium #mobileTabs a.comparator-nav-locked{
   position:relative!important;
   color:#c8aa63!important;
   opacity:1!important;
 }
 body#blinqPremium .reference-navigation a.comparator-nav-locked::after,
-body#blinqPremium .mobile-icon-nav a.comparator-nav-locked::after{
+body#blinqPremium .mobile-icon-nav a.comparator-nav-locked::after,
+body#blinqPremium #mobileTabs a.comparator-nav-locked::after{
   content:"🔒";
   position:absolute;
   top:-3px;
@@ -10939,6 +10941,17 @@ body#blinqPremium .mobile-icon-nav a.comparator-nav-locked::after{
   border-radius:5px;
   background:#0a211a;
   pointer-events:none;
+}
+/* Bottom mobile tabs use a centered badge, matching the Results lock. */
+@media(max-width:760px){
+  body#blinqPremium #mobileTabs a.comparator-nav-locked::after{
+    top:6px;
+    right:calc(50% - 20px);
+    width:13px;
+    height:13px;
+    font-size:8px;
+    border-radius:999px;
+  }
 }
 body#blinqPremium .comparator-locked-inline{
   display:inline-flex;

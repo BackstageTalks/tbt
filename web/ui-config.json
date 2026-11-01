@@ -519,8 +519,8 @@
         "trial": "locked",
         "expired": "locked",
         "rookie": "locked",
-        "pro": "locked",
-        "elite": "locked",
+        "pro": "active",
+        "elite": "active",
         "legend": "active",
         "goat": "active"
       }
@@ -2512,11 +2512,11 @@
     },
     "comparator": {
       "plans": {
-        "trial": true,
+        "trial": false,
         "expired": false,
-        "rookie": true,
-        "pro": true,
-        "elite": true,
+        "rookie": false,
+        "pro": false,
+        "elite": false,
         "legend": true,
         "goat": true
       }

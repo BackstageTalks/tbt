@@ -76,7 +76,8 @@ def inspect(browser,width):
         assert page.locator(f'[data-admin-display-access="{key}"]').is_checked() is not old,(width,key)
     assert page.locator('[data-admin-display-history]').input_value()=='7d'
     assert page.evaluate('unifiedHarness.state.ui.dashboard.results_history_window.elite==="7d"')
-    assert page.evaluate('unifiedHarness.state.ui.dashboard.comparator.plans.pro!==false')
+    # Independent PRO permission stays locked while ELITE and ROOKIE are edited.
+    assert page.evaluate('unifiedHarness.state.ui.dashboard.comparator.plans.pro===false')
 
     # Global detail section minima are editable here, not in Členstvá.
     page.locator('.admin-display-global-detail summary').click()
@@ -103,7 +104,7 @@ def inspect(browser,width):
     assert page.evaluate('unifiedHarness.state.adminTab==="layout"')
     assert page.evaluate('unifiedHarness.state.adminPlan==="pro"')
     assert page.locator('.admin-display-access-panel h3').inner_text().startswith('Čo môže otvoriť')
-    assert page.locator('[data-admin-display-access="comparator"]').is_checked()
+    assert not page.locator('[data-admin-display-access="comparator"]').is_checked()
 
     # On narrow screens, settings do not create horizontal overflow.
     overflow=page.evaluate('document.documentElement.scrollWidth - window.innerWidth')

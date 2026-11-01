@@ -313,7 +313,13 @@
     }
   };
   function publicText(value){
-    const raw=String(value??'');
+    let raw=String(value??'');
+    // Correct only known legacy Slovak public copy, without mutating
+    // admin-published source content or changing other languages.
+    if(locale==='sk')raw=raw
+      .replace('Každý zápas ma príbeh','Každý zápas má príbeh')
+      .replace('Staň as súčasťou','Staň sa súčasťou')
+      .replace('s dennym FREE','s denným FREE');
     const dict=PUBLIC_TRANSLATIONS[locale]||{};
     if(Object.prototype.hasOwnProperty.call(dict,raw))return dict[raw];
     let m=raw.match(/^(\d+) picks$/);if(m)return `${m[1]} ${locale==='cz'?'predikcí':'predikcií'}`;
@@ -850,15 +856,25 @@
     const modelRoutes=new Set(['model_data','methodology','how_blinq_works']);
     const referenceRoute=predictionRoutes.has(state.route)?'predictions':state.route==='results'?'results':state.route==='compare'?'compare':modelRoutes.has(state.route)?'model_data':state.route==='account'?'account':'';
     const resultsLocked=!resultsAccessAllowed();
-    const resultsPlan=resultsLocked?firstResultsUnlockPlan():'';
+    const resultsMismatch=resultsServerAccessMismatch();
+    const resultsPlan=resultsLocked&&!resultsMismatch?firstResultsUnlockPlan():'';
     const decorateResultsAccess=node=>{
       if(!node)return;
       node.classList.toggle('access-nav-locked',resultsLocked);
       if(resultsLocked){
-        node.dataset.upgradePlan=resultsPlan;
-        node.dataset.upgradeSection=lcopy('Results','Výsledky','Výsledky');
-        node.dataset.upgradeExplicit='1';
-        node.setAttribute('aria-label',`${lcopy('Results','Výsledky','Výsledky')} · ${accessHintDetails(resultsPlan,'').title}`);
+        if(resultsMismatch){
+          // Do not upsell an already entitled member when API and presentation
+          // settings disagree (for example during an admin-storage outage).
+          delete node.dataset.upgradePlan;
+          delete node.dataset.upgradeSection;
+          delete node.dataset.upgradeExplicit;
+          node.setAttribute('aria-label',lcopy('Results temporarily unavailable','Výsledky sú dočasne nedostupné','Výsledky jsou dočasně nedostupné'));
+        }else{
+          node.dataset.upgradePlan=resultsPlan;
+          node.dataset.upgradeSection=lcopy('Results','Výsledky','Výsledky');
+          node.dataset.upgradeExplicit='1';
+          node.setAttribute('aria-label',`${lcopy('Results','Výsledky','Výsledky')} · ${accessHintDetails(resultsPlan,'').title}`);
+        }
       }else{
         delete node.dataset.upgradePlan;
         delete node.dataset.upgradeSection;
@@ -1115,10 +1131,25 @@
     if(!['active','lifetime'].includes(status))return 'expired';
     return String(account.plan||'expired').toLowerCase();
   }
-  function elementAccess(id, plan=accountPlan()){
+  function configuredElementAccess(id, plan=accountPlan()){
     if(plan==='admin' && !state.previewPlan) return 'active';
     const value=String(elements()?.[id]?.access?.[plan]||'active').toLowerCase();
     return accessStates.includes(value)?value:'active';
+  }
+  function resultsServerAccessMismatch(plan=accountPlan()){
+    return !state.previewPlan && plan!=='admin'
+      && state.feed?.entitlements?.results===false
+      && configuredElementAccess('SIDEBAR_RESULTS',plan)==='active';
+  }
+  function elementAccess(id, plan=accountPlan()){
+    if(plan==='admin' && !state.previewPlan) return 'active';
+    // A published UI configuration can change independently of this frontend.
+    // For Results, the authenticated server entitlement is authoritative.
+    if(id==='SIDEBAR_RESULTS' && !state.previewPlan && plan===accountPlan()){
+      const allowed=state.feed?.entitlements?.results;
+      if(typeof allowed==='boolean')return allowed?'active':'locked';
+    }
+    return configuredElementAccess(id,plan);
   }
   function accessLabel(plan=accountPlan()){
     return state.ui?.plans?.[plan]?.label || String(plan||'').toUpperCase();
@@ -1131,14 +1162,22 @@
       node.setAttribute('aria-disabled',mode==='active'?'false':'true');
       if(mode!=='active'){
         node.classList.add('access-locked');
-        if(!node.dataset.upgradePlan){
-          const sectionKey=dashboardSectionKeyForSidebarElement(id)||'top_daily';
-          node.dataset.upgradePlan=id==='SIDEBAR_RESULTS'?firstResultsUnlockPlan():firstUnlockPlan(sectionKey,0,true);
-          node.dataset.upgradeSection=node.textContent?.trim().slice(0,70)||dashboardSectionConfig(sectionKey).label||'BlinQ';
-          node.dataset.accessAutoLock='1';
+        if(id==='SIDEBAR_RESULTS'&&resultsServerAccessMismatch()){
+          delete node.dataset.upgradePlan;
+          delete node.dataset.upgradeSection;
+          delete node.dataset.upgradeExplicit;
+          delete node.dataset.accessAutoLock;
+          node.dataset.uiStateLabel=lcopy('Temporarily unavailable','Dočasne nedostupné','Dočasně nedostupné');
+        }else{
+          if(!node.dataset.upgradePlan){
+            const sectionKey=dashboardSectionKeyForSidebarElement(id)||'top_daily';
+            node.dataset.upgradePlan=id==='SIDEBAR_RESULTS'?firstResultsUnlockPlan():firstUnlockPlan(sectionKey,0,true);
+            node.dataset.upgradeSection=node.textContent?.trim().slice(0,70)||dashboardSectionConfig(sectionKey).label||'BlinQ';
+            node.dataset.accessAutoLock='1';
+          }
+          const required=String(upgradePlanLabel(node.dataset.upgradePlan||'pro')||node.dataset.upgradePlan||'PRO').replace(/^BlinQ\s+/i,'').toUpperCase();
+          node.dataset.uiStateLabel=uiCopyTemplate('access.requires',lcopy(`Requires ${required}`,`Vyžaduje ${required}`,`Vyžaduje ${required}`),{plan:required});
         }
-        const required=String(upgradePlanLabel(node.dataset.upgradePlan||'pro')||node.dataset.upgradePlan||'PRO').replace(/^BlinQ\s+/i,'').toUpperCase();
-        node.dataset.uiStateLabel=uiCopyTemplate('access.requires',lcopy(`Requires ${required}`,`Vyžaduje ${required}`,`Vyžaduje ${required}`),{plan:required});
       }else{node.dataset.uiStateLabel='';if(node.dataset.accessAutoLock==='1'){delete node.dataset.upgradePlan;delete node.dataset.upgradeSection;delete node.dataset.accessAutoLock;}}
     });
   }
@@ -1652,7 +1691,7 @@
     return mergeConfig(base,cfg);
   }
   function comparatorAccessConfig(){
-    const base={plans:{trial:true,expired:false,rookie:true,pro:true,elite:true,legend:true,goat:true}};
+    const base={plans:{trial:false,expired:false,rookie:false,pro:false,elite:false,legend:true,goat:true}};
     const cfg=state.ui?.dashboard?.comparator||{};
     return mergeConfig(base,cfg);
   }
@@ -3558,6 +3597,7 @@
     return 'goat';
   }
   function resultsLockedCard(){
+    if(resultsServerAccessMismatch())return `<div class="results-access-lock" role="status"><span aria-hidden="true">ℹ</span><div><strong>${escapeHtml(lcopy('Results temporarily unavailable','Výsledky sú dočasne nedostupné','Výsledky jsou dočasně nedostupné'))}</strong><p>${escapeHtml(lcopy('Access could not be verified. Try refreshing the page.','Prístup sa momentálne nepodarilo overiť. Skús obnoviť stránku.','Přístup nyní nelze ověřit. Zkus obnovit stránku.'))}</p></div></div>`;
     const minPlan=firstResultsUnlockPlan();
     const required=String(upgradePlanLabel(minPlan)||minPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
     return `<div class="results-access-lock" data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Results','Výsledky','Výsledky'))}"><span aria-hidden="true">🔒</span><div><small>${escapeHtml(lcopy('LOCKED SECTION','UZAMKNUTÁ SEKCIA','UZAMČENÁ SEKCE'))}</small><strong>${escapeHtml(lcopy('Results','Výsledky','Výsledky'))}</strong><p>${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od: ${required}`,`Dostupné od: ${required}`))}</p></div></div>`;
@@ -3820,7 +3860,7 @@
   function renderResults(){
     if(state.feed?.results_exclusions_unavailable)return '<div class="state-card" role="alert">Vyhodnotené výsledky sú dočasne nedostupné – prebieha ochranné overenie administrátorských vylúčení. Predikcie zostávajú dostupné.</div>';
     const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',entries=settledPublishedEntries(rows,category,filters);
-    if(!entries.length){state.resultsPage=0;return '<div class="state-card">Zatiaľ nie sú dostupné vyhodnotené publikované predikcie/predikcie pre tento filter.</div>';}
+    if(!entries.length){state.resultsPage=0;return '<div class="state-card">Pre zvolené filtre nie sú dostupné vyhodnotené predikcie.</div>';}
     const allowedSizes=[50,100],pageSize=allowedSizes.includes(Number(state.resultsPageSize))?Number(state.resultsPageSize):50;
     state.resultsPageSize=pageSize;
     const pages=Math.max(1,Math.ceil(entries.length/pageSize));
