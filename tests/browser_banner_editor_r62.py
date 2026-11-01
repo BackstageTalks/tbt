@@ -321,6 +321,66 @@ def main():
             assert edited['mobileHeading']<edited['second'],edited
             assert str(edited['desktopSocialX'])=='61' and str(edited['mobileSocialY'])=='22',edited
             assert not edited['obsoleteNote'] and edited['customNote'],edited
+            # Admin X/Y/width must survive the real CSS cascade on BOTH devices.
+            # Earlier mobile styles had a hard 75% width cap and fixed padding.
+            for viewport, mode in [(1440, 'desktop'), (390, 'mobile')]:
+                page.set_viewport_size({'width': viewport, 'height': 900})
+                placement=page.evaluate("""mode => {
+                  const h=bannerHarness,s=h.state;
+                  s.ui.hero_banner.slot_count=1;
+                  s.heroIndex=0;
+                  h.setSelectedElement('HERO_BANNER_1');
+                  const c=s.ui.elements.HERO_BANNER_1.content;
+                  Object.assign(c,{enabled:true,type:'promo',show_copy:true,
+                    headline:'Kontrola pozície',text:'Zachovať polohu',
+                    image_url:'/assets/hero-reference-exact-v680.webp',
+                    mobile_image_url:'/assets/tennis-hero-v6524.webp'});
+                  const values={
+                    desktop_text_x:23,desktop_text_y:42,desktop_text_width:55,
+                    mobile_text_x:27,mobile_text_y:58,mobile_text_width:86,
+                    desktop_image_x:18,desktop_image_y:82,
+                    mobile_image_x:74,mobile_image_y:29
+                  };
+                  for(const [key,value] of Object.entries(values)){
+                    const input=document.querySelector('[data-simple-banner-field="'+key+'"]');
+                    if(!input)throw Error('Missing editor field: '+key);
+                    input.value=String(value);
+                    input.dispatchEvent(new Event('input',{bubbles:true}));
+                  }
+                  const preview=document.querySelector('[data-admin-preview-card="'+mode+'"] .lean-admin-preview');
+                  const host=document.querySelector('#dashboardHero');
+                  host.hidden=false;
+                  host.innerHTML=h.heroSlideHtml({id:'HERO_BANNER_1',...s.ui.elements.HERO_BANNER_1},0);
+                  const original=document.body.className;
+                  document.body.classList.remove('blinq-admin');
+                  document.body.classList.add('blinq-home','bqm-enabled');
+                  const slide=host.querySelector('.hero-slide');
+                  const relative=(root,elem)=>{
+                    const bounds=root.getBoundingClientRect(),cs=getComputedStyle(elem);
+                    return {x:100*parseFloat(cs.left)/bounds.width,
+                      y:100*parseFloat(cs.top)/bounds.height,
+                      width:100*parseFloat(cs.width)/bounds.width,
+                      maxWidth:100*parseFloat(cs.maxWidth)/bounds.width};
+                  };
+                  const live=relative(slide,slide.querySelector('.dashboard-hero-copy'));
+                  const imagePosition=getComputedStyle(slide.querySelector('.hero-slide-image')).objectPosition;
+                  document.body.className=original;
+                  const admin=relative(preview,preview.querySelector('.admin-hero-preview-copy'));
+                  const previewPosition=getComputedStyle(preview.querySelector('img')).objectPosition;
+                  return {live,admin,imagePosition,previewPosition,
+                    persisted:mode==='mobile'?[c.mobile_text_x,c.mobile_text_y,c.mobile_text_width]:
+                      [c.desktop_text_x,c.desktop_text_y,c.desktop_text_width]};
+                }""", mode)
+                expect=(27,58,86) if mode=='mobile' else (23,42,55)
+                for surface in ('live','admin'):
+                    for field, expected in zip(('x','y','width'),expect):
+                        assert abs(placement[surface][field]-expected)<3,(viewport,mode,surface,field,placement)
+                    assert placement[surface]['maxWidth']>=expect[2]-3,(mode,surface,placement)
+                position='74% 29%' if mode=='mobile' else '18% 82%'
+                assert placement['imagePosition']==position,(mode,placement)
+                assert placement['previewPosition']==position,(mode,placement)
+                assert placement['persisted']==list(expect),(mode,placement)
+                print(f'PASS: {mode} editor X/Y/width and image crop reflected in public + preview',flush=True)
             assert not errors,errors
             print('PASS: live carousel, text, grayscale and no hidden accent')
         finally:
