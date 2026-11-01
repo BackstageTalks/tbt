@@ -135,3 +135,42 @@ def test_old_snapshot_and_wrong_kickoff_rejected():
     board["matches"][0]["kickoff_utc"] = (NOW + timedelta(hours=4)).isoformat()
     found, _ = discover_moviodds_fallback([prediction], {}, now=NOW, board=board)
     assert found == {}
+
+
+def test_free_moviodds_aces_price_survives_zero_paid_api_budget():
+    """No API Pro call is necessary to publish an exact fallback quote."""
+    from tbt.services.projection_odds import enrich_projection_odds
+
+    class NoPaidRequests:
+        def event_odds(self, *args, **kwargs):
+            raise AssertionError("RapidAPI must not be called without budget")
+
+    prediction, board = _data()
+    prediction.update({"market": "aces", "selection_id": "11", "projection": 8.0})
+    fallback, discovery = discover_moviodds_fallback(
+        [prediction], {}, now=NOW, board=board,
+    )
+    assert discovery["priced_by_market"]["aces"] == 1
+    ace, sg, report = enrich_projection_odds(
+        NoPaidRequests(), [prediction], [], max_events=0,
+        prefetched_payloads={}, alternate_market_payloads=fallback,
+    )
+    assert not sg
+    assert report["events_requested"] == 0
+    assert report["attached_by_provider"]["moviodds"] == 1
+    assert ace[0]["price_status"] == "priced_projection"
+    assert ace[0]["provider_id"] == 3
+    assert ace[0]["odds_source"] == "moviodds"
+    assert ace[0]["odds_bookmaker"] == "bet365"
+    assert ace[0]["odds"] == 1.8
+    assert ace[0]["market_line"] == 3.5
+    assert ace[0]["price_contract"] == "player_total_ou"
+
+
+def test_pipeline_free_fallback_not_dependent_on_rapidapi_remaining():
+    source = (Path(__file__).resolve().parents[1] / "scripts/pipeline.py").read_text()
+    assert "if predictions:\\n            mov_existing = {" .replace("\\n", "\n") in source
+    assert (
+        "if (projection_odds_cap or prop_market_payloads) and (ace_picks or sg_picks):"
+        in source
+    )
