@@ -201,7 +201,7 @@ def project_market_state(state: Mapping | None, *, left_key: str, right_key: str
                          cutoff: datetime) -> dict:
     """Produce estimates only from observed, PIT-safe, tour-scoped evidence."""
     unavailable = {"aces": None, "double_faults": None}
-    if not isinstance(state, Mapping) or state.get("schema") != 2:
+    if not isinstance(state, Mapping) or state.get("schema") not in (1, 2):
         return unavailable
     if now.tzinfo is None or cutoff.tzinfo is None:
         return unavailable
@@ -215,8 +215,12 @@ def project_market_state(state: Mapping | None, *, left_key: str, right_key: str
         return unavailable
     players = state.get("players")
     baselines = state.get("baselines")
-    lengths = state.get("format_lengths")
-    formatted = state.get("format_baselines")
+    # Older already-published schema-1 snapshots still have authentic
+    # pre-cutoff per-match stats. Serve same-format estimates until the
+    # checksum-verified schema-2 release is ready; never fake BO3->BO5.
+    legacy = state.get("schema") == 1
+    lengths = {} if legacy else state.get("format_lengths")
+    formatted = {} if legacy else state.get("format_baselines")
     if not all(isinstance(value, Mapping) for value in (players, baselines, lengths, formatted)):
         return unavailable
     tour_base = baselines.get(tour)
@@ -308,8 +312,9 @@ def project_market_state(state: Mapping | None, *, left_key: str, right_key: str
             "player2": right,
             "total_estimate": round(left["estimate"] + right["estimate"], 2)
                 if left is not None and right is not None else None,
-            "method": "canonical_game_adjusted_when_verified_decay_shrunk_opponent",
-            "format_adjustment": "observed_total_games_only",
+            "method": ("canonical_legacy_same_format_decay_shrunk_opponent"
+                       if legacy else "canonical_game_adjusted_when_verified_decay_shrunk_opponent"),
+            "format_adjustment": "legacy_same_format_only" if legacy else "observed_total_games_only",
             "range_calibration": "heuristic_not_backtested",
             "not_betting_odds": True,
             "cutoff_utc": cutoff.isoformat(),
