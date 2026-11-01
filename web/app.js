@@ -460,9 +460,12 @@
     }).filter(Boolean).join('');
     return links?`<div class="hero-social-links${standalone?' hero-social-standalone':''}" aria-label="Sociálne siete">${links}</div>`:'';
   }
-  async function loadEditablePresentationConfig(){
+  function fetchEditablePresentationConfig(){
+    return Promise.all([getJSON('/config/membership-tiers.json',{timeoutMs:3000}),getJSON('/config/banners.json',{timeoutMs:3000}),getJSON('/config/site-theme.json',{timeoutMs:3000}),getJSON('/config/site-content.json',{timeoutMs:3000})]);
+  }
+  async function loadEditablePresentationConfig(presentationReady=null){
     try{
-      const [tiers,banners,theme,siteContent]=await Promise.all([getJSON('/config/membership-tiers.json',{timeoutMs:3000}),getJSON('/config/banners.json',{timeoutMs:3000}),getJSON('/config/site-theme.json',{timeoutMs:3000}),getJSON('/config/site-content.json',{timeoutMs:3000})]);
+      const [tiers,banners,theme,siteContent]=await (presentationReady||fetchEditablePresentationConfig());
       state.presentationConfig={tiers,banners,theme,siteContent}; state.siteContent=siteContent;
       Object.entries(tiers?.tiers||{}).forEach(([id,data])=>{if(!state.ui?.plans?.[id])return;const p=state.ui.plans[id];['label','eyebrow','card_title','description','short_description','cta_label','invite_only'].forEach(k=>{if(data[k]!==undefined)p[k]=data[k];});if(Array.isArray(data.features))p.features=data.features.map(value=>String(value||'').trim()).filter(Boolean);if(data.short_description!==undefined)p.note=String(data.short_description||data.description||'').trim();const u=safeExternalUrl(data.url||'');if(u)p.url=u;else if(data.url==='')p.url='';});
       const hero=banners?.main_banner||{};if(state.ui){const liveHero=state.ui.hero_banner||{};state.ui.hero_banner={...liveHero,rotation_seconds:liveHero.rotation_seconds??hero.rotation_seconds??6,auto_rotate:liveHero.auto_rotate??hero.auto_rotate??true,show_dots:liveHero.show_dots??hero.show_dots??true,pause_on_hover:liveHero.pause_on_hover??hero.pause_on_hover??true,slot_count:liveHero.slot_count??(Array.isArray(hero.slides)?Math.min(5,hero.slides.filter(x=>x?.enabled!==false).length):1)};}
@@ -488,6 +491,9 @@
 
   const VERIFIED_RUNTIME_UI_KEY='blinq_last_verified_runtime_ui_v1';
   async function loadUiConfig() {
+    // Start optional CMS fetches alongside UI/runtime requests. Apply them only
+    // after the authoritative runtime configuration has been merged.
+    const presentationReady=fetchEditablePresentationConfig().catch(()=>null);
     let runtimeConfigSnapshot=null;
     const fallbackUi={schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     // Fetch independent release/runtime resources concurrently. A single slow
@@ -560,7 +566,7 @@
       fields.forEach(key=>{if(data[key]!==undefined)plan[key]=data[key];});
       if(data.title!==undefined)plan.card_title=data.title;if(data.button_text!==undefined)plan.cta_label=data.button_text;
     });
-    await loadEditablePresentationConfig();
+    await loadEditablePresentationConfig(presentationReady);
     // Static membership JSON files are release fallbacks only. Admin-published plan
     // settings are authoritative and must survive reloads without editing JSON.
     if(runtimeConfigSnapshot?.plans&&typeof runtimeConfigSnapshot.plans==='object')state.ui.plans=mergeConfig(state.ui.plans||{},runtimeConfigSnapshot.plans);
@@ -8409,11 +8415,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     if(event.storageArea!==localStorage||event.key!==epochKey)return;
     clearTimeout(externalSessionTimer);externalSessionTimer=setTimeout(()=>{syncExternalSession().catch(error=>console.warn('[BlinQ auth] cross-tab session sync failed.',error));},40);
   }
-  async function loadFeed(showLoading=true){
+  async function loadFeed(showLoading=true,prefetchedFeed=null){
     if(feedLoading)return;feedLoading=true;const generation=feedGeneration;window.BlinqUI.sync('loading');
     if(showLoading&&state.route==='predictions') $('predictionGrid').innerHTML=`<div class="state-card">${escapeHtml(publicText('Loading current model predictions…'))}</div>`;
     try{
-      const feed=(await BlinqAuth.feed())||{};if(generation!==feedGeneration)return;
+      const feed=(await (prefetchedFeed||BlinqAuth.feed()))||{};if(generation!==feedGeneration)return;
       state.feed=normalizeFeedAceOdds(feed); state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
       // News/RSS is presentation-only. Never hold an authenticated workspace
       // behind a slow external feed. Render immediately, then refresh the hero
@@ -8590,6 +8596,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       // BlinqAuth.ensureReady(), so a still-running init cannot create a race.
       if(!session)auth('login');
 
+      // The backend validates the token. Prefetch its feed while independent
+      // auth/config checks finish; do not render private data before they pass.
+      const prefetchedFeed=session?BlinqAuth.feed():null;
+      if(prefetchedFeed)prefetchedFeed.catch(()=>{}); // handle early rejection until loadFeed awaits it
+
       const {cfg,error:authError}=await authReady;
       if(cfg){
         state.authEnabled=Boolean(cfg.enabled&&String(cfg.provider||'').toLowerCase()==='firebase');
@@ -8609,7 +8620,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       // Workspace rendering can use UI configuration, but failure falls back to
       // repository defaults and can never invalidate a Firebase session.
       await uiReady;
-      await loadFeed();
+      await loadFeed(true,prefetchedFeed);
     }catch(error){
       showStatus(error?.message||'The BlinQ workspace could not be opened. Please try again.');
       if($('appShell').hidden)auth('login');
