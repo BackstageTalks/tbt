@@ -1,12 +1,8 @@
 name: MoviOdds verified tennis JSON archive to Drive
 
 on:
-  # One-shot integration smoke, scoped to this exact operator probe marker.
-  # No other push is permitted to dispatch the archive upload.
-  push:
-    branches: [main]
-    paths:
-      - 'ops/moviodds-archive-smoke-20261101.json'
+  # Reusable manual handler dispatched by the existing external match-status clock.
+  # Retired historical one-shot push trigger; no push-based archive uploads.
   workflow_dispatch:
     inputs:
       date:
