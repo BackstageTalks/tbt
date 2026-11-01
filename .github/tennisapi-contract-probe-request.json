@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "requested_date": "2026-11-01",
-  "reason": "Verify documented source identity 69208 at player/team endpoints before historical year-stat interpretation",
+  "reason": "Validate TennisApi historical player/team aggregates in 2024, 2022, 2020, 2016 and current 2026 with non-null/bounds checks",
   "provider_requests_allowed": true,
-  "max_requests": 2,
+  "max_requests": 5,
   "event_id": 14494928,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ technical audit",
-  "diagnostic_attempt": 11,
-  "phase": "identity",
+  "diagnostic_attempt": 12,
+  "phase": "historical",
   "case": null
 }
