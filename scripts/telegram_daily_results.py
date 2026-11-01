@@ -186,8 +186,7 @@ def report_rows(rows, archive_rows, category, day_text, footer):
         unit_text=f"{item['units']:+.2f}u" if item["units"] is not None else (
             "Pending" if status=="pending" else "—" if status!="void" else "+0.00u")
         symbol="🆓" if category=="free" else tg.NUMBER_EMOJIS[i-1] if i<=10 else f"{i}."
-        selected=str(row.get("name") or "—").strip().split()
-        name=selected[-1] if selected else "—"
+        name=tg._compact_player_name(row.get("name") or "—")
         start=tg.stamp(row["scheduled_at"]).astimezone(tg.TZ).strftime("%H:%M")
         lines.append(f"{symbol} {icons[status]} {name} | {start} | {price_text} | {unit_text}")
     roi=f"ROI {units/priced*100:+.1f}%" if priced else "ROI —"
@@ -228,7 +227,7 @@ def combined_daily_report(rows, archive_rows, day_text, footer):
     names={}
     for _,row in ordered:
         full=str(row.get("name") or "—").strip()
-        short=full.split()[-1] if full.split() else "—"
+        short=tg._compact_player_name(full)
         names.setdefault(short.casefold(),set()).add(full)
     lines=[]
     for index,(section,row) in enumerate(ordered,1):
@@ -242,7 +241,7 @@ def combined_daily_report(rows, archive_rows, day_text, footer):
             bucket["units"]+=outcome["units"]
             bucket["priced"]+=outcome["stake"]
         full=str(row.get("name") or "—").strip()
-        short=full.split()[-1] if full.split() else "—"
+        short=tg._compact_player_name(full)
         name=full if len(names[short.casefold()])>1 else short
         odds=tg.num(row.get("odds"))
         odds_text=f"{odds:.2f}" if odds is not None and odds>1 else "—"
