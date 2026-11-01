@@ -138,6 +138,7 @@ jobs:
           print('')
           print(f"- Players in current feed: **{report['players_requested']:,}**")
           print(f"- Rank available: **{report['players_with_rank']:,}**")
+          print(f"- Per-player ranking lookups skipped (fresh fallback cache): **{report.get('fallback_rankings_skipped_recent', 0):,}**")
           print(f"- Country/flag available: **{report['players_with_country']:,}**")
           print(f"- New photos downloaded: **{report['photos_downloaded']:,}**")
           print(f"- Cached photos reused: **{report['photos_cached']:,}**")
