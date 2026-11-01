@@ -17,5 +17,7 @@
   "source_identity_evidence_run": 41313533933,
   "source_cdb_absence_evidence_run": 41313057773,
   "collision_protection_pr": 1214,
-  "status": "OPERATOR_APPROVED_GUARDED_NATIVE_HISTORY_WIMBLEDON_2016"
+  "status": "OPERATOR_APPROVED_GUARDED_NATIVE_HISTORY_WIMBLEDON_2016",
+  "authorization_gate_fix_attempt": 2,
+  "last_blocker": "jq false coalescing rejected explicit model_changes=false before CDB/API"
 }
