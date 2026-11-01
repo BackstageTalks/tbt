@@ -1161,14 +1161,22 @@
       node.setAttribute('aria-disabled',mode==='active'?'false':'true');
       if(mode!=='active'){
         node.classList.add('access-locked');
-        if(!node.dataset.upgradePlan){
-          const sectionKey=dashboardSectionKeyForSidebarElement(id)||'top_daily';
-          node.dataset.upgradePlan=id==='SIDEBAR_RESULTS'?firstResultsUnlockPlan():firstUnlockPlan(sectionKey,0,true);
-          node.dataset.upgradeSection=node.textContent?.trim().slice(0,70)||dashboardSectionConfig(sectionKey).label||'BlinQ';
-          node.dataset.accessAutoLock='1';
+        if(id==='SIDEBAR_RESULTS'&&resultsServerAccessMismatch()){
+          delete node.dataset.upgradePlan;
+          delete node.dataset.upgradeSection;
+          delete node.dataset.upgradeExplicit;
+          delete node.dataset.accessAutoLock;
+          node.dataset.uiStateLabel=lcopy('Temporarily unavailable','Dočasne nedostupné','Dočasně nedostupné');
+        }else{
+          if(!node.dataset.upgradePlan){
+            const sectionKey=dashboardSectionKeyForSidebarElement(id)||'top_daily';
+            node.dataset.upgradePlan=id==='SIDEBAR_RESULTS'?firstResultsUnlockPlan():firstUnlockPlan(sectionKey,0,true);
+            node.dataset.upgradeSection=node.textContent?.trim().slice(0,70)||dashboardSectionConfig(sectionKey).label||'BlinQ';
+            node.dataset.accessAutoLock='1';
+          }
+          const required=String(upgradePlanLabel(node.dataset.upgradePlan||'pro')||node.dataset.upgradePlan||'PRO').replace(/^BlinQ\s+/i,'').toUpperCase();
+          node.dataset.uiStateLabel=uiCopyTemplate('access.requires',lcopy(`Requires ${required}`,`Vyžaduje ${required}`,`Vyžaduje ${required}`),{plan:required});
         }
-        const required=String(upgradePlanLabel(node.dataset.upgradePlan||'pro')||node.dataset.upgradePlan||'PRO').replace(/^BlinQ\s+/i,'').toUpperCase();
-        node.dataset.uiStateLabel=uiCopyTemplate('access.requires',lcopy(`Requires ${required}`,`Vyžaduje ${required}`,`Vyžaduje ${required}`),{plan:required});
       }else{node.dataset.uiStateLabel='';if(node.dataset.accessAutoLock==='1'){delete node.dataset.upgradePlan;delete node.dataset.upgradeSection;delete node.dataset.accessAutoLock;}}
     });
   }
