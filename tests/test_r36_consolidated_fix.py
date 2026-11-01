@@ -30,7 +30,7 @@ def test_real_rookie_has_ui_and_server_admin_guards():
     assert "profile-preview-context" not in INDEX
 
 
-def test_rookie_static_offer_is_random_daily_and_results_are_legend_plus():
+def test_rookie_static_offer_is_random_daily_and_results_are_pro_plus():
     tabs = UI["dashboard"]["daily_hub"]["tabs"]
     for tab in ("daily", "prime", "value"):
         rule = tabs[tab]["plans"]["rookie"]
@@ -38,8 +38,8 @@ def test_rookie_static_offer_is_random_daily_and_results_are_legend_plus():
         assert int(rule["visible_rows"]) == 1
         assert rule["blur_remaining"] is True
     results = UI["elements"]["SIDEBAR_RESULTS"]["access"]
-    assert results["rookie"] == results["pro"] == results["elite"] == "locked"
-    assert results["legend"] == results["goat"] == "active"
+    assert results["rookie"] == "locked"
+    assert all(results[plan] == "active" for plan in ("pro", "elite", "legend", "goat"))
 
 
 def test_live_and_locked_detail_copy_are_unambiguous():
