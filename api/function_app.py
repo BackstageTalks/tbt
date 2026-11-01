@@ -69,6 +69,7 @@ from tbt.services.admin_storage import (
     load_runtime_ui_snapshot,
     record_banner_event,
     save_runtime_ui_config,
+    ui_config_revision,
     list_insights,
     save_insight,
     delete_insight,
@@ -1325,6 +1326,7 @@ def runtime_ui_config(req):
         "configured": True,
         "runtime_configured": runtime_configured,
         "config": config,
+        "config_revision": ui_config_revision(config),
         "source": "runtime" if runtime_configured else "release_access_defaults",
     }
     if not storage_available:
@@ -3967,7 +3969,13 @@ def admin_ui_config(req):
             payload = req.get_json()
         except ValueError:
             return response({"error": "invalid_json"}, 400)
-        saved = save_runtime_ui_config(payload, actor_id=str(actor.get("id") or ""))
+        expected = req.headers.get("x-blinq-ui-revision")
+        if expected is not None and not re.fullmatch(r"[a-f0-9]{64}", expected):
+            return response({"error": "invalid_ui_config_revision"}, 400)
+        saved = save_runtime_ui_config(
+            payload, actor_id=str(actor.get("id") or ""),
+            expected_revision=expected,
+        )
         return response(saved)
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
