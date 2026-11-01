@@ -4032,3 +4032,47 @@ def admin_banner_analytics(req):
     except AdminStorageUnavailable:
         return response({"available": False, "error": "admin_storage_unavailable"}, 503)
 
+
+
+@app.route(route="v1/internal/tennis-raw-cache", methods=["GET", "POST"])
+def internal_tennis_raw_cache(req):
+    """Worker-token protected private raw cache, never public or canonical CDB."""
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    from tbt.services.private_tennis_cache import (
+        read as read_tennis_raw, claim as claim_tennis_raw,
+        publish as publish_tennis_raw, abort as abort_tennis_raw,
+        CacheStoreUnavailable,
+    )
+    try:
+        if str(getattr(req, "method", "GET")).upper() == "GET":
+            params = getattr(req, "params", {}) or {}
+            result = read_tennis_raw(
+                str(params.get("key", "")),
+                max_age=float(params.get("max_age", 0)),
+            )
+        else:
+            data = req.get_json()
+            if not isinstance(data, dict):
+                return response({"error": "invalid_cache_request"}, 400)
+            action = data.get("action")
+            key = data.get("key")
+            owner = data.get("owner")
+            if action == "claim":
+                result = claim_tennis_raw(key, owner, max_age=data.get("max_age", 0))
+            elif action == "publish":
+                result = publish_tennis_raw(
+                    key, owner, data.get("payload"), data.get("parser_version", "")
+                )
+            elif action == "abort":
+                result = abort_tennis_raw(key, owner)
+            else:
+                return response({"error": "invalid_cache_action"}, 400)
+        return response({"ok": True, **result})
+    except (ValueError, TypeError):
+        return response({"error": "invalid_cache_request"}, 400)
+    except CacheStoreUnavailable:
+        return response({"error": "private_cache_unavailable"}, 503)
+    except Exception:
+        logging.exception("Private Tennis API raw cache unavailable")
+        return response({"error": "private_cache_unavailable"}, 503)
