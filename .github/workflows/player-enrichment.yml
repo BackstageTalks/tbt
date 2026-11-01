@@ -63,7 +63,7 @@ jobs:
       BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
       BLINQ_SHARED_API_BUDGET_PURPOSE: history
       BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'
-      BLINQ_PROVIDER_REQUEST_RESERVE: '750'
+      BLINQ_PROVIDER_REQUEST_RESERVE: '500'  # Same protected headroom as the shared 14,500/15,000 contract
 
     steps:
       - uses: actions/checkout@v4
