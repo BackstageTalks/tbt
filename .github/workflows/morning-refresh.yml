@@ -28,7 +28,7 @@ concurrency:
 jobs:
   dispatch:
     # Only external/manual workflow_dispatch may start the paid refresh.
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.BLINQ_NATIVE_SCHEDULES_ENABLED == 'true')
     runs-on: ubuntu-latest
     # Stay alive until the real data.yml refresh finishes; wrapper success must
     # mean the paid refresh/deploy itself succeeded, not only that dispatch worked.
