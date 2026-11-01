@@ -298,6 +298,60 @@ def save_snapshot(folder, record):
         f"local artifact preserved at {local}: {last_error}"
     )
 
+def publish_detail_clv(report):
+    """Forward already-paid TOP/VALUE h2h observations to the live Detail store.
+
+    The research archive remains authoritative for raw samples. This sends no
+    extra provider requests and requires the existing private worker token.
+    """
+    token = os.getenv("BLINQ_LIVE_WORKER_TOKEN", "").strip()
+    base = os.getenv("BLINQ_PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if not token or not base:
+        raise RuntimeError("CLV Detail bridge not configured")
+    events = []
+    for event in report.get("events", []):
+        if event.get("blinq_section") not in {"top", "value"}:
+            continue
+        books = []
+        for book in event.get("bookmakers", []):
+            h2h = [m for m in book.get("markets", []) if m.get("key") == "h2h"]
+            if h2h:
+                books.append({
+                    "key": book.get("key"), "title": book.get("title"),
+                    "markets": h2h,
+                })
+        if books:
+            events.append({
+                "event_id": event.get("event_id"),
+                "home_team": event.get("home_team"),
+                "away_team": event.get("away_team"),
+                "commence_time": event.get("commence_time"),
+                "captured_at": event.get("captured_at"),
+                "bookmakers": books,
+            })
+    if not events:
+        return {"status": "no_eligible_h2h", "accepted": 0, "verified": 0}
+    url = base + "/api/v1/internal/clv-snapshot"
+    data = json.dumps({"schema": 1, "events": events}).encode("utf-8")
+    result = request_json(url, {
+        "X-Blinq-Worker-Token": token,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }, method="POST", payload=data)
+    if not isinstance(result, dict) or result.get("ok") is not True:
+        raise RuntimeError("CLV Detail endpoint did not confirm write")
+    if int(result.get("verified") or 0) != int(result.get("accepted") or 0):
+        raise RuntimeError("CLV Detail read-back was incomplete")
+    return {
+        "status": "verified", "submitted_events": len(events),
+        "accepted": int(result.get("accepted") or 0),
+        "written": int(result.get("written") or 0),
+        "already_present": int(result.get("already_present") or 0),
+        "verified": int(result.get("verified") or 0),
+        "rejected_events": int(result.get("rejected_events") or 0),
+    }
+
+
 def main():
     now = datetime.now(timezone.utc)
     folder = ROOT + "/" + now.strftime("%Y-%m-%d")
@@ -331,6 +385,7 @@ def main():
                     break
                 row = {"event_id": event_id, "commence_time": kickoff.isoformat(),
                        "blinq_priority": priority == 0,
+                       "blinq_section": "top" if priority == 0 else "value" if priority == 1 else "",
                        "home_team": event.get("home_team"), "away_team": event.get("away_team"),
                        "tournament": event.get("tournament_name") or event.get("tournament"),
                        "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -376,9 +431,17 @@ def main():
             json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
         )
         raise
+    overlay_error = None
+    try:
+        report["detail_overlay"] = publish_detail_clv(report)
+    except RuntimeError as exc:
+        overlay_error = str(exc)
+        report["detail_overlay"] = {"status": "failed", "reason": overlay_error}
     Path("reports/propline_clv_snapshot.json").write_text(
         json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
     )
+    if overlay_error:
+        raise RuntimeError("Archived research, but CLV Detail overlay failed: " + overlay_error)
     print(f"CLV snapshot: {len(report['events'])} events, {api_calls} calls, "
           f"daily local calls={already+api_calls}/{DAILY_LIMIT}; "
           f"status={report.get('status') or 'ok'}, archived {path}")

@@ -220,6 +220,7 @@ jobs:
           node --check web/auth.js
           node --check web/responsive.js
           node tests/test_projection_display.cjs
+          node tests/test_match_detail_clv.cjs
           node tests/test_frontend_runtime_contract.js
           node tests/test_player_avatar_fallback.cjs
           node tests/test_auth_refresh_race.js
@@ -621,6 +622,21 @@ jobs:
           assert payload.get('release') == '7.3.6', payload
           print(json.dumps(payload, indent=2))
           PYSMOKE
+
+
+      - name: Replay existing TOP/VALUE CLV observations (zero provider spend)
+        # Only the scoped CLV release invokes the one-shot archive replay.
+        if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[clv-detail]') }}
+        timeout-minutes: 8
+        env:
+          TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PUBLIC_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          CLV_REPLAY_DAYS: "2"
+        run: |
+          set -euo pipefail
+          python scripts/replay_clv_detail_archives.py
 
 
       # Calibration snapshots are published by model-calibration-monitor.yml

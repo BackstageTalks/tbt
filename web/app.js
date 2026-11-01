@@ -1477,7 +1477,9 @@
     const heading='<div class="market-trend-heading"><div><small>MARKET INTELLIGENCE</small><h3>'+label('Market trend','Trend trhu','Trend trhu')+'</h3></div></div>';
     const caveat='<p class="market-trend-note">'+label('Information only · market movement does not change the BlinQ prediction. CLV is final only after market close.','Iba informatívne · pohyb trhu nemení predikciu BlinQ. Finálne CLV poznáme až po uzavretí trhu.','Pouze informativně · pohyb trhu nemění predikci BlinQ. Finální CLV známe až po uzavření trhu.')+'</p>';
     if(series.length<2){
-      const quote=currentQuote&&(!book||!currentQuote.book||currentQuote.book.toLowerCase()===book.toLowerCase())?currentQuote:series[0]||currentQuote;
+      // Prefer the verified current source while a distinct CLV source has
+      // fewer than two observations. Never relabel a PropLine price as API Pro.
+      const quote=currentQuote||series[0];
       if(!quote)return '<section class="market-trend-panel">'+heading+'<div class="market-trend-empty">'+noData+'</div>'+caveat+'</section>';
       const when=new Date(quote.timestamp).toLocaleString(contentLocale()==='en'?'en-GB':contentLocale()==='cs'?'cs-CZ':'sk-SK',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
       const sourceText=escapeHtml(quote.book||source||label('verified source','overený zdroj','ověřený zdroj'));
@@ -1485,6 +1487,10 @@
     }
     const first=series[0],last=series[series.length-1];
     const pctMove=(last.pick/first.pick-1)*100;
+    const kickoff=Date.parse(row?.scheduled_at||'');
+    const nearClose=Number.isFinite(kickoff)&&last.timestamp<kickoff&&
+      kickoff-last.timestamp<=90*60*1000&&last.timestamp>first.timestamp;
+    const clvProxy=nearClose?(first.pick/last.pick-1)*100:null;
     const direction=pctMove>3?'against':pctMove< -3?'toward':'neutral';
     const status=direction==='against'?label('Market moving against pick','Trh ide proti picku','Trh jde proti tipu'):direction==='toward'?label('Market supporting pick','Trh podporuje pick','Trh podporuje tip'):label('No significant movement','Bez výrazného pohybu','Bez výrazného pohybu');
     const all=series.flatMap(p=>[p.pick,p.opponent]),min=Math.min(...all),max=Math.max(...all),pad=Math.max(.08,(max-min)*.16),lo=Math.max(1.01,min-pad),hi=max+pad;
@@ -1494,7 +1500,11 @@
     const date=ts=>new Date(ts).toLocaleString(contentLocale()==='en'?'en-GB':contentLocale()==='cs'?'cs-CZ':'sk-SK',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
     const chart='<svg class="market-trend-chart" role="img" aria-label="'+label('Verified bookmaker odds over time','Overený vývoj kurzov v čase','Ověřený vývoj kurzů v čase')+'" viewBox="0 0 730 194" preserveAspectRatio="xMidYMid meet"><path d="M32 18V160H698" fill="none" stroke="#416158" stroke-width="1"/><path d="'+path('pick')+'" fill="none" stroke="#7cf2bc" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="'+path('opponent')+'" fill="none" stroke="#f8b16f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="'+x(last).toFixed(1)+'" cy="'+y(last.pick).toFixed(1)+'" r="4" fill="#7cf2bc"/><circle cx="'+x(last).toFixed(1)+'" cy="'+y(last.opponent).toFixed(1)+'" r="4" fill="#f8b16f"/><text x="32" y="182" fill="#91aea4" font-size="12">'+escapeHtml(date(first.timestamp))+'</text><text x="698" y="182" text-anchor="end" fill="#91aea4" font-size="12">'+escapeHtml(date(last.timestamp))+'</text></svg>';
     const odds=v=>v.toFixed(2);
-    return '<section class="market-trend-panel">'+heading+'<div class="market-trend-summary"><span class="market-trend-status '+direction+'">'+status+'</span><span>'+label('Pick odds','Kurz picku','Kurz tipu')+': <strong>'+odds(first.pick)+' → '+odds(last.pick)+'</strong></span><span class="market-trend-change '+direction+'">'+(pctMove>0?'+':'')+pctMove.toFixed(1)+'%</span></div><div class="market-trend-legend"><span><i class="pick"></i>'+escapeHtml(pickName||'Pick')+'</span><span><i class="opponent"></i>'+escapeHtml(opponentName||'Opponent')+'</span></div>'+chart+'<div class="market-trend-source">'+escapeHtml(book||source||'')+' · '+series.length+' '+label('observations','meraní','měření')+'</div>'+caveat+'</section>';
+    const clvHtml=clvProxy==null?'':'<div class="market-trend-source"><strong>'+label('Observed CLV proxy','Pozorované CLV (proxy)','Pozorované CLV (proxy)')+': '+(clvProxy>=0?'+':'')+clvProxy.toFixed(1)+'%</strong> · '+label('Last observed quote ≤90 min before start, not official close or placed-bet CLV.','Posledné meranie do 90 min pred štartom; nejde o oficiálny closing kurz ani CLV podanej stávky.','Poslední měření do 90 min před startem; nejde o oficiální closing kurz ani CLV podané sázky.')+'</div>';
+    const separateQuote=currentQuote&&currentBook&&book&&currentBook.toLowerCase()!==book.toLowerCase()
+      ?'<div class="market-trend-source">'+label('Other verified source (not mixed into CLV)','Iný overený zdroj (nezmiešaný do CLV)','Jiný ověřený zdroj (nezamíchaný do CLV)')+': '+escapeHtml(currentBook)+' · '+label('Pick odds','Kurz picku','Kurz tipu')+' '+odds(currentQuote.pick)+'</div>'
+      :'';
+    return '<section class="market-trend-panel">'+heading+'<div class="market-trend-summary"><span class="market-trend-status '+direction+'">'+status+'</span><span>'+label('Pick odds','Kurz picku','Kurz tipu')+': <strong>'+odds(first.pick)+' → '+odds(last.pick)+'</strong></span><span class="market-trend-change '+direction+'">'+(pctMove>0?'+':'')+pctMove.toFixed(1)+'%</span></div><div class="market-trend-legend"><span><i class="pick"></i>'+escapeHtml(pickName||'Pick')+'</span><span><i class="opponent"></i>'+escapeHtml(opponentName||'Opponent')+'</span></div>'+chart+'<div class="market-trend-source">'+escapeHtml(src.provider==='propline'?'PropLine · '+book:book||source||'')+' · '+series.length+' '+label('observations','meraní','měření')+'</div>'+clvHtml+separateQuote+caveat+'</section>';
   }
   function renderMotivationPanel(row){
     const match=normalize(row),m1=motivationContext(row,1),m2=motivationContext(row,2);
