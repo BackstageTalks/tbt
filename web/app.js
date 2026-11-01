@@ -5857,6 +5857,15 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const trainRun=training?.runs?.[0], trainBusy=!!trainRun&&['queued','in_progress','waiting','pending','requested'].includes(trainRun.status);
     const canBuild=!busy&&d?.can_start===true&&training?.can_start===true&&!trainBusy;
     const canRefreshInputs=canBuild&&/^[0-9a-f]{64}$/.test(String(d?.feed_sha256||''));
+    // A missing or stale snapshot must never present an inert primary button.
+    // Server-side queue, champion and publication guards remain authoritative.
+    const refreshBlockedReason=busy?'Iná operácia alebo načítavanie práve prebieha.':
+      !d?'Stav Model Labu nie je načítaný.':
+      !training?'Stav tréningovej fronty nie je načítaný.':
+      d.can_start!==true?(d.reason||'Model Lab nepovoľuje novú operáciu.'):
+      training.can_start!==true?(training.reason||'Tréningová fronta je obsadená.'):
+      trainBusy?'Súbežný tréning stále prebieha.':
+      !/^[0-9a-f]{64}$/.test(String(d.feed_sha256||''))?'Chýba overený SHA-256 posledného publikovaného feedu.':'';
     const preflight=d?.last_preflight;
     const evidenceTime=Date.parse(preflight?.verified_at||'');
     const preflightFresh=preflight?.state==='WORKFLOW_VERIFIED'&&
@@ -5974,7 +5983,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<small>CHAMPION · BEZ TRÉNINGU</small><h3>Aktualizácia nových dát</h3>'+
       '<p>Champion automaticky prepočítava formu, Elo, H2H a dostupné serve/return vstupy z novej CDB pri každom bežnom refreshe predikcií. Váhy a verzia modelu sa nemenia.</p>'+
       '<p><strong>Posledná publikovaná ponuka:</strong> '+escapeHtml(d?.feed_updated_at?fmtStamp(d.feed_updated_at):'neoverené')+'</p>'+
-      '<button type="button" class="btn btn-primary" data-admin-action="model-lab-start" data-model-lab-operation="refresh_champion_inputs" '+(canRefreshInputs?'':'disabled')+'>Obnoviť vstupy a prepočítať ponuku</button>'+
+      '<button type="button" class="btn btn-primary" data-admin-action="model-lab-start" data-model-lab-operation="refresh_champion_inputs" '+(busy?'disabled':'')+'>Obnoviť vstupy a prepočítať ponuku</button>'+
+      '<p class="admin-model-refresh-status" role="status">'+escapeHtml(canRefreshInputs?'Pripravené na bezpečný prepočet.':refreshBlockedReason+' Kliknutím znovu overíš stav; bez overenia sa prepočet nespustí.')+'</p>'+
       '<p>Manuálny refresh načíta aktuálnu CDB, znovu vypočíta predikcie a použije existujúci spoločný API rozpočet. Nevykoná tréning, import do CDB ani prepnutie modelu. Publikované tipy a história zostávajú chránené.</p></article>'+
       '<p role="status">'+escapeHtml(hint)+'</p>'+
       '<p class="model-factory-sync">Stav sa obnovuje každých 30 sekúnd počas otvorenia tejto karty. Posledná synchronizácia workerom: '+escapeHtml(stamp)+'. Požiadavku prevezme existujúci worker, bežne do 30 minút; kartu môžeš zavrieť.</p>'+
@@ -6050,7 +6060,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     state.adminFactoryRevision=(state.adminFactoryRevision||0)+1;
     const generation=feedGeneration;
     const tag=document.getElementById('admin-model-lab-candidate')?.value||'';
-    state.adminModelLabBusy=true;state.adminModelLabMessage='';rerenderAdmin();
+    state.adminModelLabBusy=true;state.adminModelLabMessage=startOperation?'Odosielam požiadavku a overujem bezpečnostné podmienky…':'Načítavam aktuálny stav Model Labu…';rerenderAdmin();
     try{
       let payload;
       if(acknowledge)payload={action:'acknowledge_failed',id:state.adminModelLab?.operation?.id||''};
@@ -7021,7 +7031,31 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       if(action==='model-lab-start'){
         const operation=String(actionNode.dataset.modelLabOperation||'');
         if(!['prepare_inputs','refresh_champion_inputs','import_drive','refresh_tests','audit_shadow','activate_shadow'].includes(operation))return;
-        if(operation==='refresh_champion_inputs'&&!await confirmAdminModelOperation('Znova vypočítať dnešnú ponuku z aktuálnych dát CDB? Použije to dostupnú API kvótu a publikuje novú generáciu predikcií, ale nenatrénuje ani nevymení championa.'))return;
+        if(operation==='refresh_champion_inputs'){
+          if(state.adminModelLabBusy||state.adminTrainingBusy){showStatus('Model Lab práve spracúva inú operáciu.');return;}
+          const readyNow=()=>state.adminModelLab?.can_start===true&&state.adminTraining?.can_start===true&&
+            !state.adminTraining?.runs?.some(run=>['queued','in_progress','waiting','pending','requested'].includes(run.status))&&
+            /^[0-9a-f]{64}$/.test(String(state.adminModelLab?.feed_sha256||''));
+          if(!readyNow()){
+            state.adminModelLabMessage='Znovu overujem pripravenosť Model Labu a publikovaný feed…';
+            rerenderAdmin();
+            const results=await Promise.allSettled([BlinqAuth.adminModelLab(),BlinqAuth.adminModelTraining()]);
+            if(results[0].status==='fulfilled')state.adminModelLab=results[0].value;
+            if(results[1].status==='fulfilled')state.adminTraining=results[1].value;
+            if(results.some(item=>item.status==='rejected')||!readyNow()){
+              const reason=results.find(item=>item.status==='rejected')?.reason?.message||
+                state.adminModelLab?.reason||state.adminTraining?.reason||
+                (!/^[0-9a-f]{64}$/.test(String(state.adminModelLab?.feed_sha256||''))?
+                  'Chýba overený SHA-256 feedu. Skontroluj synchronizáciu workeru a API.':
+                  'Prepočet blokuje aktívna operácia.');
+              state.adminModelLabMessage='Prepočet nebol odoslaný: '+String(reason);
+              rerenderAdmin();showStatus(state.adminModelLabMessage);return;
+            }
+            state.adminModelLabMessage='';rerenderAdmin();
+          }
+          if(!await confirmAdminModelOperation('Znova vypočítať dnešnú ponuku z aktuálnych dát CDB? Použije to dostupnú API kvótu a publikuje novú generáciu predikcií, ale nenatrénuje ani nevymení championa.'))return;
+          loadAdminModelLab(operation);return;
+        }
         if(operation==='prepare_inputs'&&!await confirmAdminModelOperation('Spustiť read-only kontrolu zdrojových ATP/WTA dát? Nevytvorí produkčný model ani CDB import.'))return;
         if(operation==='activate_shadow'&&!await confirmAdminModelOperation('Aktivovať vybraný model iba v shadow režime? Produkčný champion zostane nezmenený.'))return;
         if(operation==='import_drive'&&!await confirmAdminModelOperation('Spustiť jednu ohraničenú dávku existujúceho Drive importu do CDB?'))return;
