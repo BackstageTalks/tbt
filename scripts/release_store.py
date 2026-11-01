@@ -51,6 +51,31 @@ def gh(*args):
     return result.stdout
 
 
+def assert_history_rows_monotonic(previous, proposed):
+    """Reject any CDB year-row regression before publishing a canonical bundle.
+
+    This is a conservation guard, not a replacement for exact identity QA.
+    Genuine deletions/corrections require an isolated reviewed recovery path.
+    """
+    if not isinstance(previous, dict) or not isinstance(proposed, dict):
+        raise ValueError("Invalid historical inventory")
+    old = previous.get("years")
+    new = proposed.get("years")
+    if not isinstance(old, dict) or not old or not isinstance(new, dict) or not new:
+        raise ValueError("Invalid CDB history years inventory")
+    for year, metadata in old.items():
+        if not isinstance(metadata, dict) or type(metadata.get("rows")) is not int:
+            raise ValueError(f"Old CDB year count invalid: {year}")
+        candidate = new.get(year)
+        if not isinstance(candidate, dict) or type(candidate.get("rows")) is not int:
+            raise ValueError(f"CDB year removed or row count invalid: {year}")
+        if candidate["rows"] < metadata["rows"]:
+            raise ValueError(
+                f"CDB_YEAR_ROW_REGRESSION_BLOCKED year={year} "
+                f"previous={metadata['rows']} proposed={candidate['rows']}"
+            )
+
+
 class ReleaseStore:
     def __init__(self, repository, tag, directory):
         if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
@@ -773,6 +798,32 @@ class ReleaseStore:
             raise ValueError("Cannot upload and remove the same bundle asset")
         if not files and not removals:
             return
+
+        # Canonical history writes must not shrink or delete an existing year.
+        # This is checked against the current private release, not an old stage.
+        if (
+            self.repository == "BackstageTalks/tbt-data"
+            and self.tag == "tbt-data-v1"
+            and any(path.name == "history_manifest.json" for path in files)
+        ):
+            if "history_manifest.json" not in previous:
+                raise RuntimeError("Current canonical history inventory unavailable")
+            with tempfile.TemporaryDirectory(prefix="blinq-cdb-row-guard-") as temp:
+                remote = Path(temp) / "history_manifest.json"
+                gh(
+                    "release", "download", self.tag,
+                    "--repo", self.repository, "--pattern",
+                    "history_manifest.json", "--dir", str(temp),
+                )
+                if self._sha256(remote) != previous["history_manifest.json"]["sha256"]:
+                    raise RuntimeError("Canonical history manifest changed before write")
+                candidate_path = next(
+                    path for path in files if path.name == "history_manifest.json"
+                )
+                assert_history_rows_monotonic(
+                    json.loads(remote.read_text(encoding="utf-8")),
+                    json.loads(candidate_path.read_text(encoding="utf-8")),
+                )
 
         guarded = (
             self.repository == "BackstageTalks/tbt-data"
