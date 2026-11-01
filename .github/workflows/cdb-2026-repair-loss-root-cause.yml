@@ -100,6 +100,78 @@ jobs:
               "import_allowed":False,
               "canonical_sha256":json.loads(Path("work/snapshot.json").read_text())["partitions"]["2026"]["sha256"]
           }
+          # The three raw provider-ID collisions are metadata only; never promote
+          # a conflicting event ID to a new canonical match or erase either row.
+          from tbt.data.history_snapshot import _provider_event_id
+          from collections import defaultdict
+          import hashlib
+          groups=defaultdict(list)
+          for m in parsed:
+              eid=_provider_event_id(m)
+              if eid and eid in identity["duplicate_provider_event_ids"]:
+                  groups[eid].append(m)
+          if len(groups)!=3 or sorted(map(len,groups.values())) != [2,2,2]:
+              raise SystemExit("Unexpected collision shape; preserve current CDB")
+          def digest(value):
+              return hashlib.sha256(str(value).encode()).hexdigest()[:16]
+          collision_groups=[]
+          for eid, matches in sorted(groups.items()):
+              tour={str(m.tour).lower() for m in matches}
+              pairs={tuple(sorted(map(str,(m.player1_id,m.player2_id)))) for m in matches}
+              timestamps={m.scheduled_at.isoformat() for m in matches}
+              tournaments={str(m.tournament).casefold().strip() for m in matches}
+              entries=[]
+              for m in matches:
+                  c=m.provider_payload if isinstance(m.provider_payload,dict) else {}
+                  witness=c.get("_tbt_event_identity")
+                  witness=witness if isinstance(witness,dict) else {}
+                  entries.append({
+                      "match_id_sha16":digest(m.match_id),
+                      "tour":str(m.tour).lower(),
+                      "date_utc":m.scheduled_at.isoformat(),
+                      "tournament":str(m.tournament)[:100],
+                      "tournament_id":str(m.tournament_id or ""),
+                      "round":str(m.round_name or ""),
+                      "source_category_id":c.get("_tbt_source_category_id"),
+                      "provider_claim_keys":sorted(key for key in (
+                          "_tbt_provider_event_id","provider_event_id","event_id","eventId","id")
+                          if c.get(key) not in (None,"")),
+                      "explicit_native_claim":bool(c.get("_tbt_provider_event_id")),
+                      "witness_present":bool(witness),
+                      "witness_status":str(witness.get("status") or ""),
+                      "witness_event_id_agrees":str(witness.get("event_id") or "")==eid,
+                      "witness_player_ids_agree":set(map(str,(
+                          witness.get("home"),witness.get("away")))) ==
+                          set(map(str,(m.player1_id,m.player2_id))),
+                      "player_pair_sha16":digest(tuple(sorted(map(str,(m.player1_id,m.player2_id))))),
+                      "winner_is_player":str(m.winner_id) in set(map(str,(
+                          m.player1_id,m.player2_id))),
+                      "stats_cells":sum(v is not None for v in (m.stats or {}).values()),
+                  })
+              collision_groups.append({
+                  "native_id_sha16":digest(eid),
+                  "rows":len(matches),
+                  "cross_tour":len(tour)>1,
+                  "different_players":len(pairs)>1,
+                  "different_start_time":len(timestamps)>1,
+                  "different_tournament":len(tournaments)>1,
+                  "entries":entries,
+              })
+          context={
+              "schema":1,"state":"CDB_2026_DUPLICATE_ID_CONTEXT_REVIEW",
+              "groups":collision_groups,"rows":6,
+              "source_identity_unverified":True,
+              "cdb_writes":0,"paid_api_requests":0,
+              "live_sha256":report["canonical_sha256"],
+          }
+          Path("work/collision-context.json").write_text(
+              json.dumps(context,ensure_ascii=False,indent=2,sort_keys=True)+"\\n")
+          print("CDB_COLLISION_PAIR_SHAPES",
+                json.dumps([{"rows":x["rows"],"cross_tour":x["cross_tour"],
+                 "different_players":x["different_players"],
+                 "different_start_time":x["different_start_time"],
+                 "different_tournament":x["different_tournament"]}
+                 for x in collision_groups],sort_keys=True))
           Path("work/root-cause.json").write_text(json.dumps(report,sort_keys=True,indent=2)+"\n")
           print(json.dumps(report,sort_keys=True))
           if len(frame)!=100663:
@@ -124,7 +196,7 @@ jobs:
               raise SystemExit("CDB release moved during analysis")
           print("CDB_RELEASE_STABLE_AND_LOCK_FREE")
           PY
-          (cd work && sha256sum snapshot.json root-cause.json > SHA256SUMS && sha256sum -c SHA256SUMS)
+          (cd work && sha256sum snapshot.json root-cause.json collision-context.json > SHA256SUMS && sha256sum -c SHA256SUMS)
       - name: Keep aggregate root-cause report (no CDB parquet)
         if: always()
         uses: actions/upload-artifact@v4
@@ -133,6 +205,7 @@ jobs:
           path: |
             work/snapshot.json
             work/root-cause.json
+            work/collision-context.json
             work/SHA256SUMS
           if-no-files-found: warn
           retention-days: 14
