@@ -1,7 +1,7 @@
 # Uploaded ATP 2025 enriched CSV → CDB source-only intake
 
 This source is **not native Jeff Sackmann**, even though its statistics reuse the
-Sackmann column names. Its 8-character player, match and event identifiers are
+Sackmann column names. Its 8-character player and match identifiers and opaque tournament IDs are
 an **opaque source-local namespace**; do not map them to provider or canonical IDs
 by appearance, name similarity, tournament/start date or score alone.
 
