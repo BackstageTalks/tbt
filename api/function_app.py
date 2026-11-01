@@ -2041,7 +2041,10 @@ def internal_moviodds_stats_worker(req):
                 return response({"error": "date_window_outside_recent_results"}, 400)
             export = export_final(days=[day])
             return response(export)
-        result = collect()
+        mode = str((getattr(req, "params", {}) or {}).get("mode") or "all").lower()
+        if mode not in ("all", "live", "final"):
+            return response({"error": "invalid_collection_mode"}, 400)
+        result = collect(collect_live=mode != "final", collect_finished=mode != "live")
         return response(result, 200 if result.get("ok") else 503)
     except (ValueError, TypeError):
         return response({"error": "invalid_moviodds_stats_request"}, 400)
