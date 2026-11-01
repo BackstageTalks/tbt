@@ -54,6 +54,8 @@ class RawResponseCache:
         if not path.parent.is_dir():
             raise RawCacheUnavailable("Private cache directory is not mounted")
         self.path = str(path)
+        self.metrics = {"cache_hits": 0, "upstream_loads": 0, "inflight_waits": 0,
+                        "negative_not_cached": 0}
         try:
             with self._connect() as db:
                 db.execute("PRAGMA journal_mode=WAL")
@@ -128,6 +130,7 @@ class RawResponseCache:
             now = time.time()
             cached = self._lookup(key, ttl, now)
             if cached is not None:
+                self.metrics["cache_hits"] += 1
                 return cached
             try:
                 with self._connect() as db:
@@ -149,13 +152,16 @@ class RawResponseCache:
                 break
             if time.monotonic() >= deadline:
                 raise RawCacheUnavailable("Concurrent raw request still in flight")
+            self.metrics["inflight_waits"] += 1
             time.sleep(0.1)
         try:
             # Check again after claiming; a prior owner may have completed
             # between the initial read and this lease acquisition.
             existing = self._lookup(key, ttl, time.time())
             if existing is not None:
+                self.metrics["cache_hits"] += 1
                 return existing
+            self.metrics["upstream_loads"] += 1
             result = loader()
             if not isinstance(result, (dict, list)):
                 raise RawCacheUnavailable("Only JSON objects/arrays are cacheable")
@@ -164,6 +170,7 @@ class RawResponseCache:
             # a 30-day false miss.
             if kind == "finished_statistics" and (not isinstance(result, dict)
                     or not result.get("statistics")):
+                self.metrics["negative_not_cached"] += 1
                 return result
             body = json.dumps(result, sort_keys=True, separators=(",", ":"),
                               ensure_ascii=True, allow_nan=False)
