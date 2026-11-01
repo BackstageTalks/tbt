@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "requested_date": "2026-11-01",
-  "reason": "Read-only TennisApi match streak, momentum and win probability provider evidence",
+  "reason": "Targeted tennis bookmaker providers SK/web-odds, isolate HTTP status and quote provenance",
   "provider_requests_allowed": true,
-  "max_requests": 3,
+  "max_requests": 1,
   "event_id": 14494928,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ technical audit",
-  "diagnostic_attempt": 7,
-  "phase": "quality",
-  "case": null
+  "diagnostic_attempt": 8,
+  "phase": "odds",
+  "case": "odds_providers_sk_web_odds"
 }
