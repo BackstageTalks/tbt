@@ -31,6 +31,7 @@ concurrency:
 
 jobs:
   plan:
+    if: ${{ github.event_name != 'schedule' || vars.BLINQ_NATIVE_SCHEDULES_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.window.outputs.should_run }}
