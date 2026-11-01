@@ -70,9 +70,14 @@ def fetch_daily_final(*, date_utc: str, base_url: str, token: str,
 
 
 def _writer():
-    raw = os.environ.get("BLINQ_DRIVE_WRITER_JSON", "").strip()
+    # Use the already-configured BlinQ service account, but request Drive
+    # write scope ONLY in this isolated archive job. Other Drive intake jobs
+    # continue requesting read-only scope. The operator must grant this
+    # identity Editor on the specific MoviOdds folder before activation.
+    raw = os.environ.get("BLINQ_DRIVE_WRITER_JSON", "").strip() or os.environ.get(
+        "BLINQ_DRIVE_READER_JSON", "").strip()
     if not raw:
-        raise RuntimeError("BLOCKED_DRIVE_WRITER_CREDENTIAL_NOT_CONFIGURED")
+        raise RuntimeError("BLOCKED_DRIVE_ARCHIVE_CREDENTIAL_NOT_CONFIGURED")
     info = json.loads(raw)
     from google.auth.transport.requests import AuthorizedSession
     if info.get("type") == "service_account":
