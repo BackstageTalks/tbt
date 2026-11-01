@@ -10,7 +10,6 @@ on:
     paths:
       - scripts/audit_wta2026_verified_rank_gaps.py
       - tests/test_wta2026_verified_rank_gaps.py
-      - .github/workflows/blinq-wta2026-verified-rank-gaps.yml
 permissions:
   contents: read
   actions: read
