@@ -1,12 +1,14 @@
 {
   "schema": 1,
   "requested_date": "2026-11-01",
-  "reason": "CDB-priority TennisApi PRO audit: statistics, PBP, calendar, rankings and season odds before bookmaker mapping",
+  "reason": "Continue TennisApi PRO audit: validated event tournament metadata, rounds, bracket, venues, player ranking",
   "provider_requests_allowed": true,
-  "max_requests": 24,
+  "max_requests": 6,
   "event_id": 14494928,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ technical audit",
-  "diagnostic_attempt": 3
+  "diagnostic_attempt": 4,
+  "phase": "metadata",
+  "case": null
 }
