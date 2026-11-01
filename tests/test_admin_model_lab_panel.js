@@ -19,7 +19,8 @@ for(const phrase of ['1 · Pripraviť dáta','2 · Natrénovať a aktivovať kan
   assert(html.includes(phrase));
 }
 assert.match(html,/data-model-lab-operation="prepare_inputs" disabled/);
-assert.match(html,/data-model-lab-operation="refresh_champion_inputs" disabled/);
+assert.doesNotMatch(html,/data-model-lab-operation="refresh_champion_inputs" disabled/);
+assert.match(html,/Stav Model Labu nie je načítaný/);
 assert.match(html,/data-admin-action="training-start" disabled/);
 assert.match(html,/data-admin-action="model-factory-promote" disabled/);
 assert.match(html,/data-model-lab-operation="activate_shadow" disabled/);
@@ -30,7 +31,8 @@ state.adminModelLab={can_start:true,reason:'Pripravené',active_sha256:'a'.repea
   operation:null,last_operation:null};
 html=ctx.renderAdminModelLab();
 assert.doesNotMatch(html,/data-model-lab-operation="prepare_inputs" disabled/);
-assert.match(html,/data-model-lab-operation="refresh_champion_inputs" disabled/);
+assert.doesNotMatch(html,/data-model-lab-operation="refresh_champion_inputs" disabled/);
+assert.match(html,/Chýba overený SHA-256 posledného publikovaného feedu/);
 state.adminModelLab.feed_sha256='f'.repeat(64);
 state.adminModelLab.feed_updated_at=new Date().toISOString();
 html=ctx.renderAdminModelLab();
@@ -88,6 +90,8 @@ state.adminModelLab.can_start=false;
 html=ctx.renderAdminModelLab();
 assert.match(html,/data-admin-action="training-start" disabled/);
 assert.match(html,/data-model-lab-operation="prepare_inputs" disabled/);
+assert.match(src,/Promise\.allSettled\(\[BlinqAuth\.adminModelLab\(\),BlinqAuth\.adminModelTraining\(\)\]\)/);
+assert.match(src,/Prepočet nebol odoslaný/);
 assert.match(src,/if\(action==='model-lab-start'\)/);
 assert.match(src,/if\(action==='model-lab-acknowledge'\)/);
 assert.match(src,/state\.adminTraining=await BlinqAuth\.adminModelTraining\(\);/);
