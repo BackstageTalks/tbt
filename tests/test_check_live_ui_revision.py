@@ -93,6 +93,29 @@ class UiWatchdogTests(unittest.TestCase):
         self.assertEqual(checked, original)
         self.assertNotEqual(checked["app.js"], (web / "app.js").read_bytes())
 
+    def test_direct_cli_import_can_load_optimizer(self):
+        # CI executes scripts/check_live_ui_revision.py directly, not as a package.
+        script_dir = Path(__file__).resolve().parents[1] / "scripts"
+        probe = (
+            "import sys, pathlib, unittest.mock; "
+            f"sys.path.insert(0, {str(script_dir)!r}); "
+            "import check_live_ui_revision as mod; "
+            "import optimize_web_assets as optimizer; "
+            "files={'app.js':b'code','blinq-app.css':b'css','release.json':b'{}'}; "
+            "fake=lambda web,out: (out.mkdir(parents=True,exist_ok=True), "
+            "[(out/name).write_bytes(files[name]) for name in optimizer.ASSETS]); "
+            "p=unittest.mock.patch.object(optimizer,'build',fake); "
+            "p.start(); "
+            "result=mod.build_optimized_revision(files); "
+            "assert result['app.js']==b'code'; "
+            "p.stop()"
+        )
+        completed = subprocess.run(
+            [__import__("sys").executable, "-c", probe],
+            cwd=self.web, capture_output=True, text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_exact_optimized_deployment_passes_and_modified_js_is_rejected(self):
         # The production pipeline intentionally rewrites whitespace in JS/CSS.
         # Trust neither the live checksum manifest nor the CDN without
