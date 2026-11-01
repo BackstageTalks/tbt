@@ -12,7 +12,7 @@ sys.path[:0] = [str(ROOT / "api"), str(ROOT / "scripts")]
 
 import pytest
 
-from tbt.services.moviodds_stats import save_observations, export_final
+from tbt.services.moviodds_stats import save_observations, save_final_scan_receipt, export_final
 from moviodds_drive_archive import (
     _json_bytes, fetch_daily_final, upload_archive, _sha,
 )
@@ -40,6 +40,20 @@ class Table:
     def query_entities(self, *, query_filter):
         partition = query_filter.split("'")[1]
         return [dict(v) for (p, _), v in self.entities.items() if p == partition]
+
+
+def _mark_completed_day_scanned(table):
+    save_final_scan_receipt(
+        table, date_utc="2026-11-01", raw_count=1, accepted_count=1,
+        collected_at=NOW + timedelta(days=1),
+    )
+
+
+def test_no_false_green_archive_without_post_day_scan():
+    table = Table()
+    save_observations(table, [observation()], completed=True, collected_at=NOW)
+    with pytest.raises(Exception, match="no post-day verified scan"):
+        export_final(days=["2026-11-01"], table=table)
 
 
 def observation(finished=True, *, aces=3):
@@ -71,6 +85,7 @@ def test_verified_final_stats_and_repeat_idempotence():
     second = save_observations(table, [row], completed=True, collected_at=NOW)
     assert first["written"] == 1
     assert second["duplicate"] == 1 and second["written"] == 0
+    _mark_completed_day_scanned(table)
     result = export_final(days=["2026-11-01"], table=table)
     assert result["verified"] and result["count"] == 1
     assert result["records"][0]["payload"]["stats"]["home"]["aces"] == 3
@@ -83,6 +98,7 @@ def test_changed_final_observation_quarantined_not_overwritten():
     result = save_observations(table, [observation(aces=4)],
                                completed=True, collected_at=NOW)
     assert result["conflict"] == 1 and result["written"] == 0
+    _mark_completed_day_scanned(table)
     exported = export_final(days=["2026-11-01"], table=table)
     assert exported["records"][0]["payload"]["stats"]["home"]["aces"] == 3
 
@@ -92,6 +108,7 @@ def test_live_is_never_exported_as_final():
     row = observation(False)
     first = save_observations(table, [row], completed=False, collected_at=NOW)
     assert first["written"] == 1
+    _mark_completed_day_scanned(table)
     assert export_final(days=["2026-11-01"], table=table)["count"] == 0
     assert save_observations(table, [row], completed=False, collected_at=NOW)["duplicate"] == 1
 
@@ -115,6 +132,7 @@ def test_tampered_azure_source_digest_refused():
     save_observations(table, [observation()], completed=True, collected_at=NOW)
     entity = next(iter(table.entities.values()))
     entity["payload_json"] = entity["payload_json"].replace('"aces":3', '"aces":8')
+    _mark_completed_day_scanned(table)
     with pytest.raises(Exception, match="digest mismatch"):
         export_final(days=["2026-11-01"], table=table)
 
