@@ -8,11 +8,14 @@ from __future__ import annotations
 
 import math
 import hashlib
+from datetime import datetime, timezone
 from typing import Any
 
 PROJECTION_MARKETS = {"aces", "double_faults", "games", "sets"}
 ESTIMATE_MODEL = "frozen_projection_confidence_v1"
 DISPLAY_OVERROUND = 0.055
+# Existing 06:00 Bratislava betting-day rollover (CET on Nov 1).
+ACES_NEW_PRICE_START_UTC = datetime(2026, 11, 1, 5, tzinfo=timezone.utc)
 
 
 def _number(value: Any) -> float | None:
@@ -67,6 +70,14 @@ def historical_display_placeholder(publication: dict, *, event_id: str = "") -> 
     market = str(publication.get("market") or "").strip().lower()
     if market not in PROJECTION_MARKETS or not publication.get("issued_at"):
         return None
+    if market == "aces":
+        # Legacy 1.50-1.70 only for results issued before the new Aces policy.
+        try:
+            issued_at = datetime.fromisoformat(str(publication["issued_at"]).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if issued_at.tzinfo is None or issued_at.astimezone(timezone.utc) >= ACES_NEW_PRICE_START_UTC:
+            return None
     actual = _number(publication.get("odds"))
     if actual is not None and actual > 1:
         return None
