@@ -101,3 +101,21 @@ Implementation (2026-10-15):
 - New odds and point-by-point historical backfill, independent raw-sidecar
   publication and model promotion remain disabled until identity, completeness,
   provenance, single-writer and independent persisted read-back pass.
+
+## Additional observed market evidence — 2026-11-01
+
+A separately supplied provider-1 `getAllOddsForEvent` response for
+`eventId=14494928` included `marketId=13`, `marketName="Tie break in match"`,
+`isLive=false`, `suspended=false`, and Yes/No prices 4/9 and 13/8.
+This *one observed response* refines the older 2026-10-14 statement that
+tie-break prices were unavailable; it does **not** establish general coverage.
+The research snapshot parser can now label **only** this exact unsuspended
+prematch shape as `tie_break_in_match` (not ACES). It preserves unknown
+bookmaker identity and unknown quote timestamp, and is **not** a pre-match
+model/CLV price. No production ACES market selection or canonical numeric
+CDB field mapping was changed.
+
+On the read-only guarded probe dated 2026-11-01, season-wide odds for
+season 67287/provider 1 returned HTTP 404. Odds-provider enumeration was
+not proved available because the quota-header guard halted further requests.
+Neither path is approved for production coverage or bulk import on this basis.

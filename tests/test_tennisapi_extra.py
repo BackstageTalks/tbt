@@ -99,6 +99,43 @@ def test_total_games_requires_line_two_sides_and_valid_prices():
     )["quotes"] == []
 
 
+def test_observed_tie_break_market_13_is_research_only_and_never_aces():
+    market = {
+        "marketId": 13, "marketName": "Tie break in match",
+        "marketPeriod": "Extra time", "isLive": False, "suspended": False,
+        "choices": [
+            {"name": "Yes", "initialFractionalValue": "4/9",
+             "fractionalValue": "4/9"},
+            {"name": "No", "initialFractionalValue": "13/8",
+             "fractionalValue": "13/8"},
+        ],
+    }
+    raw = {"eventId": 14494928, "markets": [market]}
+    result = normalize_market_snapshot(raw, event_id=14494928)
+    assert len(result["quotes"]) == 2
+    assert {q["selection"] for q in result["quotes"]} == {"Yes", "No"}
+    assert all(q["market_id"] == 13 and q["market"] == "tie_break_in_match"
+               and q["line_games"] is None for q in result["quotes"])
+    assert all("ace" not in q["market"] for q in result["quotes"])
+    assert result["provider_quote_timestamp_known"] is False
+    assert result["pre_match_asof_verified"] is False
+    yes = next(q for q in result["quotes"] if q["selection"] == "Yes")
+    no = next(q for q in result["quotes"] if q["selection"] == "No")
+    assert yes["latest_decimal"] == pytest.approx(1 + 4 / 9)
+    assert no["latest_decimal"] == pytest.approx(1 + 13 / 8)
+    for invalid in (
+        {**market, "marketName": "Player aces"},
+        {**market, "marketName": None},
+        {**market, "suspended": True},
+        {**market, "suspended": None},
+        {**market, "isLive": True},
+        {**market, "choices": market["choices"][:1]},
+    ):
+        assert normalize_market_snapshot(
+            {"markets": [invalid]}, event_id=14494928
+        )["quotes"] == []
+
+
 def test_conflicting_repeated_quote_not_silently_selected():
     duplicated = [
         SAMPLE["markets"][0],

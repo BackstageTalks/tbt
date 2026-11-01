@@ -19,7 +19,8 @@ from ..services.market_selection import decimal_odds
 
 
 MARKET_LABELS = {1: "match_winner", 11: "first_set_winner",
-                 12: "total_games", 15: "current_set_winner"}
+                 12: "total_games", 13: "tie_break_in_match",
+                 15: "current_set_winner"}
 
 
 def _check_event(payload: Any, event_id: str | int) -> dict:
@@ -33,7 +34,7 @@ def _check_event(payload: Any, event_id: str | int) -> dict:
 
 def normalize_market_snapshot(payload: Any, *, event_id: str | int,
                               observed_at: datetime | None = None) -> dict:
-    """Only explicit marketIds 1/11/12/15; never infer a missing line.
+    """Only explicit marketIds 1/11/12/13/15; never infer a missing line.
 
     observed_at is the time OUR client read the record, not the book's price
     timestamp. Both historical opening and latest are ineligible for backtested
@@ -67,6 +68,14 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
             raise ProviderError("TennisApi isLive must be boolean")
         if market_id == 15 and not live:
             continue
+        # Market 13 was observed as a match tie-break Yes/No on 2026-11-01.
+        # Its ID alone is insufficient: require the exact documented shape
+        # and an unsuspended prematch quote. This remains research-only.
+        if market_id == 13 and (
+            str(market.get("marketName") or "").strip().casefold() != "tie break in match"
+            or market.get("suspended") is not False or live
+        ):
+            continue
         line = None
         if market_id == 12:
             try:
@@ -79,7 +88,8 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
         if not isinstance(choices, list):
             raise ProviderError("TennisApi market choices must be a list")
         valid = []
-        required = {"Over", "Under"} if market_id == 12 else {"1", "2"}
+        required = ({"Over", "Under"} if market_id == 12 else
+                    {"Yes", "No"} if market_id == 13 else {"1", "2"})
         for choice in choices:
             if not isinstance(choice, dict):
                 raise ProviderError("Malformed TennisApi choice")
