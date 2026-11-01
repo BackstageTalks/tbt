@@ -12,6 +12,7 @@ from ..data.wta_rank_history import WTA_RANK_HISTORY_FEATURE_NAMES, WTARankHisto
 from ..data.wta_season_stats import WTA_SEASON_FEATURE_NAMES, WTASeasonPriors
 from ..models.feature_builder import FeatureBuilder, stats_surface_key
 from ..models.portable_model import predict_probability
+from .comparator_markets import project_market_state
 from ..schemas import MatchRecord
 
 
@@ -268,14 +269,23 @@ def _player_stats(builder: FeatureBuilder, match: MatchRecord, *, first: bool) -
         if state.last_played is not None and state.last_played < match.scheduled_at
         else None
     )
+    def observed_rate(field):
+        known = [float(getattr(row, field)) for row in surface_all
+                 if getattr(row, field, None) is not None
+                 and math.isfinite(float(getattr(row, field)))]
+        return {"mean": round(sum(known) / len(known), 4) if known else None,
+                "matches": len(known), "window": int(state.recent.maxlen or 80)}
+
     return {
         "history_matches": int(state.matches),
         "surface_matches": int(state.surface_matches.get(surface, 0)),
         "overall_elo": round(float(state.overall_elo), 1),
         "surface_elo": round(float(state.get_surface_elo(surface)), 1),
         "recent_5": _window(recent[-5:]),
+        "recent_20": _window(recent_all[-20:]),
         "recent_10": _window(recent),
         "surface_recent_10": _window(surface_recent),
+        "surface_recent_20": _window(surface_all[-20:]),
         "recent_results": [
             {"result": "W" if float(row.won) >= .5 else "L", "surface": stats_surface_key(row.surface)}
             for row in recent
@@ -284,6 +294,12 @@ def _player_stats(builder: FeatureBuilder, match: MatchRecord, *, first: bool) -
         "surface_serve_quality": None if serve is None else round(float(serve), 4),
         "surface_return_quality": None if ret is None else round(float(ret), 4),
         "surface_quality_samples": {"serve": serve_samples, "return": return_samples},
+        "surface_special_rates": {
+            "break_point_save": observed_rate("break_point_serve"),
+            "break_point_convert": observed_rate("break_point_return"),
+            "first_strike": observed_rate("first_strike_serve"),
+            "return_in_play": observed_rate("return_in_play"),
+        },
         "recent_window_limit": 80,
     }
 
@@ -410,6 +426,13 @@ def compare_from_artifact(
     factors.sort(key=lambda row: row["magnitude"], reverse=True)
 
     quality = _quality(builder, match)
+    markets = project_market_state(
+        artifact.get("market_state"),
+        left_key=builder.player_key(tour, left_id),
+        right_key=builder.player_key(tour, right_id),
+        tour=tour, surface=stats_surface_key(surface), best_of=best_of,
+        now=now, cutoff=_parse_time(freshness["cutoff_utc"]),
+    )
     return {
         "schema": 1,
         "generated_at": now.isoformat(),
@@ -445,6 +468,7 @@ def compare_from_artifact(
             "stats": _player_stats(builder, match, first=False),
         },
         "quality": quality,
+        "markets": markets,
         "factors": factors[:5],
         "h2h": _matchup_history(builder, match),
         "evidence": {
@@ -453,5 +477,7 @@ def compare_from_artifact(
             "model_unchanged": True,
             "serve_return_quality_is_estimate": True,
             "no_odds_or_external_live_data": True,
+            "market_projections_are_not_bookmaker_lines": True,
+            "market_projection_samples_required": 6,
         },
     }
