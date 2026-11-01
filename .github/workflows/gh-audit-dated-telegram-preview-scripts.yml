@@ -1,0 +1,47 @@
+name: Audit stale date-pinned Telegram preview scripts (read-only)
+on:
+  push:
+    branches: [maintenance/gh-cleanup-20261101-30d]
+    paths: [.github/workflows/gh-audit-dated-telegram-preview-scripts.yml]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Check all tracked references in main
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import subprocess, json, pathlib, hashlib
+          patterns=['telegram_badge_smoke_preview','telegram_elite_results_preview']
+          checked={}
+          for p in patterns:
+              cmd=['git','grep','-n','-F','-I','--',p]
+              proc=subprocess.run(cmd, text=True, capture_output=True)
+              assert proc.returncode in (0,1), proc.stderr
+              checked[p]=[row for row in proc.stdout.splitlines() if not row.startswith('scripts/'+p+'.py:')]
+          filenames=[
+            'scripts/telegram_badge_smoke_preview.py',
+            'scripts/telegram_elite_results_preview.py'
+          ]
+          for file in filenames:
+              assert pathlib.Path(file).is_file(), 'main changed, missing '+file
+          sha={p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in filenames}
+          manifest={'main_sha':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+                    'read_only':True,'references_excluding_own_code':checked,
+                    'sha256':sha,'all_unused':all(len(v)==0 for v in checked.values())}
+          pathlib.Path('gh-telegram-script-audit.json').write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n')
+          print('GH_TELEGRAM_SCRIPT_AUDIT '+json.dumps(manifest,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: old-telegram-preview-scripts-reference-audit
+          path: gh-telegram-script-audit.json
+          retention-days: 30
+          if-no-files-found: error
