@@ -136,6 +136,6 @@ def test_fetch_does_not_swallow_auth_error(tmp_path,monkeypatch):
                     today=datetime(2026,11,1,tzinfo=timezone.utc))
 
 
-def test_no_more_than_21_days(tmp_path):
+def test_no_more_than_7_days(tmp_path):
     with pytest.raises(ValueError):
-        fetch_dates(tmp_path,22,base_url="https://protected.example",token="secret")
+        fetch_dates(tmp_path,8,base_url="https://protected.example",token="secret")

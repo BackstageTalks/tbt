@@ -35,8 +35,8 @@ def fetch_dates(out_dir: Path, days_back: int, *, base_url: str, token: str,
     import requests
     from moviodds_drive_archive import fetch_daily_final, _json_bytes
 
-    if not 1 <= days_back <= 21:
-        raise ValueError("Unsupported retrospective scope (1..21)")
+    if not 1 <= days_back <= 7:
+        raise ValueError("Unsupported retrospective scope (1..7)")
     if not base_url.startswith("https://") or not token:
         raise ValueError("Protected MoviOdds export credentials missing")
     now = (today or datetime.now(timezone.utc)).astimezone(timezone.utc)

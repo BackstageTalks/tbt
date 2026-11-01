@@ -214,7 +214,7 @@ jobs:
             exit 0
           fi
           gh workflow run cdb-drive-inbox.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f source_mode=moviodds -f moviodds_days_back=14 -f request_id="$request_id"
+            -f source_mode=moviodds -f moviodds_days_back=7 -f request_id="$request_id"
           echo 'MOVIODDS_WEEKLY_CDB_GUARDED_WRITER_DISPATCHED_READBACK_REQUIRED'
 
       - name: Dispatch read-only production UI revision watchdog

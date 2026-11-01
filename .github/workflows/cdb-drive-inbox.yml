@@ -26,10 +26,10 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
         options: [drive, moviodds]
         default: drive
       moviodds_days_back:
-        description: Completed UTC days to examine (1..21); MoviOdds source only
+        description: Completed UTC days to examine (1..7); protected export window
         required: false
         type: number
-        default: 14
+        default: 7
   pull_request:
     paths:
       - scripts/cdb_large_source_stage.py
@@ -124,7 +124,7 @@ jobs:
       INBOX_FOLDER_ID: 1jzdzztz8cXquO8VDswqE19PHupQau-xM
       REPLAY_DRIVE_IDS: ${{ inputs.replay_drive_ids || '' }}
       SOURCE_MODE: ${{ inputs.source_mode || 'drive' }}
-      MOVIODDS_DAYS_BACK: ${{ inputs.moviodds_days_back || 14 }}
+      MOVIODDS_DAYS_BACK: ${{ inputs.moviodds_days_back || 7 }}
       BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
       BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
       PYTHONPATH: api:scripts
@@ -166,7 +166,7 @@ jobs:
             drive) test -n "$BLINQ_DRIVE_READER_JSON" || { echo BLOCKED_DRIVE_READER_MISSING; exit 1; } ;;
             moviodds)
               test -n "$BLINQ_LIVE_WORKER_TOKEN" || { echo BLOCKED_MOVIODDS_EXPORT_TOKEN_MISSING; exit 1; }
-              [[ "$MOVIODDS_DAYS_BACK" =~ ^[0-9]+$ ]] && (( MOVIODDS_DAYS_BACK >= 1 && MOVIODDS_DAYS_BACK <= 21 )) || exit 1
+              [[ "$MOVIODDS_DAYS_BACK" =~ ^[0-9]+$ ]] && (( MOVIODDS_DAYS_BACK >= 1 && MOVIODDS_DAYS_BACK <= 7 )) || exit 1
               test -z "$REPLAY_DRIVE_IDS" || { echo MOVIODDS_CANNOT_REPLAY_DRIVE_IDS; exit 1; } ;;
             *) echo UNSUPPORTED_IMPORT_SOURCE; exit 1 ;;
           esac
