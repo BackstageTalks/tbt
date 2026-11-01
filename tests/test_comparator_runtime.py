@@ -198,3 +198,21 @@ def test_surface_special_rate_ignores_corrupt_historical_values():
     assert special["matches"] == 2
     assert result["winner"]["player_id"] in {"a", "b"}
     assert result["api_requests"] == 0
+
+
+
+def test_runtime_rejects_same_name_with_two_distinct_canonical_ids():
+    from tbt.services.comparator_runtime import RuntimeComparatorError
+
+    artifact = build_serving_artifact(_model(), _history(), now=NOW)
+    canonical = next(p for p in artifact["players"] if p["player_id"] == "a")
+    artifact["players"].append({**canonical, "player_id": "second-id", "name": "Alpha Óne"})
+    try:
+        compare_from_artifact(
+            artifact, player1="a", player2="second-id",
+            tour="atp", surface="hard", now=NOW,
+        )
+    except RuntimeComparatorError as exc:
+        assert "players must be different" in str(exc)
+    else:
+        raise AssertionError("same normalized name cannot be compared as two distinct players")

@@ -44,8 +44,8 @@ def test_comparator_copy_is_not_duplicated_inside_form():
 
 def test_comparator_assets_are_cache_busted():
     html = Path("web/index.html").read_text(encoding="utf-8")
-    assert "/blinq-app.css?v=7360&p=61&compare=6" in html
-    assert "/app.js?v=7360&p=61&compare=13" in html
+    assert "/blinq-app.css?v=7360&p=61&compare=7" in html
+    assert "/app.js?v=7360&p=61&compare=14" in html
 
 
 def test_comparator_player_suggestions_bind_after_async_insertion():
@@ -121,5 +121,23 @@ def test_comparator_search_compacts_unambiguous_initial_name_without_identity_me
     assert "Math.abs(Number(shortGroup.rows[0].rank)-Number(group.rows[0].rank))<=10" in groups
     assert "parents.length!==1" in groups
     assert "parent.shortNameGrouped=true" in groups
-    assert "if(full.length===1)return full" in render
+    assert "ambiguous_identity:Boolean(first.ambiguous_identity)||display.length>1" in render
+    assert "alreadySelected" in render
+    assert "disabled aria-disabled=" in render
     assert "data-comparator-expand" not in render
+
+
+
+def test_comparator_rejects_same_person_on_both_sides_and_labels_ambiguity():
+    app = Path("web/app.js").read_text(encoding="utf-8")
+    css = Path("web/blinq-app.css").read_text(encoding="utf-8")
+    select = app.split("function comparatorSelectPlayer(side,player)", 1)[1].split(
+        "function comparatorSearchHtml", 1
+    )[0]
+    assert "player.ambiguous_identity" in select
+    assert "normalizeComparatorPlayerName(other.name)===normalizeComparatorPlayerName(player.name)" in select
+    assert "Tento hráč je už vybraný na druhej strane." in select
+    assert "Identitu treba overiť" in app
+    assert "comparator-market-bars" in app
+    assert "comparator-market-bar-first" in css
+    assert "prefers-reduced-motion:reduce" in css

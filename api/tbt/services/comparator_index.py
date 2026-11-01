@@ -164,7 +164,8 @@ def load_pair_artifact(path: Path, directory: Mapping, *, player1: str, player2:
     right = _canonical_lookup(directory, player2, tour)
     key1 = f'{tour}:{left["player_id"]}'
     key2 = f'{tour}:{right["player_id"]}'
-    if key1 == key2:
+    if (key1 == key2 or
+            normalize_player_name(left.get("name")) == normalize_player_name(right.get("name"))):
         raise ComparatorIndexError("same_player")
     uri = f"file:{Path(path).resolve()}?mode=ro&immutable=1"
     with sqlite3.connect(uri, uri=True, timeout=5) as conn:

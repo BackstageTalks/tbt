@@ -7649,7 +7649,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const groups=comparatorPlayerGroups(rows);
     const unique=player=>{
       // Never auto-select one of multiple unresolved canonical IDs.
-      return player&&!groups.some(group=>group.rows.length>1&&group.rows.some(item=>String(item.player_id)===String(player.player_id)))?player:null;
+      return player&&!player.ambiguous_identity&&!groups.some(group=>group.rows.length>1&&group.rows.some(item=>String(item.player_id)===String(player.player_id)))?player:null;
     };
     const exact=rows.filter(player=>normalizeComparatorPlayerName(player?.name)===normalized);
     if(exact.length===1)return unique(exact[0]);
@@ -7664,6 +7664,13 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   function comparatorSelectPlayer(side,player){
     const s=comparatorState();
     if(!player||![0,1].includes(Number(side)))return false;
+    if(player.ambiguous_identity)return false;
+    const other=s.players[1-Number(side)];
+    if(other&&(String(other.player_id)===String(player.player_id)||
+       normalizeComparatorPlayerName(other.name)===normalizeComparatorPlayerName(player.name))){
+      s.error=lcopy('This player is already selected on the other side.','Tento hráč je už vybraný na druhej strane.','Tento hráč je již vybraný na druhé straně.');
+      return false;
+    }
     s.players[Number(side)]={player_id:player.player_id,name:player.name,rank:player.rank||null,tour:s.tour};
     s.search[Number(side)]=[];
     s.expandedGroups[Number(side)]=[];
@@ -7680,18 +7687,27 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       // Presentation only: never merge historical/canonical IDs or match rows.
       const canonical=group.rows.filter(player=>!String(player.player_id||'').startsWith('hist-js:'));
       const candidates=canonical.length?canonical:group.rows;
-      if(group.shortNameGrouped){
-        const full=candidates.filter(player=>{
-          const tokens=normalizeComparatorPlayerName(player.name).split(' ');
-          return tokens.length>=2&&tokens.every(token=>token.length>1);
-        });
-        // Exactly one complete name: don't expose its abbreviated duplicate.
-        // Ambiguous full-name candidates remain distinct and selectable.
-        if(full.length===1)return full;
-      }
-      return candidates;
+      const full=group.shortNameGrouped?candidates.filter(player=>{
+        const tokens=normalizeComparatorPlayerName(player.name).split(' ');
+        return tokens.length>=2&&tokens.every(token=>token.length>1);
+      }):[];
+      const display=full.length?full:candidates;
+      if(!display.length)return [];
+      // Exactly one visible suggestion per normalized person name. Several
+      // unresolved provider IDs share a label but are NOT a selectable ID.
+      const first=display[0];
+      return [{...first,ambiguous_identity:Boolean(first.ambiguous_identity)||display.length>1}];
     });
-    return `<div class="comparator-search-results">${visible.map(player=>`<button type="button" class="comparator-search-primary" data-comparator-select="${side}" data-player-id="${escapeHtml(String(player.player_id||''))}" data-player-name="${escapeHtml(String(player.name||''))}" data-player-rank="${escapeHtml(String(player.rank??''))}"><strong>${escapeHtml(player.name||'—')}</strong><span>${escapeHtml(String(player.tour||'').toUpperCase())}${Number(player.rank)>0?` · #${escapeHtml(String(player.rank))}`:''}</span></button>`).join('')}</div>`;
+    const other=s.players[1-side];
+    return `<div class="comparator-search-results">${visible.map(player=>{
+      const alreadySelected=other&&(String(other.player_id)===String(player.player_id)||
+        normalizeComparatorPlayerName(other.name)===normalizeComparatorPlayerName(player.name));
+      const blocked=player.ambiguous_identity||alreadySelected;
+      const status=player.ambiguous_identity
+        ?lcopy('Identity needs verification','Identitu treba overiť','Identitu je třeba ověřit')
+        :alreadySelected?lcopy('Already selected','Už vybraný','Již vybraný'):'';
+      return `<button type="button" class="comparator-search-primary${blocked?' is-unavailable':''}" ${blocked?'disabled aria-disabled="true"':''} data-comparator-select="${side}" data-player-id="${escapeHtml(String(player.player_id||''))}" data-player-name="${escapeHtml(String(player.name||''))}" data-player-rank="${escapeHtml(String(player.rank??''))}"><strong>${escapeHtml(player.name||'—')}</strong><span>${escapeHtml(status||(String(player.tour||'').toUpperCase()+(Number(player.rank)>0?' · #'+String(player.rank):'')))}</span></button>`;
+    }).join('')}</div>`;
   }
 
   function comparatorResultHtml(result){
@@ -7729,6 +7745,10 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       const data=result.markets?.[key],v1=data?.player1,v2=data?.player2;
       const estimate=x=>valid(x?.estimate)?num(x.estimate,1)+' · n='+num(x.samples)+' ('+lcopy('effective','efekt.','efekt.')+' '+num(x.effective_samples,1)+')':'—';
       const total=valid(data?.total_estimate)?num(data.total_estimate,1):'—';
+      const maxEstimate=Math.max(Number(v1?.estimate)||0,Number(v2?.estimate)||0);
+      const comparison=maxEstimate>0&&valid(v1?.estimate)&&valid(v2?.estimate)
+        ?`<div class="comparator-market-bars" role="img" aria-label="${escapeHtml(label+': '+String(p1.name||'—')+' '+num(v1.estimate,1)+', '+String(p2.name||'—')+' '+num(v2.estimate,1))}"><span class="comparator-market-bar comparator-market-bar-first"><i style="width:${Math.max(0,Math.min(100,100*Number(v1.estimate)/maxEstimate)).toFixed(1)}%"></i></span><span class="comparator-market-bar comparator-market-bar-second"><i style="width:${Math.max(0,Math.min(100,100*Number(v2.estimate)/maxEstimate)).toFixed(1)}%"></i></span></div>`
+        :'';
       const evidence=x=>x&&valid(x.estimate)
         ?lcopy('Last stat','Posledná štat.','Poslední stat.')+': '+String(x.last_stat_match||'—').slice(0,10)
           +' · '+lcopy('Reliability','Spoľahlivosť','Spolehlivost')+': '+String(x.quality_band||'—')
@@ -7737,6 +7757,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       return `<article class="comparator-market-card">
         <h5>${escapeHtml(label)}</h5>
         <div class="comparator-market-values"><span>${escapeHtml(p1.name||'—')}<strong>${escapeHtml(estimate(v1))}</strong></span><span>${escapeHtml(p2.name||'—')}<strong>${escapeHtml(estimate(v2))}</strong></span></div>
+        ${comparison}
         <p>${escapeHtml(lcopy('Projected combined total','Projekcia spolu','Projekce celkem'))}: <b>${escapeHtml(total)}</b></p>
         <p>${escapeHtml(p1.name||'—')}: <small>${escapeHtml(evidence(v1))}</small></p>
         <p>${escapeHtml(p2.name||'—')}: <small>${escapeHtml(evidence(v2))}</small></p>
@@ -7831,6 +7852,12 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     form.querySelector('#comparatorBestOf')?.addEventListener('change',event=>{s.bestOf=s.tour==='wta'?3:(Number(event.target.value)===5?5:3);s.bestOfAuto=false;s.result=null;s.error='';refresh();});
     form.querySelectorAll('[data-comparator-input]').forEach(input=>{
       const side=Number(input.dataset.comparatorInput);
+      input.addEventListener('keydown',event=>{
+        if(event.key==='Escape'){
+          ++s.searchSeq[side];clearTimeout(timers[side]);s.search[side]=[];
+          const box=$(`comparatorSearch${side}`);if(box)box.innerHTML='';
+        }
+      });
       input.addEventListener('input',()=>{
         const requestSeq=++s.searchSeq[side];
         s.players[side]=null;s.result=null;s.error='';s.search[side]=[];s.expandedGroups[side]=[];
@@ -7874,7 +7901,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     form.addEventListener('submit',async event=>{
       event.preventDefault();if(s.loading)return;
       if(!s.players[0]||!s.players[1]){s.error=lcopy('Select both players from the suggestions so their full canonical names are filled in.','Vyber oboch hráčov z ponuky, aby sa doplnilo celé meno.','Vyber oba hráče z nabídky, aby se doplnilo celé jméno.');refresh();return;}
-      if(String(s.players[0].player_id)===String(s.players[1].player_id)){s.error=lcopy('Choose two different players.','Vyber dvoch rôznych hráčov.','Vyber dva různé hráče.');refresh();return;}
+      if(String(s.players[0].player_id)===String(s.players[1].player_id)||
+         normalizeComparatorPlayerName(s.players[0].name)===normalizeComparatorPlayerName(s.players[1].name)){s.error=lcopy('Choose two different players.','Vyber dvoch rôznych hráčov.','Vyber dva různé hráče.');refresh();return;}
       s.loading=true;s.error='';s.result=null;refresh();
       try{
         s.result=await BlinqAuth.comparatorCompare({player1_id:s.players[0].player_id,player2_id:s.players[1].player_id,tour:s.tour,surface:s.surface,best_of:Number(s.bestOf)||3});

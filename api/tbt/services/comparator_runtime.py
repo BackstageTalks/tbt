@@ -90,6 +90,10 @@ def _safe_abbreviation_target(short: Mapping, full_candidates: list[dict]) -> di
         full = next(iter(distinct.values()))
     elif len(canonical) == 1 and len(canonical) < len(distinct):
         full = canonical[0]
+    elif len(canonical) > 1:
+        # Same complete display spelling across provider IDs. This is *not*
+        # proof of identity: the search result is marked ambiguous below.
+        full = canonical[0]
     else:
         return None
     if str(full.get("player_id")) == str(short.get("player_id")):
@@ -113,7 +117,8 @@ def _safe_abbreviation_target(short: Mapping, full_candidates: list[dict]) -> di
         and len(distinct) > 1
         and len(canonical) == 1
     )
-    return full if alias_evidence or rank_evidence or historical_full_evidence else None
+    return full if (alias_evidence or rank_evidence or historical_full_evidence
+                    or len(canonical) > 1) else None
 
 
 def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12) -> list[dict]:
@@ -128,9 +133,18 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
     full_names: dict[tuple[str, str], list[dict]] = {}
     provider_names: dict[str, list[dict]] = {}
     ranked = []
+    # Search/UI identity risk is evaluated over the entire canonical directory,
+    # not the first 12 suggestions; don't silently choose between two provider
+    # IDs just because they share a display name.
+    display_ids: dict[str, dict[str, set[str]]] = {}
     for player in _players(artifact):
         if str(player.get("tour") or "").lower() != tour:
             continue
+        display_key = normalize_player_name(player.get("name"))
+        player_id = str(player.get("player_id") or "")
+        if display_key and player_id:
+            buckets = display_ids.setdefault(display_key, {"provider": set(), "history": set()})
+            buckets["history" if player_id.startswith("hist-js:") else "provider"].add(player_id)
         complete_key = _full_name_key(player.get("name"))
         if complete_key:
             full_names.setdefault(complete_key, []).append(player)
@@ -156,6 +170,7 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
     ranked.sort(key=lambda row: row[:-1])
     visible = []
     seen_ids: set[str] = set()
+    seen_names: set[str] = set()
     for candidate in ranked:
         player = candidate[-1]
         if str(player.get("player_id") or "").startswith("hist-js:") and _full_name_key(player.get("name")):
@@ -168,11 +183,21 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
             if full is not None:
                 player = full
         player_id = str(player.get("player_id") or "")
-        if not player_id or player_id in seen_ids:
+        display_key = normalize_player_name(player.get("name"))
+        if not player_id or player_id in seen_ids or display_key in seen_names:
             continue
         seen_ids.add(player_id)
+        seen_names.add(display_key)
+        ids = display_ids.get(display_key) or {"provider": set(), "history": set()}
+        # Provider + historical fragment may be shown as one provider entry;
+        # two provider IDs (or two unlinked history-only IDs) must not become
+        # one selectable, invented identity.
+        ambiguous = len(ids["provider"]) > 1 or (
+            not ids["provider"] and len(ids["history"]) > 1
+        )
         visible.append({
             "player_id": player_id,
+            "ambiguous_identity": ambiguous,
             "name": str(player.get("name") or ""),
             # An alias is only display/search evidence, NOT an ID merge.
             "aliases": [str(value)[:120] for value in (player.get("aliases") or [])[:12] if value],
@@ -363,7 +388,10 @@ def compare_from_artifact(
     right = _resolve(artifact, player2, tour=tour)
     left_id = str(left.get("player_id") or "")
     right_id = str(right.get("player_id") or "")
-    if left_id == right_id:
+    if (left_id == right_id or
+            normalize_player_name(left.get("name")) == normalize_player_name(right.get("name"))):
+        # Two source IDs with an identical display name are not verified
+        # different people. Reject this synthetic self-match before prediction.
         raise RuntimeComparatorError("players must be different")
 
     builder = FeatureBuilder.from_state(artifact.get("feature_state"))
