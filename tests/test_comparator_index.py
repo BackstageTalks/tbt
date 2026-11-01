@@ -11,7 +11,10 @@ from test_comparator_runtime import _history, _model, NOW
 
 
 def test_index_preserves_champion_and_pairwise_probabilities(tmp_path):
-    source = build_serving_artifact(_model(), _history(), now=NOW)
+    history = _history()
+    for match in history:
+        match.stats.update({"p1_aces": 8, "p2_aces": 5, "p1_double_faults": 2, "p2_double_faults": 1})
+    source = build_serving_artifact(_model(), history, now=NOW)
     db = tmp_path / "comparator-serving.sqlite3"
     report = build_comparator_index(source, db)
     assert report["players"] == len(source["players"])
@@ -31,6 +34,8 @@ def test_index_preserves_champion_and_pairwise_probabilities(tmp_path):
         assert indexed["player1"]["probability"] == pytest.approx(original["player1"]["probability"], abs=1e-10)
         assert indexed["winner"] == original["winner"]
         assert indexed["api_requests"] == 0
+        assert indexed["markets"] == original["markets"]
+        assert indexed["markets"]["aces"]["player1"]["samples"] >= 6
     with pytest.raises(ComparatorIndexError, match="player_not_found"):
         load_pair_artifact(db, directory, player1="unknown-id", player2="b", tour="atp")
     with pytest.raises(ComparatorIndexError, match="same_player"):
