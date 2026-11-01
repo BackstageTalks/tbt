@@ -1,0 +1,167 @@
+name: Safe cleanup of obsolete fully-merged branches (batch)
+
+on:
+  push:
+    branches: [maintenance/gh-cleanup-20261101-30d]
+    paths: [.github/workflows/gh-cleanup-merged-branches-batch.yml]
+
+permissions:
+  contents: write
+  actions: read
+  pull-requests: read
+
+concurrency:
+  group: gh-safe-fully-merged-branch-cleanup-20261101
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DRY_RUN: "true"
+      LIMIT: "80"
+      DATE_CUTOFF: "2026-10-02T00:00:00+00:00"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Fetch complete branch commit graph for ancestry proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*'
+          git rev-parse refs/remotes/origin/main
+          test -z "$(git rev-parse --is-shallow-repository | grep -x true || true)"
+      - name: Generate evidence-backed candidate manifest
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime as dt
+          import json,os,pathlib,re,subprocess,time,urllib.parse,urllib.request
+          base="https://api.github.com/repos/"+os.environ["GITHUB_REPOSITORY"]
+          hdr={"Authorization":"Bearer "+os.environ["GH_TOKEN"],"Accept":"application/vnd.github+json",
+               "X-GitHub-Api-Version":"2022-11-28","User-Agent":"BlinQ-safe-branch-housekeeping"}
+          def api(path):
+              with urllib.request.urlopen(urllib.request.Request(base+path,headers=hdr),timeout=30) as f:
+                  return json.load(f)
+          def git(*args):
+              return subprocess.run(["git",*args],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+          assert git("rev-parse","--is-shallow-repository").stdout.strip()=="false"
+          cutoff=dt.datetime.fromisoformat(os.environ["DATE_CUTOFF"])
+          deny=re.compile(r"(cdb|dil|identity|data|train|model|backup|restore|rollback|release|deploy|prod|live|history|raw|snapshot|writer|lock|import|provider|api|feed|quota|recovery|security|protected|drive|shadow|serve|return|point|sackmann|tennis|rank|calibrat|source|research)",re.I)
+          allowed=("analysis/","audit/","fix/","feat/","feature/","chore/","ui/")
+          main=git("rev-parse","refs/remotes/origin/main").stdout.strip()
+          assert re.fullmatch("[0-9a-f]{40}",main)
+          open_pr_heads=set()
+          for page in range(1,10):
+              res=api(f"/pulls?state=open&per_page=100&page={page}")
+              open_pr_heads.update(p["head"]["ref"] for p in res if p.get("head",{}).get("repo") and p["head"]["repo"].get("full_name")==os.environ["GITHUB_REPOSITORY"])
+              if len(res)<100:break
+          protected=set()
+          for page in range(1,20):
+              res=api(f"/branches?per_page=100&page={page}")
+              protected.update(p["name"] for p in res if p["protected"])
+              if len(res)<100:break
+          rows=git("for-each-ref","--format=%(refname:strip=3)%09%(objectname)%09%(committerdate:iso8601-strict)","refs/remotes/origin").stdout.splitlines()
+          assert len(rows)>=100 and len(rows)<=1600, "Unexpected branch count"
+          source_files=git("ls-tree","-r","--name-only","refs/remotes/origin/main").stdout.splitlines()
+          for path in source_files:
+              if re.search(r"\.github/workflows/.*\.yml$|^ops/",path):
+                  pass
+          candidates=[]
+          tally={"branch_count":len(rows),"deny_name":0,"too_recent":0,"non_ancestor":0,"open_or_protected":0,"referenced":0,"busy":0,"eligible_seen":0}
+          limit=int(os.environ["LIMIT"])
+          assert 1<=limit<=100
+          for row in rows:
+              parts=row.split("\t")
+              if len(parts)!=3:continue
+              name,sha,date=parts
+              if not name.startswith(allowed) or deny.search(name):
+                  tally["deny_name"]+=1;continue
+              if name in open_pr_heads or name in protected:
+                  tally["open_or_protected"]+=1;continue
+              when=dt.datetime.fromisoformat(date)
+              if when>=cutoff:
+                  tally["too_recent"]+=1;continue
+              if git("merge-base","--is-ancestor",sha,main).returncode!=0:
+                  tally["non_ancestor"]+=1;continue
+              if git("grep","-F","-q","--",name,main,"--",".github/workflows","ops","scripts").returncode==0:
+                  tally["referenced"]+=1;continue
+              busy=False
+              for status in ("queued","in_progress"):
+                  query=urllib.parse.urlencode({"branch":name,"status":status,"per_page":1})
+                  if api("/actions/runs?"+query).get("total_count",0):busy=True
+              if busy:
+                  tally["busy"]+=1;continue
+              tally["eligible_seen"]+=1
+              candidates.append({"name":name,"sha":sha,"date":date,"proven_ancestor_of_main":main})
+              if len(candidates)>=limit:break
+          manifest={"schema":1,"repo":os.environ["GITHUB_REPOSITORY"],"dry_run":os.environ["DRY_RUN"]=="true",
+                    "date_cutoff":os.environ["DATE_CUTOFF"],"main_sha":main,"count":len(candidates),
+                    "tally":tally,"candidates":candidates,"restore": "git push origin <saved-sha>:refs/heads/<saved-name> -- use saved SHA from this 30-day artifact"}
+          pathlib.Path("gh-safe-branches.json").write_text(json.dumps(manifest,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+          print("CANDIDATES: "+json.dumps({"dry_run":manifest["dry_run"],"count":len(candidates),"tally":tally,"names":[x["name"] for x in candidates]},sort_keys=True))
+          PY
+      - name: Store 30-day restoration manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-branch-shas-and-restore-20261101
+          path: gh-safe-branches.json
+          retention-days: 30
+          if-no-files-found: error
+      - name: Revalidate and remove candidates, then independently verify
+        if: env.DRY_RUN == 'false'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime as dt
+          import json,os,re,subprocess,urllib.error,urllib.parse,urllib.request
+          m=json.load(open("gh-safe-branches.json"))
+          base="https://api.github.com/repos/"+os.environ["GITHUB_REPOSITORY"]
+          hdr={"Authorization":"Bearer "+os.environ["GH_TOKEN"],"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"BlinQ-safe-branch-housekeeping"}
+          def api(method,path):
+              req=urllib.request.Request(base+path,method=method,headers=hdr)
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as f:
+                      raw=f.read()
+                      return f.status,json.loads(raw) if raw else None
+              except urllib.error.HTTPError as e:
+                  if e.code==404:return 404,None
+                  raise
+          def git(*args):
+              return subprocess.run(["git",*args],capture_output=True,text=True).returncode
+          assert 0<=m["count"]<=100 and len(m["candidates"])==m["count"]
+          assert m["repo"]==os.environ["GITHUB_REPOSITORY"]
+          status,main=api("GET","/branches/main")
+          assert status==200 and main["commit"]["sha"]==m["main_sha"],"Main moved; fail closed"
+          seen=set()
+          vetted=[]
+          for x in m["candidates"]:
+              name=x["name"];sha=x["sha"];encoded=urllib.parse.quote(name,safe="")
+              assert name not in seen;seen.add(name)
+              assert name.startswith(("analysis/","audit/","fix/","feat/","feature/","chore/","ui/"))
+              assert x["proven_ancestor_of_main"]==m["main_sha"] and re.fullmatch("[a-f0-9]{40}",sha)
+              status,branch=api("GET","/branches/"+encoded)
+              assert status==200 and branch["commit"]["sha"]==sha and not branch["protected"]
+              assert git("merge-base","--is-ancestor",sha,m["main_sha"])==0
+              for runstatus in ("in_progress","queued"):
+                  q=urllib.parse.urlencode({"branch":name,"status":runstatus,"per_page":1})
+                  code,runs=api("GET","/actions/runs?"+q)
+                  assert code==200 and runs["total_count"]==0
+              owner=os.environ["GITHUB_REPOSITORY"].split("/")[0]
+              code,prs=api("GET","/pulls?state=open&head="+urllib.parse.quote(owner+":"+name,safe=""))
+              assert code==200 and len(prs)==0
+              vetted.append((name,encoded,sha))
+          deleted=[]
+          for name,encoded,sha in vetted:
+              code,_=api("DELETE","/git/refs/heads/"+encoded)
+              assert code==204,(name,code)
+              deleted.append((name,encoded))
+          for name,encoded in deleted:
+              code,_=api("GET","/branches/"+encoded)
+              assert code==404,(name,code)
+          print("VERIFIED_DELETIONS: "+json.dumps({"deleted":len(deleted),"readback_404":len(deleted),"restoration_artifact_days":30,"main_sha_unchanged":True},sort_keys=True))
+          PY
