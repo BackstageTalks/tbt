@@ -151,10 +151,10 @@ def verify_once(
         patch = str(release["patch"]).replace("736-", "7.3.6-", 1)
         optimized_markers = (
             actual_files["app.js"].startswith(
-                f"/* BlinQ visual revision: {visual} */\\n".encode("utf-8")
+                f"/* BlinQ visual revision: {visual} */\n".encode("utf-8")
             )
             and actual_files["blinq-app.css"].startswith(
-                f"/* BlinQ runtime patch {patch} */\\n".encode("utf-8")
+                f"/* BlinQ runtime patch {patch} */\n".encode("utf-8")
             )
         )
         if optimized_markers:
