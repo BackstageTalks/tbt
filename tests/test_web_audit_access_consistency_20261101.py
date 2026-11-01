@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "web/app.js").read_text(encoding="utf-8")
 CSS = (ROOT / "web/blinq-app.css").read_text(encoding="utf-8")
 UI = json.loads((ROOT / "web/ui-config.json").read_text(encoding="utf-8"))
+SERVER = json.loads((ROOT / "api/tbt/assets/ui_access_defaults.json").read_text(encoding="utf-8"))
 
 
 def test_offline_policy_matches_current_published_member_access():
@@ -23,6 +24,16 @@ def test_offline_policy_matches_current_published_member_access():
     assert all(results[p] == "active" for p in ("pro", "elite", "legend", "goat"))
     assert all(comparator[p] is False for p in ("trial", "expired", "rookie", "pro", "elite"))
     assert all(comparator[p] is True for p in ("legend", "goat"))
+    assert SERVER["dashboard"]["comparator"]["plans"] == comparator
+    # The backend Results fallback intentionally remains conservative without runtime storage.
+    server_results = SERVER["elements"]["SIDEBAR_RESULTS"]["access"]
+    assert server_results["pro"] == server_results["elite"] == "locked"
+
+
+def test_comparator_runtime_default_is_not_open_to_rookie():
+    api = (ROOT / "api/function_app.py").read_text(encoding="utf-8")
+    assert '"trial": False, "expired": False, "rookie": False, "pro": False' in api
+    assert "const base={plans:{trial:false,expired:false,rookie:false,pro:false,elite:false" in APP
 
 
 def test_comparator_lock_is_visible_in_both_mobile_navigation_surfaces():
