@@ -214,3 +214,58 @@ def test_player_doc_example_identity_is_research_not_cdb_link():
         ("/api/tennis/player/69208", None),
         ("/api/tennis/team/69208", None),
     ]
+
+def test_archive_2016_selects_provider_native_finished_event():
+    class Historical(StubClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            self.request_count += 1
+            self.paths.append((path, params))
+            if path == "/api/tennis/events/10/7/2016":
+                return {"events": [
+                    {"id": 900, "homeTeam": {"id": 4},
+                     "awayTeam": {"id": 5}, "status": {"type": "finished"},
+                     "tournament": {"name": "Other"}},
+                    {"id": 800, "homeTeam": {"id": 31},
+                     "awayTeam": {"id": 32}, "status": {"type": "finished"},
+                     "tournament": {"name": "Wimbledon"}},
+                    {"id": 100, "homeTeam": {"id": 1},
+                     "awayTeam": {"id": 2}, "status": {"type": "inprogress"},
+                     "tournament": {"name": "Wimbledon"}},
+                ]}
+            return {"statistics": []}
+    client = Historical()
+    report = run_probe(client, event_id=14494928, max_requests=4,
+                       phase="archive_2016")
+    assert report["historical_sample_event_id"] == 800
+    assert report["historical_sample_policy"] == "wimbledon_finished"
+    assert report["historical_source_home_id"] == 31
+    assert report["request_count"] == 4
+    assert client.paths == [
+        ("/api/tennis/events/10/7/2016", None),
+        ("/api/tennis/event/800/statistics", None),
+        ("/api/tennis/event/800/point-by-point", None),
+        ("/api/tennis/team/31/year-statistics/2016", None),
+    ]
+    assert report["eligible_for_cdb_import"] is False
+    assert report["identity_validated_for_import"] is False
+
+
+def test_archive_2016_empty_day_never_invents_a_match_id():
+    class Empty(StubClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            self.request_count += 1
+            self.paths.append((path, params))
+            return {"events": []}
+    client = Empty()
+    result = run_probe(client, event_id=14494928, max_requests=4,
+                       phase="archive_2016")
+    assert result["request_count"] == 1
+    assert result["historical_sample_policy"] == "no_valid_completed_event"
+    assert "historical_sample_event_id" not in result
+
+
+def test_archive_2016_rejects_custom_case():
+    import pytest
+    with pytest.raises(ValueError, match="case"):
+        run_probe(StubClient(), event_id=14494928, max_requests=4,
+                  phase="archive_2016", case="arbitrary")

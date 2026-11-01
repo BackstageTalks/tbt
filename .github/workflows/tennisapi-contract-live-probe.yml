@@ -50,7 +50,8 @@ jobs:
             .cdb_writes_allowed == false and
             (.phase == "full" or .phase == "metadata" or .phase == "odds" or
              .phase == "doubles" or .phase == "quality" or
-             .phase == "historical" or .phase == "identity") and
+             .phase == "historical" or .phase == "identity" or
+             .phase == "archive_2016") and
             (.case == null or (.case | type == "string" and length > 0 and length < 64))' "$request" >/dev/null
       - name: Install existing API dependencies
         run: python -m pip install -r api/requirements-train.txt
