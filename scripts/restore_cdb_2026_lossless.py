@@ -80,8 +80,79 @@ def index(table, source):
     return found
 
 
+def _align_exact_2026_schema(old, live):
+    """Only reconcile observed type drift with exact, non-lossy guards.
+
+    2026 backup stored best_of as float64; present CDB uses int64.
+    The current rank columns are entirely null-typed; preserve historical
+    float64 rank values by widening those empty current columns to float64.
+    Other schema changes always fail closed.
+    """
+    import math
+    import pyarrow as pa
+    a = {f.name: str(f.type) for f in old.schema}
+    b = {f.name: str(f.type) for f in live.schema}
+    if old.column_names != live.column_names:
+        return old, live
+    changes = {name: (a[name], b[name]) for name in a if a[name] != b[name]}
+    allowed = {
+        "best_of": ("double", "int64"),
+        "player1_rank": ("double", "null"),
+        "player2_rank": ("double", "null"),
+    }
+    if any(allowed.get(name) != delta for name, delta in changes.items()):
+        return old, live
+    if any(old.schema.field(name).nullable != live.schema.field(name).nullable
+           for name in a):
+        return old, live
+    if "best_of" in changes:
+        # Prevent silent float truncation, NaN/inf, or out-of-domain values.
+        for value in old.column("best_of").to_pylist():
+            if value is not None and (not math.isfinite(value)
+                    or not value.is_integer() or not 1 <= value <= 5):
+                raise ValueError("Unsafe backup best_of; refusing type conversion")
+        old = old.set_column(old.schema.get_field_index("best_of"),
+                             live.schema.field("best_of"),
+                             old.column("best_of").cast(pa.int64(), safe=True))
+    for name in ("player1_rank", "player2_rank"):
+        if name in changes:
+            # Null current columns contain no ranked values to overwrite.
+            if live.column(name).null_count != live.num_rows:
+                raise ValueError("Current rank field is not entirely null")
+            for value in old.column(name).to_pylist():
+                if value is not None and not math.isfinite(value):
+                    raise ValueError("Unsafe backup rank; refusing conversion")
+            live = live.set_column(live.schema.get_field_index(name),
+                                   old.schema.field(name),
+                                   pa.nulls(live.num_rows, type=pa.float64()))
+    return old, live
+
+
+def _live_prefix_is_conserved(before, candidate):
+    """Verify each old live field is unchanged, including zero vs NULL.
+
+    A null-typed current rank column may become typed float64, but all its
+    existing cells must remain NULL. No other live-column conversion allowed.
+    """
+    import pyarrow as pa
+    if (before.column_names != candidate.column_names
+            or before.num_rows > candidate.num_rows):
+        return False
+    for name in before.column_names:
+        a, b = before.column(name), candidate.column(name).slice(0, before.num_rows)
+        if (name in ("player1_rank", "player2_rank")
+                and pa.types.is_null(a.type) and pa.types.is_float64(b.type)):
+            if a.null_count != before.num_rows or b.null_count != before.num_rows:
+                return False
+        elif not a.equals(b):
+            return False
+    return True
+
+
 def merge_preserving_live(old, live):
     import pyarrow as pa
+    original_live = live
+    old, live = _align_exact_2026_schema(old, live)
     if not old.schema.equals(live.schema, check_metadata=False):
         # Diagnostics are column names/types only: no canonical identities,
         # player information, row contents or private raw values in CI logs.
@@ -128,8 +199,8 @@ def merge_preserving_live(old, live):
         type=pa.int64(),
     ))
     merged = pa.concat_tables([live, additions], promote_options="none")
-    if merged.num_rows != len(set(oi) | set(ci)) or not merged.slice(
-            0, live.num_rows).equals(live, check_metadata=False):
+    if merged.num_rows != len(set(oi) | set(ci)) or not _live_prefix_is_conserved(
+            original_live, merged):
         raise ValueError("Merged canonical content not conserved")
     return merged, {
         "backup_2026": len(oi), "live_2026": len(ci),
@@ -143,6 +214,7 @@ def merge_preserving_live(old, live):
         "net_new_canonical_matches": len(missing),
         "enriched_existing_matches": 0,
         "existing_cells_overwritten": 0,
+        "schema_alignment": "strict_best_of_int_and_null_rank_widening_only",
     }, set(oi) | set(ci)
 
 
@@ -253,8 +325,7 @@ def main():
         persisted = pq.read_table(root / "persisted" / "history-2026.parquet")
         if not persisted.equals(merged, check_metadata=False):
             raise RuntimeError("Remote persisted 2026 content mismatch")
-        if not persisted.slice(0, original_live.num_rows).equals(
-                original_live, check_metadata=False):
+        if not _live_prefix_is_conserved(original_live, persisted):
             raise RuntimeError("Existing live canonical rows changed")
         for year in range(1949, 2026):
             filename = f"history-{year}.parquet"
