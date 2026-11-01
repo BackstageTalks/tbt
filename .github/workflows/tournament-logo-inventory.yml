@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/tournament-logo-inventory.yml'
       - 'scripts/audit_tournament_logo_cache.py'
       - 'tests/test_audit_tournament_logo_cache.py'
   workflow_dispatch:
