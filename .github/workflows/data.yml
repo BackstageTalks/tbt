@@ -338,6 +338,10 @@ jobs:
         if: env.MODE == 'deploy-current'
         run: echo "Deployment job will assemble and verify the immutable serving snapshot once."
 
+      - name: Load independently verified adaptive statistics prior (read-only)
+        if: env.MODE == 'statistics' && env.BLINQ_AUTOFILL_HIGH_YIELD == 'true'
+        run: python scripts/fetch_adaptive_verified_prior.py
+
       - name: Acquire global cross-repository canonical writer
         if: env.MODE != 'deploy-current'
         shell: bash
