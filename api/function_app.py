@@ -155,6 +155,9 @@ from tbt.services.match_status import (
     event_ids_from_feed, runtime_settled_results, scan_match_statuses,
     verified_terminal_statuses, apply_verified_schedule_overlay,
 )
+from tbt.services.clv_market_history import (
+    extract_verified_quotes, persist_quotes, attach_offer_clv,
+)
 from tbt.services.results_archive import (
     settled_archive_candidates, save_settled_results_archive,
     load_settled_results_archive, merge_settled_results,
@@ -1467,6 +1470,13 @@ def feed(req):
         except AdminStorageUnavailable:
             data["match_statuses"] = {}
             data["match_status_updated_at"] = None
+        # Presentation-only history is joined AFTER entitlement filtering. Never
+        # mutate the immutable publication or expand the member's visible picks.
+        try:
+            data = attach_offer_clv(data)
+        except AdminStorageUnavailable:
+            logging.exception("CLV historical odds overlay unavailable")
+            data["clv_history_unavailable"] = True
         return response(data)
     except AuthUnavailable as exc:
         record_system_event("error", "feed", "Authentication service unavailable while serving feed", details={"error": exc.__class__.__name__})
@@ -1477,8 +1487,27 @@ def feed(req):
         return response({"error": "feed_unavailable"}, 503)
 
 
-
-
+@app.route(route="v1/internal/clv-snapshot", methods=["POST"])
+def internal_clv_snapshot(req):
+    """Accept only verified pre-match Match Winner quotes for issued TOP/VALUE."""
+    if not _live_worker_token_ok(req):
+        return response({"error": "unauthorized"}, 401)
+    try:
+        payload = req.get_json()
+        authorized_feed = visible_feed(read_feed(FEED))
+        quotes, rejected = extract_verified_quotes(payload, authorized_feed)
+        saved = persist_quotes(quotes) if quotes else {
+            "written": 0, "already_present": 0, "verified": 0,
+        }
+        return response({
+            "ok": True, "accepted": len(quotes), "rejected_events": rejected,
+            **saved,
+        })
+    except (ValueError, TypeError) as exc:
+        return response({"error": "invalid_clv_snapshot", "reason": str(exc)[:80]}, 400)
+    except (AdminStorageUnavailable, OSError):
+        logging.exception("CLV snapshot persistence/read-back unavailable")
+        return response({"error": "clv_storage_unavailable"}, 503)
 
 
 def _membership_allowed(account: dict, min_level: str = "rookie") -> bool:
