@@ -141,6 +141,8 @@ jobs:
           print(f"- Country/flag available: **{report['players_with_country']:,}**")
           print(f"- New photos downloaded: **{report['photos_downloaded']:,}**")
           print(f"- Cached photos reused: **{report['photos_cached']:,}**")
+          print(f"- Player detail lookups skipped (complete static profile): **{report.get('player_details_cached_complete', 0):,}**")
+          print(f"- Player detail lookups skipped (fresh prior response): **{report.get('player_details_skipped_recent', 0):,}**")
           print(f"- Photo unavailable: **{report['photos_unavailable']:,}**")
           print(f"- Tournaments in current feed: **{report.get('tournaments_requested', 0):,}**")
           print(f"- Tournament logos downloaded: **{report.get('tournament_logos_downloaded', 0):,}**")
