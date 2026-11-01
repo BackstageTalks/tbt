@@ -1494,8 +1494,13 @@ def internal_clv_snapshot(req):
         return response({"error": "unauthorized"}, 401)
     try:
         payload = req.get_json()
-        authorized_feed = visible_feed(read_feed(FEED))
-        quotes, rejected = extract_verified_quotes(payload, authorized_feed)
+        # Quote collection is private, but the public 06:00 betting-day view
+        # hides TOMORROW's already issued TOP/VALUE rows. Link against the
+        # immutable complete issued feed so pre-match observations are not
+        # lost before the pick's display day. Public entitlement/day filtering
+        # still applies ONLY at v1/feed, after quote history is persisted.
+        issued_feed = read_feed(FEED)
+        quotes, rejected = extract_verified_quotes(payload, issued_feed)
         saved = persist_quotes(quotes) if quotes else {
             "written": 0, "already_present": 0, "verified": 0,
         }
