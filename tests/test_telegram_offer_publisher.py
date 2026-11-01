@@ -48,6 +48,29 @@ def offer():
 
 
 
+
+
+def test_compact_name_keeps_family_before_generational_suffix():
+    cases={
+        "Martin Damm Jr.":"Damm junior",
+        "Martin Damm junior":"Damm junior",
+        "John Smith Sr.":"Smith senior",
+        "Alex Smith II":"Smith II",
+        "Alex Smith III":"Smith III",
+        "Daniil Medvedev":"Medvedev",
+        "Li Na":"Na",
+        "Alice Li":"Li",
+    }
+    for full, expected in cases.items():
+        assert tg._compact_player_name(full)==expected
+        assert tg._name_map([row(101,full)])[full]==expected
+        assert f" | {expected} | " in tg.fmt(row(101,full),"top",settings())
+    # A player whose display name ends in an initial must not become just that initial.
+    assert tg._compact_player_name("Player A.")=="Player A."
+    # Never identify two differently named players with the same compact surname alone.
+    mapping=tg._name_map([row(101,"Martin Damm Jr."),row(102,"John Damm Jr.")])
+    assert mapping["Martin Damm Jr."]!=mapping["John Damm Jr."]
+
 def test_telegram_omits_ev_everywhere_including_value_and_full_daily_message():
     cfg=settings()
     top=tg.fmt(row(88,"Sinner"),"top",cfg,index=1)
