@@ -282,6 +282,11 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
     superiority = extract_player_superiority_odds(payload, metric, name1, name2)
     if superiority:
         odds = superiority["player1_odds"] if slot == 1 else superiority["player2_odds"]
+        # Legacy exact-2.00 ACES feed values lack independently verified
+        # bettable evidence; do not convert an Aces projection to this price.
+        if metric == "aces" and float(odds) == 2.0:
+            superiority = None
+    if superiority:
         out.update({
             "odds": round(float(odds), 3), "price_status": "priced_projection",
             "provider_id": int(provider_id), "captured_at": captured_at,
@@ -309,6 +314,8 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
                 continue
             probability = p_over if direction == "over" else 1 - p_over
             odds = float(option[direction])
+            if metric == "aces" and odds == 2.0:
+                continue  # Unverified legacy 2.00; preserve local fallback.
             ev = probability * odds - 1
             if probability >= 0.60 and ev >= 0:
                 priced.append((ev, probability, odds, direction, option))

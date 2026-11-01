@@ -1367,12 +1367,32 @@
       &&Number.isInteger(Number(row?.provider_id))&&Number(row.provider_id)>0
       &&Boolean(row?.captured_at);
   }
+  function authenticLocalAceProjection(row){
+    // Local Aces remain projection_only with no external quote; never admit
+    // missing-data cards, legacy dates, other markets or fabricated API prices.
+    if(String(row?.market||'').toLowerCase()!=='aces'
+      ||row?.price_status!=='projection_only'||row?.odds!=null
+      ||row?.projection_model!=='ace-count-projection-v4')return false;
+    const selected=String(row?.selection_id||'');
+    if(!row?.event_id||!selected||![String(row?.player1?.id||''),String(row?.player2?.id||'')].includes(selected))return false;
+    const scheduled=Date.parse(String(row?.scheduled_at||''));
+    const projection=Number(row?.projection),opponent=Number(row?.opponent_projection);
+    const confidence=Number(row?.projection_confidence);
+    return Number.isFinite(scheduled)&&scheduled>=Date.parse('2026-11-01T05:00:00Z')
+      &&Number.isFinite(projection)&&projection>=0
+      &&Number.isFinite(opponent)&&opponent>=0
+      &&Number.isFinite(confidence)&&confidence>=.60&&confidence<=1
+      &&Number.isFinite(stableAceDisplayOdds(row));
+  }
+  function authenticMarketSectionRow(row,key){
+    return authenticLiveProjection(row)||(key==='ace'&&authenticLocalAceProjection(row));
+  }
   function marketRows(key){
     // TOP200 has been retired. Old feed data must not recreate active picks.
     if(key==='top200')return [];
     const candidates={prime:['prime_picks','prime'],top_daily:['top_daily_picks','daily_picks','top_daily'],value:['value_picks','value'],doubles:['doubles_picks','doubles'],ace:['ace_picks','aces','ace_markets'],sg:['sg_picks','sets_games','set_game_picks']}[key]||[];
-    for(const field of candidates){const value=state.feed?.[field];if(Array.isArray(value))return ['ace','sg'].includes(key)?value.filter(authenticLiveProjection):value;}
-    const markets=state.feed?.markets;if(markets&&Array.isArray(markets[key]))return ['ace','sg'].includes(key)?markets[key].filter(authenticLiveProjection):markets[key];
+    for(const field of candidates){const value=state.feed?.[field];if(Array.isArray(value))return ['ace','sg'].includes(key)?value.filter(row=>authenticMarketSectionRow(row,key)):value;}
+    const markets=state.feed?.markets;if(markets&&Array.isArray(markets[key]))return ['ace','sg'].includes(key)?markets[key].filter(row=>authenticMarketSectionRow(row,key)):markets[key];
     return [];
   }
   function marketProbability(row){const raw=row?.blinq_probability??row?.probability??row?.win_probability??row?.model_probability??row?.confidence_probability;const value=Number(raw);return Number.isFinite(value)?(value>1?value/100:value):null;}
@@ -2937,8 +2957,8 @@
     if(Number.isFinite(aceDisplay)&&aceDisplay>=1.60&&aceDisplay<=1.80)
       return hubNumberHtml(aceDisplay.toFixed(2),lcopy('odds','kurz','kurz'));
     if(authenticLiveProjection(row))return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
-    // Current ACES/DF/GAMES/SETS never receive a synthetic display price.
-    // Until a verified provider quote exists, show N/A.
+    // Local ACES are handled above; DF/GAMES/SETS stay provider-only.
+    // Without an eligible contract or statistical Aces basis, show N/A.
     const reason=lcopy('Market odds unavailable','Trhový kurz nie je dostupný','Tržní kurz není dostupný');
     return `<span title="${escapeHtml(reason)}">${hubNumberHtml('N/A',reason)}</span>`;
   }

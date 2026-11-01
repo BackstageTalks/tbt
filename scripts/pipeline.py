@@ -41,6 +41,7 @@ from tbt.services.publication import (
     validate_publication_candidate,
 )
 from tbt.services.ace_selection import select_ace_picks
+from ace_working_odds import eligible_local_ace_projection, verified_ace_odds
 from tbt.services.sg_selection import select_sg_picks
 from tbt.services.projection_odds import (
     enrich_projection_odds, prefetch_projection_market_board,
@@ -1540,12 +1541,13 @@ def main():
             if args.market_odds_max_events == -1
             else max(0, int(args.market_odds_max_events))
         )
-        # BlinQ alone selects and ranks the Aces/DF matches first. The external
-        # provider board may price these frozen candidates, but must not select
-        # replacements or change the player's count prediction.
+        # Freeze BlinQ's own statistically ranked Aces/DF picks before any
+        # bookmaker market discovery. Quotes can attach to these identities,
+        # never determine which matches the model originally selects.
         ace_picks, ace_report = select_ace_picks(
             matches, predictions, now=selection_now,
             per_market_limit=10, total_limit=20, target_count=10,
+            allow_local_aces_fallback=True,
         )
         if isinstance(ace_report, dict):
             ace_report["selection_policy"] = "blinq_model_first_then_odds_attachment"
@@ -1804,8 +1806,8 @@ def main():
             "selection": doubles_selection_report,
         }
 
-        # Sets/Games keep their existing odds-first selector. Aces/DF were
-        # already selected above; only their matching price contracts are attached.
+        # Sets/Games retain their established market-aware selection. Aces/DF
+        # were chosen earlier, independent of provider market availability.
         projection_pool_per_market = (
             max(30, min(200, projection_odds_cap)) if projection_odds_cap else 10
         )
@@ -1874,8 +1876,11 @@ def main():
                     and provider > 0 and bool(row.get("captured_at"))
                     and 1.50 <= odds < float("inf")
                     and ace_df_real_api
+                    and (market != "aces" or verified_ace_odds(row) is not None)
                 )
-            ace_picks = [row for row in ace_picks if publishable_api_price(row)]
+            ace_picks = [row for row in ace_picks if (
+                publishable_api_price(row) or eligible_local_ace_projection(row)
+            )]
             sg_picks = [row for row in sg_picks if publishable_api_price(row)]
         # Ten per independent category, sorted by validated projection
         # confidence and evidence, NOT simply by the highest bookmaker price.
@@ -1906,8 +1911,8 @@ def main():
             ace_report = {
                 **ace_report, "odds_attachment": projection_odds_report,
                 "published_selected": len(ace_picks),
-                "priced_selection_policy": "blinq_model_first_then_exact_player_ou_price",
-                "unpriced_selected": ace_report["pre_odds_selected"] - len(ace_picks),
+                "aces_local_fallback_published": sum(eligible_local_ace_projection(row) for row in ace_picks),
+                "priced_selection_policy": "blinq_model_first_api_pro_propline_moviodds_then_local_aces_only",
             }
         if isinstance(sg_report, dict):
             sg_report = {

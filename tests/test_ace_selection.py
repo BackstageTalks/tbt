@@ -125,24 +125,22 @@ def test_double_fault_confidence_is_predictive_and_capped_below_old_97_percent()
     assert report["uncertainty_model"] == "future_count_predictive_variance"
 
 
-def test_aces_model_selection_is_identical_with_or_without_provider_market():
-    """Market discovery must not add, replace or remove a BlinQ model selection."""
-    now = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+def test_local_aces_projection_bypasses_only_missing_bookmaker_market():
+    now = datetime(2026, 11, 2, 9, tzinfo=timezone.utc)
     rows = []
     for i in range(10):
         when = now - timedelta(days=20 + i * 8)
-        rows.append(historical(f"model-a{i}", when, "A", f"X{i}", 9, 3, 1, 2))
-        rows.append(historical(f"model-b{i}", when, "B", f"Y{i}", 3, 8, 4, 2))
-    fixture = prediction(now + timedelta(hours=5))
-
-    no_market, _ = select_ace_picks(
-        rows, [fixture], now=now, available_markets_by_event={},
+        rows.append(historical(f"ca{i}", when, "A", f"CX{i}", 9, 3, 1, 2))
+        rows.append(historical(f"cb{i}", when, "B", f"CY{i}", 3, 8, 4, 2))
+    future = [prediction(now + timedelta(hours=5))]
+    restricted, _ = select_ace_picks(
+        rows, future, now=now, available_markets_by_event={},
     )
-    full_market, _ = select_ace_picks(
-        rows, [fixture], now=now,
-        available_markets_by_event={"999": {"aces", "double_faults"}},
+    assert restricted == []
+    local, _ = select_ace_picks(
+        rows, future, now=now, available_markets_by_event={},
+        allow_local_aces_fallback=True,
     )
-    default, _ = select_ace_picks(rows, [fixture], now=now)
-    assert no_market == full_market == default
-    assert {card["market"] for card in default} == {"aces", "double_faults"}
-    assert all(card["odds"] is None for card in default)
+    assert {row["market"] for row in local} == {"aces"}
+    assert local[0]["odds"] is None
+    assert local[0]["price_status"] == "projection_only"

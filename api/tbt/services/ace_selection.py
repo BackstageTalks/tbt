@@ -688,8 +688,9 @@ def select_ace_picks(
     total_limit: int = 20,
     target_count: int = 10,
     available_markets_by_event: dict[str, set[str]] | None = None,
+    allow_local_aces_fallback: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Select Ace/DF predictions from BlinQ statistics before looking up odds."""
+    """Keep odds-first selection; optionally allow model-qualified local Aces."""
     if now.tzinfo is None:
         raise ValueError("select_ace_picks requires timezone-aware now")
     now = now.astimezone(timezone.utc)
@@ -715,10 +716,11 @@ def select_ace_picks(
         except (TypeError, ValueError):
             best_of = None
 
-        # Market availability must never choose matches for the BlinQ model.
-        # Keep the historical optional argument for backwards compatibility, but
-        # do not let an empty provider board suppress a statistical candidate.
         for market in ("aces", "double_faults"):
+            if (available_markets_by_event is not None
+                and market not in available_markets_by_event.get(str(row.get("event_id") or ""), set())
+                and not (allow_local_aces_fallback and market == "aces")):
+                continue
             p1_projection = _projection(
                 p1_id, p2_id, market, histories, baselines[market], now,
                 surface=surface, best_of=best_of,

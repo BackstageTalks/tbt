@@ -11,6 +11,8 @@ reuse this same price basis.
 from __future__ import annotations
 
 from typing import Mapping, Any
+from datetime import datetime, timezone
+from math import isfinite
 
 PRICE_BASIS = "local_aces_statistical_v1"
 
@@ -93,3 +95,48 @@ def selected_ace_odds(row: Mapping[str, Any], *,
         return actual, True
     return working_ace_odds(row, selection_id=selection_id), False
 
+
+
+# The previous 1.50-1.70 Results-only formula is historical before the
+# 2026-11-01 06:00 Europe/Bratislava betting-day boundary. New Aces without
+# an exact provider contract use this separately approved local price basis.
+NEW_ACES_START_UTC = datetime(2026, 11, 1, 5, tzinfo=timezone.utc)
+
+
+def eligible_local_ace_projection(row: Mapping[str, Any]) -> bool:
+    """Publish only model-qualified new Aces projections, never fake provider odds.
+
+    The immutable publication retains odds=None / projection_only. The UI and
+    Telegram independently compute the stable statistical display value.
+    """
+    if not isinstance(row, Mapping):
+        return False
+    if str(row.get("market") or "").lower() != "aces":
+        return False
+    if row.get("price_status") != "projection_only" or row.get("odds") is not None:
+        return False
+    if row.get("projection_model") != "ace-count-projection-v4":
+        return False
+    p1 = row.get("player1") if isinstance(row.get("player1"), Mapping) else {}
+    p2 = row.get("player2") if isinstance(row.get("player2"), Mapping) else {}
+    if not row.get("event_id") or str(row.get("selection_id") or "") not in {
+        str(p1.get("id") or ""), str(p2.get("id") or ""),
+    }:
+        return False
+    if not row.get("selection_id"):
+        return False
+    try:
+        scheduled = datetime.fromisoformat(str(row.get("scheduled_at") or "").replace("Z", "+00:00"))
+        projection = float(row.get("projection"))
+        opponent = float(row.get("opponent_projection"))
+        confidence = float(row.get("projection_confidence"))
+    except (TypeError, ValueError, OverflowError):
+        return False
+    return (
+        scheduled.tzinfo is not None
+        and scheduled.astimezone(timezone.utc) >= NEW_ACES_START_UTC
+        and all(isfinite(value) for value in (projection, opponent, confidence))
+        and projection >= 0 and opponent >= 0
+        and 0.60 <= confidence <= 1.0
+        and working_ace_odds(row) is not None
+    )
