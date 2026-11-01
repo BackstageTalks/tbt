@@ -76,7 +76,8 @@ def test_ui_never_renders_filler_as_a_real_quote():
     assert "aceDfLegacyResultDisplayOdds(publication)" in results
     live = APP[APP.index("function projectionOddsHtml("):APP.index("function dailyHubRow(")]
     assert "aceDfLegacyResultDisplayOdds" not in live
-    assert "historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'" in APP
+    assert "historicalEligible&&publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'" in APP
+    assert "2026-11-01T05:00:00Z" in APP
     assert "illustrativeOnly?placeholderOdds.toFixed(2)" in APP
     # The source provenance and KPI guards remain; the user removed the four visible odds tooltips.
     assert "not an archived bookmaker price or model estimate" not in APP
