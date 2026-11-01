@@ -112,8 +112,7 @@ def test_bo5_without_verified_format_duration_does_not_invent_cross_format_aces(
         state, left_key="atp:a", right_key="atp:b", tour="atp",
         surface="hard", best_of=5, now=CUTOFF + timedelta(hours=4), cutoff=CUTOFF,
     )
-    assert value["aces"]["total_estimate"] is None
-    assert value["aces"]["player1"] is None
+    assert value["aces"] is None
     assert state["provider_requests"] == 0
 
 
@@ -172,4 +171,4 @@ def test_existing_schema_one_market_release_retains_aces_without_cross_format_gu
         legacy, left_key="atp:a", right_key="atp:b", tour="atp",
         surface="hard", best_of=5, now=CUTOFF + timedelta(hours=4), cutoff=CUTOFF,
     )
-    assert future["aces"]["total_estimate"] is None
+    assert future["aces"] is None
