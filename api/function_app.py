@@ -1165,7 +1165,7 @@ def match_intelligence(req):
             client = RapidTennisClient(
                 settings,
                 request_budget=None if remote_ledger_configured else (
-                    lambda *args, **kwargs: reserve_shared_api_budget("history", paced=True)
+                    lambda *args, **kwargs: reserve_shared_api_budget("history")
                 ),
             )
             # Explicit opt-in still has a strict per-request ceiling. The default
@@ -1648,7 +1648,7 @@ def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
         else:
             client=RapidTennisClient(
                 settings,
-                request_budget=lambda *args, **kwargs: reserve_shared_api_budget("live", paced=True),
+                request_budget=lambda *args, **kwargs: reserve_shared_api_budget("live"),
             )
             # A single slow provider request must not exceed the SWA HTTP window.
             client.configure_runtime_fast_fail(timeout_seconds=5,attempts=1)
@@ -2110,7 +2110,7 @@ def internal_match_status_worker(req):
         feed_payload = read_feed(FEED)
         previous = load_match_status_snapshot() or {}
         client = RapidTennisClient(
-            settings, request_budget=lambda *args, **kwargs: reserve_shared_api_budget("match", paced=True)
+            settings, request_budget=lambda *args, **kwargs: reserve_shared_api_budget("match")
         )
         # An earlier run hit the HTTP gateway after ~45s. This worker uses
         # short batches and a bounded latency/request budget; all other users
