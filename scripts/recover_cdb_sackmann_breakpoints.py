@@ -85,6 +85,49 @@ def _valid_cdb_lineage(match, row: dict, tour: str, kind: str, file: Path) -> bo
             ctx.get("_tbt_source_category_name") == "historical_" + kind)
 
 
+
+def lineage_rejection_reason(match, row: dict, tour: str, kind: str, file: Path) -> str:
+    """Aggregate-only reasons for the *unchanged* strict identity gate.
+
+    Diagnostic labels contain no event ID, player ID, filename, or source row.
+    Never use this result as an import authorization or a crosswalk.
+    """
+    if (str(match.tour).lower() != tour or not match.is_completed
+            or str(match.status).lower() != "completed"
+            or match.scheduled_at >= datetime.now(timezone.utc)):
+        return "canonical_tour_status_or_time"
+    original_date = str(row.get("tourney_date") or "").strip()
+    if (not re.fullmatch(r"\\d{8}", original_date)
+            or match.scheduled_at.strftime("%Y%m%d") != original_date):
+        return "historical_source_date"
+    winner_id = str(row.get("winner_id") or "").strip()
+    loser_id = str(row.get("loser_id") or "").strip()
+    if (not winner_id or not loser_id or winner_id == loser_id
+            or not re.fullmatch(r"[A-Za-z0-9_.:-]+", winner_id + loser_id)):
+        return "source_player_ids"
+    if (str(match.player1_id) != f"hist-js:{tour}:{winner_id}"
+            or str(match.player2_id) != f"hist-js:{tour}:{loser_id}"):
+        return "source_native_player_id_mapping"
+    if str(match.winner_id) != str(match.player1_id):
+        return "winner_orientation"
+    if (norm_text(match.player1_name) != norm_text(row.get("winner_name"))
+            or norm_text(match.player2_name) != norm_text(row.get("loser_name"))):
+        return "player_names"
+    ctx = match.provider_payload
+    if not isinstance(ctx, dict):
+        return "missing_provider_context"
+    evidence = ctx.get("_tbt_statistics")
+    if not isinstance(evidence, dict) or evidence.get("source") != SOURCE + file.name:
+        return "source_statistics_provenance"
+    if ctx.get("_tbt_provider_event_id") != str(match.match_id):
+        return "provider_event_identity"
+    if ctx.get("_tbt_source_category_name") != "historical_" + kind:
+        return "source_category"
+    # A rejection not explained by these checks indicates an implementation
+    # drift in the canonical lineage contract: reject rather than guess.
+    return "unclassified_strict_rejection"
+
+
 def _source_rates(row: dict) -> dict[str, float]:
     """Two independent winner/loser return-side break-point conversion rates."""
     stats = valid(row)  # complete score, all raw counts and sanity constraints
@@ -193,6 +236,9 @@ def stage(matches, source_root: Path):
                     continue
                 proposed, status = candidate(record, row, tour, path, line_no, file_hash)
                 counts[status] += 1
+                if status == "lineage_rejected":
+                    reason = lineage_rejection_reason(record, row, tour, _source_type(path, tour), path)
+                    counts["lineage_reason_" + reason] += 1
                 if proposed is not None:
                     proposed["source"]["file"] = rel
                     staged[mid] = proposed
