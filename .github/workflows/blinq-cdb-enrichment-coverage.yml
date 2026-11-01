@@ -1,10 +1,7 @@
 name: BlinQ CDB full enrichment field coverage audit (no writes)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/blinq-cdb-enrichment-coverage.yml
+  # Manual-only audit; retired redundant self-file push trigger.
   workflow_dispatch:
 
 permissions:
