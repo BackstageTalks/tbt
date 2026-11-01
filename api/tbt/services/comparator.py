@@ -460,6 +460,13 @@ def build_serving_artifact(
         ],
     }
 
+    # Explicit source-watermark: snapshot creation time is not proof that
+    # canonical matches were imported through that timestamp.
+    newest = max(
+        (m.scheduled_at for m in replay
+         if str(m.status).strip().lower() == "completed" and m.scheduled_at < cutoff),
+        default=None,
+    )
     # Canonical, pre-cutoff Aces/DF evidence is indexed separately at serving.
     # Keep champion probabilities and feature contracts unchanged.
     from .comparator_markets import build_market_state
@@ -482,6 +489,9 @@ def build_serving_artifact(
             "canonical_read_only": True,
             "provider_requests_per_user_compare": 0,
             "market_stat_matches": market_state["canonical_stat_matches"],
+            "latest_canonical_completed_match_utc": newest.astimezone(timezone.utc).isoformat()
+                if newest else None,
+            "latest_market_stat_match_by_tour": market_state["latest_stat_match_by_tour"],
         },
     }
     if atp_leaderboards is not None:
