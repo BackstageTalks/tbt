@@ -103,3 +103,31 @@ def test_concurrent_clients_singleflight(tmp_path):
 def test_missing_mount_fails_closed(tmp_path):
     with pytest.raises(RawCacheUnavailable, match="not mounted"):
         RawResponseCache(tmp_path / "absent" / "raw.sqlite")
+
+
+def test_cache_metrics_are_separate_from_paid_attempts(tmp_path):
+    cache = store(tmp_path)
+    calls = []
+    payload = {"statistics": [{"period": "ALL", "groups": []}]}
+    def paid():
+        calls.append(1)
+        return payload
+    assert load(cache, paid) == payload
+    assert load(cache, paid) == payload
+    assert cache.metrics["cache_hits"] == 1
+    assert cache.metrics["upstream_loads"] == 1
+    assert cache.metrics["negative_not_cached"] == 0
+    assert len(calls) == 1
+
+
+def test_empty_statistics_do_not_create_long_lived_negative_cache(tmp_path):
+    cache = store(tmp_path)
+    attempts = []
+    def paid():
+        attempts.append(1)
+        return {"statistics": []}
+    load(cache, paid)
+    load(cache, paid)
+    assert len(attempts) == 2
+    assert cache.metrics["negative_not_cached"] == 2
+    assert cache.metrics["cache_hits"] == 0
