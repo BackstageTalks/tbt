@@ -93,7 +93,7 @@ def audit_members(browser, width):
           audit.state.feed.entitlements={results:server};
           audit.renderNavigation();audit.applyAccessStates();
           const result=document.querySelector('#mobileTabs [data-route="results"]');
-          const compare=document.querySelector('#mobileTabs [data-route="compare"]');
+          const compare=document.querySelector('.mobile-icon-nav [data-route="compare"]')\n            ||document.querySelector('.reference-navigation [data-route="compare"]');
           return {
             results:audit.resultsAccessAllowed(),
             comparator:audit.comparatorPlanAllowed(),
