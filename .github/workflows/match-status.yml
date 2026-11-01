@@ -204,20 +204,15 @@ jobs:
 
       - name: Archive completed MoviOdds source JSON to the user's Drive once daily
         # Existing externally driven half-hour clock; CDB imports remain manual.
-        # Explicit repository variable activates after a scoped Drive writer is
-        # independently provisioned, tested and SHA-readback verified.
+        # Automatically attempts once at UTC 04:00. Missing folder Editor
+        # permission fails only this archive job, never the match-status job.
         if: always() && github.event_name == 'workflow_dispatch'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          DRIVE_ARCHIVE_ENABLED: ${{ vars.BLINQ_MOVIODDS_DRIVE_ENABLED || 'false' }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$DRIVE_ARCHIVE_ENABLED" != "true" ]]; then
-            echo 'MOVIODDS_DRIVE_NOT_ENABLED_WRITER_AUTH_UNVERIFIED'
-            exit 0
-          fi
           hour="$(date -u +%H)"
           minute="$(date -u +%M)"
           if [[ "$hour" != "04" ]] || (( 10#$minute >= 30 )); then
