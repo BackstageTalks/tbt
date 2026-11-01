@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "purpose": "Verify autonomous MoviOdds provider-native source -> guarded CDB staging and dry-run",
+  "source": "moviodds",
+  "cdb_write_authorized": false,
+  "production_model_change_authorized": false,
+  "requested_dates": "last_3_completed_utc_days",
+  "trigger_kind": "single_read_only_smoke"
+}
