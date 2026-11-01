@@ -1691,7 +1691,7 @@
     return mergeConfig(base,cfg);
   }
   function comparatorAccessConfig(){
-    const base={plans:{trial:true,expired:false,rookie:true,pro:true,elite:true,legend:true,goat:true}};
+    const base={plans:{trial:false,expired:false,rookie:false,pro:false,elite:false,legend:true,goat:true}};
     const cfg=state.ui?.dashboard?.comparator||{};
     return mergeConfig(base,cfg);
   }
