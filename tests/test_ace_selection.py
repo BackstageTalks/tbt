@@ -123,3 +123,24 @@ def test_double_fault_confidence_is_predictive_and_capped_below_old_97_percent()
     assert report["settlement_enabled"] is True
     assert "empirical_calibration" in report
     assert report["uncertainty_model"] == "future_count_predictive_variance"
+
+
+def test_local_aces_projection_bypasses_only_missing_bookmaker_market():
+    now = datetime(2026, 11, 2, 9, tzinfo=timezone.utc)
+    rows = []
+    for i in range(10):
+        when = now - timedelta(days=20 + i * 8)
+        rows.append(historical(f"ca{i}", when, "A", f"CX{i}", 9, 3, 1, 2))
+        rows.append(historical(f"cb{i}", when, "B", f"CY{i}", 3, 8, 4, 2))
+    future = [prediction(now + timedelta(hours=5))]
+    restricted, _ = select_ace_picks(
+        rows, future, now=now, available_markets_by_event={},
+    )
+    assert restricted == []
+    local, _ = select_ace_picks(
+        rows, future, now=now, available_markets_by_event={},
+        allow_local_aces_fallback=True,
+    )
+    assert {row["market"] for row in local} == {"aces"}
+    assert local[0]["odds"] is None
+    assert local[0]["price_status"] == "projection_only"
