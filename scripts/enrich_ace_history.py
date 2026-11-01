@@ -196,7 +196,8 @@ def main() -> None:
                 continue
             status = enricher.enrich(match)
             report[status] += 1
-            if status in {"enriched", "unavailable"}:
+            # Conflict quarantine markers must survive to avoid repaying the same API miss.
+            if status in {"enriched", "unavailable", "conflict"}:
                 changed_years.add(match.scheduled_at.year)
                 processed_since_checkpoint += 1
             for player_id in participants:
