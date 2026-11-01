@@ -15,6 +15,7 @@ from typing import Any
 
 from tbt.services.market_selection import _walk_market_rows, _outcome_text, _price, _match_side
 from tbt.providers.budget import RequestBudgetExceeded
+from tbt.services.ace_under_buffer import ace_under_eligible, ace_under_preferred
 
 
 ACE_DF_REAL_ODDS_CONTRACT = "ace_df_real_api_v1"
@@ -297,17 +298,35 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
     if mean is None or mean < 0:
         return out, False, "missing_player_count_projection"
     priced = []
+    under_rejected_by_buffer = False
     for option in options:
         p_over = _player_ou_probability(mean, metric, option["line"])
         for direction in ("over", "under"):
+            # This guards actual offered player-aces UNDER contracts, not the
+            # projection itself or other betting markets. Fail closed.
+            if metric == "aces" and direction == "under" and not ace_under_eligible(mean, option["line"]):
+                under_rejected_by_buffer = True
+                continue
             probability = p_over if direction == "over" else 1 - p_over
             odds = float(option[direction])
             ev = probability * odds - 1
             if probability >= 0.60 and ev >= 0:
                 priced.append((ev, probability, odds, direction, option))
     if not priced:
-        return out, False, ("no_exact_player_total_ou_market" if not options
-                            else "player_total_ou_not_qualified")
+        reason = ("no_exact_player_total_ou_market" if not options
+                  else "ace_under_buffer_not_qualified" if metric == "aces" and under_rejected_by_buffer
+                  else "player_total_ou_not_qualified")
+        return out, False, reason
+    if metric == "aces":
+        # Among price/EV-qualified UNDER offers, use a preferred cushion if
+        # available. Otherwise keep the best eligible minimum-cushion line.
+        # OVER keeps its original EV ranking and can still win overall.
+        under_offers = [item for item in priced if item[3] == "under"]
+        if under_offers:
+            preferred = [item for item in under_offers
+                         if ace_under_preferred(mean, item[4]["line"])]
+            best_under = max(preferred or under_offers, key=lambda x: (x[0], x[1]))
+            priced = [item for item in priced if item[3] != "under"] + [best_under]
     _ev, probability, odds, direction, choice = max(priced, key=lambda x: (x[0], x[1]))
     line = float(choice["line"])
     stat = "Aces" if metric == "aces" else "Double Faults"

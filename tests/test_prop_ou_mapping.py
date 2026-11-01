@@ -36,8 +36,25 @@ class TestPropOverUnder(unittest.TestCase):
                 {"name": "Over", "description": "Bob", "point": 4.5, "price": 1.75},
             ]}]}]}
         rows = prop_ou_candidates(card, payload)
-        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["side"], "over")
         self.assertTrue(all(r["line"] == 5.5 for r in rows))
+
+    def test_aces_under_minimum_buffer_is_enforced(self):
+        card = {"market": "aces", "projection": 2.1,
+                "projection_subject": "Alice"}
+        payload = {"bookmakers": [{"key": "book", "markets": [{
+            "key": "player_aces",
+            "outcomes": [
+                {"name": "Under", "description": "Alice", "point": 2.5, "price": 1.9},
+                {"name": "Under", "description": "Alice", "point": 3.5, "price": 1.8},
+                {"name": "Under", "description": "Alice", "point": 4.5, "price": 1.65},
+            ],
+        }]}]}
+        result = prop_ou_candidates(card, payload)
+        assert {item["line"] for item in result} == {3.5, 4.5}
+        best = best_ou_option(card, payload)
+        assert best is not None and best["line"] == 4.5
 
     def test_sets_reject_unmodeled_lines(self):
         card = {"market": "sets", "best_of": 3, "projection": 2.7,

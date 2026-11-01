@@ -10,6 +10,8 @@ import math
 import re
 from typing import Any
 
+from tbt.services.ace_under_buffer import ace_under_eligible, ace_under_preferred
+
 
 def _number(value: Any) -> float | None:
     try:
@@ -133,6 +135,9 @@ def prop_ou_candidates(card: dict, odds_payload: dict) -> list[dict]:
             if not isinstance(market, dict) or market.get("key") not in market_keys:
                 continue
             for quote in _proper_outcomes(book, market, player):
+                if (metric == "aces" and quote["side"] == "under"
+                        and not ace_under_eligible(card.get("projection"), quote["line"])):
+                    continue
                 probs = _probabilities(card, quote["line"])
                 if probs is None:
                     continue
@@ -149,5 +154,16 @@ def prop_ou_candidates(card: dict, odds_payload: dict) -> list[dict]:
 
 def best_ou_option(card: dict, odds_payload: dict, *, min_probability: float = 0.60) -> dict | None:
     """Find a candidate satisfying both probability and nonnegative modeled EV."""
-    return next((x for x in prop_ou_candidates(card, odds_payload)
-                 if x["model_probability"] >= min_probability and x["expected_value"] >= 0), None)
+    qualifying = [x for x in prop_ou_candidates(card, odds_payload)
+                  if x["model_probability"] >= min_probability and x["expected_value"] >= 0]
+    if not qualifying or str(card.get("market") or "").lower() != "aces":
+        return qualifying[0] if qualifying else None
+    # Rank eligible UNDER lines by cushion preference before comparing the
+    # chosen UNDER with OVER on modeled EV. All prices remain real offers.
+    under = [x for x in qualifying if x["side"] == "under"]
+    if not under:
+        return qualifying[0]
+    preferred = [x for x in under if ace_under_preferred(card["projection"], x["line"])]
+    chosen_under = (preferred or under)[0]
+    return max([x for x in qualifying if x["side"] == "over"] + [chosen_under],
+               key=lambda x: (x["expected_value"], x["model_probability"]))
