@@ -23,7 +23,9 @@ jobs:
     env:
       BLINQ_PUBLIC_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
       BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
-      # Separate scoped writer; existing BLINQ_DRIVE_READER_JSON is read-only.
+      # Existing service account can write ONLY after folder-level Editor
+      # permission is granted on the operator's specific MoviOdds folder.
+      BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
       BLINQ_DRIVE_WRITER_JSON: ${{ secrets.BLINQ_DRIVE_WRITER_JSON }}
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$BLINQ_LIVE_WORKER_TOKEN" || { echo 'BLOCKED_EXPORT_WORKER_TOKEN_MISSING'; exit 1; }
-          test -n "$BLINQ_DRIVE_WRITER_JSON" || { echo 'BLOCKED_MOVIODDS_DRIVE_WRITER_MISSING'; exit 1; }
+          test -n "$BLINQ_DRIVE_WRITER_JSON" || test -n "$BLINQ_DRIVE_READER_JSON" || { echo 'BLOCKED_MOVIODDS_DRIVE_CREDENTIAL_MISSING'; exit 1; }
           echo 'MOVIODDS_EXPORT_PREREQUISITES_PRESENT'
       - name: Install authenticated Drive client
         run: python -m pip install --disable-pip-version-check google-auth requests
