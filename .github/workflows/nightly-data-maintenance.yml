@@ -1,6 +1,9 @@
 name: Nightly data maintenance (no TennisAPI)
 
 on:
+  schedule:
+    - cron: '30 0 * * *'
+      timezone: Europe/Bratislava
   push:
     branches: [main]
     paths:
@@ -54,7 +57,7 @@ jobs:
           local = now_utc.astimezone(zone)
           event = os.environ.get("BLINQ_EVENT_NAME", "")
 
-          if event == "push":
+          if event in ("push", "schedule"):
               forced = "[force-nightly]" in os.environ.get("BLINQ_HEAD_COMMIT_MESSAGE", "")
               if forced:
                   env_stop_local = local + timedelta(hours=3, minutes=30)
