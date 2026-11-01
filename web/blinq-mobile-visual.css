@@ -46,7 +46,7 @@
     height:128px!important; min-height:128px!important; max-height:128px!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero-copy {
-    padding:14px 18px!important; max-width:75%!important;
+    padding:14px 0!important; max-width:var(--hero-copy-mobile-width,70%)!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero h2 {
     font-size:19px!important; line-height:1.2!important; margin:5px 0!important;
@@ -115,7 +115,7 @@
  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked)>:is(.hub-time,.hub-tournament-cell,.hub-match-cell){background:transparent!important;}
  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-detail{background:#1c4d3e!important;border:1px solid #398367!important;color:#eafff5!important;font-weight:600!important;}
  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #insightShortcut.is-live-enabled:not(:disabled):not(.is-access-locked){color:#54e4b3!important;}
- body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero-copy{padding:8px 18px!important;}
+ body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero-copy{padding:8px 0!important;}
  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardHero .dashboard-hero-copy p{margin:4px 0 0!important;line-height:1.3!important;}
 }
 
