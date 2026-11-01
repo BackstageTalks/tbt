@@ -132,6 +132,7 @@ from tbt.providers.shared_budget import (
     SharedBudgetExhausted,
     SharedBudgetUnavailable,
 )
+from tbt.providers.shared_rate import SharedRateBusy, SharedRateUnavailable
 from tbt.services.entitlements import (
     filter_feed_for_access,
     filter_results_for_categories,
@@ -1164,7 +1165,7 @@ def match_intelligence(req):
             client = RapidTennisClient(
                 settings,
                 request_budget=None if remote_ledger_configured else (
-                    lambda *args, **kwargs: reserve_shared_api_budget("history")
+                    lambda *args, **kwargs: reserve_shared_api_budget("history", paced=True)
                 ),
             )
             # Explicit opt-in still has a strict per-request ceiling. The default
@@ -1647,7 +1648,7 @@ def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
         else:
             client=RapidTennisClient(
                 settings,
-                request_budget=lambda *args, **kwargs: reserve_shared_api_budget("live"),
+                request_budget=lambda *args, **kwargs: reserve_shared_api_budget("live", paced=True),
             )
             # A single slow provider request must not exceed the SWA HTTP window.
             client.configure_runtime_fast_fail(timeout_seconds=5,attempts=1)
@@ -1838,10 +1839,16 @@ def internal_api_budget_reserve(req):
         # External paid clients reserve exactly one attempt at a time.
         if purpose not in {"live","match","refresh","history"} or type(count) is not int or count != 1:
             return response({"error":"invalid_budget_request"},400)
-        result=reserve_shared_api_budget(purpose,count)
+        result=reserve_shared_api_budget(purpose,count, paced=True)
         return response({"ok":True,"budget":result})
     except SharedBudgetExhausted:
         return response({"error":"api_budget_exhausted"},429)
+    except SharedRateBusy as exc:
+        out = response({"error":"api_rate_busy"},429)
+        out.headers["Retry-After"] = str(max(0.02, min(exc.retry_after_seconds, 0.5)))
+        return out
+    except SharedRateUnavailable:
+        return response({"error":"api_rate_unavailable"},503)
     except SharedBudgetUnavailable:
         logging.exception("Shared API budget unavailable")
         return response({"error":"api_budget_unavailable"},503)
@@ -2103,7 +2110,7 @@ def internal_match_status_worker(req):
         feed_payload = read_feed(FEED)
         previous = load_match_status_snapshot() or {}
         client = RapidTennisClient(
-            settings, request_budget=lambda *args, **kwargs: reserve_shared_api_budget("match")
+            settings, request_budget=lambda *args, **kwargs: reserve_shared_api_budget("match", paced=True)
         )
         # An earlier run hit the HTTP gateway after ~45s. This worker uses
         # short batches and a bounded latency/request budget; all other users
