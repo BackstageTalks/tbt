@@ -6,11 +6,10 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(process.argv[2] || 'web/app.js', 'utf8');
-const start = source.indexOf('  function stableAceDisplayOdds(');
+const start = source.indexOf('  function verifiedAceProviderOdds(');
 const end = source.indexOf('  function projectionOddsHtml(', start);
 assert(start >= 0 && end > start, 'Missing ACES price normalization from served app.js');
-const sandbox = {verifiedAceProviderOdds: row =>
-  row.market === 'aces' && row.price_status === 'priced_projection' ? Number(row.odds) : NaN};
+const sandbox = {};
 vm.createContext(sandbox);
 vm.runInContext(source.slice(start, end), sandbox);
 
