@@ -867,11 +867,11 @@
     },
     "comparator": {
       "plans": {
-        "trial": true,
+        "trial": false,
         "expired": false,
-        "rookie": true,
-        "pro": true,
-        "elite": true,
+        "rookie": false,
+        "pro": false,
+        "elite": false,
         "legend": true,
         "goat": true
       }
