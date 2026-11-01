@@ -141,3 +141,18 @@ jobs:
           done
           echo '::error::Production optimized frontend read-back did not converge'
           exit 1
+
+      - name: Replay verified CLV archives for TOP/VALUE
+        # Existing research data only. No extra provider requests.
+        if: ${{ contains(github.event.head_commit.message, '[clv-detail]') }}
+        timeout-minutes: 10
+        env:
+          TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PUBLIC_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          CLV_REPLAY_DAYS: "2"
+        run: |
+          set -euo pipefail
+          python scripts/replay_clv_detail_archives.py
+
