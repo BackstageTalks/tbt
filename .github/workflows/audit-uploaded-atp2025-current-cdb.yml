@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: atp2025-flashscore-cdb-research-\${{ github.run_id }}
+  group: atp2025-flashscore-cdb-research-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      GH_TOKEN: \${{ secrets.TBT_DATA_GH_TOKEN }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PYTHONPATH: scripts
     steps:
       - uses: actions/checkout@v4
@@ -92,7 +92,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: atp2025-flashscore-current-cdb-audit-\${{ github.run_id }}
+          name: atp2025-flashscore-current-cdb-audit-${{ github.run_id }}
           path: .cache/tbt/atp2025-flashscore-audit/report.json
           if-no-files-found: ignore
           retention-days: 30
