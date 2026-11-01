@@ -133,21 +133,10 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int) ->
             }
             return {}
 
-    # Probe an existing documented event route FIRST to distinguish a general
-    # account/header failure from an optional country-specific odds 204.
+    # Known event and post-match CDB fields first. Country odds provider
+    # lookup may legitimately return 204 without the required quota header.
+    # Keep it last so a single missing header cannot mask core source coverage.
     detail = read("event_detail", f"/api/tennis/event/{event_id}")
-
-    # Provider-country mapping must be checked *before* assuming 1 = any named book.
-    read("odds_providers_sk_web", "/api/odds/providers/SK/web")
-    read("odds_providers_sk_web_odds", "/api/odds/providers/SK/web-odds")
-    read("odds_providers_gb_web", "/api/odds/providers/GB/web")
-
-    # Calendar batching candidate versus today's production day route.
-    read("monthly_categories", "/api/tennis/calendar/11/2026/categories",
-         params={"days": "1,2,3,4,5"})
-    read("monthly_calendar", "/api/tennis/calendar/11/2026")
-    read("daily_categories", "/api/tennis/calendar/1/11/2026/categories")
-
     event = _obj(_obj(detail).get("event", detail))
     season_id = _nested_int(event, "season", "id")
     tournament_id = _nested_int(event, "tournament", "uniqueTournament", "id")
@@ -159,12 +148,12 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int) ->
         "player_id": player_id, "event_id_matched": (
             str(event.get("id", event.get("eventId", ""))) == str(event_id))}
 
-    read("event_odds", f"/api/tennis/event/{event_id}/odds/1/all")
     read("event_statistics", f"/api/tennis/event/{event_id}/statistics")
     read("point_by_point", f"/api/tennis/event/{event_id}/point-by-point")
-    read("match_streak", f"/api/tennis/event/{event_id}/streak")
-    read("graph_sequence", f"/api/tennis/event/{event_id}/graph/sequence")
-    read("win_probability", f"/api/tennis/event/{event_id}/win-probability")
+    read("monthly_categories", "/api/tennis/calendar/11/2026/categories",
+         params={"days": "1,2,3,4,5"})
+    read("monthly_calendar", "/api/tennis/calendar/11/2026")
+    read("daily_categories", "/api/tennis/calendar/1/11/2026/categories")
 
     if player_id is not None:
         read("previous_player_matches", f"/api/tennis/player/{player_id}/events/previous/0")
@@ -175,6 +164,7 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int) ->
     if season_id is not None:
         read("season_odds", f"/api/odds/season/{season_id}/provider/1/all")
 
+    read("event_odds", f"/api/tennis/event/{event_id}/odds/1/all")
     if tournament_id is not None:
         read("tournament_seasons", f"/api/tennis/tournament/{tournament_id}/seasons")
         if season_id is not None:
@@ -182,6 +172,15 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int) ->
             read("tournament_rounds", prefix + "/rounds")
             read("tournament_venues", prefix + "/venues")
             read("tournament_draw", prefix + "/cup-trees")
+
+    read("match_streak", f"/api/tennis/event/{event_id}/streak")
+    read("graph_sequence", f"/api/tennis/event/{event_id}/graph/sequence")
+    read("win_probability", f"/api/tennis/event/{event_id}/win-probability")
+
+    # Experimental country odds lookup LAST: no quota-header bypass.
+    read("odds_providers_sk_web", "/api/odds/providers/SK/web")
+    read("odds_providers_sk_web_odds", "/api/odds/providers/SK/web-odds")
+    read("odds_providers_gb_web", "/api/odds/providers/GB/web")
 
     report["request_count"] = client.request_count
     report["provider_header_remaining"] = client.rate_limit_remaining
