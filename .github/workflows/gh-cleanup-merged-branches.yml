@@ -48,7 +48,7 @@ jobs:
                   raise
           def esc(s):return urllib.parse.quote(s,safe="")
           def branch_safe(name):
-              return (name.startswith("analysis/") or name.startswith("audit/")) and not deny.search(name)
+              return name.startswith(("analysis/","audit/","fix/","feat/","feature/")) and not deny.search(name)
           branches=[]
           for page in range(1,16):
               status,data=request("GET",f"/branches?per_page=100&page={page}")
@@ -139,7 +139,7 @@ jobs:
               name=item["branch"]
               assert name not in names
               names.add(name)
-              assert name.startswith(("audit/","analysis/")) and name!="main"
+              assert name.startswith(("audit/","analysis/","fix/","feat/","feature/")) and name!="main"
               assert item["ahead_by"]==0 and item["protected"]==False
               path=urllib.parse.quote(name,safe="")
               status,b=call("GET","/branches/"+path)
