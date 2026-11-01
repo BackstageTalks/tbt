@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "mode": "dry-run",
-  "approved_by_operator": false,
+  "mode": "write",
+  "approved_by_operator": true,
   "source_tag": "blinq-full-training-backup-40554915730-1",
   "source_2026_sha256": "b1d91433808b3c5c6bc0fec36098a92c68a17f7b25da582e462d67f9a8d97d7c",
   "expected_old_only": 97736,
   "provider_requests": 0,
   "model_changes": false,
-  "reason": "Validate verified lossless 2026 schema alignment against frozen backup and latest SHA-verified CDB; dry-run only, no provider calls or writes.",
+  "reason": "Operator-approved lossless recovery after successful dry-run 41310165009: 97736 backup-only matches, 0 existing overwrites, 9 conflicts retained live; enforce global lock, immutable prewrite backup, CAS, fresh independent readback.",
   "write_policy": "Global lock, immutable fresh prewrite backup, CAS, existing ReleaseStore, complete independent CDB readback",
   "diagnostic_attempt": 2
 }
