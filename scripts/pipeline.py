@@ -12,7 +12,7 @@ from pathlib import Path
 from _bootstrap import ROOT
 from morning_clock import morning_selection_now, morning_publication_delay
 from download_tennis_history import read_json, write_json
-from history_download_budget import LocalRequestBudget, reserve_allocation
+from history_download_budget import LocalRequestBudget
 from release_store import ReleaseStore
 from rank_feature_inputs import load_rank_feature_inputs
 from tbt.config import settings
@@ -1237,20 +1237,13 @@ def main():
     doubles_store = ReleaseStore(args.data_repository, "tbt-doubles-data-v1", doubles_dir)
     doubles_history = _load_doubles_history(doubles_store)
     current_only = args.mode == "current-refresh"
-    budget_path = history_dir / "request_budget.json"
-    if current_only:
-        # Emergency/current-day serving refresh is deliberately read-only with
-        # respect to canonical history. The durable shared API guard remains the
-        # hard quota authority; do not mutate the history release just to reserve
-        # a local allowance.
-        allowance = args.max_requests
-    else:
-        ledger, allowance = reserve_allocation(read_json(budget_path, {}), args.max_requests,
-            run_id=os.getenv("GITHUB_RUN_ID", "manual"), purpose="refresh")
-        if not allowance:
-            raise SystemExit("Refresh budget exhausted; previously deployed feed stays available with its timestamp")
-        write_json(budget_path, ledger)
-        history_store.upload_bundle([budget_path])
+    # The Azure CAS shared budget is the authoritative provider-day limit.
+    # Reserve *actual calls* through RapidTennisClient, not the requested
+    # maximum in the historical CDB ledger. Pre-reserving 14500 could starve
+    # later jobs even if the morning refresh used only a small fraction, and
+    # needlessly created an extra GitHub release bundle transaction.
+    # Keep the existing secondary local per-run guard and shared 500 reserve.
+    allowance = args.max_requests
     # A complete refresh now includes the verified rank-history/identity inputs,
     # canonical recent-history checkpoints, and multiple odds-backed markets.
     # The former 30-minute local deadline expired *before* upcoming discovery on

@@ -29,7 +29,9 @@ def test_production_refresh_budget_covers_heavy_recent_history_before_upcoming()
 def test_provider_request_caps_remain_independent_of_elapsed_time():
     source = (Path(__file__).resolve().parents[1] / "scripts" / "pipeline.py").read_text(encoding="utf-8")
     assert "provider.request_limit = allowance" in source
-    assert 'purpose="refresh"' in source
+    assert "allowance = args.max_requests" in source
+    assert "reserve_allocation(" not in source
+    assert "history_store.upload_bundle([budget_path])" not in source
     assert "combined_reservation" in (
         Path(__file__).resolve().parents[1] / "api" / "tbt" / "providers" / "rapidapi.py"
     ).read_text(encoding="utf-8")
