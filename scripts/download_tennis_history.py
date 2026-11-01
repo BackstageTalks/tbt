@@ -570,37 +570,50 @@ def main():
     # No rolling reservation ledger is used for history/statistics downloads.
     allocation = args.max_requests
     rows = load_partitions(directory) if list(directory.glob("history-*.parquet")) else []
-    matches, history_safety = sanitize_history_identities(rows)
+    clean, history_safety = sanitize_history_identities(rows)
+    protected_provider_ids = set()
     if history_safety.get("changed"):
-        print(json.dumps({"history_safety": history_safety}, ensure_ascii=False), flush=True)
-        limit = quarantine_budget(len(rows))
-        if int(history_safety.get("quarantined_rows") or 0) > limit:
+        # Existing canonical IDs may be mutually incompatible, but they are
+        # NOT permission to delete rows from the authoritative release.
+        # Verified repair/readback for 2026 exposed six such ITF rows.
+        only_ambiguous = (
+            int(history_safety.get("merged_rows_removed") or 0) == 0
+            and int(history_safety.get("quarantined_rows") or 0) > 0
+            and not history_safety.get("duplicate_match_ids")
+            and len(rows) == len(clean) + int(history_safety["quarantined_rows"])
+        )
+        if not only_ambiguous:
             raise ValueError(
-                f"History identity corruption exceeds automatic safety budget {limit}; "
-                "run mode=history-repair for diagnostics"
+                "Canonical history identity repair would change stored rows; "
+                "review required before paid API requests"
             )
-        # Persist the deterministic safety cleanup before spending provider calls.
-        # This removes legacy duplicate identity corruption from the private release
-        # and makes the run resumable even if the provider budget is later exhausted.
-        if store:
-            repaired_paths = []
-            repaired_removals = []
-            for year in history_safety.get("affected_years", []):
-                path, was_removed = sync_year_partition(
-                    matches, directory, int(year),
-                    extra_manifest={"identity_safety_repair": "automatic"},
-                )
-                if path is not None:
-                    repaired_paths.append(path)
-                elif was_removed:
-                    repaired_removals.append(f"history-{int(year):04d}.parquet")
-            manifest_file = directory / "history_manifest.json"
-            if manifest_file.is_file():
-                repaired_paths.append(manifest_file)
-            safety_report = directory / "history_identity_safety_report.json"
-            write_json(safety_report, history_safety)
-            repaired_paths.append(safety_report)
-            store.upload_bundle(repaired_paths, remove_names=repaired_removals)
+        protected_provider_ids = set(
+            history_safety.get("duplicate_provider_event_ids") or []
+        )
+        if not protected_provider_ids:
+            raise ValueError("Ambiguous identity lacks a provider collision witness")
+        print(json.dumps({
+            "canonical_existing_collision_quarantine": {
+                "status": "PRESERVED_UNCHANGED",
+                "protected_rows": history_safety["quarantined_rows"],
+                "duplicate_provider_events": len(protected_provider_ids),
+                "production_rows_removed": 0,
+                "canonical_repair_published": False,
+            }
+        }, sort_keys=True), flush=True)
+    # Preserve every original byte-backed canonical match in the in-memory
+    # writer; merge_trusted_history_batch protects colliding pairs and
+    # quarantines incoming claims. Never publish the sanitized/subset list.
+    matches = rows
+    if protected_provider_ids and args.mode == "identity":
+        # Identity recovery may rewrite an event identifier. The conflicts
+        # must first receive independent source-level adjudication.
+        raise ValueError("Identity recovery blocked on unresolved existing provider IDs")
+    def eligible_rows_for_enrichment():
+        return [
+            row for row in matches
+            if str(_provider_event_id(row) or "") not in protected_provider_ids
+        ]
     progress_file = directory / "download_progress.json"
     progress = read_json(progress_file, {"schema": 1, "completed_days": []})
     if progress.get("schema") != 1:
@@ -747,7 +760,7 @@ def main():
             checkpoint(changed, True)
         elif args.mode == "extras":
             changed = set()
-            pending = _extras_candidates(matches, start, end)
+            pending = _extras_candidates(eligible_rows_for_enrichment(), start, end)
             report["extras_candidate_rows"] = len(pending)
             report["extras_candidate_rows_by_year"] = dict(Counter(
                 str(m.scheduled_at.year) for m in pending
@@ -798,7 +811,7 @@ def main():
                                          targeted=args.targeted_statistics)
             changed = set()
             statistics_candidates, statistics_plan = _statistics_candidates(
-                matches, start, end, targeted=args.targeted_statistics,
+                eligible_rows_for_enrichment(), start, end, targeted=args.targeted_statistics,
                 historical_high_yield=high_yield_setting == "true",
                 target_tour=args.target_tour)
             write_json(directory / "statistics_gap_plan.json", statistics_plan)
@@ -871,6 +884,11 @@ def main():
         report["stored_matches"] = len(matches)
         report["completed_days"] = len(progress["completed_days"])
         report["allocated_requests"] = allocation
+        report["existing_cdb_conflict_rows_preserved"] = int(
+            history_safety.get("quarantined_rows") or 0
+        )
+        report["existing_cdb_conflict_event_ids"] = len(protected_provider_ids)
+        report["existing_cdb_conflict_row_removals"] = 0
         if provider_quarantine:
             report["provider_identity_quarantined"] = len(provider_quarantine)
         try:

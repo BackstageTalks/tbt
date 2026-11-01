@@ -229,6 +229,39 @@ def main() -> None:
             f"History repair blocked: {total_quarantined} quarantined rows exceed safety budget {limit}."
         )
 
+    # A canonical row with conflicting provider-event identity is NOT a
+    # deletion candidate. Keep the existing partition byte-for-byte and let
+    # the writer's protected-history merge quarantine future conflicting
+    # provider claims. The metadata report is local; do not publish a smaller
+    # history manifest and never mask malformed or provably duplicate rows.
+    only_ambiguous_canonical_id = bool(
+        changed_years
+        and not raw_quarantine
+        and int(identity.get("merged_rows_removed") or 0) == 0
+        and int(identity.get("quarantined_rows") or 0) > 0
+        and not identity.get("duplicate_match_ids")
+        and len(parsed_records) == original_rows
+        and len(safe) + int(identity["quarantined_rows"]) == original_rows
+    )
+    if only_ambiguous_canonical_id:
+        report["status"] = "EXISTING_AMBIGUOUS_PROVIDER_IDS_PRESERVED_NO_WRITE"
+        report["canonical_rows_preserved"] = int(original_rows)
+        report["released_partitions_changed"] = 0
+        report["reason"] = "Conflicting existing provider claims require review; removal prohibited"
+        report_path = directory / "history_repair_report.json"
+        report_path.write_text(
+            json.dumps(report, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+        print(json.dumps({
+            "status": report["status"],
+            "canonical_rows_preserved": report["canonical_rows_preserved"],
+            "quarantined_identity_rows": identity["quarantined_rows"],
+            "changed_years_not_published": sorted(changed_years),
+            "cdb_writes": 0,
+        }, sort_keys=True), flush=True)
+        return
+
     if not changed_years:
         print(json.dumps(report, indent=2, ensure_ascii=False, default=str))
         return

@@ -227,3 +227,40 @@ def test_history_monthly_provider_error_falls_back_to_daily():
     assert len(provider.calls) == 4
     assert all(row[2] is True for row in provider.calls)
     assert progress["completed_days"] == ["2026-11-01", "2026-11-02"]
+
+def test_2016_native_backfill_does_not_rewrite_2026_ambiguous_cdb_rows(match_factory):
+    """History checkpoints include only the new year, preserving ITF collisions."""
+    old1 = replace(
+        match_factory("itf-1", "A", "B", "A", tour="wta"),
+        scheduled_at=datetime(2026, 10, 23, 18, 55, tzinfo=timezone.utc),
+        provider_payload={"_tbt_provider_event_id": "ambiguous-itf"},
+    )
+    old2 = replace(
+        match_factory("itf-2", "C", "D", "C", tour="wta"),
+        scheduled_at=old1.scheduled_at,
+        provider_payload={"_tbt_provider_event_id": "ambiguous-itf"},
+    )
+    final = replace(
+        match_factory("wimbledon-2016", "Serena", "Kerber", "Serena", tour="wta"),
+        scheduled_at=datetime(2016, 7, 9, 12, tzinfo=timezone.utc),
+        provider_payload={"_tbt_provider_event_id": "7115726"},
+    )
+
+    class Provider:
+        request_count = 0
+        def matches_for_day(self, tour, day, historical):
+            self.request_count += 1
+            return [final] if tour == "wta" else []
+
+    records = {old1.match_id: old1, old2.match_id: old2}
+    progress = {"completed_days": []}
+    checkpoints = []
+    download_days(
+        Provider(), records, progress, date(2016, 7, 9), date(2016, 7, 9),
+        lambda years, publish=False: checkpoints.append((set(years), publish))
+    )
+    assert len(records) == 3
+    assert {record.match_id for record in records.values()
+            if record.scheduled_at.year == 2026} == {"itf-1", "itf-2"}
+    assert checkpoints == [({2016}, False)]
+    assert progress["completed_days"] == ["2016-07-09"]
