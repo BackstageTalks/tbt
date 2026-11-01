@@ -105,7 +105,17 @@ def build_optimized_revision(files: dict[str, bytes]) -> dict[str, bytes]:
     Never trust deployment.json checksums alone when checking optimized assets:
     independently reproduce the JS/CSS bytes first.
     """
-    from scripts.optimize_web_assets import ASSETS, build
+    # Direct CLI execution has scripts/ (not the repository root) on sys.path.
+    # Resolve the sibling optimizer without relying on the runner's CWD.
+    try:
+        from scripts.optimize_web_assets import ASSETS, build
+    except ModuleNotFoundError as exc:
+        if exc.name != "scripts":
+            raise
+        root = str(Path(__file__).resolve().parents[1])
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from scripts.optimize_web_assets import ASSETS, build
 
     with tempfile.TemporaryDirectory(prefix="blinq-watchdog-") as tmp:
         web = Path(tmp) / "web"
