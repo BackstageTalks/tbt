@@ -342,7 +342,42 @@ def identity_safety_aggregate(safety: dict) -> dict:
     }
 
 
-def _load(directory, *, safety_report: Path | None = None):
+def verified_provider_collision_quarantine(safety: dict, expected_rows: int) -> bool:
+    """Stage-only exception for explicitly quantified ambiguous provider IDs.
+
+    Every collided row stays in the immutable CDB and is excluded from staging.
+    This NEVER authorizes a writer or a readback that omits quarantined rows.
+    """
+    if type(expected_rows) is not int or not 0 < expected_rows <= 20:
+        return False
+    input_rows = safety.get("input_rows")
+    output_rows = safety.get("output_rows")
+    quarantined = safety.get("quarantined_rows")
+    duplicates = safety.get("duplicate_provider_event_ids") or []
+    quarantine = safety.get("quarantine") or []
+    return (
+        type(input_rows) is int and type(output_rows) is int
+        and type(quarantined) is int and quarantined == expected_rows
+        and safety.get("merged_rows_removed") == 0
+        and not (safety.get("duplicate_match_ids") or [])
+        and 0 < len(duplicates) <= expected_rows
+        and len(quarantine) == quarantined
+        and input_rows == output_rows + quarantined
+        and safety.get("changed") is True
+        and safety.get("affected_years") == [2026]
+        and all(
+            isinstance(row, dict)
+            and row.get("reason") == "ambiguous_duplicate_identity"
+            and str(row.get("provider_event_id") or "") in duplicates
+            and str(row.get("match_id") or "")
+            for row in quarantine
+        )
+    )
+
+
+def _load(directory, *, safety_report: Path | None = None,
+          isolate_provider_collisions: bool = False,
+          expected_provider_quarantine: int = 0):
     rows, safety = sanitize_history_identities(load_partitions(directory))
     aggregate = identity_safety_aggregate(safety)
     if safety_report is not None:
@@ -350,7 +385,12 @@ def _load(directory, *, safety_report: Path | None = None):
         safety_report.write_text(json.dumps(aggregate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print("CDB_IDENTITY_SAFETY_AGGREGATE", json.dumps(aggregate, sort_keys=True), flush=True)
     if safety.get("quarantined_rows") or safety.get("changed"):
-        raise ValueError("Canonical identity sanitizer changed or quarantined history")
+        if not isolate_provider_collisions or not verified_provider_collision_quarantine(
+                safety, expected_provider_quarantine):
+            raise ValueError("Canonical identity sanitizer changed or quarantined history")
+    elif isolate_provider_collisions and expected_provider_quarantine:
+        # Never silently treat a missing expected quarantine as approval to widen scope.
+        raise ValueError("Expected provider-ID quarantine disappeared; repeat full audit")
     return rows
 
 
@@ -358,16 +398,28 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--mode", choices=["stage", "write", "verify"], required=True)
     p.add_argument("--pairwise", action="store_true", help="Isolate unrelated conflicting rate pairs")
+    p.add_argument("--isolate-provider-collisions", action="store_true",
+                   help="Read-only STAGING only: exclude precisely audited 2026 ambiguous provider identities")
+    p.add_argument("--expected-provider-quarantine", type=int, default=0)
     p.add_argument("--history-dir", type=Path)
     p.add_argument("--before-dir", type=Path)
     p.add_argument("--stage-file", type=Path)
     p.add_argument("--out-dir", required=True, type=Path)
     a = p.parse_args()
     a.out_dir.mkdir(parents=True, exist_ok=True)
+    if a.isolate_provider_collisions and (a.mode != "stage"
+            or not 0 < a.expected_provider_quarantine <= 20):
+        p.error("Provider-collision isolation requires stage mode and exact 1..20 quarantine pin")
     if a.mode == "stage":
         if not a.history_dir:
             p.error("--history-dir is required")
-        staged, counts = stage(_load(a.history_dir, safety_report=a.out_dir / "identity-safety.json"), pairwise=a.pairwise)
+        staged, counts = stage(_load(
+            a.history_dir, safety_report=a.out_dir / "identity-safety.json",
+            isolate_provider_collisions=a.isolate_provider_collisions,
+            expected_provider_quarantine=a.expected_provider_quarantine,
+        ), pairwise=a.pairwise)
+        if a.isolate_provider_collisions:
+            counts["excluded_ambiguous_provider_rows"] = a.expected_provider_quarantine
         with (a.out_dir / "stage.jsonl").open("w", encoding="utf-8") as fh:
             for row in staged:
                 fh.write(json.dumps(row, sort_keys=True) + "\n")
