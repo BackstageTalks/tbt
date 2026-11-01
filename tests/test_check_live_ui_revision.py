@@ -2,6 +2,7 @@
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -92,6 +93,22 @@ class UiWatchdogTests(unittest.TestCase):
         checked = revision_files(web, deployed_sha)
         self.assertEqual(checked, original)
         self.assertNotEqual(checked["app.js"], (web / "app.js").read_bytes())
+
+    def test_direct_execution_can_import_the_pinned_optimizer(self):
+        # python scripts/check_live_ui_revision.py puts scripts/, not the
+        # repository root, on sys.path. Reproduce that isolated import shape.
+        scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+        code = (
+            "import sys; sys.path.insert(0, sys.argv[1]); "
+            "import check_live_ui_revision as w; "
+            "assets, build = w.load_pinned_optimizer(); "
+            "assert assets == ('app.js', 'blinq-app.css'); "
+            "assert callable(build)"
+        )
+        subprocess.run(
+            [sys.executable, "-I", "-c", code, str(scripts_dir)],
+            check=True, capture_output=True, text=True, cwd=self.web,
+        )
 
     def test_exact_optimized_deployment_passes_and_modified_js_is_rejected(self):
         # The production pipeline intentionally rewrites whitespace in JS/CSS.
