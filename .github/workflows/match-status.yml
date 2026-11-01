@@ -36,6 +36,28 @@ jobs:
           echo
           # A 503 with provider_errors now fails this job rather than reporting an empty PASS.
 
+      - name: Capture finalized MoviOdds tennis statistics in DB
+        # Reuse the existing 30-minute external status clock; API Pro is separate.
+        continue-on-error: true
+        env:
+          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          curl --fail-with-body --silent --show-error --max-time 90 \
+            -X POST -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN" \
+            "${BLINQ_BASE_URL%/}/api/v1/internal/moviodds-stats-worker?mode=final" \
+            -o /tmp/moviodds-final.json
+          python - <<'PY'
+          import json
+          report=json.load(open("/tmp/moviodds-final.json"))
+          if not report.get("ok") or report.get("errors"):
+              raise SystemExit("MoviOdds FINAL durable collection failed")
+          print("MOVIODDS_FINAL_DB", report.get("final"))
+          PY
+
       - name: Dispatch completed Telegram ELITE results check after settlement
         # Reuse the existing externally scheduled 30-minute match-status clock.
         # Result evaluation is read-only; no second provider/API budget.
