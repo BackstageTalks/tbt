@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   account-lifecycle:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && vars.BLINQ_NATIVE_SCHEDULES_ENABLED == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
