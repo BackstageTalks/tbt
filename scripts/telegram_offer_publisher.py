@@ -131,6 +131,18 @@ def _name_map(rows):
     return {full:(full if len(used[display.casefold()])>1 else display)
             for full,display in names_out.items()}
 
+def _demo_ace_display_price(row):
+    """Stable visual-only ACES value: NEVER write it into feed, receipt, ROI or model."""
+    identity="|".join(str(value or "") for value in (
+        row.get("event_id"), row.get("selection_id") or row.get("winner_id"),
+        row.get("market_line"), row.get("ou_side"),
+    ))
+    h=2166136261
+    for character in identity:
+        h=((h ^ ord(character))*16777619) & 0xffffffff
+    return (150+(h % 31))/100.0
+
+
 def fmt(r,k,c,index=1,name_map=None,prefix_override=None):
     bet=r.get("betting") or {}
     selected=_selection_name(r)
@@ -161,7 +173,8 @@ def fmt(r,k,c,index=1,name_map=None,prefix_override=None):
     else:
         prob=num(bet.get("blinq_probability") or bet.get("model_probability") or r.get("blinq_probability") or r.get("probability"))
         values=[f"{(prob*100 if abs(prob)<=1 else prob):.1f}%" if prob is not None else "—"] if c.get("show_probability",True) else []
-    odds=num(bet.get("odds") or r.get("odds"))
+    odds=(_demo_ace_display_price(r) if k=="aces"
+          else num(bet.get("odds") or r.get("odds")))
     if c.get("show_odds",True):
         values.append(f"{odds:.2f}" if odds is not None and odds>1 else "—")
     prefix=prefix_override or OFFER_ICONS[k]
