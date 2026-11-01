@@ -2847,7 +2847,7 @@
     if(String(row?.market||row?.projection_metric||'').toLowerCase()!=='aces')return NaN;
     const identity=[
       row?.event_id||row?.match_id||row?.id||'',
-      row?.selection_id||row?.betting?.selection_id||row?.winner_id||row?.pick||row?.selection||'',
+      row?.betting?.selection_id||row?.selection_id||row?.winner_id||row?.pick||row?.selection||'',
     ].join('|');
     if(!identity.replaceAll('|',''))return NaN;
     let hash=2166136261;
