@@ -51,6 +51,6 @@ jobs:
         run: |
           set -euo pipefail
           gh workflow run cdb-drive-inbox.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f source_mode=moviodds -f moviodds_days_back=14 \
+            -f source_mode=moviodds -f moviodds_days_back=7 \
             -f request_id=moviodds-smoke-20261101
           echo 'EXISTING_CDB_GUARDED_WRITER_DISPATCHED_CHECK_TARGET_RUN_RESULT'
