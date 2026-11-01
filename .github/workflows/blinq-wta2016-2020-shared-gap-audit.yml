@@ -10,7 +10,6 @@ on:
     paths:
       - scripts/audit_wta_2016_2020_shared_gap_audit.py
       - tests/test_wta2016_2020_shared_gap_audit.py
-      - .github/workflows/blinq-wta2016-2020-shared-gap-audit.yml
 permissions:
   contents: read
   actions: read
