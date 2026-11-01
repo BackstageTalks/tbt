@@ -218,6 +218,35 @@ def main():
                 page.locator("#comparatorSearch0 [data-player-id='163480']").click()
                 assert page.evaluate("comparatorHarness.state.comparator.players[0].player_id") == "163480"
 
+                # Two provider identities with exactly the same visible
+                # name must produce ONE disabled result; never guess a winner.
+                page.evaluate("""() => {
+                    window.BlinqAuth.comparatorPlayers=async()=>({players:[
+                        {player_id:'provider-one',name:'Alexander Bublik',tour:'atp',rank:13},
+                        {player_id:'provider-two',name:'Alexander Bublik',tour:'atp',rank:14}
+                    ]});
+                }""")
+                page.locator("#comparatorPlayer0").fill("bubli")
+                page.locator("#comparatorSearch0 .comparator-search-primary").wait_for()
+                assert page.locator("#comparatorSearch0 .comparator-search-primary").count() == 1
+                assert page.locator("#comparatorSearch0 .comparator-search-primary").is_disabled()
+                assert "Identitu treba overiť" in page.locator("#comparatorSearch0").inner_text()
+
+                # Neither field can select the same person twice, even when
+                # the second field receives a different historical source ID.
+                page.evaluate("""() => {
+                    window.BlinqAuth.comparatorPlayers=async()=>({players:[
+                        {player_id:'hist-js:atp:BK92',name:'Alexander Bublik',tour:'atp'}
+                    ]});
+                }""")
+                page.locator("#comparatorPlayer1").fill("bubli")
+                page.locator("#comparatorSearch1 .comparator-search-primary").wait_for()
+                assert page.locator("#comparatorSearch1 .comparator-search-primary").is_disabled()
+                assert "Už vybraný" in page.locator("#comparatorSearch1").inner_text()
+                assert page.evaluate(
+                    "comparatorHarness.state.comparator.players[1]"
+                ) is None
+
                 # Realistic analysis data, not decorative placeholders.
                 page.evaluate("""() => {
                     const h=window.comparatorHarness;
@@ -245,6 +274,11 @@ def main():
                         confidence:{data_band:'medium'},tour:'atp',surface:'hard',best_of:3,
                         model_version:'v201-test',
                         artifact:{generated_at:'2026-10-08T03:46:00+00:00'},
+                        markets:{aces:{
+                            player1:{estimate:9.8,samples:12,effective_samples:10},
+                            player2:{estimate:6.2,samples:13,effective_samples:11},
+                            total_estimate:16.0
+                        }},
                         factors:[{label:'Surface Elo',advantage_player_id:'95935'}]
                     };
                     document.getElementById('routePanel').innerHTML=h.renderComparatorRoute();
@@ -252,6 +286,10 @@ def main():
                 }""")
                 panel=page.locator(".comparator-analytics")
                 panel.wait_for()
+                assert panel.locator(".comparator-market-bars").count() == 1
+                assert panel.locator(".comparator-market-bars [role=img]").count() == 0
+                assert panel.locator(".comparator-market-bar").count() == 2
+                assert panel.locator(".comparator-market-bars").get_attribute("aria-label")
                 assert panel.locator(".comparator-form-chip").count() == 4
                 assert panel.locator(".comparator-h2h-line").count() == 2
                 assert "1 : 2" in panel.locator(".comparator-h2h-line").first.inner_text()
