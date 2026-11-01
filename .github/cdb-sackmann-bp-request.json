@@ -18,5 +18,7 @@
     "manifest CAS",
     "independent remote complete match-by-match readback"
   ],
-  "write_state": "NOT_AUTHORIZED_FOR_PRODUCTION_WRITE_YET__DRY_RUN_ONLY"
+  "write_state": "NOT_AUTHORIZED_FOR_PRODUCTION_WRITE_YET__DRY_RUN_ONLY",
+  "audit_request_id": "blinq-native-breakpoints-readonly-20261101-current-cdb",
+  "reason": "Fresh read-only stage and Parquet integrity proof against live canonical CDB; do not authorize historical source write"
 }
