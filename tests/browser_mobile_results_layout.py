@@ -28,7 +28,7 @@ def route_request(route):
 
 
 def main():
-    widths = (320, 360, 390, 430, 768, 900, 1024, 1440)
+    widths = (320, 360, 390, 430, 520, 600, 768, 900, 1024, 1440)
     with sync_playwright() as pw:
         executable = os.getenv("BLINQ_BROWSER") or browser_path()
         browser = (
@@ -202,7 +202,7 @@ def main():
                     page.get_by_role('button',name='Zavrieť menu').click()
                 assert not errors,(width,errors)
                 page.close()
-            print("Mobile Results 320/360/390/430/768/900 + desktop 1024/1440 geometry: PASS")
+            print("Mobile Results 320/360/390/430/520/600/768/900 + desktop 1024/1440 geometry: PASS")
         finally:
             browser.close()
 
