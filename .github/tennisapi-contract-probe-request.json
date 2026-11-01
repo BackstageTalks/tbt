@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "requested_date": "2026-11-01",
-  "reason": "Validate TennisApi historical player/team aggregates in 2024, 2022, 2020, 2016 and current 2026 with non-null/bounds checks",
+  "reason": "Source-native 10 July 2016 Wimbledon completed match sample: statistics, PBP and 2016 year-stats, no CDB writes",
   "provider_requests_allowed": true,
-  "max_requests": 5,
+  "max_requests": 4,
   "event_id": 14494928,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ technical audit",
-  "diagnostic_attempt": 12,
-  "phase": "historical",
+  "diagnostic_attempt": 13,
+  "phase": "archive_2016",
   "case": null
 }
