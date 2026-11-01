@@ -42,6 +42,14 @@ def build(web: Path, output_dir: Path) -> dict:
                 encoding="utf-8",
             )
         else:
+            # esbuild drops the original app.js revision comment. Reattach the
+            # release marker after optimization so strict live read-back can
+            # verify the exact visual revision without changing JS behaviour.
+            js = dest.read_text(encoding="utf-8")
+            dest.write_text(
+                f"/* BlinQ visual revision: {visual} */\n" + js,
+                encoding="utf-8",
+            )
             subprocess.run(["node", "--check", str(dest)], check=True, cwd=ROOT)
         before, after = source.stat().st_size, dest.stat().st_size
         if not 0 < after < before:

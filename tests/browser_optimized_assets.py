@@ -4,6 +4,7 @@ Compares stable computed geometry/style from untouched sources against the
 optimized deploy asset. Authenticated membership cases are deterministic
 fixtures; they do not use live Firebase accounts or touch CDB.
 """
+import json
 import os
 from pathlib import Path
 from urllib.parse import urlparse
@@ -118,6 +119,12 @@ def audit_members(browser, width):
 
 def main():
     assert (OPT / "app.js").is_file() and (OPT / "blinq-app.css").is_file()
+    release = json.loads((WEB / "release.json").read_text(encoding="utf-8"))
+    visual = release["visual_revision"]
+    # The exact production release read-back depends on this marker. esbuild
+    # strips original comments, so validate the staged optimized artifact.
+    assert f"BlinQ visual revision: {visual}" in (OPT / "app.js").read_text(encoding="utf-8")
+    assert f"BlinQ visual revision {visual}" in (OPT / "blinq-app.css").read_text(encoding="utf-8")
     with sync_playwright() as pw:
         executable = browser_path()
         browser = pw.chromium.launch(headless=True, executable_path=executable) if executable else pw.chromium.launch(headless=True)
