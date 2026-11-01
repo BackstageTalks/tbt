@@ -70,4 +70,15 @@ assert.ok(!css.includes('.dashboard-hero-copy{left:40px!important}'),'old fixed 
 assert.ok(mobileVisual.includes('max-width:var(--hero-copy-mobile-width,70%)!important'),'mobile copy width must respect Admin, not cap at 75%');
 assert.ok(!mobileVisual.includes('.dashboard-hero-copy{padding:8px 18px!important;}'),'mobile fixed inset must not displace Admin coordinates');
 assert.ok(index.includes('banner-position-fix=20261101-1'),'updated banner style cache revision');
+for(const control of ['desktop_image_fit','mobile_image_fit','desktop_image_zoom','mobile_image_zoom']){
+  assert.ok(app.includes('data-simple-banner-field="'+control+'"'),'banner cover editor control: '+control);
+}
+for(const cssVar of ['--hero-img-fit:','--hero-img-mobile-fit:','--hero-img-zoom:','--hero-img-mobile-zoom:'])
+  assert.ok(app.includes(cssVar),'banner runtime style variable: '+cssVar);
+assert.ok(css.includes('scale:var(--hero-img-zoom,1);'),'desktop/public image zoom must work with existing animations');
+assert.ok(css.includes('scale:var(--hero-img-mobile-zoom,1);'),'mobile image zoom must be independent');
+assert.ok(css.includes('transform-origin:var(--hero-img-x,50%) var(--hero-img-y,50%)!important'),'desktop crop movement at matching aspect ratio');
+assert.ok(css.includes('transform-origin:var(--hero-img-mobile-x,50%) var(--hero-img-mobile-y,50%)!important'),'mobile crop movement at matching aspect ratio');
+assert.ok(css.includes('object-fit:var(--hero-img-mobile-fit,cover)!important'),'mobile cover/contain visible in preview and public');
+assert.ok(index.includes('banner-cover-zoom=20261101-1'),'cover zoom asset cache revision');
 console.log('PASS: banner editor contract');
