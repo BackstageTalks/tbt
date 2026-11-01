@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "requested_date": "2026-11-01",
-  "reason": "Read-only production odds quality evidence for PR #1151: provider-1 event market, suspension and source provenance; 1 guarded call; no CDB writes",
+  "reason": "Read-only 2016 Wimbledon category-native archive verification after PR #1157; all discovered categories; 10-call guard; no CDB/model writes",
   "provider_requests_allowed": true,
-  "max_requests": 1,
+  "max_requests": 10,
   "event_id": 14494928,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ technical audit",
-  "diagnostic_attempt": 15,
-  "phase": "odds",
-  "case": "event_odds"
+  "diagnostic_attempt": 16,
+  "phase": "archive_2016",
+  "case": null
 }
