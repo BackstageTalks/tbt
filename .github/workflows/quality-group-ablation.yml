@@ -1,9 +1,7 @@
 name: BlinQ matched quality group research
 # Same dates and fixed champion choices; read-only serve/return ablation.
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/quality-group-ablation.yml']
+  # Manual-only audit; retired redundant self-file push trigger.
   workflow_dispatch:
 permissions:
   contents: read
