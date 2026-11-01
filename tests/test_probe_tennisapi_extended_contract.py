@@ -171,3 +171,46 @@ def test_targeted_case_cannot_call_undeclared_endpoint():
         run_probe(client, event_id=14494928, max_requests=10,
                   phase="odds", case="../../api/live")
     assert client.request_count == 0
+
+def test_historical_coverage_routes_are_exact_and_budgeted():
+    historical = StubClient()
+    result = run_probe(historical, event_id=14494928, max_requests=3,
+                       phase="historical")
+    assert result["request_count"] == 3
+    assert historical.paths == [
+        ("/api/tennis/team/69208/year-statistics/2024", None),
+        ("/api/tennis/team/69208/year-statistics/2022", None),
+        ("/api/tennis/team/69208/year-statistics/2020", None),
+    ]
+    assert result["eligible_for_cdb_import"] is False
+    assert result["identity_validated_for_import"] is False
+
+
+def test_historical_quality_counts_without_exposing_values():
+    payload = {"statistics": [
+        {"aces": 4, "firstServePointsScored": 11,
+         "firstServePointsTotal": 14, "breakPointsScored": 4,
+         "breakPointsTotal": 3},
+        {"aces": None, "firstServePointsScored": None,
+         "firstServePointsTotal": 0},
+    ]}
+    result = summarize("year_stats_2024", payload, event_id=1)
+    assert result["season_stat_groups"] == 2
+    assert result["non_null_fields"]["aces"] == 1
+    assert result["non_null_fields"]["firstServePointsTotal"] == 2
+    assert result["statistic_pairs_compared"] == 2
+    assert result["statistic_bound_violations"] == 1
+    assert result["point_in_time_match_eligibility"] is False
+    assert "11" not in str(result["collections"])
+
+
+def test_player_doc_example_identity_is_research_not_cdb_link():
+    client = StubClient()
+    report = run_probe(client, event_id=14494928, max_requests=2,
+                       phase="identity")
+    assert report["request_count"] == 2
+    assert report["identity_validated_for_import"] is False
+    assert client.paths == [
+        ("/api/tennis/player/69208", None),
+        ("/api/tennis/team/69208", None),
+    ]
