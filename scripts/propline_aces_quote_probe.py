@@ -46,8 +46,9 @@ def events(payload):
 
 
 def extract_quotes(payload):
-    """No cross-book joins, only full-match same-book same-player same-line pairs."""
+    """Collect individually priced player-aces selections, even one-sided or alternate lines."""
     real = []
+    real_selections = []
     rejected = Counter()
     raw_book_names = Counter()
     listed = events(payload)
@@ -95,11 +96,26 @@ def extract_quotes(payload):
                     key = (_name(player), line)
                     candidates.setdefault(key, {"player": player, "line": line})[side] = odds
                 for item in candidates.values():
+                    if dfs:
+                        rejected["fantasy_pairs" if "under" in item and "over" in item else "fantasy_one_sided"] += 1
+                        continue
+                    details = {
+                        "event_id": event_id,
+                        "match": str(event.get("home_team") or "") + " vs " + str(event.get("away_team") or ""),
+                        "commence_time": when,
+                        "bookmaker": book_name,
+                        "bookmaker_key": book.get("key"),
+                        "player": item["player"],
+                        "line": item["line"],
+                        "period": market.get("period"),
+                        "line_type": market.get("line_type"),
+                        "last_update": market.get("last_update"),
+                    }
+                    for side in ("under", "over"):
+                        if side in item:
+                            real_selections.append({**details, "side": side, "odds": item[side]})
                     if "under" not in item or "over" not in item:
                         rejected["one_sided"] += 1
-                        continue
-                    if dfs:
-                        rejected["fantasy_pairs"] += 1
                         continue
                     real.append({
                         "event_id": event_id,
@@ -118,6 +134,7 @@ def extract_quotes(payload):
         "events_in_payload": len(listed),
         "books_seen": dict(raw_book_names.most_common(30)),
         "real_pairs": real,
+        "real_selections": real_selections,
         "rejected": dict(rejected),
     }
 
@@ -150,6 +167,7 @@ def self_test():
     assert len(out["real_pairs"]) == 2, out
     assert [x["line"] for x in out["real_pairs"]] == [12.5, 13.5]
     assert out["real_pairs"][0]["under"] == 1.625
+    assert len(out["real_selections"]) == 4
     assert out["rejected"]["fantasy_pairs"] == 1
     assert out["rejected"]["partial_period"] == 1
     assert extract_quotes([{"id": "2", "bookmakers": [
@@ -158,7 +176,17 @@ def self_test():
         {"key": "bovada", "markets": [{"key": "player_aces", "outcomes": [
             {"name": "Under", "description": "A", "point": 7.5, "price": -110}]}]},
     ]}])["real_pairs"] == []
-    print("SELF_TEST: PASS; separate fantasy / real lines / periods / bookmakers")
+    singles = extract_quotes([{"id": "2", "bookmakers": [
+        {"key": "draftkings", "markets": [{"key": "player_aces", "outcomes": [
+            {"name": "Under", "description": "Daniil Medvedev", "point": 10.5, "price": -150}
+        ]}]}
+    ]}])
+    assert singles["real_pairs"] == []
+    assert singles["real_selections"][0]["odds"] == 1.666667
+    assert singles["real_selections"][0]["player"] == "Daniil Medvedev"
+    assert singles["real_selections"][0]["line"] == 10.5
+    assert singles["real_selections"][0]["side"] == "under"
+    print("SELF_TEST: PASS; player-specific real one-sided odds, arbitrary lines, fantasy isolation")
 
 
 def run_live(max_calls, max_event_fallback):
@@ -174,7 +202,8 @@ def run_live(max_calls, max_event_fallback):
         bulk = client.get("/sports/tennis/odds", {"markets": "player_aces"})
         first = extract_quotes(bulk)
         checked.append({"source": "bulk", **first})
-        if not first["real_pairs"] and max_event_fallback:
+        targets = {"fritz", "medvedev", "zverev"}
+        if not any(set(_name(q["player"]).split()) & targets for q in first["real_selections"]) and max_event_fallback:
             board = client.get("/sports/tennis/events")
             now = datetime.now(timezone.utc)
             upcoming = []
@@ -187,7 +216,11 @@ def run_live(max_calls, max_event_fallback):
                     dt = dt.replace(tzinfo=timezone.utc)
                 if dt > now and row.get("id") and row.get("doubles") is not True:
                     upcoming.append((dt, row))
-            upcoming.sort(key=lambda x: x[0])
+            upcoming.sort(key=lambda x: (
+                0 if any(t in _name(str(x[1].get("home_team") or "") + " " + str(x[1].get("away_team") or "")).split()
+                         for t in targets) else 1,
+                x[0],
+            ))
             for _, row in upcoming[:min(max_event_fallback, max(0, max_calls-client.calls))]:
                 eid = str(row["id"])
                 data = client.get(f"/sports/tennis/events/{eid}/odds",
@@ -197,12 +230,18 @@ def run_live(max_calls, max_event_fallback):
     except RuntimeError as exc:
         print("LIVE_PROBE_ERROR:", str(exc))
     unique = {}
+    selections = {}
     failures = Counter()
     for item in checked:
         failures.update(item["rejected"])
         for q in item["real_pairs"]:
             identity = (q["event_id"], q["bookmaker_key"], q["player"], q["line"])
             unique[identity] = q
+        for q in item["real_selections"]:
+            identity = (q["event_id"], q["bookmaker_key"], _name(q["player"]), q["line"], q["side"])
+            selections[identity] = q
+    target_quotes = [q for q in selections.values()
+                     if set(_name(q["player"]).split()) & {"fritz", "medvedev", "zverev"}]
     report = {
         "schema": 1, "mode": "read_only_aces_real_quote_probe",
         "captured_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -210,7 +249,15 @@ def run_live(max_calls, max_event_fallback):
         "provider_remaining_header": client.remaining,
         "events_checked": sum(item["events_in_payload"] for item in checked),
         "real_two_sided_pairs": len(unique),
-        "real_books": dict(Counter(q["bookmaker"] for q in unique.values())),
+        "real_individual_selections": len(selections),
+        "real_books": dict(Counter(q["bookmaker"] for q in selections.values())),
+        "target_players": ["Fritz", "Medvedev", "Zverev"],
+        "target_quotes": sorted(target_quotes, key=lambda q: (
+            q["player"], q["line"], q["side"], q["bookmaker"]
+        ))[:40],
+        "other_real_samples": sorted(selections.values(), key=lambda q: (
+            q["player"], q["line"], q["side"], q["bookmaker"]
+        ))[:30],
         "rejected": dict(failures),
         "samples": sorted(unique.values(), key=lambda q: (
             0 if q.get("tier") in ("atp", "wta") else 1,
