@@ -7,7 +7,6 @@ on:
       - scripts/audit_top_reliability.py
       - scripts/audit_market_reliability.py
       - tests/test_issuance_schema2_trust.py
-      - .github/workflows/trust-evidence-readback.yml
   workflow_dispatch:
 
 permissions:

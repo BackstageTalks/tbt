@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
     paths:
-      - .github/workflows/blinq-fresh-private-archive-qa.yml
       - scripts/audit_tennisexplorer_private_checkpoint.py
       - tests/test_tennisexplorer_private_checkpoint.py
   pull_request:
