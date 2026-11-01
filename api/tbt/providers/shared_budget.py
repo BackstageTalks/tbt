@@ -197,6 +197,10 @@ def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
     """
     if purpose not in PURPOSE_CAPS:
         raise ValueError("Unknown budget purpose")
+    # Capture the original caller mode BEFORE resolving the storage client.
+    # Otherwise table becomes non-None and live Azure workers bypass pacing.
+    if paced is None:
+        paced = table is None and bool(os.getenv("FUNCTIONS_WORKER_RUNTIME", "").strip())
     if table is None:
         from ..services.admin_storage import _table
         try:
@@ -207,10 +211,6 @@ def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
     # A failed daily budget may waste a time slot but cannot spend quota on a
     # request that never happens. Both operations fail closed on store errors.
     pace_proof = None
-    if paced is None:
-        # Runtime direct storage reservations must not silently bypass the
-        # distributed limiter. Injected synthetic tables keep old test rules.
-        paced = table is None and bool(os.getenv("FUNCTIONS_WORKER_RUNTIME", "").strip())
     if paced:
         from .shared_rate import reserve_pace
         pace_proof = reserve_pace(table=pace_table)
