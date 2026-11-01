@@ -21,7 +21,7 @@ jobs:
     # main push provides a safe one-shot catch-up without bypassing budget guards.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'schedule' ||
+      (github.event_name == 'schedule' && vars.BLINQ_NATIVE_SCHEDULES_ENABLED == 'true') ||
       (github.event_name == 'push' && contains(github.event.head_commit.message, '[match-status-now]'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
