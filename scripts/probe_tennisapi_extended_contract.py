@@ -17,6 +17,7 @@ from typing import Any
 
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.providers.tennisapi_extra import point_by_point_inventory
+from tbt.providers.statistics import inventory_statistics_keys
 
 
 def _obj(value: Any) -> dict:
@@ -61,6 +62,8 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                 "kind": "dict", "keys": sorted(map(str, value))[:22],
                 "count": len(value),
             }
+    if name in ("event_statistics", "historical_2016_match_statistics"):
+        result["statistics_key_inventory"] = inventory_statistics_keys(payload)
     if name == "event_odds":
         markets = obj.get("markets")
         if isinstance(markets, list):
