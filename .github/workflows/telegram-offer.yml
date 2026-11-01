@@ -2,6 +2,8 @@ name: BlinQ Telegram offer
 # Reuse the existing external hourly tick; optional 10-minute
 # repository_dispatch gives finer timing. Native GitHub cron is forbidden.
 on:
+  schedule:
+    - cron: '12,42 * * * *'
   push:
     branches: [main]
     paths:
