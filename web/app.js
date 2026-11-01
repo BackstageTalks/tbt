@@ -8398,7 +8398,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     $('profileButton')?.setAttribute('aria-expanded',opening?'true':'false');
   }
 
-  let feedLoading=false,feedGeneration=0,externalSessionTimer=null;
+  let feedLoading=false,feedGeneration=0,externalSessionTimer=null,bootPrefetchedFeed=null;
   async function syncExternalSession(){
     feedGeneration++;clearPrivateWorkspaceState();feedLoading=false;
     const generation=feedGeneration;
@@ -8415,11 +8415,13 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     if(event.storageArea!==localStorage||event.key!==epochKey)return;
     clearTimeout(externalSessionTimer);externalSessionTimer=setTimeout(()=>{syncExternalSession().catch(error=>console.warn('[BlinQ auth] cross-tab session sync failed.',error));},40);
   }
-  async function loadFeed(showLoading=true,prefetchedFeed=null){
+  async function loadFeed(showLoading=true){
     if(feedLoading)return;feedLoading=true;const generation=feedGeneration;window.BlinqUI.sync('loading');
     if(showLoading&&state.route==='predictions') $('predictionGrid').innerHTML=`<div class="state-card">${escapeHtml(publicText('Loading current model predictions…'))}</div>`;
     try{
-      const feed=(await (prefetchedFeed||BlinqAuth.feed()))||{};if(generation!==feedGeneration)return;
+      // Consume the one-shot boot prefetch; later refreshes request fresh data.
+      const pendingFeed=bootPrefetchedFeed;bootPrefetchedFeed=null;
+      const feed=(await (pendingFeed||BlinqAuth.feed()))||{};if(generation!==feedGeneration)return;
       state.feed=normalizeFeedAceOdds(feed); state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
       // News/RSS is presentation-only. Never hold an authenticated workspace
       // behind a slow external feed. Render immediately, then refresh the hero
@@ -8620,7 +8622,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       // Workspace rendering can use UI configuration, but failure falls back to
       // repository defaults and can never invalidate a Firebase session.
       await uiReady;
-      await loadFeed(true,prefetchedFeed);
+      bootPrefetchedFeed=prefetchedFeed;
+      await loadFeed();
     }catch(error){
       showStatus(error?.message||'The BlinQ workspace could not be opened. Please try again.');
       if($('appShell').hidden)auth('login');
