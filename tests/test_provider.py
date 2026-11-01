@@ -236,3 +236,66 @@ def test_tournament_logo_stops_after_dark_variant(monkeypatch):
     monkeypatch.setattr(client, '_get_bytes', fake_bytes)
     assert client.tournament_logo(2368) == (b'dark-logo', 'image/webp')
     assert calls == [('/api/tennis/tournament/2368/image/dark', True)]
+
+
+def test_provider_monthly_calendar_batch_caches_only_complete_valid_days(monkeypatch):
+    from datetime import date
+    client = object.__new__(RapidTennisClient)
+    client._category_cache = {}
+    days = [date(2026, 11, n) for n in range(1, 6)]
+    calls = []
+
+    def fake_get(path, params=None, *, enrichment=False):
+        calls.append((path, params))
+        assert path == "/api/tennis/calendar/11/2026/categories"
+        assert params == {"days": "1,2,3,4,5"}
+        return {day.isoformat(): {"categories": [
+            {"category": {"id": 3, "name": "ATP"}}
+        ]} for day in days}
+    monkeypatch.setattr(client, "_get", fake_get)
+    assert client.prefetch_calendar_categories(days[::-1]) == 5
+    for day in days:
+        assert client.calendar_categories(day)[0]["category"]["id"] == 3
+    assert len(calls) == 1
+    assert client.calendar_batch_metrics["days_cached"] == 5
+
+
+def test_provider_monthly_batch_missing_date_or_duplicate_id_falls_back(monkeypatch):
+    from datetime import date
+    client = object.__new__(RapidTennisClient)
+    client._category_cache = {}
+    days = [date(2026, 11, 1), date(2026, 11, 2)]
+    payloads = [
+        {days[0].isoformat(): {"categories": [{"id": 3}]}},
+        {d.isoformat(): {"categories": [{"id": 3}, {"id": 3}]}
+         for d in days},
+        {},
+    ]
+    def fake_get(path, params=None, *, enrichment=False):
+        if "/calendar/11/2026/" in path:
+            return payloads.pop(0)
+        assert path == "/api/tennis/calendar/1/11/2026/categories"
+        return {"categories": [{"id": 6}]}
+    monkeypatch.setattr(client, "_get", fake_get)
+    for _ in range(3):
+        assert client.prefetch_calendar_categories(days) == 0
+        assert client._category_cache == {}
+    assert client.calendar_categories(days[0]) == [{"id": 6}]
+    assert client.calendar_batch_metrics["invalid_responses"] == 3
+
+
+def test_provider_monthly_batch_preserves_shared_quota_stop(monkeypatch):
+    from datetime import date
+    import pytest
+    from tbt.providers.budget import RequestBudgetExceeded
+    client = object.__new__(RapidTennisClient)
+    client._category_cache = {}
+    def fail(*args, **kwargs):
+        raise RequestBudgetExceeded("provider reserve reached")
+    monkeypatch.setattr(client, "_get", fail)
+    days = [date(2026, 11, 1), date(2026, 11, 2)]
+    with pytest.raises(RequestBudgetExceeded):
+        client.prefetch_calendar_categories(days)
+    assert client._category_cache == {}
+    with pytest.raises(ValueError):
+        client.prefetch_calendar_categories([date(2026, 10, 31), days[0]])
