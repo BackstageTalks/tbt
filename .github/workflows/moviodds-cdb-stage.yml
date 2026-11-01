@@ -72,16 +72,29 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
-          import json, os, pathlib
+          import json, os, pathlib, requests
           from moviodds_drive_archive import fetch_daily_final, _json_bytes
           from moviodds_cdb_format import format_cdb_archive, verify_cdb_archive
           folder=pathlib.Path("work/moviodds-stage/source")
-          dates=pathlib.Path("work/moviodds-stage/days.txt").read_text().splitlines()
+          day_file=pathlib.Path("work/moviodds-stage/days.txt")
+          dates=day_file.read_text().splitlines()
+          verified, unavailable=[],[]
           for day in dates:
-              original=fetch_daily_final(
-                  date_utc=day, base_url=os.environ["BLINQ_BASE_URL"],
-                  token=os.environ["BLINQ_LIVE_WORKER_TOKEN"],
-              )
+              try:
+                  original=fetch_daily_final(
+                      date_utc=day, base_url=os.environ["BLINQ_BASE_URL"],
+                      token=os.environ["BLINQ_LIVE_WORKER_TOKEN"],
+                  )
+              except requests.HTTPError as exc:
+                  if exc.response is None or exc.response.status_code != 503:
+                      raise
+                  # A missing post-day scan must NEVER masquerade as
+                  # verified zero rows, but cannot block independently
+                  # verified dates. Retry availability by normal next run.
+                  unavailable.append({"day":day,
+                      "reason":"protected_source_final_export_unavailable_503"})
+                  print("MOVIODDS_CDB_SOURCE_NOT_READY",day,"HTTP_503",flush=True)
+                  continue
               converted=format_cdb_archive(original)
               verify_cdb_archive(converted)
               if original["count"] != converted["count"]:
@@ -89,8 +102,15 @@ jobs:
               file=folder/f"moviodds-{day}.json"
               file.write_bytes(_json_bytes(converted))
               verify_cdb_archive(json.loads(file.read_bytes()))
+              verified.append(day)
               print("MOVIODDS_CDB_SOURCE_VERIFIED",day,converted["count"],
                     converted["summary"],flush=True)
+          (folder/"unavailable_days.json").write_text(
+              json.dumps({"schema":1,"unavailable":unavailable,
+                          "verified_days":verified},indent=2)+"\n")
+          if not verified:
+              raise SystemExit("No verified MoviOdds finished day; refusing empty stage")
+          day_file.write_text("\n".join(verified)+"\n")
           PY
 
       - name: Obtain authoritative canonical private release and original asset digests
@@ -212,5 +232,6 @@ jobs:
             work/moviodds-stage/staged/*/report.json
             work/moviodds-stage/dry-run/report.json
             work/moviodds-stage/summary.json
+            work/moviodds-stage/source/unavailable_days.json
           retention-days: 7
           if-no-files-found: error
