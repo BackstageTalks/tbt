@@ -2,6 +2,7 @@
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -92,6 +93,25 @@ class UiWatchdogTests(unittest.TestCase):
         checked = revision_files(web, deployed_sha)
         self.assertEqual(checked, original)
         self.assertNotEqual(checked["app.js"], (web / "app.js").read_bytes())
+
+    def test_standalone_watchdog_can_import_optimizer_outside_repo(self):
+        # CI invokes python scripts/check_live_ui_revision.py, with scripts/
+        # as sys.path[0]. Previously optimized Azure assets raised
+        # ModuleNotFoundError: No module named 'scripts'.
+        script = Path(__file__).resolve().parents[1] / "scripts" / "check_live_ui_revision.py"
+        optimizer = Path(__file__).resolve().parents[1] / "scripts" / "optimize_web_assets.py"
+        self.assertTrue(optimizer.is_file())
+        isolated = subprocess.run(
+            [sys.executable, "-I", "-c",
+             "import sys; from pathlib import Path; "
+             "sys.path.insert(0, str(Path(sys.argv[1]).parent)); "
+             "from check_live_ui_revision import build_optimized_revision; "
+             "import inspect; "
+             "assert 'scripts.optimize_web_assets' in inspect.getsource(build_optimized_revision)",
+             str(script)],
+            cwd=self.tmp.name, capture_output=True, text=True,
+        )
+        self.assertEqual(isolated.returncode, 0, isolated.stderr)
 
     def test_exact_optimized_deployment_passes_and_modified_js_is_rejected(self):
         # The production pipeline intentionally rewrites whitespace in JS/CSS.
