@@ -99,13 +99,24 @@ def revision_files(web: Path, deployed_sha: str) -> dict[str, bytes]:
         raise ValueError("Cannot verify exact deployed revision from Git history") from exc
 
 
+def load_pinned_optimizer():
+    """Support package imports in tests and direct 'python scripts/...' runs."""
+    try:
+        from scripts.optimize_web_assets import ASSETS, build
+    except ModuleNotFoundError as exc:
+        if exc.name != "scripts":
+            raise
+        from optimize_web_assets import ASSETS, build
+    return ASSETS, build
+
+
 def build_optimized_revision(files: dict[str, bytes]) -> dict[str, bytes]:
     """Rebuild the pinned deployment transform from the immutable Git sources.
 
     Never trust deployment.json checksums alone when checking optimized assets:
     independently reproduce the JS/CSS bytes first.
     """
-    from scripts.optimize_web_assets import ASSETS, build
+    ASSETS, build = load_pinned_optimizer()
 
     with tempfile.TemporaryDirectory(prefix="blinq-watchdog-") as tmp:
         web = Path(tmp) / "web"
