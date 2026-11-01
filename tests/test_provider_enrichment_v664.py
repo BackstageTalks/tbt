@@ -48,3 +48,20 @@ def test_frontend_passes_custom_id_to_h2h_enrichment():
     app = read("web/app.js")
     assert "custom_id: String(customId || '')" in auth
     assert "row?.custom_id||row?.customId||''" in app
+
+
+def test_previous_player_history_uses_live_verified_route_without_legacy_fallback():
+    from tbt.providers.rapidapi import RapidTennisClient
+
+    client = object.__new__(RapidTennisClient)
+    calls = []
+
+    def fake_get(path, params=None, *, enrichment=False):
+        calls.append((path, enrichment))
+        return {"events": [{"id": 14494928}], "hasNextPage": True}
+
+    client._get = fake_get
+    response = client.previous_player_matches(206570, page=0)
+    assert response["events"][0]["id"] == 14494928
+    assert calls == [(
+        "/api/tennis/player/206570/events/previous/0", True)]
