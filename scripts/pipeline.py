@@ -41,6 +41,7 @@ from tbt.services.publication import (
     validate_publication_candidate,
 )
 from tbt.services.ace_selection import select_ace_picks
+from ace_working_odds import eligible_local_ace_projection, verified_ace_odds
 from tbt.services.sg_selection import select_sg_picks
 from tbt.services.projection_odds import (
     enrich_projection_odds, prefetch_projection_market_board,
@@ -1808,6 +1809,7 @@ def main():
             available_markets_by_event=(
                 available_projection_markets if projection_odds_cap else None
             ),
+            allow_local_aces_fallback=True,
         )
         sg_picks, sg_report = select_sg_picks(
             matches, predictions, now=selection_now,
@@ -1874,8 +1876,11 @@ def main():
                     and provider > 0 and bool(row.get("captured_at"))
                     and 1.50 <= odds < float("inf")
                     and ace_df_real_api
+                    and (market != "aces" or verified_ace_odds(row) is not None)
                 )
-            ace_picks = [row for row in ace_picks if publishable_api_price(row)]
+            ace_picks = [row for row in ace_picks if (
+                publishable_api_price(row) or eligible_local_ace_projection(row)
+            )]
             sg_picks = [row for row in sg_picks if publishable_api_price(row)]
         # Ten per independent category, sorted by validated projection
         # confidence and evidence, NOT simply by the highest bookmaker price.
@@ -1906,7 +1911,8 @@ def main():
             ace_report = {
                 **ace_report, "odds_attachment": projection_odds_report,
                 "published_selected": len(ace_picks),
-                "priced_selection_policy": "odds_first_exact_market_then_model_independent_top10",
+                "aces_local_fallback_published": sum(eligible_local_ace_projection(row) for row in ace_picks),
+                "priced_selection_policy": "verified_api_pro_propline_moviodds_then_local_aces_only",
             }
         if isinstance(sg_report, dict):
             sg_report = {
