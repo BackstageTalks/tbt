@@ -344,6 +344,10 @@ jobs:
         if: env.MODE == 'statistics' && env.BLINQ_AUTOFILL_HIGH_YIELD == 'true'
         run: python scripts/fetch_adaptive_verified_prior.py
 
+      - name: Verify private raw cache capability without Tennis API calls
+        if: env.MODE == 'statistics'
+        run: python scripts/verify_private_tennis_cache_ready.py
+
       - name: Acquire global cross-repository canonical writer
         if: env.MODE != 'deploy-current'
         shell: bash
