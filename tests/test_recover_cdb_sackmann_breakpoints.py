@@ -207,6 +207,7 @@ def test_strict_lineage_diagnostics_keep_non_native_player_ids_rejected():
     assert lineage_rejection_reason(match, row, "atp", "main", path) == "unclassified_strict_rejection"  # Diagnostic cannot approve a candidate.
     match = canonical(row)
     match.player1_id = "mapped:provider:1001"
+    match.winner_id = match.player1_id  # Keep completed winner orientation valid; test only the namespace.
     before = deepcopy(match.to_storage_dict())
     assert candidate(match, row, "atp", path, 2, "a" * 64)[1] == "lineage_rejected"
     assert lineage_rejection_reason(match, row, "atp", "main", path) == "source_native_player_id_mapping"
