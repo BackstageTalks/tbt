@@ -73,7 +73,6 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
       - scripts/cdb_wta_lookback_guard.py
       - tests/test_cdb_wta_lookback_guard.py
       - ops/cdb-import-requests/wta-safe-batch-20261020.json
-      - ops/cdb-import-requests/moviodds-guarded-smoke-20261101.json
       - .github/workflows/cdb-drive-inbox.yml
 
 permissions:
@@ -109,8 +108,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'push' &&
-        (startsWith(github.event.head_commit.message, 'chore(cdb): authorized one-shot Drive import 2026-10-20') ||
-         startsWith(github.event.head_commit.message, 'test(ops): authorize one-shot MoviOdds CDB import 2026-11-01'))))
+        startsWith(github.event.head_commit.message, 'chore(cdb): authorized one-shot Drive import 2026-10-20')))
     needs: synthetic-contract-tests
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -125,7 +123,7 @@ jobs:
       CDB_TAG: tbt-data-v1
       INBOX_FOLDER_ID: 1jzdzztz8cXquO8VDswqE19PHupQau-xM
       REPLAY_DRIVE_IDS: ${{ inputs.replay_drive_ids || '' }}
-      SOURCE_MODE: ${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, 'test(ops): authorize one-shot MoviOdds CDB import 2026-11-01') && 'moviodds' || inputs.source_mode || 'drive' }}
+      SOURCE_MODE: ${{ inputs.source_mode || 'drive' }}
       MOVIODDS_DAYS_BACK: ${{ inputs.moviodds_days_back || 14 }}
       BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
       BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
@@ -135,29 +133,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Enforce exact MoviOdds one-shot source scope (push only)
-        if: github.event_name == 'push' && env.SOURCE_MODE == 'moviodds'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          p=Path("ops/cdb-import-requests/moviodds-guarded-smoke-20261101.json")
-          data=json.loads(p.read_text())
-          if (data.get("schema") != 1 or
-              data.get("source") != "moviodds" or
-              data.get("scope") != "one_shot_existing_guarded_single_writer" or
-              data.get("allowed_fields") != ["aces","double_faults"] or
-              data.get("require_global_cdb_lock") is not True or
-              data.get("require_full_remote_readback") is not True or
-              data.get("no_new_cdb_writer") is not True or
-              data.get("sports_api_requests") != 0):
-              raise SystemExit("MOVIODDS_ONE_SHOT_AUTHORIZATION_INVALID")
-          print("AUTHORIZED_MOVIODDS_SINGLE_WRITER_SOURCE_SMOKE")
-          PY
       - name: Enforce explicit one-shot source authorization (push only)
-        if: github.event_name == 'push' && env.SOURCE_MODE == 'drive'
+        if: github.event_name == 'push'
         shell: bash
         run: |
           set -euo pipefail
