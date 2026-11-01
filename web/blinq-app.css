@@ -10979,3 +10979,12 @@ body#blinqPremium.blinq-admin .admin-dashboard-slot .admin-kpi-period-toggle inp
 .admin-page-background-previews figcaption{margin-top:6px;color:#adc4b6;font-size:11px}
 .admin-page-background-previews figure:last-child img{width:min(100%,135px);height:auto;aspect-ratio:9/16;object-position:center bottom}
 @media(max-width:600px){.admin-page-background-previews{grid-template-columns:1fr}}
+
+/* Background upload instructions are distinct from the upper hero banner export sizes. */
+.admin-page-background-editor .admin-background-size-guide{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0 8px;min-width:0}
+.admin-page-background-editor .admin-background-size-item{display:flex;flex-direction:column;gap:4px;min-width:0;padding:12px 14px;border:1px solid rgba(130,196,164,.24);border-radius:10px;background:rgba(6,35,30,.3)}
+.admin-page-background-editor .admin-background-size-item strong{font-size:12px;color:#e2f5eb}
+.admin-page-background-editor .admin-background-size-item b{font-size:18px;line-height:1.3;letter-spacing:.01em;color:#8debc5;font-variant-numeric:tabular-nums}
+.admin-page-background-editor .admin-background-size-item small{font-size:11px;line-height:1.45;color:#b0c9bd}
+.admin-page-background-editor .admin-background-size-note{font-size:11px;line-height:1.55;color:#b5c9bf;margin:0 0 12px}
+@media(max-width:600px){.admin-page-background-editor .admin-background-size-guide{grid-template-columns:1fr}}
