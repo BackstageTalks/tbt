@@ -2826,6 +2826,24 @@
     const p=Math.min(0.94,Math.max(0.5,confidence));
     return Math.round(Math.max(1.05,Math.min(2.50,1/(p*1.055)))*100)/100;
   }
+  // Reuse the provider-verified Aces contract; never infer a quote from odds alone.
+  // API Pro has precedence over PropLine upstream; this is presentation only.
+  function verifiedAceProviderOdds(row){
+    if(String(row?.market||row?.projection_metric||'').toLowerCase()!=='aces')return NaN;
+    if(row?.price_status!=='priced_projection'||row?.odds_contract_version!=='ace_df_real_api_v1')return NaN;
+    const odds=row?.odds==null?NaN:Number(row.odds);
+    if(!Number.isFinite(odds)||odds<1.50||odds>100||!row?.captured_at)return NaN;
+    const source=String(row?.odds_source||'').toLowerCase(),id=Number(row?.provider_id);
+    const verified=(source==='rapidapi'&&id===1)
+      ||(source==='propline'&&id===2&&Boolean(row?.odds_bookmaker))
+      ||(source==='moviodds'&&id===3&&row?.odds_bookmaker==='bet365');
+    if(!verified)return NaN;
+    if(row?.price_contract==='player_total_ou'){
+      const line=Number(row?.market_line);
+      if(!Number.isFinite(line)||line<0||!['over','under'].includes(String(row?.ou_side||'').toLowerCase()))return NaN;
+    }
+    return odds;
+  }
   // Stable per-pick Aces display estimate (1.60–1.80); do not alter provider odds or settlement.
   function stableAceDisplayOdds(row){
     if(String(row?.market||row?.projection_metric||'').toLowerCase()!=='aces')return NaN;
@@ -2846,12 +2864,14 @@
     // The provider odds, source and immutable issuance ledger remain untouched.
     for(const row of feed?.ace_picks||[]){
       if(!row||row.market!=='aces')continue;
+      if(Number.isFinite(verifiedAceProviderOdds(row))){delete row.statistical_ace_odds;continue;}
       const value=stableAceDisplayOdds(row);
       if(Number.isFinite(value))row.statistical_ace_odds=value;
     }
     for(const result of feed?.results||[]){
       for(const publication of result?.market_publications||[]){
         if(!publication||publication.market!=='aces')continue;
+        if(Number.isFinite(verifiedAceProviderOdds(publication))){delete publication.statistical_ace_odds;continue;}
         // Apply to this betting day onward; issued historical results remain immutable.
         const issued=Date.parse(String(publication?.issued_at||result?.scheduled_at||result?.date||''));
         if(!Number.isFinite(issued)||issued<Date.parse('2026-11-01T05:00:00Z'))continue;

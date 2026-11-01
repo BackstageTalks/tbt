@@ -5,7 +5,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
 from tbt.services.entitlements import _daily_rows
-from ace_working_odds import PRICE_BASIS, working_ace_odds
+from ace_working_odds import PRICE_BASIS, working_ace_odds, selected_ace_odds
 TZ=ZoneInfo("Europe/Bratislava")
 SECTIONS={"top":"top_daily_picks","value":"value_picks","aces":"ace_picks"}
 LABELS={"top":"🏆 TOP","value":"💎 VALUE","aces":"🎯 ACES"}
@@ -181,7 +181,7 @@ def fmt(r,k,c,index=1,name_map=None,prefix_override=None):
     else:
         prob=num(bet.get("blinq_probability") or bet.get("model_probability") or r.get("blinq_probability") or r.get("probability"))
         values=[f"{(prob*100 if abs(prob)<=1 else prob):.1f}%" if prob is not None else "—"] if c.get("show_probability",True) else []
-    odds=working_ace_odds(r) if k=="aces" else num(bet.get("odds") or r.get("odds"))
+    odds=selected_ace_odds(r)[0] if k=="aces" else num(bet.get("odds") or r.get("odds"))
     if c.get("show_odds",True):
         values.append(f"{odds:.2f}" if odds is not None and odds>1 else "—")
     prefix=prefix_override or OFFER_ICONS[k]
@@ -296,8 +296,11 @@ def result_reference(row,section):
           and p.get("section")==real_section and str(p.get("market") or market)==market
           and str(p.get("selection_id") or p.get("winner_id") or "")==selection]
     pub=pubs[0] if len(pubs)==1 else {}
-    odds=(working_ace_odds(row, selection_id=selection) if section=="aces"
-          else num(pub.get("odds") or betting.get("odds") or row.get("odds")))
+    if section=="aces":
+        odds, verified_provider = selected_ace_odds(row, selection_id=selection)
+    else:
+        odds=num(pub.get("odds") or betting.get("odds") or row.get("odds"))
+        verified_provider=False
     return {"event_id":str(row["event_id"]), "section":real_section,
             "channel":section, "market":market, "selection_id":selection,
             "publication_key":str(pub.get("publication_key") or ""),
@@ -305,7 +308,7 @@ def result_reference(row,section):
             "projection_direction":str(pub.get("ou_side") or pub.get("projection_direction") or ""),
             "scheduled_at":str(row["scheduled_at"]),
             "name":_selection_name(row), "odds":odds if odds and odds>1 else None,
-            "price_basis":PRICE_BASIS if market=="aces" and odds else None,
+            "price_basis":PRICE_BASIS if market=="aces" and odds and not verified_provider else None,
             "projection":num(row.get("projection")) if market=="aces" else None}
 
 def _same_frozen_selection(current, frozen, *, allow_aces_price_update=False):
@@ -314,7 +317,8 @@ def _same_frozen_selection(current, frozen, *, allow_aces_price_update=False):
                 "publication_key","market_line","projection_direction"):
         if str(current.get(key) or "")!=str(frozen.get(key) or ""):
             return False
-    if allow_aces_price_update and frozen.get("channel")=="aces":
+    if (allow_aces_price_update and frozen.get("channel")=="aces"
+            and current.get("price_basis")==PRICE_BASIS):
         return (current.get("price_basis")==PRICE_BASIS
                 and (num(current.get("odds")) or 0)>=1.60
                 and (num(current.get("odds")) or 0)<=1.80)
