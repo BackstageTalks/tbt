@@ -543,7 +543,7 @@ class ReleaseStore:
             if name.startswith(("blinq-rollback-", "blinq-candidate-", "blinq-txn-")):
                 rollback = re.fullmatch(r"blinq-rollback-([0-9a-f]{32})-(.+)", name)
                 candidate = re.fullmatch(r"blinq-candidate-([0-9a-f]{32})-(.+)", name)
-                journal = re.fullmatch(r"blinq-txn-([0-9a-f]{32})\\.json", name)
+                journal = re.fullmatch(r"blinq-txn-([0-9a-f]{32})\.json", name)
                 match = rollback or candidate or journal
                 if match is None or match.group(1) not in tokens:
                     raise RuntimeError("Unrecognized pending prediction release asset")
