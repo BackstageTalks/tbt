@@ -67,4 +67,16 @@ assert.ok(!css.includes('.dashboard-hero-copy{left:40px!important}'),'old fixed 
 assert.ok(mobileVisual.includes('max-width:var(--hero-copy-mobile-width,70%)!important'),'mobile copy width must respect Admin, not cap at 75%');
 assert.ok(!mobileVisual.includes('.dashboard-hero-copy{padding:8px 18px!important;}'),'mobile fixed inset must not displace Admin coordinates');
 assert.ok(index.includes('banner-position-fix=20261101-1'),'updated banner style cache revision');
+for(const field of ['desktop_image_fit','mobile_image_fit','desktop_image_zoom','mobile_image_zoom'])
+  assert.ok(app.includes('data-simple-banner-field="'+field+'"'),'missing Cover/Contain and zoom control: '+field);
+for(const token of ['--hero-img-fit:','--hero-img-mobile-fit:','--hero-img-zoom:','--hero-img-mobile-zoom:'])
+  assert.ok(app.includes(token),'missing persistent device crop variable: '+token);
+for(const cssToken of ['object-fit:var(--hero-img-fit,cover)!important','object-fit:var(--hero-img-mobile-fit,cover)!important',
+  'scale:var(--hero-img-zoom,1)!important','scale:var(--hero-img-mobile-zoom,1)!important'])
+  assert.ok(css.includes(cssToken),'public/preview crop style absent: '+cssToken);
+assert.ok(app.includes('admin-background-size-guide'),'background dimensions must be visible next to both uploads');
+for(const token of ['1920 × 1080 px','1080 × 1920 px','16 : 9','9 : 16','do 600 px'])
+  assert.ok(app.includes(token),'missing recommended background dimensions: '+token);
+assert.ok(css.includes('admin-background-size-guide'),'background dimensions must be styled in Admin');
+assert.ok(index.includes('banner-cover-controls=20261101-1'),'banner JS/CSS must have a fresh cache key');
 console.log('PASS: banner editor contract');
