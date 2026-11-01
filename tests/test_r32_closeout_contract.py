@@ -70,7 +70,7 @@ def test_r32_detail_info_live_and_visual_cleanup_contract():
     assert "info_min_level" in APP and "live_min_level" in APP
     assert "save-info-access" in APP and "save-live-access" in APP
     assert "is-access-locked" in APP
-    assert "Aktualizácia modelu: —" in INDEX
+    assert "Aktualizácie: —" in INDEX
     assert "@keyframes blinqStatusBreath" in CSS
 
 
