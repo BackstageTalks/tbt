@@ -51,3 +51,16 @@ def test_public_endpoint_does_not_load_full_snapshot():
     assert "load_pair_artifact(" in route
     assert "_load_comparator_artifact()" not in route
     assert 'COMPARATOR_INDEX = Path(__file__).parent / "data/comparator-serving.sqlite3"' in app
+
+
+
+def test_index_rejects_different_ids_with_same_verified_display_name(tmp_path):
+    directory = {"players": [
+        {"player_id": "id-1", "name": "Cameron Norrie", "tour": "atp"},
+        {"player_id": "id-2", "name": "Camerón Norrie", "tour": "atp"},
+    ]}
+    with pytest.raises(ComparatorIndexError, match="same_player"):
+        load_pair_artifact(
+            tmp_path / "nonexistent.sqlite3", directory,
+            player1="id-1", player2="id-2", tour="atp",
+        )
