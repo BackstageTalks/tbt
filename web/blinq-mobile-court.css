@@ -140,6 +140,22 @@
     margin-top:0 !important;
   }
 
+  /* Aces/DF: the column label (::before) and projected value are sibling
+     flex items. Keep a 12px gutter between them at all phone widths. */
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"]) .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] > td:nth-child(7) {
+    column-gap:12px !important;
+    row-gap:4px !important;
+    flex-wrap:wrap !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
+  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"]) .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] > td:nth-child(7) .hub-number-stack {
+    display:inline-flex !important;
+    align-items:baseline !important;
+    flex:0 0 auto !important;
+    min-width:0 !important;
+  }
+
   /* Aces and double faults already have a mobile PROJEKCIA column heading.
      Keep the numeric model projection, hide only its redundant lower caption. */
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
