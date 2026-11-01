@@ -6284,6 +6284,58 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       return false;
     }
   }
+  function normalizeTelegramGroupsForPublish(source){
+    const config=clone(source||{});
+    const fix=text=>String(text||'').replace('Staň as súčasťou','Staň sa súčasťou').replace('s dennym FREE','s denným FREE');
+    for(const field of ['title','description','eyebrow'])if(typeof config[field]==='string')config[field]=fix(config[field]);
+    if(Array.isArray(config.groups))config.groups.forEach(group=>{
+      for(const field of ['title','description','badge','cta'])if(typeof group?.[field]==='string')group[field]=fix(group[field]);
+    });
+    return config;
+  }
+  async function publishTelegramConfig(){
+    if(!state.ui?.telegram_groups||state.uiStorageAvailable!==true){
+      showStatus('Telegram konfigurácia alebo Azure úložisko nie je dostupné.');return false;
+    }
+    showStatus('Overujem poslednú publikovanú verziu Telegram nastavení…');
+    try{
+      const status=await getJSON('/api/v1/ui-config?telegram_preflight='+Date.now(),{timeoutMs:5000});
+      if(status?.storage_available!==true||!status?.runtime_configured||!status?.config
+         || !/^[a-f0-9]{64}$/.test(String(status.config_revision||'')))
+        throw new Error('Aktuálnu konfiguráciu nemožno bezpečne overiť.');
+      const published=status.config.telegram_groups||{};
+      if(JSON.stringify(published)!==JSON.stringify(state.telegramPublishedOriginal||{}))
+        throw new Error('Telegram nastavenia sa medzičasom zmenili v inej relácii. Obnov stránku pred ďalším publikovaním.');
+      const wanted=normalizeTelegramGroupsForPublish(state.ui.telegram_groups);
+      // Fresh server state prevents Telegram edits overwriting other Admin areas.
+      const payload=clone(status.config);payload.telegram_groups=wanted;
+      const result=await BlinqAuth.adminSaveUiConfig(payload,status.config_revision);
+      if(!result?.saved)throw new Error('Azure nepotvrdil uloženie.');
+      let verified=null;
+      for(let attempt=0;attempt<3;attempt++){
+        const check=await getJSON('/api/v1/ui-config?telegram_readback='+Date.now()+'-'+attempt,{timeoutMs:5000});
+        if(check?.storage_available===true&&check?.runtime_configured===true
+           &&JSON.stringify(check.config?.telegram_groups||{})===JSON.stringify(wanted)){
+          verified=check;break;
+        }
+        await new Promise(resolve=>setTimeout(resolve,300));
+      }
+      if(!verified){
+        showStatus('Zápis bol prijatý, ale nezávislé načítanie Telegram textov sa nepotvrdilo. Pred ďalšími zmenami obnov stránku.');
+        return false;
+      }
+      state.telegramPublishedOriginal=clone(wanted);
+      state.ui.telegram_groups=clone(wanted);
+      state.uiPublishedRevision=String(verified.config_revision||'');
+      try{localStorage.setItem(VERIFIED_RUNTIME_UI_KEY,JSON.stringify(verified.config));}catch{}
+      renderTelegramGroupsPanel();rerenderAdmin();
+      showStatus('Telegram skupiny publikované a nezávisle overené v Azure.');
+      return true;
+    }catch(error){
+      showStatus(error?.message||'Publikovanie Telegram nastavení zlyhalo.');
+      return false;
+    }
+  }
   async function publishUiConfig(){
     if(!state.ui)return false;
     if(state.uiStorageAvailable!==true){
@@ -6864,6 +6916,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       }
       else if(action==='load-draft')restoreAdminDraft();
       else if(action==='publish-config')await publishUiConfig();
+      else if(action==='tg-publish')await publishTelegramConfig();
       else if(action==='tg-bot-queue'){
         const cfg=tgBotConfig();
         if(cfg.enabled!==true||!['top','value','aces'].some(k=>cfg.sections[k]===true)){showStatus('Zapni publisher a vyber kategóriu.');return;}
