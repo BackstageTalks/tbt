@@ -6,17 +6,18 @@ from tbt.services.comparator_markets import build_market_state, project_market_s
 CUTOFF = datetime(2026, 11, 1, tzinfo=timezone.utc)
 
 
-def match(day, tour="atp", *, aces_a=7, aces_b=4, status="completed"):
+def match(day, tour="atp", *, aces_a=7, aces_b=4, status="completed", best_of=3, surface="hard", games=None):
     return MatchRecord(
-        match_id=f"{tour}-{day}-{status}",
+        match_id=f"{tour}-{day}-{status}-bo{best_of}",
         tour=tour,
         scheduled_at=CUTOFF - timedelta(days=day),
         player1_id="a", player1_name="Alpha One",
         player2_id="b", player2_name="Beta Two",
-        surface="hard", winner_id="a", status=status, best_of=3,
+        surface=surface, winner_id="a", status=status, best_of=best_of,
         stats={
             "p1_aces": aces_a, "p2_aces": aces_b,
             "p1_double_faults": 2, "p2_double_faults": 3,
+            "total_games": games,
         },
     )
 
@@ -86,3 +87,56 @@ def test_cutoff_mismatch_and_tampered_sample_fail_closed():
     )["aces"] is None
     state["players"]["atp:a"]["samples"][0]["scheduled_at"] = CUTOFF.isoformat()
     assert project(state)["aces"] is None
+
+def test_empirical_bo5_duration_lifts_aces_with_real_total_games():
+    matches = (
+        [match(i, best_of=3, games=24, aces_a=7, aces_b=5) for i in range(1, 31)]
+        + [match(i + 40, best_of=5, games=42, aces_a=13, aces_b=9) for i in range(1, 31)]
+    )
+    state = build_market_state(matches, {"atp:a", "atp:b"}, CUTOFF)
+    bo3 = project(state)["aces"]
+    bo5 = project_market_state(
+        state, left_key="atp:a", right_key="atp:b", tour="atp",
+        surface="hard", best_of=5, now=CUTOFF + timedelta(hours=4), cutoff=CUTOFF,
+    )["aces"]
+    assert state["format_lengths"]["atp"]["hard"]["5"]["matches"] == 30
+    assert bo5["total_estimate"] > bo3["total_estimate"]
+    assert bo5["player1"]["effective_samples"] >= 3
+    assert bo5["range_calibration"] == "heuristic_not_backtested"
+
+
+def test_bo5_without_verified_format_duration_does_not_invent_cross_format_aces():
+    only_bo3 = [match(i, best_of=3, games=23) for i in range(1, 31)]
+    state = build_market_state(only_bo3, {"atp:a", "atp:b"}, CUTOFF)
+    value = project_market_state(
+        state, left_key="atp:a", right_key="atp:b", tour="atp",
+        surface="hard", best_of=5, now=CUTOFF + timedelta(hours=4), cutoff=CUTOFF,
+    )
+    assert value["aces"]["total_estimate"] is None
+    assert value["aces"]["player1"] is None
+    assert state["provider_requests"] == 0
+
+
+def test_indoor_hard_shares_verified_hard_surface_bucket():
+    rows = [match(i, surface="indoor_hard") for i in range(1, 16)]
+    state = build_market_state(rows, {"atp:a", "atp:b"}, CUTOFF)
+    value = project_market_state(
+        state, left_key="atp:a", right_key="atp:b", tour="atp",
+        surface="indoor_hard", best_of=3, now=CUTOFF + timedelta(hours=4), cutoff=CUTOFF,
+    )
+    assert value["aces"]["player1"]["surface_samples"] == 15
+
+
+def test_old_aces_are_abstained_even_with_six_recorded_rows():
+    rows = [match(i) for i in range(800, 815)]
+    state = build_market_state(rows, {"atp:a", "atp:b"}, CUTOFF)
+    value = project(state)
+    assert value["aces"]["player1"] is None
+    assert value["aces"]["total_estimate"] is None
+    assert value["double_faults"]["player2"] is None
+
+
+def test_market_projections_reject_cross_tour_keys_without_implicit_link():
+    rows = [match(i) for i in range(1, 15)]
+    state = build_market_state(rows, {"atp:a", "atp:b"}, CUTOFF)
+    assert project(state, left="wta:a")["aces"] is None
