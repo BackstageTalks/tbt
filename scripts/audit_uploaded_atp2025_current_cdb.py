@@ -222,10 +222,12 @@ def run(source_path, index_path, history_dir, out_path):
         for item in rows if item.get("canonical_match_id")
     }
     canon = {}
+    all_canonical = []
     for year in (2024, 2025):
         frame = pd.read_parquet(history_dir / f"history-{year}.parquet", columns=cols)
         for values in frame.itertuples(index=False, name=None):
             item = dict(zip(cols, values))
+            all_canonical.append(item)
             mid = str(item["match_id"])
             if mid in target_ids:
                 if mid in canon:
@@ -244,6 +246,9 @@ def run(source_path, index_path, history_dir, out_path):
         raise ValueError("Candidate identity bijection collision")
     summary["source_only_passed_quality"] = len(sources)
     summary["eligible_new_cells_written"] = 0
+    from audit_atp2025_metadata_candidates import review as metadata_review
+    metadata = metadata_review(sources, all_canonical)
+    assert metadata["canonical_links_authorized"] == metadata["cdb_writes"] == 0
     report = {
         "schema": "BLINQ_ATP2025_FLASH_NATIVE_CDB_RESEARCH_RECHECK_V1",
         "state": "READ_ONLY_NO_INDEPENDENT_CROSS_PROVIDER_EVENT_AND_TWO_PLAYER_WITNESS",
@@ -252,6 +257,7 @@ def run(source_path, index_path, history_dir, out_path):
         "cdb_partition_sha256s": checked,
         "counts": dict(sorted(summary.items())),
         "research_null_cells_not_authorized": potential,
+        "metadata_research": metadata,
         "verified_links_authorized": 0,
         "import_ready": False,
         "writer_invoked": False,
