@@ -130,8 +130,30 @@ def download_days(provider, matches, progress, start, end, checkpoint, quarantin
     }
     day = end
     count = 0
+    monthly_enabled = True
     while day >= start:
         if day.isoformat() not in done:
+            # Optimization only: batch category discovery without affecting
+            # per-day match fetch, identity, checkpoints, or the CDB writer.
+            prefetch = getattr(provider, "prefetch_calendar_categories", None)
+            if monthly_enabled and callable(prefetch):
+                batch_days = []
+                cursor = day
+                while (cursor >= start and len(batch_days) < 5
+                       and (cursor.year, cursor.month) == (day.year, day.month)):
+                    if cursor.isoformat() not in done:
+                        batch_days.append(cursor)
+                    cursor -= timedelta(days=1)
+                if len(batch_days) >= 2:
+                    try:
+                        prefetch(batch_days)
+                        if getattr(provider, "calendar_batch_metrics", {}).get(
+                                "invalid_responses", 0):
+                            monthly_enabled = False
+                    except ProviderError:
+                        # Optional monthly path unavailable: use daily contract.
+                        # Shared quota failures remain fatal, not suppressed.
+                        monthly_enabled = False
             rows = []
             for tour in ("atp", "wta"):
                 rows.extend(provider.matches_for_day(tour, day, historical=True))
