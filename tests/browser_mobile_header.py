@@ -119,12 +119,17 @@ def main():
                             const cell=tr?.querySelector('td:nth-child(7)');
                             const number=cell?.querySelector('.hub-number-stack strong');
                             const caption=cell?.querySelector('.hub-number-stack small');
+                            if(cell && !cell.dataset.label)cell.dataset.label='PROJEKCIA';
                             return {value:number?.textContent?.trim(),caption:caption?.textContent?.trim(),
-                              display:caption?getComputedStyle(caption).display:null};
+                              display:caption?getComputedStyle(caption).display:null,
+                              gap:cell?getComputedStyle(cell).columnGap:null,
+                              labelContent:cell?getComputedStyle(cell,'::before').content:null};
                           } finally {body.innerHTML=oldHtml;hub.dataset.tab=oldTab;}
                         }""")
                         assert ace_caption and ace_caption['value'] == '9.62', (width, ace_caption)
                         assert ace_caption['display'] == 'none', (width, ace_caption)
+                        assert ace_caption['gap'] == '12px', (width, ace_caption)
+                        assert 'PROJEKCIA' in ace_caption['labelContent'], (width, ace_caption)
 
                     if width <= 600:
                         # Actual Chromium-computed surfaces, including locked TG cards.
