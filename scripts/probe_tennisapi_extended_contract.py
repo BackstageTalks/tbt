@@ -99,7 +99,13 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int) ->
         "eligible_for_cdb_import": False,
     }
 
+    guard_halted = False
+
     def read(name: str, path: str, *, params: dict | None = None) -> Any:
+        nonlocal guard_halted
+        if guard_halted:
+            report["observations"][name] = {"state": "shared_budget_guard_halted"}
+            return {}
         if client.request_count >= max_requests:
             report["observations"][name] = {"state": "budget_cap"}
             return {}
@@ -108,6 +114,10 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int) ->
             report["observations"][name] = summarize(name, payload, event_id=event_id)
             return payload
         except Exception as exc:
+            if type(exc).__name__ in {
+                    "RequestBudgetExceeded", "SharedBudgetExhausted",
+                    "SharedBudgetUnavailable", "ConfigurationError"}:
+                guard_halted = True
             report["observations"][name] = {
                 "state": "error", "error_type": type(exc).__name__,
                 # Avoid copying provider response bodies or secrets into artifact.
