@@ -701,8 +701,13 @@
   async function bannerEvent(payload, keepalive = false) {
     return json('/api/v1/banner-events', {method: 'POST', keepalive, body: JSON.stringify(payload || {})});
   }
-  async function adminSaveUiConfig(payload) {
-    return apiWithSession('/api/v1/admin/ui-config', {method: 'PUT', body: JSON.stringify(payload || {})});
+  async function adminSaveUiConfig(payload, expectedRevision = '') {
+    const revision=String(expectedRevision||'');
+    return apiWithSession('/api/v1/admin/ui-config', {
+      method: 'PUT',
+      headers: revision ? {'X-BlinQ-UI-Revision': revision} : {},
+      body: JSON.stringify(payload || {}),
+    });
   }
   async function adminUiSnapshots() {
     return apiWithSession('/api/v1/admin/ui-config/snapshots');
