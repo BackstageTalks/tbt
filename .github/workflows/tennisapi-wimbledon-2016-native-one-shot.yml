@@ -31,6 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Fail-closed CDB writer, concurrent data jobs, shared provider-day quota preflight
+        id: preflight
         shell: bash
         run: |
           set -euo pipefail
@@ -99,12 +100,19 @@ jobs:
               'global_remaining':int(budget['global_remaining']),
               'max_requests':expected,'start':'2016-07-09','end':'2016-07-10',
               'model_promote':False}),flush=True)
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
+              output.write('allowed=true\\n')
           PY
       - name: Dispatch ONLY existing locked provider-native CDB history importer
+        if: steps.preflight.outputs.allowed == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          # The preflight step above may skip for a busy lock; fail closed here
-          # unless that step gave an explicit allowance in a persisted output.
-          # No direct writes or custom CDB writer exist in this workflow.
-          echo 'Dispatcher requires explicit budget and writer gate output.'
+          test "$GITHUB_REPOSITORY" = "BackstageTalks/tbt"
+          gh workflow run data.yml -R "$GITHUB_REPOSITORY" --ref main \
+            -f mode=history \
+            -f start=2016-07-09 \
+            -f end=2016-07-10 \
+            -f max_requests=40 \
+            -f promote=false
+          echo 'EXISTING_GUARDED_DATA_YML_HISTORY_DISPATCHED_NOT_CDB_VERIFIED'
