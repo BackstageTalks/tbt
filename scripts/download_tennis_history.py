@@ -19,7 +19,8 @@ from tbt.data.history_snapshot import (
     sync_year_partition,
     _provider_event_id,
 )
-from tbt.data.history_safety import sanitize_history_identities, quarantine_budget, merge_trusted_history_batch
+from tbt.data.history_safety import (sanitize_history_identities, quarantine_budget,
+    merge_trusted_history_batch, guard_scoped_history_identity_repair)
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.statistics_enrichment import StatisticsEnricher
@@ -571,36 +572,46 @@ def main():
     allocation = args.max_requests
     rows = load_partitions(directory) if list(directory.glob("history-*.parquet")) else []
     matches, history_safety = sanitize_history_identities(rows)
+    history_isolation = None
     if history_safety.get("changed"):
-        print(json.dumps({"history_safety": history_safety}, ensure_ascii=False), flush=True)
         limit = quarantine_budget(len(rows))
         if int(history_safety.get("quarantined_rows") or 0) > limit:
             raise ValueError(
                 f"History identity corruption exceeds automatic safety budget {limit}; "
                 "run mode=history-repair for diagnostics"
             )
-        # Persist the deterministic safety cleanup before spending provider calls.
-        # This removes legacy duplicate identity corruption from the private release
-        # and makes the run resumable even if the provider budget is later exhausted.
-        if store:
-            repaired_paths = []
-            repaired_removals = []
-            for year in history_safety.get("affected_years", []):
-                path, was_removed = sync_year_partition(
-                    matches, directory, int(year),
-                    extra_manifest={"identity_safety_repair": "automatic"},
-                )
-                if path is not None:
-                    repaired_paths.append(path)
-                elif was_removed:
-                    repaired_removals.append(f"history-{int(year):04d}.parquet")
-            manifest_file = directory / "history_manifest.json"
-            if manifest_file.is_file():
-                repaired_paths.append(manifest_file)
-            safety_report = directory / "history_identity_safety_report.json"
-            write_json(safety_report, history_safety)
-            repaired_paths.append(safety_report)
-            store.upload_bundle(repaired_paths, remove_names=repaired_removals)
+        if args.mode == "history":
+            # Never rewrite a year outside this import window; the ambiguous
+            # pre-existing rows remain in the unmodified canonical partition.
+            # Quarantined identities are excluded only from in-memory matching.
+            history_isolation = guard_scoped_history_identity_repair(
+                history_safety.get("affected_years", []), start=start, end=end)
+            print(json.dumps({"history_scoped_identity_isolation": {
+                **history_isolation,
+                "quarantined_existing_rows": int(history_safety.get("quarantined_rows") or 0),
+            }}, sort_keys=True), flush=True)
+        else:
+            print(json.dumps({"history_safety": history_safety}, ensure_ascii=False), flush=True)
+            # Existing conservative writer behavior for statistics/identity/extras.
+            if store:
+                repaired_paths = []
+                repaired_removals = []
+                for year in history_safety.get("affected_years", []):
+                    path, was_removed = sync_year_partition(
+                        matches, directory, int(year),
+                        extra_manifest={"identity_safety_repair": "automatic"},
+                    )
+                    if path is not None:
+                        repaired_paths.append(path)
+                    elif was_removed:
+                        repaired_removals.append(f"history-{int(year):04d}.parquet")
+                manifest_file = directory / "history_manifest.json"
+                if manifest_file.is_file():
+                    repaired_paths.append(manifest_file)
+                safety_report = directory / "history_identity_safety_report.json"
+                write_json(safety_report, history_safety)
+                repaired_paths.append(safety_report)
+                store.upload_bundle(repaired_paths, remove_names=repaired_removals)
     progress_file = directory / "download_progress.json"
     progress = read_json(progress_file, {"schema": 1, "completed_days": []})
     if progress.get("schema") != 1:
@@ -636,6 +647,15 @@ def main():
     pending_removals = set()
 
     def checkpoint(years, publish=False):
+        if args.mode == "history":
+            allowed_years = set(range(start.year, end.year + 1))
+            outside = {int(year) for year in years} - allowed_years
+            outside |= set(pending_years) - allowed_years
+            if outside:
+                raise ValueError(
+                    "CDB_HISTORY_SCOPE_WRITE_BLOCKED years="
+                    + ",".join(map(str, sorted(outside)))
+                )
         pending_years.update(years)
         for year in sorted(years):
             path, was_removed = sync_year_partition(
@@ -876,6 +896,12 @@ def main():
         try:
             output_report = dict(report)
             if args.mode == "history":
+                if history_isolation is not None:
+                    output_report["scoped_existing_identity_isolation"] = {
+                        **history_isolation,
+                        "quarantined_existing_rows": int(history_safety.get("quarantined_rows") or 0),
+                        "source_year_partitions_modified": False,
+                    }
                 # Counts actual provider requests and cache population; no
                 # unverified API saving is reported as a measured result.
                 output_report["calendar_batch_metrics"] = dict(
