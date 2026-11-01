@@ -1,10 +1,6 @@
 name: CDB 2016 source-native event identity audit (read-only)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/tennisapi-2016-cdb-native-audit.yml
   workflow_dispatch:
 
 permissions:
