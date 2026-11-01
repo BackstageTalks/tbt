@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "kind": "moviodds_drive_archival_smoke_request",
+  "utc_date": "2026-10-31",
+  "purpose": "Confirm existing service-account Editor access and independent uploaded JSON SHA-256 readback",
+  "cdb_write_authorized": false,
+  "model_change_authorized": false
+}
