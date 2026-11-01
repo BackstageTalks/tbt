@@ -84,6 +84,30 @@ def test_top_matching_handles_accents_and_preserves_exact_source():
     assert quotes[0]["provider"] == "propline"
 
 
+def test_provider_native_american_h2h_odds_are_real_decimal_prices():
+    """Regression from the 2026-11-01 production archive (+150 / -222)."""
+    assert clv._price(150) == 2.5
+    assert clv._price(-222) == 1.4505
+    assert clv._price(-100) == 2.0
+    assert clv._price(2.1) == 2.1
+    assert clv._price(0) is None
+    assert clv._price("nan") is None
+    assert clv._price(1_000_000) is None
+    now = datetime(2026, 11, 2, 13, tzinfo=timezone.utc)
+    american = sample(books=[{"key": "AdmiralBet", "markets": [
+        {"key": "h2h", "outcomes": [
+            {"name": "Karolina Muchova", "price": 150},
+            {"name": "Rebecca Sramkova", "price": -222},
+        ]}
+    ]}])
+    quotes, rejected = clv.extract_verified_quotes(american, offer(), now=now)
+    assert rejected == 0
+    assert len(quotes) == 1
+    assert quotes[0]["odds1"] == 2.5
+    assert quotes[0]["odds2"] == 1.4505
+    assert quotes[0]["bookmaker"] == "AdmiralBet"
+
+
 def test_value_is_in_scope_but_prime_is_not():
     now = datetime(2026, 11, 2, 13, tzinfo=timezone.utc)
     v, _ = clv.extract_verified_quotes(
