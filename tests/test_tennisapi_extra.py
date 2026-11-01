@@ -1,5 +1,6 @@
 """Provider confirmed 2026-10-14: strict event-market and PBP guards."""
 from datetime import datetime, timezone
+from copy import deepcopy
 
 import pytest
 
@@ -32,6 +33,27 @@ SAMPLE = {
          "choices": [{"name": "1", "fractionalValue": "4/5"}]},
     ],
 }
+
+
+@pytest.mark.parametrize("level", ["envelope", "market", "choice"])
+@pytest.mark.parametrize("flag", [True, "true", "false", None, 0, 1])
+def test_suspended_or_malformed_flags_cannot_produce_snapshot(level, flag):
+    payload = deepcopy(SAMPLE)
+    payload["markets"] = payload["markets"][:1]
+    target = {"envelope": payload, "market": payload["markets"][0],
+              "choice": payload["markets"][0]["choices"][0]}[level]
+    target["suspended"] = flag
+    assert normalize_market_snapshot(payload, event_id=17305441)["quotes"] == []
+
+
+def test_explicit_false_suspension_keeps_snapshot():
+    payload = deepcopy(SAMPLE)
+    payload["suspended"] = False
+    for market in payload["markets"]:
+        market["suspended"] = False
+        for choice in market["choices"]:
+            choice["suspended"] = False
+    assert len(normalize_market_snapshot(payload, event_id=17305441)["quotes"]) == 6
 
 
 def test_provider_confirmed_markets_capture_all_and_no_fake_quote_time():
