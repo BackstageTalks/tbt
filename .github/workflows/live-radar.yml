@@ -60,6 +60,28 @@ jobs:
                             'live_spent':budget['live_spent']},sort_keys=True))
           PY
 
+      - name: Capture MoviOdds LIVE tennis statistics to durable DB
+        # Reuse the externally driven LIVE clock, without RapidAPI calls.
+        continue-on-error: true
+        env:
+          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          curl --fail-with-body --silent --show-error --max-time 45 \
+            -X POST -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN" \
+            "${BLINQ_BASE_URL%/}/api/v1/internal/moviodds-stats-worker?mode=live" \
+            -o /tmp/moviodds-live.json
+          python - <<'PY'
+          import json
+          report=json.load(open("/tmp/moviodds-live.json"))
+          if not report.get("ok") or report.get("errors"):
+              raise SystemExit("MoviOdds LIVE durable collection failed")
+          print("MOVIODDS_LIVE_DB", report.get("live"))
+          PY
+
       - name: Retire expired INFO and LIVE history (six-hour server lease)
         env:
           BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}

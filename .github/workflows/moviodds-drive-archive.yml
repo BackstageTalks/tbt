@@ -1,0 +1,71 @@
+name: MoviOdds verified tennis JSON archive to Drive
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        type: string
+        description: 'Finished UTC date YYYY-MM-DD; default yesterday UTC'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moviodds-drive-archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      BLINQ_PUBLIC_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+      BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      # Existing service account can write ONLY after folder-level Editor
+      # permission is granted on the operator's specific MoviOdds folder.
+      BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+      BLINQ_DRIVE_WRITER_JSON: ${{ secrets.BLINQ_DRIVE_WRITER_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate writer and protected export prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN" || { echo 'BLOCKED_EXPORT_WORKER_TOKEN_MISSING'; exit 1; }
+          test -n "$BLINQ_DRIVE_WRITER_JSON" || test -n "$BLINQ_DRIVE_READER_JSON" || { echo 'BLOCKED_MOVIODDS_DRIVE_CREDENTIAL_MISSING'; exit 1; }
+          echo 'MOVIODDS_EXPORT_PREREQUISITES_PRESENT'
+      - name: Install authenticated Drive client
+        run: python -m pip install --disable-pip-version-check google-auth requests
+      - name: Export finalized source and verify remote Drive JSON readback
+        shell: bash
+        env:
+          REQUESTED_DAY: ${{ inputs.date }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$REQUESTED_DAY" ]]; then
+            days=("$REQUESTED_DAY")
+          else
+            # Automatically repair one/two missed archive days and capture
+            # late-provider finalized records as immutable new versions.
+            days=("$(date -u -d 'yesterday' +%F)"
+                  "$(date -u -d '2 days ago' +%F)"
+                  "$(date -u -d '3 days ago' +%F)")
+          fi
+          for day in "${days[@]}"; do
+            python scripts/moviodds_drive_archive.py --date "$day" \
+              --folder-id 13kDDxOaQ0L1Jr5ZjbSNjbDFJiNSz9uwx \
+              --out-dir work/moviodds
+          done
+      - name: Preserve independent troubleshooting artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: moviodds-verified-export-${{ github.run_id }}
+          path: work/moviodds/*.json
+          retention-days: 14
+          if-no-files-found: ignore
