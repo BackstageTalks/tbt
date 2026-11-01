@@ -128,7 +128,6 @@ def save_observations(table, records: list[dict], *, completed: bool,
     """
     report = {"raw": len(records), "valid": 0, "written": 0,
               "duplicate": 0, "conflict": 0, "rejected": 0}
-    slot = collected_at.astimezone(timezone.utc).strftime("%Y%m%dT%H") + f"{collected_at.minute // 15:01d}"
     for record in records:
         item = _payload(record, completed=completed) if isinstance(record, dict) else None
         if item is None:
@@ -138,7 +137,12 @@ def save_observations(table, records: list[dict], *, completed: bool,
         report["valid"] += 1
         source_date = (data["finished_at"][:10] if completed else collected_at.date().isoformat())
         part = source_date.replace("-", "")
-        key = "final:" + fixture if completed else f"live:{fixture}:{slot}"
+        observed = _when(data["observed_at"])
+        if observed is None:
+            report["rejected"] += 1
+            continue
+        sample_id = observed.strftime("%Y%m%dT%H%M%S%f")
+        key = "final:" + fixture if completed else f"live:{fixture}:{sample_id}"
         serialized = json.dumps(data, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
         if len(serialized.encode("utf-8")) > 45000:
             report["rejected"] += 1
