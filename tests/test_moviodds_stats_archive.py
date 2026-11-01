@@ -39,7 +39,9 @@ class Table:
 
     def query_entities(self, *, query_filter):
         partition = query_filter.split("'")[1]
-        return [dict(v) for (p, _), v in self.entities.items() if p == partition]
+        # Mirror Azure's one-shot ItemPaged query_entities iterator rather
+        # than a re-iterable list. Reiterating consumes it permanently.
+        return (dict(v) for (p, _), v in self.entities.items() if p == partition)
 
 
 def _mark_completed_day_scanned(table):
@@ -138,9 +140,11 @@ def test_tampered_azure_source_digest_refused():
 
 
 class Response:
-    def __init__(self, *, obj=None, raw=None):
+    def __init__(self, *, obj=None, raw=None, status=200):
         self.obj = obj
         self.raw = raw
+        self.ok = status < 400
+        self.status_code = status
 
     def raise_for_status(self):
         return None
@@ -204,3 +208,18 @@ def test_drive_corrupted_prior_archive_fails_closed():
     with pytest.raises(ValueError, match="readback mismatch"):
         upload_archive(fake, date_utc="2026-11-01",
                        folder_id="folder", export=export)
+
+def test_drive_403_reports_google_api_reason_without_leaking_response():
+    class Forbidden(ArchiveSession):
+        def post(self, url, *, params, headers, data, timeout):
+            return Response(obj={"error": {
+                "errors": [{"reason": "storageQuotaExceeded"}],
+                "message": "do not leak this diagnostic body",
+            }}, status=403)
+
+    export = {"schema": 1, "source": "moviodds", "verified": True,
+              "days": ["2026-11-01"], "count": 0, "records": []}
+    with pytest.raises(RuntimeError, match=r"403 reason=storageQuotaExceeded") as info:
+        upload_archive(Forbidden(), date_utc="2026-11-01",
+                       folder_id="folder", export=export)
+    assert "do not leak" not in str(info.value)
