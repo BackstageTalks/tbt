@@ -189,7 +189,7 @@ def _conflict(exc: Exception) -> bool:
 
 
 def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
-            table: Any = None, paced: bool = False, pace_table: Any = None) -> dict:
+            table: Any = None, paced: bool | None = None, pace_table: Any = None) -> dict:
     """Atomic reservation in the same durable store used by BlinQ admin.
 
     Table may be injected in tests. Retries only on optimistic write races,
@@ -207,6 +207,10 @@ def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
     # A failed daily budget may waste a time slot but cannot spend quota on a
     # request that never happens. Both operations fail closed on store errors.
     pace_proof = None
+    if paced is None:
+        # Runtime direct storage reservations must not silently bypass the
+        # distributed limiter. Injected synthetic tables keep old test rules.
+        paced = table is None and bool(os.getenv("FUNCTIONS_WORKER_RUNTIME", "").strip())
     if paced:
         from .shared_rate import reserve_pace
         pace_proof = reserve_pace(table=pace_table)
