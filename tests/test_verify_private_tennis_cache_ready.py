@@ -61,3 +61,11 @@ def test_verified_cache_sets_pacing_and_raw_env_only_after_readback(monkeypatch,
         f"BLINQ_TENNIS_RAW_CACHE_URL={CACHE}\n"
         "BLINQ_SHARED_RPS_REQUIRED=true\n"
     )
+
+
+def test_private_cache_redirect_cannot_forward_worker_token():
+    from urllib.request import Request
+    request = Request(CACHE, headers={"X-Blinq-Worker-Token": "worker-secret"})
+    handler = gate.DenyWorkerTokenRedirect()
+    assert handler.redirect_request(request, None, 302, "Found", {},
+                                    "https://attacker.test/collect") is None
