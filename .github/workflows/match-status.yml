@@ -199,7 +199,11 @@ jobs:
         # Keep existing external Match Status 30-minute cron unchanged.
         # Retry failure including BUSY writer after two-hour cooldown.
         # A verified successful run closes the week; no duplicate writer.
-        if: always() && github.event_name == 'workflow_dispatch'
+        # QUALITY HOLD 2026-11-01: 410 source rows, 0 verified CDB additions,
+        # 5 conflicts and unresolved identity quarantine. Do not automatically
+        # dispatch canonical MoviOdds writes until a new source QA authorizes it.
+        # LIVE/final DB capture and read-only staging stay active.
+        if: ${{ false }}
         # A failed dispatch must fail this job, not a green workflow.
         env:
           GH_TOKEN: ${{ github.token }}
