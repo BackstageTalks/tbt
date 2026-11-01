@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from tbt.services.statistics_gapfill import event_id, missing_fields, retry_due
+from tbt.services.statistics_gapfill import event_id, missing_fields, retry_due, recent_score_identity_conflict
 from tbt.services.statistics_enrichment import StatisticsEnricher, STATISTICS_SCHEMA_VERSION
 
 
@@ -563,3 +563,91 @@ def test_wta_2025_ineligible_gaps_report_why_without_extra_api_calls(
         "missing_or_conflicting_event_id": 1,
         "retry_not_due": 1,
     }
+
+
+def _known_score_identity_conflict(match, *, fetched_at):
+    match.provider_payload = {
+        "id": "123",
+        "_tbt_event_identity": {
+            "event_id": "123", "home": "A", "away": "X", "status": "mismatch",
+        },
+        "_tbt_score": {
+            "schema": 3, "event_id": "123", "status": "identity_mismatch",
+            "identity_verified": False, "fetched_at": fetched_at,
+        },
+    }
+
+
+def test_score_proven_identity_conflict_skips_paid_hourly_statistics(match_factory):
+    from datetime import date
+    from download_tennis_history import _statistics_candidates
+
+    m = match_factory("conflict", "A", "B", "A")
+    now = datetime.now(timezone.utc)
+    _known_score_identity_conflict(m, fetched_at=now.isoformat())
+    assert recent_score_identity_conflict(m, now=now)
+    candidates, plan = _statistics_candidates([m], date(2020, 1, 1),
+                                               date(2026, 12, 31), targeted=True)
+    assert candidates == []
+    assert plan["skipped"]["recent_identity_conflict"] == 1
+
+    class NeverCallProvider:
+        def _get(self, path, **kwargs):
+            raise AssertionError("Recent score mismatch must not trigger API")
+
+    # The direct collector also protects manual/non-targeted modes.
+    from tempfile import TemporaryDirectory
+    from pathlib import Path
+    with TemporaryDirectory() as tmp:
+        enricher = StatisticsEnricher(NeverCallProvider(), Path(tmp)/"stats.sqlite", targeted=True)
+        try:
+            assert enricher.enrich(m) == "cached"
+        finally:
+            enricher.close()
+
+
+def test_score_identity_conflict_gate_requires_valid_current_evidence(match_factory):
+    now = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
+    m = match_factory("conflict", "A", "B", "A")
+    _known_score_identity_conflict(m, fetched_at=(now - timedelta(days=31)).isoformat())
+    assert not recent_score_identity_conflict(m, now=now)
+    m.provider_payload["_tbt_score"]["fetched_at"] = now.isoformat()
+    assert recent_score_identity_conflict(m, now=now)
+    m.provider_payload["_tbt_score"]["event_id"] = "999"
+    assert not recent_score_identity_conflict(m, now=now)
+    m.provider_payload["_tbt_score"]["event_id"] = "123"
+    m.provider_payload["_tbt_event_identity"]["away"] = "B"
+    assert not recent_score_identity_conflict(m, now=now)
+    m.provider_payload["_tbt_event_identity"]["away"] = "X"
+    m.provider_payload["_tbt_score"]["fetched_at"] = "bad"
+    assert not recent_score_identity_conflict(m, now=now)
+
+
+def test_expired_identity_mismatch_recheck_quarantines_without_hourly_refetch(
+    match_factory, tmp_path,
+):
+    class Provider:
+        calls = []
+        def _get(self, path, **kwargs):
+            self.calls.append(path)
+            assert path == "/api/tennis/event/123"
+            return {"event": {
+                "homeTeam": {"id": "A"}, "awayTeam": {"id": "X"},
+                "status": {"type": "finished"},
+            }}
+
+    now = datetime.now(timezone.utc)
+    m = match_factory("conflict", "A", "B", "A")
+    _known_score_identity_conflict(m, fetched_at=(now - timedelta(days=31)).isoformat())
+    provider = Provider()
+    enricher = StatisticsEnricher(provider, tmp_path/"retry.sqlite", targeted=True)
+    try:
+        assert enricher.enrich(m) == "conflict"
+        assert provider.calls == ["/api/tennis/event/123"]
+        assert m.provider_payload["_tbt_statistics"]["status"] == "conflict"
+        assert m.provider_payload["_tbt_statistics"]["reason"] == "provider_identity_mismatch"
+        assert not m.stats
+        assert enricher.enrich(m) == "cached"
+        assert provider.calls == ["/api/tennis/event/123"]
+    finally:
+        enricher.close()
