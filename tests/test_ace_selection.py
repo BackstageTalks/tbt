@@ -123,3 +123,26 @@ def test_double_fault_confidence_is_predictive_and_capped_below_old_97_percent()
     assert report["settlement_enabled"] is True
     assert "empirical_calibration" in report
     assert report["uncertainty_model"] == "future_count_predictive_variance"
+
+
+def test_aces_model_selection_is_identical_with_or_without_provider_market():
+    """Market discovery must not add, replace or remove a BlinQ model selection."""
+    now = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+    rows = []
+    for i in range(10):
+        when = now - timedelta(days=20 + i * 8)
+        rows.append(historical(f"model-a{i}", when, "A", f"X{i}", 9, 3, 1, 2))
+        rows.append(historical(f"model-b{i}", when, "B", f"Y{i}", 3, 8, 4, 2))
+    fixture = prediction(now + timedelta(hours=5))
+
+    no_market, _ = select_ace_picks(
+        rows, [fixture], now=now, available_markets_by_event={},
+    )
+    full_market, _ = select_ace_picks(
+        rows, [fixture], now=now,
+        available_markets_by_event={"999": {"aces", "double_faults"}},
+    )
+    default, _ = select_ace_picks(rows, [fixture], now=now)
+    assert no_market == full_market == default
+    assert {card["market"] for card in default} == {"aces", "double_faults"}
+    assert all(card["odds"] is None for card in default)
