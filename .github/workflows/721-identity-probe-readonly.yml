@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - 'scripts/diagnose_frozen_721_settlement.py'
-      - '.github/workflows/721-identity-probe-readonly.yml'
   workflow_dispatch:
 
 permissions:
