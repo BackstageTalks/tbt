@@ -7641,6 +7641,27 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const band=String(result.confidence?.data_band||'low').toLowerCase();
     const sample=band==='high'?lcopy('Good sample','Dobrá vzorka','Dobrá vzorka'):band==='medium'?lcopy('Partial sample','Čiastočná vzorka','Částečný vzorek'):lcopy('Limited sample','Obmedzená vzorka','Omezený vzorek');
     const left=valid(p1.probability)?Math.max(0,Math.min(100,Number(p1.probability)*100)):50;
+    const special=(x,key)=>{
+      const metric=x?.surface_special_rates?.[key];
+      return Number(metric?.matches)>=3&&valid(metric?.mean)&&Number(metric.mean)>=0&&Number(metric.mean)<=1
+        ?pct(metric.mean)+' · n='+num(metric.matches):'—';
+    };
+    const marketRows=(key,label)=>{
+      const data=result.markets?.[key],v1=data?.player1,v2=data?.player2;
+      const estimate=x=>valid(x?.estimate)?num(x.estimate,1)+' · n='+num(x.samples):'—';
+      const total=valid(data?.total_estimate)?num(data.total_estimate,1):'—';
+      return `<article class="comparator-market-card">
+        <h5>${escapeHtml(label)}</h5>
+        <div class="comparator-market-values"><span>${escapeHtml(p1.name||'—')}<strong>${escapeHtml(estimate(v1))}</strong></span><span>${escapeHtml(p2.name||'—')}<strong>${escapeHtml(estimate(v2))}</strong></span></div>
+        <p>${escapeHtml(lcopy('Projected combined total','Projekcia spolu','Projekce celkem'))}: <b>${escapeHtml(total)}</b></p>
+        <small>${escapeHtml(lcopy('Historical estimate, not a bookmaker line. Minimum 6 recorded matches per player.','Odhad z histórie, nie vypísaná stávková hranica. Min. 6 zápasov so štatistikou na hráča.','Odhad z historie, ne sázková hranice. Min. 6 zápasů se statistikou na hráče.'))}</small>
+      </article>`;
+    };
+    const marketCards=marketRows('aces',lcopy('Aces','Esá','Esa'))+
+      marketRows('double_faults',lcopy('Double faults','Dvojchyby','Dvojchyby'));
+    const evidenceCutoff=String(fresh.cutoff_utc||result.evidence?.history_cutoff_utc||'');
+    const ageNote=valid(fresh.age_hours)?' · '+num(fresh.age_hours,1)+' h':'';
+    const cutoffNote=evidenceCutoff?evidenceCutoff.slice(0,16).replace('T',' ')+' UTC':'—';
     return `<section class="comparator-result comparator-analytics" aria-live="polite">
       <header class="comparator-result-head"><small>${escapeHtml(lcopy('MATCH ANALYSIS','ANALÝZA ZÁPASU','ANALÝZA ZÁPASU'))}</small><h3>${escapeHtml(p1.name||'—')} <em>vs</em> ${escapeHtml(p2.name||'—')}</h3><p>${escapeHtml(lcopy('Model favourite','Favorit modelu','Favorit modelu'))}: <b>${escapeHtml(result.winner?.name||'—')}</b></p></header>
       <div class="comparator-prob-grid">
@@ -7650,6 +7671,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       <div class="comparator-prob-meter" role="img" aria-label="${escapeHtml(`${p1.name}: ${pct(p1.probability)}, ${p2.name}: ${pct(p2.probability)}`)}"><span style="width:${left.toFixed(2)}%"></span></div>
       <div class="comparator-quality"><b>${escapeHtml(sample)}</b><span>${escapeHtml(String(result.tour||'').toUpperCase())} · ${escapeHtml(String(result.surface||'').replace('_',' '))} · ${escapeHtml(lcopy('max sets','max. setov','max. setů'))} ${escapeHtml(String(result.best_of||3))}</span></div>
       <div class="comparator-analytics-body">
+        <div class="comparator-evidence-time" role="status">${escapeHtml(lcopy('Verified snapshot cutoff','Cutoff overeného snapshotu','Cutoff ověřeného snapshotu'))}: <strong>${escapeHtml(cutoffNote)}</strong>${escapeHtml(ageNote)} ${fresh.stale?escapeHtml(lcopy('· older snapshot','· starší snapshot','· starší snapshot')):''}</div>
         <div class="comparator-section-head"><h4>${escapeHtml(lcopy('Recent form','Aktuálna forma','Aktuální forma'))}</h4><small>${escapeHtml(lcopy('Completed matches before snapshot · oldest → newest','Zápasy pred snapshotom · od najstaršieho','Zápasy před snapshotem · od nejstaršího'))}</small></div>
         <div class="comparator-form-cards">${playerForm(p1,a)}${playerForm(p2,b)}</div>
         <div class="comparator-insight-grid">
@@ -7664,6 +7686,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
             ${stat(lcopy('Matches on surface','Zápasy na povrchu','Zápasy na povrchu'),num(a.surface_matches),num(b.surface_matches))}
           </article>
         </div>
+        <div class="comparator-section-head"><h4>${escapeHtml(lcopy('Aces & double faults','Esá a dvojchyby','Esa a dvojchyby'))}</h4><small>${escapeHtml(lcopy('Pre-match projections from canonical completed matches','Predzápasové projekcie z dokončených zápasov CDB','Předzápasové projekce z dokončených zápasů CDB'))}</small></div>
+        <div class="comparator-market-grid">${marketCards}</div>
         <div class="comparator-section-head"><h4>${escapeHtml(lcopy('Performance','Výkonnosť','Výkonnost'))}</h4><small>${escapeHtml(lcopy('Measured data, not bookmaker odds','Uložené dáta, nie stávkové kurzy','Uložená data, ne sázkové kurzy'))}</small></div>
         <div class="comparator-stats">
           <div class="comparator-stat-row comparator-stat-head"><span></span><strong>${escapeHtml(p1.name||'—')}</strong><strong>${escapeHtml(p2.name||'—')}</strong></div>
@@ -7671,9 +7695,15 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
           ${stat(lcopy('Overall Elo','Celkové Elo','Celkové Elo'),num(a.overall_elo,1),num(b.overall_elo,1))}
           ${stat(lcopy('Surface Elo','Povrchové Elo','Povrchové Elo'),num(a.surface_elo,1),num(b.surface_elo,1))}
           ${stat(lcopy('Wins · last 10','Výhry · posledných 10','Výhry · posledních 10'),form(a.recent_10),form(b.recent_10))}
+          ${stat(lcopy('Wins · last 20','Výhry · posledných 20','Výhry · posledních 20'),form(a.recent_20),form(b.recent_20))}
           ${stat(lcopy('Wins · surface last 10','Výhry · povrch/10','Výhry · povrch/10'),form(a.surface_recent_10),form(b.surface_recent_10))}
+          ${stat(lcopy('Wins · surface last 20','Výhry · povrch/20','Výhry · povrch/20'),form(a.surface_recent_20),form(b.surface_recent_20))}
           ${stat(lcopy('Serve quality index','Index kvality servisu','Index kvality servisu'),quality(a,'serve'),quality(b,'serve'),lcopy('0–1 index · minimum 3 available surface samples','Index 0–1 · min. 3 dostupné vzorky na povrchu','Index 0–1 · min. 3 dostupné vzorky na povrchu'))}
           ${stat(lcopy('Return quality index','Index kvality returnu','Index kvality returnu'),quality(a,'return'),quality(b,'return'),lcopy('0–1 index · not raw point-win percentage','Index 0–1 · nie priamo % vyhraných bodov','Index 0–1 · ne přímo % vyhraných bodů'))}
+          ${stat(lcopy('Break-point save rate','Úspešnosť záchrany brejkbalov','Úspěšnost odvrácení brejkbolů'),special(a,'break_point_save'),special(b,'break_point_save'),lcopy('Observed charting fraction on selected surface · min. 3 samples','Pozorovaný podiel na povrchu · min. 3 vzorky','Pozorovaný podíl na povrchu · min. 3 vzorky'))}
+          ${stat(lcopy('Break-point conversion','Premenené brejkbaly','Proměněné brejkboly'),special(a,'break_point_convert'),special(b,'break_point_convert'))}
+          ${stat(lcopy('First-strike serve','Prvý úder po servise','První úder po podání'),special(a,'first_strike'),special(b,'first_strike'))}
+          ${stat(lcopy('Return in play','Return v hre','Return ve hře'),special(a,'return_in_play'),special(b,'return_in_play'))}
         </div>
         ${signals?`<div class="comparator-section-head"><h4>${escapeHtml(lcopy('Supporting signals','Podporné signály','Podpůrné signály'))}</h4><small>${escapeHtml(lcopy('Direction of evidence, not causal model attribution','Smer signálov, nie vyčíslený vplyv na model','Směr signálů, ne vyčíslený vliv na model'))}</small></div><div class="comparator-factors">${signals}</div>`:''}
         <p class="comparator-analytics-note">${escapeHtml(lcopy('Model probabilities are estimates, not guaranteed results. Missing or limited samples are marked —. Only completed historical data before the UTC-day cutoff are used; no live odds.','Pravdepodobnosti sú odhady modelu, nie garancia. Chýbajúce alebo malé vzorky sú označené —. Používa sa len história pred dennou UTC uzávierkou, bez LIVE kurzov.','Pravděpodobnosti jsou odhady modelu, ne záruka. Chybějící nebo malé vzorky jsou označené —. Použita je jen historie před denní UTC uzávěrkou, bez LIVE kurzů.'))}</p>
