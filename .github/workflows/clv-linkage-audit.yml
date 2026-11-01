@@ -38,8 +38,7 @@ jobs:
           import json
           from datetime import datetime, timezone
           from tbt.services.clv_market_history import _offer_rows, extract_verified_quotes, _pair, _time
-          from tbt.services.feed import visible_feed
-          base='/tmp/clv-linkage-audit/'
+                    base='/tmp/clv-linkage-audit/'
           src=json.load(open(base+'feed.json'))
           offered=json.load(open(base+'daily_offer_snapshot.json'))
           clv=json.load(open(base+'clv.json'))
@@ -48,9 +47,11 @@ jobs:
             for key in ('daily_picks','top_daily_picks','value_picks','prime_picks','results')})
           print('SNAPSHOT_COUNTS', {key:len(offered.get(key) or []) if isinstance(offered.get(key),list) else None
             for key in ('daily_picks','top_daily_picks','value_picks','prime_picks')})
-          public=visible_feed(src)
-          rows=_offer_rows(public)
-          quote, rejected=extract_verified_quotes(clv,public,now=datetime(2026,11,1,16,tzinfo=timezone.utc))
+          # Internal CLV ingestion links against the complete immutable issued feed.
+          # visible_feed() is only for public entitlement/day presentation and
+          # wrongly hides tomorrow's already-issued picks during this audit.
+          rows=_offer_rows(src)
+          quote, rejected=extract_verified_quotes(clv,src,now=datetime(2026,11,1,16,tzinfo=timezone.utc))
           print('EXTRACT', {'offer_rows':len(rows),'archived_events':len(clv.get('events') or []),
              'accepted_quotes':len(quote),'rejected':rejected})
           for key in ('top_daily_picks','value_picks'):
