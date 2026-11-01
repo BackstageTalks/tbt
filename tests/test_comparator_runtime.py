@@ -161,6 +161,15 @@ def test_runtime_analytics_use_only_pre_cutoff_history_and_keep_winner_unchanged
         assert stats["surface_recent_10"]["matches"] <= 10
         assert len(stats["recent_results"]) == stats["recent_10"]["matches"]
         assert all(x["result"] in ("W", "L") for x in stats["recent_results"])
+        surface_trend = stats["surface_recent_results"]
+        assert len(surface_trend) == stats["surface_recent_20"]["matches"]
+        assert 0 < len(surface_trend) <= 20
+        assert all(row["result"] in ("W", "L") for row in surface_trend)
+        dates = [datetime.fromisoformat(row["played_at"]) for row in surface_trend]
+        assert dates == sorted(dates)
+        assert all(dt < NOW.replace(hour=0, minute=0, second=0, microsecond=0)
+                   for dt in dates)
+        assert all("played_at" in row for row in surface_trend)
         assert stats["days_since_last_match"] is not None
         assert stats["days_since_last_match"] >= 1
         assert set(stats["surface_quality_samples"]) == {"serve", "return"}
