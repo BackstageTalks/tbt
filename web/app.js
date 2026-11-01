@@ -3903,6 +3903,118 @@
     if(!Number.isFinite(peak)||peak<=1||!Number.isFinite(base)||base<=1||peak<=base+0.005)return '';
     return `<small class="result-live-max">MAX ${peak.toFixed(2)}</small>`;
   }
+
+  // Admin-only monthly report. Calculations are read-only and based on the
+  // settled, authorized, deduplicated publication ledger (not display quotes).
+  const MONTHLY_SECTIONS=[
+    ['top_daily','TOP'],['prime','ACCA'],['value','VALUE'],
+    ['doubles','Štvorhra'],['ace','Esá'],['double_faults','Dvojchyby'],
+    ['sets','Sety'],['games','Gamy']
+  ];
+  function monthlyPerformanceState(){
+    if(!state.monthlyPerformance){
+      const thisMonth=bratislavaBettingDayKey(Date.now(),0).slice(0,7);
+      const [year,month]=thisMonth.split('-').map(Number);
+      const prior=new Date(Date.UTC(year,month-2,1)).toISOString().slice(0,7);
+      state.monthlyPerformance={month:prior,sections:MONTHLY_SECTIONS.map(([key])=>key),
+        tour:'',surface:'',minOdds:'',maxOdds:'',outcomes:['win','loss','void']};
+    }
+    return state.monthlyPerformance;
+  }
+  function monthlyMetricRows(){
+    const selection=monthlyPerformanceState(),month=/^\d{4}-(0[1-9]|1[0-2])$/.test(selection.month)
+      ?selection.month:bratislavaBettingDayKey(Date.now(),0).slice(0,7);
+    const [year,numberMonth]=month.split('-').map(Number);
+    const last=String(new Date(Date.UTC(year,numberMonth,0)).getUTCDate()).padStart(2,'0');
+    const filters={category:'all',window:'custom',dateFrom:month+'-01',
+      dateTo:month+'-'+last,bettingDay:false,tour:selection.tour,surface:selection.surface};
+    // Reuse the canonical, de-duplicated publication view, including existing
+    // publication authorization and settlement checks.
+    const entries=settledPublishedEntries(filteredResults(filters),'all',filters);
+    const selected=new Set(selection.sections);
+    const allowedOutcomes=new Set(selection.outcomes);
+    const min=selection.minOdds===''?null:Number(selection.minOdds);
+    const max=selection.maxOdds===''?null:Number(selection.maxOdds);
+    return entries.filter(({publication,categories})=>{
+      if(!categories.some(c=>selected.has(c)))return false;
+      const outcome=publicationOutcome(publication).kind;
+      if(!allowedOutcomes.has(outcome))return false;
+      const odds=publication.odds==null?NaN:Number(publication.odds);
+      // Apply odds bounds only to actual published quotations. Never coerce
+      // a synthetic or indicative display price into a real wager.
+      if(min!==null&&(!Number.isFinite(odds)||odds<min))return false;
+      if(max!==null&&(!Number.isFinite(odds)||odds>max))return false;
+      return true;
+    });
+  }
+  function monthlyFinancialRecord(publication){
+    const outcome=publicationOutcome(publication).kind;
+    if(outcome==='void')return {profit:0,stake:0,priced:false};
+    if(!['win','loss'].includes(outcome))return null;
+    const odds=publication.odds==null?NaN:Number(publication.odds);
+    const status=String(publication.price_status||'').toLowerCase();
+    const projection=['aces','double_faults','sets','games'].includes(String(publication.market||'').toLowerCase());
+    if(!(projection?status==='priced_projection':['','priced','priced_projection'].includes(status))
+      ||!Number.isFinite(odds)||odds<=1)return null;
+    const stake=publication.result?.staked_units==null?NaN:Number(publication.result.staked_units);
+    const profit=publication.result?.profit_units==null?NaN:Number(publication.result.profit_units);
+    if(!Number.isFinite(stake)||stake<=0||!Number.isFinite(profit))return null;
+    return {profit:profit/stake,stake:1,priced:true,odds};
+  }
+  function renderMonthlyPerformance(){
+    const s=monthlyPerformanceState(),entries=monthlyMetricRows();
+    const all=entries.map(item=>({...item,outcome:publicationOutcome(item.publication).kind,
+      financial:monthlyFinancialRecord(item.publication)}));
+    const wins=all.filter(x=>x.outcome==='win').length;
+    const losses=all.filter(x=>x.outcome==='loss').length;
+    const voids=all.filter(x=>x.outcome==='void').length;
+    const quoted=all.filter(x=>x.financial?.priced);
+    const excluded=all.filter(x=>['win','loss'].includes(x.outcome)&&!x.financial?.priced).length;
+    const profit=quoted.reduce((sum,x)=>sum+x.financial.profit,0);
+    const n=quoted.length,roi=n?profit/n*100:null;
+    const avg=n?quoted.reduce((sum,x)=>sum+x.financial.odds,0)/n:null;
+    const fmt=(value,d=2)=>Number(value).toLocaleString('sk-SK',{minimumFractionDigits:d,maximumFractionDigits:d});
+    const signed=value=>(value>0?'+':'')+fmt(value);
+    const option=(value,label,current)=>'<option value="'+escapeHtml(value)+'"'+(value===current?' selected':'')+'>'+escapeHtml(label)+'</option>';
+    const tours=[...new Set((state.feed.results||[]).map(r=>String(r.tour||'').toUpperCase()).filter(Boolean))].sort();
+    const surfaces=[...new Set((state.feed.results||[]).map(r=>String(r.surface||'').toLowerCase().replace('indoor_hard','hard')).filter(Boolean))].sort();
+    const daily=new Map();
+    quoted.forEach(item=>{
+      const key=bratislavaBettingDayKey(item.row.scheduled_at||item.row.date||0,0);
+      daily.set(key,(daily.get(key)||0)+item.financial.profit);
+    });
+    const [y,m]=s.month.split('-').map(Number),days=new Date(Date.UTC(y,m,0)).getUTCDate();
+    let running=0;
+    const values=Array.from({length:days},(_,i)=>{
+      const date=s.month+'-'+String(i+1).padStart(2,'0');
+      running+=daily.get(date)||0;return running;
+    });
+    const low=Math.min(0,...values),high=Math.max(0,...values),span=Math.max(1,high-low);
+    const positions=values.map((v,i)=>[20+(days===1?0:i/(days-1))*720,170-(v-low)/span*145]);
+    const path=positions.map(([x,y],i)=>(i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1)).join(' ');
+    const zero=(170-(0-low)/span*145).toFixed(1);
+    const categories=MONTHLY_SECTIONS.map(([key,label])=>'<label><input type="checkbox" data-monthly-section="'+key+'"'+(s.sections.includes(key)?' checked':'')+'><span>'+label+'</span></label>').join('');
+    const outcomes=[['win','WIN'],['loss','LOSS'],['void','VOID']].map(([key,label])=>
+      '<label><input type="checkbox" data-monthly-outcome="'+key+'"'+(s.outcomes.includes(key)?' checked':'')+'><span>'+label+'</span></label>').join('');
+    return '<section class="monthly-performance" aria-label="Mesačná výkonnosť" style="margin:22px 0;padding:20px;border:1px solid #28445a;border-radius:18px;background:#0d1b2c;color:#e4edf6">'+
+      '<header style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><small style="color:#96afc6">BLINQ ANALYTICS · ADMIN</small><h2 style="margin:5px 0">Mesačné výsledky</h2><small style="color:#96afc6">Interaktívny výber tipov zahrnutých do výpočtu</small></div><label>Mesiac <input type="month" id="monthlyMonth" value="'+escapeHtml(s.month)+'" style="color-scheme:dark"></label></header>'+
+      '<div class="monthly-controls" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:18px 0">'+
+      '<label>Okruh <select id="monthlyTour">'+option('','ATP + WTA',s.tour)+tours.map(v=>option(v,v,s.tour)).join('')+'</select></label>'+
+      '<label>Povrch <select id="monthlySurface">'+option('','Všetky',s.surface)+surfaces.map(v=>option(v,v,s.surface)).join('')+'</select></label>'+
+      '<label>Kurz od <input type="number" id="monthlyMinOdds" min="1.01" step="0.01" placeholder="Bez limitu" value="'+escapeHtml(s.minOdds)+'"></label>'+
+      '<label>Kurz do <input type="number" id="monthlyMaxOdds" min="1.01" step="0.01" placeholder="Bez limitu" value="'+escapeHtml(s.maxOdds)+'"></label></div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:15px;margin:12px 0"><fieldset style="flex:2;min-width:230px;border:1px solid #365066;border-radius:10px"><legend>Kategórie vstupujúce do výpočtu</legend><div style="display:flex;gap:12px;flex-wrap:wrap">'+categories+'</div></fieldset>'+
+      '<fieldset style="flex:1;min-width:150px;border:1px solid #365066;border-radius:10px"><legend>Výsledky</legend><div style="display:flex;gap:12px;flex-wrap:wrap">'+outcomes+'</div></fieldset></div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:18px 0">'+
+      [['Profit',n?signed(profit)+' u':'—'],['ROI',roi===null?'—':signed(roi)+' %'],['Úspešnosť',wins+losses?fmt(wins/(wins+losses)*100,1)+' %':'—'],['Priemerný kurz',avg===null?'—':fmt(avg)],['WIN / LOSS / VOID',wins+' / '+losses+' / '+voids],['Započítané do ROI',n+' / '+all.length]].map(([label,value])=>
+      '<div style="padding:13px;background:#1c2c3f;border-radius:11px"><small style="color:#aabed1">'+escapeHtml(label)+'</small><div style="font-size:21px;font-weight:700;margin-top:4px">'+escapeHtml(value)+'</div></div>').join('')+'</div>'+
+      '<div style="padding:15px;background:#17273a;border-radius:12px"><strong>Kumulatívny profit (1 u / tip)</strong><svg viewBox="0 0 760 192" style="display:block;width:100%;height:auto;max-height:260px" role="img" aria-label="Denný kumulatívny profit za mesiac">'+
+      '<line x1="20" y1="'+zero+'" x2="740" y2="'+zero+'" stroke="#73869a" stroke-dasharray="5 5"/>'+
+      '<path d="'+path+'" fill="none" stroke="#43d88c" stroke-width="3" stroke-linejoin="round"/>'+
+      '<text x="20" y="190" fill="#aabed1" font-size="13">1.</text><text x="705" y="190" fill="#aabed1" font-size="13">'+days+'.</text></svg></div>'+
+      '<p style="font-size:12px;color:#aabed1;margin:12px 0 0" role="status">Vzorka: '+all.length+' unikátnych vyhodnotených tipov; '+excluded+' bez použiteľného overeného kurzu / vyúčtovania nezahrnutých do ROI. Profit je normalizovaný na 1 jednotku vkladu. VOID sa nezapočítava do menovateľa ROI. Filtre nemenia produkčné dáta ani globálne výsledky.</p></section>';
+  }
+
   function renderResults(){
     if(state.feed?.results_exclusions_unavailable)return '<div class="state-card" role="alert">Vyhodnotené výsledky sú dočasne nedostupné – prebieha ochranné overenie administrátorských vylúčení. Predikcie zostávajú dostupné.</div>';
     const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',entries=settledPublishedEntries(rows,category,filters);
@@ -4105,6 +4217,22 @@
     if(to)to.onchange=()=>{state.resultsFilters.dateTo=to.value||'';if(state.resultsFilters.dateFrom&&state.resultsFilters.dateTo<state.resultsFilters.dateFrom)state.resultsFilters.dateFrom=state.resultsFilters.dateTo;state.resultsFilters.window='custom';rerender();};
     if(bettingDay)bettingDay.onchange=()=>{state.resultsFilters.bettingDay=Boolean(bettingDay.checked);rerender();};
     const clear=$('resultsDateClear');if(clear)clear.onclick=()=>{state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';state.resultsFilters.window='all';rerender();};
+    const monthly=monthlyPerformanceState();
+    const updateMonthly=(field,value)=>{monthly[field]=value;renderRoute('results');};
+    [['monthlyMonth','month'],['monthlyTour','tour'],['monthlySurface','surface'],
+      ['monthlyMinOdds','minOdds'],['monthlyMaxOdds','maxOdds']].forEach(([id,field])=>{
+      const el=$(id);if(el)el.onchange=()=>updateMonthly(field,el.value);
+    });
+    document.querySelectorAll('[data-monthly-section]').forEach(el=>el.onchange=()=>{
+      const next=new Set(monthly.sections);
+      if(el.checked)next.add(el.dataset.monthlySection);else next.delete(el.dataset.monthlySection);
+      updateMonthly('sections',MONTHLY_SECTIONS.map(([key])=>key).filter(key=>next.has(key)));
+    });
+    document.querySelectorAll('[data-monthly-outcome]').forEach(el=>el.onchange=()=>{
+      const next=new Set(monthly.outcomes);
+      if(el.checked)next.add(el.dataset.monthlyOutcome);else next.delete(el.dataset.monthlyOutcome);
+      updateMonthly('outcomes',['win','loss','void'].filter(key=>next.has(key)));
+    });
     const size=$('resultsPageSize');if(size)size.onchange=()=>{state.resultsPageSize=[50,100].includes(Number(size.value))?Number(size.value):50;state.resultsPage=0;renderRoute('results');};
     const prev=$('resultsPrevPage'),next=$('resultsNextPage');
     if(prev)prev.onclick=()=>{if(state.resultsPage>0){state.resultsPage-=1;renderRoute('results');window.scrollTo({top:0,behavior:'smooth'});}};
@@ -7995,7 +8123,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     else if(route==='results'){
       // An empty Today result is a valid outcome of the selected filters.
       // Never silently switch to All time and show results from other days.
-      body=resultsAccessAllowed()?(renderResultsFilters()+resultsSummary()+`<div class="route-sub results-section-head results-section-clean">${renderResults()}</div>`):resultsLockedCard();
+      body=resultsAccessAllowed()?(renderResultsFilters()+(isAdminAccount()?renderMonthlyPerformance():'')+resultsSummary()+`<div class="route-sub results-section-head results-section-clean">${renderResults()}</div>`):resultsLockedCard();
     }
     else if(route==='tournaments'){const names=[...new Set((feed.upcoming||[]).map(x=>x.tournament).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):escapeHtml(publicText('No upcoming tournament coverage is currently published.'))}</div>`;}
     else if(route==='players'){const names=[...new Set((feed.upcoming||[]).flatMap(x=>[x.player1?.name,x.player2?.name]).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):escapeHtml(publicText('No upcoming players are currently published.'))}</div>`;}
