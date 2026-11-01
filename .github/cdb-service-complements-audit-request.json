@@ -2,14 +2,15 @@
   "schema": 1,
   "mode": "dry-run",
   "workflow": "cdb-service-complement-audit.yml",
-  "reason": "After 2026 verified restoration, capture canonical serve-return coverage and non-identifying sanitizer corrections; no provider/API, no CDB writes; do not weaken writer gate.",
+  "reason": "Read-only stage for 2016-2026 service/return: exact 6 ambiguous provider-event identity rows isolated in 2026; no canonical writes, no API calls, no model update; full CDB preflight and aggregate receipt.",
   "approved_by_operator": true,
   "purpose": "Read-only current canonical 2016-2026 and historical CDB exact already-observed opposing service/return complement NULL candidates; do not mutate CDB, no provider calls, zero overwrite, require new SHA/count/years pin before any guarded import.",
   "api_requests": 0,
   "cdb_write": false,
   "write_authorized": false,
-  "request_id": "cdb-service-coverage-identity-safety-readonly-20261101-1504",
-  "previous_request_id": "blinq-cdb-service-complements-readonly-after-2026-recovery-41310504634",
+  "request_id": "cdb-2026-six-provider-collision-isolated-stage-20261101",
+  "previous_request_id": "cdb-service-coverage-identity-safety-readonly-20261101-1504",
   "prior_evidence_run_id": 41310504634,
-  "expected_prior_reference_manifest_sha256": "1a89a4ffb8ab87b5219c31b2853b3eab8a83015b7f10d508ddbeae43567a5e19"
+  "expected_prior_reference_manifest_sha256": "1a89a4ffb8ab87b5219c31b2853b3eab8a83015b7f10d508ddbeae43567a5e19",
+  "pinned_identity_quarantine": 6
 }
