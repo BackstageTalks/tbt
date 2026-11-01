@@ -256,6 +256,7 @@ class RapidTennisClient:
         params: dict[str, Any] | None = None,
         *,
         enrichment: bool = False,
+        optional_not_found: bool = False,
     ) -> Any:
         url = (
             f"{self.cfg.rapidapi_base_url}"
@@ -311,6 +312,9 @@ class RapidTennisClient:
                     raise RequestBudgetExceeded(
                         "Provider rate-limit remaining header missing"
                     )
+
+                if response.status_code in {204} or (optional_not_found and response.status_code == 404):
+                    return {}
 
                 if response.status_code == 429:
                     if attempt + 1 >= attempts:
@@ -492,40 +496,12 @@ class RapidTennisClient:
         )
 
     def _get_optional_json(self, path: str) -> Any:
-        """GET optional provider JSON; 204/404 mean unavailable, not fatal."""
-        url = f"{self.cfg.rapidapi_base_url}{path}"
-        self._throttle()
-        _enforce_provider_day_hard_stop()
-        if self.request_limit is not None and self.request_count >= self.request_limit:
-            raise RequestBudgetExceeded("Per-run request limit exhausted")
-        if (self.rate_limit_remaining is not None
-                and self.rate_limit_remaining <= _provider_request_reserve()):
-            raise RequestBudgetExceeded("Provider reserve reached")
-        if self.request_budget is not None:
-            self.request_budget(self.client, self.cfg, enrichment=True)
-        self._last_request_at = time.monotonic()
-        self.request_count += 1
-        response = self.client.get(url, headers=self.headers)
-        remaining = response.headers.get("x-ratelimit-requests-remaining")
-        if remaining is not None:
-            self.rate_limit_remaining = safe_int(remaining)
-            if self.rate_limit_remaining is None and _require_provider_remaining_header():
-                raise RequestBudgetExceeded("Invalid provider remaining header")
-        elif _require_provider_remaining_header():
-            raise RequestBudgetExceeded(
-                "Provider rate-limit remaining header missing"
-            )
-        if response.status_code in {204, 404}:
-            return {}
-        if response.status_code == 429:
-            raise ProviderError(f"RapidAPI HTTP 429 for {path}")
-        if response.status_code >= 400:
-            raise ProviderError(
-                f"RapidAPI HTTP {response.status_code} for {path}: {response.text[:300]}"
-            )
-        if not response.content:
-            return {}
-        return response.json()
+        """Optional JSON shares the paid budget, cutoff, retries and provider headers.
+
+        Only this explicitly optional route treats 404 as absence. Ordinary _get
+        callers still receive a provider error for 404; 204 is an empty response.
+        """
+        return self._get(path, enrichment=True, optional_not_found=True)
 
     def player_details(self, player_id: str | int) -> Any:
         """Current player profile metadata for presentation only.
