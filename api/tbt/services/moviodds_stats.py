@@ -225,8 +225,10 @@ def collect(*, now: datetime | None = None, opener=None, table=None,
         except Exception as exc:
             report["errors"].append("live_" + type(exc).__name__)
     if collect_finished:
-        # Avoid gaps over midnight/late provider index propagation.
-        for day in (now.date() - timedelta(days=1), now.date()):
+        # Collect current and the prior two UTC days to recover late provider
+        # indexing and autonomous Drive retry after transient source outages.
+        for day in (now.date() - timedelta(days=2),
+                    now.date() - timedelta(days=1), now.date()):
             key = day.isoformat()
             try:
                 data = _get("/results", params={"sport": "tennis", "date": key,
