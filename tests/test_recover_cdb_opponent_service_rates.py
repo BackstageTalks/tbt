@@ -383,3 +383,64 @@ def test_provider_quarantine_not_approved_without_explicit_stage_mode(monkeypatc
     with pytest.raises(ValueError, match="Canonical identity sanitizer"):
         mod._load(tmp_path, isolate_provider_collisions=True,
                   expected_provider_quarantine=5)
+
+
+def test_full_readback_retains_all_six_ambiguous_provider_rows(monkeypatch, tmp_path):
+    from scripts import recover_cdb_opponent_service_rates as mod
+    from copy import deepcopy
+    safe = match("safe", stats={"p1_first_serve_win": 0.64})
+    ambiguous = [match("q" + str(i), stats={"p1_aces": i}) for i in range(6)]
+    all_rows = [safe, *ambiguous]
+    safety = {
+        "input_rows": 7, "rows_after_proven_merges": 7,
+        "output_rows": 1, "quarantined_rows": 6,
+        "merged_rows_removed": 0, "changed": True,
+        "affected_years": [2026], "duplicate_match_ids": [],
+        "duplicate_provider_event_ids": ["event1", "event2", "event3"],
+        "quarantine": [
+            {"match_id": "q" + str(i),
+             "provider_event_id": "event" + str(i // 2 + 1),
+             "reason": "ambiguous_duplicate_identity"}
+            for i in range(6)
+        ],
+    }
+    monkeypatch.setattr(mod, "load_partitions", lambda directory: all_rows)
+    monkeypatch.setattr(mod, "sanitize_history_identities",
+                        lambda rows: ([safe], safety))
+    assert mod._load(tmp_path, isolate_provider_collisions=True,
+                     expected_provider_quarantine=6) == [safe]
+    full = mod._load(
+        tmp_path, isolate_provider_collisions=True,
+        expected_provider_quarantine=6,
+        include_quarantined_for_full_readback=True,
+    )
+    assert [row.match_id for row in full] == ["safe", "q0", "q1", "q2", "q3", "q4", "q5"]
+    assert mod.verify_readback(full, deepcopy(full), [])["canonical_matches"] == 7
+    damaged = deepcopy(full)
+    damaged[1].stats["p1_aces"] = 999
+    with pytest.raises(ValueError, match="Unstaged or missing persisted statistics"):
+        mod.verify_readback(full, damaged, [])
+
+
+def test_full_readback_exception_never_skips_a_different_identity_conflict(monkeypatch, tmp_path):
+    from scripts import recover_cdb_opponent_service_rates as mod
+    safe = match("safe")
+    safety = {
+        "input_rows": 7, "output_rows": 1, "quarantined_rows": 6,
+        "merged_rows_removed": 0, "changed": True,
+        "affected_years": [2026], "duplicate_match_ids": ["wrong"],
+        "duplicate_provider_event_ids": ["event1", "event2", "event3"],
+        "quarantine": [
+            {"match_id": "q" + str(i),
+             "provider_event_id": "event" + str(i // 2 + 1),
+             "reason": "ambiguous_duplicate_identity"}
+            for i in range(6)
+        ],
+    }
+    monkeypatch.setattr(mod, "load_partitions", lambda directory: [safe])
+    monkeypatch.setattr(mod, "sanitize_history_identities",
+                        lambda rows: ([safe], safety))
+    with pytest.raises(ValueError, match="Canonical identity sanitizer"):
+        mod._load(tmp_path, isolate_provider_collisions=True,
+                  expected_provider_quarantine=6,
+                  include_quarantined_for_full_readback=True)
