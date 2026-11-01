@@ -325,7 +325,7 @@ native_schedules = {
     'morning-refresh.yml': "cron: '15 5 * * *'",
     'telegram-daily-offer.yml': "cron: '20 6 * * *'",
     'telegram-offer.yml': "cron: '12,42 * * * *'",
-    'data-hourly-quota-gapfill.yml': "cron: '17 * * * *'",
+    'data-hourly-quota-gapfill.yml': "cron: '3 * * * *'",
     'nightly-data-maintenance.yml': "cron: '30 0 * * *'",
 }
 for workflow_name, cron_expr in native_schedules.items():
