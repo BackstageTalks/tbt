@@ -1752,18 +1752,27 @@
     return `<button class="hub-detail is-locked" type="button" data-detail-locked data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}" aria-label="${escapeHtml(lcopy(`Match detail available from ${required}`,`Detail zápasu dostupný od ${required}`,`Detail zápasu dostupný od ${required}`))}" title="${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od ${required}`,`Dostupné od ${required}`))}"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span><i aria-hidden="true"><svg viewBox="0 0 20 20"><rect x="4" y="8" width="12" height="9" rx="2"/><path d="M6.5 8V5a3.5 3.5 0 0 1 7 0v3"/></svg></i></button>`;
   }
   function renderSystemFooterStatus(){
-    const host=$('footerSystemStatus'),time=$('footerLastUpdate');if(!host||!time)return;
-    // Match-status worker snapshot time is provided by the authenticated feed.
-    // Do not substitute feed generation or LIVE radar timestamps for a match scan.
-    const matchScanAt=state.feed?.match_status_updated_at||'';
-    time.textContent=Number.isFinite(Date.parse(matchScanAt))
-      ?lcopy(`Last scan: ${fmtTime(matchScanAt)}`,`Posledný scan: ${fmtTime(matchScanAt)}`,`Poslední sken: ${fmtTime(matchScanAt)}`)
-      :lcopy('Last scan: —','Posledný scan: —','Poslední sken: —');
-    const heartbeat=state.liveRadarHeartbeat||state.userLiveRadarStatus||{};
-    const raw=heartbeat?.scanned_at||heartbeat?.updated_at||state.feed?.generated_at||'';
-    const parsed=Date.parse(raw);
-    const fresh=heartbeat?.fresh===true||(Number.isFinite(parsed)&&Date.now()-parsed<=180000);
-    host.classList.toggle('is-stale',!fresh);
+    const host=$('footerSystemStatus'),scan=$('footerLastUpdate'),update=$('footerFeedUpdate'),model=$('footerModelVersion');
+    if(!host||!scan||!update||!model)return;
+    const feedAt=state.feed?.generated_at||'';
+    update.textContent=Number.isFinite(Date.parse(feedAt))
+      ?lcopy(`Update ${fmtTime(feedAt)}`,`Aktualizácia ${fmtTime(feedAt)}`,`Aktualizace ${fmtTime(feedAt)}`)
+      :lcopy('Update —','Aktualizácia —','Aktualizace —');
+    const matchAt=state.feed?.match_status_updated_at||'';
+    scan.textContent=Number.isFinite(Date.parse(matchAt))
+      ?lcopy(`Scan ${fmtTime(matchAt)}`,`Scan ${fmtTime(matchAt)}`,`Sken ${fmtTime(matchAt)}`)
+      :lcopy('Scan —','Scan —','Sken —');
+    const version=shortModelVersion(state.feed?.model?.version||state.feed?.model_version||'');
+    model.textContent=lcopy(`Model version ${version||'—'}`,`Verzia modelu ${version||'—'}`,`Verze modelu ${version||'—'}`);
+    // Only the authenticated match updater timestamp controls footer health.
+    const matchMs=Date.parse(matchAt);
+    const ageMs=Date.now()-matchMs;
+    const healthy=Number.isFinite(matchMs)&&ageMs>=0&&ageMs<=30*60*1000;
+    host.classList.toggle('is-stale',!healthy);
+    const label=host.querySelector('strong');
+    if(label)label.textContent=healthy
+      ?lcopy('All systems operational','Všetky systémy funkčné','Všechny systémy funkční')
+      :lcopy('Match updater delayed','Match updater mešká','Aktualizace zápasů má zpoždění');
   }
   function insightTypeLabel(type){return ({info:'Info',insight:'Premium Info',alert:'LIVE · COMEBACK',live_watch:'LIVE · WATCH',set2:'LIVE · 2. SET',vip:'Premium Info'})[String(type||'').toLowerCase()]||'Insight';}
   function insightAudienceText(levels){
