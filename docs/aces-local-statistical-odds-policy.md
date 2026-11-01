@@ -15,3 +15,7 @@ For **future** player-Aces UNDER selections only, require the actual offered boo
 This is separate from the 1.60–1.80 locally statistically grounded *display price* policy above. The line and EV selection require real provider odds; synthetic/local prices never establish a bettable market. Existing historical publications are immutable. Other markets and ACES OVER/superiority are unaffected.
 
 Introduced by [PR #1174](https://github.com/BackstageTalks/tbt/pull/1174), with regression tests and a read-only historical filter audit. The historical filter test cannot infer the prices of alternative lines that were not actually issued.
+
+### 2026-11-01 pre-release historical sanity check
+
+The read-only replay of settled, truly provider-priced player Aces UNDER publications found **100** eligible historical observations (78 hits; 55.917 flat-unit profit). Requiring the minimum offered-line cushion retains **97** observations (77 hits; 56.917 units): 78.0% → 79.38% historical hit rate and 55.92% → 58.68% flat-unit ROI. Only **three** historically issued offers were filtered; the result is directional and must not be presented as proof of future profitability. It does **not** replay alternative bookmaker lines, which may not have existed or had an acceptable price.
