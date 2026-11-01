@@ -169,7 +169,7 @@ skóre, môže sa pridať prísnejší full-score gate bez zmeny writeru.
 **Žiadny nový externý cron.** Existujúci Match Status job (každých 30 minút
 pod externým cron plánovačom) raz týždenne, **v nedeľu o 06:00 UTC**,
 dispatchuje \`cdb-drive-inbox.yml\` s
-\`source_mode=moviodds\`, \`moviodds_days_back=14\`,
+\`source_mode=moviodds\`, \`moviodds_days_back=7\`,
 \`request_id=moviodds-YYYY-MM-DD\`. GitHub run-name kontrola zabráni
 druhému dispatchu toho istého týždňa.
 
