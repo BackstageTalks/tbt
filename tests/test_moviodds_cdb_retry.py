@@ -118,3 +118,16 @@ def test_match_status_checks_out_retry_script_and_does_not_hide_failure():
     assert "set -euo pipefail" in retry_block
     # Other existing half-hour tasks continue under their own always() gates.
     assert "if: always() && github.event_name == 'workflow_dispatch'" in retry_block
+
+
+def test_late_global_writer_race_cannot_report_moviodds_import_success():
+    workflow = (ROOT / ".github/workflows/cdb-drive-inbox.yml").read_text()
+    late = workflow.split(
+        "      - name: Acquire global single writer ONLY for a positive, validated delta", 1
+    )[1].split(
+        "      - name: Atomic CAS verification and select immutable backup years", 1
+    )[0]
+    assert 'if [[ "$SOURCE_MODE" == "drive" ]]; then' in late
+    assert "python scripts/cdb_inbox_pending_batch.py persist" in late
+    assert "MOVIODDS_CDB_DEFERRED_LATE_LOCK_RACE_NOT_IMPORTED" in late
+    assert "exit 1" in late.split("MOVIODDS_CDB_DEFERRED_LATE_LOCK_RACE_NOT_IMPORTED", 1)[1]
