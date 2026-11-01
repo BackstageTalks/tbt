@@ -14,7 +14,7 @@ def test_provider_has_full_presentation_endpoints():
     assert "def head_to_head_history" in text
     assert 'f"/api/tennis/match/{token}/h2h"' in text
     assert 'f"/api/tennis/player/{player_id}/events/near"' in text
-    assert 'f"/api/tennis/player/{player_id}/events/last/{page}"' in text
+    assert 'f"/api/tennis/player/{player_id}/events/previous/{page}"' in text
     assert 'f"/api/tennis/player/{player_id}/events/next/{page}"' in text
 
 
