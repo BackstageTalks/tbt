@@ -3529,7 +3529,7 @@
     if(explicit)return cleaned.endsWith(' · '+explicit[0])&&cleaned.slice(0,-explicit[0].length-3).toLowerCase().endsWith(explicit[0].toLowerCase())?cleaned.slice(0,-explicit[0].length-3):cleaned;
     const rawLine=metric==='games'?publication?.reference_projection:publication?.market_line??publication?.line??publication?.threshold;
     const line=rawLine==null?NaN:Number(rawLine);
-    const direction=String(publication?.projection_direction||'').toLowerCase();
+    const direction=String(publication?.ou_side||publication?.projection_direction||'').toLowerCase();
     const projected=publication?.projection==null?NaN:Number(publication.projection);
     const side=['over','high'].includes(direction)?'Over':['under','low'].includes(direction)?'Under':Number.isFinite(projected)&&Number.isFinite(line)?(projected>=line?'Over':'Under'):'';
     if(side&&Number.isFinite(line)&&['aces','double_faults','games'].includes(metric)){
@@ -3560,6 +3560,10 @@
     if(!Number.isFinite(actual))return '—';
     const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
     const primary=projectionResultNumber(actual,publication,1);
+    const line=publication?.market_line==null?NaN:Number(publication.market_line);
+    if(metric==='aces'&&String(publication?.price_contract||'').toLowerCase()==='player_total_ou'&&Number.isFinite(line)){
+      return `${primary} · ${lcopy('line','hranica','hranice')} ${line.toFixed(1)}`;
+    }
     if(['aces','double_faults'].includes(metric)&&Number.isFinite(opponent)){
       return `${primary} · ${lcopy('opponent','súper','soupeř')} ${projectionResultNumber(opponent,publication,1)}`;
     }
