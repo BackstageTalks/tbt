@@ -273,6 +273,21 @@ def _drive_source_hints(manifest_path: Path | None, input_dir: Path):
 # exclusively with the exact offline linker.
 TML_ATP_2026_SOURCE_SHA = "8e9b756d1874e9e7866796b797273dd3b791d89eeb6b52aa6ee961a2c4c82c01"
 TML_ATP_2026_SOURCE_SUFFIX = "/Sackmann/TML/TML/2026.csv"
+TML_ATP_SOURCE_ROOT = "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/TML/TML"
+# Exact downloaded source checksums. Never infer ATP from bare YYYY.csv.
+TML_ATP_SOURCE_SHAS = {
+    2016: "28a106544a50184c742263eed43a49ca725be735cbf640143c51ab32e40e8588",
+    2017: "b55f12e9bf5220b694cd8954f65027f1b7e649ce4977da0316a1a3f4f2f20ea4",
+    2018: "5abc0e80e83ddab9f04f682b6e72fa062ad11d523c88f3c105f690a555bacc4a",
+    2019: "6821d93e92de9110b365cd3b4f8d30138c261bcf679de4a5ccaff6917c33335e",
+    2020: "3c97228abeede853db0139e4b49699aecbadafd2e7000acaaf9a449d38da202d",
+    2021: "80d570be31d778b143eb58380258243785bf3fcb18db144b42704bc6c56d941b",
+    2022: "d70036c6ee6c27dd3deda6e6c9ccd500b66e6e78106fb00794cb277e37353357",
+    2023: "9faaf53186ef908b3322d521a8dd2a717401167c0e400a99e1efddb23e13600f",
+    2024: "db27fb184b62bc1716ecc84c5a8365088e34e8e9a0101a59782ec7907f6e2de8",
+    2025: "a00f5f991b4949c2c6867637ac02a8c44b9058780da67aba8600e9140002f8d3",
+    2026: "8e9b756d1874e9e7866796b797273dd3b791d89eeb6b52aa6ee961a2c4c82c01",
+}
 # From independent TML-versus-BAL/123 source-only reconciliation:
 # line 64 lacks loser source ID; line 121 is W/O with conflicting counts.
 # Neither can become a CDB candidate even when the SHA-pinned tour is known.
@@ -283,9 +298,30 @@ TML_ATP_2026_QUARANTINE = frozenset({
 
 
 def tour_from_pinned_tml(sha, path):
-    return ("atp" if sha == TML_ATP_2026_SOURCE_SHA
-            and isinstance(path, str)
-            and path.endswith(TML_ATP_2026_SOURCE_SUFFIX) else "")
+    if not isinstance(path, str):
+        return ""
+    match = re.fullmatch(re.escape(TML_ATP_SOURCE_ROOT) + r"/(20(?:1[6-9]|2[0-6]))\\.csv", path)
+    if not match:
+        return ""
+    return "atp" if TML_ATP_SOURCE_SHAS.get(int(match.group(1))) == sha else ""
+
+
+def _pinned_tml_safety_reason(raw):
+    """Only match-level finished native records with coherent observed counts."""
+    if not isinstance(raw, dict):
+        return "tml_invalid_source_row"
+    ids = [str(raw.get(k) or "").strip() for k in ("winner_id", "loser_id")]
+    if not all(ids) or ids[0] == ids[1]:
+        return "tml_native_identity_missing_or_equal"
+    score = str(raw.get("score") or "").strip()
+    if not score or re.search(r"\\b(?:W/O|WO|RET|ABD|DEF|walkover)\\b", score, re.I):
+        return "tml_noncompleted_or_missing_score"
+    # The existing native stage validates internal consistency; same quality
+    # gate here prevents generic normalization from rescuing invalid totals.
+    from scripts.cdb_native_sackmann_stage import _quality
+    if _quality(raw) not in {"COMPLETE_BASIC_SERVE_RETURN", "VALID_PARTIAL_SERVE_OR_BP"}:
+        return "tml_invalid_or_missing_stat_counts"
+    return ""
 
 
 def normalize(raw, filename, index, *, source_tour=""):
@@ -440,13 +476,18 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
                         raise ValueError("Table exceeds row limit")
                     counts["raw_rows"] += 1
                     table_seen += 1
-                    if (is_pinned_tml and isinstance(raw, dict)
-                            and (str(raw.get("tourney_id") or ""),
-                                 str(raw.get("match_num") or "")) in TML_ATP_2026_QUARANTINE):
-                        counts["rejected_rows"] += 1
-                        counts["reason_tml_cross_source_review_quarantine"] += 1
-                        table_rejections["tml_cross_source_review_quarantine"] += 1
-                        continue
+                    if is_pinned_tml:
+                        tml_reason = _pinned_tml_safety_reason(raw)
+                        if (not tml_reason and
+                                (str(raw.get("tourney_id") or ""),
+                                 str(raw.get("match_num") or "")) in TML_ATP_2026_QUARANTINE
+                                and original_sha == TML_ATP_2026_SOURCE_SHA):
+                            tml_reason = "tml_cross_source_review_quarantine"
+                        if tml_reason:
+                            counts["rejected_rows"] += 1
+                            counts["reason_" + tml_reason] += 1
+                            table_rejections[tml_reason] += 1
+                            continue
                     row, reason = normalize(raw, member_name, index,
                                             source_tour=folder_tour)
                     if reason:
