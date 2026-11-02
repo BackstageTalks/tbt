@@ -291,6 +291,25 @@ TML_ATP_SOURCE_SHAS = {
 # From independent TML-versus-BAL/123 source-only reconciliation:
 # line 64 lacks loser source ID; line 121 is W/O with conflicting counts.
 # Neither can become a CDB candidate even when the SHA-pinned tour is known.
+# Exactly matched TML 2025 vs BAL ATP 2025 by winner, loser, event,
+# round, surface, source tournament start + 0..16 days, and final score.
+# Same match but 653 unequal observed fields in 112 source rows.
+# This is a SHA-bound conflict review, NOT evidence that BAL is canonical.
+# TML SHA: a00f5f991b4949c2c6867637ac02a8c44b9058780da67aba8600e9140002f8d3
+# BAL SHA: 46f5c8b1cc6ee1706dff0f029b8d9dfdaea4613ad2db82cbe7ad6e83cefbaa55
+# Ordinals are 1-based CSV record indices, NOT physical text line numbers.
+TML_ATP_2025_CROSS_SOURCE_CONFLICT_ORDINALS = frozenset({
+    635, 2194, 2195, 2196, 2197, 2198, 2199, 2200, 2201, 2202, 2203, 2204, 2205, 2206,
+    2207, 2208, 2209, 2210, 2211, 2212, 2213, 2214, 2215, 2216, 2217, 2218, 2219, 2220,
+    2221, 2222, 2223, 2224, 2225, 2226, 2227, 2228, 2229, 2230, 2231, 2232, 2233, 2234,
+    2235, 2236, 2237, 2240, 2249, 2255, 2256, 2257, 2258, 2260, 2261, 2262, 2263, 2264,
+    2265, 2266, 2267, 2268, 2269, 2270, 2271, 2273, 2274, 2275, 2276, 2277, 2278, 2279,
+    2280, 2281, 2283, 2284, 2285, 2286, 2287, 2288, 2289, 2290, 2291, 2292, 2294, 2295,
+    2296, 2297, 2298, 2299, 2300, 2301, 2302, 2303, 2304, 2305, 2306, 2307, 2308, 2309,
+    2316, 2317, 2319, 2320, 2466, 2527, 2540, 2548, 2733, 2772, 2777, 2788, 2815, 2825,
+})
+
+
 TML_ATP_2026_QUARANTINE = frozenset({
     ("2026-336", "19"), ("2026-8998", "17"),
     ("2026-339", "18"), ("2026-336", "23"),
@@ -483,6 +502,10 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
                                  str(raw.get("match_num") or "")) in TML_ATP_2026_QUARANTINE
                                 and original_sha == TML_ATP_2026_SOURCE_SHA):
                             tml_reason = "tml_cross_source_review_quarantine"
+                        if (not tml_reason
+                                and original_sha == TML_ATP_SOURCE_SHAS[2025]
+                                and index in TML_ATP_2025_CROSS_SOURCE_CONFLICT_ORDINALS):
+                            tml_reason = "tml_cross_source_stat_disagreement"
                         if tml_reason:
                             counts["rejected_rows"] += 1
                             counts["reason_" + tml_reason] += 1
