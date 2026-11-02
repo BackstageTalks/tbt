@@ -612,7 +612,8 @@ def _card(
     card.pop("match_winner_market", None)
     card.update({
         "market": market,
-        "market_type": label,
+        "market_type": "Aces Count Projection" if market == "aces" else label,
+        "aces_superiority_hint": (selected.get("name") or "") if market == "aces" else None,
         "projection_scope": "player",
         "projection_metric": market,
         "projection_subject": selected.get("name") or "—",
