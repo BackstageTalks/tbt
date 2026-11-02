@@ -343,8 +343,8 @@ def test_classic_format_and_deterministic_free_pick():
     assert all("ℹ️ Analytical preview by BlinQ Stat Engine" in x["text"] for x in first)
     assert all(x["text"].endswith("by BlinQ Stat Engine") for x in first)
     assert all(tg.telegram_link_entities(x["text"]) for x in first)
-    assert first[0]["text"].splitlines()[-2].startswith("ℹ️ Analytical preview")
-    assert first[1]["text"].splitlines()[-2].startswith("ℹ️ Analytical preview")
+    assert first[0]["text"].splitlines()[-1].startswith("ℹ️ Analytical preview")
+    assert first[1]["text"].splitlines()[-1].startswith("ℹ️ Analytical preview")
 
 
 def test_free_only_does_not_show_other_premium_rows():
