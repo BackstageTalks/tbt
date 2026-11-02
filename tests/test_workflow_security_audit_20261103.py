@@ -36,7 +36,7 @@ def test_untrusted_inputs_do_not_interpolate_into_shell_source():
 def test_existing_data_limits_and_cdb_single_writer_guards_unchanged():
     data = (WF / "data.yml").read_text(encoding="utf-8")
     assert "HOURLY_AUTOFILL: ${{ inputs.hourly_autofill && 'true' || 'false' }}" in data
-    assert '"$HOURLY_AUTOFILL" == "true"' in data
+    assert '"${HOURLY_AUTOFILL}" == "true"' in data
     assert '10#$MAX_REQUESTS > 14500' in data
     assert "tbt-crossrepo-writer-" in data
     model = (WF / "model-factory-preflight.yml").read_text(encoding="utf-8")
