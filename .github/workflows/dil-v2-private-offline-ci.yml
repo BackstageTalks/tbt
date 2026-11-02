@@ -1,10 +1,6 @@
 name: DIL V2 SHA-pinned private synthetic contract on public runner
 
 'on':
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/dil-v2-private-offline-ci.yml'
   workflow_dispatch:
 
 permissions:
