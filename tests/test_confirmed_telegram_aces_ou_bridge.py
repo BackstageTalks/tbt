@@ -2,7 +2,7 @@
 from copy import deepcopy
 
 from prepare_feed import overlay_confirmed_telegram_aces_ou
-from tbt.services.match_status import runtime_settled_results
+from tbt.services.match_status import runtime_settled_results, attach_confirmed_aces_ou_sidecar
 
 
 def fixture():
@@ -67,6 +67,31 @@ def test_frozen_telegram_over_10_5_is_web_loss_even_if_hurkacz_served_more():
     assert result["opponent_actual_count"] == 5
     assert result["staked_units"] == 1.0 and result["profit_units"] == -1.0
     assert overlay_confirmed_telegram_aces_ou(new_feed, state)["ace_picks"] == new_feed["ace_picks"]
+
+
+
+
+def test_sidecar_preserves_canonical_feed_and_replays_exact_frozen_ou():
+    match, state, status = fixture()
+    canonical = {"ace_picks": [match], "results": []}
+    presentation = overlay_confirmed_telegram_aces_ou(canonical, state)
+    pub = presentation["ace_picks"][0]["market_publications"][-1]
+    sidecar = {"schema": 1, "issued_aces_ou": [{
+        "event_id": match["event_id"], "selection_id": match["selection_id"],
+        "scheduled_at": match["scheduled_at"], "projection": match["projection"],
+        "publication": pub,
+    }]}
+    initial = deepcopy(canonical)
+    served = attach_confirmed_aces_ou_sidecar(canonical, sidecar)
+    assert canonical == initial
+    assert served == presentation
+    settled = runtime_settled_results(served, status)
+    assert settled[0]["market_publications"][0]["result"]["status"] == "miss"
+    assert settled[0]["market_publications"][0]["result"]["profit_units"] == -1.0
+    assert attach_confirmed_aces_ou_sidecar(served, sidecar) == served
+    invalid = deepcopy(sidecar)
+    invalid["issued_aces_ou"][0]["projection"] = 14.0
+    assert attach_confirmed_aces_ou_sidecar(canonical, invalid) == canonical
 
 
 def test_missing_or_late_reissue_never_invents_historical_ou():
