@@ -131,6 +131,11 @@ def test_telegram_prices_verified_aces_and_fallback_without_model_changes():
         "provider_id": 2, "odds_source": "propline", "odds_bookmaker": "bookA",
         "captured_at": "2026-11-01T06:45:00Z", "odds": 2.125,
         "price_contract": "player_total_ou", "market_line": 7.5, "ou_side": "over",
+        "market_publications": [{
+            "section": "ace", "market": "aces", "selection_id": "player-1",
+            "publication_key": "ace:projection:aces:player:fixture-11:player-1:total:over:7.5",
+            "market_line": 7.5, "ou_side": "over",
+        }],
     }
     before = json.dumps(base, sort_keys=True)
     text = tg.fmt(base, "aces", {"show_odds": True})
