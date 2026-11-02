@@ -2435,13 +2435,15 @@
     const label=subLabel||({daily:'TOP',prime:'ACCA',value:'VALUE',ace:'ACES',double_faults:'DVOJCHYBY',doubles:'DOUBLES',games:'GAMES',sets:'SETS'}[sourceTab]||String(sourceTab||'').toUpperCase());
     return `<span class="hub-pick-stack"><small>${escapeHtml(label)}</small><strong title="${escapeHtml(text)}">${escapeHtml(text)}</strong></span>`;
   }
-  function aceLeaderHintHtml(row){
+  function aceLeaderHintHtml(row,player,name){
+    // Visual-only insight: the count model's expected ACE leader, never an O/U side.
     if(String(row?.market||'').toLowerCase()!=='aces')return '';
-    const name=String(row?.aces_superiority_hint||row?.projection_subject||'').trim();
-    if(!name)return '';
-    const caption=lcopy('More aces expected','Viac es očakávame','Více es očekáváme');
-    const accessible=caption+': '+name;
-    return `<span class="ace-leader-hint" title="${escapeHtml(accessible)}" aria-label="${escapeHtml(accessible)}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"></circle><path d="M9 3.5c-.2 4.7 1.7 6.2 5 7.4 3.5 1.2 5.2 3.7 5 8.6M4.7 9c4.9.1 7 2.5 7.4 6 .4 3.5 2.2 5 4.6 5.4"></path></svg><span>${escapeHtml(caption)}: ${escapeHtml(name)}</span></span>`;
+    const expected=String(row?.aces_superiority_hint||row?.projection_subject||'').trim().toLocaleLowerCase();
+    if(!expected)return '';
+    const actual=String(name||player?.name||'').trim().toLocaleLowerCase();
+    const identity=String(player?.id||'').trim().toLocaleLowerCase();
+    if(expected!==actual&&expected!==identity)return '';
+    return '<svg class="ace-leader-ball" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="12"></circle><path d="M13 4.5c.1 6 2.4 8.1 6.4 9.1 5.2 1.4 7 4.1 7.4 8.3M4.5 13.7c6-.1 8 2.6 9.1 6.4 1.4 5.2 4.1 7 8.3 7.4"></path></svg>';
   }
   function hubNumberHtml(value,label=''){
     return `<span class="hub-number-stack"><strong>${escapeHtml(value)}</strong>${label?`<small>${escapeHtml(label)}</small>`:''}</span>`;
@@ -2571,7 +2573,7 @@
     const r1=firstFinite(p1.rank,p1.ranking,p1.current_rank,row?.player1_rank,row?.p1_rank),r2=firstFinite(p2.rank,p2.ranking,p2.current_rank,row?.player2_rank,row?.p2_rank);
     const photoFor=(player,side)=>playerPhotoSource(row,player,side);
     const selected=String(row?.pick||row?.selection||row?.prediction||'').trim().toLocaleLowerCase();
-    const line=(player,side,name,country,rank)=>`<span class="hub-match-player${selected&&selected===String(name).toLocaleLowerCase()?' is-pick':''}"><span class="hub-match-player-main">${sideAvatarHtml(row,player,side,'hub-avatar')}${flagIconHtml(country,true)}<b title="${escapeHtml(name)}">${escapeHtml(name)}</b></span>${Number.isFinite(Number(rank))&&Number(rank)>0?`<small>#${Math.trunc(Number(rank))}</small>`:''}</span>`;
+    const line=(player,side,name,country,rank)=>`<span class="hub-match-player${selected&&selected===String(name).toLocaleLowerCase()?' is-pick':''}"><span class="hub-match-player-main">${sideAvatarHtml(row,player,side,'hub-avatar')}${flagIconHtml(country,true)}<b title="${escapeHtml(name)}">${escapeHtml(name)}</b>${aceLeaderHintHtml(row,player,name)}</span>${Number.isFinite(Number(rank))&&Number(rank)>0?`<small>#${Math.trunc(Number(rank))}</small>`:''}</span>`;
     return `<span class="hub-match hub-match-pro">${line(p1,'player1',n1,c1,r1)}<i class="hub-match-divider" aria-hidden="true"></i>${line(p2,'player2',n2,c2,r2)}</span>`;
   }
   function recentFormData(source,key){
@@ -2791,7 +2793,7 @@
     if(Number.isFinite(d.p1Surface)&&d.p1Surface>0)surfaceParts.push(`${d.p1Name} ${Math.trunc(d.p1Surface)}`);
     if(Number.isFinite(d.p2Surface)&&d.p2Surface>0)surfaceParts.push(`${d.p2Name} ${Math.trunc(d.p2Surface)}`);
     if(surfaceParts.length)metrics.push(metric(lcopy('Surface samples','Vzorka na povrchu','Vzorek na povrchu'),surfaceParts.join(' · '),true));
-    return `<div class="match-detail-shell ace-detail-shell"><header class="match-detail-head"><div><div class="dialog-eyebrow">${escapeHtml(d.market.toUpperCase())} · ${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div></header><div class="ace-detail-pick"><div><small>${escapeHtml(d.market)}</small><strong>${escapeHtml(d.selectedName)}</strong></div><div class="ace-detail-main"><b>${escapeHtml(d.projection.toFixed(2))}</b><small>${escapeHtml(lcopy('prediction','predikcia','predikce'))}</small></div></div><div class="ace-detail-grid">${metrics.filter(Boolean).join('')}</div>${aceLeaderHintHtml(row)}<p class="ace-detail-note">${escapeHtml(lcopy('Only verified Aces / Double Faults projection data are shown here. Missing serve or return statistics are intentionally hidden.','Zobrazujeme iba overené projekčné dáta pre esá a dvojchyby. Chýbajúce štatistiky podania alebo returnu zámerne nezobrazujeme.','Zobrazujeme pouze ověřená projekční data pro esa a dvojchyby. Chybějící statistiky podání nebo returnu záměrně nezobrazujeme.'))}</p><div class="dialog-meta"><span>${escapeHtml(String(match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>${escapeHtml(String(row?.projection_source||'historical_event_statistics').replaceAll('_',' '))}</span></div></div>`;
+    return `<div class="match-detail-shell ace-detail-shell"><header class="match-detail-head"><div><div class="dialog-eyebrow">${escapeHtml(d.market.toUpperCase())} · ${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div></header><div class="ace-detail-pick"><div><small>${escapeHtml(d.market)}</small><strong>${escapeHtml(d.selectedName)}${aceLeaderHintHtml(row,row?.player1,d.selectedName)||aceLeaderHintHtml(row,row?.player2,d.selectedName)}</strong></div><div class="ace-detail-main"><b>${escapeHtml(d.projection.toFixed(2))}</b><small>${escapeHtml(lcopy('prediction','predikcia','predikce'))}</small></div></div><div class="ace-detail-grid">${metrics.filter(Boolean).join('')}</div><p class="ace-detail-note">${escapeHtml(lcopy('Only verified Aces / Double Faults projection data are shown here. Missing serve or return statistics are intentionally hidden.','Zobrazujeme iba overené projekčné dáta pre esá a dvojchyby. Chýbajúce štatistiky podania alebo returnu zámerne nezobrazujeme.','Zobrazujeme pouze ověřená projekční data pro esa a dvojchyby. Chybějící statistiky podání nebo returnu záměrně nezobrazujeme.'))}</p><div class="dialog-meta"><span>${escapeHtml(String(match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>${escapeHtml(String(row?.projection_source||'historical_event_statistics').replaceAll('_',' '))}</span></div></div>`;
   }
   function openAceProjection(row){
     if(!aceProjectionDetailAvailable(row))return;
@@ -3009,9 +3011,9 @@
       const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces prediction','Predikcia es','Predikce es'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}</button>`:'';
       const oddsHtml=projectionOddsHtml(row),projectionText=Number.isFinite(projection)?projection.toFixed(2):'—',projectionUnit=lcopy('projection','projekcia','projekce');
       if(tab==='see_all'){
-        return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}${aceLeaderHintHtml(row)}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-seeall-model-cell">${hubSeeAllProjectionHtml(projectionText,projectionUnit,confidence,row)}</td><td class="hub-action-cell hub-optional-action">${action}</td></tr>`;
+        return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-seeall-model-cell">${hubSeeAllProjectionHtml(projectionText,projectionUnit,confidence,row)}</td><td class="hub-action-cell hub-optional-action">${action}</td></tr>`;
       }
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}${aceLeaderHintHtml(row)}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td><td class="hub-action-cell hub-mobile-only">${action}</td></tr>`;
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td><td class="hub-action-cell hub-mobile-only">${action}</td></tr>`;
     }
     const probability=marketProbability(row),odds=Number(row?.odds??row?.betting?.odds),pick=modelPickName(row);
     const base=`${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick)}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(probability,row)}</td>`;
