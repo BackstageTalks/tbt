@@ -3583,6 +3583,24 @@
     const raw=String(result?.status||result?.outcome||result?.settlement||result?.result||'').trim().toLowerCase();
     const reason=String(result?.reason||result?.void_reason||result?.settlement_reason||'').trim();
     const isVoid=result?.void===true||result?.is_void===true||['void','push','cancelled','canceled','postponed','walkover','walk over','w/o','retired','ret','abandoned','interrupted','suspended','no_action'].includes(raw);
+    // Aces issued since 1 Nov are individual O/U bets, not Most Aces.
+    // Reconcile from the frozen line and the verified player count. A legacy
+    // player-superiority "win" must never enter Results or financial KPIs.
+    const issued=Date.parse(String(publication?.issued_at||result?.scheduled_at||''));
+    if(String(publication?.market||'').toLowerCase()==='aces'
+      &&Number.isFinite(issued)&&issued>=Date.parse('2026-11-01T05:00:00Z')){
+      const side=String(publication?.ou_side||'').trim().toLowerCase();
+      const line=publication?.market_line==null?NaN:Number(publication.market_line);
+      if(String(publication?.price_contract||'').toLowerCase()!=='player_total_ou'
+         ||!['over','under'].includes(side)||!Number.isFinite(line)||line<0)
+        return {kind:'pending',reason:'missing_original_aces_ou_contract'};
+      if(isVoid)return {kind:'void',reason:reason||raw||'void'};
+      const actual=result?.actual_count==null?NaN:Number(result.actual_count);
+      if(!Number.isFinite(actual)||actual<0)
+        return {kind:'pending',reason:'missing_verified_aces_count'};
+      if(actual===line)return {kind:'void',reason:'push'};
+      return {kind:(side==='over'?actual>line:actual<line)?'win':'loss',reason:''};
+    }
     if(isVoid)return {kind:'void',reason:reason||raw||'void'};
     if(result?.correct===true)return {kind:'win',reason:''};
     if(result?.correct===false)return {kind:'loss',reason:''};
