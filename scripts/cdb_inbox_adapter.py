@@ -267,6 +267,20 @@ def _drive_source_hints(manifest_path: Path | None, input_dir: Path):
     return hints
 
 
+# Pin the one manually reviewed TML ATP 2026 upload by exact source bytes
+# AND its Drive provenance path. No generic year-only filename inference.
+# This only recovers a SOURCE-ONLY tour hint; canonical identity remains
+# exclusively with the exact offline linker.
+TML_ATP_2026_SOURCE_SHA = "8e9b756d1874e9e7866796b797273dd3b791d89eeb6b52aa6ee961a2c4c82c01"
+TML_ATP_2026_SOURCE_SUFFIX = "/Sackmann/TML/TML/2026.csv"
+
+
+def tour_from_pinned_tml(sha, path):
+    return ("atp" if sha == TML_ATP_2026_SOURCE_SHA
+            and isinstance(path, str)
+            and path.endswith(TML_ATP_2026_SOURCE_SUFFIX) else "")
+
+
 def normalize(raw, filename, index, *, source_tour=""):
     if not isinstance(raw, dict):
         return None, "not_object"
@@ -398,7 +412,8 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
         for part_no, (member_name, part) in enumerate(components):
             # ZIPs may mix tours: do not project an archive's folder onto
             # unknown member rows. Only member names/explicit columns apply.
-            folder_tour = (tour_from_source_path(original_path)
+            folder_tour = ((tour_from_source_path(original_path)
+                            or tour_from_pinned_tml(original_sha, original_path))
                            if path.suffix.lower() != ".zip" else "")
             if len(part) > MAX_MEMBER_BYTES:
                 counts["unsupported_or_oversized_files"] += 1
