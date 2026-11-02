@@ -3651,12 +3651,23 @@
     if(['top200','top','prime','value','daily'].includes(market))market='match_winner';
     const scope=String(publication?.projection_scope||row?.projection_scope||'').trim().toLowerCase();
     const metric=String(publication?.projection_metric||row?.projection_metric||'').trim().toLowerCase();
-    const selection=String(
-      publication?.selection_id||publication?.winner_id||publication?.pick_id
-      ||betting?.selection_id||row?.winner_id||row?.pick_id||row?.selection_id
-      ||publication?.selection||row?.pick||row?.selection||''
-    ).trim().toLowerCase();
-    return event&&market&&selection?[event,market,scope,metric,selection].join('::'):'';
+    const projectionMarket=['aces','double_faults','sets','games'].includes(market);
+    // The selected player for Aces/DF is NOT the match-winner id.
+    const selected=projectionMarket
+      ?(publication?.selection_id||publication?.pick_id||betting?.selection_id||row?.selection_id||row?.pick_id||publication?.winner_id||row?.winner_id)
+      :(publication?.selection_id||publication?.winner_id||publication?.pick_id||betting?.selection_id||row?.winner_id||row?.pick_id||row?.selection_id);
+    const selection=String(selected||publication?.selection||row?.pick||row?.selection||'').trim().toLowerCase();
+    if(!event||!market||!selection)return '';
+    // Never match a different O/U line or direction for the same player.
+    const contract=String(publication?.price_contract||row?.price_contract||'').toLowerCase();
+    if(contract==='player_total_ou'){
+      const side=String(publication?.ou_side||row?.ou_side||'').toLowerCase();
+      const rawLine=publication?.market_line??row?.market_line;
+      const line=rawLine===null||rawLine===undefined||rawLine===''?NaN:Number(rawLine);
+      if(!['over','under'].includes(side)||!Number.isFinite(line)||line<0)return '';
+      return [event,market,scope,metric,selection,'ou',side,String(line)].join('::');
+    }
+    return [event,market,scope,metric,selection].join('::');
   }
   function currentBettingDayPublishedKeys(now=Date.now()){
     const currentDay=bratislavaBettingDayKey(now,6),keys=new Set();
@@ -3664,15 +3675,29 @@
       ['daily_picks','match_winner'],
       ['top_daily_picks','match_winner'],['prime_picks','match_winner'],
       ['value_picks','match_winner'],['doubles_picks','match_winner'],
-      ['ace_picks',''],['sg_picks','']
+      ['ace_picks','aces'],['sg_picks','']
     ];
     sources.forEach(([feedKey,defaultMarket])=>{
       const rows=Array.isArray(state.feed?.[feedKey])?state.feed[feedKey]:[];
       rows.forEach(row=>{
         const scheduled=row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0;
         if(bratislavaBettingDayKey(scheduled,6)!==currentDay)return;
-        const key=resultBetIdentity(row,row,defaultMarket);
-        if(key)keys.add(key);
+        // Flatten the frozen pre-match publications, not just the display row:
+        // Aces/DF/SG can have multiple player-total lines and no top-level market.
+        const publications=Array.isArray(row?.market_publications)?row.market_publications:[];
+        let valid=0;
+        publications.forEach(pub=>{
+          if(!pub||pub.publication_status==='excluded'||pub.publication_status==='rejected')return;
+          if(pub.issued_at&&Date.parse(pub.issued_at)>Date.parse(scheduled))return;
+          const key=resultBetIdentity(row,pub,defaultMarket);
+          if(key){keys.add(key);valid++;}
+        });
+        // Legacy flat issued rows remain eligible, but never let a flat fallback
+        // widen an explicit O/U contract or invent a missing market.
+        if(valid===0&&publications.length===0){
+          const key=resultBetIdentity(row,row,defaultMarket);
+          if(key)keys.add(key);
+        }
       });
     });
     return keys;
