@@ -1494,7 +1494,7 @@ def feed(req):
                 # The post-settlement pass must also honor the exact issued
                 # 2 Nov offer, not just its broad TOP / VALUE / Aces category.
                 data["results"] = filter_results_for_issued_day(
-                    data["results"], entitlements
+                    data["results"], entitlements, authorized_feed=data
                 )
                 if not exclusions_available:
                     data["results"] = []

@@ -242,7 +242,63 @@ def _nov2_issued_contracts() -> dict[tuple[str, str, str, str], dict]:
     return indexed
 
 
-def filter_results_for_issued_day(rows: list, manifest: dict) -> list:
+def _authorized_nov2_bets(feed: dict) -> set[tuple[str, str, str, str]]:
+    """Account-filtered morning bets. A tier quota is not a bet identity.
+
+    In particular, FREE and PRO may have per-account, durable randomized
+    allocations and independently enabled projection markets. Read only rows
+    already authorized by the normal server entitlement path. Do not infer
+    extra rights from the public Telegram FREE receipt or plan name.
+    """
+    section_markets = (
+        ("daily_picks", "top_daily", "match_winner"),
+        ("top_daily_picks", "top_daily", "match_winner"),
+        ("prime_picks", "prime", "match_winner"),
+        ("value_picks", "value", "match_winner"),
+        ("doubles_picks", "doubles", "match_winner"),
+        ("ace_picks", "ace", "aces"),
+        ("sg_picks", "games", "games"),
+    )
+    allowed = set()
+    for array_name, default_section, default_market in section_markets:
+        for row in feed.get(array_name) or []:
+            if not isinstance(row, dict):
+                continue
+            scheduled = _result_timestamp(row)
+            if (scheduled is None
+                    or scheduled.astimezone(ZoneInfo("Europe/Bratislava")).date().isoformat()
+                        != _NOV2_ISSUED_DAY
+                    or blinq_access_day(scheduled) != _NOV2_ISSUED_DAY):
+                continue
+            event = str(row.get("event_id") or row.get("id") or "").strip().lower()
+            betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+            selection = str(
+                betting.get("selection_id") or row.get("selection_id")
+                or row.get("pick_id") or row.get("winner_id") or ""
+            ).strip().lower()
+            if not event or not selection:
+                continue
+            pubs = [pub for pub in (row.get("market_publications") or [])
+                    if isinstance(pub, dict) and
+                    str(pub.get("publication_status") or "published").lower() == "published"]
+            if not pubs:
+                pubs = [row]
+            for pub in pubs:
+                market = str(pub.get("market") or row.get("market") or default_market).lower()
+                category = _result_publication_category(pub) if pub is not row else default_section
+                if pub is row and array_name == "sg_picks":
+                    category = str(row.get("market") or "games").lower()
+                if pub is row and array_name == "ace_picks":
+                    category = "double_faults" if market == "double_faults" else "ace"
+                pub_selection = str(
+                    pub.get("selection_id") or pub.get("pick_id")
+                    or pub.get("winner_id") or selection
+                ).strip().lower()
+                allowed.add((event, category, market, pub_selection))
+    return allowed
+
+
+def filter_results_for_issued_day(rows: list, manifest: dict, *, authorized_feed: dict | None = None) -> list:
     """For 2 Nov only, return the exact sent offer, never merely category matches.
 
     LEGEND / GOAT / admin retain their full Results universe. Lower tiers can
@@ -260,6 +316,12 @@ def filter_results_for_issued_day(rows: list, manifest: dict) -> list:
     for offer in issued.values():
         cat = str(offer["section"]).lower()
         indices.setdefault(cat, []).append(offer)
+    # Explicitly supplied account feed is authoritative. An empty selection
+    # denies 2 Nov results; never fall back to a Telegram-global FREE pick.
+    authorized_keys = (
+        _authorized_nov2_bets(authorized_feed)
+        if isinstance(authorized_feed, dict) else None
+    )
 
     out = []
     for row in rows:
@@ -285,8 +347,9 @@ def filter_results_for_issued_day(rows: list, manifest: dict) -> list:
                 publication.get("selection_id") or publication.get("winner_id")
                 or publication.get("pick_id") or ""
             ).strip().lower()
-            offer = issued.get((event, category, market, selection))
-            if not offer:
+            key = (event, category, market, selection)
+            offer = issued.get(key)
+            if not offer or (authorized_keys is not None and key not in authorized_keys):
                 continue
             # A later quote must not silently replace the odds actually sent
             # with this 2 Nov bet. Rounding to two decimals is tolerated.
@@ -304,11 +367,15 @@ def filter_results_for_issued_day(rows: list, manifest: dict) -> list:
                     continue
             elif market != "match_winner":
                 continue
-            # FREE has one explicitly sent free pick, not an arbitrary 2 Nov TOP.
-            if plan == "rookie" and not offer.get("free"):
-                continue
-            if plan == "pro" and market != "match_winner":
-                continue
+            # Legacy direct callers without an authenticated feed retain the
+            # prior conservative fixture behavior. Production always passes
+            # authorized_feed, so FREE/PRO respect actual member allocations
+            # and independently enabled Aces instead of a hardcoded quota.
+            if authorized_keys is None:
+                if plan == "rookie" and not offer.get("free"):
+                    continue
+                if plan == "pro" and market != "match_winner":
+                    continue
             ent_key = "daily" if category == "top_daily" else category
             ent = sections.get(ent_key) or {}
             if not ent.get("enabled") or ent.get("display_state") != "active":
@@ -321,7 +388,7 @@ def filter_results_for_issued_day(rows: list, manifest: dict) -> list:
             override = str(overrides.get(str(rank)) or "").lower()
             if override and override != "active":
                 continue
-            if plan != "rookie" and override != "active":
+            if authorized_keys is None and plan != "rookie" and override != "active":
                 visible = ent.get("visible_picks", 0)
                 if str(visible).upper() != "ALL":
                     try:
@@ -1179,7 +1246,6 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
         source_results, history_hours,
         allowed_categories=set(manifest.get("result_categories") or []),
     )
-    result["results"] = filter_results_for_issued_day(result["results"], manifest)
     restricted_categories = (
         manifest["plan"] != "admin"
         and set(manifest.get("result_categories") or []) != set(RESULT_CATEGORY_ORDER)
@@ -1300,4 +1366,9 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
                 if isinstance(player,dict): player.pop("probability",None)
             safe.append(copy)
         result["upcoming"]=safe
+    # Apply the exact issued-day Results gate only after all market arrays have
+    # been redacted for this specific account and durable allocations loaded.
+    result["results"] = filter_results_for_issued_day(
+        result["results"], manifest, authorized_feed=result
+    )
     return result,manifest
