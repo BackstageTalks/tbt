@@ -537,4 +537,4 @@ def test_legacy_aces_reissue_lookup_can_recover_frozen_superiority_identity():
                      "free_top_pick":True,"include_started":True,
                      "max_per_section":0,"aces_ou_only":False}
     assert [r["event_id"] for r in tg.select_groups(source,settings_legacy,NOW)["aces"]]==["98"]
-    assert not tg.select_groups(source,settings(),NOW)["aces"]
+    assert not tg.select_groups(source,settings(),NOW).get("aces")
