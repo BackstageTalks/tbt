@@ -174,7 +174,7 @@ def test_farjat_confirmed_over_4_5_reissue_wins_after_retirement():
     results = runtime_settled_results(restored, status)
     assert len(results) == 1
     publications = results[0]["market_publications"]
-    assert len(publications) == 2  # old projection-only VOID + exact winning O/U
+    assert len(publications) == 1  # superseded old Aces bet must not create a second VOID
     verified = [p for p in publications if p.get("price_contract") == "player_total_ou"]
     assert len(verified) == 1
     outcome = verified[0]["result"]
