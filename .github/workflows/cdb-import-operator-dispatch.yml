@@ -2,6 +2,7 @@ name: CDB Import - operator one-shot dispatcher
 # Operator-approved replay 2026-10-23: bounded four Drive files from verified inventory; no quota spend, do not reset checkpoint.
 # Operator request 2026-10-21: SHA-verified ATP/WTA Drive folder provenance salvage; existing guarded importer only; 0 paid API calls.
 
+# 2026-11-02: authorized fresh checkpointed Drive batch, reusing the existing CDB writer and current quarantine evidence.
 # Operator entrypoint. Changes to unrelated files never trigger this workflow.
 # Operator request 2026-10-21: owner-authorized checkpointed Drive CDB import; 5 bounded batches, no gate bypass, zero paid provider calls.
 # One-shot operator request: process up to 5 safe 100-file batches, starting 2026-10-20.
