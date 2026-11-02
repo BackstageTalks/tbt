@@ -126,6 +126,45 @@ def sanitize_history_identities(matches: Iterable[MatchRecord]) -> tuple[list[Ma
     return safe, report
 
 
+
+def select_exact_provider_quarantine(
+    matches: Iterable[MatchRecord],
+    *, expected_rows: int = 0, preserve_quarantined: bool = False,
+) -> tuple[list[MatchRecord], dict, set[str]]:
+    """Fail closed on unexpected CDB collisions; optionally retain protected rows.
+
+    Linkers see only safe rows. Exact-stats writers must see every original
+    row so full-year Parquet readback proves the quarantined rows unchanged.
+    No provider identity is guessed, merged, removed, or overwritten.
+    """
+    original = list(matches)
+    safe, report = sanitize_history_identities(original)
+    if isinstance(expected_rows, bool) or not isinstance(expected_rows, int) or expected_rows < 0:
+        raise ValueError("Invalid exact provider quarantine expectation")
+    if report["quarantined_rows"] != expected_rows:
+        raise ValueError(
+            f"Unexpected canonical identity quarantine: "
+            f"{report['quarantined_rows']} != {expected_rows}"
+        )
+    protected_ids: set[str] = set()
+    if expected_rows:
+        protected = report["quarantine"]
+        protected_ids = {str(row["match_id"]) for row in protected}
+        all_ids = [str(m.match_id) for m in original]
+        provider_ids = set(report["duplicate_provider_event_ids"])
+        if (
+            report["merged_rows_removed"] != 0
+            or report["duplicate_match_ids"]
+            or len(safe) + expected_rows != len(original)
+            or len(protected_ids) != expected_rows
+            or len(set(all_ids)) != len(all_ids)
+            or not protected_ids.issubset(set(all_ids))
+            or not provider_ids
+            or any(str(row["provider_event_id"]) not in provider_ids for row in protected)
+        ):
+            raise ValueError("Quarantine is not exact, lossless provider-only isolation")
+    return (original if preserve_quarantined and expected_rows else safe), report, protected_ids
+
 def merge_trusted_history_batch(
     existing: Iterable[MatchRecord],
     incoming: Iterable[MatchRecord],
