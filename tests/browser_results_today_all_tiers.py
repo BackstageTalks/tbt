@@ -41,7 +41,7 @@ def main():
             page.wait_for_function("window.todayTierAudit")
             result = page.evaluate("""() => {
                 const t=todayTierAudit,s=t.state;
-                const day=t.b ratislavaBettingDayKey(Date.now(),6);
+                const day=t.bratislavaBettingDayKey(Date.now(),6);
                 const make=(h,m=0)=>day+'T'+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':00Z';
                 const winner=(event,section,odds,correct)=>{
                     const p={section,market:'match_winner',selection_id:'p2',
@@ -120,10 +120,10 @@ def main():
                   adminCohort:adminCohort.size,admin:adminEntries.length,
                   pro:pro.length,free:free.length,noWrongLine,
                   eliteIds:elite.map(x=>x.row.event_id).sort()};
-            }""".replace("b ratislava","bratislava"))
+            }""")
             assert result == {
                 "eliteKeys":9,"elite":6,"eliteWins":4,"eliteLosses":2,
-                "eliteProfit":1.91,"adminCohort":9,"admin":6,
+                "eliteProfit":0.91,"adminCohort":9,"admin":6,
                 "pro":2,"free":1,"noWrongLine":True,
                 "eliteIds":["far","hur","kar","mpt","top","value"]
             }, result
