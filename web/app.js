@@ -2958,6 +2958,23 @@
     }
     return feed;
   }
+  function localAceOuModelBand(row){
+    // Display-only envelope around BlinQ's own count estimate. These ARE NOT
+    // offered bookmaker lines and must never become an issued betting contract.
+    if(String(row?.market||'').toLowerCase()!=='aces'
+      ||row?.projection_model!=='ace-count-projection-v4'
+      ||row?.price_status!=='projection_only'||row?.odds!=null
+      ||!authenticLocalAceProjection(row))return null;
+    const mean=Number(row?.projection);
+    if(!Number.isFinite(mean)||mean<0)return null;
+    // Nearest half-ace thresholds with a STRICTLY greater than 1 ace cushion.
+    const over=Math.floor(mean-1.5-1e-9)+0.5;
+    const under=Math.ceil(mean+0.5+1e-9)+0.5;
+    const options=[];
+    if(over>=0.5&&mean-over>1.0)options.push('O '+over.toFixed(1));
+    if(under>mean+1.0)options.push('U '+under.toFixed(1));
+    return options.length?options.join(' / '):null;
+  }
   function projectionOddsHtml(row){
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
@@ -2965,6 +2982,9 @@
     if(String(row?.market||'').toLowerCase()==='aces'){
       if(row?.price_contract==='player_total_ou'&&Number.isFinite(verifiedAceProviderOdds(row)))
         return hubNumberHtml(Number(row.odds).toFixed(2),lcopy('odds','kurz','kurz'));
+      const modelBand=localAceOuModelBand(row);
+      if(modelBand)
+        return hubNumberHtml(modelBand,lcopy('MODEL RANGE · No O/U price','MODELOVÉ PÁSMO · Bez O/U kurzu','MODELOVÉ PÁSMO · Bez O/U kurzu'));
       return hubNumberHtml('—',lcopy('No O/U price','Bez O/U kurzu','Bez O/U kurzu'));
     }
     if(authenticLiveProjection(row))return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));

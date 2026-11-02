@@ -572,3 +572,28 @@ def test_ou_reissue_preserves_nonaces_and_replaces_legacy_superiority():
     else:
         raise AssertionError("Legacy superiority must never be resent as O/U")
 
+
+
+def test_new_ace_line_cushion_above_one_with_v1_frozen_compatibility():
+    base=row(770,"Hurkacz","aces") | {"projection":10.90}
+    fresh=tg._local_player_aces_ou(base)
+    assert fresh is not None
+    assert fresh["market_line"]==9.5
+    assert base["projection"]-fresh["market_line"]>1.0
+    assert fresh["local_ou_line_basis"]=="model_projection_min_gt_1_ace_v2"
+    assert tg._eligible_local_player_aces_ou(fresh)
+    assert tg._local_player_aces_ou(base|{"projection":12.57})["market_line"]==11.5
+
+    # A half-ace threshold at EXACTLY 1.0 cushion must be rejected.
+    exact=tg._local_player_aces_ou(base|{"projection":10.5})
+    assert exact["market_line"]==8.5
+    assert 10.5-exact["market_line"]>1
+    assert tg._local_player_aces_ou(base|{"projection":1.4}) is None
+
+    # Old issued v1 identities keep their original line and still validate.
+    old=tg._local_player_aces_ou(base,legacy=True)
+    assert old["market_line"]==10.5
+    assert old["local_ou_line_basis"]=="model_projection_half_ace_v1"
+    assert tg._eligible_local_player_aces_ou(old)
+    assert not tg._eligible_local_player_aces_ou(fresh|{"market_line":10.5})
+    assert not tg._eligible_local_player_aces_ou(old|{"market_line":9.5})
