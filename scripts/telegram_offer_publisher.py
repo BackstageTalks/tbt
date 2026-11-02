@@ -426,8 +426,8 @@ def _reissue_with_verified_aces_ou(confirmed, sent, now):
                "free_top_pick":False,"include_started":False,
                "max_per_section":0,"aces_ou_only":True}
     aces=select_groups(confirmed,only_aces,now).get("aces",[])
-    if not aces:
-        raise RuntimeError("No future verified player-total ACES O/U in today's confirmed snapshot; no resend")
+    # Absence of an offered player-total market must not block unchanged
+    # TOP/VALUE/FREE; no legacy Most Aces selection is mislabelled as O/U.
     for row in aces:
         if (row.get("price_contract")!="player_total_ou"
                 or verified_ace_odds(row) is None):
