@@ -192,7 +192,7 @@ def test_native_partial_invalid_or_one_sided_bp_counts_stay_quarantined(tmp_path
         {"w_ace": "-2"},
         {"l_1stWon": "17"},
     ):
-        assert _quality(_match(**absent, **bad)) == "INCOMPLETE_OR_INVALID"
+        assert _quality(_match(**{**absent, **bad})) == "INCOMPLETE_OR_INVALID"
     for side in ("w", "l"):
         for field in ("ace", "df", "bpSaved", "bpFaced"):
             absent[f"{side}_{field}"] = ""
