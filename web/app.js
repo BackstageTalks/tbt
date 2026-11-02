@@ -3833,7 +3833,8 @@
     if(!rules)return new Set();
     const groups=new Map(),seen=new Set();
     const add=(row,p)=>{
-      const section=p.market==='aces'?'ace':p.market==='double_faults'?'double_faults':p.section;
+      const market=String(p.market||'').toLowerCase();
+      const section=({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'})[market]||p.section;
       const tab=section==='top_daily'?'daily':section;
       const day=resultPublicationBettingDay(row,p),key=resultBetIdentity(row,p,section==='ace'?'aces':section==='double_faults'?'double_faults':'match_winner');
       if(!day||!key||!rules[tab])return;
@@ -3850,7 +3851,7 @@
         const pubs=(Array.isArray(row?.market_publications)?row.market_publications:[])
           .filter(p=>p&&typeof p==='object'&&String(p.publication_status||'published')==='published');
         if(pubs.length){pubs.forEach(p=>add(row,{...p,offer_position:p.offer_position||row.offer_position||rowIndex+1}));return;}
-        const market=row.market||(section==='ace'?'aces':'match_winner');
+        const market=row.market||(section==='ace'?'aces':section==='sg'?'':'match_winner');
         add(row,{...row,section:market==='double_faults'?'double_faults':market==='sets'?'sets':market==='games'?'games':section,
           selection_id:row.betting?.selection_id||row.selection_id||row.pick_id,
           market,offer_position:row.offer_position||rowIndex+1,
