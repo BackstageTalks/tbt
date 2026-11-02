@@ -77,7 +77,8 @@ def test_player_ou_settlement_uses_line_not_opponent():
 
 
 def test_legacy_most_aces_grading_unchanged():
-    start = datetime.now(timezone.utc) - timedelta(hours=2)
+    # True legacy issuance predates the 1 Nov 2026 player O/U cutover.
+    start = datetime(2026, 10, 30, 12, tzinfo=timezone.utc)
     match = MatchRecord(
         match_id="125", tour="atp", scheduled_at=start,
         player1_id="1", player1_name="Player A",

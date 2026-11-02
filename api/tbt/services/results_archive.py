@@ -10,6 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timezone
 from hashlib import sha256
+import math
 from typing import Any
 
 from .admin_storage import (
@@ -300,10 +301,95 @@ def read_only_archive_category_counts(
     }
 
 
+_ACES_OU_CUTOVER = datetime(2026, 11, 1, 5, tzinfo=timezone.utc)
+
+
+def _verified_aces_outcome(publication: dict) -> dict | None:
+    """Read-side repair of verified player O/U results; never rewrite issuer evidence.
+
+    After the Aces O/U cutover a completed Aces result without the exact issued
+    player-total contract and actual player count is not a verifiable win/loss.
+    Historical pre-cutover records are preserved without reinterpretation.
+    """
+    pub = deepcopy(publication)
+    if str(pub.get("market") or "").lower() != "aces":
+        return pub
+    issued = _time(pub.get("issued_at"))
+    if issued is not None and issued < _ACES_OU_CUTOVER:
+        return pub
+    result = pub.get("result")
+    if not isinstance(result, dict):
+        return pub
+    if str(pub.get("price_contract") or "").lower() != "player_total_ou":
+        return None
+    side = str(pub.get("ou_side") or "").lower()
+    if side not in {"over", "under"}:
+        return None
+    try:
+        line = float(pub.get("market_line"))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(line) or line < 0:
+        return None
+    if result.get("void") is True and str(result.get("reason") or "").lower() in {"retired", "void", "walkover"}:
+        return pub
+    try:
+        raw_actual = result.get("actual_count")
+        if isinstance(raw_actual, bool) or raw_actual is None:
+            return None
+        actual = float(raw_actual)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(actual) or actual < 0:
+        return None
+    is_push = actual == line
+    expected = None if is_push else (actual > line if side == "over" else actual < line)
+    if result.get("correct") is expected and bool(result.get("void")) == is_push:
+        return pub
+    # A stored, verified actual count takes precedence over an obsolete status.
+    # This is a serving-only derived view. The original settlement remains in
+    # the immutable release/archive for subsequent audited reconciliation.
+    revised = dict(result)
+    revised.update(status="void" if is_push else "hit" if expected else "miss",
+                   correct=expected, void=is_push,
+                   ou_readback_regraded=True)
+    for field in ("staked_units", "return_units", "profit_units"):
+        revised.pop(field, None)
+    if is_push:
+        revised.update(staked_units=0.0, return_units=0.0, profit_units=0.0)
+    elif str(pub.get("price_status") or "").lower() == "priced_projection":
+        try:
+            odds = float(pub.get("odds"))
+        except (TypeError, ValueError, OverflowError):
+            odds = float("nan")
+        if math.isfinite(odds) and odds > 1:
+            revised.update(staked_units=1.0,
+                           return_units=odds if expected else 0.0,
+                           profit_units=odds-1.0 if expected else -1.0)
+    pub["result"] = revised
+    return pub
+
+
 def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
     """Overlay settled outcomes only, preserving canonical publication metadata."""
     out = dict(feed)
-    rows = deepcopy(feed.get("results") or [])
+    rows = []
+    for source_row in feed.get("results") or []:
+        if not isinstance(source_row, dict):
+            rows.append(deepcopy(source_row))
+            continue
+        copy = deepcopy(source_row)
+        # Preserve legacy rows without publications; quarantine only invalid
+        # Aces results, never unrelated result rows during a readback repair.
+        if not isinstance(copy.get("market_publications"), list) or not copy["market_publications"]:
+            rows.append(copy)
+            continue
+        copy["market_publications"] = [validated for pub in copy.get("market_publications") or []
+                                        if isinstance(pub, dict)
+                                        for validated in [_verified_aces_outcome(pub)]
+                                        if validated is not None]
+        if copy["market_publications"]:
+            rows.append(copy)
     existing = {}
     for row in rows:
         if not isinstance(row, dict):
@@ -320,7 +406,9 @@ def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
         pubs = archived_row.get("market_publications") or []
         if len(pubs) != 1 or not isinstance(pubs[0], dict):
             continue
-        archived_pub = pubs[0]
+        archived_pub = _verified_aces_outcome(pubs[0])
+        if archived_pub is None:
+            continue
         key = _identity(archived_row, archived_pub)
         if not key:
             continue
@@ -331,8 +419,10 @@ def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
             if previous.get("correct") is None and not previous.get("void"):
                 incumbent["result"] = deepcopy(archived_pub.get("result"))
             continue
-        rows.append(deepcopy(archived_row))
-        existing[key] = rows[-1]["market_publications"][0]
+        copy = deepcopy(archived_row)
+        copy["market_publications"] = [archived_pub]
+        rows.append(copy)
+        existing[key] = archived_pub
     rows.sort(key=lambda row: _time(row.get("scheduled_at") or row.get("date")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     out["results"] = rows
     return out

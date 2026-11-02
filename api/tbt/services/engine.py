@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 import json
 import math
+import re
 import numpy as np
 import pandas as pd
 
@@ -650,7 +651,15 @@ def _settle_projection_publications(row, match, now):
             else:
                 correct = (actual > line) if direction == "over" else (actual < line)
                 status = "hit" if correct else "miss"
-        elif contract in {"", "player_superiority"}:
+        elif (contract in {"", "player_superiority"}
+              and (market != "aces" or (
+                  issued < datetime(2026, 11, 1, 5, tzinfo=timezone.utc)
+                  and publication.get("market_line") in (None, "")
+                  and publication.get("ou_side") in (None, "")
+                  and not re.search(r"\b(?:over|under)\s+\d", str(publication.get("selection") or ""), re.I)
+              ))):
+            # Only legacy pre-cutover player comparisons may use opponent count.
+            # Today an O/U bet MUST be graded against its frozen player line.
             if not np.isfinite(opponent_actual) or opponent_actual < 0:
                 publication["excluded_reason"] = "projection_result_unavailable"
                 continue

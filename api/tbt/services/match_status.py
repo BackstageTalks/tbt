@@ -522,7 +522,15 @@ def _grade_runtime_projection(
                     return None
                 correct = actual > reference if direction == "over" else actual < reference
                 equal = actual == reference
-            elif contract in {"", "player_superiority"}:
+            elif (contract in {"", "player_superiority"}
+                  and (market != "aces" or (
+                      issued < datetime(2026, 11, 1, 5, tzinfo=timezone.utc)
+                      and publication.get("market_line") in (None, "")
+                      and publication.get("ou_side") in (None, "")
+                      and not re.search(r"\b(?:over|under)\s+\d", str(publication.get("selection") or ""), re.I)
+                  ))):
+                # Legacy pre-cutover comparison only. Current Aces are player O/U;
+                # missing/contradictory lines must NEVER win by beating the rival.
                 if other is None:
                     return None
                 correct = actual > other
