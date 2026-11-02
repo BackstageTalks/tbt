@@ -34,6 +34,8 @@ def test_actual_api_price_requirement_is_enforced_before_issuing_bets():
     assert 'and provider == 2' in live
     assert 'and bool(row.get("odds_bookmaker"))' in live
     assert "publishable_api_price(row)" in live
+    assert "elif eligible_local_ace_projection(row):" in live
+    assert "local_player_aces_ou(row)" in live
     assert 'row.get("price_contract") == "player_total_ou"' in live
     assert "publishable_api_price(row) or eligible_local_ace_projection(row)" not in live
     assert "verified_ace_odds(row) is not None" in live
