@@ -77,7 +77,7 @@ def test_board_discovers_all_four_complete_markets_and_reuses_requests():
         provider, aces, sg, max_events=2, prefetched_payloads=cache,
     )
     assert provider.calls == [("100", 1), ("101", 1)]
-    assert ace_out[0]["odds"] is None
+    assert ace_out[0].get("odds") is None
     assert ace_out[0].get("price_contract") is None
     assert ace_out[0].get("price_status") != "priced_projection"
     assert sg_out[0]["odds"] == 1.86
