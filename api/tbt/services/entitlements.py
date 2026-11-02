@@ -268,7 +268,8 @@ def filter_results_for_issued_day(rows: list, manifest: dict) -> list:
         scheduled = _result_timestamp(row)
         if (scheduled is None
                 or scheduled.astimezone(ZoneInfo("Europe/Bratislava")).date().isoformat()
-                    != _NOV2_ISSUED_DAY):
+                    != _NOV2_ISSUED_DAY
+                or blinq_access_day(scheduled) != _NOV2_ISSUED_DAY):
             out.append(deepcopy(row))
             continue
         event = str(row.get("event_id") or row.get("id") or "").strip().lower()
