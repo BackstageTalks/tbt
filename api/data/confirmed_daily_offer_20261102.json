@@ -1,0 +1,122 @@
+{
+  "schema": 1,
+  "betting_day": "2026-11-02",
+  "timezone": "Europe/Bratislava",
+  "provenance": {
+    "morning_delivery_id": "2026-11-02:daily:0620",
+    "morning_sha256": "109791a8d40267d26f032d44efa30c3dd08f202ab19e9c1cff33a327c8e50cbc",
+    "morning_sent_at": "2026-11-02T05:37:35.400107+00:00",
+    "morning_message_ids": [
+      725,
+      726
+    ],
+    "aces_superseding_id": "2026-11-02:repost:aces-player-ou-20261102-v1",
+    "aces_sha256": "78346b720297ee16177a7fb611f21a62921c51e6ecb4828c017831fa34a34b65",
+    "aces_sent_at": "2026-11-02T09:27:02.743369+00:00",
+    "aces_message_ids": [
+      727,
+      728
+    ]
+  },
+  "issued_picks": [
+    {
+      "event_id": "17456690",
+      "section": "top_daily",
+      "market": "match_winner",
+      "selection_id": "307383",
+      "publication_key": "top_daily:match_winner:2026-11-02:17456690:307383",
+      "scheduled_at": "2026-11-02T20:10:00+00:00",
+      "ou_side": null,
+      "market_line": null,
+      "free": false
+    },
+    {
+      "event_id": "17471474",
+      "section": "top_daily",
+      "market": "match_winner",
+      "selection_id": "199488",
+      "publication_key": "top_daily:match_winner:2026-11-02:17471474:199488",
+      "scheduled_at": "2026-11-02T19:10:00+00:00",
+      "ou_side": null,
+      "market_line": null,
+      "free": false
+    },
+    {
+      "event_id": "17467283",
+      "section": "top_daily",
+      "market": "match_winner",
+      "selection_id": "52229",
+      "publication_key": "top_daily:match_winner:2026-11-02:17467283:52229",
+      "scheduled_at": "2026-11-02T11:30:00+00:00",
+      "ou_side": null,
+      "market_line": null,
+      "free": true
+    },
+    {
+      "event_id": "17470634",
+      "section": "value",
+      "market": "match_winner",
+      "selection_id": "409907",
+      "publication_key": "value:match_winner:2026-11-02:17470634:409907",
+      "scheduled_at": "2026-11-02T17:00:00+00:00",
+      "ou_side": null,
+      "market_line": null,
+      "free": false
+    },
+    {
+      "event_id": "17468525",
+      "section": "ace",
+      "market": "aces",
+      "selection_id": "289146",
+      "publication_key": "local-aces-ou-v1:17468525:289146:over:12.5",
+      "scheduled_at": "2026-11-02T11:10:00+00:00",
+      "ou_side": "over",
+      "market_line": 12.5,
+      "free": false
+    },
+    {
+      "event_id": "17449526",
+      "section": "ace",
+      "market": "aces",
+      "selection_id": "158896",
+      "publication_key": "local-aces-ou-v1:17449526:158896:over:10.5",
+      "scheduled_at": "2026-11-02T10:00:00+00:00",
+      "ou_side": "over",
+      "market_line": 10.5,
+      "free": false
+    },
+    {
+      "event_id": "17456687",
+      "section": "ace",
+      "market": "aces",
+      "selection_id": "372310",
+      "publication_key": "local-aces-ou-v1:17456687:372310:over:6.5",
+      "scheduled_at": "2026-11-02T19:00:00+00:00",
+      "ou_side": "over",
+      "market_line": 6.5,
+      "free": false
+    },
+    {
+      "event_id": "17467964",
+      "section": "ace",
+      "market": "aces",
+      "selection_id": "270414",
+      "publication_key": "local-aces-ou-v1:17467964:270414:over:4.5",
+      "scheduled_at": "2026-11-02T13:00:00+00:00",
+      "ou_side": "over",
+      "market_line": 4.5,
+      "free": false
+    },
+    {
+      "event_id": "17457727",
+      "section": "ace",
+      "market": "aces",
+      "selection_id": "341853",
+      "publication_key": "local-aces-ou-v1:17457727:341853:over:7.5",
+      "scheduled_at": "2026-11-02T15:00:00+00:00",
+      "ou_side": "over",
+      "market_line": 7.5,
+      "free": false
+    }
+  ]
+}
