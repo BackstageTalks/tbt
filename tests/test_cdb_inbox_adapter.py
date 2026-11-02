@@ -398,7 +398,7 @@ def test_historical_tml_source_only_rejects_retirements_missing_ids_and_bad_coun
     incoming = tmp_path / "input"
     incoming.mkdir()
     path = incoming / "fixed-2019.csv"
-    good = sample(tour="", winner_id="ALFA", loser_id="BETA",
+    good = sample(tour="", match_date="2019-10-17", winner_id="ALFA", loser_id="BETA",
                   score="6-4 6-4", best_of="3", w_bpSaved="2", w_bpFaced="3",
                   l_bpSaved="1", l_bpFaced="4")
     candidates = [
@@ -409,7 +409,7 @@ def test_historical_tml_source_only_rejects_retirements_missing_ids_and_bad_coun
         dict(good, match_num="", score="W/O"),
     ]
     with path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(candidates[0]))
+        writer = csv.DictWriter(handle, fieldnames=list(dict.fromkeys(k for row in candidates for k in row)))
         writer.writeheader()
         writer.writerows(candidates)
     original_sha = hashlib.sha256(path.read_bytes()).hexdigest()
