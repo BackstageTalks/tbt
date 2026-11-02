@@ -147,7 +147,7 @@ def prepare(source_root: Path, output_dir: Path, start_year: int = 2016,
                     continue
                 quality = _quality(row)
                 metrics[quality] += 1
-                if quality != "COMPLETE_BASIC_SERVE_RETURN":
+                if quality not in {"COMPLETE_BASIC_SERVE_RETURN", "VALID_PARTIAL_SERVE_OR_BP"}:
                     continue
                 row["league"] = tour
                 row["source_record_id"] = f"sackmann:{tour}:{family}:{year}:{digest}:{index}"
