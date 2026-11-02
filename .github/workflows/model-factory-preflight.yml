@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 180
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      REQUEST_ID: ${{ inputs.request_id }}
       PYTHONPATH: api:scripts
       PYTHONDONTWRITEBYTECODE: '1'
       BLINQ_RAPIDAPI_MAX_RPS: '0'
@@ -44,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN"
-          [[ "${{ inputs.request_id }}" =~ ^[0-9a-f]{24}$ ]]
+          [[ "$REQUEST_ID" =~ ^[0-9a-f]{24}$ ]]
           python scripts/wait_for_cdb_writer_idle.py --max-seconds 7200 --interval-seconds 30
           test "$(gh repo view BackstageTalks/tbt-data --json visibility --jq '.visibility')" = PRIVATE
       - name: Audit canonical ATP/WTA inputs and produce read-only report
