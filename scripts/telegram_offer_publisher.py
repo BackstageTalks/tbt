@@ -192,8 +192,12 @@ def fmt(r,k,c,index=1,name_map=None,prefix_override=None):
         line=f"{prefix} | {name} | {time} | "+" | ".join(values)
     return line
 
-def _local_player_aces_ou(row):
-    """A statistical player-total contract, never an external bookmaker line."""
+def _local_player_aces_ou(row, *, legacy=False):
+    """Local Aces Over threshold; newly created contracts keep >1 ace cushion.
+
+    legacy=True reproduces the immutable v1 threshold for already frozen rows.
+    No bookmaker quote, model count or previously issued contract is modified.
+    """
     if (not isinstance(row,dict) or row.get("market")!="aces"
             or str(row.get("selection_id") or "") not in
             {str((row.get("player1") or {}).get("id") or ""),
@@ -204,12 +208,14 @@ def _local_player_aces_ou(row):
         return None
     # This is explicitly a locally computed half-ace threshold. Never
     # represent it as a price or threshold offered by a bookmaker.
-    line=max(0.5,math.floor(projection-0.5)+0.5)
-    if projection<=line:
+    line=(max(0.5,math.floor(projection-0.5)+0.5) if legacy
+          else max(0.5,math.floor(projection-1.5-1e-9)+0.5))
+    if projection<=line or (not legacy and projection-line<=1.0):
         return None
     return {**row,"price_contract":"player_total_ou",
             "market_line":line,"ou_side":"over",
-            "local_ou_line_basis":"model_projection_half_ace_v1",
+            "local_ou_line_basis":("model_projection_half_ace_v1" if legacy
+                                    else "model_projection_min_gt_1_ace_v2"),
             "price_status":"projection_only",
             "odds":None,"provider_id":None,
             "odds_source":None,"odds_bookmaker":None,
@@ -217,12 +223,13 @@ def _local_player_aces_ou(row):
 
 
 def _eligible_local_player_aces_ou(row):
-    if not isinstance(row,dict) or row.get("local_ou_line_basis")!="model_projection_half_ace_v1":
+    basis=row.get("local_ou_line_basis") if isinstance(row,dict) else None
+    if basis not in ("model_projection_half_ace_v1","model_projection_min_gt_1_ace_v2"):
         return False
     original={**row,"price_contract":"player_superiority",
               "market_line":None,"ou_side":None,
               "local_ou_line_basis":None}
-    calculated=_local_player_aces_ou(original)
+    calculated=_local_player_aces_ou(original,legacy=(basis=="model_projection_half_ace_v1"))
     return (calculated is not None
             and num(row.get("market_line"))==num(calculated.get("market_line"))
             and str(row.get("ou_side"))=="over"
