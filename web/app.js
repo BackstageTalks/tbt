@@ -3929,51 +3929,6 @@
     });
     return [...unique.values()].sort((a,b)=>new Date(b.row?.scheduled_at||0)-new Date(a.row?.scheduled_at||0));
   }
-  function pendingAdminTodayEntries(filters,settled){
-    // Results KPIs remain settled-only. Admin's tier preview must nevertheless
-    // show the immutable current-day offer while a provider score is unverified.
-    if(!isAdminAccount()||String(filters?.window||'')!=='today'||!filters?.membership)return [];
-    const day=bratislavaBettingDayKey(Date.now(),6),cohort=memberResultCohort(filters.membership,day);
-    const seen=new Set(settled.map(({row,publication})=>resultBetIdentity(row,publication)));
-    const output=[];
-    const sources=[
-      ['daily_picks','top_daily','match_winner'],
-      ['top_daily_picks','top_daily','match_winner'],
-      ['prime_picks','prime','match_winner'],
-      ['value_picks','value','match_winner'],
-      ['doubles_picks','doubles','match_winner'],
-      ['ace_picks','ace','aces'],['sg_picks','sg','']
-    ];
-    for(const [feedKey,section,defaultMarket] of sources){
-      for(const row of state.feed?.[feedKey]||[]){
-        if(!row||typeof row!=='object'||row.excluded_reason)continue;
-        if(filters.tour&&String(row.tour||'').toUpperCase()!==filters.tour)continue;
-        if(filters.surface){
-          const surface=String(row.surface||'').toLowerCase().replace('indoor_hard','hard');
-          if(surface!==filters.surface)continue;
-        }
-        if(bratislavaBettingDayKey(row.scheduled_at||row.date||0,6)!==day)continue;
-        const publications=(Array.isArray(row.market_publications)?row.market_publications:[])
-          .filter(p=>p&&typeof p==='object'&&String(p.publication_status||'published')==='published');
-        for(const original of publications.length?publications:[row]){
-          if(String(original.publication_status||'published')!=='published')continue;
-          const market=String(original.market||row.market||row.projection_metric||defaultMarket).toLowerCase();
-          const resolvedSection=market==='aces'?'ace':market==='double_faults'?'double_faults':
-            market==='sets'?'sets':market==='games'?'games':section;
-          const selection=String(original.selection_id||row.betting?.selection_id||row.selection_id||'').trim();
-          if(!market||!selection)continue;
-          const publication={...original,section:resolvedSection,market,selection_id:selection,result:{}};
-          const identity=resultBetIdentity(row,publication);
-          if(!identity||!cohort.has(identity)||seen.has(identity))continue;
-          if(!publicationMatchesResultCategory(publication,normalizedResultsCategory(filters.category||'all')))continue;
-          if(!resultPublicationMatchesWindow(row,publication,filters))continue;
-          seen.add(identity);
-          output.push({row,publication,categories:[resolvedSection],pending:true});
-        }
-      }
-    }
-    return output;
-  }
   function resultVisibleOdds(publication){
     const actual=publication?.odds==null?NaN:Number(publication.odds);
     const normalized=String(publication?.market||'').toLowerCase()==='aces'?Number(publication?.statistical_ace_odds):NaN;
@@ -4195,10 +4150,7 @@
 
   function renderResults(){
     if(state.feed?.results_exclusions_unavailable)return '<div class="state-card" role="alert">Vyhodnotené výsledky sú dočasne nedostupné – prebieha ochranné overenie administrátorských vylúčení. Predikcie zostávajú dostupné.</div>';
-    const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all';
-    const settled=settledPublishedEntries(rows,category,filters);
-    const entries=[...settled,...pendingAdminTodayEntries(filters,settled)]
-      .sort((a,b)=>new Date(b.row?.scheduled_at||0)-new Date(a.row?.scheduled_at||0));
+    const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',entries=settledPublishedEntries(rows,category,filters);
     if(!entries.length){state.resultsPage=0;return '<div class="state-card">Pre zvolené filtre nie sú dostupné vyhodnotené predikcie.</div>';}
     const allowedSizes=[50,100],pageSize=allowedSizes.includes(Number(state.resultsPageSize))?Number(state.resultsPageSize):50;
     state.resultsPageSize=pageSize;
@@ -4230,9 +4182,7 @@
         ?`<b class="correct">✓ ${escapeHtml(lcopy('WIN','VÝHRA','VÝHRA'))}</b>`
         :outcome.kind==='loss'
           ?`<b class="wrong">× ${escapeHtml(lcopy('LOSS','PREHRA','PREHRA'))}</b>`
-          :outcome.kind==='pending'
-            ?`<b class="pending">⏳ ${escapeHtml(lcopy('AWAITING VERIFICATION','ČAKÁ NA OVERENIE','ČEKÁ NA OVĚŘENÍ'))}</b>`
-            :`<b class="${voidLabel==='SKREČ'?'retired':'void'}">○ ${escapeHtml(voidLabel)}</b>`;
+          :`<b class="${voidLabel==='SKREČ'?'retired':'void'}">○ ${escapeHtml(voidLabel)}</b>`;
       const p1Name=p1.name||'Player 1',p2Name=p2.name||'Player 2';
       const p1Photo=playerPhotoSource(r,p1,'player1');
       const p2Photo=playerPhotoSource(r,p2,'player2');
