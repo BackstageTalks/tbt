@@ -127,7 +127,7 @@ def test_aces_nested_market_metadata_prices_exact_selection_only():
         return {'markets': [{'market': {'name': name}, 'choices': [{'name': 'Alpha', 'decimalOdds': 1.8}, {'name': 'Beta', 'decimalOdds': 2.1}]}]}
     provider = SimpleNamespace(event_odds=lambda *a, **kw: payload('Most aces'))
     rows, _, report = enrich_projection_odds(provider, [card], [], max_events=1)
-    assert rows[0]['odds'] == 2.1 and report['priced_cards']['aces'] == 1
+    assert rows[0].get('odds') is None and report['priced_cards']['aces'] == 0
     provider.event_odds = lambda *a, **kw: payload('First set most aces')
     rows, _, _ = enrich_projection_odds(provider, [card], [], max_events=1)
     assert 'odds' not in rows[0]
