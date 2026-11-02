@@ -478,6 +478,16 @@ def _grade_runtime_projection(
     issued = _parse_time(publication.get("issued_at"))
     if scheduled is None or issued is None or issued >= scheduled:
         return None
+    # Since 2026-11-01, BlinQ publishes player Aces O/U, never a
+    # "more aces than the opponent" bet. Without the frozen issued side/line
+    # there is no verifiable result, including for retired fixtures.
+    if market == "aces" and scheduled >= datetime(2026, 11, 1, 5, tzinfo=timezone.utc):
+        if str(publication.get("price_contract") or "").lower() != "player_total_ou":
+            return None
+        if str(publication.get("ou_side") or "").lower() not in {"over", "under"}:
+            return None
+        if _finite_count(publication.get("market_line")) is None:
+            return None
     state = str(status_row.get("status") or "").lower()
     if state not in TERMINAL_STATUSES:
         return None
