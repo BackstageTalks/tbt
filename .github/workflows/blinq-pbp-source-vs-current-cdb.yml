@@ -22,6 +22,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PRIVATE_REPO: BackstageTalks/tbt-data
+      ALIAS_RESEARCH: ${{ inputs.alias_research && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,7 +62,7 @@ jobs:
           set -euo pipefail
           python -m unittest discover -s app/tests -p test_pbp_candidate_audit.py -v
           flags=()
-          if [[ "${{ inputs.alias_research || 'false' }}" == "true" ]]; then
+          if [[ "$ALIAS_RESEARCH" == "true" ]]; then
             flags+=(--alias-research)
           fi
           python app/scripts/audit_pbp_source_vs_current_cdb.py \
