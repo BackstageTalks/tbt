@@ -179,3 +179,14 @@ def test_different_replacement_odds_are_never_counted_as_original_bet():
     rounded = json.loads(json.dumps(row))
     rounded["market_publications"][0]["odds"] = 1.83
     assert len(filter_results_for_issued_day([rounded], _manifest("elite"))) == 1
+
+
+def test_nov2_before_six_am_is_previous_betting_day_and_untouched():
+    prior = {
+        "event_id": "prior-day-early",
+        "scheduled_at": "2026-11-02T03:00:00+00:00",
+        "market_publications": [{"section": "value", "market": "match_winner",
+                                 "selection_id": "old", "result": {"correct": False}}],
+    }
+    for plan in ("rookie", "pro", "elite"):
+        assert filter_results_for_issued_day([prior], _manifest(plan)) == [prior]
