@@ -360,7 +360,9 @@ def test_window_requires_complete_independent_metadata(proof, eligible):
 
 
 def test_sha_and_path_pinned_tml_atp_source_only_tour():
-    from scripts.cdb_inbox_adapter import tour_from_pinned_tml, TML_ATP_2026_SOURCE_SHA
+    from scripts.cdb_inbox_adapter import (
+        tour_from_pinned_tml, TML_ATP_2026_SOURCE_SHA, TML_ATP_2026_QUARANTINE
+    )
     correct = "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/TML/TML/2026.csv"
     assert tour_from_pinned_tml(TML_ATP_2026_SOURCE_SHA, correct) == "atp"
     for wrong_sha, wrong_path in (
@@ -369,6 +371,9 @@ def test_sha_and_path_pinned_tml_atp_source_only_tour():
         (TML_ATP_2026_SOURCE_SHA, "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/TML/2026.csv"),
     ):
         assert tour_from_pinned_tml(wrong_sha, wrong_path) == ""
+    assert ("2026-336", "19") in TML_ATP_2026_QUARANTINE
+    assert ("2026-8998", "17") in TML_ATP_2026_QUARANTINE
+    assert ("2026-9900", "1") not in TML_ATP_2026_QUARANTINE
     # A source-specific tour hint never resolves canonical players/matches.
     parsed, reason = normalize_row(sample(tour=""), "2026.csv", 1, source_tour="atp")
     assert reason == "" and parsed["league"] == "atp"
