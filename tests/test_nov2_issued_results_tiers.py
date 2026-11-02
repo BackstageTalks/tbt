@@ -41,6 +41,7 @@ def _result(offer: dict) -> dict:
         "market": offer["market"],
         "selection_id": offer["selection_id"],
         "publication_key": offer["publication_key"],
+        "odds": offer["odds"],
         "result": {"correct": True, "profit_units": 0.5},
     }
     if offer["market"] == "aces":
@@ -167,3 +168,14 @@ def test_runtime_second_pass_is_present_after_category_gate():
     app = (Path(__file__).resolve().parents[1] / "api/function_app.py").read_text(encoding="utf-8")
     assert 'data["results"] = filter_results_for_categories(' in app
     assert 'data["results"] = filter_results_for_issued_day(' in app
+
+
+def test_different_replacement_odds_are_never_counted_as_original_bet():
+    row = _result(next(o for o in OFFERS if o["event_id"] == "17470634"))
+    assert len(filter_results_for_issued_day([row], _manifest("elite"))) == 1
+    modified = json.loads(json.dumps(row))
+    modified["market_publications"][0]["odds"] = 2.30
+    assert filter_results_for_issued_day([modified], _manifest("elite")) == []
+    rounded = json.loads(json.dumps(row))
+    rounded["market_publications"][0]["odds"] = 1.83
+    assert len(filter_results_for_issued_day([rounded], _manifest("elite"))) == 1
