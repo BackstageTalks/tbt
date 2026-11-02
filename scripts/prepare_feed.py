@@ -617,6 +617,8 @@ def main() -> None:
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     comparator_target = ROOT / "api/data/comparator.json.gz"
+    ace_ou_sidecar = ROOT / "api/data/confirmed_aces_ou.json"
+    ace_ou_sidecar.unlink(missing_ok=True)
     comparator_target.unlink(missing_ok=True)
     (ROOT / "api/data/comparator-players.json").unlink(missing_ok=True)
     (ROOT / "api/data/comparator-serving.sqlite3").unlink(missing_ok=True)
@@ -661,7 +663,27 @@ def main() -> None:
             payload = _attach_player_assets(payload, repository)
             telegram_state = _read_confirmed_telegram_state(repository)
             if telegram_state is not None:
-                payload = overlay_confirmed_telegram_aces_ou(payload, telegram_state)
+                bridged = overlay_confirmed_telegram_aces_ou(payload, telegram_state)
+                links = []
+                for ace_row in bridged.get("ace_picks") or []:
+                    if not isinstance(ace_row, dict):
+                        continue
+                    for pub in ace_row.get("market_publications") or []:
+                        if isinstance(pub, dict) and pub.get("source") == "confirmed_telegram_ou_reissue":
+                            links.append({
+                                "event_id": ace_row.get("event_id"),
+                                "selection_id": ace_row.get("selection_id"),
+                                "scheduled_at": ace_row.get("scheduled_at"),
+                                "projection": ace_row.get("projection"),
+                                "publication": pub,
+                            })
+                if links:
+                    ace_ou_sidecar.write_text(
+                        json.dumps({"schema": 1, "issued_aces_ou": links},
+                                   ensure_ascii=False, allow_nan=False),
+                        encoding="utf-8",
+                    )
+                    print("Confirmed Aces O/U read-only sidecar:", len(links))
 
     # If no private prediction candidate exists, overwrite any checked-in stale
     # snapshot with an honest empty feed instead of silently deploying it.
