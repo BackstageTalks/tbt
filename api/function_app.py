@@ -157,6 +157,7 @@ from tbt.services.live_comeback import (
 from tbt.services.match_status import (
     event_ids_from_feed, runtime_settled_results, scan_match_statuses,
     verified_terminal_statuses, apply_verified_schedule_overlay,
+    attach_confirmed_aces_ou_sidecar,
 )
 from tbt.services.clv_market_history import (
     extract_verified_quotes, persist_quotes, attach_offer_clv,
@@ -183,6 +184,23 @@ COMPARATOR = Path(__file__).parent / "data/comparator.json.gz"
 COMPARATOR_PLAYERS = Path(__file__).parent / "data/comparator-players.json"
 COMPARATOR_INDEX = Path(__file__).parent / "data/comparator-serving.sqlite3"
 RELEASE = "7.3.6"
+
+CONFIRMED_ACE_OU = Path(__file__).parent / "data/confirmed_aces_ou.json"
+
+
+def _read_feed_with_confirmed_aces_ou():
+    """Canonical feed plus a separately packaged, verified sent-issuance overlay."""
+    base = read_feed(FEED)
+    if not CONFIRMED_ACE_OU.is_file():
+        return base
+    try:
+        sidecar = json.loads(CONFIRMED_ACE_OU.read_text(encoding="utf-8"))
+        return attach_confirmed_aces_ou_sidecar(base, sidecar)
+    except (OSError, ValueError, TypeError):
+        logging.exception("Confirmed ACE O/U sidecar unreadable; no inferred settlement")
+        return base
+
+
 API_VERSION = "3.10.0"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
@@ -1381,7 +1399,7 @@ def feed(req):
             return response({"error": "email_not_verified"}, 403)
         profile = _profile_for(user)
         account_data = public_account(user, cfg=settings, profile=profile)
-        source_feed = visible_feed(read_feed(FEED))
+        source_feed = visible_feed(_read_feed_with_confirmed_aces_ou())
         try:
             source_feed = merge_settled_results(source_feed, load_settled_results_archive())
         except AdminStorageUnavailable:
@@ -2107,7 +2125,7 @@ def internal_match_status_worker(req):
     if not _live_worker_token_ok(req):
         return response({"error": "forbidden"}, 403)
     try:
-        feed_payload = read_feed(FEED)
+        feed_payload = _read_feed_with_confirmed_aces_ou()
         previous = load_match_status_snapshot() or {}
         client = RapidTennisClient(
             settings, request_budget=lambda *args, **kwargs: reserve_shared_api_budget("match")
