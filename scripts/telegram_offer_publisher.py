@@ -299,6 +299,14 @@ def result_reference(row,section):
     pub=pubs[0] if len(pubs)==1 else {}
     if section=="aces":
         odds, verified_provider = selected_ace_odds(row, selection_id=selection)
+        if row.get("price_contract") == "player_total_ou":
+            # Frozen settlement must refer to the exact issued O/U market,
+            # not a legacy Most Aces publication on this player.
+            if len(pubs)!=1 or not pub.get("publication_key"):
+                raise RuntimeError("Confirmed player ACES O/U missing unique issued publication")
+            if (str(pub.get("ou_side") or "").lower()!=str(row.get("ou_side") or "").lower()
+                    or num(pub.get("market_line"))!=num(row.get("market_line"))):
+                raise RuntimeError("ACES O/U publication line or side mismatch")
     else:
         odds=num(pub.get("odds") or betting.get("odds") or row.get("odds"))
         verified_provider=False
@@ -359,6 +367,24 @@ def _original_offer_only(confirmed, sent, now, *, allow_aces_price_update=False)
     if _daily_rows(frozen_offer)!=selected["top"]:
         raise RuntimeError("Frozen original TOP no longer passes exact public TOP selection")
     return frozen_offer
+
+
+def _reissue_with_verified_aces_ou(confirmed, sent, now):
+    """Keep issued TOP/VALUE/FREE, replace obsolete superiority ACE bets with new O/U."""
+    frozen_nonaces={"rows":[row for row in sent.get("rows") or []
+                           if row.get("channel") != "aces"]}
+    frozen=_original_offer_only(confirmed,frozen_nonaces,now)
+    only_aces={"sections":{"top":False,"value":False,"aces":True},
+               "free_top_pick":False,"include_started":False,
+               "max_per_section":0,"aces_ou_only":True}
+    aces=select_groups(confirmed,only_aces,now).get("aces",[])
+    if not aces:
+        raise RuntimeError("No future verified player-total ACES O/U in today's confirmed snapshot; no resend")
+    for row in aces:
+        if (row.get("price_contract")!="player_total_ou"
+                or verified_ace_odds(row) is None):
+            raise RuntimeError("Cannot resend unverified ACES total")
+    return {**frozen,"ace_picks":aces}
 
 
 def mark_sent(args):
@@ -441,11 +467,17 @@ def prepare(a):
     sticky=old.get("free_picks") if isinstance(old.get("free_picks"),dict) else {}
     confirmed=snapshot(out/"assets")
     price_correction=repost and revision in ("aces-local-prices-20261101-v1","aces-standard-feed-20261101-v2")
-    if repost:confirmed=_original_offer_only(confirmed,previous,now,
-        allow_aces_price_update=price_correction)
+    ace_ou_reissue=repost and revision=="aces-player-ou-20261102-v1"
+    if ace_ou_reissue and day(now)!="2026-11-02":
+        raise RuntimeError("Operator-approved ACE O/U revision expired")
+    if ace_ou_reissue:
+        confirmed=_reissue_with_verified_aces_ou(confirmed,previous,now)
+    elif repost:
+        confirmed=_original_offer_only(confirmed,previous,now,
+            allow_aces_price_update=price_correction)
     msg=messages(confirmed,v,now,free_event_id=sticky.get(day(now)))
     if not msg:print('{"status":"skipped","reason":"no_eligible_rows"}');return
-    if repost and len(msg)!=len(previous["message_ids"]):
+    if repost and not ace_ou_reissue and len(msg)!=len(previous["message_ids"]):
         raise RuntimeError("Reformatted message count does not match original receipts")
     groups=select_groups(confirmed,v,now)
     sent_rows=[]
@@ -462,7 +494,18 @@ def prepare(a):
     if not sent_rows:raise RuntimeError("No exact Telegram rows to evaluate")
     if repost:
         original=previous["rows"]
-        if len(sent_rows)!=len(original) or any(
+        if ace_ou_reissue:
+            preserved=[row for row in sent_rows if row.get("channel")!="aces"]
+            frozen=[row for row in original if row.get("channel")!="aces"]
+            if len(preserved)!=len(frozen) or any(
+                    not _same_frozen_selection(new,old)
+                    for new,old in zip(preserved,frozen)):
+                raise RuntimeError("Reissue would change original TOP VALUE or FREE")
+            if not any(row.get("channel")=="aces" and row.get("market_line") is not None
+                       and row.get("projection_direction") in ("over","under")
+                       for row in sent_rows):
+                raise RuntimeError("Reissue has no exactly frozen player ACE O/U")
+        elif len(sent_rows)!=len(original) or any(
                 not _same_frozen_selection(now_row,old_row,
                     allow_aces_price_update=price_correction)
                 for now_row,old_row in zip(sent_rows,original)):
@@ -470,7 +513,8 @@ def prepare(a):
     save(out/"messages.json",msg)
     slot=reposts if repost else attempts
     slot[ident]={"reserved_at":now.isoformat(),"status":"reserved",
-                 "rows":sent_rows if not repost else [],
+                 "rows":sent_rows if (not repost or ace_ou_reissue) else [],
+                 "supersedes_daily":bool(ace_ou_reissue),
                  "sha256":hashlib.sha256(json.dumps(msg,ensure_ascii=False).encode()).hexdigest()}
     for item in msg:
         if item.get("audience")=="free" and item.get("free_event_id"):
