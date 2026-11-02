@@ -470,8 +470,9 @@ def _grade_runtime_projection(
 ) -> dict[str, Any] | None:
     """Apply the frozen offline market rules without importing ML dependencies.
 
-    Only verified full-match evidence from the same event can settle a market.
-    Partial provider counts and unpriced projections never invent betting ROI.
+    Only verified terminal evidence from the same event can settle a market.
+    During retirement, only an already-crossed player Aces O/U line is final;
+    partial/missing counts and unpriced projections never invent betting ROI.
     """
     market = str(publication.get("market") or "").lower()
     scheduled = _parse_time(row.get("scheduled_at"))
@@ -491,7 +492,29 @@ def _grade_runtime_projection(
         "runtime_overlay": True,
         "runtime_source": "match_status_snapshot",
     }
-    if state in {"retired", "void"}:
+
+    # An aces Over/Under can be irrevocably decided before retirement.
+    # Use only a pre-start frozen player-total contract and terminal,
+    # player-identity-matched provider counts; never infer missing statistics.
+    retired_aces_decided = False
+    if state == "retired" and market == "aces" and (
+        str(publication.get("price_contract") or "").lower() == "player_total_ou"
+        and str(publication.get("ou_side") or "").lower() in {"over", "under"}
+    ):
+        stats = status_row.get("projection_stats")
+        p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
+        selected = str(publication.get("selection_id") or "")
+        line = _finite_count(publication.get("market_line"))
+        if (
+            isinstance(stats, dict) and line is not None
+            and selected in {p1, p2} and p1 != p2
+            and str(status_row.get("projection_stats_p1_id") or "") == p1
+            and str(status_row.get("projection_stats_p2_id") or "") == p2
+        ):
+            own = "p1" if selected == p1 else "p2"
+            actual = _finite_count(stats.get(f"{own}_aces"))
+            retired_aces_decided = actual is not None and actual > line
+    if state in {"retired", "void"} and not retired_aces_decided:
         result = {**base, "status": "void", "reason": state,
                   "correct": None, "void": True,
                   "staked_units": 0.0, "return_units": 0.0, "profit_units": 0.0}
@@ -577,6 +600,9 @@ def _grade_runtime_projection(
             result["opponent_projection"] = publication.get("opponent_projection")
         else:
             result["reference_projection"] = reference
+        if retired_aces_decided:
+            result["retirement_line_decided"] = True
+            result["reason"] = "retired_after_ou_decided"
         if equal:
             result.update(staked_units=0.0, return_units=0.0, profit_units=0.0)
         elif str(publication.get("price_status") or "").lower() == "priced_projection":
