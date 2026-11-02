@@ -2167,7 +2167,7 @@ def internal_match_status_worker(req):
                 if client.request_count >= client.request_limit - 1:
                     break
                 entry = (snapshot.get("statuses") or {}).get(event)
-                if not isinstance(entry, dict) or entry.get("status") not in {"win", "loss"}:
+                if not isinstance(entry, dict) or entry.get("status") not in {"win", "loss", "retired"}:
                     continue
                 p1 = str((row.get("player1") or {}).get("id") or "")
                 p2 = str((row.get("player2") or {}).get("id") or "")
