@@ -277,7 +277,7 @@ def messages(x,c,now,free_event_id=None):
     if not got:return []
     today=day(now)
     date=now.astimezone(TZ).strftime("%d.%m.%Y")
-    footer=branded_footer(c.get("footer"))
+    # Keep analytical previews out of predictions; results retain their separate footer.
     outbound=[]
     # User-facing order: TOP -> Value -> Aces, without category headings.
     # 0 means ALL issued/eligible picks; never silently truncate the offer.
@@ -296,18 +296,18 @@ def messages(x,c,now,free_event_id=None):
         current=[]
         for index,(key,row) in enumerate(records,1):
             line=fmt(row,key,c,index,names)
-            candidate="\n\n".join(base+["\n".join(current+[line]),footer])
+            candidate="\n\n".join(base+["\n".join(current+[line])])
             if len(candidate.encode("utf-16-le"))//2>4096:
                 if not current:
                     raise RuntimeError("A Telegram prediction row exceeds safe size")
-                chunks.append("\n\n".join(base+["\n".join(current),footer]))
+                chunks.append("\n\n".join(base+["\n".join(current)]))
                 current=[line]
-                if len("\n\n".join(base+[line,footer]).encode("utf-16-le"))//2>4096:
+                if len("\n\n".join(base+[line]).encode("utf-16-le"))//2>4096:
                     raise RuntimeError("A Telegram prediction row exceeds safe size")
             else:
                 current.append(line)
         if current:
-            chunks.append("\n\n".join(base+["\n".join(current),footer]))
+            chunks.append("\n\n".join(base+["\n".join(current)]))
         return chunks
 
     if premium_groups:
@@ -327,7 +327,7 @@ def messages(x,c,now,free_event_id=None):
         winner=min(candidates,key=lambda r:hashlib.sha256(
             (today+"|"+str(r.get("event_id"))+"|"+str((r.get("betting") or {}).get("selection_id") or r.get("winner_id"))).encode("utf-8")).hexdigest())
         free="\n".join(["🎾 FREE | BlinQ",f"📅 {date}","",fmt(winner,"top",c,1,prefix_override="🆓 FREE")])
-        outbound.append({"audience":"free","text":"\n\n".join([HEADER,free,footer]),"free_event_id":str(winner.get("event_id"))})
+        outbound.append({"audience":"free","text":"\n\n".join([HEADER,free]),"free_event_id":str(winner.get("event_id"))})
     if any(len(item["text"].encode("utf-16-le"))//2>4096 for item in outbound):
         raise RuntimeError("Telegram message exceeds 4096 UTF-16 units")
     return outbound
