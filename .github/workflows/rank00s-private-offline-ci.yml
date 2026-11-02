@@ -1,9 +1,5 @@
 name: BlinQ rank00s private source offline QA on public runner
 'on':
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/rank00s-private-offline-ci.yml'
   workflow_dispatch:
 
 permissions:
