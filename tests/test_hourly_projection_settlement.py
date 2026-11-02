@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from tbt.services.match_status import (
     _verified_final_score_stats, prediction_rows, runtime_settled_results,
-    scan_match_statuses,
+    scan_match_statuses, published_ace_statistic_targets,
 )
 from tbt.services import results_archive
 from tbt.services.results_archive import settled_archive_candidates, save_settled_results_archive, load_settled_results_archive
@@ -349,3 +349,56 @@ def test_retired_aces_archive_replaces_only_older_void_with_verified_win(monkeyp
     assert outcome["correct"] is True
     assert outcome["profit_units"] == 0.79
     assert outcome["actual_count"] == 7
+
+
+def test_flat_deployed_aces_offer_is_eligible_for_retirement_statistics():
+    """Production flat published Aces rows must get real post-retirement counts."""
+    base = _base()
+    base["scheduled_at"] = "2026-11-02T13:00:00Z"
+    flat = {
+        **base, "market": "aces", "selection": "Over 5.5",
+        "side": "over", "line": 5.5, "odds": 1.79,
+        "price_status": "priced_projection", "provider_id": 1,
+        "issued_at": "2026-11-02T06:00:00Z",
+        "captured_at": "2026-11-02T05:55:00Z",
+        "betting": {"selection_id": "11"},
+    }
+    feed = {"generated_at": "2026-11-02T06:00:00Z",
+            "ace_picks": [flat], "results": []}
+    targets = published_ace_statistic_targets(feed)
+    assert set(targets) == {"100"}
+    assert targets["100"]["markets"] == {"aces"}
+    assert targets["100"]["row"] == flat
+    state = _status(status="retired", provider_status="retired injury",
+                    projection_stats={"p1_aces": 7, "p2_aces": 3})
+    settled = runtime_settled_results(feed, state)
+    assert len(settled) == 1
+    result = settled[0]["market_publications"][0]["result"]
+    assert result["correct"] is True
+    assert result["actual_count"] == 7
+    assert result["return_units"] == 1.79
+
+
+def test_flat_unissued_poststart_or_ambiguous_aces_never_trigger_stat_calls():
+    base = _base()
+    base["scheduled_at"] = "2026-11-02T13:00:00Z"
+    valid = {
+        **base, "market": "aces", "selection": "Over 5.5",
+        "side": "over", "line": 5.5, "odds": 1.79,
+        "price_status": "priced_projection", "provider_id": 1,
+        "issued_at": "2026-11-02T06:00:00Z",
+        "captured_at": "2026-11-02T05:55:00Z",
+        "betting": {"selection_id": "11"},
+    }
+    bad_variants = [
+        {**valid, "captured_at": "2026-11-02T13:01:00Z"},
+        {**valid, "issued_at": "2026-11-02T14:00:00Z"},
+        {**valid, "betting": {"selection_id": "99"}},
+        {**valid, "line": None},
+        {**valid, "price_status": "projection_only"},
+        {**valid, "excluded_reason": "not_published"},
+    ]
+    for bad in bad_variants:
+        feed = {"generated_at": "2026-11-02T06:00:00Z",
+                "ace_picks": [bad], "results": []}
+        assert published_ace_statistic_targets(feed) == {}
