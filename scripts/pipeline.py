@@ -1871,8 +1871,14 @@ def main():
                     and ace_df_real_api
                     and (market != "aces" or verified_ace_odds(row) is not None)
                 )
+            # Aces COUNT / Most Aces projections can inform the UI, but
+            # cannot enter the official picks, issuance or settlement as bets.
+            # Only verified, player-specific Over/Under lines are published.
+            # Double Faults retain the independently verified existing policy.
             ace_picks = [row for row in ace_picks if (
-                publishable_api_price(row) or eligible_local_ace_projection(row)
+                publishable_api_price(row)
+                and (str(row.get("market") or "").lower() != "aces"
+                     or row.get("price_contract") == "player_total_ou")
             )]
             sg_picks = [row for row in sg_picks if publishable_api_price(row)]
         # Ten per independent category, sorted by validated projection
@@ -1905,7 +1911,7 @@ def main():
                 **ace_report, "odds_attachment": projection_odds_report,
                 "published_selected": len(ace_picks),
                 "aces_local_fallback_published": sum(eligible_local_ace_projection(row) for row in ace_picks),
-                "priced_selection_policy": "blinq_model_first_api_pro_propline_moviodds_then_local_aces_only",
+                "priced_selection_policy": "blinq_model_first_then_verified_player_aces_ou_only",
             }
         if isinstance(sg_report, dict):
             sg_report = {
