@@ -3859,7 +3859,7 @@
       groups.get(group).push({key,p,tab,day});
     };
     (state.feed.results||[]).forEach(row=>publicResultPublications(row).forEach(p=>add(row,p)));
-    [['daily_picks','top_daily'],['prime_picks','prime'],['value_picks','value'],['doubles_picks','doubles'],['ace_picks','ace'],['sg_picks','sg']].forEach(([feedKey,section])=>{
+    [['daily_picks','top_daily'],['top_daily_picks','top_daily'],['prime_picks','prime'],['value_picks','value'],['doubles_picks','doubles'],['ace_picks','ace'],['sg_picks','sg']].forEach(([feedKey,section])=>{
       (state.feed[feedKey]||[]).forEach(row=>{
         const pubs=Array.isArray(row?.market_publications)?row.market_publications.filter(p=>p&&(!p.publication_status||p.publication_status==='published')&&p.issued_at):[];
         if(pubs.length){
