@@ -130,7 +130,8 @@ def test_public_markup_unchanged_and_admin_config_is_scoped():
     assert "const cards=visibleSettings.map" in app
     assert 'host.innerHTML=cards.map(([icon,label,value,note,trend])=>`<article class="dashboard-kpi"' in app
     assert "state.feed?.dashboard_kpi_cards" in app
-    assert "source_feed = visible_feed(read_feed(FEED))" in api
+    assert "source_feed = visible_feed(_read_feed_with_confirmed_aces_ou())" in api
+    assert 'return attach_confirmed_aces_ou_sidecar(base, sidecar)' in api
     assert 'data["dashboard_kpi_cards"] = selected_dashboard_cards(source_feed, runtime_ui)' in api
     assert "data, entitlements = filter_feed_for_access(source_feed" in api
     assert "body#blinqPremium.blinq-admin .admin-dashboard-slot" in css
