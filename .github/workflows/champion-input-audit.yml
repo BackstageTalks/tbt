@@ -1,9 +1,6 @@
 name: BlinQ fitted champion input inspection
 # Also preserve exact current VALUE rejection counters from persisted feed.
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/champion-input-audit.yml']
   workflow_dispatch:
 permissions:
   contents: read
