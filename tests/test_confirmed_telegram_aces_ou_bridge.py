@@ -182,3 +182,106 @@ def test_farjat_confirmed_over_4_5_reissue_wins_after_retirement():
     assert outcome["retirement_line_decided"] is True
     assert outcome["actual_count"] == 7
     assert outcome["profit_units"] == 0.79
+
+
+def test_entire_20261102_confirmed_aces_reissue_grades_only_played_verified_bets():
+    """All issued O/U selections, with actual provider counts from 2 Nov snapshot.
+
+    The fifth player, Barton, stays pending until terminal verified statistics
+    exist. Match-winner TOP/VALUE/FREE picks are not changed.
+    """
+    player_cases = [
+        # event, picked, other, threshold, odds, actual picked, actual other,
+        # retired, expected settlement, profit (stake=1)
+        ("17468525", "289146", "355096", 12.5, 1.75, 26, 7, False, True, .75),
+        ("17449526", "158896", "261015", 10.5, 1.80, 9, 5, False, False, -1.0),
+        ("17467964", "270414", "206594", 4.5, 1.79, 7, 0, True, True, .79),
+        ("17457727", "341853", "407164", 7.5, 1.72, 7, 5, False, False, -1.0),
+    ]
+    feed = {"generated_at": "2026-11-02T05:12:06Z", "ace_picks": [], "results": [],
+            "top_daily_picks": [{"event_id": "17467283", "pick": "Danka Kovinic"}]}
+    sent_rows = []
+    statuses = {}
+    for event, selected, opponent, threshold, odds, count, other, retired, correct, profit in player_cases:
+        publication_id = f"local-aces-ou-v1:{event}:{selected}:over:{threshold:.1f}"
+        row = {
+            "event_id": event, "scheduled_at": "2026-11-02T13:00:00+00:00",
+            "player1": {"id": selected}, "player2": {"id": opponent},
+            "selection_id": selected, "winner_id": opponent, "market": "aces",
+            "projection": threshold + .4,
+        }
+        feed["ace_picks"].append(row)
+        sent_rows.append({
+            "event_id": event, "selection_id": selected, "section": "ace",
+            "market": "aces", "channel": "aces",
+            "publication_key": publication_id, "market_line": threshold,
+            "projection_direction": "over", "odds": odds,
+            "scheduled_at": row["scheduled_at"], "projection": row["projection"],
+            "name": "Frozen Aces selection", "price_basis": "local_aces_statistical_v1",
+        })
+        statuses[event] = {
+            "status": "retired" if retired else "win",
+            "provider_status": "finished retired" if retired else "finished ended",
+            "provider_home_id": selected, "provider_away_id": opponent,
+            "projection_stats_p1_id": selected,
+            "projection_stats_p2_id": opponent,
+            "projection_stats": {"p1_aces": count, "p2_aces": other},
+            "checked_at": "2026-11-02T17:45:41Z",
+        }
+    # The fifth issued pick has not finished and therefore cannot be graded.
+    pending = {
+        "event_id": "17456687", "scheduled_at": "2026-11-02T19:00:00Z",
+        "player1": {"id": "372310"}, "player2": {"id": "other"},
+        "market": "aces", "selection_id": "372310", "projection": 6.57,
+    }
+    feed["ace_picks"].append(pending)
+    sent_rows.append({
+        "event_id": "17456687", "selection_id": "372310", "section": "ace",
+        "market": "aces", "channel": "aces",
+        "publication_key": "local-aces-ou-v1:17456687:372310:over:6.5",
+        "market_line": 6.5, "projection_direction": "over", "odds": 1.6,
+        "scheduled_at": pending["scheduled_at"], "projection": 6.57,
+        "name": "Hynek Barton", "price_basis": "local_aces_statistical_v1",
+    })
+    state = {
+        "schema": 1, "reposts": {
+            "2026-11-02:repost:aces-player-ou-20261102-v1": {
+                "status": "sent", "supersedes_daily": True,
+                "message_ids": [727, 728],
+                "sent_at": "2026-11-02T09:27:02.743369+00:00",
+                "rows": sent_rows,
+            },
+        },
+    }
+    frozen = deepcopy(feed)
+    bridged = overlay_confirmed_telegram_aces_ou(feed, state)
+    assert feed == frozen
+    assert bridged["top_daily_picks"] == frozen["top_daily_picks"]
+    sidecar = {"schema": 1, "issued_aces_ou": [
+        {
+            "event_id": row["event_id"], "selection_id": row["selection_id"],
+            "scheduled_at": row["scheduled_at"], "projection": row["projection"],
+            "publication": pub,
+        }
+        for row in bridged["ace_picks"]
+        for pub in row.get("market_publications") or []
+        if pub.get("source") == "confirmed_telegram_ou_reissue"
+    ]}
+    assert len(sidecar["issued_aces_ou"]) == 5
+    served = attach_confirmed_aces_ou_sidecar(feed, sidecar)
+    assert served == bridged
+    results = runtime_settled_results(served, statuses)
+    actual = {
+        p["publication_key"]: p["result"]
+        for row in results for p in row.get("market_publications") or []
+        if p.get("price_contract") == "player_total_ou"
+    }
+    assert len(actual) == 4
+    for event, selected, opponent, threshold, odds, count, other, retired, correct, profit in player_cases:
+        pubkey = f"local-aces-ou-v1:{event}:{selected}:over:{threshold:.1f}"
+        outcome = actual[pubkey]
+        assert outcome["correct"] is correct and outcome["void"] is False
+        assert outcome["actual_count"] == count
+        assert outcome["staked_units"] == 1.0
+        assert abs(outcome["profit_units"] - profit) < 1e-9
+    assert "local-aces-ou-v1:17456687:372310:over:6.5" not in actual
