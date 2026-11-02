@@ -398,6 +398,14 @@ def test_exact_tml2026_fingerprint_upgrade_only_for_original_file():
         "modifiedTime": "2026-11-01T22:46:32Z",
         "path": "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/TML/TML/2026.csv",
     }
+    import hashlib
+    import json
+    def legacy(item):
+        fields = ("id", "name", "mimeType", "size", "md5Checksum", "modifiedTime")
+        return hashlib.sha256(json.dumps(
+            [str(item.get(k) or "") for k in fields],
+            ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
     baseline = dict(original, id="different_other_source_id")
-    assert _fingerprint(original) != _fingerprint(baseline)
+    assert _fingerprint(original) != legacy(original)  # one targeted replay
+    assert _fingerprint(baseline) == legacy(baseline)  # all unrelated checkpoints stable
     assert _fingerprint(original) == _fingerprint(dict(original))
