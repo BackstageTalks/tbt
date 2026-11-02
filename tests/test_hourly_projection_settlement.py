@@ -102,7 +102,8 @@ def test_projection_only_published_rows_enter_daily_worker_without_fake_results(
 def test_all_projection_categories_grade_only_from_verified_evidence():
     base = _base()
     ace = {**base, "market_publications":[
-        _pub("aces", price_contract="player_superiority", odds=None),
+        _pub("aces", price_contract="player_total_ou", ou_side="over",
+             market_line=6.5, odds=None),
         _pub("double_faults", price_contract="player_superiority", odds=None),
     ]}
     sg = {**base, "market_publications":[
@@ -139,6 +140,51 @@ def test_priced_player_over_under_uses_frozen_line_and_real_odds():
     assert result["staked_units"] == 1
     assert abs(result["profit_units"] - .85) < 1e-12
 
+
+
+
+def test_hurkacz_9_aces_must_lose_frozen_over_10_5_despite_opponent_5():
+    """Regression for 02 Nov 2026: Results must settle O/U, not who hit more aces."""
+    base = _base()
+    legacy = _pub("aces", "22", price_contract="player_superiority",
+                  price_status="priced_projection", odds=1.80)
+    actual = _status(projection_stats={"p1_aces": 5.0, "p2_aces": 9.0})
+    legacy_feed = {"ace_picks": [{**base, "market_publications": [legacy]}], "results": []}
+    assert runtime_settled_results(legacy_feed, actual) == []
+    assert settled_archive_candidates(legacy_feed, actual) == []
+
+    over = _pub("aces", "22", price_contract="player_total_ou", ou_side="over",
+                market_line=10.5, price_status="priced_projection", odds=1.80)
+    feed = {"ace_picks": [{**base, "market_publications": [over]}], "results": []}
+    scored = runtime_settled_results(feed, actual)
+    assert len(scored) == 1
+    result = scored[0]["market_publications"][0]["result"]
+    assert result["actual_count"] == 9.0
+    assert result["opponent_actual_count"] == 5.0
+    assert result["status"] == "miss" and result["correct"] is False
+    assert result["profit_units"] == -1.0
+
+
+def test_previously_archived_superiority_win_cannot_inflate_results_or_kpis():
+    base = _base()
+    false_win = _pub(
+        "aces", "22", price_contract="player_superiority", price_status="priced_projection",
+        odds=1.80, result={"correct": True, "status": "hit", "actual_count": 9.0,
+                           "opponent_actual_count": 5.0, "profit_units": 0.80,
+                           "runtime_source": "match_status_snapshot"},
+    )
+    bogus = {**base, "market_publications": [false_win], "runtime_result_overlay": True}
+    other = _pub("sets", "sets:over:2.5",
+                 result={"correct": True, "status": "hit", "runtime_source": "match_status_snapshot"})
+    valid_row = {**base, "market_publications": [other], "runtime_result_overlay": True}
+    raw = {"results": [bogus, valid_row]}
+    merged = results_archive.merge_settled_results(raw, [bogus])
+    assert len(merged["results"]) == 1
+    assert merged["results"][0]["market_publications"][0]["market"] == "sets"
+    assert len(raw["results"]) == 2
+    runtime = runtime_settled_results(raw, {})
+    assert len(runtime) == 1
+    assert runtime[0]["market_publications"][0]["market"] == "sets"
 
 def test_retirement_void_and_late_unissued_are_excluded_from_false_bets():
     base = _base()
