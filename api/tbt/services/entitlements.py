@@ -287,6 +287,13 @@ def filter_results_for_issued_day(rows: list, manifest: dict) -> list:
             offer = issued.get((event, category, market, selection))
             if not offer:
                 continue
+            # A later quote must not silently replace the odds actually sent
+            # with this 2 Nov bet. Rounding to two decimals is tolerated.
+            seen_odds = _number(publication.get("odds"))
+            if seen_odds is not None and not (
+                abs(seen_odds - float(offer["odds"])) <= 0.011
+            ):
+                continue
             if market == "aces":
                 # Reject the superseded player-superiority card and altered line.
                 if (str(publication.get("price_contract") or "").lower() != "player_total_ou"
