@@ -157,7 +157,8 @@ from tbt.services.live_comeback import (
 )
 from tbt.services.match_status import (
     event_ids_from_feed, runtime_settled_results, scan_match_statuses,
-    verified_terminal_statuses, apply_verified_schedule_overlay,
+    verified_terminal_statuses, filter_unverified_nov2_winner_results,
+    apply_verified_schedule_overlay,
     published_ace_statistic_targets, attach_confirmed_aces_ou_sidecar,
 )
 from tbt.services.clv_market_history import (
@@ -1407,6 +1408,17 @@ def feed(req):
             # immutable issued feed remains available, but health is explicit.
             logging.exception("Durable Results archive read unavailable")
             source_feed["results_archive_unavailable"] = True
+        # The four 2 Nov match-winner receipts are not final on winnerCode alone.
+        # Quarantine stale archive wins before entitlements AND KPI calculations.
+        # The same status snapshot is reused below for runtime readback.
+        try:
+            status_snapshot = load_match_status_snapshot() or {}
+        except AdminStorageUnavailable:
+            logging.exception("Match status read unavailable; 2 Nov winner results quarantined")
+            status_snapshot = {}
+        source_feed["results"] = filter_unverified_nov2_winner_results(
+            source_feed.get("results") or [], status_snapshot.get("statuses")
+        )
         # Test exclusions are centrally enforced before both entitlements
         # and KPI evaluation. Never trust a browser-side-only filter.
         exclusions_available = True
@@ -1449,7 +1461,6 @@ def feed(req):
         # immutable prediction feed; only statuses for rows this account can
         # already see are returned.
         try:
-            status_snapshot = load_match_status_snapshot() or {}
             allowed_event_ids = event_ids_from_feed(data)
             # Do not expose stale terminal rows if the original provider state
             # still said this event was live. The worker will repair on recheck.
