@@ -1,9 +1,6 @@
 name: BlinQ frozen champion recalibration audit
 # Frozen base estimators; isolated past-window recalibration.
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/champion-recalibration.yml']
   workflow_dispatch:
 permissions:
   contents: read
