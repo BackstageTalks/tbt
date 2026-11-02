@@ -1,46 +1,34 @@
 {
-  "schema": 1,
-  "mode": "write",
+  "schema": 2,
+  "mode": "dry-run",
   "workflow": "cdb-service-pairwise-guarded.yml",
-  "purpose": "One-time NULL-only Serve & Return complement completion from existing canonical post-match rates. Quarantine only the conflicting independent rate pairs; never overwrite any current non-NULL statistics.",
-  "approved_by_operator": true,
-  "approval_date": "2026-10-15",
-  "approval_source": "Explicit operator authorization in ChatGPT to verify, repair and deploy safe SERVE/RETURN changes to CDB without asking for repeated confirmation.",
-  "request_identifier": "blinq-cdb-pairwise-serve-return-20261015-38666214493",
-  "expected_cdb_bundle_sha256": "2f4425d105c137b27e6d3535f1c72019797a0f4def08adb226960d35e59f6d50",
-  "expected_canonical_matches": 995610,
-  "expected_staged_matches": 1435,
-  "expected_new_stat_values": 5744,
-  "expected_quarantined_conflicting_pairs": 3115,
-  "expected_changed_years": [
-    2003,
-    2011,
-    2012,
-    2013,
-    2014,
-    2015,
-    2016,
-    2017,
-    2018,
-    2019
-  ],
-  "prior_source_readonly_stage_run_id": 38666214493,
-  "prior_complete_local_parquet_dryrun_run_id": 38666823324,
-  "prior_complete_local_parquet_readback": "VERIFIED: 995610 matches, 1435 enriched matches, 5744 values, 0 overwritten existing stats, 0 unverified identities",
-  "expected_importer_blob_sha": "87a2a05f5aa6616113c35490a921832b857b08db",
-  "expected_workflow_blob_sha": "64772262458984e7e9527189a30edaf2bdb22da2",
-  "source": "already_existing_canonical_CDB_post_match_rates_only",
-  "source_license_scope": "No new external third-party match source imported by this batch.",
-  "provenance_policy": "post_match_prior_history; per_independent_pair_exact_null_complement_v1",
-  "same_match_prematch_usage_allowed": false,
+  "purpose": "Fresh current-CDB deterministic pairwise serve/return NULL-only stage and full local readback after Nov 1 15365 complement and 1896 BP imports",
+  "approved_by_operator": false,
+  "production_write_allowed": false,
+  "provider_api_requests_allowed": 0,
   "training_allowed": false,
   "model_promotion_allowed": false,
-  "provider_api_requests_allowed": 0,
-  "max_added_fields": 5744,
-  "max_updated_matches": 1435,
-  "single_writer_lock_required": true,
-  "immutable_backup_required": true,
-  "private_stage_evidence_required": true,
-  "expected_remote_readback": "Full match-by-match verification and second-run zero-delta check",
-  "idempotency_rule": "One-shot; do not manually rerun as a writer after any partial or complete publication. Inspect current release and immutable backup before recovery."
+  "source": "existing_canonical_post_match_service_rates_only",
+  "scope": "all canonical years; independently isolate conflicting opposite-player rate pairs; no source or player identity inference",
+  "current_release_tag": "tbt-data-v1",
+  "known_last_bundle_manifest_sha256": "575e10fd6a5500ef0032acee5038c3a1b5d5fca4bc3b8a7456d19f2fa3dac132",
+  "prior_batches_not_to_repeat": [
+    {
+      "run_id": 41320493332,
+      "cells": 15365,
+      "matches": 3867
+    },
+    {
+      "run_id": 41357943502,
+      "cells": 1792,
+      "matches": 900
+    },
+    {
+      "run_id": 41362125338,
+      "cells": 104,
+      "matches": 52
+    }
+  ],
+  "audit_date": "2026-11-02",
+  "gate": "pull_request runs read-only stage and local rehearsal; never publish; inspect evidence and create separately SHA-bound exact writer request only if positive verified delta"
 }
