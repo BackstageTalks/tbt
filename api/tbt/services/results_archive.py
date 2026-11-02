@@ -376,8 +376,14 @@ def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
     rows = []
     for source_row in feed.get("results") or []:
         if not isinstance(source_row, dict):
+            rows.append(deepcopy(source_row))
             continue
         copy = deepcopy(source_row)
+        # Preserve legacy rows without publications; quarantine only invalid
+        # Aces results, never unrelated result rows during a readback repair.
+        if not isinstance(copy.get("market_publications"), list) or not copy["market_publications"]:
+            rows.append(copy)
+            continue
         copy["market_publications"] = [validated for pub in copy.get("market_publications") or []
                                         if isinstance(pub, dict)
                                         for validated in [_verified_aces_outcome(pub)]
