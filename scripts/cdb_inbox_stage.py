@@ -34,7 +34,7 @@ def _strict_source_evidence(proof: dict) -> bool:
     return {"date_tournament_window", "round", "surface", "best_of"}.issubset(evidence)
 
 
-def run(normalized_report: Path, history_dir: Path, out_dir: Path):
+def run(normalized_report: Path, history_dir: Path, out_dir: Path, *, expected_provider_quarantine: int = 0):
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest = json.loads(normalized_report.read_text(encoding="utf-8"))
     paths = [str(Path(row["path"]).resolve()) for row in manifest["normalized"]]
@@ -51,12 +51,27 @@ def run(normalized_report: Path, history_dir: Path, out_dir: Path):
         return result
     command = [sys.executable, str(Path(__file__).with_name("link_offline_serve_return.py")),
                "--history-dir", str(history_dir), "--out-dir", str(out_dir / "link")]
+    if expected_provider_quarantine:
+        command += ["--isolate-provider-collisions",
+                    "--expected-provider-quarantine", str(expected_provider_quarantine)]
     for path in paths:
         command += ["--source-csv", path]
-    subprocess.run(command, check=True, capture_output=True, text=True,
-                   env=os.environ.copy(), timeout=1800)
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True,
+                       env=os.environ.copy(), timeout=1800)
+    except subprocess.CalledProcessError as exc:
+        # Preserve the exact linker error instead of hiding it behind a generic
+        # CalledProcessError. Never continue to the writer on a linker failure.
+        raise RuntimeError(
+            "CDB offline linker rejected source/history: "
+            + (exc.stderr or exc.stdout or "no diagnostic")[-4000:]
+        ) from exc
     link_dir = out_dir / "link"
     linked = json.loads((link_dir / "report.json").read_text())
+    if linked.get("excluded_ambiguous_provider_rows") != expected_provider_quarantine:
+        raise ValueError("Unexpected provider collision quarantine in offline linker")
+    result["excluded_ambiguous_provider_rows"] = linked["excluded_ambiguous_provider_rows"]
+    result["full_canonical_rows"] = linked["full_canonical_rows"]
     if linked.get("production_mutated") is not False or linked.get("api_requests") != 0:
         raise ValueError("Linker violated read-only contract")
     conflicted = {
@@ -132,8 +147,10 @@ def main():
     p.add_argument("--normalized-report", type=Path, required=True)
     p.add_argument("--history-dir", type=Path, required=True)
     p.add_argument("--out-dir", type=Path, required=True)
+    p.add_argument("--expected-provider-quarantine", type=int, default=0)
     a = p.parse_args()
-    result = run(a.normalized_report, a.history_dir, a.out_dir)
+    result = run(a.normalized_report, a.history_dir, a.out_dir,
+                 expected_provider_quarantine=a.expected_provider_quarantine)
     print(json.dumps({k: v for k, v in result.items() if k not in {"link_counts"}}))
 
 if __name__ == "__main__":
