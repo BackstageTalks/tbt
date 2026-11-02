@@ -51,3 +51,14 @@ def test_lock_contract_checks_current_private_main_not_old_working_branch():
     assert "ref: main" in contents
     assert "ref: fix/cdb-global-single-writer-20261010" not in contents
     assert "cmp scripts/cdb_global_writer_lock.py private-data/scripts/cdb_global_writer_lock.py" in contents
+
+
+def test_pairwise_push_dryrun_never_falls_through_to_writer_approval():
+    text = (ROOT / "cdb-service-pairwise-guarded.yml").read_text(encoding="utf-8")
+    assert 'or request.get("mode") == "dry-run":' in text
+    assert 'request.get("approved_by_operator") is False' in text
+    assert 'raise SystemExit(0)' in text
+    assert 'assert request.get("mode") == "write"' in text
+    assert 'assert request.get("approved_by_operator") is True' in text
+    assert '--isolate-provider-collisions --expected-provider-quarantine 6' in text
+    assert 'assert r["quarantined_rows_proven_unchanged"] == 6' in text
