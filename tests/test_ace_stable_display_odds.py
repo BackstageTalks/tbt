@@ -37,14 +37,14 @@ const row = {
 const original = JSON.stringify(row);
 const value = sandbox.stableAceDisplayOdds(row);
 sandbox.normalizeFeedAceOdds({ace_picks:[row],results:[]});
-assert.equal(row.statistical_ace_odds, value);
+assert.equal(row.statistical_ace_odds, undefined);
 assert(Number.isInteger(Math.round(value * 100)));
 assert(value >= 1.60 && value <= 1.80, 'ACES display range');
 assert.equal(value, sandbox.stableAceDisplayOdds({...row}));
 assert.equal(sandbox.stableAceDisplayOdds({...row, market: 'games'}).toString(), 'NaN');
 assert.equal(row.odds, 2.00, 'underlying provider quote unchanged');
 assert.equal(row.odds, JSON.parse(original).odds, 'original provider price unchanged');
-assert(sandbox.projectionOddsHtml(row).includes(value.toFixed(2)));
+assert(sandbox.projectionOddsHtml(row).includes('Bez O/U kurzu'));
 
 // A provider-backed PropLine quote must NOT be overwritten by working odds.
 const real = {
@@ -70,9 +70,9 @@ for(const [event_id,selection_id,scheduled_at,telegramOdds] of novemberPicks){
   const expected=sandbox.stableAceDisplayOdds(pick);
   assert.equal(expected,telegramOdds,'Must reproduce frozen Telegram pick identity odds');
   sandbox.normalizeFeedAceOdds({ace_picks:[pick],results:[]});
-  assert.equal(pick.statistical_ace_odds,expected);
+  assert.equal(pick.statistical_ace_odds,undefined);
   assert(expected>=1.60&&expected<=1.80);
-  assert(sandbox.projectionOddsHtml(pick).includes(expected.toFixed(2)));
+  assert(sandbox.projectionOddsHtml(pick).includes('Bez O/U kurzu'));
   assert(!sandbox.projectionOddsHtml(pick).includes('2.00'));
   assert.equal(pick.odds,2.00,'provider price/provenance must remain frozen');
   const results={event_id,scheduled_at,market_publications:[{...pick,statistical_ace_odds:undefined}]};
@@ -81,13 +81,13 @@ for(const [event_id,selection_id,scheduled_at,telegramOdds] of novemberPicks){
   assert.equal(sandbox.aceDfResultKpiOdds(results.market_publications[0]),expected);
   const future={...pick,statistical_ace_odds:undefined,scheduled_at:'2026-11-02T13:00:00Z'};
   sandbox.normalizeFeedAceOdds({ace_picks:[future],results:[]});
-  assert.equal(future.statistical_ace_odds,expected,'permanent fallback covers subsequent 2.00 placeholders');
-  assert(sandbox.projectionOddsHtml(future).includes(expected.toFixed(2)));
+  assert.equal(future.statistical_ace_odds,undefined,'No future quote without an O/U contract');
+  assert(sandbox.projectionOddsHtml(future).includes('Bez O/U kurzu'));
   assert(!sandbox.projectionOddsHtml(future).includes('2.00'));
   const nextYear={...pick,statistical_ace_odds:undefined,scheduled_at:'2027-05-02T13:00:00Z'};
   sandbox.normalizeFeedAceOdds({ace_picks:[nextYear],results:[]});
-  assert.equal(nextYear.statistical_ace_odds,expected,'fallback must not expire after 2026');
-  assert(sandbox.projectionOddsHtml(nextYear).includes(expected.toFixed(2)));
+  assert.equal(nextYear.statistical_ace_odds,undefined,'Future Aces count insight remains unpriced');
+  assert(sandbox.projectionOddsHtml(nextYear).includes('Bez O/U kurzu'));
   const futureResults={
     event_id,scheduled_at:nextYear.scheduled_at,
     market_publications:[{...nextYear,statistical_ace_odds:undefined}]
@@ -98,8 +98,8 @@ for(const [event_id,selection_id,scheduled_at,telegramOdds] of novemberPicks){
 
 const unverified = {...real, odds_bookmaker: ''};
 sandbox.normalizeFeedAceOdds({ace_picks:[unverified],results:[]});
-assert.equal(unverified.statistical_ace_odds,value);
-assert(sandbox.projectionOddsHtml(unverified).includes(value.toFixed(2)));
+assert.equal(unverified.statistical_ace_odds,undefined);
+assert(sandbox.projectionOddsHtml(unverified).includes('Bez O/U kurzu'));
 const result = {
   event_id:'ace-1',scheduled_at:row.scheduled_at,
   market_publications:[{
@@ -132,7 +132,7 @@ const historical = {
 sandbox.normalizeFeedAceOdds({ace_picks:[],results:[historical]});
 assert.equal(historical.market_publications[0].statistical_ace_odds,undefined);
 assert(sandbox.projectionOddsHtml({...row, market: 'double_faults'}).includes('2.00'));
-assert(sandbox.projectionOddsHtml({...row, market: 'aces', price_status: 'projection_only'}).includes(value.toFixed(2)));
+assert(sandbox.projectionOddsHtml({...row, market: 'aces', price_status: 'projection_only'}).includes('Bez O/U kurzu'));
 const values = new Set();
 for(let i=0;i<200;i++){
   const v = sandbox.stableAceDisplayOdds({
@@ -147,5 +147,58 @@ console.log('stable ACES display: PASS');
     run = subprocess.run(
         ["node", "-e", js], cwd=ROOT, text=True, capture_output=True, timeout=20
     )
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "PASS" in run.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js required")
+def test_ace_ball_is_inline_only_for_projected_ace_leader():
+    js = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const app=fs.readFileSync('web/app.js','utf8');
+const helperStart=app.indexOf('  function aceLeaderHintHtml(');
+const helperEnd=app.indexOf('  function hubNumberHtml(',helperStart);
+const matchStart=app.indexOf('  function dailyHubMatch(');
+const matchEnd=app.indexOf('  function recentFormData(',matchStart);
+assert(helperStart>0&&helperEnd>helperStart&&matchStart>0&&matchEnd>matchStart);
+const cx={
+  escapeHtml:x=>String(x),
+  sideAvatarHtml:()=>'',flagIconHtml:()=>'',firstFinite:()=>null,
+};
+vm.createContext(cx);
+vm.runInContext(app.slice(helperStart,helperEnd)+app.slice(matchStart,matchEnd),cx);
+const row={
+  market:'aces',
+  aces_superiority_hint:'Beta',
+  projection_subject:'Beta',selection_id:'22',
+  player1:{id:'11',name:'Alpha'},
+  player2:{id:'22',name:'Beta'}
+};
+const html=cx.dailyHubMatch(row);
+assert.equal((html.match(/ace-leader-ball/g)||[]).length,1);
+assert(html.includes('Alpha</b></span>'));
+assert(html.includes('Beta</b><svg class="ace-leader-ball"'));
+assert(html.includes('aria-hidden="true"'));
+assert(!html.includes('Viac es'));
+assert(!html.includes('title="Viac'));
+assert.equal((cx.dailyHubMatch({...row,market:'games'}).match(/ace-leader-ball/g)||[]).length,0);
+assert.equal((cx.dailyHubMatch({...row,aces_superiority_hint:'Unknown',projection_subject:'Unknown'}).match(/ace-leader-ball/g)||[]).length,0);
+assert.equal((cx.dailyHubMatch({...row,aces_superiority_hint:'Alpha'}).match(/ace-leader-ball/g)||[]).length,1);
+// No inline hint remains in the pick cell or beneath the detail grid.
+const ace=app.slice(app.indexOf('  function aceProjectionDetailHtml('),app.indexOf('  function openAceProjection('));
+assert(ace.includes('aceLeaderHintHtml(row,row?.player1,d.selectedName)'));
+assert(!ace.includes('aceLeaderHintHtml(row)}'));
+const cells=app.slice(app.indexOf("if(sourceTab==='ace'||sourceTab==='double_faults')"),app.indexOf("const probability=marketProbability(row)"));
+assert(!cells.includes('aceLeaderHintHtml'));
+const card=app.slice(app.indexOf('  function marketPreviewCard('),app.indexOf('  function ',app.indexOf('  function marketPreviewCard(')+7));
+assert(card.includes('aceLeaderHintHtml(row,p1,p1Name)'));
+assert(card.includes('aceLeaderHintHtml(row,p2,p2Name)'));
+assert(!card.includes('aceLeaderHintHtml(row)'));
+console.log('ACES white ball display: PASS');
+"""
+    run = subprocess.run(["node", "-e", js], cwd=ROOT, text=True,
+                         capture_output=True, timeout=20)
     assert run.returncode == 0, run.stdout + run.stderr
     assert "PASS" in run.stdout

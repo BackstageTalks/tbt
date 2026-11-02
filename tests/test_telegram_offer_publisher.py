@@ -31,6 +31,16 @@ def row(identifier, player="A", category="top"):
     return data
 
 
+def priced_ou(ace):
+    """Provider-verified player ACES O/U offer for current-day tests."""
+    return {**ace, "price_contract": "player_total_ou", "ou_side": "over",
+            "market_line": 7.5, "price_status": "priced_projection",
+            "odds": 1.93, "model_probability": 0.68,
+            "odds_contract_version": "ace_df_real_api_v1",
+            "odds_source": "propline", "odds_bookmaker": "TestBook",
+            "provider_id": 2, "captured_at": NOW.isoformat()}
+
+
 def settings(**kwargs):
     c = dict(enabled=True, sections={"top": True, "value": True, "aces": True},
              schedule={"enabled": True, "time": "08:00", "weekdays": list(range(7))},
@@ -44,7 +54,7 @@ def offer():
                 generated_at=NOW.isoformat(),
                 top_daily_picks=[row(i, f"Player Surname{i}") for i in range(1, 6)],
                 value_picks=[row(42, "Value")],
-                ace_picks=[row(51, "Server", "aces"), row(52, "DF", "aces") | {"market": "double_faults"}])
+                ace_picks=[priced_ou(row(51, "Server", "aces")), row(52, "DF", "aces") | {"market": "double_faults"}])
 
 
 
@@ -247,7 +257,7 @@ def test_one_time_format_reissue_preserves_exact_previous_picks_and_dedup(tmp_pa
     rendered=tg.load(tmp_path/"repost"/"messages.json")
     assert [m["audience"] for m in rendered]==["premium","free"]
     assert all("EV" not in m["text"] for m in rendered)
-    assert "najviac" in rendered[0]["text"]
+    assert "O 7.5" in rendered[0]["text"]
     staged=tg.load(tmp_path/"repost"/"state.json")
     assert staged["attempts"][sent_id]==prior
     repost_id=tg.day(NOW)+":repost:format-v2-no-ev"
@@ -316,7 +326,7 @@ def test_classic_format_and_deterministic_free_pick():
     assert "EV" not in premium
     assert "🆓 FREE | Surname" in first[1]["text"]
     assert first[1]["text"].count("🆓") == 1
-    assert "najviac" in first[0]["text"]
+    assert "O 7.5" in first[0]["text"]
     assert "aces 8.3" not in first[0]["text"]
     assert "esá" not in first[0]["text"]
     assert "Double Fault" not in first[0]["text"]
@@ -469,7 +479,7 @@ def test_admin_section_limit_7_does_not_cap_telegram_or_pagination():
     sample=offer()
     sample["top_daily_picks"]=[row(i,f"Top Surname{i}") for i in range(1,75)]
     sample["value_picks"]=[row(100+i,f"Value Person{i}") for i in range(1,27)]
-    sample["ace_picks"]=[row(200+i,f"Aces Server{i}","aces") for i in range(1,28)]
+    sample["ace_picks"]=[priced_ou(row(200+i,f"Aces Server{i}","aces")) for i in range(1,28)]
     cfg=settings(max_per_section=7,free_top_pick=False)
     out=tg.messages(sample,cfg,NOW)
     assert len(out)>=2
@@ -487,7 +497,7 @@ def test_admin_section_limit_7_does_not_cap_frozen_results_ledger(tmp_path, monk
     sample=offer()
     sample["top_daily_picks"]=[row(i,f"Top Player{i}") for i in range(1,18)]
     sample["value_picks"]=[row(100+i,f"Value Person{i}") for i in range(1,6)]
-    sample["ace_picks"]=[row(200+i,f"Aces Server{i}","aces") for i in range(1,4)]
+    sample["ace_picks"]=[priced_ou(row(200+i,f"Aces Server{i}","aces")) for i in range(1,4)]
     cfg=settings(max_per_section=7,free_top_pick=False)
     cfg["schedule"]["enabled"]=False
     cfg["manual_request"]={"id":"fullsend001","created_at":NOW.isoformat()}
@@ -503,3 +513,27 @@ def test_admin_section_limit_7_does_not_cap_frozen_results_ledger(tmp_path, monk
     assert len(selected)==25
     assert [sum(x["channel"]==section for x in selected) for section in ("top","value","aces")]==[17,5,3]
     assert len(tg.load(out/"messages.json"))>=1
+
+
+def test_new_aces_telegram_excludes_most_aces_and_unpriced_local_fallback():
+    source=offer()
+    source["ace_picks"]=[
+        row(99,"Most Player","aces") | {"price_contract":"player_superiority",
+                                           "odds":1.77, "price_status":"priced_projection"},
+        row(100,"Local Player","aces") | {"price_status":"projection_only"},
+        priced_ou(row(101,"Over Player","aces")),
+    ]
+    chosen=tg.select_groups(source,settings(),NOW)
+    assert [r["event_id"] for r in chosen["aces"]]==["101"]
+    assert "najviac" not in tg.messages(source,settings(),NOW)[0]["text"]
+
+
+def test_legacy_aces_reissue_lookup_can_recover_frozen_superiority_identity():
+    source=offer()
+    legacy=row(98,"Legacy Player","aces")
+    source["ace_picks"]=[legacy]
+    settings_legacy={"sections":{"top":True,"value":True,"aces":True},
+                     "free_top_pick":True,"include_started":True,
+                     "max_per_section":0,"aces_ou_only":False}
+    assert [r["event_id"] for r in tg.select_groups(source,settings_legacy,NOW)["aces"]]==["98"]
+    assert not tg.select_groups(source,settings(),NOW).get("aces")

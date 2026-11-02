@@ -65,7 +65,7 @@ def test_board_discovers_all_four_complete_markets_and_reuses_requests():
         "event_id": "100", "market": "aces",
         "player1": {"id": "11", "name": "Alpha"},
         "player2": {"id": "22", "name": "Beta"},
-        "selection_id": "11",
+        "selection_id": "11", "projection": 7.0,
     }]
     sg = [{
         "event_id": "100", "market": "games",
@@ -77,9 +77,9 @@ def test_board_discovers_all_four_complete_markets_and_reuses_requests():
         provider, aces, sg, max_events=2, prefetched_payloads=cache,
     )
     assert provider.calls == [("100", 1), ("101", 1)]
-    assert ace_out[0]["odds"] == 1.68
-    assert ace_out[0]["odds_contract_version"] == "ace_df_real_api_v1"
-    assert ace_out[0]["odds_source"] == "rapidapi"
+    assert ace_out[0].get("odds") is None
+    assert ace_out[0].get("price_contract") is None
+    assert ace_out[0].get("price_status") != "priced_projection"
     assert sg_out[0]["odds"] == 1.86
     assert sg_out[0]["market_line"] == 23.5
     assert diagnostics["priced_cards"]["games"] == 1
@@ -117,7 +117,7 @@ def test_unknown_market_or_no_budget_does_not_call_provider():
     assert report["events_requested"] == 0
 
 
-def test_primary_exact_ace_market_wins_over_propline_fallback():
+def test_primary_exact_ace_ou_market_wins_over_propline_fallback():
     class Provider:
         def event_odds(self, event_id, provider_id=1):
             return _payload()
@@ -135,17 +135,25 @@ def test_primary_exact_ace_market_wins_over_propline_fallback():
             "bookmaker": "FallbackBook",
             "provider_event_id": "p100",
             "payload": {"markets": [
-                {"marketName": "Most Aces", "choiceName": "Alpha", "decimalOdds": 1.91},
-                {"marketName": "Most Aces", "choiceName": "Beta", "decimalOdds": 1.91},
+                {"marketName": "Alpha Aces", "choiceName": "Over", "choiceGroup": "4.5", "decimalOdds": 1.91},
+                {"marketName": "Alpha Aces", "choiceName": "Under", "choiceGroup": "4.5", "decimalOdds": 1.91},
             ]},
         }}
     }
+    primary = {"markets": [
+        {"marketName": "Alpha Aces", "choiceName": "Over", "choiceGroup": "4.5", "decimalOdds": 1.84},
+        {"marketName": "Alpha Aces", "choiceName": "Under", "choiceGroup": "4.5", "decimalOdds": 1.95},
+        *_payload()["markets"],
+    ]}
     out, _, report = enrich_projection_odds(
         Provider(), ace, [], max_events=1,
-        prefetched_payloads={"100": _payload()},
+        prefetched_payloads={"100": primary},
         alternate_market_payloads=alternate,
     )
-    assert out[0]["odds"] == 1.68
+    assert out[0]["odds"] == 1.84
+    assert out[0]["price_contract"] == "player_total_ou"
+    assert out[0]["ou_side"] == "over"
+    assert out[0]["market_line"] == 4.5
     assert out[0]["odds_source"] == "rapidapi"
     assert out[0]["provider_id"] == 1
     assert report["attached_by_provider"]["rapidapi"] == 1
@@ -206,8 +214,8 @@ def test_unverified_aces_2_00_does_not_preempt_propline_or_local_projection():
         "provider_id": 2, "source": "propline", "bookmaker": "BookA",
         "provider_event_id": "prop-100", "captured_at": NOW.isoformat(),
         "payload": {"markets": [
-            {"marketName": "Most Aces", "choiceName": "Alpha", "decimalOdds": 1.93},
-            {"marketName": "Most Aces", "choiceName": "Beta", "decimalOdds": 1.84},
+            {"marketName": "Alpha Aces", "choiceName": "Over", "choiceGroup": "4.5", "decimalOdds": 1.93},
+            {"marketName": "Alpha Aces", "choiceName": "Under", "choiceGroup": "4.5", "decimalOdds": 1.84},
         ]},
     }}}
     priced, _, report = enrich_projection_odds(
@@ -216,6 +224,8 @@ def test_unverified_aces_2_00_does_not_preempt_propline_or_local_projection():
         alternate_market_payloads=with_propline,
     )
     assert priced[0]["odds"] == 1.93
+    assert priced[0]["price_contract"] == "player_total_ou"
+    assert priced[0]["market_line"] == 4.5
     assert priced[0]["odds_source"] == "propline"
     assert report["attached_by_provider"]["propline"] == 1
 

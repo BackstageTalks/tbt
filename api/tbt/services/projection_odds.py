@@ -278,8 +278,11 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
     else:
         return out, False, "selection_not_resolved_to_market_side"
 
-    # Keep the identical Most Aces / Most DF wager where the bookmaker offers it.
-    superiority = extract_player_superiority_odds(payload, metric, name1, name2)
+    # Most Aces is model insight only; a published Aces bet must be
+    # an exact player-specific O/U contract with a verified line and price.
+    # Preserve the pre-existing Most Double Faults behavior outside Aces.
+    superiority = (extract_player_superiority_odds(payload, metric, name1, name2)
+                   if metric != "aces" else None)
     if superiority:
         odds = superiority["player1_odds"] if slot == 1 else superiority["player2_odds"]
         # Legacy exact-2.00 ACES feed values lack independently verified

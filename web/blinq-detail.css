@@ -54,3 +54,19 @@ body#blinqPremium .match-h2h-summary p,body#blinqPremium .match-detail-note{font
 }
 body#blinqPremium #matchDialog{position:fixed!important;align-self:center!important;justify-self:center!important}
 
+/* A white, outline-only tennis ball sits next to the projected ACE leader's name.
+   Decorative only: no label, tooltip, extra row, betting price or O/U claim. */
+body#blinqPremium .ace-leader-ball{
+  display:inline-block!important;flex:0 0 14px!important;width:14px!important;height:14px!important;
+  margin-left:1px!important;vertical-align:middle!important;
+  fill:none!important;stroke:#e7f0ed!important;stroke-width:1.6!important;
+  stroke-linecap:round!important;stroke-linejoin:round!important;
+  opacity:.94!important;pointer-events:none!important;
+}
+body#blinqPremium .ace-detail-pick strong .ace-leader-ball{margin-left:7px!important}
+body#blinqPremium .market-card .player-name .ace-leader-ball{margin-left:5px!important}
+@media(max-width:760px){
+  body#blinqPremium .daily-hub-table .ace-leader-ball{
+    flex-basis:12px!important;width:12px!important;height:12px!important;margin-left:0!important;
+  }
+}

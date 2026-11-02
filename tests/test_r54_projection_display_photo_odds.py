@@ -111,8 +111,8 @@ def test_enricher_can_price_all_four_projection_categories_when_provider_exposes
         {"event_id": "s", "market": "sets", "projection": 2.18, "reference_projection": 2.5, "projection_direction": "low", "selection_id": "sets:under:2.5"},
     ]
     ace_out, sg_out, report = enrich_projection_odds(Provider(), ace, sg, max_events=10, provider_id=1)
-    assert ace_out[0]["odds"] == 1.72
+    assert ace_out[0].get("odds") is None
     assert ace_out[1]["odds"] == 2.00
     assert sg_out[0]["odds"] == 1.91
     assert sg_out[1]["odds"] == 1.67
-    assert report["priced_cards"] == {"aces": 1, "double_faults": 1, "sets": 1, "games": 1}
+    assert report["priced_cards"] == {"aces": 0, "double_faults": 1, "sets": 1, "games": 1}
