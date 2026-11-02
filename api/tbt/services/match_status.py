@@ -513,6 +513,17 @@ def _finite_count(raw: Any) -> float | None:
     return n if math.isfinite(n) and n >= 0 else None
 
 
+def verified_aces_ou_publication(publication: dict[str, Any]) -> bool:
+    """Require the actual frozen player-total Aces direction and threshold."""
+    return (
+        isinstance(publication, dict)
+        and str(publication.get("market") or "").strip().lower() == "aces"
+        and str(publication.get("price_contract") or "").strip().lower() == "player_total_ou"
+        and str(publication.get("ou_side") or "").strip().lower() in {"over", "under"}
+        and _finite_count(publication.get("market_line")) is not None
+    )
+
+
 def attach_confirmed_aces_ou_sidecar(feed: dict[str, Any], sidecar: Any) -> dict[str, Any]:
     """Overlay immutable pre-match O/U issuance without editing canonical feed.
 
