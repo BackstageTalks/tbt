@@ -349,7 +349,7 @@ jobs:
           else
             python scripts/cdb_inbox_stage.py --normalized-report work/source/report.json \
               --history-dir work/before --out-dir work/stage \
-              "${quarantine_args[@]}"
+              --expected-provider-quarantine "$q"
           fi
           python scripts/import_offline_linked_serve_return.py \
             "${quarantine_args[@]}" \
