@@ -14,7 +14,7 @@ def route_request(route):
         assert source.count(marker) == 1
         source = source.replace(
             marker,
-            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,todayPublishedPickCount,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow};\n"
+            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,todayPublishedPickCount,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow,currentBettingDayPublishedKeys,memberResultCohort};\n"
             + marker,
         )
         route.fulfill(content_type="application/javascript", body=source)
@@ -308,6 +308,118 @@ def main():
                 "eliteFraction":True,"eliteDescription":True,
                 "eliteNoGlobal":True,"allFraction":True
             },membership
+
+            # Replay the complete issued morning cohort: 3 TOP, 1 VALUE,
+            # 5 ACES. The superseding Aces O/U message was sent pre-match.
+            # Both access filtering and the Admin membership previews must
+            # use the same immutable 9 bets, not only the settled two winners.
+            morning = page.evaluate("""() => {
+                const t=bettingDayTest,s=t.state;
+                const day=t.bratislavaBettingDayKey(Date.now(),6);
+                const at=(hh,mm)=>day+'T'+hh+':'+mm+':00Z';
+                const base=(event,section,market,id,position,scheduled,settled,odds=1.8,line=null,ace=false)=>{
+                  const pub={
+                    section,market,selection_id:id,selection:'Issued player',
+                    issued_at:at(ace?'09':'05',ace?'27':'37'),
+                    publication_status:'published',
+                    betting_day:day,offer_position:position,
+                    odds,price_status:ace?'priced_projection':'priced',
+                    ...(ace?{projection_scope:'player',projection_metric:'aces',
+                      price_contract:'player_total_ou',ou_side:'over',market_line:line}:{}),
+                    result:settled===null?{}:{correct:settled,status:settled?'hit':'miss',
+                      staked_units:1,profit_units:settled?odds-1:-1}
+                  };
+                  return {
+                    event_id:event,scheduled_at:scheduled,tour:'ATP',surface:'hard',
+                    player1:{id},player2:{id:'opp-'+event},
+                    selection_id:id,winner_id:'opp-'+event,
+                    betting:{selection_id:id},
+                    // The production ace source row has no flat .market,
+                    // but the issued result publication has all O/U fields.
+                    ...(ace?{}:{market:'match_winner'}),
+                    market_publications:[pub]
+                  };
+                };
+                const rows=[
+                  base('17456690','top_daily','match_winner','307383',1,at('21','20'),null,1.549451),
+                  base('17471474','top_daily','match_winner','199488',2,at('19','55'),null,1.510204),
+                  base('17467283','top_daily','match_winner','52229',3,at('11','30'),true,1.540541),
+                  base('17470634','value','match_winner','409907',1,at('17','00'),true,1.833333),
+                  base('17468525','ace','aces','289146',1,at('11','10'),true,1.75,12.5,true),
+                  base('17449526','ace','aces','158896',2,at('10','00'),false,1.80,10.5,true),
+                  base('17456687','ace','aces','372310',3,at('21','00'),null,1.60,6.5,true),
+                  base('17467964','ace','aces','270414',4,at('13','00'),true,1.79,4.5,true),
+                  base('17457727','ace','aces','341853',5,at('15','00'),false,1.72,7.5,true)
+                ];
+                const archived=structuredClone(rows);
+                // Archive contract carries parser metadata missing from the
+                // original flat daily row. A difference must not hide results.
+                const offer=structuredClone(rows).map(r=>{
+                  const copy={...r};
+                  delete copy.market_publications;
+                  delete copy.market;
+                  return copy;
+                });
+                s.feed={
+                  account:{is_admin:true,role:'admin',plan:'admin',status:'active'},
+                  entitlements:{daily_pick_count:9},
+                  member_result_rules:{
+                    elite:{
+                      daily:{enabled:true,display_state:'active',visible_picks:3,selection_mode:'first'},
+                      value:{enabled:true,display_state:'active',visible_picks:1,selection_mode:'first'},
+                      ace:{enabled:true,display_state:'active',visible_picks:5,selection_mode:'first'}
+                    },
+                    pro:{
+                      daily:{enabled:true,display_state:'active',visible_picks:2,selection_mode:'first'},
+                      value:{enabled:true,display_state:'active',visible_picks:1,selection_mode:'first'},
+                      ace:{enabled:true,display_state:'active',visible_picks:2,selection_mode:'first'}
+                    },
+                    rookie:{
+                      daily:{enabled:true,display_state:'active',visible_picks:1,selection_mode:'stable_random'},
+                      value:{enabled:true,display_state:'active',visible_picks:1,selection_mode:'stable_random'},
+                      ace:{enabled:true,display_state:'active',visible_picks:0}
+                    },
+                    legend:{
+                      daily:{enabled:true,display_state:'active',visible_picks:'ALL',selection_mode:'first'},
+                      value:{enabled:true,display_state:'active',visible_picks:'ALL',selection_mode:'first'},
+                      ace:{enabled:true,display_state:'active',visible_picks:'ALL',selection_mode:'first'}
+                    },
+                    goat:{
+                      daily:{enabled:true,display_state:'active',visible_picks:'ALL',selection_mode:'first'},
+                      value:{enabled:true,display_state:'active',visible_picks:'ALL',selection_mode:'first'},
+                      ace:{enabled:true,display_state:'active',visible_picks:'ALL',selection_mode:'first'}
+                    }
+                  },
+                  results:archived,
+                  top_daily_picks:offer.slice(0,3),
+                  daily_picks:offer.slice(0,3),
+                  value_picks:offer.slice(3,4),
+                  ace_picks:offer.slice(4)
+                };
+                s.resultsFilters={category:'all',tour:'',surface:'',window:'today',
+                  dateFrom:'',dateTo:'',bettingDay:true,membership:'elite'};
+                const dayKeys=t.currentBettingDayPublishedKeys(Date.now());
+                const eliteKeys=t.memberResultCohort('elite',day);
+                const elite=t.resultsSummary();
+                const result={
+                  published:dayKeys.size,
+                  matched:rows.filter(r=>dayKeys.has([r.event_id,
+                    r.market_publications[0].market,r.market_publications[0].selection_id].join('::').toLowerCase())).length,
+                  eliteCohort:eliteKeys.size,
+                  eliteSummary:elite.includes('6/9'),
+                  proCohort:t.memberResultCohort('pro',day).size,
+                  freeCohort:t.memberResultCohort('rookie',day).size,
+                  legendCohort:t.memberResultCohort('legend',day).size,
+                  goatCohort:t.memberResultCohort('goat',day).size
+                };
+                return result;
+            }""")
+            assert morning == {
+                "published": 9, "matched": 9, "eliteCohort": 9,
+                "eliteSummary": True, "proCohort": 5, "freeCohort": 2,
+                "legendCohort": 9, "goatCohort": 9
+            }, morning
+
             assert not errors, errors
             print("Results current betting-day cohort + 06:00 custom filter contract: PASS")
         finally:

@@ -3649,14 +3649,16 @@
       publication?.market||publication?.projection_metric||betting?.market||row?.market||defaultMarket||''
     ).trim().toLowerCase();
     if(['top200','top','prime','value','daily'].includes(market))market='match_winner';
-    const scope=String(publication?.projection_scope||row?.projection_scope||'').trim().toLowerCase();
-    const metric=String(publication?.projection_metric||row?.projection_metric||'').trim().toLowerCase();
+    // Cohort membership is about the *issued player and market*, never the
+    // archive's optional parser-specific projection_scope/metric metadata.
+    // The frozen O/U contract is still graded and deduplicated separately.
     const selection=String(
-      publication?.selection_id||publication?.winner_id||publication?.pick_id
-      ||betting?.selection_id||row?.winner_id||row?.pick_id||row?.selection_id
+      publication?.selection_id||betting?.selection_id||row?.selection_id
+      ||publication?.pick_id||row?.pick_id
+      ||publication?.winner_id||row?.winner_id
       ||publication?.selection||row?.pick||row?.selection||''
     ).trim().toLowerCase();
-    return event&&market&&selection?[event,market,scope,metric,selection].join('::'):'';
+    return event&&market&&selection?[event,market,selection].join('::'):'';
   }
   function currentBettingDayPublishedKeys(now=Date.now()){
     const currentDay=bratislavaBettingDayKey(now,6),keys=new Set();
@@ -3664,15 +3666,20 @@
       ['daily_picks','match_winner'],
       ['top_daily_picks','match_winner'],['prime_picks','match_winner'],
       ['value_picks','match_winner'],['doubles_picks','match_winner'],
-      ['ace_picks',''],['sg_picks','']
+      ['ace_picks','aces'],['sg_picks','']
     ];
     sources.forEach(([feedKey,defaultMarket])=>{
       const rows=Array.isArray(state.feed?.[feedKey])?state.feed[feedKey]:[];
       rows.forEach(row=>{
         const scheduled=row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0;
         if(bratislavaBettingDayKey(scheduled,6)!==currentDay)return;
-        const key=resultBetIdentity(row,row,defaultMarket);
-        if(key)keys.add(key);
+        const pubs=(Array.isArray(row?.market_publications)?row.market_publications:[])
+          .filter(p=>p&&typeof p==='object'&&String(p.publication_status||'published')==='published');
+        const contracts=pubs.length?pubs:[row];
+        contracts.forEach(p=>{
+          const key=resultBetIdentity(row,p,defaultMarket);
+          if(key)keys.add(key);
+        });
       });
     });
     return keys;
@@ -3823,17 +3830,29 @@
     const add=(row,p)=>{
       const section=p.market==='aces'?'ace':p.market==='double_faults'?'double_faults':p.section;
       const tab=section==='top_daily'?'daily':section;
-      const day=resultPublicationBettingDay(row,p),key=canonicalResultPublicationKey(row,p);
+      const day=resultPublicationBettingDay(row,p),key=resultBetIdentity(row,p,section==='ace'?'aces':section==='double_faults'?'double_faults':'match_winner');
       if(!day||!key||!rules[tab])return;
       if(bettingDayFilter&&(day!==bettingDayFilter||bratislavaBettingDayKey(row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0,6)!==bettingDayFilter))return;
       const identity=day+'|'+tab+'|'+key;if(seen.has(identity))return;seen.add(identity);
       const group=day+'|'+tab;if(!groups.has(group))groups.set(group,[]);
       groups.get(group).push({key,p,tab,day});
     };
-    (state.feed.results||[]).forEach(row=>publicResultPublications(row).forEach(p=>add(row,p)));
+    // The issued daily pool defines the tier's 1st/2nd/... positions, not
+    // the arrival order of completed Results in the archive. Seed it FIRST.
+    // Settled rows only fill missing historical identities after the offer.
     [['daily_picks','top_daily'],['prime_picks','prime'],['value_picks','value'],['doubles_picks','doubles'],['ace_picks','ace'],['sg_picks','sg']].forEach(([feedKey,section])=>{
-      (state.feed[feedKey]||[]).forEach(row=>add(row,{...row,section:row.market==='double_faults'?'double_faults':row.market==='sets'?'sets':row.market==='games'?'games':section,selection_id:row.betting?.selection_id||row.selection_id||row.pick_id,market:row.market||'match_winner',issued_at:row.issued_at||row.published_at||row.created_at}));
+      (state.feed[feedKey]||[]).forEach((row,rowIndex)=>{
+        const pubs=(Array.isArray(row?.market_publications)?row.market_publications:[])
+          .filter(p=>p&&typeof p==='object'&&String(p.publication_status||'published')==='published');
+        if(pubs.length){pubs.forEach(p=>add(row,{...p,offer_position:p.offer_position||row.offer_position||rowIndex+1}));return;}
+        const market=row.market||(section==='ace'?'aces':'match_winner');
+        add(row,{...row,section:market==='double_faults'?'double_faults':market==='sets'?'sets':market==='games'?'games':section,
+          selection_id:row.betting?.selection_id||row.selection_id||row.pick_id,
+          market,offer_position:row.offer_position||rowIndex+1,
+          issued_at:row.issued_at||row.published_at||row.created_at});
+      });
     });
+    (state.feed.results||[]).forEach(row=>publicResultPublications(row).forEach(p=>add(row,p)));
     const allowed=new Set();
     const hash=text=>{let h=2166136261;for(const ch of text){h^=ch.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;};
     for(const pool of groups.values()){
@@ -3889,7 +3908,7 @@
         .filter(p=>publicationOutcome(p).kind!=='pending');
       pubs.forEach((publication,index)=>{
         const key=canonicalResultPublicationKey(row,publication,index);
-        if(cohort&&!cohort.has(key))return;
+        if(cohort&&!cohort.has(resultBetIdentity(row,publication)))return;
         const current=unique.get(key);
         const market=String(publication.market||'').toLowerCase();
         const categoryTag=({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'})[market]
