@@ -2443,12 +2443,14 @@
     // Issued flat Aces rows can carry projection_metric without a market field.
     const market=String(row?.market||row?.projection_metric||'').trim().toLowerCase();
     if(market!=='aces')return '';
-    const expected=normalizeResultPlayerName(row?.aces_superiority_hint||row?.projection_subject||'');
+    const normalize=value=>String(value||'').normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
+    const expected=normalize(row?.aces_superiority_hint||row?.projection_subject||'');
     const expectedId=String(row?.aces_superiority_player_id||row?.projection_subject_id||'').trim();
-    const actual=normalizeResultPlayerName(name||player?.name||'');
+    const actual=normalize(name||player?.name||'');
     const identity=String(player?.id||'').trim();
     if(!((expected&&actual&&expected===actual)||(expectedId&&identity&&expectedId===identity)
-         ||(expected&&identity&&expected===normalizeResultPlayerName(identity))))return '';
+         ||(expected&&identity&&expected===normalize(identity))))return '';
     return '<svg class="ace-leader-ball" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="12"></circle><path d="M13 4.5c.1 6 2.4 8.1 6.4 9.1 5.2 1.4 7 4.1 7.4 8.3M4.5 13.7c6-.1 8 2.6 9.1 6.4 1.4 5.2 4.1 7 8.3 7.4"></path></svg>';
   }
   function hubNumberHtml(value,label=''){
