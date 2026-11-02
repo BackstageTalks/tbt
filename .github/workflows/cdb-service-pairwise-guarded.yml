@@ -102,7 +102,9 @@ jobs:
           request_path=Path(".github/cdb-service-pairwise-request.json")
           request=json.loads(request_path.read_text()) if request_path.is_file() else {}
           snapshot=json.loads((root/"source-snapshot.json").read_text())
-          if os.environ.get("GITHUB_EVENT_NAME") == "pull_request":
+          if os.environ.get("GITHUB_EVENT_NAME") == "pull_request" or request.get("mode") == "dry-run":
+            # A push of a dry-run request must never fall through to the writer-only gate.
+            assert os.environ.get("GITHUB_EVENT_NAME") == "pull_request" or request.get("approved_by_operator") is False
             assert snapshot["status"] == "verified"
             assert counts.get("new_stat_values",0) >= counts.get("staged_matches",0)
             assert len({r["match_id"] for r in [json.loads(x) for x in (root/"stage/stage.jsonl").read_text().splitlines() if x.strip()]}) == counts.get("staged_matches",0)
