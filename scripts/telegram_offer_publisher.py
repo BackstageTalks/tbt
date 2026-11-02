@@ -216,11 +216,7 @@ def select_groups(x,c,now):
             ident=(str(r["event_id"]),"aces" if k=="aces" else "match_winner",selector)
             if not selector or ident in seen:continue
             seen.add(ident);rows.append(r)
-            # FREE pick can select among the whole confirmed TOP shortlist,
-            # independently of the number of premium tips in the outbound message.
-            limit=c.get("max_per_section",0)
-            if limit and len(rows)>=max(limit,10 if k=="top" else 0):
-                break
+            # Every eligible bet is kept; Admin display limits never truncate Telegram.
         if rows:got[k]=rows
     return got
 
@@ -234,8 +230,7 @@ def messages(x,c,now,free_event_id=None):
     # User-facing order: TOP -> Value -> Aces, without category headings.
     # 0 means ALL issued/eligible picks; never silently truncate the offer.
     # Telegram's 4096 character cap is handled by splitting the message.
-    limit=c.get("max_per_section",0)
-    premium_groups=[(key,rows[:limit] if limit else rows) for key,rows in got.items()
+    premium_groups=[(key,rows) for key,rows in got.items()
                     if (c.get("sections") or {}).get(key)]
     shown=[row for _,rows in premium_groups for row in rows]
     names=_name_map(shown)
@@ -282,7 +277,7 @@ def messages(x,c,now,free_event_id=None):
         free="\n".join(["🎾 FREE | BlinQ",f"📅 {date}","",fmt(winner,"top",c,1,prefix_override="🆓 FREE")])
         outbound.append({"audience":"free","text":"\n\n".join([HEADER,free,footer]),"free_event_id":str(winner.get("event_id"))})
     if any(len(item["text"].encode("utf-16-le"))//2>4096 for item in outbound):
-        raise RuntimeError("Telegram 4096 character limit; reduce max_per_section")
+        raise RuntimeError("Telegram message exceeds 4096 UTF-16 units")
     return outbound
 
 
@@ -450,8 +445,7 @@ def prepare(a):
     for section,rows in groups.items():
         if not (v.get("sections") or {}).get(section):
             continue
-        limit=v.get("max_per_section",0)
-        for row in (rows[:limit] if limit else rows):
+        for row in rows:
             sent_rows.append(result_reference(row,section))
     free=next((item for item in msg if item.get("audience")=="free"),None)
     if free:
