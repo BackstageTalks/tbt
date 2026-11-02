@@ -14,7 +14,7 @@ def route_request(route):
         assert source.count(marker) == 1
         source = source.replace(
             marker,
-            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,todayPublishedPickCount,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow,currentBettingDayPublishedKeys,memberResultCohort,pendingAdminTodayEntries,settledPublishedEntries,renderResults,aceLeaderHintHtml};\n"
+            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,todayPublishedPickCount,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow,currentBettingDayPublishedKeys,memberResultCohort,settledPublishedEntries,renderResults,aceLeaderHintHtml};\n"
             + marker,
         )
         route.fulfill(content_type="application/javascript", body=source)
@@ -411,9 +411,9 @@ def main():
                     r.market_publications[0].market,r.market_publications[0].selection_id].join('::').toLowerCase())).length,
                   eliteCohort:eliteKeys.size,
                   eliteSummary:elite.includes('6/9'),
-                  pendingCount:t.pendingAdminTodayEntries(s.resultsFilters,settled).length,
+                  settledCount:settled.length,
                   resultRows:(preview.match(/class="results-card-row/g)||[]).length,
-                  pendingVisible:preview.includes('ČAKÁ NA OVERENIE'),
+                  noPendingEntries:!preview.includes('ČAKÁ NA OVERENIE'),
                   aceLeaderMarker:t.aceLeaderHintHtml(aceExample,leader,'Farjat').includes('ace-leader-ball'),
                   wrongAceMarker:!!t.aceLeaderHintHtml(aceExample,opponent,'Opponent'),
                   nonAceMarker:!!t.aceLeaderHintHtml({...aceExample,projection_metric:'games'},leader,'Farjat'),
@@ -426,8 +426,8 @@ def main():
             }""")
             assert morning == {
                 "published": 9, "matched": 9, "eliteCohort": 9,
-                "eliteSummary": True, "pendingCount": 3, "resultRows": 9,
-                "pendingVisible": True, "aceLeaderMarker": True,
+                "eliteSummary": True, "settledCount": 6, "resultRows": 6,
+                "noPendingEntries": True, "aceLeaderMarker": True,
                 "wrongAceMarker": False, "nonAceMarker": False,
                 "proCohort": 5, "freeCohort": 2,
                 "legendCohort": 9, "goatCohort": 9
