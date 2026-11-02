@@ -278,6 +278,7 @@ TML_ATP_2026_SOURCE_SUFFIX = "/Sackmann/TML/TML/2026.csv"
 # Neither can become a CDB candidate even when the SHA-pinned tour is known.
 TML_ATP_2026_QUARANTINE = frozenset({
     ("2026-336", "19"), ("2026-8998", "17"),
+    ("2026-339", "18"), ("2026-336", "23"),
 })
 
 
