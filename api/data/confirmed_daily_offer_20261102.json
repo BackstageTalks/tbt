@@ -28,7 +28,8 @@
       "scheduled_at": "2026-11-02T20:10:00+00:00",
       "ou_side": null,
       "market_line": null,
-      "free": false
+      "free": false,
+      "odds": 1.549451
     },
     {
       "event_id": "17471474",
@@ -39,7 +40,8 @@
       "scheduled_at": "2026-11-02T19:10:00+00:00",
       "ou_side": null,
       "market_line": null,
-      "free": false
+      "free": false,
+      "odds": 1.510204
     },
     {
       "event_id": "17467283",
@@ -50,7 +52,8 @@
       "scheduled_at": "2026-11-02T11:30:00+00:00",
       "ou_side": null,
       "market_line": null,
-      "free": true
+      "free": true,
+      "odds": 1.540541
     },
     {
       "event_id": "17470634",
@@ -61,7 +64,8 @@
       "scheduled_at": "2026-11-02T17:00:00+00:00",
       "ou_side": null,
       "market_line": null,
-      "free": false
+      "free": false,
+      "odds": 1.833333
     },
     {
       "event_id": "17468525",
@@ -72,7 +76,8 @@
       "scheduled_at": "2026-11-02T11:10:00+00:00",
       "ou_side": "over",
       "market_line": 12.5,
-      "free": false
+      "free": false,
+      "odds": 1.75
     },
     {
       "event_id": "17449526",
@@ -83,7 +88,8 @@
       "scheduled_at": "2026-11-02T10:00:00+00:00",
       "ou_side": "over",
       "market_line": 10.5,
-      "free": false
+      "free": false,
+      "odds": 1.8
     },
     {
       "event_id": "17456687",
@@ -94,7 +100,8 @@
       "scheduled_at": "2026-11-02T19:00:00+00:00",
       "ou_side": "over",
       "market_line": 6.5,
-      "free": false
+      "free": false,
+      "odds": 1.6
     },
     {
       "event_id": "17467964",
@@ -105,7 +112,8 @@
       "scheduled_at": "2026-11-02T13:00:00+00:00",
       "ou_side": "over",
       "market_line": 4.5,
-      "free": false
+      "free": false,
+      "odds": 1.79
     },
     {
       "event_id": "17457727",
@@ -116,7 +124,8 @@
       "scheduled_at": "2026-11-02T15:00:00+00:00",
       "ou_side": "over",
       "market_line": 7.5,
-      "free": false
+      "free": false,
+      "odds": 1.72
     }
   ]
 }
