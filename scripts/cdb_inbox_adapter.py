@@ -318,7 +318,7 @@ def _pinned_tml_safety_reason(raw):
         return "tml_noncompleted_or_missing_score"
     # The existing native stage validates internal consistency; same quality
     # gate here prevents generic normalization from rescuing invalid totals.
-    from scripts.cdb_native_sackmann_stage import _quality
+    from cdb_native_sackmann_stage import _quality
     if _quality(raw) not in {"COMPLETE_BASIC_SERVE_RETURN", "VALID_PARTIAL_SERVE_OR_BP"}:
         return "tml_invalid_or_missing_stat_counts"
     return ""
