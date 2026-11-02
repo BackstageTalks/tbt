@@ -429,3 +429,30 @@ def test_historical_tml_source_only_rejects_retirements_missing_ids_and_bad_coun
     assert saved[0]["source_loser_id"] == "BETA"
     assert saved[0]["source_date_kind"] == "match_exact"  # sample.match_date provided
     assert "import_ready" not in saved[0]
+
+
+def test_tml2025_frozen_sha_bound_conflicts_are_never_normalized(tmp_path, monkeypatch):
+    import scripts.cdb_inbox_adapter as adapter
+    assert len(adapter.TML_ATP_2025_CROSS_SOURCE_CONFLICT_ORDINALS) == 112
+    assert 635 in adapter.TML_ATP_2025_CROSS_SOURCE_CONFLICT_ORDINALS
+    assert 636 not in adapter.TML_ATP_2025_CROSS_SOURCE_CONFLICT_ORDINALS
+    source = tmp_path / "source"
+    source.mkdir()
+    path = source / "source__2025.csv"
+    row = sample(tour="", match_date="2025-08-26",
+                 winner_id="AA11", loser_id="BB22", score="6-4 6-4")
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(row))
+        writer.writeheader()
+        writer.writerow(row)
+    sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    monkeypatch.setitem(adapter.TML_ATP_SOURCE_SHAS, 2025, sha)
+    monkeypatch.setattr(adapter, "TML_ATP_2025_CROSS_SOURCE_CONFLICT_ORDINALS", frozenset({1}))
+    manifest = _drive_context_manifest(tmp_path, path,
+        "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/TML/TML/2025.csv")
+    out = normalize(source, tmp_path / "out", drive_manifest_path=manifest)
+    assert out["counts"]["raw_rows"] == 1
+    assert out["counts"].get("normalized_rows", 0) == 0
+    assert out["counts"]["reason_tml_cross_source_stat_disagreement"] == 1
+    assert out["state"] == "SOURCE_ONLY"
+    assert out["production_mutated"] is False
