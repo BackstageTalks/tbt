@@ -226,6 +226,54 @@ def deployed_priced_projection(row: dict[str, Any], feed: dict[str, Any]) -> dic
     return pub
 
 
+
+def published_ace_statistic_targets(feed: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Identify only issued Aces/DF offers eligible for terminal provider stats.
+
+    Production can serve priced projections as flat daily rows rather than
+    embedded market_publications. Recover those via the *same* frozen-contract
+    validation used by runtime Results; otherwise the retirement collector
+    would never request their actual aces.
+    """
+    targets: dict[str, dict[str, Any]] = {}
+    if not isinstance(feed, dict):
+        return targets
+    for row in feed.get("ace_picks") or []:
+        if not isinstance(row, dict) or row.get("excluded_reason"):
+            continue
+        eid = _event_id(row)
+        scheduled = _parse_time(row.get("scheduled_at") or row.get("date"))
+        p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
+        if not eid or scheduled is None or not p1 or not p2 or p1 == p2:
+            continue
+        supplied = row.get("market_publications")
+        if isinstance(supplied, list) and supplied:
+            publications = [p for p in supplied if isinstance(p, dict)]
+        else:
+            deployed = deployed_priced_projection(row, feed)
+            publications = [deployed] if deployed is not None else []
+        markets: set[str] = set()
+        for pub in publications:
+            if not isinstance(pub, dict):
+                continue
+            market = str(pub.get("market") or "").lower()
+            issued = _parse_time(pub.get("issued_at"))
+            selected = str(pub.get("selection_id") or "").strip()
+            if (market in {"aces", "double_faults"}
+                    and str(pub.get("publication_status") or "").lower() == "published"
+                    and issued is not None and issued < scheduled
+                    and selected in {p1, p2}):
+                markets.add(market)
+        if not markets:
+            continue
+        existing = targets.get(eid)
+        if existing is None:
+            targets[eid] = {"row": row, "markets": markets}
+        elif {_player_id(existing["row"], "player1"), _player_id(existing["row"], "player2")} == {p1, p2}:
+            existing["markets"].update(markets)
+    return targets
+
+
 def prediction_rows(
     feed: dict[str, Any], *, now: datetime | None = None
 ) -> dict[str, dict[str, Any]]:
@@ -470,8 +518,9 @@ def _grade_runtime_projection(
 ) -> dict[str, Any] | None:
     """Apply the frozen offline market rules without importing ML dependencies.
 
-    Only verified full-match evidence from the same event can settle a market.
-    Partial provider counts and unpriced projections never invent betting ROI.
+    Only verified terminal evidence from the same event can settle a market.
+    During retirement, only an already-crossed player Aces O/U line is final;
+    partial/missing counts and unpriced projections never invent betting ROI.
     """
     market = str(publication.get("market") or "").lower()
     scheduled = _parse_time(row.get("scheduled_at"))
@@ -491,7 +540,29 @@ def _grade_runtime_projection(
         "runtime_overlay": True,
         "runtime_source": "match_status_snapshot",
     }
-    if state in {"retired", "void"}:
+
+    # An aces Over/Under can be irrevocably decided before retirement.
+    # Use only a pre-start frozen player-total contract and terminal,
+    # player-identity-matched provider counts; never infer missing statistics.
+    retired_aces_decided = False
+    if state == "retired" and market == "aces" and (
+        str(publication.get("price_contract") or "").lower() == "player_total_ou"
+        and str(publication.get("ou_side") or "").lower() in {"over", "under"}
+    ):
+        stats = status_row.get("projection_stats")
+        p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
+        selected = str(publication.get("selection_id") or "")
+        line = _finite_count(publication.get("market_line"))
+        if (
+            isinstance(stats, dict) and line is not None
+            and selected in {p1, p2} and p1 != p2
+            and str(status_row.get("projection_stats_p1_id") or "") == p1
+            and str(status_row.get("projection_stats_p2_id") or "") == p2
+        ):
+            own = "p1" if selected == p1 else "p2"
+            actual = _finite_count(stats.get(f"{own}_aces"))
+            retired_aces_decided = actual is not None and actual > line
+    if state in {"retired", "void"} and not retired_aces_decided:
         result = {**base, "status": "void", "reason": state,
                   "correct": None, "void": True,
                   "staked_units": 0.0, "return_units": 0.0, "profit_units": 0.0}
@@ -577,6 +648,9 @@ def _grade_runtime_projection(
             result["opponent_projection"] = publication.get("opponent_projection")
         else:
             result["reference_projection"] = reference
+        if retired_aces_decided:
+            result["retirement_line_decided"] = True
+            result["reason"] = "retired_after_ou_decided"
         if equal:
             result.update(staked_units=0.0, return_units=0.0, profit_units=0.0)
         elif str(publication.get("price_status") or "").lower() == "priced_projection":

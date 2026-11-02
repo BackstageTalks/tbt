@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from tbt.services.match_status import (
     _verified_final_score_stats, prediction_rows, runtime_settled_results,
-    scan_match_statuses,
+    scan_match_statuses, published_ace_statistic_targets,
 )
 from tbt.services import results_archive
 from tbt.services.results_archive import settled_archive_candidates, save_settled_results_archive, load_settled_results_archive
@@ -263,3 +263,142 @@ def test_post_cutover_aces_never_use_implicit_or_superiority_fallback():
             _status(projection_stats={"p1_aces": 9, "p2_aces": 5}),
         )
         assert rows == []  # Ambiguous issuance remains pending, never WIN.
+
+
+def test_retired_aces_over_already_crossed_wins_with_original_price():
+    base = _base()
+    base["scheduled_at"] = "2026-11-02T13:00:00Z"
+    pub = _pub(
+        "aces", price_contract="player_total_ou", ou_side="over",
+        market_line=5.5, price_status="priced_projection", odds=1.79,
+        issued_at="2026-11-02T06:00:00Z",
+    )
+    feed = {"ace_picks": [{**base, "market_publications": [pub]}], "results": []}
+    state = _status(status="retired", provider_status="retired injury",
+                    projection_stats={"p1_aces": 7, "p2_aces": 3})
+    outcome = runtime_settled_results(feed, state)[0]["market_publications"][0]["result"]
+    assert (outcome["status"], outcome["correct"], outcome["void"]) == ("hit", True, False)
+    assert outcome["actual_count"] == 7
+    assert outcome["retirement_line_decided"] is True
+    assert outcome["staked_units"] == 1.0
+    assert outcome["return_units"] == 1.79
+    assert abs(outcome["profit_units"] - 0.79) < 1e-12
+
+
+def test_retired_aces_under_already_lost_and_undecided_bets_stay_void():
+    base = _base()
+    base["scheduled_at"] = "2026-11-02T13:00:00Z"
+    for side, count, expected_status, expected_correct in (
+        ("under", 7, "miss", False),
+        ("over", 5, "void", None),
+        ("under", 5, "void", None),
+    ):
+        pub = _pub(
+            "aces", price_contract="player_total_ou", ou_side=side,
+            market_line=5.5, price_status="priced_projection", odds=1.79,
+            issued_at="2026-11-02T06:00:00Z",
+        )
+        feed = {"ace_picks": [{**base, "market_publications": [pub]}], "results": []}
+        evidence = _status(status="retired", provider_status="retired injury",
+                           projection_stats={"p1_aces": count, "p2_aces": 2})
+        result = runtime_settled_results(feed, evidence)[0]["market_publications"][0]["result"]
+        assert result["status"] == expected_status
+        assert result["correct"] is expected_correct
+        assert result["profit_units"] == (-1 if expected_correct is False else 0.0)
+    # No counts or a mismatched provider-statistic orientation never earns a win.
+    pub = _pub("aces", price_contract="player_total_ou", ou_side="over",
+               market_line=5.5, price_status="priced_projection", odds=1.79,
+               issued_at="2026-11-02T06:00:00Z")
+    feed = {"ace_picks": [{**base, "market_publications": [pub]}], "results": []}
+    for status in (
+        _status(status="retired", projection_stats={}),
+        _status(status="retired", projection_stats={"p1_aces": 7},
+                projection_stats_p1_id="22", projection_stats_p2_id="11"),
+    ):
+        result = runtime_settled_results(feed, status)[0]["market_publications"][0]["result"]
+        assert result["void"] is True
+        assert result["profit_units"] == 0.0
+
+
+def test_retired_aces_archive_replaces_only_older_void_with_verified_win(monkeypatch):
+    table = Table()
+    monkeypatch.setattr(results_archive, "_table", lambda _: table)
+    base = _base()
+    base["scheduled_at"] = "2026-11-02T13:00:00Z"
+    pub = _pub(
+        "aces", price_contract="player_total_ou", ou_side="over",
+        market_line=5.5, price_status="priced_projection", odds=1.79,
+        issued_at="2026-11-02T06:00:00Z",
+    )
+    feed = {"generated_at": "2026-11-02T06:00:00Z",
+            "ace_picks": [{**base, "market_publications": [pub]}], "results": []}
+    retired = _status(status="retired", provider_status="retired injury")
+    previous = settled_archive_candidates(feed, retired)
+    assert len(previous) == 1
+    assert save_settled_results_archive(previous)["added"] == 1
+    resolved = _status(status="retired", provider_status="retired injury",
+                       projection_stats={"p1_aces": 7, "p2_aces": 2})
+    corrected = settled_archive_candidates(feed, resolved)
+    assert len(corrected) == 1
+    saved = save_settled_results_archive(corrected)
+    assert saved["updated"] == 1 and saved["verified"] is True
+    merged = results_archive.merge_settled_results(
+        {"results": deepcopy(previous)}, load_settled_results_archive()
+    )
+    outcome = merged["results"][0]["market_publications"][0]["result"]
+    assert outcome["correct"] is True
+    assert outcome["profit_units"] == 0.79
+    assert outcome["actual_count"] == 7
+
+
+def test_flat_deployed_aces_offer_is_eligible_for_retirement_statistics():
+    """Production flat published Aces rows must get real post-retirement counts."""
+    base = _base()
+    base["scheduled_at"] = "2026-11-02T13:00:00Z"
+    flat = {
+        **base, "market": "aces", "selection": "Over 5.5",
+        "side": "over", "line": 5.5, "odds": 1.79,
+        "price_status": "priced_projection", "provider_id": 1,
+        "issued_at": "2026-11-02T06:00:00Z",
+        "captured_at": "2026-11-02T05:55:00Z",
+        "betting": {"selection_id": "11"},
+    }
+    feed = {"generated_at": "2026-11-02T06:00:00Z",
+            "ace_picks": [flat], "results": []}
+    targets = published_ace_statistic_targets(feed)
+    assert set(targets) == {"100"}
+    assert targets["100"]["markets"] == {"aces"}
+    assert targets["100"]["row"] == flat
+    state = _status(status="retired", provider_status="retired injury",
+                    projection_stats={"p1_aces": 7, "p2_aces": 3})
+    settled = runtime_settled_results(feed, state)
+    assert len(settled) == 1
+    result = settled[0]["market_publications"][0]["result"]
+    assert result["correct"] is True
+    assert result["actual_count"] == 7
+    assert result["return_units"] == 1.79
+
+
+def test_flat_unissued_poststart_or_ambiguous_aces_never_trigger_stat_calls():
+    base = _base()
+    base["scheduled_at"] = "2026-11-02T13:00:00Z"
+    valid = {
+        **base, "market": "aces", "selection": "Over 5.5",
+        "side": "over", "line": 5.5, "odds": 1.79,
+        "price_status": "priced_projection", "provider_id": 1,
+        "issued_at": "2026-11-02T06:00:00Z",
+        "captured_at": "2026-11-02T05:55:00Z",
+        "betting": {"selection_id": "11"},
+    }
+    bad_variants = [
+        {**valid, "captured_at": "2026-11-02T13:01:00Z"},
+        {**valid, "issued_at": "2026-11-02T14:00:00Z"},
+        {**valid, "betting": {"selection_id": "99"}},
+        {**valid, "line": None, "selection": "Aces"},
+        {**valid, "price_status": "projection_only"},
+        {**valid, "excluded_reason": "not_published"},
+    ]
+    for bad in bad_variants:
+        feed = {"generated_at": "2026-11-02T06:00:00Z",
+                "ace_picks": [bad], "results": []}
+        assert published_ace_statistic_targets(feed) == {}

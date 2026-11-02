@@ -416,7 +416,21 @@ def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
             incumbent = existing[key]
             previous = incumbent.get("result")
             previous = previous if isinstance(previous, dict) else {}
-            if previous.get("correct") is None and not previous.get("void"):
+            updated_result = archived_pub.get("result")
+            updated_result = updated_result if isinstance(updated_result, dict) else {}
+            # A prior retirement VOID can be superseded only by a freshly
+            # verified, irrevocably decided player Aces O/U. Other Results and
+            # historical records retain their existing precedence.
+            if (
+                str(archived_pub.get("market") or "").lower() == "aces"
+                and previous.get("void") is True
+                and str(previous.get("reason") or previous.get("status") or "").lower()
+                    in {"retired", "retirement"}
+                and updated_result.get("retirement_line_decided") is True
+                and type(updated_result.get("correct")) is bool
+            ):
+                incumbent["result"] = deepcopy(updated_result)
+            elif previous.get("correct") is None and not previous.get("void"):
                 incumbent["result"] = deepcopy(archived_pub.get("result"))
             continue
         copy = deepcopy(archived_row)

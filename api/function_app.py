@@ -157,6 +157,7 @@ from tbt.services.live_comeback import (
 from tbt.services.match_status import (
     event_ids_from_feed, runtime_settled_results, scan_match_statuses,
     verified_terminal_statuses, apply_verified_schedule_overlay,
+    published_ace_statistic_targets,
 )
 from tbt.services.clv_market_history import (
     extract_verified_quotes, persist_quotes, attach_offer_clv,
@@ -2142,32 +2143,20 @@ def internal_match_status_worker(req):
             # Only issued Aces/DF offers qualify for post-match statistics.
             # Reuse the same client/quota; never start an unbounded enrichment.
             from tbt.providers.statistics import parse_statistics
-            stat_rows = {}
-            for row in feed_payload.get("ace_picks", []) or []:
-                if not isinstance(row, dict):
-                    continue
-                event = str(row.get("event_id") or "").strip()
-                publications = row.get("market_publications") or []
-                if event and any(
-                    isinstance(p, dict)
-                    and str(p.get("market") or "") in {"aces", "double_faults"}
-                    and str(p.get("publication_status") or "") == "published"
-                    and p.get("issued_at")
-                    for p in publications
-                ):
-                    stat_rows.setdefault(event, row)
+            stat_rows = published_ace_statistic_targets(feed_payload)
             checked_stats = 0
             unavailable_stats = 0
             quota_paused = False
             before_stat_requests = client.request_count
-            for event, row in stat_rows.items():
+            for event, target in stat_rows.items():
+                row = target["row"]
                 # Leave time for provider timeout and Azure snapshot readback.
                 if checked_stats >= 2 or time.monotonic() - worker_started + 5.0 >= 22.0:
                     break
                 if client.request_count >= client.request_limit - 1:
                     break
                 entry = (snapshot.get("statuses") or {}).get(event)
-                if not isinstance(entry, dict) or entry.get("status") not in {"win", "loss"}:
+                if not isinstance(entry, dict) or entry.get("status") not in {"win", "loss", "retired"}:
                     continue
                 p1 = str((row.get("player1") or {}).get("id") or "")
                 p2 = str((row.get("player2") or {}).get("id") or "")
@@ -2177,11 +2166,7 @@ def internal_match_status_worker(req):
                     continue
                 evidence = entry.get("projection_stats")
                 evidence = evidence if isinstance(evidence, dict) else {}
-                markets = {
-                    str(p.get("market") or "")
-                    for p in row.get("market_publications") or []
-                    if isinstance(p, dict) and p.get("issued_at")
-                }
+                markets = target["markets"]
                 fields = set()
                 for market in markets & {"aces", "double_faults"}:
                     fields.update({f"p1_{market}", f"p2_{market}"})
