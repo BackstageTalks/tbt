@@ -22,7 +22,9 @@ function safeNotificationTarget(value) {
   const fallback = new URL('/#predictions', self.location.origin).href;
   try {
     const target = new URL(String(value || '/#predictions'), self.location.origin);
-    if (target.origin !== self.location.origin || target.username || target.password) return fallback;
+    if (target.origin !== self.location.origin ||
+        (target.protocol !== 'https:' && target.protocol !== 'http:') ||
+        target.username || target.password) return fallback;
     return target.href;
   } catch {
     return fallback;
