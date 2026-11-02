@@ -2439,13 +2439,18 @@
     return `<span class="hub-pick-stack"><small>${escapeHtml(label)}</small><strong title="${escapeHtml(text)}">${escapeHtml(text)}</strong></span>`;
   }
   function aceLeaderHintHtml(row,player,name){
-    // Visual-only insight: the count model's expected ACE leader, never an O/U side.
-    if(String(row?.market||'').toLowerCase()!=='aces')return '';
-    const expected=String(row?.aces_superiority_hint||row?.projection_subject||'').trim().toLocaleLowerCase();
-    if(!expected)return '';
-    const actual=String(name||player?.name||'').trim().toLocaleLowerCase();
-    const identity=String(player?.id||'').trim().toLocaleLowerCase();
-    if(expected!==actual&&expected!==identity)return '';
+    // Visual-only projected Aces leader, never a bet winner or the O/U side.
+    // Issued flat Aces rows can carry projection_metric without a market field.
+    const market=String(row?.market||row?.projection_metric||'').trim().toLowerCase();
+    if(market!=='aces')return '';
+    const normalize=value=>String(value||'').normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
+    const expected=normalize(row?.aces_superiority_hint||row?.projection_subject||'');
+    const expectedId=String(row?.aces_superiority_player_id||row?.projection_subject_id||'').trim();
+    const actual=normalize(name||player?.name||'');
+    const identity=String(player?.id||'').trim();
+    if(!((expected&&actual&&expected===actual)||(expectedId&&identity&&expectedId===identity)
+         ||(expected&&identity&&expected===normalize(identity))))return '';
     return '<svg class="ace-leader-ball" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="12"></circle><path d="M13 4.5c.1 6 2.4 8.1 6.4 9.1 5.2 1.4 7 4.1 7.4 8.3M4.5 13.7c6-.1 8 2.6 9.1 6.4 1.4 5.2 4.1 7 8.3 7.4"></path></svg>';
   }
   function hubNumberHtml(value,label=''){
@@ -3828,7 +3833,8 @@
     if(!rules)return new Set();
     const groups=new Map(),seen=new Set();
     const add=(row,p)=>{
-      const section=p.market==='aces'?'ace':p.market==='double_faults'?'double_faults':p.section;
+      const market=String(p.market||'').toLowerCase();
+      const section=({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'})[market]||p.section;
       const tab=section==='top_daily'?'daily':section;
       const day=resultPublicationBettingDay(row,p),key=resultBetIdentity(row,p,section==='ace'?'aces':section==='double_faults'?'double_faults':'match_winner');
       if(!day||!key||!rules[tab])return;
@@ -3840,12 +3846,12 @@
     // The issued daily pool defines the tier's 1st/2nd/... positions, not
     // the arrival order of completed Results in the archive. Seed it FIRST.
     // Settled rows only fill missing historical identities after the offer.
-    [['daily_picks','top_daily'],['prime_picks','prime'],['value_picks','value'],['doubles_picks','doubles'],['ace_picks','ace'],['sg_picks','sg']].forEach(([feedKey,section])=>{
+    [['daily_picks','top_daily'],['top_daily_picks','top_daily'],['prime_picks','prime'],['value_picks','value'],['doubles_picks','doubles'],['ace_picks','ace'],['sg_picks','sg']].forEach(([feedKey,section])=>{
       (state.feed[feedKey]||[]).forEach((row,rowIndex)=>{
         const pubs=(Array.isArray(row?.market_publications)?row.market_publications:[])
           .filter(p=>p&&typeof p==='object'&&String(p.publication_status||'published')==='published');
         if(pubs.length){pubs.forEach(p=>add(row,{...p,offer_position:p.offer_position||row.offer_position||rowIndex+1}));return;}
-        const market=row.market||(section==='ace'?'aces':'match_winner');
+        const market=row.market||(section==='ace'?'aces':section==='sg'?'':'match_winner');
         add(row,{...row,section:market==='double_faults'?'double_faults':market==='sets'?'sets':market==='games'?'games':section,
           selection_id:row.betting?.selection_id||row.selection_id||row.pick_id,
           market,offer_position:row.offer_position||rowIndex+1,
@@ -4190,7 +4196,7 @@
       const p1Class=p1Selected?' is-pick':p2Selected?' is-opponent':'';
       const p2Class=p2Selected?' is-pick':p1Selected?' is-opponent':'';
       const tipBadge='<i class="results-pick-mark" aria-label="Predikovaný hráč">TIP</i>';
-      const match=`<div class="results-match-player${p1Class}">${sideAvatarHtml(r,p1,'player1','hub-avatar')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${p1Selected?tipBadge:''}</div><div class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${sideAvatarHtml(r,p2,'player2','hub-avatar')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<strong>${escapeHtml(p2Name)}</strong>${p2Selected?tipBadge:''}</span></div>`;
+      const match=`<div class="results-match-player${p1Class}">${sideAvatarHtml(r,p1,'player1','hub-avatar')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${aceLeaderHintHtml(r,p1,p1Name)}${p1Selected?tipBadge:''}</div><div class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${sideAvatarHtml(r,p2,'player2','hub-avatar')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<strong>${escapeHtml(p2Name)}</strong>${aceLeaderHintHtml(r,p2,p2Name)}${p2Selected?tipBadge:''}</span></div>`;
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
         const displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);

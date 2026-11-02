@@ -14,7 +14,7 @@ def route_request(route):
         assert source.count(marker) == 1
         source = source.replace(
             marker,
-            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,todayPublishedPickCount,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow,currentBettingDayPublishedKeys,memberResultCohort};\n"
+            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,todayPublishedPickCount,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow,currentBettingDayPublishedKeys,memberResultCohort,settledPublishedEntries,renderResults,aceLeaderHintHtml};\n"
             + marker,
         )
         route.fulfill(content_type="application/javascript", body=source)
@@ -401,12 +401,52 @@ def main():
                 const dayKeys=t.currentBettingDayPublishedKeys(Date.now());
                 const eliteKeys=t.memberResultCohort('elite',day);
                 const elite=t.resultsSummary();
+                const settled=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters);
+                const preview=t.renderResults();
+                const aceExample={projection_metric:'aces',aces_superiority_hint:'Farjat'};
+                const leader={id:'270414',name:'Farjat'},opponent={id:'206594',name:'Opponent'};
+                // Same Admin → Zobrazenie rule must drive the ELITE result tier,
+                // including a newly enabled settled Doubles category.
+                const doubles=base('doubles-regression','doubles','match_winner','doubles-p1',1,at('16','00'),true);
+                const doublesOffer=structuredClone(doubles);
+                delete doublesOffer.market_publications;
+                s.feed.results.push(doubles);
+                s.feed.doubles_picks=[doublesOffer];
+                const doublesRule={enabled:true,display_state:'hidden',visible_picks:0,selection_mode:'first'};
+                s.feed.member_result_rules.elite.doubles=doublesRule;
+                const beforeDoubles=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
+                doublesRule.display_state='active';doublesRule.visible_picks=1;
+                const afterDoubles=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
+                doublesRule.row_overrides={'1':'hidden'};
+                const hiddenOverride=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
+                doublesRule.row_overrides={};doublesRule.display_state='hidden';
+                const afterDisable=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
+                // SETS and GAMES are independent Admin tabs, even though their
+                // published market rows share the legacy sg_picks source.
+                const sets=base('sets-regression','sets','sets','sets-p1',1,at('16','30'),true);
+                const setsOffer=structuredClone(sets);delete setsOffer.market_publications;
+                setsOffer.market='sets';
+                s.feed.sg_picks=[setsOffer];s.feed.results.push(sets);
+                const setsRule={enabled:true,display_state:'hidden',visible_picks:0,selection_mode:'first'};
+                s.feed.member_result_rules.elite.sets=setsRule;
+                s.feed.member_result_rules.elite.sg={enabled:false,display_state:'hidden',visible_picks:0,selection_mode:'first'};
+                const beforeSets=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
+                setsRule.display_state='active';setsRule.visible_picks=1;
+                const afterSets=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
                 const result={
                   published:dayKeys.size,
                   matched:rows.filter(r=>dayKeys.has([r.event_id,
                     r.market_publications[0].market,r.market_publications[0].selection_id].join('::').toLowerCase())).length,
                   eliteCohort:eliteKeys.size,
                   eliteSummary:elite.includes('6/9'),
+                  settledCount:settled.length,
+                  resultRows:(preview.match(/class="results-card-row/g)||[]).length,
+                  noPendingEntries:!preview.includes('ČAKÁ NA OVERENIE'),
+                  aceLeaderMarker:t.aceLeaderHintHtml(aceExample,leader,'Farjat').includes('ace-leader-ball'),
+                  wrongAceMarker:!!t.aceLeaderHintHtml(aceExample,opponent,'Opponent'),
+                  nonAceMarker:!!t.aceLeaderHintHtml({...aceExample,projection_metric:'games'},leader,'Farjat'),
+                  beforeDoubles,afterDoubles,hiddenOverride,afterDisable,
+                  beforeSets,afterSets,
                   proCohort:t.memberResultCohort('pro',day).size,
                   freeCohort:t.memberResultCohort('rookie',day).size,
                   legendCohort:t.memberResultCohort('legend',day).size,
@@ -416,7 +456,13 @@ def main():
             }""")
             assert morning == {
                 "published": 9, "matched": 9, "eliteCohort": 9,
-                "eliteSummary": True, "proCohort": 5, "freeCohort": 2,
+                "eliteSummary": True, "settledCount": 6, "resultRows": 6,
+                "noPendingEntries": True, "aceLeaderMarker": True,
+                "wrongAceMarker": False, "nonAceMarker": False,
+                "beforeDoubles": 6, "afterDoubles": 7,
+                "hiddenOverride": 6, "afterDisable": 6,
+                "beforeSets": 6, "afterSets": 7,
+                "proCohort": 5, "freeCohort": 2,
                 "legendCohort": 9, "goatCohort": 9
             }, morning
 
