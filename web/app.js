@@ -3654,7 +3654,7 @@
     const projectionMarket=['aces','double_faults','sets','games'].includes(market);
     // The selected player for Aces/DF is NOT the match-winner id.
     const selected=projectionMarket
-      ?(publication?.selection_id||publication?.pick_id||betting?.selection_id||row?.selection_id||row?.pick_id||publication?.winner_id||row?.winner_id)
+      ?(publication?.selection_id||publication?.pick_id||betting?.selection_id||row?.selection_id||row?.pick_id||row?.projection_subject_id)
       :(publication?.selection_id||publication?.winner_id||publication?.pick_id||betting?.selection_id||row?.winner_id||row?.pick_id||row?.selection_id);
     const selection=String(selected||publication?.selection||row?.pick||row?.selection||'').trim().toLowerCase();
     if(!event||!market||!selection)return '';
@@ -3687,8 +3687,9 @@
         const publications=Array.isArray(row?.market_publications)?row.market_publications:[];
         let valid=0;
         publications.forEach(pub=>{
-          if(!pub||pub.publication_status==='excluded'||pub.publication_status==='rejected')return;
-          if(pub.issued_at&&Date.parse(pub.issued_at)>Date.parse(scheduled))return;
+          if(!pub||(pub.publication_status&&pub.publication_status!=='published'))return;
+          if(!pub.issued_at&&pub.runtime_publication_evidence!=='deployed_daily_offer_row')return;
+          if(pub.issued_at&&(!Number.isFinite(Date.parse(pub.issued_at))||Date.parse(pub.issued_at)>Date.parse(scheduled)))return;
           const key=resultBetIdentity(row,pub,defaultMarket);
           if(key){keys.add(key);valid++;}
         });
