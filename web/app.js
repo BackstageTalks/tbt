@@ -3837,18 +3837,22 @@
       const group=day+'|'+tab;if(!groups.has(group))groups.set(group,[]);
       groups.get(group).push({key,p,tab,day});
     };
-    (state.feed.results||[]).forEach(row=>publicResultPublications(row).forEach(p=>add(row,p)));
+    // The issued daily pool defines the tier's 1st/2nd/... positions, not
+    // the arrival order of completed Results in the archive. Seed it FIRST.
+    // Settled rows only fill missing historical identities after the offer.
     [['daily_picks','top_daily'],['prime_picks','prime'],['value_picks','value'],['doubles_picks','doubles'],['ace_picks','ace'],['sg_picks','sg']].forEach(([feedKey,section])=>{
-      (state.feed[feedKey]||[]).forEach(row=>{
+      (state.feed[feedKey]||[]).forEach((row,rowIndex)=>{
         const pubs=(Array.isArray(row?.market_publications)?row.market_publications:[])
           .filter(p=>p&&typeof p==='object'&&String(p.publication_status||'published')==='published');
-        if(pubs.length){pubs.forEach(p=>add(row,p));return;}
+        if(pubs.length){pubs.forEach(p=>add(row,{...p,offer_position:p.offer_position||row.offer_position||rowIndex+1}));return;}
         const market=row.market||(section==='ace'?'aces':'match_winner');
         add(row,{...row,section:market==='double_faults'?'double_faults':market==='sets'?'sets':market==='games'?'games':section,
           selection_id:row.betting?.selection_id||row.selection_id||row.pick_id,
-          market,issued_at:row.issued_at||row.published_at||row.created_at});
+          market,offer_position:row.offer_position||rowIndex+1,
+          issued_at:row.issued_at||row.published_at||row.created_at});
       });
     });
+    (state.feed.results||[]).forEach(row=>publicResultPublications(row).forEach(p=>add(row,p)));
     const allowed=new Set();
     const hash=text=>{let h=2166136261;for(const ch of text){h^=ch.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;};
     for(const pool of groups.values()){
