@@ -248,6 +248,7 @@ _COMPARATOR_PLAYERS_CACHE_LOCK = Lock()
 _COMPARATOR_RESULT_CACHE: dict[str, tuple[float, dict]] = {}
 _COMPARATOR_RESULT_CACHE_LOCK = Lock()
 _COMPARATOR_RESULT_TTL_SECONDS = 5 * 60
+_COMPARATOR_RESULT_MAX_ENTRIES = 2000
 _COMPARATOR_RATE_WINDOW_SECONDS = 60.0
 _COMPARATOR_RATE_MAX_REQUESTS = 60
 _COMPARATOR_RATE_BUCKETS = defaultdict(deque)
@@ -304,6 +305,23 @@ def _auth_email_request_allowed(req) -> bool:
                 _AUTH_EMAIL_RATE_BUCKETS.pop(stale_key, None)
     return True
 
+
+
+def _prune_comparator_result_cache(now_mono: float) -> None:
+    """Bound cache size even when every entry is still inside its TTL.
+
+    Caller holds _COMPARATOR_RESULT_CACHE_LOCK; oldest valid results are
+    evicted only when the capacity is exceeded.
+    """
+    cutoff = now_mono - _COMPARATOR_RESULT_TTL_SECONDS
+    for key, item in list(_COMPARATOR_RESULT_CACHE.items()):
+        if item[0] < cutoff:
+            _COMPARATOR_RESULT_CACHE.pop(key, None)
+    overflow = len(_COMPARATOR_RESULT_CACHE) - _COMPARATOR_RESULT_MAX_ENTRIES
+    if overflow > 0:
+        oldest = sorted(_COMPARATOR_RESULT_CACHE, key=lambda k: _COMPARATOR_RESULT_CACHE[k][0])[:overflow]
+        for key in oldest:
+            _COMPARATOR_RESULT_CACHE.pop(key, None)
 
 
 def _load_comparator_artifact() -> dict:
@@ -600,11 +618,8 @@ def comparator_compare(req):
         )
         with _COMPARATOR_RESULT_CACHE_LOCK:
             _COMPARATOR_RESULT_CACHE[cache_key] = (now_mono, result)
-            if len(_COMPARATOR_RESULT_CACHE) > 2000:
-                cutoff = now_mono - _COMPARATOR_RESULT_TTL_SECONDS
-                for key, item in list(_COMPARATOR_RESULT_CACHE.items())[:500]:
-                    if item[0] < cutoff:
-                        _COMPARATOR_RESULT_CACHE.pop(key, None)
+            if len(_COMPARATOR_RESULT_CACHE) > _COMPARATOR_RESULT_MAX_ENTRIES:
+                _prune_comparator_result_cache(now_mono)
         return response({**result, "cache": "miss"})
     except ComparatorIndexError as exc:
         if str(exc) == "player_not_found":
