@@ -10,7 +10,7 @@ Admin -> **Telegram bot** is independent of the existing **Telegram skupiny** pa
 - TOP, VALUE, ESÁ categories independently.
 - Free preview: one deterministic random confirmed TOP bet per BlinQ betting day (defaults ON).
 - Scheduled dispatch time in **Europe/Bratislava**, weekdays, on/off.
-- By default **ALL** confirmed TOP → Value → Aces rows are sent in one unlabelled sequential offer. Admin can apply an optional explicit per-category cap. Large offers are split at record boundaries to respect the Telegram 4096 UTF-16 text limit without silently dropping a pick. FREE is separately issued from one deterministic daily TOP pick.
+- **ALL** confirmed, eligible TOP → Value → Aces rows are sent in one sequential offer. Telegram publishing ignores the Admin `max_per_section` display setting (including legacy `7`), for scheduled, manual and 06:20 daily sends. Large offers are split at record boundaries to respect Telegram's 4096 UTF-16 limit without dropping picks. FREE is separately issued from one deterministic daily TOP pick.
 
 Click **Publikovať** to store the configuration in the existing durable Azure Admin UI store. The default is OFF. Clicking **Zaradiť jednorazové odoslanie** saves the current draft along with a unique request ID; the existing externally scheduled hourly tick processes fresh requests, within 90 minutes. An external 10-minute repository dispatch can improve precision. The button does not mean that Telegram confirmed delivery.
 
@@ -133,4 +133,4 @@ by BlinQ Stat Engine
 
 ### Release & production read-back
 
-PR #1084 introduces the full confirmed daily TOP → Value → Aces offer and the daily WIN/LOSS/VOID/PENDING + win-rate/units/ROI report. Deployment is through the existing `BlinQ UI hotfix deploy` workflow; a merge alone does not update Azure Static Web Apps. Verify the stamped `deployment.json` SHA and the served `app.js` asset (not just HTTP 200) after deploying. The default static Admin config has `max_per_section=0` for ALL; **existing Azure runtime Admin configuration is authoritative** and an older operator-published numeric cap may persist until Admin → Telegram bot → ALL is explicitly published. Publisher/results remain disabled unless explicitly enabled by the operator.
+PR #1084 introduces the full confirmed daily TOP → Value → Aces offer and the daily WIN/LOSS/VOID/PENDING + win-rate/units/ROI report. Deployment is through the existing `BlinQ UI hotfix deploy` workflow; a merge alone does not update Azure Static Web Apps. Verify the stamped `deployment.json` SHA and the served `app.js` asset (not just HTTP 200) after deploying. The default static Admin config has `max_per_section=0` for ALL; a legacy numeric runtime limit no longer restricts Telegram offers, while other Admin-controlled settings continue to apply. Publisher/results remain disabled unless explicitly enabled by the operator.
