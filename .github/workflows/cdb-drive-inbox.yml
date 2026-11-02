@@ -378,7 +378,7 @@ jobs:
                 "filtered",a["filtered_matches"],"conflicts",a["conflict_matches"])
           PY
       - name: Preserve exact-source private player ID review without identity promotion
-        if: env.SOURCE_MODE == 'drive' && steps.source.outputs.eligible == 'true' && steps.stage.conclusion == 'success'
+        if: env.SOURCE_MODE == 'drive' && steps.prepared.outputs.restored != 'true' && steps.source.outputs.eligible == 'true' && steps.stage.conclusion == 'success'
         shell: bash
         run: |
           set -euo pipefail
