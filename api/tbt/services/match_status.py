@@ -607,6 +607,14 @@ def _grade_runtime_projection(
     issued = _parse_time(publication.get("issued_at"))
     if scheduled is None or issued is None or issued >= scheduled:
         return None
+    # The 2 Nov reissue superseded the old player-superiority Aces pick.
+    # Reject a post-cutover legacy publication before retirement VOID grading:
+    # otherwise the same fixture produces a fake SKREC card next to the
+    # correctly issued O/U win/loss, and the UI may display the older one.
+    if (market == "aces"
+            and issued >= datetime(2026, 11, 1, 5, tzinfo=timezone.utc)
+            and not verified_aces_ou_publication(publication)):
+        return None
     state = str(status_row.get("status") or "").lower()
     if state not in TERMINAL_STATUSES:
         return None
