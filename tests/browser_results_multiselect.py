@@ -60,8 +60,10 @@ def main():
                         section,market,selection,selection_id:selection,
                         issued_at:new Date(Date.now()-7200000).toISOString(),
                         price_status:['aces','double_faults','sets','games'].includes(market)?'projection_only':'priced',
+                        ...(market==='aces'?{price_contract:'player_total_ou',ou_side:'over',market_line:8.5}:{}),
                         odds:market==='match_winner'?1.6:null,
                         result:{status:correct?'hit':'miss',correct,
+                            ...(market==='aces'?{actual_count:10,scheduled_at:when}:{}),
                             staked_units:market==='match_winner'?1:null,
                             profit_units:market==='match_winner'?(correct ? 0.6 : -1):null}
                     });
