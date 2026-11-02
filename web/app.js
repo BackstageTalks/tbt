@@ -3586,7 +3586,7 @@
     // Aces issued since 1 Nov are individual O/U bets, not Most Aces.
     // Reconcile from the frozen line and the verified player count. A legacy
     // player-superiority "win" must never enter Results or financial KPIs.
-    const issued=Date.parse(String(publication?.issued_at||result?.scheduled_at||''));
+    const issued=Date.parse(String(result?.scheduled_at||publication?.scheduled_at||publication?.issued_at||''));
     if(String(publication?.market||'').toLowerCase()==='aces'
       &&Number.isFinite(issued)&&issued>=Date.parse('2026-11-01T05:00:00Z')){
       const side=String(publication?.ou_side||'').trim().toLowerCase();
