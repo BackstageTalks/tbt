@@ -405,6 +405,22 @@ def main():
                 const preview=t.renderResults();
                 const aceExample={projection_metric:'aces',aces_superiority_hint:'Farjat'};
                 const leader={id:'270414',name:'Farjat'},opponent={id:'206594',name:'Opponent'};
+                // Same Admin → Zobrazenie rule must drive the ELITE result tier,
+                // including a newly enabled settled Doubles category.
+                const doubles=base('doubles-regression','doubles','match_winner','doubles-p1',1,at('16','00'),true);
+                const doublesOffer=structuredClone(doubles);
+                delete doublesOffer.market_publications;
+                s.feed.results.push(doubles);
+                s.feed.doubles_picks=[doublesOffer];
+                const doublesRule={enabled:true,display_state:'hidden',visible_picks:0,selection_mode:'first'};
+                s.feed.member_result_rules.elite.doubles=doublesRule;
+                const beforeDoubles=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
+                doublesRule.display_state='active';doublesRule.visible_picks=1;
+                const afterDoubles=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
+                doublesRule.row_overrides={'1':'hidden'};
+                const hiddenOverride=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
+                doublesRule.row_overrides={};doublesRule.display_state='hidden';
+                const afterDisable=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
                 const result={
                   published:dayKeys.size,
                   matched:rows.filter(r=>dayKeys.has([r.event_id,
@@ -417,6 +433,7 @@ def main():
                   aceLeaderMarker:t.aceLeaderHintHtml(aceExample,leader,'Farjat').includes('ace-leader-ball'),
                   wrongAceMarker:!!t.aceLeaderHintHtml(aceExample,opponent,'Opponent'),
                   nonAceMarker:!!t.aceLeaderHintHtml({...aceExample,projection_metric:'games'},leader,'Farjat'),
+                  beforeDoubles,afterDoubles,hiddenOverride,afterDisable,
                   proCohort:t.memberResultCohort('pro',day).size,
                   freeCohort:t.memberResultCohort('rookie',day).size,
                   legendCohort:t.memberResultCohort('legend',day).size,
@@ -429,6 +446,8 @@ def main():
                 "eliteSummary": True, "settledCount": 6, "resultRows": 6,
                 "noPendingEntries": True, "aceLeaderMarker": True,
                 "wrongAceMarker": False, "nonAceMarker": False,
+                "beforeDoubles": 6, "afterDoubles": 7,
+                "hiddenOverride": 6, "afterDisable": 6,
                 "proCohort": 5, "freeCohort": 2,
                 "legendCohort": 9, "goatCohort": 9
             }, morning
