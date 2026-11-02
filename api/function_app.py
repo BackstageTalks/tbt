@@ -1921,7 +1921,42 @@ def internal_telegram_settled_results(req):
                                   "profit_units", "staked_units", "runtime_source")
                     },
                 })
-        if len(approved) > 1000:
+        # The operator's independent statistical player Aces O/U market
+        # has no external bookmaker publication. Expose only authenticated,
+        # verified terminal player counts; settlement uses the frozen TG line.
+        status_snapshot = load_match_status_snapshot() or {}
+        terminal = verified_terminal_statuses(status_snapshot.get("statuses"))
+        player_ace_counts = []
+        for event_id, status in terminal.items():
+            p1 = str(status.get("projection_stats_p1_id") or "")
+            p2 = str(status.get("projection_stats_p2_id") or "")
+            provider_ids = {str(status.get("provider_home_id") or ""),
+                            str(status.get("provider_away_id") or "")}
+            if not p1 or not p2 or p1 == p2 or {p1,p2} != provider_ids:
+                continue
+            outcome = str(status.get("status") or "")
+            stats = status.get("projection_stats")
+            if outcome in {"retired", "void"}:
+                for player_id in (p1,p2):
+                    player_ace_counts.append({"source_type":"verified_player_aces_count",
+                        "event_id":event_id,"selection_id":player_id,"void":True,
+                        "runtime_source":"match_status_snapshot"})
+                continue
+            if not isinstance(stats,dict):
+                continue
+            for player_id,slot in ((p1,"p1"),(p2,"p2")):
+                raw=stats.get(slot+"_aces")
+                try:
+                    actual=float(raw)
+                except (TypeError,ValueError,OverflowError):
+                    continue
+                if raw is None or not 0 <= actual <= 200 or not actual.is_integer():
+                    continue
+                player_ace_counts.append({"source_type":"verified_player_aces_count",
+                    "event_id":event_id,"selection_id":player_id,
+                    "actual_count":int(actual),"void":False,
+                    "runtime_source":"match_status_snapshot"})
+        if len(approved) + len(player_ace_counts) > 1000:
             return response({"error": "telegram_result_limit_exceeded"}, 503)
         return response({
             "schema": 1,
@@ -1929,6 +1964,7 @@ def internal_telegram_settled_results(req):
             "source": "verified_match_status_snapshot",
             "archived_rows": len(approved),
             "rows": approved,
+            "player_aces_counts": player_ace_counts,
         })
     except AdminStorageUnavailable:
         return response({"error": "archive_unavailable"}, 503)
