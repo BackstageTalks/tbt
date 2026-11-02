@@ -394,7 +394,7 @@ def test_flat_unissued_poststart_or_ambiguous_aces_never_trigger_stat_calls():
         {**valid, "captured_at": "2026-11-02T13:01:00Z"},
         {**valid, "issued_at": "2026-11-02T14:00:00Z"},
         {**valid, "betting": {"selection_id": "99"}},
-        {**valid, "line": None},
+        {**valid, "line": None, "selection": "Aces"},
         {**valid, "price_status": "projection_only"},
         {**valid, "excluded_reason": "not_published"},
     ]
