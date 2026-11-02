@@ -226,6 +226,54 @@ def deployed_priced_projection(row: dict[str, Any], feed: dict[str, Any]) -> dic
     return pub
 
 
+
+def published_ace_statistic_targets(feed: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Identify only issued Aces/DF offers eligible for terminal provider stats.
+
+    Production can serve priced projections as flat daily rows rather than
+    embedded market_publications. Recover those via the *same* frozen-contract
+    validation used by runtime Results; otherwise the retirement collector
+    would never request their actual aces.
+    """
+    targets: dict[str, dict[str, Any]] = {}
+    if not isinstance(feed, dict):
+        return targets
+    for row in feed.get("ace_picks") or []:
+        if not isinstance(row, dict) or row.get("excluded_reason"):
+            continue
+        eid = _event_id(row)
+        scheduled = _parse_time(row.get("scheduled_at") or row.get("date"))
+        p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
+        if not eid or scheduled is None or not p1 or not p2 or p1 == p2:
+            continue
+        supplied = row.get("market_publications")
+        if isinstance(supplied, list) and supplied:
+            publications = [p for p in supplied if isinstance(p, dict)]
+        else:
+            deployed = deployed_priced_projection(row, feed)
+            publications = [deployed] if deployed is not None else []
+        markets: set[str] = set()
+        for pub in publications:
+            if not isinstance(pub, dict):
+                continue
+            market = str(pub.get("market") or "").lower()
+            issued = _parse_time(pub.get("issued_at"))
+            selected = str(pub.get("selection_id") or "").strip()
+            if (market in {"aces", "double_faults"}
+                    and str(pub.get("publication_status") or "").lower() == "published"
+                    and issued is not None and issued < scheduled
+                    and selected in {p1, p2}):
+                markets.add(market)
+        if not markets:
+            continue
+        existing = targets.get(eid)
+        if existing is None:
+            targets[eid] = {"row": row, "markets": markets}
+        elif {_player_id(existing["row"], "player1"), _player_id(existing["row"], "player2")} == {p1, p2}:
+            existing["markets"].update(markets)
+    return targets
+
+
 def prediction_rows(
     feed: dict[str, Any], *, now: datetime | None = None
 ) -> dict[str, dict[str, Any]]:
