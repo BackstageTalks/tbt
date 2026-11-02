@@ -136,6 +136,7 @@ from tbt.providers.shared_rate import SharedRateBusy, SharedRateUnavailable
 from tbt.services.entitlements import (
     filter_feed_for_access,
     filter_results_for_categories,
+    filter_results_for_issued_day,
     entitlement_manifest,
     match_detail_entitlements,
     match_intelligence_row_authorized,
@@ -1478,6 +1479,11 @@ def feed(req):
                 # authorized market rows may embed other category publications.
                 data["results"] = filter_results_for_categories(
                     data.get("results") or [], entitlements.get("result_categories") or []
+                )
+                # The post-settlement pass must also honor the exact issued
+                # 2 Nov offer, not just its broad TOP / VALUE / Aces category.
+                data["results"] = filter_results_for_issued_day(
+                    data["results"], entitlements
                 )
                 if not exclusions_available:
                     data["results"] = []
