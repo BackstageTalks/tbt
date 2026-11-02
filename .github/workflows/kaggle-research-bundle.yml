@@ -45,7 +45,8 @@ jobs:
       - name: Validate research integration contract without external sources
         run: |
           set -euo pipefail
-          python -m pip install pytest
+          python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
+          python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
           python -m compileall -q scripts/integrate_kaggle_research_bundle.py
           python -m pytest tests/test_kaggle_research_bundle.py -q
 
