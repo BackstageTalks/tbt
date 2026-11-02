@@ -149,3 +149,52 @@ console.log('stable ACES display: PASS');
     )
     assert run.returncode == 0, run.stdout + run.stderr
     assert "PASS" in run.stdout
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js required")
+def test_ace_ball_is_inline_only_for_projected_ace_leader():
+    js = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const app=fs.readFileSync('web/app.js','utf8');
+const helperStart=app.indexOf('  function aceLeaderHintHtml(');
+const helperEnd=app.indexOf('  function hubNumberHtml(',helperStart);
+const matchStart=app.indexOf('  function dailyHubMatch(');
+const matchEnd=app.indexOf('  function recentFormData(',matchStart);
+assert(helperStart>0&&helperEnd>helperStart&&matchStart>0&&matchEnd>matchStart);
+const cx={
+  escapeHtml:x=>String(x),
+  sideAvatarHtml:()=>'',flagIconHtml:()=>'',firstFinite:()=>null,
+};
+vm.createContext(cx);
+vm.runInContext(app.slice(helperStart,helperEnd)+app.slice(matchStart,matchEnd),cx);
+const row={
+  market:'aces',
+  aces_superiority_hint:'Beta',
+  projection_subject:'Beta',selection_id:'22',
+  player1:{id:'11',name:'Alpha'},
+  player2:{id:'22',name:'Beta'}
+};
+const html=cx.dailyHubMatch(row);
+assert.equal((html.match(/ace-leader-ball/g)||[]).length,1);
+assert(html.includes('Alpha</b></span>'));
+assert(html.includes('Beta</b><svg class="ace-leader-ball"'));
+assert(html.includes('aria-hidden="true"'));
+assert(!html.includes('Viac es'));
+assert(!html.includes('title="Viac'));
+assert.equal((cx.dailyHubMatch({...row,market:'games'}).match(/ace-leader-ball/g)||[]).length,0);
+assert.equal((cx.dailyHubMatch({...row,aces_superiority_hint:'Unknown',projection_subject:'Unknown'}).match(/ace-leader-ball/g)||[]).length,0);
+assert.equal((cx.dailyHubMatch({...row,aces_superiority_hint:'Alpha'}).match(/ace-leader-ball/g)||[]).length,1);
+// No inline hint remains in the pick cell or beneath the detail grid.
+const ace=app.slice(app.indexOf('  function aceProjectionDetailHtml('),app.indexOf('  function openAceProjection('));
+assert(ace.includes('aceLeaderHintHtml(row,row?.player1,d.selectedName)'));
+assert(!ace.includes('aceLeaderHintHtml(row)}'));
+const cells=app.slice(app.indexOf("if(sourceTab==='ace'||sourceTab==='double_faults')"),app.indexOf("const probability=marketProbability(row)"));
+assert(!cells.includes('aceLeaderHintHtml'));
+console.log('ACES white ball display: PASS');
+"""
+    run = subprocess.run(["node", "-e", js], cwd=ROOT, text=True,
+                         capture_output=True, timeout=20)
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "PASS" in run.stdout
