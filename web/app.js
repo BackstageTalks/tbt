@@ -3152,7 +3152,7 @@
   function marketPreviewCard(row,key,index=0,locked=false,compact=false){
     if(locked)return lockedPickCard(key,index);
     const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const aceLocal=row?.ui_local_ace_ou_line!=null&&Number.isFinite(Number(row.ui_local_ace_ou_line))?Number(row?.statistical_ace_odds):NaN;const odds=key==='ace'&&row?.market==='aces'?(Number.isFinite(verifiedAceProviderOdds(row))&&row?.price_contract==='player_total_ou'?Number(row.odds):aceLocal):Number(row?.odds);
-    const projection=Number(row?.projection),opponentProjection=Number(row?.opponent_projection),projectionGap=Number(row?.projection_gap),projectionConfidence=Number(row?.projection_confidence);const samples=row?.projection_samples||{};const projectionOnly=row?.price_status==='projection_only'&&Number.isFinite(projection);
+    const projection=Number(row?.projection),opponentProjection=Number(row?.opponent_projection),projectionGap=Number(row?.projection_gap),projectionConfidence=Number(row?.projection_confidence);const samples=row?.projection_samples||{};const projectionOnly=(row?.price_status==='projection_only'||(key==='ace'&&row?.market==='aces'&&row?.ui_local_ace_ou_line!=null))&&Number.isFinite(projection);
     let badge='',mainValue='—',confidenceClass='low',pickLabel=publicText(key==='prime'?'ACCA Prediction':key==='value'?'Value Prediction':key==='ace'?'Ace / DF Prediction':key==='sg'?'Set / Game Prediction':'TOP Prediction'),note='',metrics=[];
     if(projectionOnly){
       const projectionMarket=String(row?.market||row?.projection_metric||'').toLowerCase();
