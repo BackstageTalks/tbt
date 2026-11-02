@@ -157,7 +157,7 @@ from tbt.services.live_comeback import (
 )
 from tbt.services.match_status import (
     event_ids_from_feed, runtime_settled_results, scan_match_statuses,
-    verified_terminal_statuses, filter_unverified_nov2_winner_results,
+    verified_terminal_statuses,
     apply_verified_schedule_overlay,
     published_ace_statistic_targets, attach_confirmed_aces_ou_sidecar,
 )
@@ -1423,17 +1423,12 @@ def feed(req):
             # immutable issued feed remains available, but health is explicit.
             logging.exception("Durable Results archive read unavailable")
             source_feed["results_archive_unavailable"] = True
-        # The four 2 Nov match-winner receipts are not final on winnerCode alone.
-        # Quarantine stale archive wins before entitlements AND KPI calculations.
-        # The same status snapshot is reused below for runtime readback.
+        # Reuse the persisted worker snapshot for the Results overlay and KPI.
         try:
             status_snapshot = load_match_status_snapshot() or {}
         except AdminStorageUnavailable:
-            logging.exception("Match status read unavailable; 2 Nov winner results quarantined")
+            logging.exception("Match status read unavailable; Results overlay unavailable")
             status_snapshot = {}
-        source_feed["results"] = filter_unverified_nov2_winner_results(
-            source_feed.get("results") or [], status_snapshot.get("statuses")
-        )
         # Test exclusions are centrally enforced before both entitlements
         # and KPI evaluation. Never trust a browser-side-only filter.
         exclusions_available = True
