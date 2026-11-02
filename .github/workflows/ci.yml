@@ -251,9 +251,18 @@ jobs:
               },
               "checked_at": "2026-11-02T17:45:41Z",
           }}
+          input_row = [r for r in replay.get("ace_picks", []) if str(r.get("event_id")) == "17467964"][0]
+          print("FARJAT_LINK_DIAG:", json.dumps({
+              "canonical_selection_id": str((source[0].get("betting") or {}).get("selection_id") or source[0].get("selection_id") or ""),
+              "row_selection_id": str(input_row.get("selection_id") or ""),
+              "player_ids": [str((input_row.get(x) or {}).get("id") or "") for x in ("player1","player2")],
+              "replayed_pubkeys": [p.get("publication_key") for p in input_row.get("market_publications", [])],
+              "existing_result_rows": len([r for r in feed.get("results", []) if str(r.get("event_id")) == "17467964"]),
+          }), flush=True)
           result = runtime_settled_results(replay, status)
           exact = [p for r in result for p in r.get("market_publications", [])
                    if p.get("publication_key") == pub["publication_key"]]
+          print("FARJAT_RESULT_DIAG:", json.dumps([{"event_id": r.get("event_id"), "pubs": [{"key": p.get("publication_key"), "status": (p.get("result") or {}).get("status"), "correct": (p.get("result") or {}).get("correct"), "void": (p.get("result") or {}).get("void")} for p in r.get("market_publications", [])]} for r in result if str(r.get("event_id")) == "17467964"]), flush=True)
           assert len(exact) == 1 and exact[0]["result"]["correct"] is True
           assert abs(exact[0]["result"]["profit_units"] - .79) < 1e-9
           print("FARJAT_VERIFIED_ACE_REISSUE_LINKED: 7 > Over 4.5, odds 1.79, +0.79u")
