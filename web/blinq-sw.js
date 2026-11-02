@@ -17,9 +17,21 @@ self.addEventListener('push', event => {
   }));
 });
 
+// Push payload URLs are not trusted navigation destinations.
+function safeNotificationTarget(value) {
+  const fallback = new URL('/#predictions', self.location.origin).href;
+  try {
+    const target = new URL(String(value || '/#predictions'), self.location.origin);
+    if (target.origin !== self.location.origin || target.username || target.password) return fallback;
+    return target.href;
+  } catch {
+    return fallback;
+  }
+}
+
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const target = new URL(String(event.notification?.data?.url || '/#predictions'), self.location.origin).href;
+  const target = safeNotificationTarget(event.notification?.data?.url);
   event.waitUntil((async () => {
     const windows = await clients.matchAll({type: 'window', includeUncontrolled: true});
     for (const client of windows) {
