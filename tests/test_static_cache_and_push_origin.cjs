@@ -53,6 +53,7 @@ async function click(url, existingWindow = false) {
   for (const bad of [
     'https://evil.example/phishing', '//evil.example/phishing',
     'javascript:alert(1)', 'data:text/html,evil',
+    'blob:https://blinq.example/uuid',
     'https://blinq.example@evil.example/path',
     'https://user:password@blinq.example/path',
     'http://blinq.example/insecure', 'http://[invalid',
