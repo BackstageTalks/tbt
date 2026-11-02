@@ -38,7 +38,13 @@ def priced_ou(ace):
             "odds": 1.93, "model_probability": 0.68,
             "odds_contract_version": "ace_df_real_api_v1",
             "odds_source": "propline", "odds_bookmaker": "TestBook",
-            "provider_id": 2, "captured_at": NOW.isoformat()}
+            "provider_id": 2, "captured_at": NOW.isoformat(),
+            "market_publications": [{
+                "section":"ace", "market":"aces",
+                "selection_id":str(ace["selection_id"]),
+                "publication_key":f"ace:total:{ace['event_id']}:{ace['selection_id']}:over:7.5",
+                "market_line":7.5, "ou_side":"over",
+            }]}
 
 
 def settings(**kwargs):
@@ -537,3 +543,32 @@ def test_legacy_aces_reissue_lookup_can_recover_frozen_superiority_identity():
                      "max_per_section":0,"aces_ou_only":False}
     assert [r["event_id"] for r in tg.select_groups(source,settings_legacy,NOW)["aces"]]==["98"]
     assert not tg.select_groups(source,settings(),NOW).get("aces")
+
+
+def test_ou_reissue_preserves_nonaces_and_replaces_legacy_superiority():
+    published=offer()
+    legacy=row(98,"Legacy Player","aces")
+    old_rows=[]
+    for channel,entries in (("top",published["top_daily_picks"]),("value",published["value_picks"])):
+        old_rows.extend(tg.result_reference(r,channel) for r in entries)
+    old_rows.append(tg.result_reference(legacy,"aces"))
+    old_rows.append(tg.result_reference(published["top_daily_picks"][0],"free"))
+    revised=tg._reissue_with_verified_aces_ou(published,{"rows":old_rows},NOW)
+    assert len(revised["top_daily_picks"])==5
+    assert len(revised["value_picks"])==1
+    assert len(revised["ace_picks"])==1
+    assert revised["ace_picks"][0]["price_contract"]=="player_total_ou"
+    frozen=tg.result_reference(revised["ace_picks"][0],"aces")
+    assert frozen["market_line"]==7.5
+    assert frozen["projection_direction"]=="over"
+    assert frozen["publication_key"].startswith("ace:total:")
+    assert "O 7.5" in tg.messages(revised,settings(),NOW)[0]["text"]
+    assert "najviac" not in tg.messages(revised,settings(),NOW)[0]["text"]
+    rejected=published|{"ace_picks":[legacy]}
+    try:
+        tg._reissue_with_verified_aces_ou(rejected,{"rows":old_rows},NOW)
+    except RuntimeError as exc:
+        assert "No future verified" in str(exc)
+    else:
+        raise AssertionError("Legacy superiority must never be resent as O/U")
+
