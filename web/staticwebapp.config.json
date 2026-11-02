@@ -21,7 +21,7 @@
     {
       "route": "/blinq-app.css",
       "headers": {
-        "Cache-Control": "public, max-age=0, must-revalidate"
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
       }
     },
     {
@@ -33,7 +33,7 @@
     {
       "route": "/app.js",
       "headers": {
-        "Cache-Control": "public, max-age=0, must-revalidate"
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
       }
     },
     {
