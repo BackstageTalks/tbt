@@ -373,6 +373,8 @@ def test_sha_and_path_pinned_tml_atp_source_only_tour():
         assert tour_from_pinned_tml(wrong_sha, wrong_path) == ""
     assert ("2026-336", "19") in TML_ATP_2026_QUARANTINE
     assert ("2026-8998", "17") in TML_ATP_2026_QUARANTINE
+    assert ("2026-339", "18") in TML_ATP_2026_QUARANTINE
+    assert ("2026-336", "23") in TML_ATP_2026_QUARANTINE
     assert ("2026-9900", "1") not in TML_ATP_2026_QUARANTINE
     # A source-specific tour hint never resolves canonical players/matches.
     parsed, reason = normalize_row(sample(tour=""), "2026.csv", 1, source_tour="atp")
