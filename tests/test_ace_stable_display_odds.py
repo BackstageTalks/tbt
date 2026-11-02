@@ -192,6 +192,10 @@ assert(ace.includes('aceLeaderHintHtml(row,row?.player1,d.selectedName)'));
 assert(!ace.includes('aceLeaderHintHtml(row)}'));
 const cells=app.slice(app.indexOf("if(sourceTab==='ace'||sourceTab==='double_faults')"),app.indexOf("const probability=marketProbability(row)"));
 assert(!cells.includes('aceLeaderHintHtml'));
+const card=app.slice(app.indexOf('  function marketPreviewCard('),app.indexOf('  function ',app.indexOf('  function marketPreviewCard(')+7));
+assert(card.includes('aceLeaderHintHtml(row,p1,p1Name)'));
+assert(card.includes('aceLeaderHintHtml(row,p2,p2Name)'));
+assert(!card.includes('aceLeaderHintHtml(row)'));
 console.log('ACES white ball display: PASS');
 """
     run = subprocess.run(["node", "-e", js], cwd=ROOT, text=True,
