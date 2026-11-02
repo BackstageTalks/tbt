@@ -465,6 +465,36 @@ def _finite_count(raw: Any) -> float | None:
     return n if math.isfinite(n) and n >= 0 else None
 
 
+def verified_aces_ou_publication(publication: dict[str, Any]) -> bool:
+    """Aces Results require the exact published player's O/U direction and line.
+
+    Legacy player-versus-opponent superiority is not an Aces O/U bet; never
+    manufacture a win, stake or yield from that unrelated contract.
+    """
+    if str(publication.get("market") or "").strip().lower() != "aces":
+        return True
+    return (
+        str(publication.get("price_contract") or "").strip().lower() == "player_total_ou"
+        and str(publication.get("ou_side") or "").strip().lower() in {"over", "under"}
+        and _finite_count(publication.get("market_line")) is not None
+    )
+
+
+def retain_verified_ace_ou_results(row: dict[str, Any]) -> dict[str, Any] | None:
+    """Quarantine invalid legacy Aces wins at read time; keep the raw archive."""
+    if not isinstance(row, dict):
+        return None
+    publications = row.get("market_publications")
+    if not isinstance(publications, list) or not publications:
+        return deepcopy(row)
+    kept = [p for p in publications if isinstance(p, dict) and verified_aces_ou_publication(p)]
+    if not kept:
+        return None
+    copy = deepcopy(row)
+    copy["market_publications"] = kept
+    return copy
+
+
 def _grade_runtime_projection(
     row: dict[str, Any], publication: dict[str, Any], status_row: dict[str, Any]
 ) -> dict[str, Any] | None:
@@ -523,6 +553,10 @@ def _grade_runtime_projection(
                 correct = actual > reference if direction == "over" else actual < reference
                 equal = actual == reference
             elif contract in {"", "player_superiority"}:
+                if market == "aces":
+                    # This grades who served MORE aces, not Over/Under against
+                    # the issued line. It produced false Hurkacz-style wins.
+                    return None
                 if other is None:
                     return None
                 correct = actual > other
@@ -596,7 +630,10 @@ def runtime_settled_results(
     a match-winner outcome.
     """
     existing_results = [
-        deepcopy(row) for row in (feed.get("results") or []) if isinstance(row, dict)
+        kept
+        for row in (feed.get("results") or [])
+        if isinstance(row, dict)
+        if (kept := retain_verified_ace_ou_results(row)) is not None
     ]
     statuses = verified_terminal_statuses(statuses)
     if not statuses:
