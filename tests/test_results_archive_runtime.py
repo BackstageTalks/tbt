@@ -135,3 +135,39 @@ def test_multi_day_archive_does_not_erase_prior_day(monkeypatch):
     second[0]["market_publications"][0]["result"]["settled_at"] = "2026-10-09T15:00:00Z"
     save_settled_results_archive(second)
     assert {x["event_id"] for x in load_settled_results_archive()} == {"100", "103"}
+
+
+def test_readback_regrades_verified_ou_win_to_loss_without_mutating_archive():
+    original = _offer()
+    original["scheduled_at"] = "2026-11-02T11:10:00+00:00"
+    original["market_publications"] = [{
+        "section": "ace", "market": "aces", "selection_id": "11",
+        "price_contract": "player_total_ou", "ou_side": "over",
+        "market_line": 10.5, "odds": 1.8,
+        "price_status": "priced_projection", "issued_at": "2026-11-02T06:00:00Z",
+        "result": {"status": "hit", "correct": True,
+                   "actual_count": 9, "opponent_actual_count": 5,
+                   "profit_units": 0.8, "staked_units": 1.0,
+                   "runtime_source": "match_status_snapshot"},
+    }]
+    frozen = deepcopy(original)
+    merged = merge_settled_results({"results": [original]}, [])
+    pub = merged["results"][0]["market_publications"][0]
+    assert pub["result"]["correct"] is False
+    assert pub["result"]["profit_units"] == -1.0
+    assert pub["result"]["ou_readback_regraded"] is True
+    assert original == frozen  # Immutable evidence has not been overwritten.
+
+
+def test_readback_quarantines_new_aces_without_exact_frozen_ou_contract():
+    original = _offer()
+    original["scheduled_at"] = "2026-11-02T11:10:00+00:00"
+    original["market_publications"] = [{
+        "section": "ace", "market": "aces", "selection_id": "11",
+        "market_line": 10.5, "ou_side": "over",
+        "issued_at": "2026-11-02T06:00:00Z",
+        "result": {"correct": True, "actual_count": 9,
+                   "opponent_actual_count": 5},
+    }]
+    assert merge_settled_results({"results": [original]}, [])["results"] == []
+    assert merge_settled_results({"results": []}, [original])["results"] == []
