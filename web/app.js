@@ -2439,13 +2439,16 @@
     return `<span class="hub-pick-stack"><small>${escapeHtml(label)}</small><strong title="${escapeHtml(text)}">${escapeHtml(text)}</strong></span>`;
   }
   function aceLeaderHintHtml(row,player,name){
-    // Visual-only insight: the count model's expected ACE leader, never an O/U side.
-    if(String(row?.market||'').toLowerCase()!=='aces')return '';
-    const expected=String(row?.aces_superiority_hint||row?.projection_subject||'').trim().toLocaleLowerCase();
-    if(!expected)return '';
-    const actual=String(name||player?.name||'').trim().toLocaleLowerCase();
-    const identity=String(player?.id||'').trim().toLocaleLowerCase();
-    if(expected!==actual&&expected!==identity)return '';
+    // Visual-only projected Aces leader, never a bet winner or the O/U side.
+    // Issued flat Aces rows can carry projection_metric without a market field.
+    const market=String(row?.market||row?.projection_metric||'').trim().toLowerCase();
+    if(market!=='aces')return '';
+    const expected=normalizeResultPlayerName(row?.aces_superiority_hint||row?.projection_subject||'');
+    const expectedId=String(row?.aces_superiority_player_id||row?.projection_subject_id||'').trim();
+    const actual=normalizeResultPlayerName(name||player?.name||'');
+    const identity=String(player?.id||'').trim();
+    if(!((expected&&actual&&expected===actual)||(expectedId&&identity&&expectedId===identity)
+         ||(expected&&identity&&expected===normalizeResultPlayerName(identity))))return '';
     return '<svg class="ace-leader-ball" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="12"></circle><path d="M13 4.5c.1 6 2.4 8.1 6.4 9.1 5.2 1.4 7 4.1 7.4 8.3M4.5 13.7c6-.1 8 2.6 9.1 6.4 1.4 5.2 4.1 7 8.3 7.4"></path></svg>';
   }
   function hubNumberHtml(value,label=''){
@@ -3840,7 +3843,7 @@
     // The issued daily pool defines the tier's 1st/2nd/... positions, not
     // the arrival order of completed Results in the archive. Seed it FIRST.
     // Settled rows only fill missing historical identities after the offer.
-    [['daily_picks','top_daily'],['prime_picks','prime'],['value_picks','value'],['doubles_picks','doubles'],['ace_picks','ace'],['sg_picks','sg']].forEach(([feedKey,section])=>{
+    [['daily_picks','top_daily'],['top_daily_picks','top_daily'],['prime_picks','prime'],['value_picks','value'],['doubles_picks','doubles'],['ace_picks','ace'],['sg_picks','sg']].forEach(([feedKey,section])=>{
       (state.feed[feedKey]||[]).forEach((row,rowIndex)=>{
         const pubs=(Array.isArray(row?.market_publications)?row.market_publications:[])
           .filter(p=>p&&typeof p==='object'&&String(p.publication_status||'published')==='published');
@@ -3925,6 +3928,51 @@
       });
     });
     return [...unique.values()].sort((a,b)=>new Date(b.row?.scheduled_at||0)-new Date(a.row?.scheduled_at||0));
+  }
+  function pendingAdminTodayEntries(filters,settled){
+    // Results KPIs remain settled-only. Admin's tier preview must nevertheless
+    // show the immutable current-day offer while a provider score is unverified.
+    if(!isAdminAccount()||String(filters?.window||'')!=='today'||!filters?.membership)return [];
+    const day=bratislavaBettingDayKey(Date.now(),6),cohort=memberResultCohort(filters.membership,day);
+    const seen=new Set(settled.map(({row,publication})=>resultBetIdentity(row,publication)));
+    const output=[];
+    const sources=[
+      ['daily_picks','top_daily','match_winner'],
+      ['top_daily_picks','top_daily','match_winner'],
+      ['prime_picks','prime','match_winner'],
+      ['value_picks','value','match_winner'],
+      ['doubles_picks','doubles','match_winner'],
+      ['ace_picks','ace','aces'],['sg_picks','sg','']
+    ];
+    for(const [feedKey,section,defaultMarket] of sources){
+      for(const row of state.feed?.[feedKey]||[]){
+        if(!row||typeof row!=='object'||row.excluded_reason)continue;
+        if(filters.tour&&String(row.tour||'').toUpperCase()!==filters.tour)continue;
+        if(filters.surface){
+          const surface=String(row.surface||'').toLowerCase().replace('indoor_hard','hard');
+          if(surface!==filters.surface)continue;
+        }
+        if(bratislavaBettingDayKey(row.scheduled_at||row.date||0,6)!==day)continue;
+        const publications=(Array.isArray(row.market_publications)?row.market_publications:[])
+          .filter(p=>p&&typeof p==='object'&&String(p.publication_status||'published')==='published');
+        for(const original of publications.length?publications:[row]){
+          if(String(original.publication_status||'published')!=='published')continue;
+          const market=String(original.market||row.market||row.projection_metric||defaultMarket).toLowerCase();
+          const resolvedSection=market==='aces'?'ace':market==='double_faults'?'double_faults':
+            market==='sets'?'sets':market==='games'?'games':section;
+          const selection=String(original.selection_id||row.betting?.selection_id||row.selection_id||'').trim();
+          if(!market||!selection)continue;
+          const publication={...original,section:resolvedSection,market,selection_id:selection,result:{}};
+          const identity=resultBetIdentity(row,publication);
+          if(!identity||!cohort.has(identity)||seen.has(identity))continue;
+          if(!publicationMatchesResultCategory(publication,normalizedResultsCategory(filters.category||'all')))continue;
+          if(!resultPublicationMatchesWindow(row,publication,filters))continue;
+          seen.add(identity);
+          output.push({row,publication,categories:[resolvedSection],pending:true});
+        }
+      }
+    }
+    return output;
   }
   function resultVisibleOdds(publication){
     const actual=publication?.odds==null?NaN:Number(publication.odds);
@@ -4147,7 +4195,10 @@
 
   function renderResults(){
     if(state.feed?.results_exclusions_unavailable)return '<div class="state-card" role="alert">Vyhodnotené výsledky sú dočasne nedostupné – prebieha ochranné overenie administrátorských vylúčení. Predikcie zostávajú dostupné.</div>';
-    const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',entries=settledPublishedEntries(rows,category,filters);
+    const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all';
+    const settled=settledPublishedEntries(rows,category,filters);
+    const entries=[...settled,...pendingAdminTodayEntries(filters,settled)]
+      .sort((a,b)=>new Date(b.row?.scheduled_at||0)-new Date(a.row?.scheduled_at||0));
     if(!entries.length){state.resultsPage=0;return '<div class="state-card">Pre zvolené filtre nie sú dostupné vyhodnotené predikcie.</div>';}
     const allowedSizes=[50,100],pageSize=allowedSizes.includes(Number(state.resultsPageSize))?Number(state.resultsPageSize):50;
     state.resultsPageSize=pageSize;
@@ -4179,7 +4230,9 @@
         ?`<b class="correct">✓ ${escapeHtml(lcopy('WIN','VÝHRA','VÝHRA'))}</b>`
         :outcome.kind==='loss'
           ?`<b class="wrong">× ${escapeHtml(lcopy('LOSS','PREHRA','PREHRA'))}</b>`
-          :`<b class="${voidLabel==='SKREČ'?'retired':'void'}">○ ${escapeHtml(voidLabel)}</b>`;
+          :outcome.kind==='pending'
+            ?`<b class="pending">⏳ ${escapeHtml(lcopy('AWAITING VERIFICATION','ČAKÁ NA OVERENIE','ČEKÁ NA OVĚŘENÍ'))}</b>`
+            :`<b class="${voidLabel==='SKREČ'?'retired':'void'}">○ ${escapeHtml(voidLabel)}</b>`;
       const p1Name=p1.name||'Player 1',p2Name=p2.name||'Player 2';
       const p1Photo=playerPhotoSource(r,p1,'player1');
       const p2Photo=playerPhotoSource(r,p2,'player2');
@@ -4190,7 +4243,7 @@
       const p1Class=p1Selected?' is-pick':p2Selected?' is-opponent':'';
       const p2Class=p2Selected?' is-pick':p1Selected?' is-opponent':'';
       const tipBadge='<i class="results-pick-mark" aria-label="Predikovaný hráč">TIP</i>';
-      const match=`<div class="results-match-player${p1Class}">${sideAvatarHtml(r,p1,'player1','hub-avatar')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${p1Selected?tipBadge:''}</div><div class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${sideAvatarHtml(r,p2,'player2','hub-avatar')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<strong>${escapeHtml(p2Name)}</strong>${p2Selected?tipBadge:''}</span></div>`;
+      const match=`<div class="results-match-player${p1Class}">${sideAvatarHtml(r,p1,'player1','hub-avatar')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${aceLeaderHintHtml(r,p1,p1Name)}${p1Selected?tipBadge:''}</div><div class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${sideAvatarHtml(r,p2,'player2','hub-avatar')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<strong>${escapeHtml(p2Name)}</strong>${aceLeaderHintHtml(r,p2,p2Name)}${p2Selected?tipBadge:''}</span></div>`;
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
         const displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
