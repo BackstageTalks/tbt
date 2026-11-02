@@ -203,6 +203,62 @@ jobs:
           gh release download tbt-predictions-v1 --repo BackstageTalks/tbt-data --pattern ledger.json --dir "$RUNNER_TEMP/ace-under-audit" --clobber
           PYTHONPATH=api:scripts python scripts/audit_ace_under_buffer.py "$RUNNER_TEMP/ace-under-audit/ledger.json"
 
+      # Scoped read-only verification of the real 2 Nov Farjat issuance.
+      # PR-only: ensure the *private* release and SENT Telegram receipt
+      # actually link before touching production.
+      - name: Verify actual Farjat Aces receipt linkage (scoped PR)
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'fix/farjat-confirmed-aces-reissue-results-20261102' }}
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          PYTHONPATH: api:scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "Missing release read token"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/farjat-ace-audit"
+          gh release download tbt-predictions-v1 --repo BackstageTalks/tbt-data --pattern feed.json --dir "$RUNNER_TEMP/farjat-ace-audit" --clobber
+          CANONICAL_FEED="$RUNNER_TEMP/farjat-ace-audit/feed.json" python - <<'PYFARJAT'
+          import json, os
+          from scripts.prepare_feed import overlay_confirmed_telegram_aces_ou, _read_confirmed_telegram_state
+          from tbt.services.match_status import runtime_settled_results, attach_confirmed_aces_ou_sidecar
+          feed = json.load(open(os.environ["CANONICAL_FEED"], encoding="utf-8"))
+          ledger = _read_confirmed_telegram_state("BackstageTalks/tbt-data")
+          assert ledger and ledger.get("schema") == 1, "Missing confirmed Telegram ledger"
+          source = [r for r in feed.get("ace_picks", []) if str(r.get("event_id")) == "17467964"]
+          assert len(source) == 1, ("Farjat absent or ambiguous", len(source))
+          merged = overlay_confirmed_telegram_aces_ou(feed, ledger)
+          row = [r for r in merged.get("ace_picks", []) if str(r.get("event_id")) == "17467964"][0]
+          pubs = [p for p in row.get("market_publications", []) if p.get("publication_key") == "local-aces-ou-v1:17467964:270414:over:4.5"]
+          assert len(pubs) == 1, "Exact Farjat reissued O/U contract was NOT linked"
+          pub = pubs[0]
+          assert pub.get("ou_side") == "over" and pub.get("market_line") == 4.5
+          assert abs(float(pub["odds"]) - 1.79) < 1e-9
+          assert pub.get("source") == "confirmed_telegram_ou_reissue"
+          sidecar = {"schema": 1, "issued_aces_ou": [{
+              "event_id": "17467964", "selection_id": "270414",
+              "scheduled_at": row["scheduled_at"], "projection": row["projection"],
+              "publication": pub,
+          }]}
+          replay = attach_confirmed_aces_ou_sidecar(feed, sidecar)
+          status = {"17467964": {
+              "status": "retired", "provider_status": "finished retired",
+              "provider_home_id": "270414", "provider_away_id": "206594",
+              "projection_stats_p1_id": str((row.get("player1") or {}).get("id") or ""),
+              "projection_stats_p2_id": str((row.get("player2") or {}).get("id") or ""),
+              "projection_stats": {
+                  "p1_aces": 7 if str((row.get("player1") or {}).get("id")) == "270414" else 0,
+                  "p2_aces": 7 if str((row.get("player2") or {}).get("id")) == "270414" else 0,
+              },
+              "checked_at": "2026-11-02T17:45:41Z",
+          }}
+          result = runtime_settled_results(replay, status)
+          exact = [p for r in result for p in r.get("market_publications", [])
+                   if p.get("publication_key") == pub["publication_key"]]
+          assert len(exact) == 1 and exact[0]["result"]["correct"] is True
+          assert abs(exact[0]["result"]["profit_units"] - .79) < 1e-9
+          print("FARJAT_VERIFIED_ACE_REISSUE_LINKED: 7 > Over 4.5, odds 1.79, +0.79u")
+          PYFARJAT
+
       - name: Run backend tests
         env:
           PYTHONPATH: api:scripts
