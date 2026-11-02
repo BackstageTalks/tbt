@@ -550,7 +550,14 @@ def attach_confirmed_aces_ou_sidecar(feed: dict[str, Any], sidecar: Any) -> dict
         if not isinstance(row, dict):
             amended.append(row)
             continue
-        key = (_event_id(row), _selection_id(row))
+        betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+        # Aces selection_id is the picked player. winner_id may instead be
+        # a match-winner field; do not let it shadow the frozen Aces identity.
+        selected = str(
+            betting.get("selection_id") or row.get("selection_id")
+            or row.get("projection_subject_id") or row.get("winner_id") or ""
+        ).strip()
+        key = (_event_id(row), selected)
         item = indexed.get(key)
         if not item or key in conflicted:
             amended.append(row)
