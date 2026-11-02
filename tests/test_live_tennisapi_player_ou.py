@@ -93,3 +93,21 @@ def test_legacy_most_aces_grading_unchanged():
                                     datetime.now(timezone.utc))
     assert pub["result"]["status"] == "miss"
     assert "profit_units" not in pub["result"]
+
+
+def test_new_aces_without_ou_contract_cannot_win_from_superiority():
+    start = datetime(2026, 11, 2, 10, tzinfo=timezone.utc)
+    match = MatchRecord(
+        match_id="126", tour="atp", scheduled_at=start,
+        player1_id="1", player1_name="Player A",
+        player2_id="2", player2_name="Player B",
+        winner_id="1", status="finished", best_of=3,
+        stats={"p1_aces": 9, "p2_aces": 5},
+    )
+    pub = {"market": "aces", "section": "ace", "selection_id": "1",
+           "price_status": "projection_only",
+           "issued_at": (start - timedelta(hours=1)).isoformat()}
+    _settle_projection_publications({"market_publications": [pub]}, match,
+                                    datetime(2026, 11, 2, 13, tzinfo=timezone.utc))
+    assert "result" not in pub
+    assert pub["excluded_reason"] == "unverifiable_issued_aces_ou_contract"
