@@ -14,7 +14,7 @@ def route_request(route):
         assert source.count(marker) == 1
         source = source.replace(
             marker,
-            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,todayPublishedPickCount,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow,currentBettingDayPublishedKeys,memberResultCohort};\n"
+            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,todayPublishedPickCount,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow,currentBettingDayPublishedKeys,memberResultCohort,pendingAdminTodayEntries,settledPublishedEntries,renderResults,aceLeaderHintHtml};\n"
             + marker,
         )
         route.fulfill(content_type="application/javascript", body=source)
@@ -401,12 +401,22 @@ def main():
                 const dayKeys=t.currentBettingDayPublishedKeys(Date.now());
                 const eliteKeys=t.memberResultCohort('elite',day);
                 const elite=t.resultsSummary();
+                const settled=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters);
+                const preview=t.renderResults();
+                const aceExample={projection_metric:'aces',aces_superiority_hint:'Farjat'};
+                const leader={id:'270414',name:'Farjat'},opponent={id:'206594',name:'Opponent'};
                 const result={
                   published:dayKeys.size,
                   matched:rows.filter(r=>dayKeys.has([r.event_id,
                     r.market_publications[0].market,r.market_publications[0].selection_id].join('::').toLowerCase())).length,
                   eliteCohort:eliteKeys.size,
                   eliteSummary:elite.includes('6/9'),
+                  pendingCount:t.pendingAdminTodayEntries(s.resultsFilters,settled).length,
+                  resultRows:(preview.match(/class="results-card-row/g)||[]).length,
+                  pendingVisible:preview.includes('ČAKÁ NA OVERENIE'),
+                  aceLeaderMarker:t.aceLeaderHintHtml(aceExample,leader,'Farjat').includes('ace-leader-ball'),
+                  wrongAceMarker:!!t.aceLeaderHintHtml(aceExample,opponent,'Opponent'),
+                  nonAceMarker:!!t.aceLeaderHintHtml({...aceExample,projection_metric:'games'},leader,'Farjat'),
                   proCohort:t.memberResultCohort('pro',day).size,
                   freeCohort:t.memberResultCohort('rookie',day).size,
                   legendCohort:t.memberResultCohort('legend',day).size,
@@ -416,7 +426,10 @@ def main():
             }""")
             assert morning == {
                 "published": 9, "matched": 9, "eliteCohort": 9,
-                "eliteSummary": True, "proCohort": 5, "freeCohort": 2,
+                "eliteSummary": True, "pendingCount": 3, "resultRows": 9,
+                "pendingVisible": True, "aceLeaderMarker": True,
+                "wrongAceMarker": False, "nonAceMarker": False,
+                "proCohort": 5, "freeCohort": 2,
                 "legendCohort": 9, "goatCohort": 9
             }, morning
 
