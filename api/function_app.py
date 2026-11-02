@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from threading import Lock
 import gzip
 import hashlib
+import ipaddress
 import hmac
 import logging
 import json
@@ -282,9 +283,16 @@ def _banner_event_allowed(payload):
 
 def _auth_email_request_allowed(req) -> bool:
     headers = getattr(req, "headers", {}) or {}
-    forwarded = str(headers.get("X-Azure-ClientIP") or headers.get("X-Forwarded-For") or headers.get("X-Client-IP") or "anonymous")
-    client = forwarded.split(",", 1)[0].strip()[:128] or "anonymous"
-    key = hashlib.sha256(client.encode("utf-8")).hexdigest()[:24]
+    # Only the platform-provided client IP may identify an anonymous caller.
+    # X-Forwarded-For/X-Client-IP can be supplied by the caller and must not
+    # create fresh buckets. A missing/invalid trusted IP uses the global cap
+    # rather than grouping all legitimate unknown callers into one 20-hit cap.
+    trusted_ip = str(headers.get("X-Azure-ClientIP") or "").strip()
+    try:
+        client = ipaddress.ip_address(trusted_ip).compressed
+    except ValueError:
+        client = None
+    key = hashlib.sha256(client.encode("utf-8")).hexdigest()[:24] if client else None
     now = time.monotonic()
     cutoff = now - _AUTH_EMAIL_RATE_WINDOW_SECONDS
     with _AUTH_EMAIL_RATE_LOCK:
@@ -292,12 +300,13 @@ def _auth_email_request_allowed(req) -> bool:
             _AUTH_EMAIL_RATE_GLOBAL.popleft()
         if len(_AUTH_EMAIL_RATE_GLOBAL) >= _AUTH_EMAIL_RATE_GLOBAL_MAX_REQUESTS:
             return False
-        bucket = _AUTH_EMAIL_RATE_BUCKETS[key]
-        while bucket and bucket[0] < cutoff:
-            bucket.popleft()
-        if len(bucket) >= _AUTH_EMAIL_RATE_MAX_REQUESTS:
-            return False
-        bucket.append(now)
+        if key is not None:
+            bucket = _AUTH_EMAIL_RATE_BUCKETS[key]
+            while bucket and bucket[0] < cutoff:
+                bucket.popleft()
+            if len(bucket) >= _AUTH_EMAIL_RATE_MAX_REQUESTS:
+                return False
+            bucket.append(now)
         _AUTH_EMAIL_RATE_GLOBAL.append(now)
         if len(_AUTH_EMAIL_RATE_BUCKETS) > 10000:
             stale = [k for k, values in list(_AUTH_EMAIL_RATE_BUCKETS.items())[:2000] if not values or values[-1] < cutoff]
