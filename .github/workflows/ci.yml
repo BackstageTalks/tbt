@@ -239,6 +239,24 @@ jobs:
               "scheduled_at": row["scheduled_at"], "projection": row["projection"],
               "publication": pub,
           }]}
+          from tbt.services.match_status import _event_id, _selection_id, _parse_time, _finite_count, verified_aces_ou_publication
+          raw = source[0]
+          print("FARJAT_GUARDS_DIAG:", json.dumps({
+              "market": raw.get("market"),
+              "event_match": _event_id(raw) == "17467964",
+              "selection_match": _selection_id(raw) == "270414",
+              "raw_scheduled_at": str(raw.get("scheduled_at")),
+              "receipt_scheduled_at": str(sidecar["issued_aces_ou"][0]["scheduled_at"]),
+              "issued_before_match": _parse_time(pub.get("issued_at")) < _parse_time(raw.get("scheduled_at")),
+              "projection": raw.get("projection"),
+              "receipt_projection": row.get("projection"),
+              "verified_contract": verified_aces_ou_publication(pub),
+              "source": pub.get("source"),
+              "price_status": pub.get("price_status"),
+              "price_basis": pub.get("price_basis"),
+              "published": pub.get("publication_status"),
+              "existing_contracts": [{"key": p.get("publication_key"), "price_contract": p.get("price_contract"), "market": p.get("market")} for p in raw.get("market_publications") or []],
+          }), flush=True)
           replay = attach_confirmed_aces_ou_sidecar(feed, sidecar)
           status = {"17467964": {
               "status": "retired", "provider_status": "finished retired",
