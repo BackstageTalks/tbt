@@ -1,0 +1,15 @@
+{
+  "schema": "BLINQ_DEPLOY_REQUEST_V1",
+  "reason": "Deploy merged verified 2026-11-02 Match Winner final-score and stale snapshot recovery to production API: the hourly worker returns a verified finished TOP result without provider_final_score_verified because backend remained old after UI-only deploy.",
+  "fix_commit": "9c2a1b49badf0ae9bb6fc1dfd9023e6a0d608974",
+  "fix_pr": 1313,
+  "ui_pr": 1314,
+  "scope": "Existing tbt production CI with full web AND api deployment. No CDB/model/odds changes. Post-deploy: rerun existing match-status worker with shared budget guard, check saved statuses for frozen 4 receipts and read-back ELITE results.",
+  "requested_on": "2026-11-02",
+  "required_checks": [
+    "Full CI browser and backend",
+    "Live API deployment",
+    "Match worker provider verified final result",
+    "ELITE Today actual readback"
+  ]
+}
