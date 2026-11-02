@@ -174,7 +174,13 @@ def _candidate_priority(info):
     name = str(info["name"]).casefold()
     parts = [part for part in path.split("/") if part]
     root = parts[0] if parts else ""
-    if re.search(r"(?:^|[_-])(?:atp|wta)[_-]?matches(?:[_-]|$)", name) or "matchlevel" in name:
+    if (info.get("id") == "15SxTALy5nFxObsKczqTn0a8NPW0UlICE"
+            and info.get("name") == "2026.csv"
+            and str(info.get("path") or "").endswith("/Sackmann/TML/TML/2026.csv")):
+        # Review-pinned source first so duplicate-byte suppression does not
+        # preferentially retain an unclassified copy of this same upload.
+        tier = 0
+    elif re.search(r"(?:^|[_-])(?:atp|wta)[_-]?matches(?:[_-]|$)", name) or "matchlevel" in name:
         tier = 0
     elif root == "cdb_inbox":
         tier = 1
