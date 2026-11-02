@@ -80,8 +80,17 @@ def extract_sent(state, target_day):
     attempts = state.get("attempts") or {}
     if not isinstance(attempts, dict):
         raise ValueError("Corrupted Telegram delivery ledger")
+    # A specifically approved, fully sent reissue replaces the old morning
+    # presentation for reporting; never double-count the old Most Aces bets.
+    superseding=[(key,value) for key,value in (state.get("reposts") or {}).items()
+                 if key.startswith(target_day+":repost:") and isinstance(value,dict)
+                 and value.get("supersedes_daily") is True
+                 and value.get("status")=="sent"]
+    if len(superseding)>1:
+        raise RuntimeError("Ambiguous superseding Telegram delivery")
+    source=dict(superseding) if superseding else attempts
     picked = {}
-    for key, attempt in sorted(attempts.items()):
+    for key, attempt in sorted(source.items()):
         if not key.startswith(target_day + ":") or not isinstance(attempt, dict):
             continue
         if attempt.get("status") != "sent":
