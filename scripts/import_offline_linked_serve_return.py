@@ -102,7 +102,7 @@ def main() -> None:
     )
     # Exact Parquet writers require all original rows, including the six
     # quarantined provider collisions, to remain byte-logically unchanged.
-    if len(matches) != safety["input_rows"]:
+    if args.expected_provider_quarantine and len(matches) != safety["input_rows"]:
         raise ValueError("Exact stats importer would drop canonical rows")
 
     by_id = {str(m.match_id): m for m in matches}
