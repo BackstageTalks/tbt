@@ -140,17 +140,39 @@ def _folder_tour_upgrade(info):
     return next(iter(tours)) if len(tours) == 1 else ""
 
 
+TML_YEAR_ONLY_DRIVE_IDS = {
+    2016: "1ku0BYVuAHBLWEe5jqw5lMDzwCMdvNe_Z",
+    2017: "1ALec1ikv1PQdAkJOsl3fdj20xrolggF5",
+    2018: "1GKr_lIOHXEnM2Dk8Orh_Yp2DD6jeKHb7",
+    2019: "1M6c_r4d7ts07pGAZarcimQWTzC6LbH03",
+    2020: "1dR_YLGN1sfoxiqtVAjh61yaVXJJkKvD3",
+    2021: "1JKQ5iMQnkoUyzlS9HThRbYAbLiCA2Ibu",
+    2022: "1SKno-fJOIqp_fjUoRnJbxJNTG7BQliuY",
+    2023: "1M1KFDerpPBQ-pBcgF6uP0cDA6cMJEkvJ",
+    2024: "1OxjASdoF45yBNxMBD_WeXcDVwBb0Tzhs",
+    2025: "1RuO53cvXWd_WdaLwcFWa_PYmQZ9TYT-G",
+    2026: "15SxTALy5nFxObsKczqTn0a8NPW0UlICE",
+}
+
+
+def _pinned_tml_drive_year(info):
+    path = str(info.get("path") or "")
+    for year, drive_id in TML_YEAR_ONLY_DRIVE_IDS.items():
+        if (info.get("id") == drive_id and info.get("name") == f"{year}.csv"
+                and path == f"/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/TML/TML/{year}.csv"):
+            return year
+    return None
+
+
 def _fingerprint(info):
     fields = ("id", "name", "mimeType", "size", "md5Checksum", "modifiedTime")
     values = [str(info.get(field) or "") for field in fields]
     folder_tour = _folder_tour_upgrade(info)
-    if (info.get("id") == "15SxTALy5nFxObsKczqTn0a8NPW0UlICE"
-            and info.get("name") == "2026.csv"
-            and str(info.get("path") or "").endswith("/Sackmann/TML/TML/2026.csv")):
-        # One explicitly reviewed legacy year-only source gets a bounded
-        # checkpoint replay when source-only SHA-pinned tour support lands.
-        # Replay is NOT an import authorization.
-        values.append("tml-atp-2026-source-replay-v1")
+    tml_year = _pinned_tml_drive_year(info)
+    if tml_year is not None:
+        # Preserve the preexisting 2026 fingerprint, and replay each newly
+        # reviewed 2016-2025 source exactly once from private progress.
+        values.append(f"tml-atp-{tml_year}-source-replay-v1")
     if folder_tour:
         # Replay only candidate sources affected by folder-provenance support.
         # Include tour so moves between dedicated ATP/WTA folders invalidate
@@ -174,12 +196,11 @@ def _candidate_priority(info):
     name = str(info["name"]).casefold()
     parts = [part for part in path.split("/") if part]
     root = parts[0] if parts else ""
-    if (info.get("id") == "15SxTALy5nFxObsKczqTn0a8NPW0UlICE"
-            and info.get("name") == "2026.csv"
-            and str(info.get("path") or "").endswith("/Sackmann/TML/TML/2026.csv")):
-        # Review-pinned source first so duplicate-byte suppression does not
-        # preferentially retain an unclassified copy of this same upload.
-        tier = 0
+    if _pinned_tml_drive_year(info) is not None:
+        # Review-pinned, high-evidence ATP match tables are a bounded set.
+        # Fetch ahead of generic filenames, without bypassing checkpoints
+        # or filtering any other pending file.
+        tier = -1
     elif re.search(r"(?:^|[_-])(?:atp|wta)[_-]?matches(?:[_-]|$)", name) or "matchlevel" in name:
         tier = 0
     elif root == "cdb_inbox":

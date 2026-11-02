@@ -409,3 +409,33 @@ def test_exact_tml2026_fingerprint_upgrade_only_for_original_file():
     assert _fingerprint(original) != legacy(original)  # one targeted replay
     assert _fingerprint(baseline) == legacy(baseline)  # all unrelated checkpoints stable
     assert _fingerprint(original) == _fingerprint(dict(original))
+
+
+def test_all_pinned_tml_checkpoint_replays_leave_unrelated_sources_unchanged():
+    from scripts.cdb_inbox_drive import _fingerprint, _pinned_tml_drive_year, TML_YEAR_ONLY_DRIVE_IDS
+    import hashlib
+    import json
+    assert len(TML_YEAR_ONLY_DRIVE_IDS) == 11
+    for year, drive_id in TML_YEAR_ONLY_DRIVE_IDS.items():
+        info = {"id": drive_id, "name": f"{year}.csv", "mimeType": "text/csv",
+                "size": "100", "md5Checksum": "abc", "modifiedTime": "2026-10-23",
+                "path": f"/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/TML/TML/{year}.csv"}
+        assert _pinned_tml_drive_year(info) == year
+        vals = [str(info.get(x) or "") for x in
+                ("id", "name", "mimeType", "size", "md5Checksum", "modifiedTime")]
+        expected = hashlib.sha256(json.dumps(vals + [f"tml-atp-{year}-source-replay-v1"],
+                                  ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+        assert _fingerprint(info) == expected
+        wrong = dict(info, id="unrelated-source-id")
+        assert _pinned_tml_drive_year(wrong) is None
+        old = hashlib.sha256(json.dumps([str(wrong.get(x) or "") for x in
+            ("id", "name", "mimeType", "size", "md5Checksum", "modifiedTime")],
+            ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+        assert _fingerprint(wrong) == old
+
+    from scripts.cdb_inbox_drive import _candidate_priority
+    tml = {"id": TML_YEAR_ONLY_DRIVE_IDS[2019], "name": "2019.csv",
+           "path": "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/TML/TML/2019.csv"}
+    generic = {"id": "generic-source-id", "name": "atp_matches_2019.csv",
+               "path": "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/BAL/atp_matches_2019.csv"}
+    assert _candidate_priority(tml)[0] < _candidate_priority(generic)[0]

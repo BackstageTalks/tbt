@@ -380,3 +380,79 @@ def test_sha_and_path_pinned_tml_atp_source_only_tour():
     parsed, reason = normalize_row(sample(tour=""), "2026.csv", 1, source_tour="atp")
     assert reason == "" and parsed["league"] == "atp"
     assert "import_ready" not in parsed
+
+
+def test_sha_pinned_historical_tml_requires_exact_year_source_bytes_and_path():
+    from scripts.cdb_inbox_adapter import tour_from_pinned_tml, TML_ATP_SOURCE_SHAS
+    root = "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/TML/TML"
+    assert len(TML_ATP_SOURCE_SHAS) == 11
+    for year, sha in TML_ATP_SOURCE_SHAS.items():
+        assert tour_from_pinned_tml(sha, f"{root}/{year}.csv") == "atp"
+        assert tour_from_pinned_tml("0" * 64, f"{root}/{year}.csv") == ""
+        assert tour_from_pinned_tml(sha, f"{root}/{year+1}.csv") == ""
+        assert tour_from_pinned_tml(sha, f"/other{root}/{year}.csv") == ""
+
+
+def test_historical_tml_source_only_rejects_retirements_missing_ids_and_bad_counts(tmp_path, monkeypatch):
+    import scripts.cdb_inbox_adapter as adapter
+    incoming = tmp_path / "input"
+    incoming.mkdir()
+    path = incoming / "fixed-2019.csv"
+    good = sample(tour="", match_date="2019-10-17", winner_id="ALFA", loser_id="BETA",
+                  score="6-4 6-4", best_of="3", w_bpSaved="2", w_bpFaced="3",
+                  l_bpSaved="1", l_bpFaced="4")
+    candidates = [
+        dict(good),
+        dict(good, score="6-2 RET"),
+        dict(good, loser_id=""),
+        dict(good, w_bpSaved="5", w_bpFaced="3"),
+        dict(good, match_num="", score="W/O"),
+    ]
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(dict.fromkeys(k for row in candidates for k in row)))
+        writer.writeheader()
+        writer.writerows(candidates)
+    original_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    monkeypatch.setitem(adapter.TML_ATP_SOURCE_SHAS, 2019, original_sha)
+    manifest = _drive_context_manifest(
+        tmp_path, path, "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/TML/TML/2019.csv"
+    )
+    report = normalize(incoming, tmp_path / "output", drive_manifest_path=manifest)
+    assert report["counts"]["raw_rows"] == 5
+    assert report["counts"]["normalized_rows"] == 1
+    assert report["counts"]["reason_tml_noncompleted_or_missing_score"] == 2
+    assert report["counts"]["reason_tml_native_identity_missing_or_equal"] == 1
+    assert report["counts"]["reason_tml_invalid_or_missing_stat_counts"] == 1
+    saved = list(csv.DictReader(Path(report["normalized"][0]["path"]).open()))
+    assert len(saved) == 1 and saved[0]["league"] == "atp"
+    assert saved[0]["source_winner_id"] == "ALFA"
+    assert saved[0]["source_loser_id"] == "BETA"
+    assert saved[0]["source_date_kind"] == "match_exact"  # sample.match_date provided
+    assert "import_ready" not in saved[0]
+
+
+def test_tml2025_frozen_sha_bound_conflicts_are_never_normalized(tmp_path, monkeypatch):
+    import scripts.cdb_inbox_adapter as adapter
+    assert len(adapter.TML_ATP_2025_CROSS_SOURCE_CONFLICT_ORDINALS) == 112
+    assert 635 in adapter.TML_ATP_2025_CROSS_SOURCE_CONFLICT_ORDINALS
+    assert 636 not in adapter.TML_ATP_2025_CROSS_SOURCE_CONFLICT_ORDINALS
+    source = tmp_path / "source"
+    source.mkdir()
+    path = source / "source__2025.csv"
+    row = sample(tour="", match_date="2025-08-26",
+                 winner_id="AA11", loser_id="BB22", score="6-4 6-4")
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(row))
+        writer.writeheader()
+        writer.writerow(row)
+    sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    monkeypatch.setitem(adapter.TML_ATP_SOURCE_SHAS, 2025, sha)
+    monkeypatch.setattr(adapter, "TML_ATP_2025_CROSS_SOURCE_CONFLICT_ORDINALS", frozenset({1}))
+    manifest = _drive_context_manifest(tmp_path, path,
+        "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/TML/TML/2025.csv")
+    out = normalize(source, tmp_path / "out", drive_manifest_path=manifest)
+    assert out["counts"]["raw_rows"] == 1
+    assert out["counts"].get("normalized_rows", 0) == 0
+    assert out["counts"]["reason_tml_cross_source_stat_disagreement"] == 1
+    assert out["state"] == "SOURCE_ONLY"
+    assert out["production_mutated"] is False
