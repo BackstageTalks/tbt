@@ -88,6 +88,11 @@ def test_provider_quote_first_fallback_only_when_not_verified():
         "provider_id": 2, "odds_source": "propline", "odds_bookmaker": "bookA",
         "captured_at": "2026-11-01T06:45:00Z", "odds": 2.125,
         "price_contract": "player_total_ou", "market_line": 7.5, "ou_side": "over",
+        "market_publications": [{
+            "section": "ace", "market": "aces", "selection_id": "player-1",
+            "publication_key": "ace:projection:aces:player:fixture-11:player-1:total:over:7.5",
+            "ou_side": "over", "market_line": 7.5,
+        }],
     }
     assert verified_ace_odds(base) == 2.125
     assert selected_ace_odds(base) == (2.125, True)
