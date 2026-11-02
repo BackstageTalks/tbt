@@ -297,12 +297,41 @@ jobs:
                   raise SystemExit("Canonical year SHA inconsistent: "+name)
           print("CANONICAL_PARTITIONS_SHA_VERIFIED",len(years))
           PY
+      - name: Attest exact current canonical provider collisions (not a stale six-row assumption)
+        if: steps.source.outputs.eligible == 'true' && steps.writer_gate.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities,select_exact_provider_quarantine
+          root=Path("work/before")
+          original=load_partitions(root)
+          safe,report=sanitize_history_identities(original)
+          if (report["merged_rows_removed"]!=0 or report["duplicate_match_ids"] or
+                  len(safe)+report["quarantined_rows"]!=report["input_rows"]):
+              raise SystemExit("CDB_CANONICAL_COLLISION_NOT_LOSSLESS_QUARANTINE")
+          count=report["quarantined_rows"]
+          select_exact_provider_quarantine(original,expected_rows=count,preserve_quarantined=True)
+          proof={"schema":1,"quarantined_rows":count,
+                 "canonical_rows":report["input_rows"],"merged_rows_removed":0,
+                 "canonical_bundle_sha256":hashlib.sha256((root/"_tbt_bundle_manifest.json").read_bytes()).hexdigest()}
+          Path("work/provider-quarantine.json").write_text(json.dumps(proof,sort_keys=True)+"\n")
+          print("CDB_EXACT_CURRENT_PROVIDER_QUARANTINE",count,"rows",proof["canonical_rows"])
+          PY
       - name: Exact link, quarantine conflict, and filter to strongest match evidence
         if: steps.source.outputs.eligible == 'true' && steps.writer_gate.outputs.ready == 'true'
         id: stage
         shell: bash
         run: |
           set -euo pipefail
+          q="$(python -c 'import json; print(json.load(open("work/provider-quarantine.json"))["quarantined_rows"])')"
+          quarantine_args=()
+          if (( q > 0 )); then
+            quarantine_args=(--isolate-provider-collisions --expected-provider-quarantine "$q")
+          fi
           if [[ "$SOURCE_MODE" == "moviodds" ]]; then
             python - <<'PY'
           import json,subprocess,sys
@@ -320,18 +349,20 @@ jobs:
           else
             python scripts/cdb_inbox_stage.py --normalized-report work/source/report.json \
               --history-dir work/before --out-dir work/stage \
-              --expected-provider-quarantine 6
+              --expected-provider-quarantine "$q"
           fi
           python scripts/import_offline_linked_serve_return.py \
-            --isolate-provider-collisions --expected-provider-quarantine 6 \
+            "${quarantine_args[@]}" \
             --stage work/stage/eligible.jsonl --history-dir work/before --out-dir work/dry-run
           python - <<'PY'
           import json,os
           a=json.load(open("work/stage/report.json"))
           dry=json.load(open("work/dry-run/report.json"))
           counts=dry["counts"]
-          if a.get("excluded_ambiguous_provider_rows") != 6 or dry.get("excluded_ambiguous_provider_rows") != 6:
-              raise SystemExit("Known six provider collisions were not isolated exactly")
+          expected=json.load(open("work/provider-quarantine.json"))["quarantined_rows"]
+          if (a.get("excluded_ambiguous_provider_rows") != expected or
+              dry.get("excluded_ambiguous_provider_rows") != expected):
+              raise SystemExit("Canonical provider isolation differs from SHA-pinned current snapshot")
           if a.get("full_canonical_rows") != dry.get("full_canonical_rows"):
               raise SystemExit("Full canonical row count drift between linker and importer")
           if dry.get("production_mutated") is not False or dry.get("local_partitions_written") is not False:
@@ -481,8 +512,13 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/cdb_global_writer_lock.py verify
+          q="$(python -c 'import json; print(json.load(open("work/provider-quarantine.json"))["quarantined_rows"])')"
+          quarantine_args=()
+          if (( q > 0 )); then
+            quarantine_args=(--isolate-provider-collisions --expected-provider-quarantine "$q")
+          fi
           python scripts/import_offline_linked_serve_return.py \
-            --isolate-provider-collisions --expected-provider-quarantine 6 \
+            "${quarantine_args[@]}" \
             --stage work/stage/eligible.jsonl --history-dir work/after \
             --out-dir work/local-import --write-partitions --write-history-dir work/after --exact-stats-only
           python - <<'PY'
