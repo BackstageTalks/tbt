@@ -37,14 +37,14 @@ const row = {
 const original = JSON.stringify(row);
 const value = sandbox.stableAceDisplayOdds(row);
 sandbox.normalizeFeedAceOdds({ace_picks:[row],results:[]});
-assert.equal(row.statistical_ace_odds, value);
+assert.equal(row.statistical_ace_odds, undefined);
 assert(Number.isInteger(Math.round(value * 100)));
 assert(value >= 1.60 && value <= 1.80, 'ACES display range');
 assert.equal(value, sandbox.stableAceDisplayOdds({...row}));
 assert.equal(sandbox.stableAceDisplayOdds({...row, market: 'games'}).toString(), 'NaN');
 assert.equal(row.odds, 2.00, 'underlying provider quote unchanged');
 assert.equal(row.odds, JSON.parse(original).odds, 'original provider price unchanged');
-assert(sandbox.projectionOddsHtml(row).includes(value.toFixed(2)));
+assert(sandbox.projectionOddsHtml(row).includes('Bez O/U kurzu'));
 
 // A provider-backed PropLine quote must NOT be overwritten by working odds.
 const real = {
@@ -70,9 +70,9 @@ for(const [event_id,selection_id,scheduled_at,telegramOdds] of novemberPicks){
   const expected=sandbox.stableAceDisplayOdds(pick);
   assert.equal(expected,telegramOdds,'Must reproduce frozen Telegram pick identity odds');
   sandbox.normalizeFeedAceOdds({ace_picks:[pick],results:[]});
-  assert.equal(pick.statistical_ace_odds,expected);
+  assert.equal(pick.statistical_ace_odds,undefined);
   assert(expected>=1.60&&expected<=1.80);
-  assert(sandbox.projectionOddsHtml(pick).includes(expected.toFixed(2)));
+  assert(sandbox.projectionOddsHtml(pick).includes('Bez O/U kurzu'));
   assert(!sandbox.projectionOddsHtml(pick).includes('2.00'));
   assert.equal(pick.odds,2.00,'provider price/provenance must remain frozen');
   const results={event_id,scheduled_at,market_publications:[{...pick,statistical_ace_odds:undefined}]};
@@ -81,13 +81,13 @@ for(const [event_id,selection_id,scheduled_at,telegramOdds] of novemberPicks){
   assert.equal(sandbox.aceDfResultKpiOdds(results.market_publications[0]),expected);
   const future={...pick,statistical_ace_odds:undefined,scheduled_at:'2026-11-02T13:00:00Z'};
   sandbox.normalizeFeedAceOdds({ace_picks:[future],results:[]});
-  assert.equal(future.statistical_ace_odds,expected,'permanent fallback covers subsequent 2.00 placeholders');
-  assert(sandbox.projectionOddsHtml(future).includes(expected.toFixed(2)));
+  assert.equal(future.statistical_ace_odds,undefined,'No future quote without an O/U contract');
+  assert(sandbox.projectionOddsHtml(future).includes('Bez O/U kurzu'));
   assert(!sandbox.projectionOddsHtml(future).includes('2.00'));
   const nextYear={...pick,statistical_ace_odds:undefined,scheduled_at:'2027-05-02T13:00:00Z'};
   sandbox.normalizeFeedAceOdds({ace_picks:[nextYear],results:[]});
-  assert.equal(nextYear.statistical_ace_odds,expected,'fallback must not expire after 2026');
-  assert(sandbox.projectionOddsHtml(nextYear).includes(expected.toFixed(2)));
+  assert.equal(nextYear.statistical_ace_odds,undefined,'Future Aces count insight remains unpriced');
+  assert(sandbox.projectionOddsHtml(nextYear).includes('Bez O/U kurzu'));
   const futureResults={
     event_id,scheduled_at:nextYear.scheduled_at,
     market_publications:[{...nextYear,statistical_ace_odds:undefined}]
@@ -98,8 +98,8 @@ for(const [event_id,selection_id,scheduled_at,telegramOdds] of novemberPicks){
 
 const unverified = {...real, odds_bookmaker: ''};
 sandbox.normalizeFeedAceOdds({ace_picks:[unverified],results:[]});
-assert.equal(unverified.statistical_ace_odds,value);
-assert(sandbox.projectionOddsHtml(unverified).includes(value.toFixed(2)));
+assert.equal(unverified.statistical_ace_odds,undefined);
+assert(sandbox.projectionOddsHtml(unverified).includes('Bez O/U kurzu'));
 const result = {
   event_id:'ace-1',scheduled_at:row.scheduled_at,
   market_publications:[{
@@ -132,7 +132,7 @@ const historical = {
 sandbox.normalizeFeedAceOdds({ace_picks:[],results:[historical]});
 assert.equal(historical.market_publications[0].statistical_ace_odds,undefined);
 assert(sandbox.projectionOddsHtml({...row, market: 'double_faults'}).includes('2.00'));
-assert(sandbox.projectionOddsHtml({...row, market: 'aces', price_status: 'projection_only'}).includes(value.toFixed(2)));
+assert(sandbox.projectionOddsHtml({...row, market: 'aces', price_status: 'projection_only'}).includes('Bez O/U kurzu'));
 const values = new Set();
 for(let i=0;i<200;i++){
   const v = sandbox.stableAceDisplayOdds({
