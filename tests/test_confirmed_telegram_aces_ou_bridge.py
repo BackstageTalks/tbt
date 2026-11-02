@@ -119,7 +119,7 @@ def test_farjat_confirmed_over_4_5_reissue_wins_after_retirement():
             "event_id": event, "scheduled_at": "2026-11-02T13:00:00+00:00",
             "player1": {"id": farjat, "name": "Tomas Farjat"},
             "player2": {"id": opponent, "name": "Federico Aguilar Cardozo"},
-            "selection_id": farjat, "market": "aces", "projection": 5.49,
+            "selection_id": farjat, "winner_id": opponent, "market": "aces", "projection": 5.49,
             "market_publications": [{
                 "section": "ace", "market": "aces", "selection_id": farjat,
                 "price_contract": "player_superiority",
