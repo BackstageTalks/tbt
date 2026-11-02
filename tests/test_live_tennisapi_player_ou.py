@@ -77,7 +77,8 @@ def test_player_ou_settlement_uses_line_not_opponent():
 
 
 def test_legacy_most_aces_grading_unchanged():
-    start = datetime.now(timezone.utc) - timedelta(hours=2)
+    # Preserve genuine pre-November history, not a false modern O/U win.
+    start = datetime(2026, 10, 22, 12, tzinfo=timezone.utc)
     match = MatchRecord(
         match_id="125", tour="atp", scheduled_at=start,
         player1_id="1", player1_name="Player A",
