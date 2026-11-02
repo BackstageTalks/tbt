@@ -2152,6 +2152,9 @@
       const subject=String(row?.projection_subject||modelPickName(row)||'').trim();
       const side=projectionDirectionLabel(row),line=projectionReferenceLine(row,market);
       const unit=market==='double_faults'||String(row?.market||'').toLowerCase()==='double_faults'?lcopy('Double Faults','Dvojchyby','Dvojchyby'):lcopy('Aces','Aces','Aces');
+      const localLine=row?.ui_local_ace_ou_line==null?NaN:Number(row.ui_local_ace_ou_line);
+      if(String(row?.market||'').toLowerCase()==='aces'&&Number.isFinite(localLine))
+        return `${subject?subject+' · ':''}Over ${localLine.toFixed(1)} Aces`;
       if(side&&Number.isFinite(line))return `${subject?subject+' · ':''}${side} ${line.toFixed(1)} ${unit}`;
       if(Number.isFinite(line))return `${subject?subject+' · ':''}${line.toFixed(1)} ${unit}`;
       return subject||String(row?.selection||row?.pick||'—');
@@ -2933,13 +2936,42 @@
     return String(row?.market||row?.projection_metric||'').toLowerCase()==='aces'
       &&row?.odds!=null&&Number(row.odds)===2;
   }
+  function localAceOuDisplayLine(row){
+    // Same model-based half-ace OVER threshold as approved Telegram fallback.
+    // The returned line is view-only, never a provider quote or archive write.
+    if(!row||row.market!=='aces'||row.projection_model!=='ace-count-projection-v4')return NaN;
+    const id=String(row.selection_id||''),p1=String(row.player1?.id||''),p2=String(row.player2?.id||'');
+    const scheduled=Date.parse(String(row.scheduled_at||''));
+    const projection=row.projection==null?NaN:Number(row.projection);
+    const opponent=row.opponent_projection==null?NaN:Number(row.opponent_projection);
+    const confidence=row.projection_confidence==null?NaN:Number(row.projection_confidence);
+    if(!row.event_id||!id||(id!==p1&&id!==p2)||!Number.isFinite(scheduled)
+      ||scheduled<Date.parse('2026-11-01T05:00:00Z')
+      ||!Number.isFinite(projection)||projection<1||!Number.isFinite(opponent)||opponent<0
+      ||!Number.isFinite(confidence)||confidence<.60||confidence>1)return NaN;
+    const line=Math.max(.5,Math.floor(projection-.5)+.5);
+    if(projection<=line)return NaN;
+    if(row.local_ou_line_basis==='model_projection_half_ace_v1'
+      &&(row.ou_side!=='over'||Number(row.market_line)!==line))return NaN;
+    return line;
+  }
   function normalizeFeedAceOdds(feed){
-    // This is a client-side statistical price normalization, not a provider quote.
-    // The provider odds, source and immutable issuance ledger remain untouched.
+    // Verified provider price first, then existing BlinQ 1.60-1.80 price
+    // on the model-derived player O/U line. Raw odds and Results are untouched.
     for(const row of feed?.ace_picks||[]){
       if(!row||row.market!=='aces')continue;
-      // Live Most Aces is insight only; historical issued Results are untouched.
-      delete row.statistical_ace_odds;
+      delete row.ui_local_ace_ou_line;
+      if(row.price_contract==='player_total_ou'&&Number.isFinite(verifiedAceProviderOdds(row))){
+        delete row.statistical_ace_odds;
+        continue;
+      }
+      const line=localAceOuDisplayLine(row),value=stableAceDisplayOdds(row);
+      if(Number.isFinite(line)&&Number.isFinite(value)){
+        row.ui_local_ace_ou_line=line;
+        row.statistical_ace_odds=value;
+      }else{
+        delete row.statistical_ace_odds;
+      }
     }
     for(const result of feed?.results||[]){
       for(const publication of result?.market_publications||[]){
@@ -2961,10 +2993,14 @@
   function projectionOddsHtml(row){
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
-    // Only a verified, player-specific O/U line is a live Aces betting price.
+    // An exact provider O/U wins; otherwise show the local BlinQ O/U price.
     if(String(row?.market||'').toLowerCase()==='aces'){
       if(row?.price_contract==='player_total_ou'&&Number.isFinite(verifiedAceProviderOdds(row)))
         return hubNumberHtml(Number(row.odds).toFixed(2),lcopy('odds','kurz','kurz'));
+      const local=row?.statistical_ace_odds==null?NaN:Number(row.statistical_ace_odds);
+      const line=row?.ui_local_ace_ou_line==null?NaN:Number(row.ui_local_ace_ou_line);
+      if(Number.isFinite(line)&&Number.isFinite(local)&&local>=1.60&&local<=1.80)
+        return hubNumberHtml(local.toFixed(2),lcopy('odds','kurz','kurz'));
       return hubNumberHtml('—',lcopy('No O/U price','Bez O/U kurzu','Bez O/U kurzu'));
     }
     if(authenticLiveProjection(row))return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
@@ -3115,7 +3151,7 @@
 
   function marketPreviewCard(row,key,index=0,locked=false,compact=false){
     if(locked)return lockedPickCard(key,index);
-    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const odds=key==='ace'?(Number.isFinite(verifiedAceProviderOdds(row))&&row?.price_contract==='player_total_ou'?Number(row.odds):NaN):Number(row?.odds);
+    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const aceLocal=row?.ui_local_ace_ou_line!=null&&Number.isFinite(Number(row.ui_local_ace_ou_line))?Number(row?.statistical_ace_odds):NaN;const odds=key==='ace'&&row?.market==='aces'?(Number.isFinite(verifiedAceProviderOdds(row))&&row?.price_contract==='player_total_ou'?Number(row.odds):aceLocal):Number(row?.odds);
     const projection=Number(row?.projection),opponentProjection=Number(row?.opponent_projection),projectionGap=Number(row?.projection_gap),projectionConfidence=Number(row?.projection_confidence);const samples=row?.projection_samples||{};const projectionOnly=row?.price_status==='projection_only'&&Number.isFinite(projection);
     let badge='',mainValue='—',confidenceClass='low',pickLabel=publicText(key==='prime'?'ACCA Prediction':key==='value'?'Value Prediction':key==='ace'?'Ace / DF Prediction':key==='sg'?'Set / Game Prediction':'TOP Prediction'),note='',metrics=[];
     if(projectionOnly){
@@ -3130,10 +3166,13 @@
       }
       else if(key==='sg'&&unit==='games'){mainValue=`${projection.toFixed(1)}<small> Games</small>`;metrics=[[lcopy('Baseline','Základ','Základ'),Number.isFinite(reference)?reference.toFixed(1):'—'],[lcopy('Gap','Rozdiel','Rozdíl'),Number.isFinite(projectionGap)?`${projectionGap.toFixed(1)}`:'—'],[lcopy('Confidence','Istota','Jistota'),Number.isFinite(projectionConfidence)?pct(projectionConfidence):'—']];pickLabel=lcopy('Games prediction','Predikcia hier','Predikce her');}
       else{
-        const line=apiMarketLine(row),side=aceLineSide(row),marketName=aceMarketName(row);
+        const localLine=row?.ui_local_ace_ou_line==null?NaN:Number(row.ui_local_ace_ou_line);
+        const line=Number.isFinite(localLine)?localLine:apiMarketLine(row),side=Number.isFinite(localLine)?'Over':aceLineSide(row),marketName=aceMarketName(row);
         const unit=marketName;
         mainValue=`${projection.toFixed(1)}<small>${escapeHtml(unit)}</small>`;
         metrics=[[lcopy('Line','Hranica','Hranice'),Number.isFinite(line)?`${side?side+' ':''}${line.toFixed(1)}`:'—'],[lcopy('Opponent','Súper','Soupeř'),Number.isFinite(opponentProjection)?opponentProjection.toFixed(1):'—'],[lcopy('Difference','Rozdiel','Rozdíl'),Number.isFinite(projectionGap)?`${projectionGap>=0?'+':''}${projectionGap.toFixed(1)}`:'—'],[lcopy('Data','Dáta','Data'),Number.isFinite(projectionConfidence)?`${Math.round(projectionConfidence*100)}/100`:'—']];
+        if(key==='ace'&&row?.market==='aces'&&Number.isFinite(odds))
+          metrics.push([lcopy('Odds','Kurz','Kurz'),odds.toFixed(2)]);
         pickLabel=lcopy('Prediction','Predikcia','Predikce');
       }
       badge=lcopy('PREDICTION','PREDIKCIA','PREDIKCE');confidenceClass=Number.isFinite(projectionConfidence)?confidenceBand(projectionConfidence):'medium';note=[marketLabel,sampleText].filter(Boolean).join(' · ');
