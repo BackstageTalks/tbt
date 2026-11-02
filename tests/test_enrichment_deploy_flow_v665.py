@@ -12,7 +12,7 @@ def test_manual_player_enrichment_redeploys_site():
     assert 'needs: enrich' in text
     assert 'scripts/prepare_feed.py' in text
     assert 'scripts/verify_presentation_feed.py api/data/feed.json --summary' in text
-    assert 'Azure/static-web-apps-deploy@v1' in text
+    assert 'Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9' in text
     assert 'tbt-production-deploy' in text
 
 
