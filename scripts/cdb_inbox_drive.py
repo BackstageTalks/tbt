@@ -197,9 +197,10 @@ def _candidate_priority(info):
     parts = [part for part in path.split("/") if part]
     root = parts[0] if parts else ""
     if _pinned_tml_drive_year(info) is not None:
-        # Prioritize only reviewed source paths; duplicate-byte suppression
-        # must not prefer a generic, unclassified copy of these exact files.
-        tier = 0
+        # Review-pinned, high-evidence ATP match tables are a bounded set.
+        # Fetch ahead of generic filenames, without bypassing checkpoints
+        # or filtering any other pending file.
+        tier = -1
     elif re.search(r"(?:^|[_-])(?:atp|wta)[_-]?matches(?:[_-]|$)", name) or "matchlevel" in name:
         tier = 0
     elif root == "cdb_inbox":
