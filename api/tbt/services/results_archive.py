@@ -16,7 +16,10 @@ from .admin_storage import (
     AdminStorageUnavailable, UI_TABLE, _table, _storage_not_found,
     _encode_runtime_ui_payload, _decode_runtime_ui_payload,
 )
-from .match_status import runtime_settled_results, verified_terminal_statuses
+from .match_status import (
+    runtime_settled_results, verified_terminal_statuses,
+    verified_aces_ou_publication, retain_verified_ace_ou_results,
+)
 
 _PARTITION = "settled-results-archive-v1"
 _PUBLIC_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
@@ -70,6 +73,8 @@ def _archive_record(row: dict, publication: dict, generated_at: str) -> dict | N
     if not isinstance(row, dict) or not isinstance(publication, dict):
         return None
     identity = _identity(row, publication)
+    if not verified_aces_ou_publication(publication):
+        return None
     if not identity or str(publication.get("section") or "").lower() not in _PUBLIC_SECTIONS:
         return None
     market = str(publication.get("market") or "match_winner").lower()
@@ -210,7 +215,9 @@ def load_settled_results_archive() -> list[dict]:
                 raise AdminStorageUnavailable("Unreadable results archive shard")
             for key, row in parsed["rows"].items():
                 if isinstance(row, dict) and row.get("market_publications"):
-                    records[key] = row
+                    kept = retain_verified_ace_ou_results(row)
+                    if kept is not None:
+                        records[key] = kept
         return list(records.values())
     except AdminStorageUnavailable:
         raise
@@ -303,7 +310,11 @@ def read_only_archive_category_counts(
 def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
     """Overlay settled outcomes only, preserving canonical publication metadata."""
     out = dict(feed)
-    rows = deepcopy(feed.get("results") or [])
+    rows = [
+        kept for row in (feed.get("results") or [])
+        if isinstance(row, dict)
+        if (kept := retain_verified_ace_ou_results(row)) is not None
+    ]
     existing = {}
     for row in rows:
         if not isinstance(row, dict):
@@ -315,7 +326,8 @@ def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
             if key:
                 existing[key] = publication
     for archived_row in archived:
-        if not isinstance(archived_row, dict):
+        archived_row = retain_verified_ace_ou_results(archived_row)
+        if archived_row is None:
             continue
         pubs = archived_row.get("market_publications") or []
         if len(pubs) != 1 or not isinstance(pubs[0], dict):
