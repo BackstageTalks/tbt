@@ -226,3 +226,40 @@ def test_results_ui_distinguishes_distinct_priced_ou_lines():
     app = (Path(__file__).resolve().parents[1] / "web" / "app.js").read_text(encoding="utf-8")
     assert "const totalContract=" in app
     assert "market_line??''" in app
+
+
+def test_hurkacz_over_10_5_with_9_aces_is_loss_despite_more_aces_than_opponent():
+    base = _base()
+    base["scheduled_at"] = "2026-11-02T11:10:00+00:00"
+    pub = _pub(
+        "aces", price_contract="player_total_ou", ou_side="over",
+        market_line=10.5, odds=1.80, price_status="priced_projection",
+        issued_at="2026-11-02T06:00:00+00:00",
+    )
+    result_rows = runtime_settled_results(
+        {"ace_picks": [{**base, "market_publications": [pub]}], "results": []},
+        _status(projection_stats={"p1_aces": 9, "p2_aces": 5}),
+    )
+    assert len(result_rows) == 1
+    result = result_rows[0]["market_publications"][0]["result"]
+    assert result["actual_count"] == 9
+    assert result["opponent_actual_count"] == 5
+    assert result["correct"] is False
+    assert result["profit_units"] == -1.0
+
+
+def test_post_cutover_aces_never_use_implicit_or_superiority_fallback():
+    base = _base()
+    base["scheduled_at"] = "2026-11-02T11:10:00+00:00"
+    for extra in (
+        {},
+        {"price_contract": "player_superiority"},
+        {"price_contract": "player_superiority", "market_line": 10.5, "ou_side": "over"},
+        {"market_line": 10.5, "ou_side": "over"},
+    ):
+        pub = _pub("aces", issued_at="2026-11-02T06:00:00+00:00", **extra)
+        rows = runtime_settled_results(
+            {"ace_picks": [{**base, "market_publications": [pub]}], "results": []},
+            _status(projection_stats={"p1_aces": 9, "p2_aces": 5}),
+        )
+        assert rows == []  # Ambiguous issuance remains pending, never WIN.
