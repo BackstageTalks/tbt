@@ -24,13 +24,13 @@ def test_untrusted_inputs_do_not_interpolate_into_shell_source():
         in_script = False
         indent = -1
         for number, line in enumerate(lines, 1):
-            start = re.match(r"^(\\s*)run:\\s*(.*)$", line)
+            start = re.match(r"^(\s*)run:\s*(.*)$", line)
             if start:
                 in_script, indent = True, len(start.group(1))
             elif in_script and line.strip() and len(line) - len(line.lstrip()) <= indent:
                 in_script = False
             if in_script:
-                assert not re.search(r"\\$\\{\\{\\s*(?:inputs\\.|github\\.event\\.inputs)", line), (name, number)
+                assert not re.search(r"\$\{\{\s*(?:inputs\.|github\.event\.inputs)", line), (name, number)
 
 
 def test_existing_data_limits_and_cdb_single_writer_guards_unchanged():
