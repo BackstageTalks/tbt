@@ -33,6 +33,11 @@ def build(download: dict, readback: dict, *, run_id: str = "") -> dict:
         raise ValueError("Collector gains differ from persisted CDB values")
     if status == "VERIFIED_NO_NEW_FIELDS" and persisted:
         raise ValueError("Contradictory zero-gain read-back")
+    paid_fields = int(value.get("api_new_statistic_values", -1))
+    if (paid_fields < 0 or paid_fields > persisted
+            or (requests == 0 and paid_fields != 0)):
+        raise ValueError("Paid and non-paid CDB gains do not reconcile")
+    non_paid_fields = persisted - paid_fields
     selected = int(adaptive.get("selected_rows", -1))
     baseline = int(adaptive.get("baseline_choices", -1))
     adapted = int(adaptive.get("adaptive_choices", -1))
@@ -63,21 +68,30 @@ def build(download: dict, readback: dict, *, run_id: str = "") -> dict:
         })
     if sum(x["api_requests"] for x in per_cohort) != observed:
         raise ValueError("Cohort spend does not reconcile with provider usage")
-    if sum(x["new_fields"] for x in per_cohort) != int(value.get("api_new_statistic_values", -1)):
+    if sum(x["new_fields"] for x in per_cohort) != paid_fields:
         raise ValueError("Cohort paid gains do not reconcile")
+    if any(x["api_requests"] == 0 and x["new_fields"] for x in per_cohort):
+        raise ValueError("Non-paid cohort gains cannot be attributed to API calls")
     return {
-        "schema": 1,
+        "schema": 2,
         "parser_version": download.get("statistics_schema_version"),
         "status": "VERIFIED_CDB_GAIN" if persisted else "VERIFIED_NO_GAIN",
         "run_id": str(run_id),
         "reported_at_utc": datetime.now(timezone.utc).isoformat(),
         "requests_including_retries": requests,
         "persisted_new_statistic_values": persisted,
+        "paid_new_statistic_values": paid_fields,
+        "non_paid_new_statistic_values": non_paid_fields,
         "persisted_per_set_matches": int(readback.get("persisted_new_per_set_matches", 0)),
         "new_ace_df_values": int(value.get("new_ace_df_values", 0)),
         "new_full_serve_return_rows": int(value.get("new_quality_ready_rows", 0)),
+        # Keep the historical display field but never divide *free* gains
+        # by paid calls; its value now uses only the verified paid cohort gain.
         "persisted_new_fields_per_1000_requests": (
-            round(1000 * persisted / requests, 1) if requests else None
+            round(1000 * paid_fields / requests, 1) if requests else None
+        ),
+        "paid_new_fields_per_1000_requests": (
+            round(1000 * paid_fields / requests, 1) if requests else None
         ),
         "adaptive_choices": adapted,
         "baseline_choices": baseline,
@@ -95,11 +109,13 @@ def markdown(report: dict) -> str:
         f"- Run: \u0060{report['run_id']}\u0060",
         f"- Read-back: **{report['status']}**",
         f"- Paid RapidAPI requests (with retries): **{report['requests_including_retries']:,}**",
-        f"- Actual persisted new fields: **{report['persisted_new_statistic_values']:,}**",
+        f"- Actual persisted new fields (all origins): **{report['persisted_new_statistic_values']:,}**",
+        f"- New fields from paid provider requests: **{report['paid_new_statistic_values']:,}**",
+        f"- New fields from cache/local processing: **{report['non_paid_new_statistic_values']:,}**",
         f"- New full serve+return rows: **{report['new_full_serve_return_rows']:,}**",
         f"- New Aces / DF fields: **{report['new_ace_df_values']:,}**",
         f"- Persisted per-set match records: **{report['persisted_per_set_matches']:,}**",
-        f"- Persisted values per 1,000 calls: **{report['persisted_new_fields_per_1000_requests']}**",
+        f"- Paid new fields per 1,000 calls: **{report['paid_new_fields_per_1000_requests']}**",
         f"- Adaptive / baseline selections: **{report['adaptive_choices']:,} / {report['baseline_choices']:,}**",
         "",
         "| ATP/WTA / year / type | Calls | New fields | Quality rows | Fields/1k | Adaptive picks |",
@@ -112,7 +128,7 @@ def markdown(report: dict) -> str:
             f"| {row['adaptive_choices']} |")
     lines += [
         "",
-        "Values are independently verified CDB increments, not candidate counts.",
+        "Total values have independent CDB read-back; paid yield excludes cache/local gains.",
         "Model prediction accuracy is not established by this run.",
     ]
     return "\n".join(lines) + "\n"

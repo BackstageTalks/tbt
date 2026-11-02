@@ -15,8 +15,9 @@ WINDOW = timedelta(days=7)
 
 
 def validated_prior(data, *, parser_version, now=None):
-    if not isinstance(data, dict) or data.get("schema") != 1:
+    if not isinstance(data, dict) or data.get("schema") not in (1, 2):
         raise ValueError("Unrecognized prior evidence")
+    schema = data["schema"]
     if data.get("status") not in ("VERIFIED_CDB_GAIN", "VERIFIED_NO_GAIN"):
         raise ValueError("Prior CDB readback is not verified")
     if data.get("parser_version") != parser_version:
@@ -37,6 +38,24 @@ def validated_prior(data, *, parser_version, now=None):
         raise ValueError("Missing prior evidence totals") from exc
     if min(total_calls, total_fields) < 0:
         raise ValueError("Negative prior totals")
+    if schema == 2:
+        # Required, explicit paid/non-paid attribution. Never infer missing
+        # paid gains from aggregate persisted CDB read-back.
+        try:
+            paid_fields = data["paid_new_statistic_values"]
+            non_paid_fields = data["non_paid_new_statistic_values"]
+        except KeyError as exc:
+            raise ValueError("Missing prior paid/non-paid attribution") from exc
+        if (type(paid_fields) is not int or type(non_paid_fields) is not int
+                or min(paid_fields, non_paid_fields) < 0
+                or paid_fields + non_paid_fields != total_fields
+                or (total_calls == 0 and paid_fields != 0)):
+            raise ValueError("Inconsistent prior paid/non-paid CDB totals")
+    else:
+        # Schema 1 did not carry separate attribution. Only accept reports
+        # already proven internally consistent under its paid-only contract.
+        # Mixed legacy reports are rejected, not guessed or rewritten.
+        paid_fields = total_fields
     cohorts = data.get("cohorts")
     if not isinstance(cohorts, list):
         raise ValueError("No cohort evidence")
@@ -59,8 +78,8 @@ def validated_prior(data, *, parser_version, now=None):
                         "full_serve_return_rows": ready}
     if sum(x["api_requests"] for x in parsed.values()) != total_calls:
         raise ValueError("Provider calls mismatch")
-    if sum(x["new_fields"] for x in parsed.values()) != total_fields:
-        raise ValueError("Persisted CDB fields mismatch")
+    if sum(x["new_fields"] for x in parsed.values()) != paid_fields:
+        raise ValueError("Paid CDB cohort fields mismatch")
     return parsed
 
 

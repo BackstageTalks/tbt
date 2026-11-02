@@ -115,3 +115,29 @@ def test_render_writes_valid_json_and_markdown_without_provider_calls(tmp_path, 
     assert result["status"] == "VERIFIED_CDB_GAIN"
     assert "remote" not in summary.read_text().lower()  # no unverified external fetch
     assert "independent evidence" in summary.read_text()
+
+
+def test_summary_schema2_explicitly_separates_paid_and_cache_gain():
+    download, verified = evidence()
+    download["statistics_data_value"]["new_statistic_values"] = 35
+    verified["persisted_new_statistic_values"] = 35
+    result = build(download, verified)
+    assert result["schema"] == 2
+    assert result["persisted_new_statistic_values"] == 35
+    assert result["paid_new_statistic_values"] == 30
+    assert result["non_paid_new_statistic_values"] == 5
+    assert result["paid_new_fields_per_1000_requests"] == 300
+    assert result["persisted_new_fields_per_1000_requests"] == 300
+    assert "cache/local processing: **5**" in markdown(result)
+
+
+def test_malformed_paid_gain_is_not_misreported_from_readback():
+    download, verified = evidence()
+    download["statistics_data_value"]["api_new_statistic_values"] = 29
+    with pytest.raises(ValueError, match="Cohort paid gains"):
+        build(download, verified)
+    download, verified = evidence()
+    download["statistics_data_value"]["api_new_statistic_values"] = 31
+    with pytest.raises(ValueError, match="Paid and non-paid"):
+        # 31 alleged paid values but only 30 persisted.
+        build(download, verified)

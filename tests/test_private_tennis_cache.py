@@ -167,3 +167,149 @@ def test_remote_token_never_sent_to_untrusted_service_origin(monkeypatch):
         "secret-worker-token",
     )
     allowed.close()
+
+
+
+class PublishBetweenClaimReads(FakeTable):
+    """Publish another worker's result after the first missing-row snapshot."""
+    def __init__(self):
+        super().__init__()
+        self.injected = False
+        self.payload = {"statistics": [{"period": "ALL", "groups": []}]}
+
+    def get_entity(self, partition_key, row_key):
+        if not row_key.startswith("raw_") and not self.injected:
+            self.injected = True
+            assert claim(row_key, OTHER, max_age=3600, table=self, now=1000)["status"] == "claimed"
+            assert publish(row_key, OTHER, self.payload, "3", table=self, now=1001)["status"] == "stored"
+            raise Missing()
+        return super().get_entity(partition_key, row_key)
+
+
+def test_interleaved_publish_is_integrity_checked_hit_not_second_claim():
+    backend = PublishBetweenClaimReads()
+    result = claim(KEY, OWNER, max_age=3600, table=backend, now=1002)
+    assert result["status"] == "hit"
+    assert result["payload"] == backend.payload
+    assert result["parser_version"] == "3"
+    assert read(KEY, max_age=3600, table=backend, now=1003)["status"] == "hit"
+    assert sum(k.startswith("raw_") for k in backend.items) == 1
+    assert backend.items[KEY][0]["state"] == "ready"
+
+
+def test_http_claim_race_avoids_duplicate_provider_load(monkeypatch):
+    from tbt.services.tennis_remote_cache_client import HttpRawResponseCache
+    backend = PublishBetweenClaimReads()
+
+    class Response:
+        status_code = 200
+        def __init__(self, result):
+            self.result = result
+        def json(self):
+            return {"ok": True, **self.result}
+
+    def fake_request(method, url, *, params=None, json=None, headers=None):
+        if method == "GET":
+            # A miss was seen before another worker published; race inside claim.
+            return Response({"status": "miss"})
+        assert method == "POST" and json["action"] == "claim"
+        return Response(claim(json["key"], json["owner"], max_age=json["max_age"],
+                              table=backend, now=1002))
+
+    client = HttpRawResponseCache("https://example.test/api/v1/internal/tennis-raw-cache",
+                                  "synthetic-worker")
+    monkeypatch.setattr(client.client, "request", fake_request)
+    try:
+        result = client.get_or_load(
+            provider="tennisapi1", host="tennisapi1.p.rapidapi.com",
+            endpoint="/api/tennis/event/7115726/statistics",
+            parser_version="3", loader=lambda: pytest.fail("Duplicate paid provider request"),
+        )
+        assert result == backend.payload
+        assert client.metrics["cache_hits"] == 1
+        assert client.metrics["upstream_loads"] == 0
+    finally:
+        client.close()
+
+
+def test_two_simultaneous_clients_share_single_provider_load(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from time import sleep
+    from tbt.services.tennis_remote_cache_client import HttpRawResponseCache
+    from tbt.services.tennis_response_cache import cache_identity
+    backend = FakeTable()
+    first_reads = threading.Barrier(2)
+    lock = threading.Lock()
+    initial_reads = 0
+    paid_calls = 0
+    payload = {"statistics": [{"period": "ALL", "groups": []}]}
+
+    class Response:
+        status_code = 200
+        def __init__(self, value):
+            self.value = value
+        def json(self):
+            return {"ok": True, **self.value}
+
+    def fake_request(method, url, *, params=None, json=None, headers=None):
+        nonlocal initial_reads
+        assert headers == {"X-Blinq-Worker-Token": "synthetic-worker"}
+        if method == "GET":
+            with lock:
+                initial_reads += 1
+                initial = initial_reads <= 2
+            if initial:
+                first_reads.wait(timeout=5)
+            value = read(params["key"], max_age=float(params["max_age"]),
+                         table=backend, now=1002)
+        elif json["action"] == "claim":
+            value = claim(json["key"], json["owner"], max_age=json["max_age"],
+                          table=backend, now=1000)
+        elif json["action"] == "publish":
+            value = publish(json["key"], json["owner"], json["payload"],
+                            json["parser_version"], table=backend, now=1001)
+        elif json["action"] == "abort":
+            value = abort(json["key"], json["owner"], table=backend)
+        else:
+            raise AssertionError("Unexpected cache request")
+        return Response(value)
+
+    def task(_):
+        nonlocal paid_calls
+        client = HttpRawResponseCache("https://example.test/api/v1/internal/tennis-raw-cache",
+                                      "synthetic-worker")
+        monkeypatch.setattr(client.client, "request", fake_request)
+        def loader():
+            nonlocal paid_calls
+            with lock:
+                paid_calls += 1
+            sleep(0.08)
+            return payload
+        try:
+            value = client.get_or_load(
+                provider="tennisapi1", host="tennisapi1.p.rapidapi.com",
+                endpoint="/api/tennis/event/7115726/statistics", parser_version="3",
+                loader=loader, wait_seconds=3,
+            )
+            return value, client.metrics.copy()
+        finally:
+            client.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        out = list(pool.map(task, range(2)))
+    assert all(v == payload for v, _ in out)
+    assert paid_calls == 1
+    assert sum(m["upstream_loads"] for _, m in out) == 1
+    assert sum(m["cache_hits"] for _, m in out) == 1
+    assert sum(k.startswith("raw_") for k in backend.items) == 1
+
+
+def test_corrupt_ready_snapshot_in_claim_fails_closed():
+    backend = FakeTable()
+    assert claim(KEY, OWNER, max_age=3600, table=backend, now=1000)["status"] == "claimed"
+    publish(KEY, OWNER, {"statistics": [1]}, "3", table=backend, now=1001)
+    body, etag = backend.items[KEY]
+    backend.items[KEY] = ({**body, "digest": "f" * 64}, etag)
+    with pytest.raises(CacheStoreUnavailable, match="integrity"):
+        claim(KEY, OTHER, max_age=3600, table=backend, now=1002)
+    assert backend.items[KEY][0]["state"] == "ready"
