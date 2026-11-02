@@ -31,7 +31,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  pr-contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate research integration contract without external sources
+        run: |
+          set -euo pipefail
+          python -m pip install pytest
+          python -m compileall -q scripts/integrate_kaggle_research_bundle.py
+          python -m pytest tests/test_kaggle_research_bundle.py -q
+
   integrate:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 240
     env:
