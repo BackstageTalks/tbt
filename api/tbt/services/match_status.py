@@ -25,6 +25,13 @@ from zoneinfo import ZoneInfo
 
 TERMINAL_STATUSES = {"win", "loss", "retired", "void"}
 
+# The four exact match-winner receipts from 2 Nov 2026, recorded in
+# api/data/confirmed_daily_offer_20261102.json. Do not alter older results or
+# other markets when quarantining prematurely declared provider winners.
+_NOV2_ISSUED_WINNER_IDS = frozenset({
+    "17456690", "17471474", "17467283", "17470634",
+})
+
 
 def _explicitly_nonterminal_status(value: Any) -> bool:
     """Never settle live fixtures from an early/incomplete winnerCode."""
@@ -49,7 +56,67 @@ def verified_terminal_statuses(snapshot_statuses: Any) -> dict[str, dict[str, An
         if isinstance(row, dict)
         and str(row.get("status") or "").strip().lower() in TERMINAL_STATUSES
         and not _explicitly_nonterminal_status(row.get("provider_status"))
+        and (str(event_id) not in _NOV2_ISSUED_WINNER_IDS
+             or str(row.get("status") or "").lower() not in {"win", "loss"}
+             or row.get("provider_final_score_verified") is True)
     }
+
+
+def filter_unverified_nov2_winner_results(
+    rows: Any, snapshot_statuses: Any,
+) -> list[dict[str, Any]]:
+    """Fail closed on the 2 Nov winner receipts if final score proof is absent.
+
+    This read-only guard also rejects stale archived WIN/LOSS entries. Once a
+    newly verified terminal snapshot exists, runtime settlement can re-create
+    the appropriate win/loss and financials from the frozen published odds.
+    No historical results, odds, Aces outcomes or storage are rewritten.
+    """
+    statuses = verified_terminal_statuses(snapshot_statuses)
+    output: list[dict[str, Any]] = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        event_id = _event_id(row)
+        scheduled = _parse_time(row.get("scheduled_at") or row.get("date"))
+        if (event_id not in _NOV2_ISSUED_WINNER_IDS or scheduled is None
+                or scheduled.astimezone(ZoneInfo("Europe/Bratislava")).date().isoformat()
+                != "2026-11-02"):
+            output.append(deepcopy(row))
+            continue
+        status = statuses.get(event_id) or {}
+        state = str(status.get("status") or "").lower()
+        winner = str(status.get("winner_id") or "").strip()
+        kept = []
+        for pub in row.get("market_publications") or []:
+            if not isinstance(pub, dict):
+                continue
+            section = str(pub.get("section") or "").lower()
+            market = str(pub.get("market") or (
+                "match_winner" if section in {"top_daily", "value", "prime", "top200"} else ""
+            )).lower()
+            if market != "match_winner":
+                kept.append(deepcopy(pub))
+                continue
+            result = pub.get("result") if isinstance(pub.get("result"), dict) else {}
+            selection = str(pub.get("selection_id") or pub.get("winner_id") or "").strip()
+            if state in {"retired", "void"}:
+                if result.get("void") is True and result.get("correct") is None:
+                    kept.append(deepcopy(pub))
+                continue
+            if (state not in {"win", "loss"} or not winner or not selection
+                    or status.get("provider_final_score_verified") is not True):
+                continue
+            expected = selection == winner
+            if state != ("win" if expected else "loss"):
+                continue
+            if result.get("correct") is expected:
+                kept.append(deepcopy(pub))
+        if kept:
+            copy = deepcopy(row)
+            copy["market_publications"] = kept
+            output.append(copy)
+    return output
 
 
 _PUBLIC_MATCH_WINNER_KEYS = (
@@ -1073,6 +1140,13 @@ def classify_finished_event(
     if not predicted:
         return None
 
+    # Provider winnerCode can precede an actual match end. On the four frozen
+    # 2 Nov match-winner bets, a terminal string and winnerCode alone do not
+    # suffice: the full completed set score must agree with the same winner.
+    verified_final_score = _verified_final_score_stats(row, event)
+    if _event_id(row) in _NOV2_ISSUED_WINNER_IDS and not verified_final_score:
+        return None
+
     first_set_outcome = ""
     first_set_score = ""
     home_score = event.get("homeScore") if isinstance(event.get("homeScore"), dict) else {}
@@ -1102,7 +1176,9 @@ def classify_finished_event(
         "winner_id": provider_winner,
         "provider_home_id": str(home.get("id") or ""),
         "provider_away_id": str(away.get("id") or ""),
-        "projection_stats": _verified_final_score_stats(row, event),
+        "projection_stats": verified_final_score,
+        **({"provider_final_score_verified": True}
+           if _event_id(row) in _NOV2_ISSUED_WINNER_IDS else {}),
         **({"first_set_outcome": first_set_outcome, "first_set_score": first_set_score}
            if first_set_outcome else {}),
     }
@@ -1416,6 +1492,9 @@ def scan_match_statuses(
         # Repair snapshots prematurely settled from 'inprogress 2nd set'.
         # They must return to the due queue for verified final evidence.
         and not _explicitly_nonterminal_status(value.get("provider_status"))
+        and (str(eid) not in _NOV2_ISSUED_WINNER_IDS
+             or str(value.get("status") or "").lower() not in {"win", "loss"}
+             or value.get("provider_final_score_verified") is True)
         and (not public_contract_present or str(eid) in tracked_ids)
     }
 
