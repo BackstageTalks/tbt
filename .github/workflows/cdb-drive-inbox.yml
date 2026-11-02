@@ -319,15 +319,21 @@ jobs:
               --source-dir work/source --stage-root work/moviodds-linked --out-dir work/stage
           else
             python scripts/cdb_inbox_stage.py --normalized-report work/source/report.json \
-              --history-dir work/before --out-dir work/stage
+              --history-dir work/before --out-dir work/stage \
+              --expected-provider-quarantine 6
           fi
           python scripts/import_offline_linked_serve_return.py \
+            --isolate-provider-collisions --expected-provider-quarantine 6 \
             --stage work/stage/eligible.jsonl --history-dir work/before --out-dir work/dry-run
           python - <<'PY'
           import json,os
           a=json.load(open("work/stage/report.json"))
           dry=json.load(open("work/dry-run/report.json"))
           counts=dry["counts"]
+          if a.get("excluded_ambiguous_provider_rows") != 6 or dry.get("excluded_ambiguous_provider_rows") != 6:
+              raise SystemExit("Known six provider collisions were not isolated exactly")
+          if a.get("full_canonical_rows") != dry.get("full_canonical_rows"):
+              raise SystemExit("Full canonical row count drift between linker and importer")
           if dry.get("production_mutated") is not False or dry.get("local_partitions_written") is not False:
               raise SystemExit("Dry-run caused an unexpected write")
           if counts.get("updated",0) != a["eligible_matches"]:
@@ -476,6 +482,7 @@ jobs:
           set -euo pipefail
           python scripts/cdb_global_writer_lock.py verify
           python scripts/import_offline_linked_serve_return.py \
+            --isolate-provider-collisions --expected-provider-quarantine 6 \
             --stage work/stage/eligible.jsonl --history-dir work/after \
             --out-dir work/local-import --write-partitions --write-history-dir work/after --exact-stats-only
           python - <<'PY'
