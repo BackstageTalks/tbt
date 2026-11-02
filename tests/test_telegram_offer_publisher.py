@@ -465,12 +465,12 @@ def test_telegram_send_post_contains_real_link_entities(monkeypatch, tmp_path):
 
 
 
-def test_full_offer_has_no_hidden_top_value_aces_cap_and_paginate():
+def test_admin_section_limit_7_does_not_cap_telegram_or_pagination():
     sample=offer()
     sample["top_daily_picks"]=[row(i,f"Top Surname{i}") for i in range(1,75)]
     sample["value_picks"]=[row(100+i,f"Value Person{i}") for i in range(1,27)]
     sample["ace_picks"]=[row(200+i,f"Aces Server{i}","aces") for i in range(1,28)]
-    cfg=settings(max_per_section=0,free_top_pick=False)
+    cfg=settings(max_per_section=7,free_top_pick=False)
     out=tg.messages(sample,cfg,NOW)
     assert len(out)>=2
     assert all(item["audience"]=="premium" for item in out)
@@ -482,13 +482,13 @@ def test_full_offer_has_no_hidden_top_value_aces_cap_and_paginate():
     assert lines.count("📅") == len(out)
 
 
-def test_full_offer_reserves_every_exact_publication_for_daily_results(tmp_path, monkeypatch):
+def test_admin_section_limit_7_does_not_cap_frozen_results_ledger(tmp_path, monkeypatch):
     from types import SimpleNamespace
     sample=offer()
     sample["top_daily_picks"]=[row(i,f"Top Player{i}") for i in range(1,18)]
     sample["value_picks"]=[row(100+i,f"Value Person{i}") for i in range(1,6)]
     sample["ace_picks"]=[row(200+i,f"Aces Server{i}","aces") for i in range(1,4)]
-    cfg=settings(max_per_section=0,free_top_pick=False)
+    cfg=settings(max_per_section=7,free_top_pick=False)
     cfg["schedule"]["enabled"]=False
     cfg["manual_request"]={"id":"fullsend001","created_at":NOW.isoformat()}
     monkeypatch.setattr(tg,"config",lambda *_: cfg)
