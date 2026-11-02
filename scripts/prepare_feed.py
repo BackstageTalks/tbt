@@ -671,7 +671,7 @@ def main() -> None:
                         if isinstance(pub, dict) and pub.get("source") == "confirmed_telegram_ou_reissue":
                             links.append({
                                 "event_id": ace_row.get("event_id"),
-                                "selection_id": ace_row.get("selection_id"),
+                                "selection_id": str((ace_row.get("betting") or {}).get("selection_id") or ace_row.get("selection_id") or ace_row.get("winner_id") or ""),
                                 "scheduled_at": ace_row.get("scheduled_at"),
                                 "projection": ace_row.get("projection"),
                                 "publication": pub,
