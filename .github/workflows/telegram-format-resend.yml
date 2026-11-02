@@ -64,6 +64,22 @@ jobs:
           assert request.get("replace_original_aces") is True
           print("Approved Nov 2 verified ACES O/U replacement trigger verified")
           PY
+          # Count available already-issued player O/U evidence before the guarded send.
+          python - <<'PY'
+          import json, sys
+          from collections import Counter
+          from pathlib import Path
+          sys.path.insert(0,str(Path.cwd()/"scripts"))
+          import telegram_offer_publisher as tg
+          snap=tg.snapshot(Path("/tmp/blinq-telegram-inspect"))
+          rows=[r for r in snap.get("ace_picks",[]) if isinstance(r,dict) and r.get("market")=="aces"]
+          grouped=Counter((str(r.get("price_contract") or "none"),str(r.get("price_status") or "none")) for r in rows)
+          print(json.dumps({"diagnostic":"confirmed_aces_contracts","date":snap.get("betting_day"),
+              "total":len(rows),"types":dict((str(k),v) for k,v in grouped.items()),
+              "explicit_line":sum(r.get("market_line") is not None for r in rows),
+              "explicit_side":sum(str(r.get("ou_side") or "").lower() in ("over","under") for r in rows),
+              "provider_verified":sum(tg.verified_ace_odds(r) is not None for r in rows)},sort_keys=True))
+          PY
           python scripts/telegram_offer_publisher.py prepare --preview-format --preview-revision aces-player-ou-20261102-v1 \
             --state .private-telegram/ops/telegram-bot-state.json \
             --config-url "$BLINQ_URL/api/v1/ui-config"
