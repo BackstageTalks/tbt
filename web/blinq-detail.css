@@ -64,6 +64,7 @@ body#blinqPremium .ace-leader-ball{
   opacity:.94!important;pointer-events:none!important;
 }
 body#blinqPremium .ace-detail-pick strong .ace-leader-ball{margin-left:7px!important}
+body#blinqPremium .market-card .player-name .ace-leader-ball{margin-left:5px!important}
 @media(max-width:760px){
   body#blinqPremium .daily-hub-table .ace-leader-ball{
     flex-basis:12px!important;width:12px!important;height:12px!important;margin-left:0!important;
