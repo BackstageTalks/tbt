@@ -157,3 +157,43 @@ def test_malformed_duplicate_cannot_make_native_identity_unique(tmp_path):
     assert result["counts"]["quarantined_ambiguous_native_match_key"] == 2
     assert result["counts"]["linker_ready_source_rows"] == 0
     assert result["canonical_write_authorized"] is False
+
+
+def test_partial_native_ace_df_and_break_points_are_preserved_without_fake_serve_rates(tmp_path):
+    root = tmp_path / "raw"
+    # Neither player's serve point denominators are present, but observed
+    # ace/DF and BP counts are exact match-level fields.
+    absent = {f"{side}_{field}": "" for side in ("w", "l")
+              for field in ("svpt", "1stIn", "1stWon", "2ndWon")}
+    good = _match(**absent)
+    assert _quality(good) == "VALID_PARTIAL_SERVE_OR_BP"
+    _write(root / "wta_matches_2025.csv", [good])
+    report = prepare(root, tmp_path / "stage", 2025, 2025)
+    assert report["counts"]["VALID_PARTIAL_SERVE_OR_BP"] == 1
+    assert report["counts"]["linker_ready_source_rows"] == 1
+    assert report["canonical_write_authorized"] is False
+    rows = list(_sackmann_rows([report["files"][0]["linker_csv"]]))
+    assert len(rows) == 1
+    observed = rows[0]
+    assert observed.stats_a["aces"] == 5
+    assert observed.stats_b["double_faults"] == 3
+    assert observed.stats_a["break_point_serve_win"] == 2 / 3
+    assert observed.stats_a["break_point_return_win"] == 3 / 7
+    assert "service_points_won" not in observed.stats_a
+    assert "first_serve_win" not in observed.stats_b
+
+
+def test_native_partial_invalid_or_one_sided_bp_counts_stay_quarantined(tmp_path):
+    absent = {f"{side}_{field}": "" for side in ("w", "l")
+              for field in ("svpt", "1stIn", "1stWon", "2ndWon")}
+    for bad in (
+        {"w_bpSaved": "4", "w_bpFaced": "3"},
+        {"w_bpSaved": "4", "w_bpFaced": ""},
+        {"w_ace": "-2"},
+        {"l_1stWon": "17"},
+    ):
+        assert _quality(_match(**{**absent, **bad})) == "INCOMPLETE_OR_INVALID"
+    for side in ("w", "l"):
+        for field in ("ace", "df", "bpSaved", "bpFaced"):
+            absent[f"{side}_{field}"] = ""
+    assert _quality(_match(**absent)) == "NO_STATS"

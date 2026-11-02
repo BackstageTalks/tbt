@@ -35,6 +35,8 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
       - scripts/cdb_large_source_stage.py
       - tests/test_cdb_large_source_stage.py
       - scripts/cdb_inbox_*.py
+      - scripts/cdb_native_sackmann_stage.py
+      - tests/test_cdb_native_sackmann_stage.py
       - scripts/moviodds_cdb_batch.py
       - scripts/moviodds_cdb_link.py
       - tests/test_moviodds_cdb_batch.py
@@ -60,6 +62,8 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
       - scripts/cdb_large_source_stage.py
       - tests/test_cdb_large_source_stage.py
       - scripts/cdb_inbox_*.py
+      - scripts/cdb_native_sackmann_stage.py
+      - tests/test_cdb_native_sackmann_stage.py
       - scripts/moviodds_cdb_batch.py
       - scripts/moviodds_cdb_link.py
       - tests/test_moviodds_cdb_batch.py

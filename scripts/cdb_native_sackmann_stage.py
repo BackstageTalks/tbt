@@ -39,18 +39,40 @@ def _uint(value):
     return int(token) if token.isdigit() else None
 
 def _quality(row: dict) -> str:
-    stats_exist = False
+    """Keep independently valid ace/DF/BP evidence without inventing serve totals.
+
+    A partially populated four-count serve block is unsafe (its rates might
+    be wrong) and is still quarantined. A completely absent block is fine
+    when other observed match-level counts remain available.
+    """
+    has_stats = False
+    full_serve_sides = 0
+    core = ("svpt", "1stIn", "1stWon", "2ndWon")
     for side in ("w", "l"):
-        d = {key: _uint(row.get(f"{side}_{key}")) for key in COUNTS}
-        stats_exist |= any(v is not None for v in d.values())
-        s, a, b, c = (d[k] for k in ("svpt", "1stIn", "1stWon", "2ndWon"))
-        if (s is None or s <= 0 or a is None or b is None or c is None
-                or b > a or a > s or c > s - a or b + c > s):
-            return "INCOMPLETE_OR_INVALID" if stats_exist else "NO_STATS"
-        if (d["bpSaved"] is not None and d["bpFaced"] is not None
-                and d["bpSaved"] > d["bpFaced"]):
+        values = {}
+        for field in COUNTS:
+            raw = str(row.get(f"{side}_{field}") or "").strip()
+            if raw and not raw.isdigit():
+                return "INCOMPLETE_OR_INVALID"
+            values[field] = int(raw) if raw else None
+        has_stats |= any(value is not None for value in values.values())
+        present = [values[field] is not None for field in core]
+        if any(present):
+            if not all(present):
+                return "INCOMPLETE_OR_INVALID"
+            s, a, b, c = (values[field] for field in core)
+            if (s <= 0 or b > a or a > s or c > s - a or b + c > s):
+                return "INCOMPLETE_OR_INVALID"
+            full_serve_sides += 1
+        saved, faced = values["bpSaved"], values["bpFaced"]
+        if (saved is None) != (faced is None):
             return "INCOMPLETE_OR_INVALID"
-    return "COMPLETE_BASIC_SERVE_RETURN"
+        if saved is not None and saved > faced:
+            return "INCOMPLETE_OR_INVALID"
+    if not has_stats:
+        return "NO_STATS"
+    return ("COMPLETE_BASIC_SERVE_RETURN" if full_serve_sides == 2
+            else "VALID_PARTIAL_SERVE_OR_BP")
 
 def prepare(source_root: Path, output_dir: Path, start_year: int = 2016,
             end_year: int = 2026) -> dict:
@@ -125,7 +147,7 @@ def prepare(source_root: Path, output_dir: Path, start_year: int = 2016,
                     continue
                 quality = _quality(row)
                 metrics[quality] += 1
-                if quality != "COMPLETE_BASIC_SERVE_RETURN":
+                if quality not in {"COMPLETE_BASIC_SERVE_RETURN", "VALID_PARTIAL_SERVE_OR_BP"}:
                     continue
                 row["league"] = tour
                 row["source_record_id"] = f"sackmann:{tour}:{family}:{year}:{digest}:{index}"
