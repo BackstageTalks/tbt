@@ -761,6 +761,15 @@ def save_match_status_snapshot(payload: object) -> dict:
                             clean[key] = int(count)
                 if clean:
                     statuses[eid]["projection_stats"] = clean
+                    # Preserve strict final-score proof across Azure serialization.
+                    # Never upgrade legacy/partial/identity-mismatched statuses.
+                    if (
+                        status in {"win", "loss"}
+                        and value.get("provider_final_score_verified") is True
+                        and statuses[eid]["winner_id"] in {home, away}
+                        and {"total_sets", "total_games"} <= clean.keys()
+                    ):
+                        statuses[eid]["provider_final_score_verified"] = True
             checked_at = str(value.get("projection_stats_checked_at") or "")[:64]
             try:
                 when = datetime.fromisoformat(checked_at.replace("Z", "+00:00"))
