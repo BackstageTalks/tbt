@@ -300,7 +300,7 @@ TML_ATP_2026_QUARANTINE = frozenset({
 def tour_from_pinned_tml(sha, path):
     if not isinstance(path, str):
         return ""
-    match = re.fullmatch(re.escape(TML_ATP_SOURCE_ROOT) + r"/(20(?:1[6-9]|2[0-6]))\\.csv", path)
+    match = re.fullmatch(re.escape(TML_ATP_SOURCE_ROOT) + r"/(20(?:1[6-9]|2[0-6]))\.csv", path)
     if not match:
         return ""
     return "atp" if TML_ATP_SOURCE_SHAS.get(int(match.group(1))) == sha else ""
@@ -314,7 +314,7 @@ def _pinned_tml_safety_reason(raw):
     if not all(ids) or ids[0] == ids[1]:
         return "tml_native_identity_missing_or_equal"
     score = str(raw.get("score") or "").strip()
-    if not score or re.search(r"\\b(?:W/O|WO|RET|ABD|DEF|walkover)\\b", score, re.I):
+    if not score or re.search(r"\b(?:W/O|WO|RET|ABD|DEF|walkover)\b", score, re.I):
         return "tml_noncompleted_or_missing_score"
     # The existing native stage validates internal consistency; same quality
     # gate here prevents generic normalization from rescuing invalid totals.
