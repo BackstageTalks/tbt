@@ -6,7 +6,6 @@ on:
     branches: [main]
     paths:
       - ".github/wimbledon-1992-1995-pbp-request.json"
-      - ".github/workflows/wimbledon-1992-1995-pbp.yml"
       - "scripts/audit_figshare_wimbledon_2023.py"
 
 permissions:
