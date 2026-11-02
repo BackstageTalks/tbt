@@ -190,3 +190,88 @@ def test_nov2_before_six_am_is_previous_betting_day_and_untouched():
     }
     for plan in ("rookie", "pro", "elite"):
         assert filter_results_for_issued_day([prior], _manifest(plan)) == [prior]
+
+
+def _authorized_feed(*picked):
+    """Minimal already-redacted account feed, not a global published offer."""
+    source = {
+        "daily_picks": [], "top_daily_picks": [], "value_picks": [],
+        "prime_picks": [], "ace_picks": [], "doubles_picks": [],
+        "sg_picks": [],
+    }
+    for offer in picked:
+        row = {
+            "event_id": offer["event_id"],
+            "scheduled_at": offer["scheduled_at"],
+            "betting": {"selection_id": offer["selection_id"]},
+        }
+        if offer["market"] == "aces":
+            # Real daily Aces cards can be flat and lack a market; the issued
+            # publication, when provided, carries exact immutable O/U details.
+            row["market_publications"] = [{
+                "section": "ace", "market": "aces",
+                "selection_id": offer["selection_id"],
+                "publication_status": "published",
+                "price_contract": "player_total_ou",
+                "ou_side": offer["ou_side"],
+                "market_line": offer["market_line"],
+            }]
+            source["ace_picks"].append(row)
+        elif offer["section"] == "value":
+            source["value_picks"].append(row)
+        else:
+            source["daily_picks"].append(row)
+            source["top_daily_picks"].append(row)
+    return source
+
+
+def test_free_uses_own_top_and_value_access_not_telegram_free_channel_only():
+    top = next(o for o in OFFERS if o["event_id"] == "17467283")
+    value = next(o for o in OFFERS if o["event_id"] == "17470634")
+    assert top["free"] is True and value["free"] is False
+    visible = _authorized_feed(top, value)
+    got = filter_results_for_issued_day(
+        _all_offered_results(), _manifest("rookie", top=1, value=1, ace=0),
+        authorized_feed=visible,
+    )
+    assert {r["event_id"] for r in got} == {"17467283", "17470634"}
+
+
+def test_pro_can_receive_authorized_aces_when_runtime_enables_two_slots():
+    top = [o for o in OFFERS if o["section"] == "top_daily"][:2]
+    value = [o for o in OFFERS if o["section"] == "value"]
+    ace = [o for o in OFFERS if o["section"] == "ace"][:2]
+    filtered = filter_results_for_issued_day(
+        _all_offered_results(), _manifest("pro", top=2, value=1, ace=2),
+        authorized_feed=_authorized_feed(*top, *value, *ace),
+    )
+    assert len(filtered) == 5
+    assert {p["market"] for r in filtered for p in r["market_publications"]} == {"match_winner", "aces"}
+
+
+def test_account_with_no_authorized_daily_picks_gets_zero_today_results():
+    for plan in ("rookie", "pro", "elite"):
+        assert filter_results_for_issued_day(
+            _all_offered_results(), _manifest(plan),
+            authorized_feed=_authorized_feed(),
+        ) == []
+
+
+def test_account_does_not_inherit_other_users_random_top_result():
+    offer = next(o for o in OFFERS if o["event_id"] == "17471474")
+    other = next(o for o in OFFERS if o["event_id"] == "17467283")
+    got = filter_results_for_issued_day(
+        _all_offered_results(), _manifest("rookie", top=1, value=0, ace=0),
+        authorized_feed=_authorized_feed(offer),
+    )
+    assert [r["event_id"] for r in got] == [offer["event_id"]]
+    assert [r["event_id"] for r in got] != [other["event_id"]]
+
+
+def test_full_elite_preserves_entire_confirmed_cohort_even_with_flat_ace_source():
+    got = filter_results_for_issued_day(
+        _all_offered_results(), _manifest("elite"),
+        authorized_feed=_authorized_feed(*OFFERS),
+    )
+    assert len(got) == 9
+    assert _identity(got) == _identity(_all_offered_results())
