@@ -99,14 +99,18 @@ def _safe_new_ace_results(rows: list[dict]) -> list[dict]:
             )
             if same:
                 result.update(staked_units=0.0, return_units=0.0, profit_units=0.0)
-            elif str(pub.get("price_status") or "").lower() == "priced_projection":
+            else:
                 try:
                     odds = float(pub.get("odds"))
                 except (TypeError, ValueError):
                     odds = float("nan")
-                if math.isfinite(odds) and odds > 1:
+                if str(pub.get("price_status") or "").lower() == "priced_projection" and math.isfinite(odds) and odds > 1:
                     result.update(staked_units=1.0, return_units=odds if correct else 0.0,
                                   profit_units=odds - 1.0 if correct else -1.0)
+                else:
+                    # Never retain a stale positive ROI from a different (superiority) market.
+                    for key in ("staked_units", "return_units", "profit_units"):
+                        result.pop(key, None)
     return safe
 
 
