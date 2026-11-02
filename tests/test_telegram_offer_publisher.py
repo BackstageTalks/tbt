@@ -568,7 +568,7 @@ def test_ou_reissue_preserves_nonaces_and_replaces_legacy_superiority():
     try:
         tg._reissue_with_verified_aces_ou(rejected,{"rows":old_rows},NOW)
     except RuntimeError as exc:
-        assert "No future verified" in str(exc)
+        assert "No eligible player Aces O/U" in str(exc)
     else:
         raise AssertionError("Legacy superiority must never be resent as O/U")
 
