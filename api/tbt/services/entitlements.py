@@ -7,6 +7,9 @@ is unavailable, while published admin rules may explicitly set 0..10 rows.
 from __future__ import annotations
 
 from copy import deepcopy
+import json
+from functools import lru_cache
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 import hashlib
 import re
@@ -207,6 +210,131 @@ def _filter_result_history(
         out.append(copy)
     return out
 
+
+
+_NOV2_ISSUED_DAY = "2026-11-02"
+_NOV2_ISSUED_FILE = Path(__file__).resolve().parents[2] / "data/confirmed_daily_offer_20261102.json"
+
+
+@lru_cache(maxsize=1)
+def _nov2_issued_contracts() -> dict[tuple[str, str, str, str], dict]:
+    """Frozen sent morning + superseding O/U receipts; no model re-picks."""
+    try:
+        snapshot = json.loads(_NOV2_ISSUED_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    if (not isinstance(snapshot, dict) or snapshot.get("schema") != 1
+            or snapshot.get("betting_day") != _NOV2_ISSUED_DAY
+            or not isinstance(snapshot.get("issued_picks"), list)):
+        return {}
+    indexed = {}
+    for item in snapshot["issued_picks"]:
+        if not isinstance(item, dict):
+            return {}
+        key = tuple(str(item.get(field) or "").strip().lower()
+                    for field in ("event_id", "section", "market", "selection_id"))
+        if not all(key) or key in indexed:
+            return {}  # Ambiguous evidence must not grant additional Results.
+        indexed[key] = item
+    # The complete 2 Nov Telegram issuance: 3 TOP, 1 VALUE, 5 player Aces O/U.
+    if len(indexed) != 9 or sum(bool(x.get("free")) for x in indexed.values()) != 1:
+        return {}
+    return indexed
+
+
+def filter_results_for_issued_day(rows: list, manifest: dict) -> list:
+    """For 2 Nov only, return the exact sent offer, never merely category matches.
+
+    LEGEND / GOAT / admin retain their full Results universe. Lower tiers can
+    view only issued contracts from the immutable morning/superseding receipts,
+    further narrowed by their current server-side category and slot entitlements.
+    Historical dates are untouched; no raw source or stored result is rewritten.
+    """
+    plan = str((manifest or {}).get("plan") or "").lower()
+    if plan not in {"rookie", "pro", "elite"}:
+        return deepcopy(rows)
+    issued = _nov2_issued_contracts()
+    categories = set((manifest or {}).get("result_categories") or [])
+    sections = (manifest or {}).get("sections") or {}
+    indices = {}
+    for offer in issued.values():
+        cat = str(offer["section"]).lower()
+        indices.setdefault(cat, []).append(offer)
+
+    out = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        scheduled = _result_timestamp(row)
+        if (scheduled is None
+                or scheduled.astimezone(ZoneInfo("Europe/Bratislava")).date().isoformat()
+                    != _NOV2_ISSUED_DAY
+                or blinq_access_day(scheduled) != _NOV2_ISSUED_DAY):
+            out.append(deepcopy(row))
+            continue
+        event = str(row.get("event_id") or row.get("id") or "").strip().lower()
+        kept = []
+        for publication in row.get("market_publications") or []:
+            if not isinstance(publication, dict):
+                continue
+            category = _result_publication_category(publication)
+            if category not in categories:
+                continue
+            market = str(publication.get("market") or "match_winner").lower()
+            selection = str(
+                publication.get("selection_id") or publication.get("winner_id")
+                or publication.get("pick_id") or ""
+            ).strip().lower()
+            offer = issued.get((event, category, market, selection))
+            if not offer:
+                continue
+            # A later quote must not silently replace the odds actually sent
+            # with this 2 Nov bet. Rounding to two decimals is tolerated.
+            seen_odds = _number(publication.get("odds"))
+            if seen_odds is not None and not (
+                abs(seen_odds - float(offer["odds"])) <= 0.011
+            ):
+                continue
+            if market == "aces":
+                # Reject the superseded player-superiority card and altered line.
+                if (str(publication.get("price_contract") or "").lower() != "player_total_ou"
+                        or str(publication.get("publication_key") or "") != offer["publication_key"]
+                        or str(publication.get("ou_side") or "").lower() != offer["ou_side"]
+                        or _number(publication.get("market_line")) != offer["market_line"]):
+                    continue
+            elif market != "match_winner":
+                continue
+            # FREE has one explicitly sent free pick, not an arbitrary 2 Nov TOP.
+            if plan == "rookie" and not offer.get("free"):
+                continue
+            if plan == "pro" and market != "match_winner":
+                continue
+            ent_key = "daily" if category == "top_daily" else category
+            ent = sections.get(ent_key) or {}
+            if not ent.get("enabled") or ent.get("display_state") != "active":
+                continue
+            rank = next((i for i, item in enumerate(indices.get(category, []), 1)
+                         if item is offer), None)
+            if rank is None:
+                continue
+            overrides = ent.get("row_overrides") or {}
+            override = str(overrides.get(str(rank)) or "").lower()
+            if override and override != "active":
+                continue
+            if plan != "rookie" and override != "active":
+                visible = ent.get("visible_picks", 0)
+                if str(visible).upper() != "ALL":
+                    try:
+                        if rank > int(visible):
+                            continue
+                    except (ValueError, TypeError):
+                        continue
+            kept.append(deepcopy(publication))
+        if kept:
+            copy = deepcopy(row)
+            copy["market_publications"] = kept
+            out.append(copy)
+    return out
 
 
 def filter_results_for_categories(rows: list, categories: list[str] | set[str]) -> list:
@@ -1051,6 +1179,7 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
         source_results, history_hours,
         allowed_categories=set(manifest.get("result_categories") or []),
     )
+    result["results"] = filter_results_for_issued_day(result["results"], manifest)
     restricted_categories = (
         manifest["plan"] != "admin"
         and set(manifest.get("result_categories") or []) != set(RESULT_CATEGORY_ORDER)
