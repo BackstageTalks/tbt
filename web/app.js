@@ -3688,6 +3688,8 @@
         let valid=0;
         publications.forEach(pub=>{
           if(!pub||(pub.publication_status&&pub.publication_status!=='published'))return;
+          if(pub.market==='aces'&&pub.price_contract!=='player_total_ou'
+            &&Date.parse(pub.issued_at)>=Date.parse('2026-11-01T05:00:00Z'))return;
           if(!pub.issued_at&&pub.runtime_publication_evidence!=='deployed_daily_offer_row')return;
           if(pub.issued_at&&(!Number.isFinite(Date.parse(pub.issued_at))||Date.parse(pub.issued_at)>Date.parse(scheduled)))return;
           const key=resultBetIdentity(row,pub,defaultMarket);
