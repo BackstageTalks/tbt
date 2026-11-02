@@ -341,3 +341,23 @@ def test_current_damm_junior_result_name_is_preserved():
     assert sample["name"]=="Martin Damm Jr."
     assert r.evaluate(sample,[])["status"]=="pending"
 
+
+
+def test_confirmed_ou_reissue_supersedes_legacy_aces_without_double_count():
+    legacy=sent("aces","event-old")
+    replacement=sent("aces","event-new")
+    replacement.update(market_line=7.5,projection_direction="over",
+                       publication_key="ace:player-total:over:7.5")
+    top=sent("top","top-original")
+    original={"status":"sent","rows":[top,legacy],"message_ids":[725,726]}
+    update={"status":"sent","rows":[top,replacement],"message_ids":[727,728],
+            "supersedes_daily":True}
+    state={"attempts":{DAY+":daily:0620":original},
+           "reposts":{DAY+":repost:aces-player-ou-20261102-v1":update}}
+    active=r.extract_sent(state,DAY)
+    assert [item["event_id"] for item in active]==["top-original","event-new"]
+    assert legacy not in active
+    assert original["rows"]==[top,legacy]  # immutable original audit
+    state["reposts"][DAY+":repost:aces-player-ou-20261102-v1"]["status"]="reserved"
+    assert r.extract_sent(state,DAY)==[top,legacy]
+
