@@ -1,0 +1,21 @@
+# Normalize only actively maintained source text; do not mass-renormalize history.
+# Existing blobs remain unchanged until a file is intentionally edited.
+*.py   text eol=lf
+*.js   text eol=lf
+*.cjs  text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.sh   text eol=lf
+
+# Keep already-encoded media/data artifacts byte-exact.
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.webp    binary
+*.gif     binary
+*.zip     binary
+*.gz      binary
+*.parquet binary
+*.sqlite3 binary
