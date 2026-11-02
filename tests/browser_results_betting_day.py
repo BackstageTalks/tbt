@@ -375,9 +375,9 @@ def main():
                       ace:{enabled:true,display_state:'active',visible_picks:2,selection_mode:'first'}
                     },
                     rookie:{
-                      daily:{enabled:true,display_state:'active',visible_picks:1,selection_mode:'first'},
-                      value:{enabled:false,display_state:'hidden',visible_picks:0},
-                      ace:{enabled:false,display_state:'hidden',visible_picks:0}
+                      daily:{enabled:true,display_state:'active',visible_picks:1,selection_mode:'stable_random'},
+                      value:{enabled:true,display_state:'active',visible_picks:1,selection_mode:'stable_random'},
+                      ace:{enabled:true,display_state:'active',visible_picks:0}
                     },
                     legend:{
                       daily:{enabled:true,display_state:'active',visible_picks:'ALL',selection_mode:'first'},
@@ -416,7 +416,7 @@ def main():
             }""")
             assert morning == {
                 "published": 9, "matched": 9, "eliteCohort": 9,
-                "eliteSummary": True, "proCohort": 5, "freeCohort": 1,
+                "eliteSummary": True, "proCohort": 5, "freeCohort": 2,
                 "legendCohort": 9, "goatCohort": 9
             }, morning
 
