@@ -5,7 +5,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
 from tbt.services.entitlements import _daily_rows
-from ace_working_odds import PRICE_BASIS, working_ace_odds, selected_ace_odds
+from ace_working_odds import PRICE_BASIS, working_ace_odds, selected_ace_odds, verified_ace_odds
 TZ=ZoneInfo("Europe/Bratislava")
 SECTIONS={"top":"top_daily_picks","value":"value_picks","aces":"ace_picks"}
 LABELS={"top":"🏆 TOP","value":"💎 VALUE","aces":"🎯 ACES"}
@@ -207,6 +207,13 @@ def select_groups(x,c,now):
         for r in source:
             if not isinstance(r,dict) or not r.get("event_id") or (k=="aces" and r.get("market")!="aces"):
                 continue
+            # An upcoming ACES betting offer must have a verified individual O/U
+            # line. Most Aces remains contextual and cannot be priced as O/U.
+            # Legacy exact reissues bypass this only to preserve frozen sends.
+            if (k=="aces" and c.get("aces_ou_only",True)
+                    and not (r.get("price_contract")=="player_total_ou"
+                             and verified_ace_odds(r) is not None)):
+                continue
             if not all(isinstance(r.get(p),dict) for p in ("player1","player2")):continue
             try:start=stamp(r["scheduled_at"])
             except (ValueError,KeyError,TypeError):continue
@@ -330,7 +337,8 @@ def _same_frozen_selection(current, frozen, *, allow_aces_price_update=False):
 def _original_offer_only(confirmed, sent, now, *, allow_aces_price_update=False):
     """Make a reformat of the previously issued offer, never new model picks."""
     source=select_groups(confirmed,{"sections":{k:True for k in SECTIONS},
-        "free_top_pick":True,"include_started":True,"max_per_section":0},now)
+        "free_top_pick":True,"include_started":True,"max_per_section":0,
+        "aces_ou_only":False},now)
     selected={key:[] for key in SECTIONS}
     used=set()
     for frozen in sent.get("rows") or []:
