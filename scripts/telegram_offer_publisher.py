@@ -339,13 +339,22 @@ def result_reference(row,section):
     if section=="aces":
         odds, verified_provider = selected_ace_odds(row, selection_id=selection)
         if row.get("price_contract") == "player_total_ou":
-            # Frozen settlement must refer to the exact issued O/U market,
-            # not a legacy Most Aces publication on this player.
-            if len(pubs)!=1 or not pub.get("publication_key"):
-                raise RuntimeError("Confirmed player ACES O/U missing unique issued publication")
-            if (str(pub.get("ou_side") or "").lower()!=str(row.get("ou_side") or "").lower()
-                    or num(pub.get("market_line"))!=num(row.get("market_line"))):
-                raise RuntimeError("ACES O/U publication line or side mismatch")
+            if _eligible_local_player_aces_ou(row):
+                # Separate immutable Telegram-only contract; no synthetic
+                # provider / CDB publication or claim of externally quoted line.
+                line=num(row["market_line"])
+                pub={"publication_key":("local-aces-ou-v1:"
+                      +str(row["event_id"])+":"+selection+":over:"+f"{line:.1f}"),
+                     "market_line":line,"ou_side":"over"}
+                verified_provider=False
+            else:
+                # The real contract must correspond to exactly one provider
+                # publication, not a legacy player-superiority market.
+                if len(pubs)!=1 or not pub.get("publication_key"):
+                    raise RuntimeError("Confirmed player ACES O/U missing unique issued publication")
+                if (str(pub.get("ou_side") or "").lower()!=str(row.get("ou_side") or "").lower()
+                        or num(pub.get("market_line"))!=num(row.get("market_line"))):
+                    raise RuntimeError("ACES O/U publication line or side mismatch")
     else:
         odds=num(pub.get("odds") or betting.get("odds") or row.get("odds"))
         verified_provider=False
