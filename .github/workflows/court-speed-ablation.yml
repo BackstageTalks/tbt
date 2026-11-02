@@ -1,10 +1,6 @@
 name: BlinQ court-speed ablation
 # Re-run after adding explicit court-speed player-swap symmetry contract.
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/court-speed-ablation.yml'
   workflow_dispatch:
 
 permissions:

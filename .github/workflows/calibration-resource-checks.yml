@@ -15,7 +15,6 @@ on:
       - api/tbt/models/ensemble.py
       - api/tbt/services/training.py
       - tests/test_calibration_memory_bounded.py
-      - .github/workflows/calibration-resource-checks.yml
 
 permissions:
   contents: read

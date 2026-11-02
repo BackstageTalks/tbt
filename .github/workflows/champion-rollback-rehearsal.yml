@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/champion-rollback-rehearsal.yml'
       - 'scripts/verify_champion_rollback.py'
       - 'tests/test_champion_rollback_rehearsal.py'
   workflow_dispatch:
