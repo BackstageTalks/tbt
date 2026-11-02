@@ -44,6 +44,71 @@ def _time(value: Any) -> datetime | None:
         return None
 
 
+
+_NEW_ACES_OU_START = datetime(2026, 11, 1, 5, tzinfo=timezone.utc)
+
+
+def _safe_new_ace_results(rows: list[dict]) -> list[dict]:
+    """Read-side reconciliation; never rewrite an issued ledger or raw archive.
+
+    Newly published ACES are player-specific totals, not a contest of ace
+    counts between opponents. A frozen O/U side, line and actual count are
+    required before the result can contribute a W/L or ROI.
+    """
+    safe = deepcopy(rows)
+    for row in safe:
+        if not isinstance(row, dict):
+            continue
+        scheduled = _time(row.get("scheduled_at") or row.get("date"))
+        if scheduled is None or scheduled < _NEW_ACES_OU_START:
+            continue
+        for pub in row.get("market_publications") or []:
+            if not isinstance(pub, dict) or str(pub.get("market") or "").lower() != "aces":
+                continue
+            side = str(pub.get("ou_side") or "").strip().lower()
+            try:
+                line = float(pub.get("market_line"))
+            except (TypeError, ValueError):
+                line = float("nan")
+            valid = (
+                str(pub.get("price_contract") or "").lower() == "player_total_ou"
+                and side in {"over", "under"}
+                and math.isfinite(line) and line >= 0
+            )
+            result = pub.get("result")
+            if not valid or not isinstance(result, dict):
+                pub["result"] = None
+                pub["result_guard"] = "missing_original_aces_ou_contract"
+                continue
+            if result.get("void") is True or str(result.get("status") or "").lower() in {"void", "retired"}:
+                continue
+            try:
+                actual = float(result.get("actual_count"))
+            except (TypeError, ValueError):
+                actual = float("nan")
+            if not math.isfinite(actual) or actual < 0:
+                pub["result"] = None
+                pub["result_guard"] = "missing_verified_aces_count"
+                continue
+            same = actual == line
+            correct = (actual > line) if side == "over" else (actual < line)
+            result.update(
+                status="void" if same else "hit" if correct else "miss",
+                correct=None if same else correct, void=same,
+            )
+            if same:
+                result.update(staked_units=0.0, return_units=0.0, profit_units=0.0)
+            elif str(pub.get("price_status") or "").lower() == "priced_projection":
+                try:
+                    odds = float(pub.get("odds"))
+                except (TypeError, ValueError):
+                    odds = float("nan")
+                if math.isfinite(odds) and odds > 1:
+                    result.update(staked_units=1.0, return_units=odds if correct else 0.0,
+                                  profit_units=odds - 1.0 if correct else -1.0)
+    return safe
+
+
 def _identity(row: dict, publication: dict) -> str:
     event = str(row.get("event_id") or row.get("id") or "").strip()
     section = str(publication.get("section") or "").strip().lower()
@@ -211,7 +276,7 @@ def load_settled_results_archive() -> list[dict]:
             for key, row in parsed["rows"].items():
                 if isinstance(row, dict) and row.get("market_publications"):
                     records[key] = row
-        return list(records.values())
+        return _safe_new_ace_results(list(records.values()))
     except AdminStorageUnavailable:
         raise
     except Exception as exc:
@@ -334,5 +399,5 @@ def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
         rows.append(deepcopy(archived_row))
         existing[key] = rows[-1]["market_publications"][0]
     rows.sort(key=lambda row: _time(row.get("scheduled_at") or row.get("date")) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
-    out["results"] = rows
+    out["results"] = _safe_new_ace_results(rows)
     return out
