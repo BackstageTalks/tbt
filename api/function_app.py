@@ -256,9 +256,24 @@ _COMPARATOR_RATE_BUCKETS = defaultdict(deque)
 _COMPARATOR_RATE_LOCK = Lock()
 
 
-def _banner_event_allowed(payload):
-    client_id = str((payload or {}).get("client_id") or "anonymous")[:256]
-    key = hashlib.sha256(client_id.encode("utf-8")).hexdigest()[:24]
+def _anonymous_client_key(req) -> str | None:
+    """Return a hashed platform client IP, never an untrusted request claim.
+
+    If the platform does not provide a valid single IP, callers share only
+    the existing global cap, avoiding an artificial per-client NAT bucket.
+    """
+    headers = getattr(req, "headers", {}) or {}
+    raw = str(headers.get("X-Azure-ClientIP") or "").strip()
+    try:
+        client = ipaddress.ip_address(raw).compressed
+    except ValueError:
+        return None
+    return hashlib.sha256(client.encode("utf-8")).hexdigest()[:24]
+
+
+def _banner_event_allowed(payload, req):
+    # Payload client_id is telemetry metadata, not an abuse-protection identity.
+    key = _anonymous_client_key(req)
     now = time.monotonic()
     cutoff = now - _BANNER_RATE_WINDOW_SECONDS
     with _BANNER_RATE_LOCK:
@@ -266,12 +281,13 @@ def _banner_event_allowed(payload):
             _BANNER_RATE_GLOBAL.popleft()
         if len(_BANNER_RATE_GLOBAL) >= _BANNER_RATE_GLOBAL_MAX_EVENTS:
             return False
-        bucket = _BANNER_RATE_BUCKETS[key]
-        while bucket and bucket[0] < cutoff:
-            bucket.popleft()
-        if len(bucket) >= _BANNER_RATE_MAX_EVENTS:
-            return False
-        bucket.append(now)
+        if key is not None:
+            bucket = _BANNER_RATE_BUCKETS[key]
+            while bucket and bucket[0] < cutoff:
+                bucket.popleft()
+            if len(bucket) >= _BANNER_RATE_MAX_EVENTS:
+                return False
+            bucket.append(now)
         _BANNER_RATE_GLOBAL.append(now)
         # Keep this best-effort guard bounded on a long-running worker.
         if len(_BANNER_RATE_BUCKETS) > 10000:
@@ -282,17 +298,8 @@ def _banner_event_allowed(payload):
 
 
 def _auth_email_request_allowed(req) -> bool:
-    headers = getattr(req, "headers", {}) or {}
-    # Only the platform-provided client IP may identify an anonymous caller.
-    # X-Forwarded-For/X-Client-IP can be supplied by the caller and must not
-    # create fresh buckets. A missing/invalid trusted IP uses the global cap
-    # rather than grouping all legitimate unknown callers into one 20-hit cap.
-    trusted_ip = str(headers.get("X-Azure-ClientIP") or "").strip()
-    try:
-        client = ipaddress.ip_address(trusted_ip).compressed
-    except ValueError:
-        client = None
-    key = hashlib.sha256(client.encode("utf-8")).hexdigest()[:24] if client else None
+    # Reuse the same platform-only identity as banner telemetry.
+    key = _anonymous_client_key(req)
     now = time.monotonic()
     cutoff = now - _AUTH_EMAIL_RATE_WINDOW_SECONDS
     with _AUTH_EMAIL_RATE_LOCK:
@@ -1404,7 +1411,7 @@ def banner_events(req):
             return response({"error": "invalid_analytics_event"}, 400)
         if len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) > 4096:
             return response({"error": "analytics_event_too_large"}, 413)
-        if not _banner_event_allowed(payload):
+        if not _banner_event_allowed(payload, req):
             return response({"error": "rate_limited"}, 429)
         record_banner_event(payload)
         return response({"accepted": True}, 202)
