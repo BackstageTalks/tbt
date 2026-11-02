@@ -513,6 +513,68 @@ def _finite_count(raw: Any) -> float | None:
     return n if math.isfinite(n) and n >= 0 else None
 
 
+def attach_confirmed_aces_ou_sidecar(feed: dict[str, Any], sidecar: Any) -> dict[str, Any]:
+    """Overlay immutable pre-match O/U issuance without editing canonical feed.
+
+    The sidecar is built solely from already SENT, superseding Telegram receipts.
+    Do not infer a historical line from a projection or an opponent's ace count.
+    """
+    if (not isinstance(feed, dict) or not isinstance(sidecar, dict)
+            or sidecar.get("schema") != 1
+            or not isinstance(sidecar.get("issued_aces_ou"), list)):
+        return feed
+    indexed: dict[tuple[str, str], dict[str, Any]] = {}
+    conflicted: set[tuple[str, str]] = set()
+    for item in sidecar["issued_aces_ou"]:
+        if not isinstance(item, dict) or not isinstance(item.get("publication"), dict):
+            continue
+        key = (str(item.get("event_id") or ""), str(item.get("selection_id") or ""))
+        if not all(key):
+            continue
+        if key in indexed:
+            conflicted.add(key)
+        indexed[key] = item
+    amended = []
+    for row in feed.get("ace_picks") or []:
+        if not isinstance(row, dict):
+            amended.append(row)
+            continue
+        key = (_event_id(row), _selection_id(row))
+        item = indexed.get(key)
+        if not item or key in conflicted or str(row.get("market") or "") != "aces":
+            amended.append(row)
+            continue
+        pub = item["publication"]
+        scheduled = _parse_time(row.get("scheduled_at"))
+        issued = _parse_time(pub.get("issued_at"))
+        projection = _finite_count(row.get("projection"))
+        frozen_projection = _finite_count(item.get("projection"))
+        if (not scheduled or not issued or issued >= scheduled
+                or str(item.get("scheduled_at") or "") != str(row.get("scheduled_at") or "")
+                or projection is None or frozen_projection is None
+                or abs(projection - frozen_projection) > 0.011
+                or str(pub.get("selection_id") or "") != key[1]
+                or key[1] not in {_player_id(row, "player1"), _player_id(row, "player2")}
+                or not verified_aces_ou_publication(pub)
+                or pub.get("source") != "confirmed_telegram_ou_reissue"
+                or pub.get("price_basis") != "local_aces_statistical_v1"
+                or pub.get("price_status") != "priced_projection"
+                or (_finite_count(pub.get("odds")) or 0) <= 1
+                or str(pub.get("publication_status") or "") != "published"):
+            amended.append(row)
+            continue
+        current = [p for p in row.get("market_publications") or [] if isinstance(p, dict)]
+        if any(p.get("price_contract") == "player_total_ou" and p.get("market") == "aces"
+               and p.get("publication_key") != pub.get("publication_key") for p in current):
+            amended.append(row)
+            continue
+        if any(p.get("publication_key") == pub.get("publication_key") for p in current):
+            amended.append(row)
+            continue
+        amended.append({**row, "market_publications": [*deepcopy(current), deepcopy(pub)]})
+    return {**feed, "ace_picks": amended}
+
+
 def _grade_runtime_projection(
     row: dict[str, Any], publication: dict[str, Any], status_row: dict[str, Any]
 ) -> dict[str, Any] | None:
