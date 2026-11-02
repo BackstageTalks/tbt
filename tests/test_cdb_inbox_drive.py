@@ -432,3 +432,10 @@ def test_all_pinned_tml_checkpoint_replays_leave_unrelated_sources_unchanged():
             ("id", "name", "mimeType", "size", "md5Checksum", "modifiedTime")],
             ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
         assert _fingerprint(wrong) == old
+
+    from scripts.cdb_inbox_drive import _candidate_priority
+    tml = {"id": TML_YEAR_ONLY_DRIVE_IDS[2019], "name": "2019.csv",
+           "path": "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/TML/TML/2019.csv"}
+    generic = {"id": "generic-source-id", "name": "atp_matches_2019.csv",
+               "path": "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/BAL/atp_matches_2019.csv"}
+    assert _candidate_priority(tml)[0] < _candidate_priority(generic)[0]
