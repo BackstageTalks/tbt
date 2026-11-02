@@ -100,6 +100,20 @@ def test_archive_regrades_bad_win_when_original_ou_is_available():
     assert original["market_publications"][0]["result"]["correct"] is True
 
 
+def test_archive_discards_stale_profit_if_local_ou_is_corrected():
+    original = _row(_pub(price_contract="player_total_ou", ou_side="over",
+                         market_line=10.5))
+    original["market_publications"][0]["result"] = {
+        "status": "hit", "correct": True, "actual_count": 9,
+        "opponent_actual_count": 5, "staked_units": 1,
+        "profit_units": .80,
+    }
+    effective = _safe_new_ace_results([original])[0]["market_publications"][0]["result"]
+    assert effective["correct"] is False
+    assert "profit_units" not in effective
+    assert "staked_units" not in effective
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node runtime unavailable")
 def test_browser_win_and_units_cannot_use_opponent_comparison():
     root = Path(__file__).resolve().parents[1]
