@@ -89,7 +89,8 @@ def test_stage_requires_exact_day_tournament_winner_and_extra_evidence(tmp_path,
         link_dir = Path(command[command.index("--out-dir") + 1])
         link_dir.mkdir(parents=True)
         (link_dir / "report.json").write_text(json.dumps({"production_mutated": False,
-            "api_requests": 0, "counts": {"identity_linked": 3}, "source_rows": 3}))
+            "api_requests": 0, "counts": {"identity_linked": 3}, "source_rows": 3,
+            "excluded_ambiguous_provider_rows": 0, "full_canonical_rows": 3}))
         def row(mid, proof):
             return {"schema": 1, "import_ready": True, "match_id": mid,
                     "canonical": {"tour": "atp", "scheduled_date_utc": "2026-10-17"},

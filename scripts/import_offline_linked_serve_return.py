@@ -16,7 +16,7 @@ from pathlib import Path
 
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_partitions, write_year_partition
-from tbt.data.history_safety import sanitize_history_identities
+from tbt.data.history_safety import select_exact_provider_quarantine
 from tbt.models.feature_builder import FeatureBuilder
 
 RATE_FIELDS = {
@@ -76,6 +76,8 @@ def _read(path: str) -> list[dict]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stage", required=True)
+    ap.add_argument("--isolate-provider-collisions", action="store_true")
+    ap.add_argument("--expected-provider-quarantine", type=int, default=0)
     ap.add_argument("--history-dir", required=True)
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--write-partitions", action="store_true")
@@ -83,6 +85,8 @@ def main() -> None:
     ap.add_argument("--exact-stats-only", action="store_true",
                     help="Hwaitt import: patch ONLY verified added stats cells and full-year verify")
     args = ap.parse_args()
+    if args.isolate_provider_collisions != (args.expected_provider_quarantine > 0):
+        ap.error("Exact positive provider quarantine expectation and isolation flag must agree")
     if args.write_history_dir and not args.write_partitions:
         ap.error("--write-history-dir requires --write-partitions")
     if args.exact_stats_only and (not args.write_partitions or
@@ -91,9 +95,15 @@ def main() -> None:
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    matches, safety = sanitize_history_identities(load_partitions(args.history_dir))
-    if safety.get("quarantined_rows"):
-        raise SystemExit("Canonical history identity quarantine is non-empty")
+    matches, safety, protected_ids = select_exact_provider_quarantine(
+        load_partitions(args.history_dir),
+        expected_rows=args.expected_provider_quarantine,
+        preserve_quarantined=True,
+    )
+    # Exact Parquet writers require all original rows, including the six
+    # quarantined provider collisions, to remain byte-logically unchanged.
+    if args.expected_provider_quarantine and len(matches) != safety["input_rows"]:
+        raise ValueError("Exact stats importer would drop canonical rows")
 
     by_id = {str(m.match_id): m for m in matches}
     rows = _read(args.stage)
@@ -113,6 +123,8 @@ def main() -> None:
         if not mid or mid in seen:
             raise ValueError("Missing or duplicate staged match ID")
         seen.add(mid)
+        if mid in protected_ids:
+            raise ValueError("Staged match touches quarantined canonical provider identity")
         match = by_id.get(mid)
         if match is None:
             counts["identity_missing"] += 1
@@ -317,6 +329,8 @@ def main() -> None:
     report = {
         "schema": 1,
         "stage_rows": len(rows),
+        "excluded_ambiguous_provider_rows": safety["quarantined_rows"],
+        "full_canonical_rows": safety["input_rows"],
         "counts": dict(counts),
         "changed_years": sorted(changed_years),
         "quality_ready_before": before,

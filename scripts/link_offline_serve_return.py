@@ -31,7 +31,7 @@ from typing import Iterable
 
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_partitions
-from tbt.data.history_safety import sanitize_history_identities
+from tbt.data.history_safety import select_exact_provider_quarantine
 from tbt.models.feature_builder import FeatureBuilder
 
 
@@ -1267,6 +1267,8 @@ def _reconcile_linked_fields(
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--history-dir", required=True)
+    ap.add_argument("--isolate-provider-collisions", action="store_true")
+    ap.add_argument("--expected-provider-quarantine", type=int, default=0)
     ap.add_argument("--source-csv", action="append", default=[])
     ap.add_argument("--all-matches-csv", action="append", default=[])
     ap.add_argument("--kaggle-hwaitt-csv", action="append", default=[])
@@ -1280,6 +1282,8 @@ def main() -> None:
     ap.add_argument("--require-verified-identities", action="store_true",
                     help="Fail closed: no name-only fallback for external TML data")
     args = ap.parse_args()
+    if args.isolate_provider_collisions != (args.expected_provider_quarantine > 0):
+        ap.error("Exact positive provider quarantine expectation and isolation flag must agree")
     if args.require_verified_identities and args.matching_strategy != "verified_ids":
         ap.error("--require-verified-identities needs verified_ids matching")
     links = _read_verified_player_crosswalk(
@@ -1290,9 +1294,12 @@ def main() -> None:
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    matches, safety = sanitize_history_identities(load_partitions(args.history_dir))
-    if safety.get("quarantined_rows"):
-        raise SystemExit("Canonical history has identity quarantine; refusing offline linking")
+    matches, safety, protected_ids = select_exact_provider_quarantine(
+        load_partitions(args.history_dir),
+        expected_rows=args.expected_provider_quarantine,
+        preserve_quarantined=False,
+    )
+    assert not protected_ids.intersection(str(m.match_id) for m in matches)
 
     canonical_by_day_pair: dict[tuple[str, date, tuple[str, str]], list] = defaultdict(list)
     canonical_by_day_ids: dict[tuple[str, date, frozenset[str]], list] = defaultdict(list)
@@ -1483,6 +1490,8 @@ def main() -> None:
     report = {
         "schema": 1,
         "canonical_rows": len(matches),
+        "full_canonical_rows": safety["input_rows"],
+        "excluded_ambiguous_provider_rows": safety["quarantined_rows"],
         "source_rows": len(sources),
         "counts": dict(counts),
         "source_rows_by_source": dict(per_source),
