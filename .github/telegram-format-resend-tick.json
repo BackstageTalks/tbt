@@ -8,5 +8,5 @@
   "preserve_original_confirmed_picks": true,
   "scope": "Reissue regular TOP VALUE verified player ACES O/U FREE; replace old Most Aces rows in Results only after confirmed send",
   "requested_by": "operator",
-  "note": "Verify newly refreshed 2026-11-02 ACE player O/U fields and send already-approved regular feed once if eligible; otherwise fail without publication."
+  "note": "Operator-approved: use original BlinQ model-selected players with statistical local player Aces Over/Under boundary and odds fallback when provider exact O/U absent. Preserve TOP VALUE FREE."
 }
