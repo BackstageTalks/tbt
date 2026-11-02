@@ -21,9 +21,11 @@ def test_blinq_selects_aces_before_fetching_any_projection_prices():
 def test_missing_ace_prices_cannot_trigger_substitute_matches():
     assert '"pre_odds_selected"' in PIPELINE
     assert '"selection_policy"] = "blinq_model_first_then_odds_attachment"' in PIPELINE
-    assert '"priced_selection_policy": "blinq_model_first_api_pro_propline_moviodds_then_local_aces_only"' in PIPELINE
+    assert '"priced_selection_policy": "blinq_model_first_then_verified_player_aces_ou_only"' in PIPELINE
     assert "ace_picks = [row for row in ace_picks if (" in PIPELINE
-    assert "publishable_api_price(row) or eligible_local_ace_projection(row)" in PIPELINE
-    # The existing SG odds-first and local-Aces price policies are retained.
+    assert "publishable_api_price(row)" in PIPELINE
+    assert 'row.get("price_contract") == "player_total_ou"' in PIPELINE
+    assert "publishable_api_price(row) or eligible_local_ace_projection(row)" not in PIPELINE
+    # SG odds-first remains unchanged; no locally priced superiority Aces bets.
     assert "sg_picks, sg_report = select_sg_picks(" in PIPELINE
     assert "aces_local_fallback_published" in PIPELINE
