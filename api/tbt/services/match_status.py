@@ -552,7 +552,7 @@ def attach_confirmed_aces_ou_sidecar(feed: dict[str, Any], sidecar: Any) -> dict
             continue
         key = (_event_id(row), _selection_id(row))
         item = indexed.get(key)
-        if not item or key in conflicted or str(row.get("market") or "") != "aces":
+        if not item or key in conflicted:
             amended.append(row)
             continue
         pub = item["publication"]
