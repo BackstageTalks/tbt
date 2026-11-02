@@ -82,7 +82,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/recover_cdb_opponent_service_rates.py \
+          python scripts/recover_cdb_opponent_service_rates.py --isolate-provider-collisions --expected-provider-quarantine 6 \
             --mode stage --pairwise \
             --history-dir .cache/tbt/cdb-pairwise-write/history \
             --out-dir .cache/tbt/cdb-pairwise-write/stage
@@ -92,6 +92,10 @@ jobs:
           root=Path(".cache/tbt/cdb-pairwise-write")
           report=json.loads((root/"stage/report.json").read_text())
           counts=report["counts"]
+          safety=json.loads((root/"stage/identity-safety.json").read_text())
+          assert safety["quarantined_rows"] == 6 and safety["merged_rows_removed"] == 0
+          assert safety["input_rows"] == counts["examined"] + 6, "Full canonical count must retain six excluded collision rows"
+          assert counts.get("excluded_ambiguous_provider_rows") == 6
           assert report["production_mutated"] is False and report["provider_requests"] == 0
           # A reviewed, single-use request pins BOTH current source manifest and
           # exact eligible delta. Never widen scope silently after PR dry-run.
@@ -113,6 +117,8 @@ jobs:
           assert counts["staged_matches"] == request.get("expected_staged_matches"), "CDB staged match count drift"
           assert counts["new_stat_values"] == request.get("expected_new_stat_values"), "CDB staged value count drift"
           assert counts["examined"] == request.get("expected_canonical_matches"), "CDB history size drift"
+          assert safety["input_rows"] == request.get("expected_full_canonical_matches"), "Full canonical count drift"
+          assert request.get("expected_provider_quarantine") == 6
           assert counts.get("conflicting_rate_pairs_quarantined",0) == request.get("expected_quarantined_conflicting_pairs"), "Quarantine count drift"
           assert set(map(int,report["changed_years"])) <= set(map(int,request["expected_changed_years"])), "Staged years widened unexpectedly"
           assert counts["examined"] >= 993759, "CDB row-count regression"
@@ -139,11 +145,11 @@ jobs:
           set -euo pipefail
           root=.cache/tbt/cdb-pairwise-write
           cp -a "$root/history" "$root/rehearsal-before"
-          python scripts/recover_cdb_opponent_service_rates.py \
+          python scripts/recover_cdb_opponent_service_rates.py --isolate-provider-collisions --expected-provider-quarantine 6 \
             --mode write --history-dir "$root/history" \
             --stage-file "$root/stage/stage.jsonl" \
             --out-dir "$root/rehearsal"
-          python scripts/recover_cdb_opponent_service_rates.py \
+          python scripts/recover_cdb_opponent_service_rates.py --isolate-provider-collisions --expected-provider-quarantine 6 \
             --mode verify --history-dir "$root/history" \
             --before-dir "$root/rehearsal-before" \
             --stage-file "$root/stage/stage.jsonl" \
@@ -156,7 +162,8 @@ jobs:
           write=json.loads((root/"rehearsal/report.json").read_text())
           checked=json.loads((root/"rehearsal-readback/report.json").read_text())
           assert write["updated"]==staged["staged_matches"]
-          assert checked["status"]=="verified"
+          assert checked["status"]=="verified" and checked["quarantined_rows_proven_unchanged"]==6
+          assert checked["canonical_matches"]==staged["examined"]+6
           assert checked["enriched_matches"]==staged["staged_matches"]
           assert checked["new_stat_values"]==staged["new_stat_values"]
           assert checked["existing_values_overwritten"]==0
@@ -242,10 +249,10 @@ jobs:
         run: |
           set -euo pipefail
           root=.cache/tbt/cdb-pairwise-write
-          python scripts/recover_cdb_opponent_service_rates.py \
+          python scripts/recover_cdb_opponent_service_rates.py --isolate-provider-collisions --expected-provider-quarantine 6 \
             --mode write --history-dir "$root/history" \
             --stage-file "$root/stage/stage.jsonl" --out-dir "$root/write"
-          python scripts/recover_cdb_opponent_service_rates.py \
+          python scripts/recover_cdb_opponent_service_rates.py --isolate-provider-collisions --expected-provider-quarantine 6 \
             --mode verify --history-dir "$root/history" --before-dir "$root/before" \
             --stage-file "$root/stage/stage.jsonl" --out-dir "$root/local-readback"
           python - <<'PY'
@@ -298,7 +305,7 @@ jobs:
           root=.cache/tbt/cdb-pairwise-write
           python scripts/download_stable_cdb.py --repository "$TBT_DATA_REPOSITORY" \
             --out "$root/persisted" --report "$root/persisted-download.json"
-          python scripts/recover_cdb_opponent_service_rates.py \
+          python scripts/recover_cdb_opponent_service_rates.py --isolate-provider-collisions --expected-provider-quarantine 6 \
             --mode verify --history-dir "$root/persisted" --before-dir "$root/before" \
             --stage-file "$root/stage/stage.jsonl" --out-dir "$root/persisted-readback"
           python - <<'PY'
@@ -308,6 +315,8 @@ jobs:
           r=json.loads((root/"persisted-readback/report.json").read_text())
           s=json.loads((root/"stage/report.json").read_text())["counts"]
           assert r["status"]=="verified" and r["unverified_identities"]==0
+          assert r["quarantined_rows_proven_unchanged"] == 6
+          assert r["canonical_matches"] == s["examined"] + 6
           assert r["existing_values_overwritten"]==0
           assert r["enriched_matches"]==s["staged_matches"]
           assert r["new_stat_values"]==s["new_stat_values"]
@@ -320,7 +329,7 @@ jobs:
         run: |
           set -euo pipefail
           root=.cache/tbt/cdb-pairwise-write
-          python scripts/recover_cdb_opponent_service_rates.py --mode stage --pairwise --history-dir "$root/persisted" --out-dir "$root/idempotence"
+          python scripts/recover_cdb_opponent_service_rates.py --isolate-provider-collisions --expected-provider-quarantine 6 --mode stage --pairwise --history-dir "$root/persisted" --out-dir "$root/idempotence"
           python - <<'PY'
           import json
           from pathlib import Path
