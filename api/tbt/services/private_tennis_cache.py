@@ -89,13 +89,10 @@ def _unpack(row):
         raise CacheStoreUnavailable("Private cache integrity failure") from exc
 
 
-def read(key, *, max_age, table=None, now=None):
-    key = _key(key)
+def _read_snapshot(row, *, max_age, when):
+    """Interpret exactly the entity snapshot whose ETag may be used for CAS."""
     if not isinstance(max_age, (int, float)) or not 0 <= max_age <= 30 * 86400:
         raise ValueError("Invalid raw response max-age")
-    table = _table(table)
-    when = time.time() if now is None else float(now)
-    row = _fetch(table, key)
     if row is None:
         return {"status": "miss"}
     if row.get("state") == "pending":
@@ -113,6 +110,13 @@ def read(key, *, max_age, table=None, now=None):
             "fetched_at": fetched, "parser_version": str(row.get("parser_version") or "")}
 
 
+def read(key, *, max_age, table=None, now=None):
+    key = _key(key)
+    table = _table(table)
+    when = time.time() if now is None else float(now)
+    return _read_snapshot(_fetch(table, key), max_age=max_age, when=when)
+
+
 def claim(key, owner, *, max_age, table=None, now=None):
     key = _key(key)
     if not isinstance(owner, str) or re.fullmatch(r"[0-9a-f]{32}", owner) is None:
@@ -120,12 +124,13 @@ def claim(key, owner, *, max_age, table=None, now=None):
     table = _table(table)
     when = time.time() if now is None else float(now)
     for attempt in range(12):
-        existing = read(key, max_age=max_age, table=table, now=when)
+        # One snapshot for freshness, lease decision and CAS ETag. An
+        # interleaved publish conflicts with this ETag, then retries the
+        # complete decision and returns an integrity-checked ready hit.
+        row = _fetch(table, key)
+        existing = _read_snapshot(row, max_age=max_age, when=when)
         if existing["status"] in ("hit", "busy"):
             return existing
-        row = _fetch(table, key)
-        if row is not None and row.get("state") == "pending" and float(row.get("lease_until", 0)) > when:
-            return {"status": "busy"}
         entity = {"PartitionKey": PARTITION, "RowKey": key, "state": "pending",
                   "owner": owner, "lease_until": when + LEASE_SECONDS}
         try:
