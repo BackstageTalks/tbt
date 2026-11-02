@@ -611,6 +611,14 @@ def _settle_projection_publications(row, match, now):
         if issued.tzinfo is None or issued >= match.scheduled_at:
             publication["excluded_reason"] = "invalid_issued_at" if issued.tzinfo is None else "issued_after_actual_start"
             continue
+        # 2026-11-01 onward ACES have only player-total O/U outcomes.
+        # A greater ace count than the opponent is not proof of a winning O/U.
+        if (market == "aces" and match.scheduled_at >= datetime(2026, 11, 1, 5, tzinfo=timezone.utc)
+                and (str(publication.get("price_contract") or "").lower() != "player_total_ou"
+                     or str(publication.get("ou_side") or "").lower() not in {"over", "under"}
+                     or publication.get("market_line") is None)):
+            publication["excluded_reason"] = "unverifiable_issued_aces_ou_contract"
+            continue
         if void_reason:
             _void_projection_publication(publication, match, now, void_reason)
             continue
