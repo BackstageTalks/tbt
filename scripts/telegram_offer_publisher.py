@@ -192,6 +192,44 @@ def fmt(r,k,c,index=1,name_map=None,prefix_override=None):
         line=f"{prefix} | {name} | {time} | "+" | ".join(values)
     return line
 
+def _local_player_aces_ou(row):
+    """A statistical player-total contract, never an external bookmaker line."""
+    if (not isinstance(row,dict) or row.get("market")!="aces"
+            or str(row.get("selection_id") or "") not in
+            {str((row.get("player1") or {}).get("id") or ""),
+             str((row.get("player2") or {}).get("id") or "")}):
+        return None
+    projection=num(row.get("projection"))
+    if projection is None or not math.isfinite(projection) or projection<1.0:
+        return None
+    # This is explicitly a locally computed half-ace threshold. Never
+    # represent it as a price or threshold offered by a bookmaker.
+    line=max(0.5,math.floor(projection-0.5)+0.5)
+    if projection<=line:
+        return None
+    return {**row,"price_contract":"player_total_ou",
+            "market_line":line,"ou_side":"over",
+            "local_ou_line_basis":"model_projection_half_ace_v1",
+            "price_status":"projection_only",
+            "odds":None,"provider_id":None,
+            "odds_source":None,"odds_bookmaker":None,
+            "odds_contract_version":None,"model_probability":None}
+
+
+def _eligible_local_player_aces_ou(row):
+    if not isinstance(row,dict) or row.get("local_ou_line_basis")!="model_projection_half_ace_v1":
+        return False
+    original={**row,"price_contract":"player_superiority",
+              "market_line":None,"ou_side":None,
+              "local_ou_line_basis":None}
+    calculated=_local_player_aces_ou(original)
+    return (calculated is not None
+            and num(row.get("market_line"))==num(calculated.get("market_line"))
+            and str(row.get("ou_side"))=="over"
+            and str(row.get("price_contract"))=="player_total_ou"
+            and num(row.get("odds")) is None)
+
+
 def select_groups(x,c,now):
     today=day(now)
     generated=stamp(x["generated_at"])
@@ -211,7 +249,8 @@ def select_groups(x,c,now):
             # Preserve previously issued legacy rows only for immutable reissues.
             if (k=="aces" and c.get("aces_ou_only",True)
                     and not (r.get("price_contract")=="player_total_ou"
-                             and verified_ace_odds(r) is not None)):
+                             and (verified_ace_odds(r) is not None
+                                  or _eligible_local_player_aces_ou(r)))):
                 continue
             if not all(isinstance(r.get(p),dict) for p in ("player1","player2")):continue
             try:start=stamp(r["scheduled_at"])
