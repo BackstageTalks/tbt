@@ -7,9 +7,9 @@ const sw = fs.readFileSync('web/blinq-sw.js', 'utf8');
 const config = JSON.parse(fs.readFileSync('web/staticwebapp.config.json', 'utf8'));
 const cache = Object.fromEntries(config.routes.map(route => [route.route, route.headers?.['Cache-Control'] || '']));
 
-// Public static assets can be revalidated without caching private application data.
+// Existing critical-asset no-store contract must remain in force.
 for (const path of ['/app.js', '/blinq-app.css']) {
-  assert.equal(cache[path], 'public, max-age=0, must-revalidate');
+  assert.equal(cache[path], 'no-store, max-age=0, must-revalidate');
 }
 for (const path of ['/', '/index.html', '/auth.js', '/ui-config.json', '/release.json', '/deployment.json']) {
   assert.match(cache[path], /no-store/, path);
