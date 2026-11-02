@@ -387,3 +387,17 @@ def test_only_drive_folder_tour_upgrade_replays_existing_checkpoint_once(tmp_pat
     assert second["fetched"] == 0
     assert second["previously_seen"] == 1
     assert drive.file_reads == [ID1]
+
+
+def test_exact_tml2026_fingerprint_upgrade_only_for_original_file():
+    from scripts.cdb_inbox_drive import _fingerprint
+    original = {
+        "id": "15SxTALy5nFxObsKczqTn0a8NPW0UlICE",
+        "name": "2026.csv", "mimeType": "text/csv",
+        "size": "28551", "md5Checksum": "hash",
+        "modifiedTime": "2026-11-01T22:46:32Z",
+        "path": "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/TML/TML/2026.csv",
+    }
+    baseline = dict(original, id="different_other_source_id")
+    assert _fingerprint(original) != _fingerprint(baseline)
+    assert _fingerprint(original) == _fingerprint(dict(original))
