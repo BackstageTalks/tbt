@@ -1,12 +1,15 @@
 """Fetch the small private serving snapshot before an Azure deployment."""
 from __future__ import annotations
 
+import base64
 import gzip
 import json
+import math
 import os
 import shutil
 import subprocess
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 from _bootstrap import ROOT
@@ -479,10 +482,142 @@ def _deploy_comparator_artifact(source: Path) -> dict:
         "cutoff_utc": payload.get("cutoff_utc"),
     }
 
+def _utc(value: object) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value or "").replace("Z", "+00:00"))
+        return parsed.astimezone(timezone.utc) if parsed.tzinfo else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _number(value: object) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (ValueError, TypeError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def overlay_confirmed_telegram_aces_ou(feed: dict, state: dict) -> dict:
+    """Attach only EXACT, PRE-START, confirmed Telegram O/U reissues to web Results.
+
+    The private prediction ledger remains untouched. We do not derive missing
+    historical thresholds from the model or from a player's opponent count.
+    """
+    if not isinstance(feed, dict) or not isinstance(state, dict) or state.get("schema") != 1:
+        raise ValueError("Invalid confirmed Telegram snapshot")
+    rows = feed.get("ace_picks")
+    if not isinstance(rows, list):
+        return feed
+    candidates: dict[tuple[str, str], tuple[dict, datetime]] = {}
+    ambiguous: set[tuple[str, str]] = set()
+    for batch in (state.get("reposts") or {}).values():
+        if (not isinstance(batch, dict) or batch.get("status") != "sent"
+                or batch.get("supersedes_daily") is not True
+                or not batch.get("message_ids")):
+            continue
+        sent_at = _utc(batch.get("sent_at"))
+        if sent_at is None or not isinstance(batch.get("rows"), list):
+            continue
+        for ref in batch["rows"]:
+            if not isinstance(ref, dict) or ref.get("channel") != "aces" or ref.get("market") != "aces":
+                continue
+            event, selection = str(ref.get("event_id") or ""), str(ref.get("selection_id") or "")
+            key = (event, selection)
+            line, price = _number(ref.get("market_line")), _number(ref.get("odds"))
+            side = str(ref.get("projection_direction") or "").lower()
+            pubkey = str(ref.get("publication_key") or "")
+            scheduled = _utc(ref.get("scheduled_at"))
+            projection = _number(ref.get("projection"))
+            if (not all(key) or side not in {"over", "under"} or line is None or line <= 0
+                    or price is None or price <= 1 or scheduled is None
+                    or sent_at >= scheduled or projection is None
+                    or ref.get("price_basis") != "local_aces_statistical_v1"
+                    or pubkey != f"local-aces-ou-v1:{event}:{selection}:{side}:{line:.1f}"):
+                continue
+            if key in candidates and candidates[key][0] != ref:
+                ambiguous.add(key)
+                continue
+            candidates[key] = (ref, sent_at)
+    amended = 0
+    updated_rows = []
+    for row in rows:
+        if not isinstance(row, dict):
+            updated_rows.append(row)
+            continue
+        event, selection = str(row.get("event_id") or ""), str((row.get("betting") or {}).get("selection_id") or row.get("selection_id") or row.get("winner_id") or "")
+        key = (event, selection)
+        match = candidates.get(key)
+        if not match or key in ambiguous:
+            updated_rows.append(row)
+            continue
+        ref, sent_at = match
+        scheduled = _utc(row.get("scheduled_at"))
+        projection = _number(row.get("projection"))
+        if (not scheduled or sent_at >= scheduled or
+                abs((projection if projection is not None else float("inf")) - ref["projection"]) > 0.011
+                or selection not in {str((row.get("player1") or {}).get("id") or ""),
+                                     str((row.get("player2") or {}).get("id") or "")}):
+            updated_rows.append(row)
+            continue
+        existing = [p for p in (row.get("market_publications") or []) if isinstance(p, dict)]
+        if any(p.get("market") == "aces" and p.get("price_contract") == "player_total_ou"
+               and (p.get("publication_key") != ref["publication_key"]
+                    or _number(p.get("market_line")) != _number(ref["market_line"])
+                    or str(p.get("ou_side") or "") != ref["projection_direction"]) for p in existing):
+            updated_rows.append(row)  # conflicting canonical contract: no override
+            continue
+        if any(p.get("publication_key") == ref["publication_key"] for p in existing):
+            updated_rows.append(row)
+            continue
+        pub = {
+            "section": "ace", "market": "aces", "selection_id": selection,
+            "publication_key": ref["publication_key"],
+            "publication_status": "published",
+            "price_contract": "player_total_ou",
+            "ou_side": ref["projection_direction"],
+            "market_line": ref["market_line"],
+            "selection": f"{ref['name']} {ref['projection_direction'].title()} {ref['market_line']:.1f} Aces",
+            "projection_scope": "player", "projection_metric": "aces",
+            "projection": row.get("projection"),
+            "issued_at": sent_at.isoformat(),
+            "odds": ref["odds"], "price_status": "priced_projection",
+            "price_basis": ref["price_basis"],
+            "source": "confirmed_telegram_ou_reissue",
+        }
+        updated_rows.append({**row, "market_publications": [*existing, pub]})
+        amended += 1
+    print("Confirmed Telegram O/U Results bridge:", json.dumps({
+        "candidate_events": len(candidates), "linked": amended, "ambiguous": len(ambiguous)
+    }))
+    return {**feed, "ace_picks": updated_rows}
+
+
+def _read_confirmed_telegram_state(repository: str) -> dict | None:
+    """Fetch one private read-only sent ledger; never package its full contents."""
+    try:
+        proc = subprocess.run(
+            ["gh", "api", f"repos/{repository}/contents/ops/telegram-bot-state.json?ref=telegram-bot-state"],
+            text=True, capture_output=True, timeout=25, check=True,
+        )
+        metadata = json.loads(proc.stdout)
+        raw = base64.b64decode(metadata["content"], validate=False)
+        if len(raw) > 2_000_000:
+            raise ValueError("Telegram state exceeds bounded read")
+        return json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError, UnicodeDecodeError) as exc:
+        print("::warning::Confirmed Telegram O/U reissue ledger unavailable:", type(exc).__name__)
+        return None
+
+
 def main() -> None:
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     comparator_target = ROOT / "api/data/comparator.json.gz"
+    ace_ou_sidecar = ROOT / "api/data/confirmed_aces_ou.json"
+    ace_ou_sidecar.unlink(missing_ok=True)
     comparator_target.unlink(missing_ok=True)
     (ROOT / "api/data/comparator-players.json").unlink(missing_ok=True)
     (ROOT / "api/data/comparator-serving.sqlite3").unlink(missing_ok=True)
@@ -525,6 +660,30 @@ def main() -> None:
                         "odds-backed sections remain strict.",
                     )
             payload = _attach_player_assets(payload, repository)
+            telegram_state = _read_confirmed_telegram_state(repository)
+            if telegram_state is not None:
+                bridged = overlay_confirmed_telegram_aces_ou(payload, telegram_state)
+                links = []
+                for ace_row in bridged.get("ace_picks") or []:
+                    if not isinstance(ace_row, dict):
+                        continue
+                    for pub in ace_row.get("market_publications") or []:
+                        if isinstance(pub, dict) and pub.get("source") == "confirmed_telegram_ou_reissue":
+                            links.append({
+                                "event_id": ace_row.get("event_id"),
+                                "selection_id": str((ace_row.get("betting") or {}).get("selection_id") or ace_row.get("selection_id") or ace_row.get("winner_id") or ""),
+                                "scheduled_at": ace_row.get("scheduled_at"),
+                                "projection": ace_row.get("projection"),
+                                "publication": pub,
+                            })
+                if links:
+                    ace_ou_sidecar.write_text(
+                        json.dumps({"schema": 1, "issued_aces_ou": links},
+                                   ensure_ascii=False, allow_nan=False),
+                        encoding="utf-8",
+                    )
+                    print("Confirmed Aces O/U read-only sidecar:", len(links))
+
 
     # If no private prediction candidate exists, overwrite any checked-in stale
     # snapshot with an honest empty feed instead of silently deploying it.

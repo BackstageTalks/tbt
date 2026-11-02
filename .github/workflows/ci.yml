@@ -203,6 +203,89 @@ jobs:
           gh release download tbt-predictions-v1 --repo BackstageTalks/tbt-data --pattern ledger.json --dir "$RUNNER_TEMP/ace-under-audit" --clobber
           PYTHONPATH=api:scripts python scripts/audit_ace_under_buffer.py "$RUNNER_TEMP/ace-under-audit/ledger.json"
 
+      # Scoped read-only verification of the real 2 Nov Farjat issuance.
+      # PR-only: ensure the *private* release and SENT Telegram receipt
+      # actually link before touching production.
+      - name: Verify actual Farjat Aces receipt linkage (scoped PR)
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'fix/farjat-confirmed-aces-reissue-results-20261102' }}
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          PYTHONPATH: api:scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "Missing release read token"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/farjat-ace-audit"
+          gh release download tbt-predictions-v1 --repo BackstageTalks/tbt-data --pattern feed.json --dir "$RUNNER_TEMP/farjat-ace-audit" --clobber
+          CANONICAL_FEED="$RUNNER_TEMP/farjat-ace-audit/feed.json" python - <<'PYFARJAT'
+          import json, os
+          from scripts.prepare_feed import overlay_confirmed_telegram_aces_ou, _read_confirmed_telegram_state
+          from tbt.services.match_status import runtime_settled_results, attach_confirmed_aces_ou_sidecar
+          feed = json.load(open(os.environ["CANONICAL_FEED"], encoding="utf-8"))
+          ledger = _read_confirmed_telegram_state("BackstageTalks/tbt-data")
+          assert ledger and ledger.get("schema") == 1, "Missing confirmed Telegram ledger"
+          source = [r for r in feed.get("ace_picks", []) if str(r.get("event_id")) == "17467964"]
+          assert len(source) == 1, ("Farjat absent or ambiguous", len(source))
+          merged = overlay_confirmed_telegram_aces_ou(feed, ledger)
+          row = [r for r in merged.get("ace_picks", []) if str(r.get("event_id")) == "17467964"][0]
+          pubs = [p for p in row.get("market_publications", []) if p.get("publication_key") == "local-aces-ou-v1:17467964:270414:over:4.5"]
+          assert len(pubs) == 1, "Exact Farjat reissued O/U contract was NOT linked"
+          pub = pubs[0]
+          assert pub.get("ou_side") == "over" and pub.get("market_line") == 4.5
+          assert abs(float(pub["odds"]) - 1.79) < 1e-9
+          assert pub.get("source") == "confirmed_telegram_ou_reissue"
+          sidecar = {"schema": 1, "issued_aces_ou": [{
+              "event_id": "17467964", "selection_id": "270414",
+              "scheduled_at": row["scheduled_at"], "projection": row["projection"],
+              "publication": pub,
+          }]}
+          from tbt.services.match_status import _event_id, _selection_id, _parse_time, _finite_count, verified_aces_ou_publication
+          raw = source[0]
+          print("FARJAT_GUARDS_DIAG:", json.dumps({
+              "market": raw.get("market"),
+              "event_match": _event_id(raw) == "17467964",
+              "selection_match": _selection_id(raw) == "270414",
+              "raw_scheduled_at": str(raw.get("scheduled_at")),
+              "receipt_scheduled_at": str(sidecar["issued_aces_ou"][0]["scheduled_at"]),
+              "issued_before_match": _parse_time(pub.get("issued_at")) < _parse_time(raw.get("scheduled_at")),
+              "projection": raw.get("projection"),
+              "receipt_projection": row.get("projection"),
+              "verified_contract": verified_aces_ou_publication(pub),
+              "source": pub.get("source"),
+              "price_status": pub.get("price_status"),
+              "price_basis": pub.get("price_basis"),
+              "published": pub.get("publication_status"),
+              "existing_contracts": [{"key": p.get("publication_key"), "price_contract": p.get("price_contract"), "market": p.get("market")} for p in raw.get("market_publications") or []],
+          }), flush=True)
+          replay = attach_confirmed_aces_ou_sidecar(feed, sidecar)
+          status = {"17467964": {
+              "status": "retired", "provider_status": "finished retired",
+              "provider_home_id": "270414", "provider_away_id": "206594",
+              "projection_stats_p1_id": str((row.get("player1") or {}).get("id") or ""),
+              "projection_stats_p2_id": str((row.get("player2") or {}).get("id") or ""),
+              "projection_stats": {
+                  "p1_aces": 7 if str((row.get("player1") or {}).get("id")) == "270414" else 0,
+                  "p2_aces": 7 if str((row.get("player2") or {}).get("id")) == "270414" else 0,
+              },
+              "checked_at": "2026-11-02T17:45:41Z",
+          }}
+          input_row = [r for r in replay.get("ace_picks", []) if str(r.get("event_id")) == "17467964"][0]
+          print("FARJAT_LINK_DIAG:", json.dumps({
+              "canonical_selection_id": str((source[0].get("betting") or {}).get("selection_id") or source[0].get("selection_id") or ""),
+              "row_selection_id": str(input_row.get("selection_id") or ""),
+              "player_ids": [str((input_row.get(x) or {}).get("id") or "") for x in ("player1","player2")],
+              "replayed_pubkeys": [p.get("publication_key") for p in input_row.get("market_publications", [])],
+              "existing_result_rows": len([r for r in feed.get("results", []) if str(r.get("event_id")) == "17467964"]),
+          }), flush=True)
+          result = runtime_settled_results(replay, status)
+          exact = [p for r in result for p in r.get("market_publications", [])
+                   if p.get("publication_key") == pub["publication_key"]]
+          print("FARJAT_RESULT_DIAG:", json.dumps([{"event_id": r.get("event_id"), "pubs": [{"key": p.get("publication_key"), "status": (p.get("result") or {}).get("status"), "correct": (p.get("result") or {}).get("correct"), "void": (p.get("result") or {}).get("void")} for p in r.get("market_publications", [])]} for r in result if str(r.get("event_id")) == "17467964"]), flush=True)
+          assert len(exact) == 1 and exact[0]["result"]["correct"] is True
+          assert abs(exact[0]["result"]["profit_units"] - .79) < 1e-9
+          print("FARJAT_VERIFIED_ACE_REISSUE_LINKED: 7 > Over 4.5, odds 1.79, +0.79u")
+          PYFARJAT
+
       - name: Run backend tests
         env:
           PYTHONPATH: api:scripts
