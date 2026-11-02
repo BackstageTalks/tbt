@@ -41,7 +41,7 @@ from tbt.services.publication import (
     validate_publication_candidate,
 )
 from tbt.services.ace_selection import select_ace_picks
-from ace_working_odds import eligible_local_ace_projection, verified_ace_odds
+from ace_working_odds import eligible_local_ace_projection, verified_ace_odds, local_player_aces_ou
 from tbt.services.sg_selection import select_sg_picks
 from tbt.services.projection_odds import (
     enrich_projection_odds, prefetch_projection_market_board,
@@ -1871,15 +1871,23 @@ def main():
                     and ace_df_real_api
                     and (market != "aces" or verified_ace_odds(row) is not None)
                 )
-            # Aces COUNT / Most Aces projections can inform the UI, but
-            # cannot enter the official picks, issuance or settlement as bets.
-            # Only verified, player-specific Over/Under lines are published.
-            # Double Faults retain the independently verified existing policy.
-            ace_picks = [row for row in ace_picks if (
-                publishable_api_price(row)
-                and (str(row.get("market") or "").lower() != "aces"
-                     or row.get("price_contract") == "player_total_ou")
-            )]
+            # BlinQ fixes the match/player BEFORE odds discovery. An exactly
+            # matched provider player O/U wins; otherwise reuse the approved
+            # statistical half-ace O/U contract and local 1.60-1.80 price basis.
+            # Do not issue Most Aces as a wager or pretend the local line is
+            # bookmaker-quoted. Keep DF and other markets' policies unchanged.
+            selected_aces = []
+            for row in ace_picks:
+                if publishable_api_price(row) and (
+                    str(row.get("market") or "").lower() != "aces"
+                    or row.get("price_contract") == "player_total_ou"
+                ):
+                    selected_aces.append(row)
+                elif eligible_local_ace_projection(row):
+                    local = local_player_aces_ou(row)
+                    if local is not None:
+                        selected_aces.append(local)
+            ace_picks = selected_aces
             sg_picks = [row for row in sg_picks if publishable_api_price(row)]
         # Ten per independent category, sorted by validated projection
         # confidence and evidence, NOT simply by the highest bookmaker price.
@@ -1911,7 +1919,7 @@ def main():
                 **ace_report, "odds_attachment": projection_odds_report,
                 "published_selected": len(ace_picks),
                 "aces_local_fallback_published": sum(eligible_local_ace_projection(row) for row in ace_picks),
-                "priced_selection_policy": "blinq_model_first_then_verified_player_aces_ou_only",
+                "priced_selection_policy": "blinq_model_first_provider_player_ou_then_local_statistical_ou",
             }
         if isinstance(sg_report, dict):
             sg_report = {

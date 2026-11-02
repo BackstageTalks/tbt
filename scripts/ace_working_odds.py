@@ -97,6 +97,50 @@ def selected_ace_odds(row: Mapping[str, Any], *,
 
 
 
+
+def local_player_aces_ou(row: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Existing Telegram >1-ace-cushion OVER policy, reused for the selected web/pipeline pick.
+
+    This is a locally calculated player-total *contract*, not a bookmaker
+    price or an archival settlement. Preserve the identity, model projection,
+    data evidence and the original unpriced provenance.
+    """
+    from math import floor
+
+    if not eligible_local_ace_projection(row):
+        return None
+    projection = float(row["projection"])
+    if projection < 1.0:
+        return None
+    line = max(0.5, floor(projection - 1.5 - 1e-9) + 0.5)
+    if projection <= line or projection - line <= 1.0:
+        return None
+    selected_id = str(row.get("selection_id") or "")
+    p1 = row.get("player1") or {}
+    p2 = row.get("player2") or {}
+    player = p1 if str(p1.get("id") or "") == selected_id else p2
+    selected_name = str(player.get("name") or row.get("projection_subject") or row.get("pick") or "").strip()
+    result = dict(row)
+    result.update({
+        "price_contract": "player_total_ou",
+        "market_type": "Player Aces Over/Under",
+        "market_line": line,
+        "ou_side": "over",
+        "local_ou_line_basis": "model_projection_min_gt_1_ace_v2",
+        "selection": f"{selected_name} Over {line:.1f} Aces",
+        "pick": f"{selected_name} Over {line:.1f} Aces",
+        "price_status": "projection_only",
+        "odds": None,
+        "provider_id": None,
+        "odds_source": None,
+        "odds_bookmaker": None,
+        "odds_contract_version": None,
+        "model_probability": None,
+    })
+    return result
+
+
+
 # The previous 1.50-1.70 Results-only formula is historical before the
 # 2026-11-01 06:00 Europe/Bratislava betting-day boundary. New Aces without
 # an exact provider contract use this separately approved local price basis.

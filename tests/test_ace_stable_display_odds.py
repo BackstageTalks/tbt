@@ -46,6 +46,32 @@ assert.equal(row.odds, 2.00, 'underlying provider quote unchanged');
 assert.equal(row.odds, JSON.parse(original).odds, 'original provider price unchanged');
 assert(sandbox.projectionOddsHtml(row).includes('Bez O/U kurzu'));
 
+const local={
+  ...row, odds:null, price_status:'projection_only',
+  projection_model:'ace-count-projection-v4',
+  player1:{id:'player-1',name:'Alpha'},player2:{id:'player-2',name:'Beta'},
+  projection:10.9,opponent_projection:5.8,projection_confidence:0.78
+};
+sandbox.normalizeFeedAceOdds({ace_picks:[local],results:[]});
+assert.equal(local.ui_local_ace_ou_line,9.5);
+assert.equal(local.statistical_ace_odds,value,'BlinQ local fallback restored');
+assert(sandbox.projectionOddsHtml(local).includes(value.toFixed(2)));
+assert.equal(local.price_status,'projection_only');
+assert.equal(local.odds,null);
+assert(Number.isNaN(sandbox.localAceOuDisplayLine({...local,selection_id:'wrong'})));
+assert(Number.isNaN(sandbox.localAceOuDisplayLine({...local,projection_confidence:0.2})));
+assert(Number.isNaN(sandbox.localAceOuDisplayLine({...local,scheduled_at:'2026-10-31T12:00:00Z'})));
+// An unreliable legacy 2.00 is NOT a verified provider quote; the same
+// model-qualified player retains BlinQ statistical price and self-owned line.
+const legacy2={...local,odds:2,price_status:'priced_projection',
+  odds_contract_version:'ace_df_real_api_v1',odds_source:'propline',provider_id:2,
+  odds_bookmaker:'Book',captured_at:'2026-11-02T07:00:00Z'};
+sandbox.normalizeFeedAceOdds({ace_picks:[legacy2],results:[]});
+assert.equal(legacy2.statistical_ace_odds,value);
+assert(sandbox.projectionOddsHtml(legacy2).includes(value.toFixed(2)));
+assert.equal(legacy2.odds,2);
+
+
 // A provider-backed PropLine quote must NOT be overwritten by working odds.
 const real = {
   ...row, odds: 2.125, odds_contract_version: 'ace_df_real_api_v1',
@@ -56,6 +82,7 @@ sandbox.normalizeFeedAceOdds({ace_picks:[real],results:[]});
 assert.equal(real.statistical_ace_odds,undefined);
 assert.equal(sandbox.verifiedAceProviderOdds(real),2.125);
 assert(sandbox.projectionOddsHtml(real).includes('2.13'));
+assert.equal(real.ui_local_ace_ou_line,undefined,'provider price has precedence');
     
 // Reproduction: 1 Nov Basel / Vienna / Chennai Aces picks retained 2.00
 // as a provider-labelled price on the site, while Telegram showed 1.60-1.80.

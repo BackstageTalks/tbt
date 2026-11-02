@@ -11,7 +11,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from ace_working_odds import PRICE_BASIS, working_ace_odds, verified_ace_odds, selected_ace_odds, eligible_local_ace_projection  # noqa: E402
+from ace_working_odds import PRICE_BASIS, working_ace_odds, verified_ace_odds, selected_ace_odds, eligible_local_ace_projection, local_player_aces_ou  # noqa: E402
 import telegram_daily_results as daily  # noqa: E402
 
 
@@ -196,3 +196,33 @@ def test_local_aces_publishes_only_qualified_new_model_predictions():
     }
     assert not eligible_local_ace_projection(provider)
     assert selected_ace_odds(provider) == (1.93, True)
+
+
+def test_local_aces_ou_contract_reuses_model_player_and_never_forges_provider_quote():
+    base = {
+        "market": "aces", "event_id": "fixture-20261102",
+        "selection_id": "p2", "player1": {"id": "p1", "name": "First"},
+        "player2": {"id": "p2", "name": "Second"},
+        "scheduled_at": "2026-11-02T12:00:00Z",
+        "projection_model": "ace-count-projection-v4",
+        "projection": 10.9, "opponent_projection": 5.8,
+        "projection_confidence": .78, "price_status": "projection_only", "odds": None,
+    }
+    before = dict(base)
+    output = local_player_aces_ou(base)
+    assert output is not None
+    assert base == before
+    assert output["selection_id"] == "p2"
+    assert output["price_contract"] == "player_total_ou"
+    assert output["market_line"] == 9.5
+    assert output["ou_side"] == "over"
+    assert output["local_ou_line_basis"] == "model_projection_min_gt_1_ace_v2"
+    assert "Second Over 9.5 Aces" in output["selection"]
+    assert output["price_status"] == "projection_only"
+    assert output["odds"] is None
+    assert output["provider_id"] is None
+    assert selected_ace_odds(output) == (working_ace_odds(base), False)
+    assert local_player_aces_ou({**base, "selection_id": "wrong"}) is None
+    assert local_player_aces_ou({**base, "projection_confidence": 0.35}) is None
+    assert local_player_aces_ou({**base, "scheduled_at": "2026-10-31T18:00:00Z"}) is None
+    assert local_player_aces_ou({**base, "odds": 2.0, "price_status": "priced_projection"}) is None
