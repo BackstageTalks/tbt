@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - ".github/tennis-abstract-elo-request.json"
-      - ".github/workflows/tennis-abstract-elo.yml"
       - "scripts/parse_tennis_abstract_elo.py"
   workflow_dispatch:
 
