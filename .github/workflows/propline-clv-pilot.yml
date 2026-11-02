@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
     paths:
-      - ".github/workflows/propline-clv-pilot.yml"
       - "scripts/propline_clv_collect.py"
       - "scripts/propline_clv_report.py"
   workflow_dispatch:
