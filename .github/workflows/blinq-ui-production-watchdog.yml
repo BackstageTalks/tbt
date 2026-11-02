@@ -7,7 +7,6 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/blinq-ui-production-watchdog.yml'
       - 'scripts/check_live_ui_revision.py'
       - 'tests/test_check_live_ui_revision.py'
 
