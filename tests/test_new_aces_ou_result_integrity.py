@@ -127,6 +127,7 @@ const ctx = {};vm.createContext(ctx);vm.runInContext(source.slice(begin,end), ct
 const base = {market:'aces',issued_at:'2026-11-02T06:15:00Z',
   result:{correct:true,status:'hit',actual_count:9,opponent_actual_count:5}};
 assert.equal(ctx.publicationOutcome({...base,price_contract:'player_superiority'}).kind,'pending');
+assert.equal(ctx.publicationOutcome({...base,issued_at:'2026-10-31T08:00:00Z',result:{...base.result,scheduled_at:'2026-11-02T10:00:00Z'},price_contract:'player_superiority'}).kind,'pending');
 assert.equal(ctx.publicationOutcome({...base,price_contract:'player_total_ou',ou_side:'over',market_line:10.5}).kind,'loss');
 assert.equal(ctx.publicationOutcome({...base,price_contract:'player_total_ou',ou_side:'under',market_line:10.5}).kind,'win');
 assert.equal(ctx.publicationOutcome({...base,price_contract:'player_total_ou',ou_side:'over',market_line:9.0}).kind,'void');
