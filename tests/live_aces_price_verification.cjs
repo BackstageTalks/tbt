@@ -28,15 +28,22 @@ for (const {name, event_id, selection_id, scheduled_at, expected} of actualDay) 
     captured_at:'2026-11-01T06:11:00Z'};
   assert.equal(sandbox.stableAceDisplayOdds(row), expected, name + ' shared Telegram identity');
   sandbox.normalizeFeedAceOdds({ace_picks:[row], results:[]});
-  assert.equal(row.statistical_ace_odds, expected, name + ' visible web display');
+  assert.equal(row.statistical_ace_odds, undefined, name + ' no unverified live O/U quote');
   assert.equal(row.odds, 2.0, name + ' frozen source unchanged');
   for (const scheduled_at of ['2026-11-02T14:30:00Z', '2027-05-02T14:30:00Z']) {
     const future = {...row, scheduled_at, statistical_ace_odds:undefined};
     sandbox.normalizeFeedAceOdds({ace_picks:[future], results:[]});
-    assert.equal(future.statistical_ace_odds, expected, name + ' permanent 2.00 fallback');
+    assert.equal(future.statistical_ace_odds, undefined, name + ' no unverified future O/U quote');
     assert.equal(future.odds, 2.0, name + ' future raw price unchanged');
   }
-  const genuine = {...row, odds:2.125, statistical_ace_odds:undefined};
+  // Issued historical Results retain the approved frozen display basis.
+  const resultsRow={event_id, scheduled_at,
+    market_publications:[{...row, statistical_ace_odds:undefined}]};
+  sandbox.normalizeFeedAceOdds({ace_picks:[],results:[resultsRow]});
+  assert.equal(resultsRow.market_publications[0].statistical_ace_odds,expected,
+    name + ' historical Results display remains frozen');
+  const genuine = {...row, odds:2.125, statistical_ace_odds:undefined,
+    price_contract:'player_total_ou',market_line:7.5,ou_side:'over'};
   sandbox.normalizeFeedAceOdds({ace_picks:[genuine], results:[]});
   assert.equal(genuine.statistical_ace_odds, undefined, name + ' independently verified non-placeholder provider quote preserved');
   process.stdout.write(name + ' ' + expected.toFixed(2) + ' PASS\\n');
