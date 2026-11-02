@@ -5,7 +5,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
 from tbt.services.entitlements import _daily_rows
-from ace_working_odds import PRICE_BASIS, working_ace_odds, selected_ace_odds, verified_ace_odds
+from ace_working_odds import PRICE_BASIS, working_ace_odds, selected_ace_odds, verified_ace_odds, eligible_local_ace_projection
 TZ=ZoneInfo("Europe/Bratislava")
 SECTIONS={"top":"top_daily_picks","value":"value_picks","aces":"ace_picks"}
 LABELS={"top":"🏆 TOP","value":"💎 VALUE","aces":"🎯 ACES"}
@@ -425,13 +425,20 @@ def _reissue_with_verified_aces_ou(confirmed, sent, now):
     only_aces={"sections":{"top":False,"value":False,"aces":True},
                "free_top_pick":False,"include_started":False,
                "max_per_section":0,"aces_ou_only":True}
-    aces=select_groups(confirmed,only_aces,now).get("aces",[])
-    # Absence of an offered player-total market must not block unchanged
-    # TOP/VALUE/FREE; no legacy Most Aces selection is mislabelled as O/U.
-    for row in aces:
-        if (row.get("price_contract")!="player_total_ou"
-                or verified_ace_odds(row) is None):
-            raise RuntimeError("Cannot resend unverified ACES total")
+    # Keep the model's selected players. Prefer confirmed provider player O/U;
+    # otherwise use BlinQ's separately sourced statistical O/U and local price.
+    # Never transform old Most Aces bookmaker prices into a player total.
+    source=select_groups(confirmed,{**only_aces,"aces_ou_only":False},now).get("aces",[])
+    aces=[]
+    for row in source:
+        if row.get("price_contract")=="player_total_ou" and verified_ace_odds(row) is not None:
+            aces.append(row)
+        elif eligible_local_ace_projection(row):
+            local=_local_player_aces_ou(row)
+            if local is not None and _eligible_local_player_aces_ou(local):
+                aces.append(local)
+    if not aces:
+        raise RuntimeError("No eligible player Aces O/U contract from confirmed BlinQ model or provider")
     return {**frozen,"ace_picks":aces}
 
 
