@@ -22,7 +22,9 @@ def test_missing_ace_prices_cannot_trigger_substitute_matches():
     assert '"pre_odds_selected"' in PIPELINE
     assert '"selection_policy"] = "blinq_model_first_then_odds_attachment"' in PIPELINE
     assert '"priced_selection_policy": "blinq_model_first_provider_player_ou_then_local_statistical_ou"' in PIPELINE
-    assert "ace_picks = [row for row in ace_picks if (" in PIPELINE
+    assert "for row in ace_picks:" in PIPELINE
+    assert "selected_aces.append(row)" in PIPELINE
+    assert "selected_aces.append(local)" in PIPELINE
     assert "publishable_api_price(row)" in PIPELINE
     assert "elif eligible_local_ace_projection(row):" in PIPELINE
     assert "local_player_aces_ou(row)" in PIPELINE
