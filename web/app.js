@@ -3858,7 +3858,30 @@
     };
     (state.feed.results||[]).forEach(row=>publicResultPublications(row).forEach(p=>add(row,p)));
     [['daily_picks','top_daily'],['prime_picks','prime'],['value_picks','value'],['doubles_picks','doubles'],['ace_picks','ace'],['sg_picks','sg']].forEach(([feedKey,section])=>{
-      (state.feed[feedKey]||[]).forEach(row=>add(row,{...row,section:row.market==='double_faults'?'double_faults':row.market==='sets'?'sets':row.market==='games'?'games':section,selection_id:row.betting?.selection_id||row.selection_id||row.pick_id,market:row.market||'match_winner',issued_at:row.issued_at||row.published_at||row.created_at}));
+      (state.feed[feedKey]||[]).forEach(row=>{
+        const pubs=Array.isArray(row?.market_publications)?row.market_publications.filter(p=>p&&(!p.publication_status||p.publication_status==='published')&&p.issued_at):[];
+        if(pubs.length){
+          pubs.forEach(p=>{
+            // After the O/U cutover a historical Aces superiority projection
+            // is not a new wager and must not inflate the member sample.
+            if(p.market==='aces'&&p.price_contract!=='player_total_ou'
+              &&Date.parse(p.issued_at)>=Date.parse('2026-11-01T05:00:00Z'))return;
+            add(row,p);
+          });
+          return;
+        }
+        // Only legacy flat issued rows use a fallback. ACE is never a
+        // match-winner wager, and a missing SG market cannot be guessed.
+        const market=String(row.market||row.projection_metric||(
+          section==='ace'?'aces':section==='sg'?'':'match_winner'
+        )).toLowerCase();
+        if(!market||section==='sg'&&!['sets','games'].includes(market))return;
+        if(market==='aces'&&Date.parse(row.issued_at||row.published_at||row.created_at)
+          >=Date.parse('2026-11-01T05:00:00Z')&&row.price_contract!=='player_total_ou')return;
+        add(row,{...row,section:market==='aces'?'ace':market==='double_faults'?'double_faults':market==='sets'?'sets':market==='games'?'games':section,
+          selection_id:row.betting?.selection_id||row.selection_id||row.pick_id,
+          market,issued_at:row.issued_at||row.published_at||row.created_at});
+      });
     });
     const allowed=new Set();
     const hash=text=>{let h=2166136261;for(const ch of text){h^=ch.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;};
