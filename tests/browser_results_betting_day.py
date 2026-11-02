@@ -421,6 +421,18 @@ def main():
                 const hiddenOverride=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
                 doublesRule.row_overrides={};doublesRule.display_state='hidden';
                 const afterDisable=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
+                // SETS and GAMES are independent Admin tabs, even though their
+                // published market rows share the legacy sg_picks source.
+                const sets=base('sets-regression','sets','sets','sets-p1',1,at('16','30'),true);
+                const setsOffer=structuredClone(sets);delete setsOffer.market_publications;
+                setsOffer.market='sets';
+                s.feed.sg_picks=[setsOffer];s.feed.results.push(sets);
+                const setsRule={enabled:true,display_state:'hidden',visible_picks:0,selection_mode:'first'};
+                s.feed.member_result_rules.elite.sets=setsRule;
+                s.feed.member_result_rules.elite.sg={enabled:false,display_state:'hidden',visible_picks:0,selection_mode:'first'};
+                const beforeSets=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
+                setsRule.display_state='active';setsRule.visible_picks=1;
+                const afterSets=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length;
                 const result={
                   published:dayKeys.size,
                   matched:rows.filter(r=>dayKeys.has([r.event_id,
@@ -434,6 +446,7 @@ def main():
                   wrongAceMarker:!!t.aceLeaderHintHtml(aceExample,opponent,'Opponent'),
                   nonAceMarker:!!t.aceLeaderHintHtml({...aceExample,projection_metric:'games'},leader,'Farjat'),
                   beforeDoubles,afterDoubles,hiddenOverride,afterDisable,
+                  beforeSets,afterSets,
                   proCohort:t.memberResultCohort('pro',day).size,
                   freeCohort:t.memberResultCohort('rookie',day).size,
                   legendCohort:t.memberResultCohort('legend',day).size,
@@ -448,6 +461,7 @@ def main():
                 "wrongAceMarker": False, "nonAceMarker": False,
                 "beforeDoubles": 6, "afterDoubles": 7,
                 "hiddenOverride": 6, "afterDisable": 6,
+                "beforeSets": 6, "afterSets": 7,
                 "proCohort": 5, "freeCohort": 2,
                 "legendCohort": 9, "goatCohort": 9
             }, morning
