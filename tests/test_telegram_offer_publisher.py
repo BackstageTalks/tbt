@@ -336,10 +336,12 @@ def test_classic_format_and_deterministic_free_pick():
     assert "aces 8.3" not in first[0]["text"]
     assert "esá" not in first[0]["text"]
     assert "Double Fault" not in first[0]["text"]
-    assert all("ℹ️ Analytical preview by BlinQ Stat Engine" in x["text"] for x in first)
-    assert all("Analytical preview only" not in x["text"] for x in first)
-    assert all(x["text"].endswith("by BlinQ Stat Engine") for x in first)
-    assert all(tg.telegram_link_entities(x["text"]) for x in first)
+    # Neither premium nor FREE predictions carry the old disclaimer/footer.
+    assert all("Analytical preview" not in x["text"] for x in first)
+    assert all("by BlinQ Stat Engine" not in x["text"] for x in first)
+    assert all(not tg.telegram_link_entities(x["text"]) for x in first)
+    assert first[0]["text"].splitlines()[-1].startswith("🄰 | ")
+    assert first[1]["text"].splitlines()[-1].startswith("🆓 FREE | ")
 
 
 def test_free_only_does_not_show_other_premium_rows():
