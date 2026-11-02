@@ -52,7 +52,7 @@ def test_stale_deploy_preflight_in_both_deployment_paths():
         assert "stamp_web_deployment.py" in workflow
         assert "git fetch origin main --depth=1" in workflow
         assert workflow.rfind("stamp_web_deployment.py") < workflow.rfind(
-            "uses: Azure/static-web-apps-deploy@v1"
+            "uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9"
         )
     assert "files_sha256" in ci and "blinq-deployment-sha" in ci
 
