@@ -273,6 +273,12 @@ def _drive_source_hints(manifest_path: Path | None, input_dir: Path):
 # exclusively with the exact offline linker.
 TML_ATP_2026_SOURCE_SHA = "8e9b756d1874e9e7866796b797273dd3b791d89eeb6b52aa6ee961a2c4c82c01"
 TML_ATP_2026_SOURCE_SUFFIX = "/Sackmann/TML/TML/2026.csv"
+# From independent TML-versus-BAL/123 source-only reconciliation:
+# line 64 lacks loser source ID; line 121 is W/O with conflicting counts.
+# Neither can become a CDB candidate even when the SHA-pinned tour is known.
+TML_ATP_2026_QUARANTINE = frozenset({
+    ("2026-336", "19"), ("2026-8998", "17"),
+})
 
 
 def tour_from_pinned_tml(sha, path):
@@ -424,11 +430,22 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
                 tables = {"atp": [], "wta": []}
                 table_rejections = Counter()
                 table_seen = 0
+                is_pinned_tml = (
+                    path.suffix.lower() != ".zip"
+                    and tour_from_pinned_tml(original_sha, original_path) == "atp"
+                )
                 for index, raw in enumerate(rows, 1):
                     if index > MAX_ROWS:
                         raise ValueError("Table exceeds row limit")
                     counts["raw_rows"] += 1
                     table_seen += 1
+                    if (is_pinned_tml and isinstance(raw, dict)
+                            and (str(raw.get("tourney_id") or ""),
+                                 str(raw.get("match_num") or "")) in TML_ATP_2026_QUARANTINE):
+                        counts["rejected_rows"] += 1
+                        counts["reason_tml_cross_source_review_quarantine"] += 1
+                        table_rejections["tml_cross_source_review_quarantine"] += 1
+                        continue
                     row, reason = normalize(raw, member_name, index,
                                             source_tour=folder_tour)
                     if reason:
