@@ -43,12 +43,12 @@ def main():
                 const t=todayTierAudit,s=t.state;
                 const day=t.bratislavaBettingDayKey(Date.now(),6);
                 const make=(h,m=0)=>day+'T'+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':00Z';
-                const winner=(event,section,odds,correct)=>{
+                const winner=(event,section,odds,correct,finished=true)=>{
                     const p={section,market:'match_winner',selection_id:'p2',
                       publication_status:'published',issued_at:make(6),odds,
-                      price_status:'priced',result:{status:correct?'hit':'miss',
+                      price_status:'priced',...(finished?{result:{status:correct?'hit':'miss',
                         correct,staked_units:1,profit_units:correct?odds-1:-1,
-                        runtime_source:'match_status_snapshot'}};
+                        runtime_source:'match_status_snapshot'}}:{})};
                     return {event_id:event,scheduled_at:make(12),player1:{id:'p1'},
                       player2:{id:'p2'},market_publications:[p]};
                 };
@@ -66,23 +66,27 @@ def main():
                       projection:line+.5,market_publications:[p]};
                     return row;
                 };
-                const top=winner('top','top_daily',1.54,true);
-                const value=winner('value','value',1.83,true);
+                // Exact 06:37 ELITE morning cohort: 3 TOP + 1 VALUE + 5 Aces.
+                // Confirmed 11:27 pre-start O/U repost supersedes only Aces terms.
+                const top=winner('17467283','top_daily',1.540541,true);
+                const pendingTop=[
+                  winner('17456690','top_daily',1.549451,false,false),
+                  winner('17471474','top_daily',1.510204,false,false),
+                ];
+                const value=winner('17470634','value',1.833333,true);
                 const aceRows=[
-                  ace('mpt','a',12.5,1.75,26,true),
-                  ace('hur','b',10.5,1.80,9,false),
-                  ace('far','c',4.5,1.79,7,true),
-                  ace('kar','d',7.5,1.72,7,false),
-                  ace('pending1','e',6.5,1.7,null,null,false),
-                  ace('pending2','f',5.5,1.7,null,null,false),
-                  ace('pending3','g',7.5,1.7,null,null,false),
+                  ace('17468525','289146',12.5,1.75,26,true),
+                  ace('17449526','158896',10.5,1.80,9,false),
+                  ace('17467964','270414',4.5,1.79,7,true),
+                  ace('17457727','341853',7.5,1.72,7,false),
+                  ace('17456687','372310',6.5,1.60,null,null,false),
                 ];
                 // Real serving feed may lack a top-level ace market and have a
                 // different winner_id. Settlements only retain signed publications.
                 s.feed={account:{is_admin:false,status:'active',plan:'elite'},
                   entitlements:{result_categories:['top_daily','value','ace'],
                     daily_pick_count:9},daily_picks:[],
-                  top_daily_picks:[top],value_picks:[value],
+                  top_daily_picks:[top,...pendingTop],value_picks:[value],
                   ace_picks:aceRows,prime_picks:[],doubles_picks:[],sg_picks:[],
                   results:[top,value,...aceRows.slice(0,4)],
                   member_result_rules:{elite:{
@@ -95,10 +99,10 @@ def main():
                 const eliteRows=t.filteredResults(filt);
                 const elite=t.settledPublishedEntries(eliteRows,'all',filt);
                 const m=t.localResultMetrics(eliteRows,'all',filt);
-                const fakeResult=ace('far','c',5.5,1.79,7,true);
+                const fakeResult=ace('17467964','270414',5.5,1.79,7,true);
                 s.feed.results.push(fakeResult);
                 const noWrongLine=t.settledPublishedEntries(t.filteredResults(filt),'all',filt)
-                  .every(x=>!(x.publication.market_line===5.5&&x.row.event_id==='far'));
+                  .every(x=>!(x.publication.market_line===5.5&&x.row.event_id==='17467964'));
                 s.feed.results.pop();
                 // Administrative ELITE membership preview must match the
                 // same cohort independently of the current display market.
@@ -125,7 +129,7 @@ def main():
                 "eliteKeys":9,"elite":6,"eliteWins":4,"eliteLosses":2,
                 "eliteProfit":0.91,"adminCohort":9,"admin":6,
                 "pro":2,"free":1,"noWrongLine":True,
-                "eliteIds":["far","hur","kar","mpt","top","value"]
+                "eliteIds":["17449526","17457727","17467283","17467964","17468525","17470634"]
             }, result
             assert not errors, errors
         finally:
