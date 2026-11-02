@@ -1,5 +1,5 @@
 name: BlinQ Telegram one-time confirmed format reissue
-# Operator-approved preview reissue: preserves exact morning publication identities.
+# Operator-approved O/U reissue: freeze TOP VALUE FREE, replace legacy Most Aces only.
 # A private ledger reservation prevents a second send on retries.
 on:
   push:
@@ -37,7 +37,7 @@ jobs:
           sparse-checkout: ops
           sparse-checkout-cone-mode: true
           persist-credentials: true
-      - name: Reformat exactly today's previously sent and confirmed picks
+      - name: Resend verified ACES O/U while freezing TOP VALUE FREE
         id: prepare
         env:
           GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
@@ -47,8 +47,8 @@ jobs:
           set -euo pipefail
           test -n "$GH_TOKEN"
           test -s .private-telegram/ops/telegram-bot-state.json
-          if [[ "$(TZ=Europe/Bratislava date +%F)" != "2026-11-01" ]]; then
-            echo "::notice::1 Nov correction expired; no backdated or next-day send."
+          if [[ "$(TZ=Europe/Bratislava date +%F)" != "2026-11-02" ]]; then
+            echo "::notice::2 Nov O/U reissue expired; no backdated or next-day send."
             echo "ready=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -57,13 +57,14 @@ jobs:
           from pathlib import Path
           p=Path(".github/telegram-format-resend-tick.json")
           request=json.loads(p.read_text(encoding="utf-8"))
-          assert request.get("betting_day")=="2026-11-01"
-          assert request.get("revision")=="aces-standard-feed-20261101-v2"
+          assert request.get("betting_day")=="2026-11-02"
+          assert request.get("revision")=="aces-player-ou-20261102-v1"
           assert request.get("preserve_original_confirmed_picks") is True
-          assert request.get("aces_prices_corrected") is True
-          print("Approved one-time 1 Nov ACES price correction trigger verified")
+          assert request.get("aces_contract")=="player_total_ou"
+          assert request.get("replace_original_aces") is True
+          print("Approved Nov 2 verified ACES O/U replacement trigger verified")
           PY
-          python scripts/telegram_offer_publisher.py prepare --preview-format --preview-revision aces-standard-feed-20261101-v2 \
+          python scripts/telegram_offer_publisher.py prepare --preview-format --preview-revision aces-player-ou-20261102-v1 \
             --state .private-telegram/ops/telegram-bot-state.json \
             --config-url "$BLINQ_URL/api/v1/ui-config"
           if [[ -s /tmp/blinq-telegram/ready ]]; then
@@ -85,7 +86,7 @@ jobs:
           expected="$(git -C .private-telegram rev-parse HEAD)"
           actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
           test "$expected" = "$actual" || { echo "::error::Resend reservation read-back mismatch"; exit 1; }
-      - name: Send revised premium TOP VALUE ACES and original FREE TOP
+      - name: Send regular TOP VALUE verified ACES O/U and original FREE TOP
         if: steps.prepare.outputs.ready == 'true'
         env:
           TGB: ${{ secrets.TGB }}
