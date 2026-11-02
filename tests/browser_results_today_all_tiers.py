@@ -109,6 +109,11 @@ def main():
                 s.feed.account={is_admin:true,role:'admin',plan:'admin',status:'active'};
                 const adminCohort=t.memberResultCohort('elite',day);
                 const adminEntries=t.settledPublishedEntries(s.feed.results,'all',{...filt,membership:'elite'});
+                // LEGEND and GOAT retain the entire issued/settled morning offer.
+                s.feed.account={is_admin:false,status:'active',plan:'legend'};
+                const legend=t.settledPublishedEntries(t.filteredResults(filt),'all',filt);
+                s.feed.account={is_admin:false,status:'active',plan:'goat'};
+                const goat=t.settledPublishedEntries(t.filteredResults(filt),'all',filt);
                 // PRO and FREE never receive ELITE-only Aces rows from API.
                 s.feed.account={is_admin:false,status:'active',plan:'pro'};
                 s.feed.entitlements.result_categories=['top_daily','value'];
@@ -122,13 +127,14 @@ def main():
                   eliteWins:m.wins,eliteLosses:m.losses,
                   eliteProfit:Math.round(m.profit*100)/100,
                   adminCohort:adminCohort.size,admin:adminEntries.length,
+                  legend:legend.length,goat:goat.length,
                   pro:pro.length,free:free.length,noWrongLine,
                   eliteIds:elite.map(x=>x.row.event_id).sort()};
             }""")
             assert result == {
                 "eliteKeys":9,"elite":6,"eliteWins":4,"eliteLosses":2,
                 "eliteProfit":0.91,"adminCohort":9,"admin":6,
-                "pro":2,"free":1,"noWrongLine":True,
+                "legend":6,"goat":6,"pro":2,"free":1,"noWrongLine":True,
                 "eliteIds":["17449526","17457727","17467283","17467964","17468525","17470634"]
             }, result
             assert not errors, errors
