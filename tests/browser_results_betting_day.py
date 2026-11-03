@@ -466,6 +466,57 @@ def main():
                 "legendCohort": 9, "goatCohort": 9
             }, morning
 
+            # Regression: the Admin ELITE = ALL Aces preview must not shrink
+            # from three issued Results to one when legacy cohort IDs are absent.
+            # Limited tiers and explicit row overrides remain restrictive.
+            all_aces = page.evaluate("""() => {
+              const t=bettingDayTest,s=t.state;
+              const day=t.bratislavaBettingDayKey(Date.now(),6);
+              const iso=new Date().toISOString();
+              s.feed={
+                account:{is_admin:true,role:'admin',plan:'admin',status:'active'},
+                entitlements:{result_categories:['ace'],daily_pick_count:3},
+                member_result_rules:{
+                  elite:{ace:{enabled:true,display_state:'active',
+                    visible_picks:'ALL',selection_mode:'first',row_overrides:{}}},
+                  pro:{ace:{enabled:true,display_state:'active',
+                    visible_picks:1,selection_mode:'first',row_overrides:{}}}
+                },
+                ace_picks:[],
+                results:[1,2,3].map((number)=>({
+                  event_id:'issued-ace-'+number,scheduled_at:iso,tour:'ATP',
+                  player1:{id:'p'+number,name:'Player '+number},
+                  player2:{id:'q'+number,name:'Opponent '+number},
+                  market_publications:[{
+                    section:'ace',market:'aces',
+                    selection_id:number===1?'p1':'',
+                    selection:number===1?'Player 1':'',
+                    publication_key:'ace:issued:'+number,
+                    issued_at:iso,betting_day:day,
+                    publication_status:'published',odds:1.74,
+                    price_status:'priced_projection',
+                    result:{status:number===2?'miss':'hit',
+                      correct:number!==2,staked_units:1,
+                      profit_units:number===2?-1:0.74}
+                  }]
+                }))
+              };
+              s.resultsFilters={category:'ace',tour:'',surface:'',window:'today',
+                dateFrom:'',dateTo:'',bettingDay:true,membership:''};
+              const count=()=>t.settledPublishedEntries(t.filteredResults(),
+                'ace',s.resultsFilters).length;
+              const all=count();
+              s.resultsFilters.membership='elite';
+              const elite=count();
+              s.resultsFilters.membership='pro';
+              const pro=count();
+              s.feed.member_result_rules.elite.ace.row_overrides={'1':'hidden'};
+              s.resultsFilters.membership='elite';
+              const overridden=count();
+              return {all,elite,pro,overridden};
+            }""")
+            assert all_aces == {"all": 3, "elite": 3, "pro": 1, "overridden": 0}, all_aces
+
             assert not errors, errors
             print("Results current betting-day cohort + 06:00 custom filter contract: PASS")
         finally:
