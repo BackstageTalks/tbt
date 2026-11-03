@@ -226,9 +226,12 @@ class ReleaseStore:
                 "--dir", self.directory, "--clobber",
             )
         except RuntimeError as exc:
-            # Only recover a stale GitHub asset ID. Auth errors, rate limits and
-            # other failures retain their existing fail-closed behavior.
-            if not re.search(r"HTTP\s+404\b", str(exc)):
+            # Some gh versions report "release not found" for stale tag views.
+            # Validate the exact authenticated release and asset by REST API.
+            # Permission, quota and missing-asset failures still fail closed.
+            message = str(exc)
+            if not (re.search(r"HTTP\\s+404\\b", message)
+                    or re.search(r"release not found", message, re.IGNORECASE)):
                 raise
             print(
                 f"Stale tag release asset for {name}; refreshing by release ID",
