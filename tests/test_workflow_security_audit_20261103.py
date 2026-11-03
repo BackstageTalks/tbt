@@ -87,3 +87,29 @@ def test_production_ci_dependency_actions_pinned_to_commits():
         assert ci.count(f"uses: {action}@{sha}") == occurrences
         assert not re.search(rf"uses:\s+{re.escape(action)}@v\d+\b", ci)
     assert AZURE in ci
+
+
+def test_secondary_production_workflows_pin_external_actions():
+    expected = {
+        "ui-hotfix-deploy.yml": {
+            "actions/checkout": "11bd71901bbe5b1630ceea73d27597364c9af683",
+            "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
+            "actions/setup-node": "49933ea5288caeca8642d1e84afbd3f7d6820020",
+        },
+        "admin-production-release.yml": {
+            "actions/checkout": "11bd71901bbe5b1630ceea73d27597364c9af683",
+            "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
+            "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+        },
+        "blinq-ui-production-watchdog.yml": {
+            "actions/checkout": "11bd71901bbe5b1630ceea73d27597364c9af683",
+            "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
+            "actions/setup-node": "49933ea5288caeca8642d1e84afbd3f7d6820020",
+        },
+    }
+    for filename, actions in expected.items():
+        content = (WF / filename).read_text(encoding="utf-8")
+        for action, sha in actions.items():
+            assert re.fullmatch(r"[0-9a-f]{40}", sha)
+            assert content.count(f"uses: {action}@{sha}") == 1, (filename, action)
+            assert not re.search(rf"uses:\s+{re.escape(action)}@v\d+\b", content)
