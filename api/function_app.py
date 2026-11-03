@@ -257,13 +257,16 @@ _COMPARATOR_RATE_LOCK = Lock()
 
 
 def _anonymous_client_key(req) -> str | None:
-    """Return a hashed platform client IP, never an untrusted request claim.
+    """Hash a trusted edge socket IP, never a caller-controlled client IP.
 
-    If the platform does not provide a valid single IP, callers share only
-    the existing global cap, avoiding an artificial per-client NAT bucket.
+    Azure Front Door documents X-Azure-ClientIP as potentially overwritten
+    by the caller. X-Azure-SocketIP represents the TCP peer, provided that
+    the trusted ingress injects/overwrites it; direct-origin access must also
+    be blocked at the gateway. Missing/invalid socket IP uses only the
+    existing global limit rather than a shared per-client NAT bucket.
     """
     headers = getattr(req, "headers", {}) or {}
-    raw = str(headers.get("X-Azure-ClientIP") or "").strip()
+    raw = str(headers.get("X-Azure-SocketIP") or "").strip()
     try:
         client = ipaddress.ip_address(raw).compressed
     except ValueError:
