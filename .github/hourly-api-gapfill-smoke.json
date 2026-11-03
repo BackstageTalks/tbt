@@ -1,8 +1,9 @@
 {
   "schema": 1,
   "kind": "dry-run",
-  "requested_utc": "2026-10-12T19:45:00Z",
-  "purpose": "Verify LIVE shared RapidAPI budget and active CDB writers using existing zero-billable-call dry-run guard",
+  "requested_utc": "2026-11-03T19:53:00Z",
+  "source": "user-approved-fresh-quota-test",
+  "purpose": "Read current shared provider-day budget and authoritative CDB writer activity using existing zero-provider-request guard after PR #1339; no importer dispatch, CDB mutation or model change.",
   "safe_mode": true,
-  "deploy_reason": "User requested fresh access and quota verification; do not dispatch provider API or canonical writer"
+  "commit": "ac05f97865de4d9970ae43f86e873055a497d66f"
 }
