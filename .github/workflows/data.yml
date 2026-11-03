@@ -196,7 +196,7 @@ jobs:
               # CDB lock, strict identity and exact-value readback still apply.
               [[ "$max_requests" == "1000" ]] && \
               [[ "$(jq -r '.kind // empty' "$request")" == "operator-approved-postmatch-provider-extras-1000-test" ]] && \
-              [[ "$(jq -r '.model_changes // true' "$request")" == "false" ]] || {
+              [[ "$(jq -r 'if has("model_changes") then .model_changes else true end' "$request")" == "false" ]] || {
                 echo "Extras smoke allows >30 only for the exact authorized 1000-call test"; exit 1;
               }
             fi
