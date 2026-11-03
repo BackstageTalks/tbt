@@ -235,3 +235,27 @@ def test_public_bp_workflow_artifact_contains_no_raw_stage_identifiers():
     artifact_section = source.split("name: cdb-sackmann-bp-", 1)[-1]
     assert "stage/stage.jsonl" not in artifact_section.split("if-no-files-found:", 1)[0]
     assert "stage/report.json" in artifact_section
+
+
+def test_production_bp_workflow_requires_strict_identity_and_count_pins():
+    workflow = (Path(__file__).resolve().parents[1] / ".github" / "workflows"
+                / "cdb-sackmann-bp-guarded.yml").read_text(encoding="utf-8")
+    assert "--isolate-provider-collisions" not in workflow
+    assert 'counts.get("excluded_ambiguous_provider_rows", 0) == 0' in workflow
+    for pin in ("expected_cdb_bundle_sha256", "expected_staged_matches",
+                "expected_new_stat_values", "expected_changed_years",
+                "expected_provider_quarantine"):
+        assert pin in workflow
+
+
+def test_strict_bp_loader_preserves_identity_fail_closed(monkeypatch):
+    import recover_cdb_sackmann_breakpoints as bp
+    calls = []
+    monkeypatch.setattr(bp, "_load", lambda directory, **kwargs: calls.append(kwargs) or [])
+    for mode in ("stage", "write", "verify"):
+        assert bp.load_canonical_for_mode(Path("/offline/canonical"), mode=mode) == []
+    assert len(calls) == 3
+    assert all(kwargs["isolate_provider_collisions"] is False and
+               kwargs["expected_provider_quarantine"] == 0 and
+               kwargs["include_quarantined_for_full_readback"] is False
+               for kwargs in calls)
