@@ -8,7 +8,7 @@ import pytest
 
 from replay_selection_reliability import (
     analyze, anchors, canonical_index, dt, eligible, load_snapshots,
-    historical_cdb_coverage, metrics, paired_complete_day_comparison, prepare, verify_pins,
+    historical_cdb_coverage, forward_subset, metrics, paired_complete_day_comparison, prepare, verify_pins,
 )
 
 
@@ -258,3 +258,18 @@ def test_paired_comparison_rejects_misaligned_dates():
             [("2026-10-01", [{"correct": True}])],
             [("2026-10-02", [{"correct": True}])],
         )
+
+
+def test_prospective_cohort_rejects_historical_day():
+    old = snapshot([candidate("old")], when="2026-11-03T07:00:00+00:00")
+    next_day = snapshot([candidate("next")], when="2026-11-04T07:00:00+00:00")
+    future = forward_subset([old, next_day], "2026-11-04")
+    assert future == [next_day]
+    with pytest.raises(ValueError, match="predeclared"):
+        forward_subset([old], "2026-11-03")
+
+
+def test_forward_betting_day_uses_bratislava_local_timezone():
+    old = snapshot([], when="2026-11-03T22:50:00+00:00")  # Nov 3 23:50 CET
+    next_day = snapshot([], when="2026-11-03T23:10:00+00:00")  # Nov 4 00:10 CET
+    assert forward_subset([old, next_day], "2026-11-04") == [next_day]
