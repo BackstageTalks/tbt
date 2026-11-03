@@ -1,0 +1,36 @@
+name: Audit live frontend transport (read-only)
+on:
+  pull_request:
+    paths:
+      - scripts/measure_frontend_delivery.py
+      - tests/test_measure_frontend_delivery.py
+      - .github/workflows/live-frontend-transport-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-transport-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Offline probe contract tests
+        run: python -m unittest discover -s tests -p test_measure_frontend_delivery.py -v
+      - name: Capture public production HTTP evidence
+        env:
+          BLINQ_PUBLIC_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        run: python scripts/measure_frontend_delivery.py --output "$RUNNER_TEMP/blinq-frontend-delivery.json"
+      - name: Preserve raw HTTP headers, response sizes and hashes
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: frontend-transport-audit-${{ github.run_id }}
+          path: ${{ runner.temp }}/blinq-frontend-delivery.json
+          if-no-files-found: warn
+          retention-days: 14
