@@ -84,5 +84,5 @@ def test_production_ci_dependency_actions_pinned_to_commits():
     }
     for action, (sha, occurrences) in expected.items():
         assert ci.count(f"uses: {action}@{sha}") == occurrences
-        assert not re.search(rf"uses:\\s+{re.escape(action)}@v\\d+\\b", ci)
+        assert not re.search(rf"uses:\s+{re.escape(action)}@v\d+\b", ci)
     assert AZURE in ci
