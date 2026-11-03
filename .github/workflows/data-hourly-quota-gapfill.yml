@@ -55,6 +55,7 @@ jobs:
           from datetime import datetime, time, timedelta, timezone
           from time import sleep
           from zoneinfo import ZoneInfo
+          from scripts.api_hourly_evening import evening_cap
 
           REPO = os.environ["GITHUB_REPOSITORY"]
           TOKEN = os.getenv("GH_TOKEN", "")
@@ -87,11 +88,12 @@ jobs:
           # Runner start and writer resumption both recompute UTC-relative slots.
           final_topup = 7 * 60 <= until_reset <= 35 * 60 + 59
           new_day_start = now.hour == 17 and 10 <= now.minute <= 13
+          evening_limit = evening_cap(now, expected_reset)
           reset_local = expected_reset.astimezone(ZONE)
           print(f"Bratislava time: {local.isoformat()}; next API reset: "
                 f"{reset_local.strftime('%Y-%m-%d %H:%M %Z')} "
                 f"(UTC {expected_reset.isoformat()}); dry_run={DRY_RUN}", flush=True)
-          if stage_hour not in caps and not final_topup and not new_day_start and not DRY_RUN:
+          if stage_hour not in caps and not final_topup and not new_day_start and evening_limit is None and not DRY_RUN:
               print("Outside permitted API dispatch slots; skipping.")
               sys.exit(0)
           if not TOKEN or not WORKER or not CDB_READ_TOKEN or not BUDGET_URL.startswith("https://"):
@@ -151,7 +153,7 @@ jobs:
           spent = int(budget["global_spent"])
           remaining = int(budget["global_remaining"])
           history_remaining = int(budget["remaining"]["history"])
-          if stage_hour not in caps and not final_topup and not new_day_start:
+          if stage_hour not in caps and not final_topup and not new_day_start and evening_limit is None:
               print(f"No new job outside guarded hours Europe/Bratislava; "
                     f"shared ledger {spent}/15000, remaining to shared ceiling={remaining}.")
               if DRY_RUN:
@@ -164,7 +166,8 @@ jobs:
                   or budget.get("schema") != 2):
               raise SystemExit("Provider UTC reset/schema inconsistent; no dispatch")
 
-          limit = 3000 if new_day_start else (14500 if final_topup else caps[stage_hour])
+          limit = (3000 if new_day_start else evening_limit if evening_limit is not None
+                   else 14500 if final_topup else caps[stage_hour])
           # At most 3000 per job; the provider rechecks the 300-remaining
           # header and the shared ETag ledger before every billable attempt.
           # Two bounded DAILY slots collect provider-1 market IDs and PBP.
@@ -189,7 +192,9 @@ jobs:
           # Leave the Git tag lock untouched while waiting. Keep the
           # window bounded below the 6-hour GitHub Actions job maximum.
           run_day = local.date()
-          window_end_utc = (expected_reset - timedelta(days=1) + timedelta(minutes=5)
+          window_end_utc = (expected_reset - timedelta(days=1) + timedelta(hours=6)
+                            if evening_limit is not None else
+                            expected_reset - timedelta(days=1) + timedelta(minutes=5)
                             if new_day_start else expected_reset - timedelta(minutes=7))
           retry_deadline = min(now + timedelta(hours=5, minutes=40), window_end_utc)
           if DRY_RUN:
@@ -215,9 +220,10 @@ jobs:
               until_reset = (expected_reset - now).total_seconds()
               final_topup = 7 * 60 <= until_reset <= 35 * 60 + 59
               new_day_start = now.hour == 17 and 10 <= now.minute <= 13
+              evening_limit = evening_cap(now, expected_reset)
               if (
                   local.date() != run_day
-                  or (stage_hour not in caps and not final_topup and not new_day_start)
+                  or (stage_hour not in caps and not final_topup and not new_day_start and evening_limit is None)
               ):
                   raise SystemExit("Canonical writer released outside a permitted dispatch window")
 
@@ -244,7 +250,8 @@ jobs:
                   or budget.get("schema") != 2
               ):
                   raise SystemExit("Provider reset inconsistent after writer wait; no dispatch")
-              limit = 3000 if new_day_start else (14500 if final_topup else caps[stage_hour])
+              limit = (3000 if new_day_start else evening_limit if evening_limit is not None
+                       else 14500 if final_topup else caps[stage_hour])
               extras_slot = stage_hour in (14, 17) and not final_topup and not new_day_start
               proposed = min(3000, limit-spent, remaining, history_remaining)
               if extras_slot:
