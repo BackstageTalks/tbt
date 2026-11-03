@@ -112,4 +112,4 @@ def test_secondary_production_workflows_pin_external_actions():
         for action, sha in actions.items():
             assert re.fullmatch(r"[0-9a-f]{40}", sha)
             assert content.count(f"uses: {action}@{sha}") == 1, (filename, action)
-            assert not re.search(rf"uses:\\s+{re.escape(action)}@v\\d+\\b", content)
+            assert not re.search(rf"uses:\s+{re.escape(action)}@v\d+\b", content)
