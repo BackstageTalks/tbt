@@ -448,12 +448,16 @@ def _normalize_membership_invariants(payload: object) -> object:
             notifications["default_levels"] = ["elite", "legend", "goat"]
         payload["access_contract_revision"] = 1
 
-    # Access contract v2: ELITE ESÁ was operator-approved as an unrestricted
-    # category, but older Azure UI rows still cap it numerically (e.g. 5).
-    # Upgrade that one legacy setting when reading the effective config. The
-    # revision persists on the next normal, CAS-protected Admin publish, after
-    # which any deliberate future Admin change remains authoritative.
-    if access_revision < 2:
+    # Dedicated, one-time ELITE ESÁ migration. Legacy published Azure rules
+    # can carry a numeric limit (e.g. 5) despite the operator-approved ALL
+    # policy. Do not advance the unrelated general access contract version.
+    # Next CAS-protected Admin publish persists the marker; future deliberate
+    # edits are respected instead of silently being reset on every read.
+    try:
+        ace_revision = int(payload.get("elite_aces_access_revision") or 0)
+    except (TypeError, ValueError):
+        ace_revision = 0
+    if ace_revision < 1:
         dashboard = payload.get("dashboard") or {}
         hub = dashboard.get("daily_hub") or {}
         tabs = hub.get("tabs") or {}
@@ -465,7 +469,7 @@ def _normalize_membership_invariants(payload: object) -> object:
             elite["blur_remaining"] = False
             elite["see_all"] = True
             elite["row_overrides"] = {}
-        payload["access_contract_revision"] = 2
+        payload["elite_aces_access_revision"] = 1
 
     # INFO contract v1 heals legacy runtime rows once so a code deploy is
     # sufficient to restore the one-way INFO channel for every active tier.
