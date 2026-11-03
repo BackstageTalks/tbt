@@ -25,7 +25,11 @@ def build(download: dict, readback: dict, *, run_id: str = "") -> dict:
         raise ValueError("CDB read-back not verified")
     requests = int(download.get("requests_including_retries", -1))
     observed = int(adaptive.get("observed_paid_requests", -1))
-    new_fields = int(value.get("new_statistic_values", -1))
+    # Counter omits zero-valued keys. A cutoff before the first paid call,
+    # or a genuinely zero-yield batch, legitimately has no gain counters.
+    # Independent CDB read-back and cohort accounting still reject any
+    # unverified or contradictory positive gain.
+    new_fields = int(value.get("new_statistic_values", 0))
     persisted = int(readback.get("persisted_new_statistic_values", -1))
     if requests < 0 or requests != observed:
         raise ValueError("Paid API usage differs from adaptive feedback")
@@ -33,7 +37,7 @@ def build(download: dict, readback: dict, *, run_id: str = "") -> dict:
         raise ValueError("Collector gains differ from persisted CDB values")
     if status == "VERIFIED_NO_NEW_FIELDS" and persisted:
         raise ValueError("Contradictory zero-gain read-back")
-    paid_fields = int(value.get("api_new_statistic_values", -1))
+    paid_fields = int(value.get("api_new_statistic_values", 0))
     if (paid_fields < 0 or paid_fields > persisted
             or (requests == 0 and paid_fields != 0)):
         raise ValueError("Paid and non-paid CDB gains do not reconcile")
