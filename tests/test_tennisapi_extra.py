@@ -364,3 +364,22 @@ def test_verified_provider5_only_exports_match_winner_and_retains_provenance():
     for invalid_id in (0, 2, 6, True, "5"):
         with pytest.raises(ValueError, match="Unsupported TennisApi odds provider"):
             normalize_market_snapshot(payload, event_id=17449522, provider_id=invalid_id)
+
+def test_provider_game_winner_attestation_is_partial_even_when_final_point_missing():
+    sample = {"eventId": 17377322, "sets": [{"games": [
+        {"points": [{"home": 0, "away": 15}, {"home": 0, "away": 40}],
+         "score": {"serving": 2, "scoring": 2}},
+        {"points": [{}], "score": {"serving": 1, "scoring": 2}},
+        {"points": [{}], "score": {"serving": 1}},  # Winner not attested
+    ]}]}
+    report = point_by_point_inventory(sample, event_id=17377322)
+    assert report["games"] == 3
+    assert report["points"] == 4
+    assert report["observed_games_with_server_and_winner"] == 2
+    assert report["observed_games_won_away"] == 2
+    assert report["observed_games_won_home"] == 0
+    assert report["observed_server_won_games"] == 1
+    assert report["observed_receiver_won_games"] == 1
+    assert report["game_observation_scope"] == "observed_games_only"
+    assert report["eligible_for_cdb_point_features"] is False
+    assert report["quality_status"] == "structural_only"
