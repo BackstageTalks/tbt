@@ -527,3 +527,53 @@ def test_provider5_fallback_does_not_spend_on_unscoped_itf_or_challenger(match_f
         assert result["market_fallback_attempted"] is False
         assert provider.calls == ["/api/tennis/event/100", "odds-1", "pbp"]
         assert match.provider_payload["_tbt_tennisapi_markets"]["provider_id"] == 1
+
+def test_cdb_compactor_preserves_source_specific_provider5_winner_and_movement():
+    sample = {
+        "_tbt_tennisapi_markets": {
+            "schema": 1, "source": "tennisapi1", "event_id": "17449522",
+            "observed_at_utc": NOW.isoformat(), "status": "available",
+            "provider_id": 5, "provider_identity": "unmapped_source_id",
+            "provider_quote_timestamp_known": False, "pre_match_asof_verified": False,
+            "quotes": [
+                {"market_id": 1, "market": "match_winner", "is_live": False,
+                 "line_games": None, "selection": "1",
+                 "opening_decimal": 1.75, "latest_decimal": 1.8,
+                 "provider_change_direction": 1, "settled_winning": None},
+                {"market_id": 1, "market": "match_winner", "is_live": False,
+                 "line_games": None, "selection": "2",
+                 "opening_decimal": 2.25, "latest_decimal": 2.2,
+                 "provider_change_direction": -1, "settled_winning": None},
+            ],
+        },
+    }
+    assert minimize_provider_payload(sample)["_tbt_tennisapi_markets"] == sample["_tbt_tennisapi_markets"]
+    wrong_provider5_market = dict(sample["_tbt_tennisapi_markets"])
+    wrong_provider5_market["quotes"] = [
+        {**sample["_tbt_tennisapi_markets"]["quotes"][0],
+         "market_id": 12, "market": "total_games", "selection": "Over"},
+    ]
+    assert "_tbt_tennisapi_markets" not in minimize_provider_payload({
+        "_tbt_tennisapi_markets": wrong_provider5_market})
+
+
+def test_cdb_compactor_rejects_inconsistent_partial_game_tallies():
+    raw = {
+        "_tbt_tennisapi_pbp": {
+            "schema": 1, "source": "tennisapi1", "event_id": "17377322",
+            "observed_at_utc": NOW.isoformat(), "status": "available",
+            "sets": 1, "games": 3, "points": 4,
+            "games_with_explicit_server": 3, "games_with_explicit_winner": 2,
+            "observed_games_with_server_and_winner": 2,
+            "observed_games_won_home": 0, "observed_games_won_away": 2,
+            "observed_server_won_games": 1, "observed_receiver_won_games": 1,
+            "game_observation_scope": "observed_games_only",
+            "quality_status": "structural_only",
+            "eligible_for_cdb_point_features": False,
+        },
+    }
+    assert minimize_provider_payload(raw)["_tbt_tennisapi_pbp"] == raw["_tbt_tennisapi_pbp"]
+    corrupt = dict(raw["_tbt_tennisapi_pbp"])
+    corrupt["observed_games_won_home"] = 3
+    assert "_tbt_tennisapi_pbp" not in minimize_provider_payload({
+        "_tbt_tennisapi_pbp": corrupt})
