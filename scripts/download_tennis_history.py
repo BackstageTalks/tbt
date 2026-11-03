@@ -930,6 +930,8 @@ def main():
                     ),
                     "policy": "Actual full serve+return readiness transitions; cache/local gains separated. Denominator includes provider retries/failures. Not an estimate of model accuracy gain.",
                 }
+                if enricher is not None:
+                    output_report["statistics_provider_key_inventory"] = enricher.statistics_key_summary()
             if args.mode == "identity":
                 output_report["identity_backfill"] = {
                     "recovered_native_event_ids": len(identity_recovered_expected),
