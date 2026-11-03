@@ -110,6 +110,11 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
             opening = decimal_odds(choice.get("initialFractionalValue"))
             if latest is None:
                 continue
+            move = choice.get("change")
+            # Provider reports -1/0/1 versus opening; it is a direction only,
+            # not an odds tick timestamp or reliable historical close.
+            if type(move) is not int or move not in (-1, 0, 1):
+                move = None
             winner = choice.get("winning")
             if winner is not None and not isinstance(winner, bool):
                 raise ProviderError("Winning indicator must be boolean")
@@ -117,6 +122,7 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
                 "selection": side,
                 "opening_decimal": opening,
                 "latest_decimal": latest,
+                "provider_change_direction": move,
                 "settled_winning": winner,
             })
         if {v["selection"] for v in valid} != required:
