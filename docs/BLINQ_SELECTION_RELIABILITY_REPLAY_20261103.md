@@ -1,6 +1,6 @@
 # BlinQ 7.2.1 — winner reliability and selector replay (2026-11-03)
 
-**State:** PREPARED. This record is not proof that a replay ran.
+**State:** IMPLEMENTED + 20/20 TESTED + DATA READBACK VERIFIED, forward cohort awaiting new real observations. No model/selector deployment.
 
 ## Goal and authorized scope
 
@@ -34,7 +34,7 @@ Investigate five original points: (1) data/serve-return quality, (2) ATP/WTA, to
 
 ## Progress and gates
 
-**PREPARED:** isolated branch analysis/selection-reliability-replay-20261103 with read-only script, regression tests and workflow. Actual CI replay, per-fixture canonical outcomes and active serving model SHA must be independently verified before reporting A/B as answered. Revisit only failed technical assumptions, never bypass provenance or identity guardrails.
+**IMPLEMENTED / TESTED:** isolated research branch plus read-only workflow and corrected CDB rate-field mapping. Latest 20-case regression suite and verified readback passed (run 41715586327). Accuracy is available for *matched completed candidates*; the current serving model artifact SHA and true published-issuance outcomes remain separate unverified questions.
 
 **Acceptance:** regression tests, verified immutable readback, chronological model-isolated A/B report with coverage and diagnostics, independent confidence/calibration review, then separate forward shadow. Champion and current published selector stay unchanged until explicit owner decision.
 
@@ -57,3 +57,18 @@ Investigate five original points: (1) data/serve-return quality, (2) ATP/WTA, to
 3. Validate the candidate cohort's unresolved outcomes and publication-versus-candidate differences to avoid outcome selection bias.
 4. Forward shadow under same-event and pre-start evidence; do not auto-adjust arbitrary probability thresholds based on this retrospective replay.
 5. Confirm currently serving model artifact SHA independently from live inference before making production-specific promotion statements.
+
+## Final research integrity corrections (2026-11-03, follow-up)
+
+- [CI run 41715586327](https://github.com/BackstageTalks/tbt/actions/runs/41715586327) is **successful** at commit 80aa72b9058c39bf0e3dc375fb2d764accc81d2f: **20/20 tests pass**, 24 historical anchors, 6,689 candidate-model/event rows, and verified private historical release readback. [Private aggregate report artifact](https://github.com/BackstageTalks/tbt/actions/runs/41715586327) contains both historical and frozen prospective JSON.
+- Fixed replay's canonical settlement check to accept only genuinely final statuses with validated winner; provisional matches are excluded. Added paired betting-day identity verification so comparisons cannot pair different calendar days silently.
+- Fixed the historical data audit's break-point rate field names to match the canonical feature-builder convention: `p1/p2_break_point_serve_win` and `p1/p2_break_point_return_win`; **count fields are never accepted as rates**. The earlier zero-coverage finding was a *measurement bug*, not a finding about missing source data.
+- **Corrected current canonical CDB 2026:** 101,628 completed; 72,833 both service/return rates (71.67%); 10,160 both break-point rates (10.00%); 18,623 both ranking values (18.32%). October: 8,446 both service/return, 1,432 both break-point, 255 both ranks of 10,796 completed. November: 367 both service/return, 207 both break-point, **zero both ranks** of 984 completed. None of these post-match CDB figures prove the point-in-time availability in serving model's private rank-history features.
+- Recovered prospective split is **predeclared 2026-11-04 Europe/Bratislava**. Read-only `forward-report.json` is independently reported from historical `report.json`. As of the verified run: **0 prospective days / 0 prospective candidates**, status `AWAITING_FUTURE_SNAPSHOT`; never interpret empty data as an automatic improvement.
+- Research CI workflow is configured for a daily 11:17 UTC read-only schedule **after the research code is on GitHub's default branch**; it reads existing monthly immutable private snapshots and canonical history using pre/post asset verification. It makes **0 extra Tennis provider calls** and **0 CDB/feed/model writes**.
+- Model 7.2.1 historical 1,762/2,384 matched completed candidate outcomes remain 68.90% accurate, raw Brier 0.1971. TOP forward quality-first improvement **is not established**: retrospective paired comparison has only five complete TOP days (16 examples).
+- **Release gate stays closed:** no calibration change, selector reordering, champion swap or live service deployment. A separate prospective comparison on sufficiently many fully evaluated matching daily selections, a true issued/settled ledger, and active serving model SHA readback are still necessary before any production policy change.
+
+### Acceptance and stop/go
+
+Research-only infrastructure can be merged after green CI without touching production selection or the canonical writer. That is *not* authorization to activate a changed policy. No automatic promotion when sample sizes are small, status is unsettled, inputs are stale, or provenance is absent. Keep collecting frozen observations and report the actual denominator, missingness and per-version evidence before an owner decision.
