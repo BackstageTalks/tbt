@@ -19,7 +19,7 @@ def test_verified_action_shas_in_all_affected_workflows():
 
 
 _UNTRUSTED_SHELL_EXPRESSION = re.compile(
-    r"\\$\\{\\{\\s*(?:inputs\\.|github\\.event\\.|github\\.head_ref\\b|github\\.ref_name\\b)"
+    r"\$\{\{\s*(?:inputs\.|github\.event\.|github\.head_ref\b|github\.ref_name\b)"
 )
 
 
@@ -28,7 +28,7 @@ def _risky_shell_lines(lines):
     in_script = False
     run_key_indent = -1
     for number, line in enumerate(lines, 1):
-        match = re.match(r"^\\s*(?:-\\s*)?run:\\s*(.*)$", line)
+        match = re.match(r"^\s*(?:-\s*)?run:\s*(.*)$", line)
         if match:
             in_script = True
             run_key_indent = line.index("run:")
