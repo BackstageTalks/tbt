@@ -190,7 +190,16 @@ jobs:
           fi
           if [[ "$mode" == "extras" ]]; then
             [[ "$promote" == "false" ]] || { echo "Extras smoke never promotes a model"; exit 1; }
-            (( 10#$max_requests <= 30 )) || { echo "Extras smoke max_requests must be <=30"; exit 1; }
+            if (( 10#$max_requests > 30 )); then
+              # Explicit single 1000-request operator test only; normal smoke
+              # remains capped at 30. Shared quota, provider reserve, global
+              # CDB lock, strict identity and exact-value readback still apply.
+              [[ "$max_requests" == "1000" ]] && \
+              [[ "$(jq -r '.kind // empty' "$request")" == "operator-approved-postmatch-provider-extras-1000-test" ]] && \
+              [[ "$(jq -r '.model_changes // true' "$request")" == "false" ]] || {
+                echo "Extras smoke allows >30 only for the exact authorized 1000-call test"; exit 1;
+              }
+            fi
             [[ "$(jq -r '.targeted_statistics // false' "$request")" == "false" ]] || {
               echo "Extras smoke cannot enable targeted-statistics"; exit 1;
             }
