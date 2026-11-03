@@ -444,3 +444,12 @@ def test_full_readback_exception_never_skips_a_different_identity_conflict(monke
         mod._load(tmp_path, isolate_provider_collisions=True,
                   expected_provider_quarantine=6,
                   include_quarantined_for_full_readback=True)
+
+
+def test_current_cdb_complement_audit_requires_unambiguous_canonical_rows():
+    from pathlib import Path
+    workflow = (Path(__file__).resolve().parents[1] / ".github" / "workflows"
+                / "cdb-service-complement-audit.yml").read_text(encoding="utf-8")
+    assert "--isolate-provider-collisions" not in workflow
+    assert 'c.get("excluded_ambiguous_provider_rows", 0) == 0' in workflow
+    assert 'result["counts"].get("excluded_ambiguous_provider_rows", 0) == 0' in workflow
