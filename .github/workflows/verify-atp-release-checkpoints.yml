@@ -11,7 +11,6 @@ on:
     paths:
       - scripts/audit_atp_release_archive.py
       - scripts/test_audit_atp_release_archive.py
-      - .github/workflows/verify-atp-release-checkpoints.yml
   workflow_dispatch:
 
 permissions:

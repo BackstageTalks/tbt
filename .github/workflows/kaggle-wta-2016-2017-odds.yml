@@ -12,7 +12,6 @@ on:
     branches: [main]
     paths:
       - ".github/kaggle-wta-2016-2017-odds-request.json"
-      - ".github/workflows/kaggle-wta-2016-2017-odds.yml"
       - "scripts/link_kaggle_wta_2016_2017_odds.py"
   workflow_dispatch:
     inputs:

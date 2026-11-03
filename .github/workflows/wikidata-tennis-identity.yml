@@ -7,7 +7,6 @@ on:
     paths:
       - ".github/wikidata-tennis-identity-request.json"
       - "scripts/collect_wikidata_tennis_identity.py"
-      - ".github/workflows/wikidata-tennis-identity.yml"
   pull_request:
     paths:
       - "scripts/collect_wikidata_tennis_identity.py"
