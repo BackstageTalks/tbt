@@ -101,7 +101,11 @@ def enrich_event_extras(match, provider, *, now: datetime | None = None) -> dict
         # provider 1 has no odds. One optional attempt only after a verified
         # empty provider-1 result; all shared-budget and rate guards stay in
         # the existing provider client. Never mix sources within one marker.
-        if not parsed["quotes"]:
+        # Avoid burning scarce calls on ITF/Challenger/no-provenance gaps:
+        # the verified provider-5 sample is an ATP main-draw event. WTA and
+        # Grand Slams are bounded exploratory top-tier cohorts only.
+        native_category = str(raw.get("_tbt_source_category_id") or "")
+        if not parsed["quotes"] and native_category in {"3", "6", "-100"}:
             outcomes["market_fallback_attempted"] = True
             fallback = provider.event_odds(eid, provider_id=5)
             parsed = normalize_market_snapshot(
