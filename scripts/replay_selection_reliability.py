@@ -378,7 +378,8 @@ def analyze(snapshots, matches):
             "tour": lambda r: r["tour"],
             "surface": lambda r: r["surface"],
             "level": lambda r: r["level"],
-            "confidence": lambda r: ("65_70" if r["raw"] < .70 else
+            "confidence": lambda r: ("below_65" if r["raw"] < .65 else
+                                     "65_70" if r["raw"] < .70 else
                                      "70_75" if r["raw"] < .75 else
                                      "75_80" if r["raw"] < .80 else "80_plus"),
             "data_depth": lambda r: ("below_80" if r["depth"] < .80 else
