@@ -141,7 +141,7 @@ jobs:
       BLINQ_FROZEN_721_SHADOW_ENABLED: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[refresh-now]')) || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'refresh' || inputs.mode == 'current-refresh'))) && 'true' || 'false' }}
       PYTHONPATH: api:scripts
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Enforce per-run Tennis API hard cap
         shell: bash
@@ -338,7 +338,7 @@ jobs:
             esac
           fi
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.11'
           cache: pip
@@ -656,7 +656,7 @@ jobs:
 
       - name: Upload training decision evidence
         if: ${{ always() && env.MODE == 'train' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-model-training-${{ github.run_id }}
           path: |
@@ -668,7 +668,7 @@ jobs:
 
       - name: Save morning refresh budget evidence
         if: env.MODE == 'refresh' && env.MORNING_REFRESH == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-morning-refresh-report-${{ github.run_id }}
           path: .cache/tbt/predictions/refresh_report.json
@@ -677,7 +677,7 @@ jobs:
 
       - name: Upload mega-data report
         if: ${{ always() && env.MODE == 'mega-data' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-mega-data-${{ github.run_id }}
           path: |
@@ -704,14 +704,14 @@ jobs:
 
       - name: Upload TOP evidence and calibration audit
         if: ${{ always() && env.MODE == 'top-audit' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-top-audit-${{ github.run_id }}
           path: .cache/tbt/top-accuracy/audit.json
           if-no-files-found: error
       - name: Upload TOP VALUE doubles quality and overlap audit
         if: ${{ always() && env.MODE == 'market-audit' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-market-audit-${{ github.run_id }}
           path: |
@@ -721,7 +721,7 @@ jobs:
 
       - name: Upload Data Model v3 feature audit
         if: ${{ always() && env.MODE == 'feature-audit' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-feature-v3-${{ github.run_id }}
           path: .cache/tbt/feature-v3/coverage.json
@@ -729,7 +729,7 @@ jobs:
 
       - name: Upload doubles history report
         if: ${{ always() && env.MODE == 'doubles-data' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-doubles-data-${{ github.run_id }}
           path: |
@@ -738,7 +738,7 @@ jobs:
 
       - name: Upload SG score enrichment report
         if: ${{ always() && (env.MODE == 'sg-scores' || env.MODE == 'sg-rebuild') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-${{ env.MODE }}-${{ github.run_id }}
           path: |
@@ -748,7 +748,7 @@ jobs:
 
       - name: Upload ACE/DF enrichment report
         if: ${{ always() && env.MODE == 'ace-statistics' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-ace-statistics-${{ github.run_id }}
           path: .cache/tbt/ace-history/ace_run_summary.json
@@ -756,7 +756,7 @@ jobs:
 
       - name: Upload provider capability probe
         if: ${{ always() && env.MODE == 'provider-probe' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-provider-probe-${{ github.run_id }}
           path: |
@@ -766,7 +766,7 @@ jobs:
 
       - name: Upload history manifest recovery report
         if: ${{ always() && env.MODE == 'history-manifest-repair' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-history-manifest-repair-${{ github.run_id }}
           path: .cache/tbt/history-manifest-repair/history_manifest_repair_report.json
@@ -774,7 +774,7 @@ jobs:
 
       - name: Upload history repair diagnostics
         if: ${{ always() && env.MODE == 'history-repair' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-history-repair-${{ github.run_id }}
           path: .cache/tbt/history-repair-all/history_repair_report.json
@@ -782,7 +782,7 @@ jobs:
 
       - name: Preserve paid-provider history on failed checkpoint
         if: ${{ failure() && (env.MODE == 'history' || env.MODE == 'statistics' || env.MODE == 'extras' || env.MODE == 'identity') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-uncommitted-private-history-${{ github.run_id }}
           path: |
@@ -797,7 +797,7 @@ jobs:
 
       - name: Upload history/statistics run report
         if: ${{ always() && (env.MODE == 'history' || env.MODE == 'statistics' || env.MODE == 'extras' || env.MODE == 'identity') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-${{ env.MODE }}-${{ github.run_id }}
           path: |
@@ -814,7 +814,7 @@ jobs:
 
       - name: Upload production prediction audit
         if: ${{ always() && env.MODE == 'production-audit' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-production-audit-${{ github.run_id }}
           path: |
@@ -824,7 +824,7 @@ jobs:
 
       - name: Upload results rebuild report
         if: ${{ always() && env.MODE == 'results-rebuild' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-results-rebuild-${{ github.run_id }}
           path: .cache/tbt/results-rebuild/results_rebuild_report.json
@@ -832,7 +832,7 @@ jobs:
 
       - name: Upload production preflight artifacts
         if: env.MODE == 'production-preflight'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-production-preflight
           path: |
@@ -923,8 +923,8 @@ jobs:
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       PYTHONPATH: api:scripts
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.11'
           cache: pip
@@ -992,10 +992,10 @@ jobs:
 
     steps:
       - name: Checkout exact workflow revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.11'
 
@@ -1144,10 +1144,10 @@ jobs:
       MAX_REQUESTS: ${{ inputs.max_requests || 14500 }}
     steps:
       - name: Checkout latest presentation assets
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: main
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.11'
           cache: pip
@@ -1155,7 +1155,7 @@ jobs:
       - run: python -m pip install -r api/requirements-train.txt
 
       - name: Load the actual morning request count
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: blinq-morning-refresh-report-${{ github.run_id }}
           path: .cache/tbt/predictions
