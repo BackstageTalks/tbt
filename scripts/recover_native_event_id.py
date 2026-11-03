@@ -29,7 +29,13 @@ def _round(value):
 def _category(match):
     raw = match.provider_payload if isinstance(match.provider_payload, dict) else {}
     cid = raw.get("_tbt_source_category_id")
-    return str(cid) if cid is not None and str(cid).isascii() and str(cid).isdigit() and int(cid) > 0 else ""
+    # TennisApi uses the source-native -100 category for shared Grand Slams.
+    # Accept only that documented negative ID; all other negatives, booleans
+    # and nonnumeric/ambiguous category labels remain in identity review.
+    token = str(cid) if cid is not None and not isinstance(cid, bool) else ""
+    if token == "-100":
+        return token
+    return token if token.isascii() and token.isdigit() and int(token) > 0 else ""
 
 
 def _day(match):

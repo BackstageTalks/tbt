@@ -199,3 +199,24 @@ def test_claim_diagnostics_do_not_promote_or_hide_metadata_gaps():
     assert report["scheduled_days"] == 0
     assert report["cdb_writes"] == report["native_provider_requests"] == 0
     assert all(not eligible(m) for m in rows)
+
+def test_grand_slam_negative_100_exact_provider_category_is_recoverable():
+    for category in (-100, "-100"):
+        canonical = Match("slam", provider_payload={"_tbt_source_category_id": category})
+        source = native()
+        source.provider_payload["_tbt_source_category_id"] = category
+        assert eligible(canonical)
+        updates, evidence = recover_day([canonical], [source], day=date(2025, 4, 10))
+        assert evidence["recovered"] == 1
+        assert updates["slam"]["category_id"] == "-100"
+        assert canonical.provider_payload["_tbt_provider_event_id"] == "900"
+        assert canonical.stats == {}
+
+
+def test_negative_category_mismatch_and_unverified_claims_remain_blocked():
+    for invalid in (-101, "-1", "-100.0", " -100", True):
+        canonical = Match("invalid", provider_payload={"_tbt_source_category_id": invalid})
+        assert not eligible(canonical)
+        assert not recover_day([canonical], [native()], day=date(2025, 4, 10))[0]
+    canonical = Match("slam", provider_payload={"_tbt_source_category_id": -100})
+    assert not recover_day([canonical], [native()], day=date(2025, 4, 10))[0]
