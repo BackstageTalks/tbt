@@ -140,7 +140,7 @@ def _canonical_schedule_consistent(observed, scheduled):
 
 def _void_or_unsettled(observed, ids):
     status = str(observed.get("status") or "").strip().lower()
-    if status in {"void", "walkover", "w/o", "abandoned", "cancelled", "retired"}:
+    if status not in FINISHED:
         return True
     context = observed.get("_replay_context") or {}
     if (isinstance(context.get("_tbt_termination"), dict)
@@ -266,7 +266,8 @@ def historical_cdb_coverage(matches):
     groups = defaultdict(Counter)
     for match in matches:
         ids = {str(match.get("player1_id") or ""), str(match.get("player2_id") or "")}
-        if str(match.get("winner_id") or "") not in ids:
+        if (str(match.get("winner_id") or "") not in ids
+                or str(match.get("status") or "").strip().lower() not in FINISHED):
             continue
         try:
             month = dt(match.get("scheduled_at")).strftime("%Y-%m")
@@ -292,9 +293,9 @@ def historical_cdb_coverage(matches):
 
         s = [observed(side, ("service_points_won", "first_serve_win", "second_serve_win"))
              for side in ("p1", "p2")]
-        r = [observed(side, ("return_points_won", "break_points_won"))
+        r = [observed(side, ("return_points_won",))
              for side in ("p1", "p2")]
-        bp = [observed(side, ("break_points_won", "break_points_saved"))
+        bp = [observed(side, ("break_point_serve_win", "break_point_return_win"))
               for side in ("p1", "p2")]
         rank = (num(match.get("player1_rank")), num(match.get("player2_rank")))
         for key in ("all", month, "tour:" + tour, month + "|tour:" + tour):
@@ -314,7 +315,9 @@ def paired_complete_day_comparison(baseline_days, alternative_days):
     if len(baseline_days) != len(alternative_days):
         raise ValueError("daily comparison not aligned")
     complete = []
-    for (_, a), (_, b) in zip(baseline_days, alternative_days):
+    for (a_day, a), (b_day, b) in zip(baseline_days, alternative_days):
+        if a_day != b_day:
+            raise ValueError("daily comparison keys differ")
         if len(a) != len(b):
             raise ValueError("daily candidate capacity differs")
         if not a or any(type(r["correct"]) is not bool for r in a + b):
@@ -462,6 +465,8 @@ def analyze(snapshots, matches):
         "model_quality_A": by_model,
         "selector_comparison_B": replay,
         "interpretation_limits": [
+            "Only canonical completed/finished records with native-ID, player, tour and schedule match are scored.",
+            "CDB break-point rates use break_point_serve_win/break_point_return_win, never count fields.",
             "Stored assignment is not public issuance; results are replay of frozen candidate decisions.",
             "Unmatched or unsettled events are excluded from accuracy, never inferred as wins/losses.",
             "The available snapshot cannot establish serve/return availability or ranking timestamps.",
