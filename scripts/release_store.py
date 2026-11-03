@@ -230,7 +230,7 @@ class ReleaseStore:
             # Validate the exact authenticated release and asset by REST API.
             # Permission, quota and missing-asset failures still fail closed.
             message = str(exc)
-            if not (re.search(r"HTTP\\s+404\\b", message)
+            if not (re.search(r"HTTP\s+404\b", message)
                     or re.search(r"release not found", message, re.IGNORECASE)):
                 raise
             print(
