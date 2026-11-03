@@ -267,6 +267,13 @@ def test_pbp_wrapped_list_from_provider_is_counted_not_rejected(match_factory):
     assert result["pbp"] == "available"
     assert result["changed"] is True
     assert match.provider_payload["_tbt_tennisapi_pbp"]["points"] == 2
+    pbp = match.provider_payload["_tbt_tennisapi_pbp"]
+    assert pbp["observed_games_with_server_and_winner"] == 1
+    assert pbp["observed_games_won_away"] == 1
+    assert pbp["observed_games_won_home"] == 0
+    assert pbp["observed_receiver_won_games"] == 1
+    assert pbp["game_observation_scope"] == "observed_games_only"
+    assert pbp["eligible_for_cdb_point_features"] is False
     assert not needs_extras(match, now=NOW + timedelta(days=1))
     assert p.request_count == 3
 
