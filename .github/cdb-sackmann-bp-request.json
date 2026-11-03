@@ -19,6 +19,6 @@
     "independent remote complete match-by-match readback"
   ],
   "write_state": "NOT_AUTHORIZED_FOR_PRODUCTION_WRITE_YET__DRY_RUN_ONLY",
-  "audit_request_id": "offline-zip-native-id-cdb-fresh-dry-run-20261101-2054",
-  "reason": "Fresh read-only deterministic native ATP/WTA BP stage after 2026 canonical release changes; uploaded ZIPs cannot be promoted without exact SHA/parity and cross-provider player provenance; no paid API, no remote writer and no CDB write unless separate positive stage and guarded approval."
+  "audit_request_id": "safe-native-bp-readonly-dil-followup-20261103",
+  "reason": "User-requested fresh CDB gap audit across existing source-native ATP/WTA Sackmann breakpoint layer. Strict read-only stage and local rehearse only; no CDB publication, paid API, model or frontend changes."
 }
