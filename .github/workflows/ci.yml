@@ -11,6 +11,9 @@ on:
       # Research-only request: avoid deploying unchanged application or feeds.
       - '.github/tennisapi-contract-probe-request.json'
       - '.github/elo-weekly-trigger.json'
+      # Read-only CDB audit request is handled by its own workflow.
+      # Keep write-capable CDB request triggers visible to full CI.
+      - '.github/cdb-service-complements-audit-request.json'
   pull_request:
   workflow_dispatch:
 
