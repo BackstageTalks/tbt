@@ -379,7 +379,7 @@ def verify_pins(before_path, after_path, names, directory, *, require_manifest=F
         expected_sha = expected.get("sha256") if isinstance(expected, dict) else None
         if expected_sha and expected_sha != digest:
             raise ValueError("release bundle checksum mismatch: " + name)
-        if require_manifest and not expected_sha:
+        if require_manifest and not expected_sha and name != "_tbt_bundle_manifest.json":
             raise ValueError("required release bundle checksum absent: " + name)
         digest_list[name] = {"sha256": digest, "asset_id": first["id"],
                              "bytes": first["size"], "bundle_manifest_verified": bool(expected_sha)}
