@@ -112,3 +112,20 @@ def test_void_outcomes_not_counted_as_settled():
     x = r["models"]["model-test"]
     assert x["fixed_candidate_raw"]["settled"] == 0
     assert x["fixed_candidate_shrunk"]["settled"] == 0
+
+
+def test_fixed_snapshot_assigned_sections_are_a_separate_denominator():
+    original = row("one", raw=.84, depth=.95, selected="top_daily")
+    unassigned = row("two", raw=.90, depth=.40, selected=None)
+    result = replay_analysis([snapshot([original, unassigned])],
+                             [match("one"), match("two")])
+    model = result["models"]["model-test"]
+    fixed = model["fixed_snapshot_assigned_sections"]
+    assert fixed["top_daily"]["raw"]["settled"] == 1
+    assert fixed["unassigned"]["raw"]["settled"] == 1
+    assert model["fixed_depth_gte_80"]["raw"]["settled"] == 1
+    assert model["fixed_candidate_raw"]["settled"] == 2
+    assert model["fixed_verified_prestart_quoted"]["raw"]["settled"] == 2
+    # Very poorly supported unassigned candidate cannot become TOP/PRIME merely
+    # because the raw probability is high.
+    assert model["native_selector_replay"]["raw_changes"]["top_daily"]["entered"] == 0
