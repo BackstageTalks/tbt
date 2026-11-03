@@ -33,13 +33,19 @@ def _check_event(payload: Any, event_id: str | int) -> dict:
 
 
 def normalize_market_snapshot(payload: Any, *, event_id: str | int,
-                              observed_at: datetime | None = None) -> dict:
+                              observed_at: datetime | None = None,
+                              provider_id: int = 1) -> dict:
     """Only explicit marketIds 1/11/12/13/15; never infer a missing line.
 
     observed_at is the time OUR client read the record, not the book's price
     timestamp. Both historical opening and latest are ineligible for backtested
     pre-match CLV/as-of pricing without independent contemporaneous evidence.
     """
+    # Recodex confirmed provider 1 as primary and provider 5 as an observed
+    # event-specific fallback, not a general bookmaker crosswalk. Preserve the
+    # exact provider ID; never attribute provider 5 to a named bookmaker.
+    if type(provider_id) is not int or provider_id not in (1, 5):
+        raise ValueError("Unsupported TennisApi odds provider")
     raw = _check_event(payload, event_id)
     when = observed_at or datetime.now(timezone.utc)
     if when.tzinfo is None:
@@ -61,7 +67,9 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
             market_id = int(ident)
         except (ValueError, TypeError):
             continue
-        if market_id not in MARKET_LABELS:
+        if market_id not in MARKET_LABELS or (provider_id == 5 and market_id != 1):
+            # Provider 5 is confirmed only for Match Winner in the supplied
+            # event sample; unknown additional market semantics stay excluded.
             continue
         live = market.get("isLive", False)
         if not isinstance(live, bool):
@@ -102,6 +110,11 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
             opening = decimal_odds(choice.get("initialFractionalValue"))
             if latest is None:
                 continue
+            move = choice.get("change")
+            # Provider reports -1/0/1 versus opening; it is a direction only,
+            # not an odds tick timestamp or reliable historical close.
+            if type(move) is not int or move not in (-1, 0, 1):
+                move = None
             winner = choice.get("winning")
             if winner is not None and not isinstance(winner, bool):
                 raise ProviderError("Winning indicator must be boolean")
@@ -109,6 +122,7 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
                 "selection": side,
                 "opening_decimal": opening,
                 "latest_decimal": latest,
+                "provider_change_direction": move,
                 "settled_winning": winner,
             })
         if {v["selection"] for v in valid} != required:
@@ -132,7 +146,7 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
                                q["is_live"], q["selection"]))
     return {
         "event_id": str(event_id), "source": "tennisapi1",
-        "provider_id": 1, "observed_at_utc": when.astimezone(timezone.utc).isoformat(),
+        "provider_id": provider_id, "observed_at_utc": when.astimezone(timezone.utc).isoformat(),
         "provider_quote_timestamp_known": False,
         "pre_match_asof_verified": False,
         "quotes": quotes,
@@ -213,6 +227,8 @@ def point_by_point_inventory(payload: Any, *, event_id: str | int) -> dict:
     if not isinstance(sets, list) or len(sets) > 5:
         raise ProviderError("Unsupported point-by-point sets shape")
     games_count = points_count = explicit_server_games = explicit_winner_games = 0
+    both_attested_games = server_won_games = receiver_won_games = 0
+    observed_wins = {1: 0, 2: 0}
     for set_row in sets:
         if not isinstance(set_row, dict):
             raise ProviderError("Invalid point-by-point set")
@@ -235,13 +251,30 @@ def point_by_point_inventory(payload: Any, *, event_id: str | int) -> dict:
             points_count += len(points)
             score = game.get("score")
             if isinstance(score, dict):
-                explicit_server_games += str(score.get("serving")) in {"1", "2"}
-                explicit_winner_games += str(score.get("scoring")) in {"1", "2"}
+                server, winner = str(score.get("serving")), str(score.get("scoring"))
+                server_known = server in {"1", "2"}
+                winner_known = winner in {"1", "2"}
+                explicit_server_games += server_known
+                explicit_winner_games += winner_known
+                if server_known and winner_known:
+                    # Provider explicitly identifies each game's server and
+                    # winner; the point tape itself can omit the final point.
+                    # Only observed game records, not complete match totals.
+                    both_attested_games += 1
+                    observed_wins[int(winner)] += 1
+                    server_won_games += server == winner
+                    receiver_won_games += server != winner
     return {
         "event_id": str(event_id), "source": "tennisapi1",
         "sets": len(sets), "games": games_count, "points": points_count,
         "games_with_explicit_server": explicit_server_games,
         "games_with_explicit_winner": explicit_winner_games,
+        "observed_games_with_server_and_winner": both_attested_games,
+        "observed_games_won_home": observed_wins[1],
+        "observed_games_won_away": observed_wins[2],
+        "observed_server_won_games": server_won_games,
+        "observed_receiver_won_games": receiver_won_games,
+        "game_observation_scope": "observed_games_only",
         "eligible_for_cdb_point_features": False,
         "quality_status": "structural_only" if points_count else "unavailable",
     }

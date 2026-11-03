@@ -90,15 +90,32 @@ def enrich_event_extras(match, provider, *, now: datetime | None = None) -> dict
     # missing endpoint on the next hourly window.
     match.provider_payload = raw
     stamp = now.astimezone(timezone.utc).isoformat()
-    outcomes = {"status": "processed", "changed": False, "markets": "cached", "pbp": "cached"}
+    outcomes = {"status": "processed", "changed": False, "markets": "cached", "pbp": "cached",
+                "market_provider_id": None, "market_fallback_attempted": False}
 
     if fetch_markets:
         # Reuse the same provider-1 odds route as the Match Winner runtime.
         payload = provider.event_odds(eid, provider_id=1)
         parsed = normalize_market_snapshot(payload, event_id=eid, observed_at=now)
+        # Provider confirmed that ID 5 sometimes has Match Winner even when
+        # provider 1 has no odds. One optional attempt only after a verified
+        # empty provider-1 result; all shared-budget and rate guards stay in
+        # the existing provider client. Never mix sources within one marker.
+        # Avoid burning scarce calls on ITF/Challenger/no-provenance gaps:
+        # the verified provider-5 sample is an ATP main-draw event. WTA and
+        # Grand Slams are bounded exploratory top-tier cohorts only.
+        native_category = str(raw.get("_tbt_source_category_id") or "")
+        if not parsed["quotes"] and native_category in {"3", "6", "-100"}:
+            outcomes["market_fallback_attempted"] = True
+            fallback = provider.event_odds(eid, provider_id=5)
+            parsed = normalize_market_snapshot(
+                fallback, event_id=eid, observed_at=now, provider_id=5)
+        outcomes["market_provider_id"] = parsed["provider_id"]
         marker = {
             "schema": 1, "source": "tennisapi1", "event_id": eid,
             "observed_at_utc": stamp,
+            "provider_id": parsed["provider_id"],
+            "provider_identity": "unmapped_source_id",
             "status": "available" if parsed["quotes"] else "unavailable",
             "provider_quote_timestamp_known": False, "pre_match_asof_verified": False,
             "quotes": parsed["quotes"][:64],
@@ -141,6 +158,13 @@ def enrich_event_extras(match, provider, *, now: datetime | None = None) -> dict
             "sets": parsed["sets"], "games": parsed["games"], "points": parsed["points"],
             "games_with_explicit_server": parsed["games_with_explicit_server"],
             "games_with_explicit_winner": parsed["games_with_explicit_winner"],
+            # Observed game outcomes are not complete-match or point tape totals.
+            "observed_games_with_server_and_winner": parsed.get("observed_games_with_server_and_winner", 0),
+            "observed_games_won_home": parsed.get("observed_games_won_home", 0),
+            "observed_games_won_away": parsed.get("observed_games_won_away", 0),
+            "observed_server_won_games": parsed.get("observed_server_won_games", 0),
+            "observed_receiver_won_games": parsed.get("observed_receiver_won_games", 0),
+            "game_observation_scope": "observed_games_only",
             "quality_status": parsed["quality_status"],
             "eligible_for_cdb_point_features": False,
         }

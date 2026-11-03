@@ -70,8 +70,10 @@ def test_provider_confirmed_markets_capture_all_and_no_fake_quote_time():
               if q["market_id"] == 1 and q["selection"] == "1")
     assert p1["opening_decimal"] == pytest.approx(1.67)
     assert p1["latest_decimal"] == pytest.approx(1.8)
+    assert p1["provider_change_direction"] == 1
     total = next(q for q in report["quotes"] if q["market_id"] == 12)
     assert total["line_games"] == 22.5  # not marketPeriod="Extra time"
+    assert total["provider_change_direction"] is None  # absent in sample
 
 
 def test_unavailable_malformed_and_mismatched_markets_fail_closed():
@@ -333,3 +335,51 @@ def test_previous_set_evidence_cannot_be_downgraded_by_retry(
         assert match.stats["p1_aces"] == 7
     finally:
         enricher.close()
+
+def test_verified_provider5_only_exports_match_winner_and_retains_provenance():
+    payload = {
+        "eventId": 17449522,
+        "markets": [
+            {"marketId": 1, "marketName": "Full time", "isLive": False,
+             "choices": [
+                 {"name": "1", "initialFractionalValue": "3/4", "fractionalValue": "4/5"},
+                 {"name": "2", "initialFractionalValue": "5/4", "fractionalValue": "6/5"},
+             ]},
+            {"marketId": 12, "marketName": "Total games won", "isLive": False,
+             "choiceGroup": "22.5", "choices": [
+                 {"name": "Over", "fractionalValue": "3/4"},
+                 {"name": "Under", "fractionalValue": "4/5"},
+             ]},
+        ],
+    }
+    observed = datetime(2026, 11, 1, 9, tzinfo=timezone.utc)
+    result = normalize_market_snapshot(
+        payload, event_id=17449522, observed_at=observed, provider_id=5)
+    assert result["provider_id"] == 5
+    assert {row["market_id"] for row in result["quotes"]} == {1}
+    assert result["pre_match_asof_verified"] is False
+    assert result["provider_quote_timestamp_known"] is False
+    with pytest.raises(ProviderError, match="differs"):
+        normalize_market_snapshot(payload, event_id=17449523, provider_id=5)
+    for invalid_id in (0, 2, 6, True, "5"):
+        with pytest.raises(ValueError, match="Unsupported TennisApi odds provider"):
+            normalize_market_snapshot(payload, event_id=17449522, provider_id=invalid_id)
+
+def test_provider_game_winner_attestation_is_partial_even_when_final_point_missing():
+    sample = {"eventId": 17377322, "sets": [{"games": [
+        {"points": [{"home": 0, "away": 15}, {"home": 0, "away": 40}],
+         "score": {"serving": 2, "scoring": 2}},
+        {"points": [{}], "score": {"serving": 1, "scoring": 2}},
+        {"points": [{}], "score": {"serving": 1}},  # Winner not attested
+    ]}]}
+    report = point_by_point_inventory(sample, event_id=17377322)
+    assert report["games"] == 3
+    assert report["points"] == 4
+    assert report["observed_games_with_server_and_winner"] == 2
+    assert report["observed_games_won_away"] == 2
+    assert report["observed_games_won_home"] == 0
+    assert report["observed_server_won_games"] == 1
+    assert report["observed_receiver_won_games"] == 1
+    assert report["game_observation_scope"] == "observed_games_only"
+    assert report["eligible_for_cdb_point_features"] is False
+    assert report["quality_status"] == "structural_only"

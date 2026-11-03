@@ -267,6 +267,13 @@ def test_pbp_wrapped_list_from_provider_is_counted_not_rejected(match_factory):
     assert result["pbp"] == "available"
     assert result["changed"] is True
     assert match.provider_payload["_tbt_tennisapi_pbp"]["points"] == 2
+    pbp = match.provider_payload["_tbt_tennisapi_pbp"]
+    assert pbp["observed_games_with_server_and_winner"] == 1
+    assert pbp["observed_games_won_away"] == 1
+    assert pbp["observed_games_won_home"] == 0
+    assert pbp["observed_receiver_won_games"] == 1
+    assert pbp["game_observation_scope"] == "observed_games_only"
+    assert pbp["eligible_for_cdb_point_features"] is False
     assert not needs_extras(match, now=NOW + timedelta(days=1))
     assert p.request_count == 3
 
@@ -408,3 +415,165 @@ def test_daily_extras_slots_keep_2026_first_and_share_provider_budget():
     assert 'report["extras_candidate_rows_by_year"]' in source
     assert 'output_report["extras_processed_by_year"]' in source
     assert 'report["extras_first_100_by_year"]' in source
+
+def test_provider5_winner_fallback_exact_event_and_unmapped_source(match_factory):
+    class Provider5(Provider):
+        def event_odds(self, eid, provider_id=1):
+            self.calls.append(f"odds-{provider_id}")
+            self.request_count += 1
+            if provider_id == 1:
+                return {"eventId": 100, "markets": []}
+            assert provider_id == 5
+            return {"eventId": 100, "markets": [{
+                "marketId": 1, "marketName": "Full time", "isLive": False,
+                "choices": [
+                    {"name": "1", "initialFractionalValue": "1/2", "fractionalValue": "2/3"},
+                    {"name": "2", "initialFractionalValue": "3/2", "fractionalValue": "6/5"},
+                ],
+            }]}
+
+    match = match_for_extras(match_factory)
+    match.provider_payload["_tbt_source_category_id"] = "3"
+    stats_before = dict(match.stats)
+    provider = Provider5()
+    result = enrich_event_extras(match, provider, now=NOW)
+    assert result["markets"] == "available"
+    assert result["market_provider_id"] == 5
+    assert result["market_fallback_attempted"] is True
+    assert provider.calls == ["/api/tennis/event/100", "odds-1", "odds-5", "pbp"]
+    assert provider.request_count == 4
+    marker = match.provider_payload["_tbt_tennisapi_markets"]
+    assert marker["provider_id"] == 5
+    assert marker["provider_identity"] == "unmapped_source_id"
+    assert marker["pre_match_asof_verified"] is False
+    assert marker["provider_quote_timestamp_known"] is False
+    assert {x["market_id"] for x in marker["quotes"]} == {1}
+    assert {x["selection"] for x in marker["quotes"]} == {"1", "2"}
+    assert match.stats == stats_before
+    assert verify_markers([match], {str(match.match_id): {
+        "_tbt_tennisapi_markets": marker,
+    }}) == 1
+    assert not needs_extras(match, now=NOW + timedelta(days=1))
+
+
+def test_provider5_no_winner_remains_unavailable_with_cooldown(match_factory):
+    class NoWinner(Provider):
+        def event_odds(self, eid, provider_id=1):
+            self.calls.append(f"odds-{provider_id}")
+            self.request_count += 1
+            if provider_id == 1:
+                return {"eventId": 100, "markets": []}
+            return {"eventId": 100, "markets": [{
+                "marketId": 11, "isLive": False, "choices": [
+                    {"name": "1", "fractionalValue": "1/2"},
+                    {"name": "2", "fractionalValue": "2/1"},
+                ]}]}
+    match = match_for_extras(match_factory)
+    match.provider_payload["_tbt_source_category_id"] = "3"
+    provider = NoWinner()
+    result = enrich_event_extras(match, provider, now=NOW)
+    assert result["markets"] == "unavailable"
+    assert result["market_provider_id"] == 5
+    assert match.provider_payload["_tbt_tennisapi_markets"]["quotes"] == []
+    assert not needs_extras(match, now=NOW + timedelta(days=1))
+    assert needs_extras(match, now=NOW + timedelta(days=31))
+
+
+def test_provider5_wrong_event_is_quarantined_not_attached(match_factory):
+    class WrongEvent(Provider):
+        def event_odds(self, eid, provider_id=1):
+            self.calls.append(f"odds-{provider_id}")
+            self.request_count += 1
+            return {"eventId": 100 if provider_id == 1 else 999, "markets": []}
+    match = match_for_extras(match_factory)
+    match.provider_payload["_tbt_source_category_id"] = "3"
+    provider = WrongEvent()
+    with pytest.raises(ProviderError, match="event ID differs"):
+        enrich_event_extras(match, provider, now=NOW)
+    assert "_tbt_tennisapi_markets" not in match.provider_payload
+    assert provider.calls == ["/api/tennis/event/100", "odds-1", "odds-5"]
+
+
+def test_provider5_fallback_preserves_budget_stop_and_does_not_run_pbp(match_factory):
+    class Budgeted(Provider):
+        def event_odds(self, eid, provider_id=1):
+            self.calls.append(f"odds-{provider_id}")
+            self.request_count += 1
+            if provider_id == 5:
+                raise RequestBudgetExceeded("shared ledger blocked")
+            return {"eventId": 100, "markets": []}
+    match = match_for_extras(match_factory)
+    match.provider_payload["_tbt_source_category_id"] = "3"
+    provider = Budgeted()
+    with pytest.raises(RequestBudgetExceeded):
+        enrich_event_extras(match, provider, now=NOW)
+    assert provider.calls == ["/api/tennis/event/100", "odds-1", "odds-5"]
+    assert "_tbt_tennisapi_markets" not in match.provider_payload
+    assert "_tbt_tennisapi_pbp" not in match.provider_payload
+
+def test_provider5_fallback_does_not_spend_on_unscoped_itf_or_challenger(match_factory):
+    class EmptyPrimary(Provider):
+        def event_odds(self, eid, provider_id=1):
+            self.calls.append(f"odds-{provider_id}")
+            self.request_count += 1
+            return {"eventId": 100, "markets": []}
+    for category in (None, "72", "785", "213", "871"):
+        match = match_for_extras(match_factory)
+        if category is not None:
+            match.provider_payload["_tbt_source_category_id"] = category
+        provider = EmptyPrimary()
+        result = enrich_event_extras(match, provider, now=NOW)
+        assert result["markets"] == "unavailable"
+        assert result["market_fallback_attempted"] is False
+        assert provider.calls == ["/api/tennis/event/100", "odds-1", "pbp"]
+        assert match.provider_payload["_tbt_tennisapi_markets"]["provider_id"] == 1
+
+def test_cdb_compactor_preserves_source_specific_provider5_winner_and_movement():
+    sample = {
+        "_tbt_tennisapi_markets": {
+            "schema": 1, "source": "tennisapi1", "event_id": "17449522",
+            "observed_at_utc": NOW.isoformat(), "status": "available",
+            "provider_id": 5, "provider_identity": "unmapped_source_id",
+            "provider_quote_timestamp_known": False, "pre_match_asof_verified": False,
+            "quotes": [
+                {"market_id": 1, "market": "match_winner", "is_live": False,
+                 "line_games": None, "selection": "1",
+                 "opening_decimal": 1.75, "latest_decimal": 1.8,
+                 "provider_change_direction": 1, "settled_winning": None},
+                {"market_id": 1, "market": "match_winner", "is_live": False,
+                 "line_games": None, "selection": "2",
+                 "opening_decimal": 2.25, "latest_decimal": 2.2,
+                 "provider_change_direction": -1, "settled_winning": None},
+            ],
+        },
+    }
+    assert minimize_provider_payload(sample)["_tbt_tennisapi_markets"] == sample["_tbt_tennisapi_markets"]
+    wrong_provider5_market = dict(sample["_tbt_tennisapi_markets"])
+    wrong_provider5_market["quotes"] = [
+        {**sample["_tbt_tennisapi_markets"]["quotes"][0],
+         "market_id": 12, "market": "total_games", "selection": "Over"},
+    ]
+    assert "_tbt_tennisapi_markets" not in minimize_provider_payload({
+        "_tbt_tennisapi_markets": wrong_provider5_market})
+
+
+def test_cdb_compactor_rejects_inconsistent_partial_game_tallies():
+    raw = {
+        "_tbt_tennisapi_pbp": {
+            "schema": 1, "source": "tennisapi1", "event_id": "17377322",
+            "observed_at_utc": NOW.isoformat(), "status": "available",
+            "sets": 1, "games": 3, "points": 4,
+            "games_with_explicit_server": 3, "games_with_explicit_winner": 2,
+            "observed_games_with_server_and_winner": 2,
+            "observed_games_won_home": 0, "observed_games_won_away": 2,
+            "observed_server_won_games": 1, "observed_receiver_won_games": 1,
+            "game_observation_scope": "observed_games_only",
+            "quality_status": "structural_only",
+            "eligible_for_cdb_point_features": False,
+        },
+    }
+    assert minimize_provider_payload(raw)["_tbt_tennisapi_pbp"] == raw["_tbt_tennisapi_pbp"]
+    corrupt = dict(raw["_tbt_tennisapi_pbp"])
+    corrupt["observed_games_won_home"] = 3
+    assert "_tbt_tennisapi_pbp" not in minimize_provider_payload({
+        "_tbt_tennisapi_pbp": corrupt})

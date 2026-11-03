@@ -784,6 +784,10 @@ def main():
                         extras_processed_by_year[str(match.scheduled_at.year)] += 1
                     for field in ("markets", "pbp"):
                         report[f"extras_{field}_{outcome[field]}"] += 1
+                    if outcome.get("market_fallback_attempted"):
+                        report["extras_provider5_fallback_attempted"] += 1
+                        if outcome["markets"] == "available":
+                            report["extras_provider5_winner_available"] += 1
                 except RequestBudgetExceeded:
                     # Reaching the allocated API cap is a normal checkpoint stop,
                     # not a rejected provider event. The outer handler saves progress.
@@ -926,6 +930,8 @@ def main():
                     ),
                     "policy": "Actual full serve+return readiness transitions; cache/local gains separated. Denominator includes provider retries/failures. Not an estimate of model accuracy gain.",
                 }
+                if enricher is not None:
+                    output_report["statistics_provider_key_inventory"] = enricher.statistics_key_summary()
             if args.mode == "identity":
                 output_report["identity_backfill"] = {
                     "recovered_native_event_ids": len(identity_recovered_expected),
