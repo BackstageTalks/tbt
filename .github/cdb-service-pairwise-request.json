@@ -2,7 +2,7 @@
   "schema": 2,
   "mode": "dry-run",
   "workflow": "cdb-service-pairwise-guarded.yml",
-  "purpose": "Fresh current-CDB deterministic pairwise serve/return NULL-only stage and full local readback after Nov 1 15365 complement and 1896 BP imports",
+  "purpose": "Fresh current-CDB pairwise service/return NULL-only local rehearsal after PR #1338 strict identity fix",
   "approved_by_operator": false,
   "production_write_allowed": false,
   "provider_api_requests_allowed": 0,
@@ -11,7 +11,7 @@
   "source": "existing_canonical_post_match_service_rates_only",
   "scope": "all canonical years; independently isolate conflicting opposite-player rate pairs; no source or player identity inference",
   "current_release_tag": "tbt-data-v1",
-  "known_last_bundle_manifest_sha256": "575e10fd6a5500ef0032acee5038c3a1b5d5fca4bc3b8a7456d19f2fa3dac132",
+  "known_last_bundle_manifest_sha256": "2913e8b83b76cbf5551db2cacfc214b62d099c3aae6ec2511da5ab302bf705ee",
   "prior_batches_not_to_repeat": [
     {
       "run_id": 41320493332,
@@ -29,6 +29,6 @@
       "matches": 52
     }
   ],
-  "audit_date": "2026-11-02",
-  "gate": "pull_request runs read-only stage and local rehearsal; never publish; inspect evidence and create separately SHA-bound exact writer request only if positive verified delta"
+  "audit_date": "2026-11-03",
+  "gate": "Local-only stage/rehearsal; current exact bundle manifest SHA and CDB rows must be independently reported; no production write; wait for observed report before a separately pinned one-shot approval."
 }
