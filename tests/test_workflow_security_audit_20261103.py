@@ -113,3 +113,30 @@ def test_secondary_production_workflows_pin_external_actions():
             assert re.fullmatch(r"[0-9a-f]{40}", sha)
             assert content.count(f"uses: {action}@{sha}") == 1, (filename, action)
             assert not re.search(rf"uses:\s+{re.escape(action)}@v\d+\b", content)
+
+def test_release_critical_data_cdb_model_actions_pinned():
+    """Pin previously audited official major versions in active writer/release workflows."""
+    expected = {
+        "data.yml": {"actions/checkout": 4, "actions/setup-python": 4,
+                     "actions/upload-artifact": 17, "actions/download-artifact": 1},
+        "data-hourly-quota-gapfill.yml": {"actions/checkout": 1},
+        "cdb-drive-inbox.yml": {"actions/checkout": 2, "actions/setup-python": 2},
+        "cdb-global-writer-validation.yml": {"actions/checkout": 2,
+                                            "actions/setup-python": 1},
+        "model-factory-preflight.yml": {"actions/checkout": 1,
+                                        "actions/setup-python": 1,
+                                        "actions/upload-artifact": 1},
+    }
+    shas = {
+        "actions/checkout": "11bd71901bbe5b1630ceea73d27597364c9af683",
+        "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
+        "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+        "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    }
+    for file_name, action_counts in expected.items():
+        src = (WF / file_name).read_text(encoding="utf-8")
+        for action, count in action_counts.items():
+            sha = shas[action]
+            assert re.fullmatch(r"[0-9a-f]{40}", sha)
+            assert src.count(f"uses: {action}@{sha}") == count, (file_name, action)
+            assert not re.search(rf"uses:\s+{re.escape(action)}@v\d+\b", src)
