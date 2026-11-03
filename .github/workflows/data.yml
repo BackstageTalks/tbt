@@ -190,7 +190,7 @@ jobs:
           fi
           if [[ "$mode" == "extras" ]]; then
             [[ "$promote" == "false" ]] || { echo "Extras smoke never promotes a model"; exit 1; }
-            if (( 10#$max_requests > 30 )); then
+            if ! (( 10#$max_requests <= 30 )); then
               # Explicit single 1000-request operator test only; normal smoke
               # remains capped at 30. Shared quota, provider reserve, global
               # CDB lock, strict identity and exact-value readback still apply.
