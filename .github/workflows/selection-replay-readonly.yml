@@ -1,12 +1,14 @@
 name: BlinQ read-only selector reliability replay
 on:
   push:
-    branches: [analysis/selection-reliability-replay-20261103]
+    branches: [analysis/selection-reliability-replay-20261103, main]
     paths:
       - scripts/replay_selection_reliability.py
       - tests/test_selection_reliability_replay.py
       - .github/workflows/selection-replay-readonly.yml
   workflow_dispatch:
+  schedule:
+    - cron: '17 11 * * *'  # Daily, read-only; UTC; no provider quota
 
 permissions:
   contents: read
@@ -48,8 +50,7 @@ jobs:
           gh api "repos/$TBT_DATA_REPOSITORY/releases/tags/tbt-predictions-v1" > "$work/pred-before.json"
           gh api "repos/$TBT_DATA_REPOSITORY/releases/tags/tbt-data-v1" > "$work/history-before.json"
           gh release download tbt-predictions-v1 --repo "$TBT_DATA_REPOSITORY" \
-            --pattern 'selection_candidates_2026-10.json.gz' \
-            --pattern 'selection_candidates_2026-11.json.gz' \
+            --pattern 'selection_candidates_2026-1*.json.gz' \
             --pattern '_tbt_bundle_manifest.json' --dir "$work/pred"
           gh release download tbt-data-v1 --repo "$TBT_DATA_REPOSITORY" \
             --pattern 'history-2026.parquet' \
@@ -63,13 +64,15 @@ jobs:
           set -euo pipefail
           work=".cache/tbt/selection-replay"
           python scripts/replay_selection_reliability.py \
-            --snapshots "$work/pred/selection_candidates_2026-10.json.gz" "$work/pred/selection_candidates_2026-11.json.gz" \
+            --snapshots "$work"/pred/selection_candidates_2026-1*.json.gz \
             --canonical "$work/history/history-2026.parquet" \
             --prediction-before "$work/pred-before.json" \
             --prediction-after "$work/pred-after.json" \
             --history-before "$work/history-before.json" \
             --history-after "$work/history-after.json" \
-            --out "$work/report.json"
+            --out "$work/report.json" \
+            --forward-out "$work/forward-report.json" \
+            --forward-from 2026-11-04
       - name: Private evidence summary and interpretation limits
         if: success()
         shell: bash
@@ -78,11 +81,14 @@ jobs:
           import json, os
           from pathlib import Path
           report=json.loads(Path(".cache/tbt/selection-replay/report.json").read_text())
+          forward=json.loads(Path(".cache/tbt/selection-replay/forward-report.json").read_text())
           summary=[
             "### Read-only BlinQ selection replay (private evidence)",
             f"Status: {report['status']}",
             f"Anchored days: {report['anchored_days']}; exact model-event rows: {report['evaluated_unique_model_events']}",
             "A (per frozen model version):",
+            f"Forward frozen since {forward['prospective_from_betting_day']}: {forward['anchored_days']} days / {forward['evaluated_unique_model_events']} candidate rows",
+            f"Forward readiness: {forward['operational_readiness']}; no automatic promotion.",
           ]
           for version, item in report["model_quality_A"].items():
               m=item["all_candidates_raw"]
@@ -105,6 +111,8 @@ jobs:
         if: always()
         with:
           name: blinq-selection-replay-${{ github.run_id }}
-          path: .cache/tbt/selection-replay/report.json
+          path: |
+            .cache/tbt/selection-replay/report.json
+            .cache/tbt/selection-replay/forward-report.json
           if-no-files-found: warn
           retention-days: 14
