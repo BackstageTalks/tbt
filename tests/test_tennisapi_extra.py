@@ -333,3 +333,32 @@ def test_previous_set_evidence_cannot_be_downgraded_by_retry(
         assert match.stats["p1_aces"] == 7
     finally:
         enricher.close()
+
+def test_verified_provider5_only_exports_match_winner_and_retains_provenance():
+    payload = {
+        "eventId": 17449522,
+        "markets": [
+            {"marketId": 1, "marketName": "Full time", "isLive": False,
+             "choices": [
+                 {"name": "1", "initialFractionalValue": "3/4", "fractionalValue": "4/5"},
+                 {"name": "2", "initialFractionalValue": "5/4", "fractionalValue": "6/5"},
+             ]},
+            {"marketId": 12, "marketName": "Total games won", "isLive": False,
+             "choiceGroup": "22.5", "choices": [
+                 {"name": "Over", "fractionalValue": "3/4"},
+                 {"name": "Under", "fractionalValue": "4/5"},
+             ]},
+        ],
+    }
+    observed = datetime(2026, 11, 1, 9, tzinfo=timezone.utc)
+    result = normalize_market_snapshot(
+        payload, event_id=17449522, observed_at=observed, provider_id=5)
+    assert result["provider_id"] == 5
+    assert {row["market_id"] for row in result["quotes"]} == {1}
+    assert result["pre_match_asof_verified"] is False
+    assert result["provider_quote_timestamp_known"] is False
+    with pytest.raises(ProviderError, match="differs"):
+        normalize_market_snapshot(payload, event_id=17449523, provider_id=5)
+    for invalid_id in (0, 2, 6, True, "5"):
+        with pytest.raises(ValueError, match="Unsupported TennisApi odds provider"):
+            normalize_market_snapshot(payload, event_id=17449522, provider_id=invalid_id)
