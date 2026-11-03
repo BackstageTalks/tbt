@@ -8,7 +8,7 @@ import pytest
 
 from replay_selection_reliability import (
     analyze, anchors, canonical_index, dt, eligible, load_snapshots,
-    metrics, prepare, verify_pins,
+    historical_cdb_coverage, metrics, paired_complete_day_comparison, prepare, verify_pins,
 )
 
 
@@ -183,3 +183,41 @@ def test_provider_match_requires_same_tour_date_and_normal_finish():
     out = analyze([snapshot([candidate("native-id")])], [original])
     assert out["model_quality_A"]["v7.2.1-frozen"]["all_candidates_raw"]["settled"] == 0
     assert out["diagnostics"]["unsettled_or_void"] == 1
+
+
+
+def test_current_cdb_serve_return_report_not_misused_as_pit_inference():
+    record = settled("m1")
+    record.update(scheduled_at="2026-10-14T12:00:00+00:00", tour="atp",
+                  player1_rank=22, player2_rank=31,
+                  stats_json=json.dumps({
+                      "p1_service_points_won": .67, "p2_service_points_won": .62,
+                      "p1_return_points_won": .36, "p2_return_points_won": .32,
+                      "p1_break_points_won": .4, "p2_break_points_won": .5,
+                  }))
+    q=historical_cdb_coverage([record])
+    assert q["scope"] == "CURRENT_CDB_POST_MATCH_FIELD_AVAILABILITY_NOT_PIT_INFERENCE"
+    assert q["groups"]["all"]["both_service_return_rates"] == 1
+    assert q["groups"]["all"]["both_break_point_rates"] == 1
+    assert q["groups"]["2026-10|tour:ATP"]["both_rank_values"] == 1
+
+
+def test_full_day_paired_comparison_excludes_unresolved_days():
+    orig = [{"correct": True}, {"correct": False}]
+    alt = [{"correct": True}, {"correct": True}]
+    result = paired_complete_day_comparison(
+        [("2026-10-01", orig), ("2026-10-02", [{"correct": None}])],
+        [("2026-10-01", alt), ("2026-10-02", [{"correct": True}])],
+    )
+    assert result["complete_days"] == 1
+    assert result["paired_capacity"] == 2
+    assert result["difference_percentage_points"] == 50
+    assert result["status"].startswith("DESCRIPTIVE")
+
+
+def test_paired_comparison_rejects_capacity_mismatch():
+    with pytest.raises(ValueError, match="capacity"):
+        paired_complete_day_comparison(
+            [("2026-10-01", [{"correct": True}])],
+            [("2026-10-01", [{"correct": True}, {"correct": False}])],
+        )
