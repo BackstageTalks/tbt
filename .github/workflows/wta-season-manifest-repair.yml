@@ -6,7 +6,6 @@ on:
     paths:
       - '.github/wta-season-manifest-repair-request.json'
       - 'scripts/repair_release_bundle_manifest.py'
-      - '.github/workflows/wta-season-manifest-repair.yml'
   workflow_dispatch:
 
 permissions:
