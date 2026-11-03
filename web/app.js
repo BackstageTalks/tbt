@@ -3914,11 +3914,20 @@
         .filter(p=>publicationOutcome(p).kind!=='pending');
       pubs.forEach((publication,index)=>{
         const key=canonicalResultPublicationKey(row,publication,index);
-        if(cohort&&!cohort.has(resultBetIdentity(row,publication)))return;
-        const current=unique.get(key);
         const market=String(publication.market||'').toLowerCase();
         const categoryTag=({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'})[market]
           ||String(publication.section||'');
+        // An active, unrestricted tier already owns every issued publication
+        // in this category. Do not silently discard Results merely because
+        // the legacy daily-offer identity cannot be reconstructed. Limited
+        // tiers and explicit row overrides must still use the cohort gate.
+        const tab=categoryTag==='top_daily'?'daily':categoryTag;
+        const rule=cohort?state.feed?.member_result_rules?.[filters?.membership]?.[tab]:null;
+        const unrestricted=rule?.enabled&&rule.display_state==='active'
+          &&String(rule.visible_picks).toUpperCase()==='ALL'
+          &&Object.keys(rule.row_overrides||{}).length===0;
+        if(cohort&&!unrestricted&&!cohort.has(resultBetIdentity(row,publication)))return;
+        const current=unique.get(key);
         if(!current){
           unique.set(key,{row,publication,categories:categoryTag?[categoryTag]:[]});
         }else{
