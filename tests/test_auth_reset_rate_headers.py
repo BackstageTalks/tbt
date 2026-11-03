@@ -27,12 +27,14 @@ def test_trusted_platform_ip_remains_rate_limited(monkeypatch):
     _reset(monkeypatch)
     for i in range(api._AUTH_EMAIL_RATE_MAX_REQUESTS):
         req = SimpleNamespace(headers={
-            "X-Azure-ClientIP": "2001:0db8::1",
+            "X-Azure-SocketIP": "2001:0db8::1",
+            "X-Azure-ClientIP": f"198.51.100.{i + 1}",
             "X-Forwarded-For": f"203.0.113.{i + 1}",
         })
         assert api._auth_email_request_allowed(req)
     assert not api._auth_email_request_allowed(SimpleNamespace(headers={
-        "X-Azure-ClientIP": "2001:db8::1",
+        "X-Azure-SocketIP": "2001:db8::1",
+        "X-Azure-ClientIP": "203.0.113.200",
         "X-Forwarded-For": "198.51.100.220",
     }))
     assert len(api._AUTH_EMAIL_RATE_BUCKETS) == 1
@@ -42,7 +44,8 @@ def test_invalid_platform_ip_cannot_create_extra_buckets(monkeypatch):
     _reset(monkeypatch)
     for value in ("203.0.113.1, 203.0.113.2", "not-ip", ""):
         assert api._auth_email_request_allowed(SimpleNamespace(headers={
-            "X-Azure-ClientIP": value,
+            "X-Azure-SocketIP": value,
+            "X-Azure-ClientIP": "8.8.4.4",
             "X-Forwarded-For": "8.8.8.8",
         }))
     assert api._AUTH_EMAIL_RATE_BUCKETS == {}
@@ -55,3 +58,15 @@ def test_global_limit_applies_when_trusted_header_is_missing(monkeypatch):
         assert api._auth_email_request_allowed(req)
     assert not api._auth_email_request_allowed(req)
     assert api._AUTH_EMAIL_RATE_BUCKETS == {}
+
+
+def test_spoofed_azure_client_ip_without_socket_does_not_create_bucket(monkeypatch):
+    _reset(monkeypatch)
+    for i in range(50):
+        req = SimpleNamespace(headers={
+            "X-Azure-ClientIP": f"192.0.2.{i + 1}",
+            "X-Forwarded-For": f"203.0.113.{i + 1}",
+        })
+        assert api._auth_email_request_allowed(req)
+    assert api._AUTH_EMAIL_RATE_BUCKETS == {}
+    assert len(api._AUTH_EMAIL_RATE_GLOBAL) == 50
