@@ -33,13 +33,19 @@ def _check_event(payload: Any, event_id: str | int) -> dict:
 
 
 def normalize_market_snapshot(payload: Any, *, event_id: str | int,
-                              observed_at: datetime | None = None) -> dict:
+                              observed_at: datetime | None = None,
+                              provider_id: int = 1) -> dict:
     """Only explicit marketIds 1/11/12/13/15; never infer a missing line.
 
     observed_at is the time OUR client read the record, not the book's price
     timestamp. Both historical opening and latest are ineligible for backtested
     pre-match CLV/as-of pricing without independent contemporaneous evidence.
     """
+    # Recodex confirmed provider 1 as primary and provider 5 as an observed
+    # event-specific fallback, not a general bookmaker crosswalk. Preserve the
+    # exact provider ID; never attribute provider 5 to a named bookmaker.
+    if type(provider_id) is not int or provider_id not in (1, 5):
+        raise ValueError("Unsupported TennisApi odds provider")
     raw = _check_event(payload, event_id)
     when = observed_at or datetime.now(timezone.utc)
     if when.tzinfo is None:
@@ -61,7 +67,9 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
             market_id = int(ident)
         except (ValueError, TypeError):
             continue
-        if market_id not in MARKET_LABELS:
+        if market_id not in MARKET_LABELS or (provider_id == 5 and market_id != 1):
+            # Provider 5 is confirmed only for Match Winner in the supplied
+            # event sample; unknown additional market semantics stay excluded.
             continue
         live = market.get("isLive", False)
         if not isinstance(live, bool):
@@ -132,7 +140,7 @@ def normalize_market_snapshot(payload: Any, *, event_id: str | int,
                                q["is_live"], q["selection"]))
     return {
         "event_id": str(event_id), "source": "tennisapi1",
-        "provider_id": 1, "observed_at_utc": when.astimezone(timezone.utc).isoformat(),
+        "provider_id": provider_id, "observed_at_utc": when.astimezone(timezone.utc).isoformat(),
         "provider_quote_timestamp_known": False,
         "pre_match_asof_verified": False,
         "quotes": quotes,
