@@ -1,8 +1,9 @@
 {
   "schema": 1,
-  "local_day": "2026-11-01",
-  "local_hour": 17,
-  "requested_utc": "2026-11-01T16:10:00Z",
-  "source": "operator-request-90pct-before-1709utc-reset",
-  "purpose": "Queue guarded CDB API gapfill behind existing production and canonical writer jobs without cancelling any in-progress run. Recheck shared provider budget, 500 reserve, 6rps limit and global CDB lock at execution; use verified eligible missing fields only."
+  "local_day": "2026-11-03",
+  "local_hour": 20,
+  "requested_utc": "2026-11-03T19:54:00Z",
+  "source": "operator-approved-evening-post-reset-statistics-test",
+  "smoke_run_id": 41707381765,
+  "purpose": "Dispatch existing fail-closed hourly API gapfill using fresh verified provider budget (113/15000 at smoke), shared CAS, 500 reserve, 6/s, writer lock, high-yield missing-field queue and independent CDB readback. No model release."
 }
