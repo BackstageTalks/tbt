@@ -193,7 +193,7 @@ def test_current_cdb_serve_return_report_not_misused_as_pit_inference():
                   stats_json=json.dumps({
                       "p1_service_points_won": .67, "p2_service_points_won": .62,
                       "p1_return_points_won": .36, "p2_return_points_won": .32,
-                      "p1_break_points_won": .4, "p2_break_points_won": .5,
+                      "p1_break_point_return_win": .4, "p2_break_point_return_win": .5,
                   }))
     q=historical_cdb_coverage([record])
     assert q["scope"] == "CURRENT_CDB_POST_MATCH_FIELD_AVAILABILITY_NOT_PIT_INFERENCE"
@@ -230,3 +230,31 @@ def test_raw_confidence_below_65_is_not_labeled_65_to_70():
     buckets = out["model_quality_A"]["v7.2.1-frozen"]["by_segment"]["confidence"]
     assert buckets["below_65"]["settled"] == 1
     assert "65_70" not in buckets
+
+
+def test_provisional_canonical_winner_is_not_a_finished_result():
+    original = settled("not-done", status="scheduled")
+    r = analyze([snapshot([candidate("not-done")])], [original])
+    m = r["model_quality_A"]["v7.2.1-frozen"]["all_candidates_raw"]
+    assert m["selected"] == 1 and m["settled"] == 0
+    assert r["diagnostics"]["unsettled_or_void"] == 1
+
+
+def test_count_fields_never_masquerade_as_break_point_rates():
+    original = settled("mcount")
+    original.update(scheduled_at="2026-10-14T12:00:00+00:00", tour="atp",
+                    stats_json=json.dumps({
+                       "p1_break_points_won": 1, "p2_break_points_won": 1,
+                       "p1_return_points_won": .4, "p2_return_points_won": .3,
+                    }))
+    coverage = historical_cdb_coverage([original])["groups"]["all"]
+    assert coverage["both_return_rates"] == 1
+    assert coverage["both_break_point_rates"] == 0
+
+
+def test_paired_comparison_rejects_misaligned_dates():
+    with pytest.raises(ValueError, match="keys differ"):
+        paired_complete_day_comparison(
+            [("2026-10-01", [{"correct": True}])],
+            [("2026-10-02", [{"correct": True}])],
+        )
