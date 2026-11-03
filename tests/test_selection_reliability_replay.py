@@ -149,3 +149,37 @@ def test_readback_detects_mutated_asset_and_missing_bundle_checksum(tmp_path):
     after.write_text(json.dumps(releases))
     with pytest.raises(ValueError, match="changed during"):
         verify_pins(before, after, files, directory, require_manifest=True)
+
+
+
+def test_provider_native_event_id_recovered_only_with_exact_player_pair():
+    canonical = settled("canon-1")
+    canonical["provider_context_json"] = '{"_tbt_provider_event_id":"rapid-99"}'
+    index = canonical_index([canonical])
+    assert index["rapid-99"]["match_id"] == "canon-1"
+    outcome = analyze([snapshot([candidate("rapid-99")])], [canonical])
+    assert outcome["model_quality_A"]["v7.2.1-frozen"]["all_candidates_raw"]["settled"] == 1
+
+
+def test_same_provider_id_on_two_cdb_rows_is_quarantined():
+    left, right = settled("canon-1"), settled("canon-2")
+    left["provider_context_json"] = '{"_tbt_provider_event_id":"duplicate"}'
+    right["provider_context_json"] = '{"_tbt_provider_event_id":"duplicate"}'
+    with pytest.raises(ValueError, match="duplicate canonical/provider"):
+        canonical_index([left, right])
+
+
+def test_provider_match_requires_same_tour_date_and_normal_finish():
+    original = settled("canonical-id")
+    original.update(tour="wta", provider_context_json='{"_tbt_provider_event_id":"native-id"}')
+    out = analyze([snapshot([candidate("native-id")])], [original])
+    assert out["diagnostics"]["canonical_tour_disagreement"] == 1
+    original["tour"] = "atp"
+    original["scheduled_at"] = "2026-11-05T12:00:00+00:00"
+    out = analyze([snapshot([candidate("native-id")])], [original])
+    assert out["diagnostics"]["canonical_schedule_disagreement"] == 1
+    original["scheduled_at"] = "2026-11-02T12:00:00+00:00"
+    original["provider_context_json"] = '{"_tbt_provider_event_id":"native-id","_tbt_termination":{"reason":"retired"}}'
+    out = analyze([snapshot([candidate("native-id")])], [original])
+    assert out["model_quality_A"]["v7.2.1-frozen"]["all_candidates_raw"]["settled"] == 0
+    assert out["diagnostics"]["unsettled_or_void"] == 1
