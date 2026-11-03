@@ -30,7 +30,7 @@ class WebDeployContractTests(unittest.TestCase):
             (web / "release.json").write_text(json.dumps(release), encoding="utf-8")
             self.assertEqual(read_release(web), release)
             sha = "1" * 40
-            html = ['<title>BlinQ · Tennis Intelligence</title>']
+            html = ['  <title>BlinQ · Tennis Intelligence</title>']
             for name in DEPLOYED_ASSETS:
                 data = (name * 5).encode("utf-8")
                 (web / name).write_bytes(data)
