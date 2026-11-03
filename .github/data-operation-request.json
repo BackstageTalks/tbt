@@ -14,5 +14,7 @@
   "production_commit": "7b5fce7f7df8678669278ab4b77a34ca53469194",
   "requested_on": "2026-11-03",
   "kind": "operator-approved-postmatch-provider-extras-1000-test",
-  "purpose": "Single operator-approved at-most-1000 TennisApi extras test, 2026-10-15..2026-11-02. Keep shared API budget, provider 500 reserve, <=6/s, global CDB lock, strict identity, NULL-only canonical import, CAS and independent exact-value readback. Fail closed on missing quota/release. No model training or promotion."
+  "purpose": "Single operator-approved at-most-1000 TennisApi extras test, 2026-10-15..2026-11-02. Keep shared API budget, provider 500 reserve, <=6/s, global CDB lock, strict identity, NULL-only canonical import, CAS and independent exact-value readback. Fail closed on missing quota/release. No model training or promotion.",
+  "attempt": 2,
+  "gate_fix_commit": "39cc090a8ff3bf759dc3a849afe4a62ce4ad9f4a"
 }
