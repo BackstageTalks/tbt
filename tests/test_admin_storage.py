@@ -37,6 +37,7 @@ def test_elite_aces_all_migrates_stale_runtime_once_without_mutating_storage():
     payload = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     ace = payload["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]
     payload["access_contract_revision"] = 1
+    payload.pop("elite_aces_access_revision", None)
     ace["elite"]["visible_rows"] = 5
     ace["elite"]["blur_remaining"] = True
     ace["elite"]["see_all"] = False
@@ -49,7 +50,8 @@ def test_elite_aces_all_migrates_stale_runtime_once_without_mutating_storage():
     assert elite["blur_remaining"] is False
     assert elite["see_all"] is True
     assert elite["row_overrides"] == {}
-    assert effective["access_contract_revision"] == 2
+    assert effective["access_contract_revision"] == 1
+    assert effective["elite_aces_access_revision"] == 1
     # Reading the effective config does not change the raw stored Azure row.
     assert payload == original
     # No changes to other tiers or categories.
@@ -57,11 +59,12 @@ def test_elite_aces_all_migrates_stale_runtime_once_without_mutating_storage():
         assert effective["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"][plan] == ace[plan]
     assert effective["dashboard"]["daily_hub"]["tabs"]["value"]["plans"]["elite"] == payload["dashboard"]["daily_hub"]["tabs"]["value"]["plans"]["elite"]
 
-    # Once an Admin publish persists v2, future deliberate edits are retained.
+    # Once Admin persists the dedicated marker, deliberate edits are retained.
     effective["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]["elite"]["visible_rows"] = 4
     again = admin_storage.resolve_ui_access_config(effective)
     assert again["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]["elite"]["visible_rows"] == 4
-    assert again["access_contract_revision"] == 2
+    assert again["access_contract_revision"] == 1
+    assert again["elite_aces_access_revision"] == 1
 
 
 def test_runtime_ui_config_round_trip(monkeypatch):
