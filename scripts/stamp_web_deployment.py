@@ -12,7 +12,9 @@ import json
 import re
 from pathlib import Path
 
-ASSETS = ("blinq-app.css", "app.js", "auth.js", "responsive.js")
+from web_deploy_contract import DEPLOYED_ASSETS, read_release
+
+ASSETS = DEPLOYED_ASSETS
 
 
 def stamp(web: Path, sha: str) -> dict:
@@ -43,7 +45,7 @@ def stamp(web: Path, sha: str) -> dict:
             + f"&deploy={sha[:12]}",
             html,
         )
-    release = json.loads((web / "release.json").read_text(encoding="utf-8"))
+    release = read_release(web)
     marker = {
         "git_sha": sha,
         "patch": release["patch"],
