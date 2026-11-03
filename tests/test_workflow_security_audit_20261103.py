@@ -72,3 +72,18 @@ def test_existing_data_limits_and_cdb_single_writer_guards_unchanged():
     assert "tbt-crossrepo-writer-" in data
     model = (WF / "model-factory-preflight.yml").read_text(encoding="utf-8")
     assert '"$REQUEST_ID" =~ ^[0-9a-f]{24}$' in model
+
+
+def test_production_ci_dependency_actions_pinned_to_commits():
+    ci = (WF / "ci.yml").read_text(encoding="utf-8")
+    expected = {
+        "actions/checkout": ("11bd71901bbe5b1630ceea73d27597364c9af683", 2),
+        "actions/setup-python": ("a26af69be951a213d495a4c3e4e4022e16d87065", 2),
+        "actions/setup-node": ("49933ea5288caeca8642d1e84afbd3f7d6820020", 2),
+        "actions/upload-artifact": ("ea165f8d65b6e75b540449e92b4886f43607fa02", 1),
+    }
+    for action, (sha, occurrences) in expected.items():
+        assert len(sha) == 40 and re.fullmatch(r"[0-9a-f]{40}", sha)
+        assert ci.count(f"uses: {action}@{sha}") == occurrences
+        assert not re.search(rf"uses:\s+{re.escape(action)}@v\d+\b", ci)
+    assert AZURE in ci
