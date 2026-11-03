@@ -119,3 +119,49 @@ On the read-only guarded probe dated 2026-11-01, season-wide odds for
 season 67287/provider 1 returned HTTP 404. Odds-provider enumeration was
 not proved available because the quota-header guard halted further requests.
 Neither path is approved for production coverage or bulk import on this basis.
+
+## REcodeX follow-up: 2026-11-01 to 2026-11-02 — implementable scope
+
+This updates earlier general statements with the **specific** event evidence
+provided by the operator's support correspondence. It is not a promise of
+historical coverage, bookmaker identities or new paid-plan endpoints.
+
+| Provider fact | BlinQ implementation / restriction |
+|---|---|
+| `/category/3/events/5/7/2016`, `/6/events/5/7/2016`, `/72/events/5/7/2016` and `/785/events/5/7/2016` returned 200 | The existing native calendar/category downloader can enumerate historical event IDs. A 2016–2026 coverage matrix was **not** provided; do not presume statistics or odds exist for each event. |
+| `/event/{id}/statistics` has ALL and sometimes per-set aces/DF, serve, return, break points and game figures | Existing `StatisticsEnricher` parses verified known keys and stores per-set markers without rewriting canonical data. The new bounded `statistics_provider_key_inventory` report counts ALL supported/unsupported and set-only key names from already-fetched responses. Do not map unknown fields automatically. |
+| `/event/17449522/odds/5/all` returned **Match Winner** on a concrete event | Primary remains provider 1. Existing extras enrichment makes **one** optional provider-5 fallback only if provider 1 has zero valid quotes; only market 1 may be accepted. Exact event identity is required. Store `provider_id=5`, bookmaker identity **unknown**. |
+| `initialFractionalValue`, `fractionalValue`, `change` | Store opening/latest decimals and the supplied -1/0/1 movement direction. Do **not** invent price timestamps, bookmaker mapping, true closing prices or point-in-time CLV. |
+| `/events/odds/{day}/{month}/{year}` returns event-ID-keyed **Match Winner only** | Existing `RapidTennisClient.events_with_odds_for_status_day` serves settlement lookup; it is not a full daily event inventory or multi-market historical tape. |
+| `/event/17377322/point-by-point` showed 17 games whose terminal points were omitted | Existing PBP remains structural-only. Game server and winner indicators may support **observed-game-only** counts. These are not verified complete match totals, reconstructed point outcomes or approved pre-match model inputs. |
+| `hasEventPlayerStatistics` was not exposed on the checked event | Treat a missing flag as unknown, never skip known event stats solely because the flag is absent. |
+
+The provider does not publish a separate player Aces O/U add-on, set-correct
+score, handicaps, player game totals, timed historical odds, historical bulk
+export or new market access on a higher subscription. Provider 5 is a
+**single observed fallback**, not evidence that polling IDs 2–10 on every
+event would be efficient or accurate. Continue using approved PropLine
+secondary sources for markets outside the TennisApi contract.
+
+### Operational invariants and next verification
+
+- **CDB:** authoritative and NULL-only; native exact-event/participant
+  matching, provenance, duplicate checks, global single-writer lock,
+  checkpoint, CAS, immutable backup and independent remote read-back remain
+  in the established importer. No separate writer and no model activation.
+- **RapidAPI:** shared 15,000/day, practical 14,500 ceiling, 500 reserve,
+  6 requests/s, retries charged, unknown external usage **not** zero.
+- **Quality:** count actual stored new values separately from cache hits,
+  candidate rows, provider-5 fallback attempts, and observed partial PBP
+  games. Unsupported key discovery is not a successful canonical import.
+- **Open evidence:** measure provider-5 fallback win-rate on an authorized
+  bounded extras batch; review unknown per-match statistics keys before
+  permitting more typed CDB fields. Broaden 2016–2021 selectively only on
+  verified identity, point-in-time, yield and shared-budget evidence.
+- **Change isolation:** tests for wrong event IDs, exhausted budget, bad
+  market shapes, no-coverage cooldowns, timezone/CLV isolation and partial
+  game records must pass before production write activity.
+
+The next data run must report **actual** requests, linked events, newly
+persisted canonical values or metadata, and independent exact-value
+read-back. A passing CI check or successful dispatch is not an import.
