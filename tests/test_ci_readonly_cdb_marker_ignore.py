@@ -5,14 +5,12 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 
-def test_main_ci_ignores_only_two_verified_cdb_request_markers():
+def test_main_ci_ignores_only_verified_readonly_cdb_audit_marker():
     ci = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
     pushes = ci.split("\n  push:", 1)[1].split("\n  pull_request:", 1)[0]
-    for marker in (
-        ".github/cdb-sackmann-bp-request.json",
-        ".github/cdb-service-complements-audit-request.json",
-    ):
-        assert pushes.count(f"- '{marker}'") == 1
+    assert pushes.count("- '.github/cdb-service-complements-audit-request.json'") == 1
+    # This separate guarded importer can execute an operator-authorized write.
+    assert ".github/cdb-sackmann-bp-request.json" not in pushes
     assert "paths-ignore:" in pushes
     assert "'.github/*'" not in pushes
     assert "'.github/**/*.json'" not in pushes
