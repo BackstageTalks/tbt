@@ -18,19 +18,50 @@ def test_verified_action_shas_in_all_affected_workflows():
     assert "google-github-actions/auth@v3" not in google
 
 
-def test_untrusted_inputs_do_not_interpolate_into_shell_source():
-    for name in ("data.yml", "model-factory-preflight.yml", "blinq-pbp-source-vs-current-cdb.yml"):
-        lines = (WF / name).read_text(encoding="utf-8").splitlines()
-        in_script = False
-        indent = -1
-        for number, line in enumerate(lines, 1):
-            start = re.match(r"^(\s*)run:\s*(.*)$", line)
-            if start:
-                in_script, indent = True, len(start.group(1))
-            elif in_script and line.strip() and len(line) - len(line.lstrip()) <= indent:
+_UNTRUSTED_SHELL_EXPRESSION = re.compile(
+    r"\\$\\{\\{\\s*(?:inputs\\.|github\\.event\\.|github\\.head_ref\\b|github\\.ref_name\\b)"
+)
+
+
+def _risky_shell_lines(lines):
+    """Check both 'run:' and '- run:', but not surrounding step env fields."""
+    in_script = False
+    run_key_indent = -1
+    for number, line in enumerate(lines, 1):
+        match = re.match(r"^\\s*(?:-\\s*)?run:\\s*(.*)$", line)
+        if match:
+            in_script = True
+            run_key_indent = line.index("run:")
+        elif in_script and line.strip():
+            indentation = len(line) - len(line.lstrip())
+            if indentation <= run_key_indent:
                 in_script = False
-            if in_script:
-                assert not re.search(r"\$\{\{\s*(?:inputs\.|github\.event\.inputs)", line), (name, number)
+        if in_script and _UNTRUSTED_SHELL_EXPRESSION.search(line):
+            yield number
+
+
+def test_untrusted_workflow_event_and_dispatch_inputs_stay_out_of_shell_source():
+    paths = sorted(WF.glob("*.yml")) + sorted(WF.glob("*.yaml"))
+    assert len(paths) >= 150, "Workflow audit unexpectedly missing files"
+    for path in paths:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        violations = list(_risky_shell_lines(lines))
+        assert not violations, (path.name, violations)
+
+
+def test_shell_interpolation_scanner_recognizes_inline_and_block_run():
+    sample = [
+        "  - name: Demonstration",
+        "    env:",
+        "      SAFE_AS_ENV: ${{ github.event.pull_request.title }}",
+        "    run: |",
+        '      echo "safe $SAFE_AS_ENV"',
+        "  - run: echo '${{ inputs.untrusted }}'",
+        "  - run: |",
+        "      python -c 'print(1)'",
+        "      echo '${{ github.head_ref }}'",
+    ]
+    assert list(_risky_shell_lines(sample)) == [6, 9]
 
 
 def test_existing_data_limits_and_cdb_single_writer_guards_unchanged():
