@@ -408,3 +408,94 @@ def test_daily_extras_slots_keep_2026_first_and_share_provider_budget():
     assert 'report["extras_candidate_rows_by_year"]' in source
     assert 'output_report["extras_processed_by_year"]' in source
     assert 'report["extras_first_100_by_year"]' in source
+
+def test_provider5_winner_fallback_exact_event_and_unmapped_source(match_factory):
+    class Provider5(Provider):
+        def event_odds(self, eid, provider_id=1):
+            self.calls.append(f"odds-{provider_id}")
+            self.request_count += 1
+            if provider_id == 1:
+                return {"eventId": 100, "markets": []}
+            assert provider_id == 5
+            return {"eventId": 100, "markets": [{
+                "marketId": 1, "marketName": "Full time", "isLive": False,
+                "choices": [
+                    {"name": "1", "initialFractionalValue": "1/2", "fractionalValue": "2/3"},
+                    {"name": "2", "initialFractionalValue": "3/2", "fractionalValue": "6/5"},
+                ],
+            }]}
+
+    match = match_for_extras(match_factory)
+    stats_before = dict(match.stats)
+    provider = Provider5()
+    result = enrich_event_extras(match, provider, now=NOW)
+    assert result["markets"] == "available"
+    assert result["market_provider_id"] == 5
+    assert result["market_fallback_attempted"] is True
+    assert provider.calls == ["/api/tennis/event/100", "odds-1", "odds-5", "pbp"]
+    assert provider.request_count == 4
+    marker = match.provider_payload["_tbt_tennisapi_markets"]
+    assert marker["provider_id"] == 5
+    assert marker["provider_identity"] == "unmapped_source_id"
+    assert marker["pre_match_asof_verified"] is False
+    assert marker["provider_quote_timestamp_known"] is False
+    assert {x["market_id"] for x in marker["quotes"]} == {1}
+    assert {x["selection"] for x in marker["quotes"]} == {"1", "2"}
+    assert match.stats == stats_before
+    assert verify_markers([match], {str(match.match_id): {
+        "_tbt_tennisapi_markets": marker,
+    }}) == 1
+    assert not needs_extras(match, now=NOW + timedelta(days=1))
+
+
+def test_provider5_no_winner_remains_unavailable_with_cooldown(match_factory):
+    class NoWinner(Provider):
+        def event_odds(self, eid, provider_id=1):
+            self.calls.append(f"odds-{provider_id}")
+            self.request_count += 1
+            if provider_id == 1:
+                return {"eventId": 100, "markets": []}
+            return {"eventId": 100, "markets": [{
+                "marketId": 11, "isLive": False, "choices": [
+                    {"name": "1", "fractionalValue": "1/2"},
+                    {"name": "2", "fractionalValue": "2/1"},
+                ]}]}
+    match = match_for_extras(match_factory)
+    provider = NoWinner()
+    result = enrich_event_extras(match, provider, now=NOW)
+    assert result["markets"] == "unavailable"
+    assert result["market_provider_id"] == 5
+    assert match.provider_payload["_tbt_tennisapi_markets"]["quotes"] == []
+    assert not needs_extras(match, now=NOW + timedelta(days=1))
+    assert needs_extras(match, now=NOW + timedelta(days=31))
+
+
+def test_provider5_wrong_event_is_quarantined_not_attached(match_factory):
+    class WrongEvent(Provider):
+        def event_odds(self, eid, provider_id=1):
+            self.calls.append(f"odds-{provider_id}")
+            self.request_count += 1
+            return {"eventId": 100 if provider_id == 1 else 999, "markets": []}
+    match = match_for_extras(match_factory)
+    provider = WrongEvent()
+    with pytest.raises(ProviderError, match="event ID differs"):
+        enrich_event_extras(match, provider, now=NOW)
+    assert "_tbt_tennisapi_markets" not in match.provider_payload
+    assert provider.calls == ["/api/tennis/event/100", "odds-1", "odds-5"]
+
+
+def test_provider5_fallback_preserves_budget_stop_and_does_not_run_pbp(match_factory):
+    class Budgeted(Provider):
+        def event_odds(self, eid, provider_id=1):
+            self.calls.append(f"odds-{provider_id}")
+            self.request_count += 1
+            if provider_id == 5:
+                raise RequestBudgetExceeded("shared ledger blocked")
+            return {"eventId": 100, "markets": []}
+    match = match_for_extras(match_factory)
+    provider = Budgeted()
+    with pytest.raises(RequestBudgetExceeded):
+        enrich_event_extras(match, provider, now=NOW)
+    assert provider.calls == ["/api/tennis/event/100", "odds-1", "odds-5"]
+    assert "_tbt_tennisapi_markets" not in match.provider_payload
+    assert "_tbt_tennisapi_pbp" not in match.provider_payload
