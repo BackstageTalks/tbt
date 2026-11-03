@@ -60,5 +60,6 @@ def test_pairwise_push_dryrun_never_falls_through_to_writer_approval():
     assert 'raise SystemExit(0)' in text
     assert 'assert request.get("mode") == "write"' in text
     assert 'assert request.get("approved_by_operator") is True' in text
-    assert '--isolate-provider-collisions --expected-provider-quarantine 6' in text
-    assert 'assert r["quarantined_rows_proven_unchanged"] == 6' in text
+    assert '--isolate-provider-collisions' not in text
+    assert 'assert safety["status"] == "IDENTITY_SAFE"' in text
+    assert 'assert r.get("quarantined_rows_proven_unchanged", 0) == 0' in text
