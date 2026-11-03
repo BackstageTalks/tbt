@@ -90,15 +90,28 @@ def enrich_event_extras(match, provider, *, now: datetime | None = None) -> dict
     # missing endpoint on the next hourly window.
     match.provider_payload = raw
     stamp = now.astimezone(timezone.utc).isoformat()
-    outcomes = {"status": "processed", "changed": False, "markets": "cached", "pbp": "cached"}
+    outcomes = {"status": "processed", "changed": False, "markets": "cached", "pbp": "cached",
+                "market_provider_id": None, "market_fallback_attempted": False}
 
     if fetch_markets:
         # Reuse the same provider-1 odds route as the Match Winner runtime.
         payload = provider.event_odds(eid, provider_id=1)
         parsed = normalize_market_snapshot(payload, event_id=eid, observed_at=now)
+        # Provider confirmed that ID 5 sometimes has Match Winner even when
+        # provider 1 has no odds. One optional attempt only after a verified
+        # empty provider-1 result; all shared-budget and rate guards stay in
+        # the existing provider client. Never mix sources within one marker.
+        if not parsed["quotes"]:
+            outcomes["market_fallback_attempted"] = True
+            fallback = provider.event_odds(eid, provider_id=5)
+            parsed = normalize_market_snapshot(
+                fallback, event_id=eid, observed_at=now, provider_id=5)
+        outcomes["market_provider_id"] = parsed["provider_id"]
         marker = {
             "schema": 1, "source": "tennisapi1", "event_id": eid,
             "observed_at_utc": stamp,
+            "provider_id": parsed["provider_id"],
+            "provider_identity": "unmapped_source_id",
             "status": "available" if parsed["quotes"] else "unavailable",
             "provider_quote_timestamp_known": False, "pre_match_asof_verified": False,
             "quotes": parsed["quotes"][:64],
