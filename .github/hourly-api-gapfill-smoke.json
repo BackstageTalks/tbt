@@ -1,9 +1,11 @@
 {
   "schema": 1,
   "kind": "dry-run",
-  "requested_utc": "2026-11-03T19:53:00Z",
-  "source": "user-approved-fresh-quota-test",
-  "purpose": "Read current shared provider-day budget and authoritative CDB writer activity using existing zero-provider-request guard after PR #1339; no importer dispatch, CDB mutation or model change.",
+  "source": "operator-approved-recodex-supplemental-data-qa",
+  "requested_at_utc": "2026-11-03T21:37:00Z",
+  "scope": "read-only shared RapidAPI quota and CDB writer preflight after PR 1345",
   "safe_mode": true,
-  "commit": "ac05f97865de4d9970ae43f86e873055a497d66f"
+  "pr": 1345,
+  "merged_commit": "bc3f90d36acc5ed07150565630ba0df61477f192",
+  "purpose": "Verify current provider budget and existing global CDB writer state before bounded 30-call provider-5/post-match research smoke; no billable requests or CDB changes."
 }
