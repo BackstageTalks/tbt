@@ -385,6 +385,37 @@ def normalize(raw, filename, index, *, source_tour=""):
         return None, "no_supported_serve_return_stats"
     row["match_num"] = row["match_num"] or str(index)
     return row, ""
+def _explicit_json_match_table(rows, columns=None):
+    """Decode only explicitly headed match-level JSON tables, never inferred arrays.
+
+    Unlabeled sequences and per-player leaderboards remain source-only review.
+    The ordinary match/date/stat and CDB identity gates still run afterwards.
+    """
+    if not isinstance(rows, list) or not rows or isinstance(rows[0], dict):
+        return rows
+    values = rows if columns is not None else rows[1:]
+    headers = columns if columns is not None else rows[0]
+    if not isinstance(headers, list) or not headers or not all(
+        isinstance(h, str) and h.strip() for h in headers
+    ):
+        return rows
+    keys = [key(h) for h in headers]
+    present = set(keys)
+    def has(field):
+        return any(key(alias) in present for alias in ALIASES[field])
+    if (not all(has(field) for field in (
+            "tourney_date", "tourney_name", "winner_name", "loser_name"))
+            or not any(has(field) for field in STAT_FIELDS)):
+        return rows
+    if len(set(keys)) != len(keys):
+        raise ValueError("Duplicate normalized JSON table headers")
+    if any(not isinstance(row, list) or len(row) != len(headers)
+           or any(isinstance(cell, (list, dict)) for cell in row)
+           for row in values):
+        raise ValueError("Ragged or nested explicit JSON match rows")
+    return [dict(zip(headers, row)) for row in values]
+
+
 def read_rows(blob, name):
     suffix = Path(name).suffix.lower()
     if suffix in {".csv", ".tsv"}:
@@ -392,14 +423,17 @@ def read_rows(blob, name):
         delimiter = "\t" if suffix == ".tsv" else ","
         return csv.DictReader(io.StringIO(sample, newline=""), delimiter=delimiter)
     if suffix == ".jsonl":
-        return [json.loads(line) for line in blob.decode("utf-8-sig").splitlines() if line.strip()]
+        data = [json.loads(line) for line in blob.decode("utf-8-sig").splitlines() if line.strip()]
+        return _explicit_json_match_table(data)
     if suffix == ".json":
         data = json.loads(blob.decode("utf-8-sig"))
+        columns = None
         if isinstance(data, dict):
+            columns = data.get("columns")
             data = data.get("matches", data.get("rows"))
         if not isinstance(data, list):
             raise ValueError("JSON must contain a list or matches/rows list")
-        return data
+        return _explicit_json_match_table(data, columns)
     if suffix == ".xlsx":
         from openpyxl import load_workbook
         wb = load_workbook(io.BytesIO(blob), read_only=True, data_only=True)
@@ -485,6 +519,7 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
                 rows = read_rows(part, member_name)
                 tables = {"atp": [], "wta": []}
                 table_rejections = Counter()
+                non_object_types = Counter()
                 table_seen = 0
                 is_pinned_tml = (
                     path.suffix.lower() != ".zip"
@@ -495,6 +530,8 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
                         raise ValueError("Table exceeds row limit")
                     counts["raw_rows"] += 1
                     table_seen += 1
+                    if not isinstance(raw, dict):
+                        non_object_types[type(raw).__name__] += 1
                     if is_pinned_tml:
                         tml_reason = _pinned_tml_safety_reason(raw)
                         if (not tml_reason and
@@ -538,6 +575,9 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
                     counts["normalized_rows"] += len(accepted)
                 source_diagnostics.append({
                     "source_sha256": sha, "member_sha256": digest(part),
+                    "source_path": original_path or path.name,
+                    "member_name": member_name,
+                    "non_object_row_types": dict(sorted(non_object_types.items())),
                     "raw_rows": table_seen,
                     "normalized_rows": table_seen - sum(table_rejections.values()),
                     "rejected_by_reason": dict(sorted(table_rejections.items())),

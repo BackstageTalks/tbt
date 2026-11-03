@@ -456,3 +456,93 @@ def test_tml2025_frozen_sha_bound_conflicts_are_never_normalized(tmp_path, monke
     assert out["counts"]["reason_tml_cross_source_stat_disagreement"] == 1
     assert out["state"] == "SOURCE_ONLY"
     assert out["production_mutated"] is False
+
+
+def test_explicit_column_row_json_can_recover_match_table_without_identity_guess(tmp_path):
+    src, out = tmp_path / "src", tmp_path / "out"
+    src.mkdir()
+    record = sample()
+    columns = list(record)
+    (src / "matches.json").write_text(json.dumps({
+        "columns": columns, "rows": [list(record.values())],
+    }), encoding="utf-8")
+    report = normalize(src, out)
+    assert report["counts"]["normalized_rows"] == 1
+    assert report["counts"].get("reason_not_object", 0) == 0
+    assert report["production_mutated"] is False
+    assert report["api_requests"] == 0
+    output = Path(report["normalized"][0]["path"])
+    with output.open(newline="", encoding="utf-8") as handle:
+        row = next(csv.DictReader(handle))
+    assert row["league"] == "atp"
+    assert row["tourney_date"] == "20261017"
+    assert row["w_svpt"] == "70"
+    assert row["source_winner_id"] == ""
+
+
+def test_jsonl_and_json_array_with_explicit_header_only(tmp_path):
+    src, out = tmp_path / "src", tmp_path / "out"
+    src.mkdir()
+    record = sample()
+    header, values = list(record), list(record.values())
+    (src / "atp_records.jsonl").write_text(
+        json.dumps(header) + "\n" + json.dumps(values) + "\n",
+        encoding="utf-8",
+    )
+    (src / "atp_records.json").write_text(
+        json.dumps([header, values]), encoding="utf-8",
+    )
+    report = normalize(src, out)
+    assert report["counts"]["normalized_rows"] == 2
+    assert report["counts"].get("duplicate_source_files", 0) == 0
+    assert report["counts"].get("reason_not_object", 0) == 0
+    assert report["production_mutated"] is False
+
+
+def test_unheaded_arrays_and_player_leaderboards_stay_out_of_match_import(tmp_path):
+    src, out = tmp_path / "src", tmp_path / "out"
+    src.mkdir()
+    record = sample()
+    (src / "anonymous.json").write_text(json.dumps({
+        "rows": [list(record.values())],
+    }), encoding="utf-8")
+    (src / "leaderboard.json").write_text(json.dumps({
+        "columns": ["#", "Player", "Matches", "Double Faults"],
+        "rows": [{"source_player_id": "tml:alpha",
+                  "player_name": "Alpha", "cells": ["1", "Alpha", "4", "20"]}],
+    }), encoding="utf-8")
+    report = normalize(src, out)
+    assert report["normalized"] == []
+    assert report["counts"].get("reason_not_object", 0) == 1
+    assert report["counts"]["rejected_rows"] == 2
+    assert report["production_mutated"] is False
+
+
+def test_ragged_or_nested_headered_json_table_is_quarantined_entirely(tmp_path):
+    src, out = tmp_path / "src", tmp_path / "out"
+    src.mkdir()
+    record = sample()
+    headers, values = list(record), list(record.values())
+    (src / "bad.json").write_text(json.dumps({
+        "columns": headers, "rows": [
+            values,
+            values[:-1],
+        ],
+    }), encoding="utf-8")
+    report = normalize(src, out)
+    assert report["normalized"] == []
+    assert report["counts"]["review_tables"] == 1
+    assert report["production_mutated"] is False
+
+
+def test_duplicate_normalized_json_headers_fail_closed(tmp_path):
+    src, out = tmp_path / "src", tmp_path / "out"
+    src.mkdir()
+    record = sample()
+    headers, values = list(record), list(record.values())
+    (src / "dupe.json").write_text(json.dumps({
+        "columns": headers + ["Winner"], "rows": [values + ["Duplicate"]],
+    }), encoding="utf-8")
+    report = normalize(src, out)
+    assert report["normalized"] == []
+    assert report["counts"]["review_tables"] == 1
