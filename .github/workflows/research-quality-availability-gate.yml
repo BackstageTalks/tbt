@@ -22,7 +22,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
-      PYTHONPATH: scripts
+      PYTHONPATH: api:scripts
     steps:
       - uses: actions/checkout@v4
         with:
