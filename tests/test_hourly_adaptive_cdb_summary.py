@@ -131,6 +131,54 @@ def test_summary_schema2_explicitly_separates_paid_and_cache_gain():
     assert "cache/local processing: **5**" in markdown(result)
 
 
+def test_cutoff_before_first_paid_call_with_missing_counter_keys():
+    download, verified = evidence()
+    download["requests_including_retries"] = 0
+    download["statistics_data_value"] = {"policy": "zero-request cutoff"}
+    download["statistics_adaptive_priority"].update({
+        "observed_paid_requests": 0,
+        "selected_rows": 1,
+        "baseline_choices": 1,
+        "adaptive_choices": 0,
+        "online_adaptation_used": False,
+        "cohorts": {"atp:2026:serve_return": {
+            "paid_requests": 0, "new_statistic_values": 0,
+            "new_quality_ready_rows": 0,
+            "baseline_choices": 1, "adaptive_choices": 0,
+        }},
+    })
+    verified.update({
+        "status": "VERIFIED_NO_NEW_FIELDS",
+        "persisted_new_statistic_values": 0,
+        "persisted_new_per_set_matches": 0,
+    })
+    result = build(download, verified, run_id="cutoff")
+    assert result["status"] == "VERIFIED_NO_GAIN"
+    assert result["requests_including_retries"] == 0
+    assert result["persisted_new_statistic_values"] == 0
+    assert result["paid_new_statistic_values"] == 0
+    assert result["paid_new_fields_per_1000_requests"] is None
+
+
+def test_missing_counters_cannot_hide_independently_persisted_gain():
+    download, verified = evidence()
+    download["statistics_data_value"] = {}
+    with pytest.raises(ValueError, match="persisted"):
+        build(download, verified)
+
+
+def test_hourly_closeout_starts_early_and_keeps_authoritative_limits():
+    workflow = (Path(__file__).resolve().parents[1]
+                / ".github/workflows/data-hourly-quota-gapfill.yml").read_text()
+    assert "16: 13500, 17: 14500, 18: 14500" in workflow
+    assert "if now >= cutoff - timedelta(minutes=15):" in workflow
+    assert "min(3000, limit-spent" in workflow
+    assert 'budget.get("global_limit") != 14500' in workflow
+    assert 'budget.get("reserved_provider_headroom") != 500' in workflow
+    assert "wait_for_writer(check_writers, retry_deadline)" in workflow
+    assert '"mode": "statistics"' in workflow
+
+
 def test_malformed_paid_gain_is_not_misreported_from_readback():
     download, verified = evidence()
     download["statistics_data_value"]["api_new_statistic_values"] = 29

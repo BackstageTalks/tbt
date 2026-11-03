@@ -68,8 +68,13 @@ jobs:
 
           # Fixed UTC provider reset survives DST. Source budget is checked
           # independently after this scheduling preflight.
+          # Release the remaining safe provider-day capacity early enough for
+          # the real history pipeline (CDB bootstrap + guarded API fetches).
+          # Late 17:00 UTC topups can start after the 17:07 cutoff and waste
+          # otherwise useful headroom. The global 14,500 cap, 500 reserve,
+          # shared budget CAS and per-run 3,000 cap are unchanged.
           caps = {12: 5700, 13: 6900, 14: 8100, 15: 9300,
-                  16: 10500, 17: 12000, 18: 13500}
+                  16: 13500, 17: 14500, 18: 14500}
           def next_provider_reset(instant):
               reset_at = instant.replace(hour=17, minute=9, second=0, microsecond=0)
               if instant >= reset_at:
@@ -257,8 +262,11 @@ jobs:
           # and fail-closed provider-header quota checks. Stop well BEFORE the
           # verified 17:09 UTC reset; do not borrow the next provider day.
           cutoff = expected_reset - timedelta(minutes=2)
-          if now >= cutoff - timedelta(minutes=4):
-              print("Less than 4 minutes until provider cutoff; no dispatch")
+          # A cold CDB download/preflight has recently taken ~10 minutes.
+          # Do not dispatch a provider job that cannot reach its first paid
+          # request before the guarded 17:07 UTC cutoff.
+          if now >= cutoff - timedelta(minutes=15):
+              print("Less than 15 minutes until provider cutoff; no dispatch")
               sys.exit(0)
           last_complete = local.date() - timedelta(days=1)
           payload = {
