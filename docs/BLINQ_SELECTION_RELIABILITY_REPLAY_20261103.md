@@ -37,3 +37,23 @@ Investigate five original points: (1) data/serve-return quality, (2) ATP/WTA, to
 **PREPARED:** isolated branch analysis/selection-reliability-replay-20261103 with read-only script, regression tests and workflow. Actual CI replay, per-fixture canonical outcomes and active serving model SHA must be independently verified before reporting A/B as answered. Revisit only failed technical assumptions, never bypass provenance or identity guardrails.
 
 **Acceptance:** regression tests, verified immutable readback, chronological model-isolated A/B report with coverage and diagnostics, independent confidence/calibration review, then separate forward shadow. Champion and current published selector stay unchanged until explicit owner decision.
+
+
+## Verified research checkpoint — 2026-11-03
+
+- [Replay run 41709826091, attempt 2](https://github.com/BackstageTalks/tbt/actions/runs/41709826091): **SUCCESS** on code commit aa33a5e9fa9615aec742c46fb3117bfecb083687, 15/15 replay safety regression tests passed.
+- Input SHA-256 and release asset ID/size/timestamp checked before/after; October and November prediction assets and canonical 2026 history verified against their committed bundle manifests. See the private aggregate job artifact for exact evidence.
+- 24 daily anchors, 6,689 unique version/event candidates, two strictly separate versions. Current 7.2.1 candidate model has 1,762 unambiguously settled observations out of 2,384 candidates. Some candidates remain unresolved and are NOT scored.
+- Initial event-to-canonical join returned zero because predictions carry native provider IDs; corrected using the existing source-native provider ID fields and exact player/tour/date gates. No names-only identity matching.
+- Outcome evidence indicates raw-versus-displayed calibration mismatch worth independent forward validation; the selector comparison remains NOT READY for deployment: too few completely observed, same-capacity days, and most groups have missing outcomes. These are not public issuance metrics.
+- Existing 2026 CDB post-match serve/return, break point rate and ranking-value coverage was counted; it is explicitly NOT proof of historical point-in-time serving features. October/November ranking freshness and true serve/return feature availability remain separate audit gaps.
+- First attempt of run 41709826091 failed closed because canonical history-2026 asset was rotated during the read. New asset ID/byte count was independently observed; a single retry (attempt 2) completed with consistent input manifests.
+- **Decision gate:** NO selector policy change, NO model promotion, NO CDB write, NO provider calls, NO production deploy. Await separate owner review and, if indicated, forward shadow with exact issued/captured/settled observations.
+
+### Still open
+
+1. Determine whether stale or missing canonical ranking values actually reach the serving model features; snapshot records values but not rank as-of times.
+2. Inspect why feature-builder-compatible break-point rates have almost no confirmed paired evidence despite serve/return percentage coverage, without interpreting unrelated count fields as rates.
+3. Validate the candidate cohort's unresolved outcomes and publication-versus-candidate differences to avoid outcome selection bias.
+4. Forward shadow under same-event and pre-start evidence; do not auto-adjust arbitrary probability thresholds based on this retrospective replay.
+5. Confirm currently serving model artifact SHA independently from live inference before making production-specific promotion statements.
