@@ -154,6 +154,13 @@ def enrich_event_extras(match, provider, *, now: datetime | None = None) -> dict
             "sets": parsed["sets"], "games": parsed["games"], "points": parsed["points"],
             "games_with_explicit_server": parsed["games_with_explicit_server"],
             "games_with_explicit_winner": parsed["games_with_explicit_winner"],
+            # Observed game outcomes are not complete-match or point tape totals.
+            "observed_games_with_server_and_winner": parsed.get("observed_games_with_server_and_winner", 0),
+            "observed_games_won_home": parsed.get("observed_games_won_home", 0),
+            "observed_games_won_away": parsed.get("observed_games_won_away", 0),
+            "observed_server_won_games": parsed.get("observed_server_won_games", 0),
+            "observed_receiver_won_games": parsed.get("observed_receiver_won_games", 0),
+            "game_observation_scope": "observed_games_only",
             "quality_status": parsed["quality_status"],
             "eligible_for_cdb_point_features": False,
         }
