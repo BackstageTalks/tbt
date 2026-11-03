@@ -3,16 +3,16 @@
   "mode": "extras",
   "start": "2026-10-15",
   "end": "2026-11-02",
-  "max_requests": 30,
+  "max_requests": 1000,
   "targeted_statistics": false,
   "promote": false,
   "model_changes": false,
   "cdb_writes_allowed": true,
   "source": "tennisapi1",
   "source_contract": "docs/TENNISAPI_PROVIDER_CONTRACT_2026-08-24.md",
-  "pr": 1345,
-  "production_commit": "bc3f90d36acc5ed07150565630ba0df61477f192",
+  "pr": 1349,
+  "production_commit": "7b5fce7f7df8678669278ab4b77a34ca53469194",
   "requested_on": "2026-11-03",
-  "kind": "operator-approved-postmatch-provider-extras-smoke",
-  "purpose": "Single CDB-writer guarded 30-call provider-native extras smoke: collect provider1 odds, only source-attested fallback provider5 winner, bounded PBP game research markers; strict event identity, one writer/CAS, 500 request reserve, <=6/s and independent remote exact-value readback. No model training or promotion; reject conflicting matches."
+  "kind": "operator-approved-postmatch-provider-extras-1000-test",
+  "purpose": "Single operator-approved at-most-1000 TennisApi extras test, 2026-10-15..2026-11-02. Keep shared API budget, provider 500 reserve, <=6/s, global CDB lock, strict identity, NULL-only canonical import, CAS and independent exact-value readback. Fail closed on missing quota/release. No model training or promotion."
 }
