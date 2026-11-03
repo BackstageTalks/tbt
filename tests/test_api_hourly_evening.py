@@ -44,8 +44,9 @@ def test_workflow_preserves_existing_guards_and_uses_evening_in_both_paths():
     workflow = (Path(__file__).resolve().parents[1] /
                 ".github/workflows/data-hourly-quota-gapfill.yml").read_text()
     assert workflow.count("evening_limit = evening_cap(now, expected_reset)") == 2
-    assert workflow.count("evening_limit if evening_limit is not None") == 2
-    assert "if evening_limit is not None else" in workflow
+    assert workflow.count("if evening_limit is not None:") == 2
+    assert workflow.count("limit = evening_limit") == 2
+    assert workflow.count("limit = 3000 if new_day_start else (14500 if final_topup else caps[stage_hour])") == 2
     assert "from scripts.api_writer_wait import read_cdb_writer_lock" in workflow
     assert "from scripts.api_writer_wait import wait_for_writer" in workflow
     assert "or budget.get(\"global_limit\") != 14500" in workflow
