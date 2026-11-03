@@ -70,8 +70,10 @@ def test_provider_confirmed_markets_capture_all_and_no_fake_quote_time():
               if q["market_id"] == 1 and q["selection"] == "1")
     assert p1["opening_decimal"] == pytest.approx(1.67)
     assert p1["latest_decimal"] == pytest.approx(1.8)
+    assert p1["provider_change_direction"] == 1
     total = next(q for q in report["quotes"] if q["market_id"] == 12)
     assert total["line_games"] == 22.5  # not marketPeriod="Extra time"
+    assert total["provider_change_direction"] is None  # absent in sample
 
 
 def test_unavailable_malformed_and_mismatched_markets_fail_closed():
