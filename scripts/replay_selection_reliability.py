@@ -101,6 +101,7 @@ def betting_day(when):
 
 
 def canonical_index(matches):
+    """Index exact canonical AND existing provider-native IDs; never name-match."""
     index = {}
     for match in matches:
         if not isinstance(match, dict):
@@ -108,10 +109,44 @@ def canonical_index(matches):
         event = str(match.get("match_id") or "").strip()
         if not event:
             raise ValueError("canonical match has no ID")
-        if event in index:
-            raise ValueError("duplicate canonical match ID: refusing uncertain join")
-        index[event] = match
+        payload = match.get("provider_context_json") or {}
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except ValueError as exc:
+                raise ValueError("malformed canonical provider context") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("invalid canonical provider context")
+        match["_replay_context"] = payload
+        keys = {event}
+        # Same sources the production event_id(match) function uses.
+        for field in ("_tbt_provider_event_id", "provider_event_id", "event_id", "eventId", "id"):
+            native = payload.get(field)
+            if native not in (None, ""):
+                keys.add(str(native).strip())
+        for key in keys:
+            if key in index and index[key] is not match:
+                raise ValueError("duplicate canonical/provider match ID: refusing uncertain join")
+            index[key] = match
     return index
+
+
+def _canonical_schedule_consistent(observed, scheduled):
+    try:
+        return abs((dt(observed) - scheduled).total_seconds()) <= 86400
+    except ValueError:
+        return False
+
+
+def _void_or_unsettled(observed, ids):
+    status = str(observed.get("status") or "").strip().lower()
+    if status in {"void", "walkover", "w/o", "abandoned", "cancelled", "retired"}:
+        return True
+    context = observed.get("_replay_context") or {}
+    if (isinstance(context.get("_tbt_termination"), dict)
+        and context["_tbt_termination"].get("reason")):
+        return True
+    return str(observed.get("winner_id") or "") not in ids
 
 
 def prepare(row, generated, day, index, diagnostics):
@@ -164,8 +199,11 @@ def prepare(row, generated, day, index, diagnostics):
         ids = {str(observed.get("player1_id") or ""), str(observed.get("player2_id") or "")}
         if ids != {a, b}:
             diagnostics["canonical_player_collision"] += 1
-        elif (str(observed.get("status") or "").strip().lower() not in FINISHED
-              or str(observed.get("winner_id") or "") not in ids):
+        elif str(observed.get("tour") or "").strip().lower() not in ("", str(row.get("tour") or "").strip().lower()):
+            diagnostics["canonical_tour_disagreement"] += 1
+        elif not _canonical_schedule_consistent(observed.get("scheduled_at"), scheduled):
+            diagnostics["canonical_schedule_disagreement"] += 1
+        elif _void_or_unsettled(observed, ids):
             diagnostics["unsettled_or_void"] += 1
         else:
             correct = winner == str(observed["winner_id"])
@@ -414,7 +452,7 @@ def main():
         if not expected or expected != sha(args.canonical):
             raise ValueError("canonical year differs from history manifest SHA256")
     columns = ["match_id", "player1_id", "player2_id", "winner_id", "status",
-               "scheduled_at", "tournament_level"]
+               "scheduled_at", "tour", "tournament_level", "provider_context_json"]
     matches = pd.read_parquet(args.canonical, columns=columns).to_dict("records")
     report = analyze(load_snapshots(args.snapshots), matches)
     report["evidence"] = evidence
