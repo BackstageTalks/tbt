@@ -352,6 +352,16 @@ def eligible(record, section):
     return False
 
 
+def forward_subset(snapshots, first_betting_day):
+    """Use only predeclared *future* betting days, not a retrospective sample."""
+    from datetime import date
+    start = date.fromisoformat(first_betting_day)
+    if start < date(2026, 11, 4):
+        raise ValueError("forward cohort must begin on/after the predeclared 2026-11-04 boundary")
+    return [s for s in snapshots
+            if dt(s["generated_at"]).astimezone(LOCAL).date() >= start]
+
+
 def analyze(snapshots, matches):
     diagnostics = Counter()
     index = canonical_index(matches)
@@ -519,6 +529,8 @@ def main():
     parser.add_argument("--snapshots", nargs="+", required=True, type=Path)
     parser.add_argument("--canonical", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument("--forward-out", type=Path)
+    parser.add_argument("--forward-from", default="2026-11-04")
     parser.add_argument("--prediction-before", type=Path)
     parser.add_argument("--prediction-after", type=Path)
     parser.add_argument("--history-before", type=Path)
@@ -545,12 +557,35 @@ def main():
                "scheduled_at", "tour", "tournament_level", "provider_context_json"]
     columns.extend(("stats_json", "player1_rank", "player2_rank"))
     matches = pd.read_parquet(args.canonical, columns=columns).to_dict("records")
-    report = analyze(load_snapshots(args.snapshots), matches)
+    snapshots = load_snapshots(args.snapshots)
+    report = analyze(snapshots, matches)
     report["canonical_cdb_field_coverage"] = historical_cdb_coverage(matches)
     report["evidence"] = evidence
     report["github_source_sha"] = os.getenv("GITHUB_SHA")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + "\n")
+    if args.forward_out:
+        forward = analyze(forward_subset(snapshots, args.forward_from), matches)
+        forward["cohort"] = "OUT_OF_TIME_AFTER_POLICY_FREEZE"
+        forward["prospective_from_betting_day"] = args.forward_from
+        forward["policy_predeclared_utc"] = "2026-11-03T20:43:00Z"
+        forward["historical_comparison_not_prospectively_reused"] = True
+        forward["evidence"] = evidence
+        forward["github_source_sha"] = os.getenv("GITHUB_SHA")
+        forward["operational_readiness"] = (
+            "RESEARCH_ONLY_NO_POLICY_PROMOTION"
+            if forward["evaluated_unique_model_events"]
+            else "AWAITING_FUTURE_SNAPSHOT"
+        )
+        args.forward_out.parent.mkdir(parents=True, exist_ok=True)
+        args.forward_out.write_text(
+            json.dumps(forward, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+        )
+        print(json.dumps({
+            "forward_betting_days": forward["anchored_days"],
+            "forward_candidates": forward["evaluated_unique_model_events"],
+            "state": forward["operational_readiness"],
+        }))
     print(json.dumps({
         "status": report["status"], "anchored_days": report["anchored_days"],
         "unique": report["evaluated_unique_model_events"],
