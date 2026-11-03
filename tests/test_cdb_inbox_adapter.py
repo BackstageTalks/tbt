@@ -486,17 +486,15 @@ def test_jsonl_and_json_array_with_explicit_header_only(tmp_path):
     record = sample()
     header, values = list(record), list(record.values())
     (src / "atp_records.jsonl").write_text(
-        json.dumps(header) + "\\n" + json.dumps(values) + "\\n",
+        json.dumps(header) + "\n" + json.dumps(values) + "\n",
         encoding="utf-8",
     )
     (src / "atp_records.json").write_text(
         json.dumps([header, values]), encoding="utf-8",
     )
     report = normalize(src, out)
-    assert report["counts"]["normalized_rows"] == 1 or (
-        report["counts"]["normalized_rows"] == 2 and
-        report["counts"].get("duplicate_source_files", 0) == 0
-    )
+    assert report["counts"]["normalized_rows"] == 2
+    assert report["counts"].get("duplicate_source_files", 0) == 0
     assert report["counts"].get("reason_not_object", 0) == 0
     assert report["production_mutated"] is False
 
