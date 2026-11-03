@@ -1,0 +1,20 @@
+# Exact package version constraints taken from successful GitHub Actions CI #41704821728
+# training and pytest transitive resolution; Python 3.11 Linux runner. No package additions in this file.
+# Review lock updates through CI smoke tests and deployment read-back.
+cloudpickle==3.1.2
+iniconfig==2.3.1
+joblib==1.6.0
+narwhals==2.28.0
+numpy==2.4.6
+packaging==26.3
+pandas==2.3.3
+pluggy==1.7.0
+pyarrow==21.0.0
+pygments==2.21.0
+pytest==9.2.0
+python-dateutil==4.0.0
+pytz==2026.6
+scikit-learn==1.9.0
+scipy==1.17.1
+threadpoolctl==3.7.0
+tzdata==2026.6

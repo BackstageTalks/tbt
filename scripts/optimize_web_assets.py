@@ -12,15 +12,17 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from web_deploy_contract import OPTIMIZED_ASSETS, read_release
+
 ROOT = Path(__file__).resolve().parents[1]
 ESBUILD = "esbuild@0.25.12"
-ASSETS = ("app.js", "blinq-app.css")
+ASSETS = OPTIMIZED_ASSETS
 
 
 def build(web: Path, output_dir: Path) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     stats = {}
-    release = json.loads((web / "release.json").read_text(encoding="utf-8"))
+    release = read_release(web)
     patch = str(release["patch"]).replace("736-", "7.3.6-", 1)
     visual = str(release["visual_revision"])
     for name in ASSETS:
