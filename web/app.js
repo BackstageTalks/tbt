@@ -3914,11 +3914,22 @@
         .filter(p=>publicationOutcome(p).kind!=='pending');
       pubs.forEach((publication,index)=>{
         const key=canonicalResultPublicationKey(row,publication,index);
-        if(cohort&&!cohort.has(resultBetIdentity(row,publication)))return;
-        const current=unique.get(key);
         const market=String(publication.market||'').toLowerCase();
         const categoryTag=({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'})[market]
           ||String(publication.section||'');
+        // Admin membership comparisons use an additional, historical daily
+        // cohort. When the published tier explicitly grants ALL rows with no
+        // overrides, that cohort must not hide already-settled publications
+        // whose legacy offer identity is incomplete. The Results feed itself
+        // has already passed the server's publication/access checks.
+        const tab=categoryTag==='top_daily'?'daily':categoryTag;
+        const rule=cohort?state.feed?.member_result_rules?.[filters?.membership]?.[tab]:null;
+        const allVisible=rule?.enabled===true
+          &&rule.display_state==='active'
+          &&String(rule.visible_picks).toUpperCase()==='ALL'
+          &&Object.keys(rule.row_overrides||{}).length===0;
+        if(cohort&&!allVisible&&!cohort.has(resultBetIdentity(row,publication)))return;
+        const current=unique.get(key);
         if(!current){
           unique.set(key,{row,publication,categories:categoryTag?[categoryTag]:[]});
         }else{

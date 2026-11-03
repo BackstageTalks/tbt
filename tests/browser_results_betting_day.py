@@ -466,6 +466,67 @@ def main():
                 "legendCohort": 9, "goatCohort": 9
             }, morning
 
+            # ALL means no second membership-cohort restriction in Admin.
+            # Some settled Aces from the verified ledger lack legacy offer IDs,
+            # but they must not disappear from an unrestricted ELITE preview.
+            all_aces = page.evaluate("""() => {
+              const t=bettingDayTest,s=t.state;
+              const day=t.bratislavaBettingDayKey(Date.now(),6);
+              const scheduled=new Date().toISOString();
+              const mk=(n,correct)=>{
+                const selection=n===1?'player-1':'';
+                return {
+                  event_id:'ace-'+n,scheduled_at:scheduled,tour:'ATP',
+                  player1:{id:'player-'+n,name:'Player '+n},
+                  player2:{id:'opponent-'+n,name:'Opponent '+n},
+                  market_publications:[{
+                    section:'ace',market:'aces',selection_id:selection,
+                    publication_key:'issued-ace-'+n,
+                    publication_status:'published',issued_at:scheduled,
+                    betting_day:day,price_status:'priced_projection',odds:1.74,
+                    result:{status:correct?'hit':'miss',correct,
+                      staked_units:1,profit_units:correct?.74:-1}
+                  }]
+                };
+              };
+              s.previewPlan=null;
+              s.feed={
+                account:{is_admin:true,role:'admin',plan:'admin',status:'active'},
+                entitlements:{result_categories:['ace'],daily_pick_count:3},
+                member_result_rules:{
+                  elite:{ace:{enabled:true,display_state:'active',
+                    visible_picks:'ALL',selection_mode:'first',row_overrides:{}}},
+                  pro:{ace:{enabled:true,display_state:'active',
+                    visible_picks:1,selection_mode:'first',row_overrides:{}}}
+                },
+                ace_picks:[],results:[mk(1,false),mk(2,true),mk(3,true)]
+              };
+              const original=JSON.stringify(s.feed.results);
+              s.resultsFilters={category:'ace',tour:'',surface:'',
+                window:'today',dateFrom:'',dateTo:'',bettingDay:true,membership:''};
+              const count=()=>t.settledPublishedEntries(t.filteredResults(),
+                'ace',s.resultsFilters).length;
+              const all=count();
+              s.resultsFilters.membership='elite';
+              const elite=count();
+              const eliteRecord=t.resultsSummary().includes('2-1');
+              s.resultsFilters.membership='pro';
+              const pro=count();
+              s.resultsFilters.membership='elite';
+              s.feed.member_result_rules.elite.ace.row_overrides={'1':'hidden'};
+              const overridden=count();
+              s.feed.member_result_rules.elite.ace.row_overrides={};
+              s.feed.member_result_rules.elite.ace.enabled=false;
+              const disabled=count();
+              return {all,elite,eliteRecord,pro,overridden,disabled,
+                ledgerUnchanged:original===JSON.stringify(s.feed.results)};
+            }""")
+            assert all_aces == {
+                "all": 3, "elite": 3, "eliteRecord": True,
+                "pro": 1, "overridden": 0, "disabled": 0,
+                "ledgerUnchanged": True,
+            }, all_aces
+
             assert not errors, errors
             print("Results current betting-day cohort + 06:00 custom filter contract: PASS")
         finally:

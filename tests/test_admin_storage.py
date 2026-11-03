@@ -33,6 +33,40 @@ class FakeTable:
         return list(self.entities)
 
 
+def test_elite_aces_all_migrates_stale_runtime_once_without_mutating_storage():
+    payload = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    ace = payload["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]
+    payload["access_contract_revision"] = 1
+    payload.pop("elite_aces_access_revision", None)
+    ace["elite"]["visible_rows"] = 5
+    ace["elite"]["blur_remaining"] = True
+    ace["elite"]["see_all"] = False
+    ace["elite"]["row_overrides"] = {"2": "hidden"}
+    original = json.loads(json.dumps(payload))
+
+    effective = admin_storage.resolve_ui_access_config(payload)
+    elite = effective["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]["elite"]
+    assert elite["visible_rows"] == "ALL"
+    assert elite["blur_remaining"] is False
+    assert elite["see_all"] is True
+    assert elite["row_overrides"] == {}
+    assert effective["access_contract_revision"] == 1
+    assert effective["elite_aces_access_revision"] == 1
+    # Reading the effective config does not change the raw stored Azure row.
+    assert payload == original
+    # No changes to other tiers or categories.
+    for plan in ("rookie", "pro", "legend", "goat"):
+        assert effective["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"][plan] == ace[plan]
+    assert effective["dashboard"]["daily_hub"]["tabs"]["value"]["plans"]["elite"] == payload["dashboard"]["daily_hub"]["tabs"]["value"]["plans"]["elite"]
+
+    # Once Admin persists the dedicated marker, deliberate edits are retained.
+    effective["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]["elite"]["visible_rows"] = 4
+    again = admin_storage.resolve_ui_access_config(effective)
+    assert again["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]["elite"]["visible_rows"] == 4
+    assert again["access_contract_revision"] == 1
+    assert again["elite_aces_access_revision"] == 1
+
+
 def test_runtime_ui_config_round_trip(monkeypatch):
     table = FakeTable()
     monkeypatch.setattr(admin_storage, "_table", lambda name: table)
