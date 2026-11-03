@@ -221,3 +221,12 @@ def test_paired_comparison_rejects_capacity_mismatch():
             [("2026-10-01", [{"correct": True}])],
             [("2026-10-01", [{"correct": True}, {"correct": False}])],
         )
+
+
+
+def test_raw_confidence_below_65_is_not_labeled_65_to_70():
+    record = candidate("weak", raw=.61, depth=1, selected=None)
+    out = analyze([snapshot([record])], [settled("weak")])
+    buckets = out["model_quality_A"]["v7.2.1-frozen"]["by_segment"]["confidence"]
+    assert buckets["below_65"]["settled"] == 1
+    assert "65_70" not in buckets
