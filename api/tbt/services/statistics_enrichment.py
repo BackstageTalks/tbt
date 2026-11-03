@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from collections import Counter
 from datetime import datetime, timezone
 
 from ..errors import ProviderError
-from ..providers.statistics import (NoSupportedStatisticsError, complete_opponent_service_rates, parse_statistics)
+from ..providers.statistics import (NoSupportedStatisticsError, complete_opponent_service_rates, parse_statistics, inventory_statistics_keys)
 from ..providers.tennisapi_extra import normalize_set_statistics_home_away
 from .statistics_gapfill import event_id as resolve_event_id, missing_fields, retry_due, recent_score_identity_conflict
 from .tennis_response_cache import RawResponseCache
@@ -26,6 +27,9 @@ class StatisticsEnricher:
         self.targeted = targeted
         self.cache = sqlite3.connect(str(cache_path))
         self.cache.execute("CREATE TABLE IF NOT EXISTS responses (path TEXT PRIMARY KEY, fetched REAL, body TEXT)")
+        self.statistics_key_counts = {name: Counter() for name in ("supported", "unsupported", "set_only")}
+        self.statistics_key_responses = 0
+        self.statistics_invalid_envelopes = 0
         private_path = os.getenv("BLINQ_TENNIS_RAW_CACHE_SQLITE", "").strip()
         # The caller must mount a private persistent directory. A bad mount
         # fails closed rather than silently reverting to paid requests.
@@ -35,6 +39,34 @@ class StatisticsEnricher:
             self.durable = HttpRawResponseCache(remote_url, token)
         else:
             self.durable = RawResponseCache(private_path) if private_path else None
+
+    def statistics_key_summary(self) -> dict:
+        """Aggregate already-fetched key names, never raw values/player IDs.
+
+        Includes durable/local cache responses as well as paid responses. It
+        does not measure billable calls, create canonical fields or authorize
+        schema mapping of unknown provider keys.
+        """
+        return {
+            "schema": 1,
+            "observed_response_payloads": self.statistics_key_responses,
+            "invalid_envelopes": self.statistics_invalid_envelopes,
+            "counts_by_key": {
+                name: dict(sorted(counter.items()))
+                for name, counter in self.statistics_key_counts.items()
+            },
+            "policy": "Aggregate key discovery from already-read payloads (paid or cache); no new API calls, no raw data, no automatic field promotion.",
+        }
+
+    def _observe_statistics_keys(self, payload) -> None:
+        inventory = inventory_statistics_keys(payload)
+        self.statistics_key_responses += 1
+        self.statistics_invalid_envelopes += int(inventory["invalid_envelope"])
+        for name, counter in self.statistics_key_counts.items():
+            # Bound untrusted names and cardinality in a large historical run.
+            for key in inventory[name][:100]:
+                if len(key) <= 64 and (key in counter or len(counter) < 200):
+                    counter[key] += 1
 
     def close(self):
         self.cache.close()
@@ -148,6 +180,7 @@ class StatisticsEnricher:
             "event_id": str(event_id), "home": home, "away": away, "status": "finished",
         }}
         payload = self._get(f"/api/tennis/event/{event_id}/statistics", max_age=30 * 86400)
+        self._observe_statistics_keys(payload)
         try:
             stats = parse_statistics(payload, home_is_player1=home == match.player1_id)
         except NoSupportedStatisticsError:
