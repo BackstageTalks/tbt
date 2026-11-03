@@ -186,7 +186,9 @@ def test_replay(snapshots, matches, reference=None):
                         raise ValueError("independent replay reference mismatch: " + name+"/"+metric)
         by_tour = defaultdict(list)
         by_depth = defaultdict(list)
+        by_assigned_section = defaultdict(list)
         for r in rows:
+            by_assigned_section[str(r["section"] or "unassigned")].append(r)
             by_tour[r["tour"]].append(r)
             bucket = "below_80" if r["depth"] < .8 else "80_90" if r["depth"] < .9 else "90_plus"
             by_depth[bucket].append(r)
@@ -263,6 +265,21 @@ def test_replay(snapshots, matches, reference=None):
             "fixed_candidate_shrunk": s_public,
             "paired_day_brier": paired_day_ci(rows, metric="brier"),
             "paired_day_log_loss": paired_day_ci(rows, metric="log_loss"),
+            "fixed_depth_gte_80": {
+                "raw": sorted_score([r for r in rows if r["depth"] >= .80], "raw"),
+                "shrunk": sorted_score([r for r in rows if r["depth"] >= .80], "public"),
+            },
+            "fixed_verified_prestart_quoted": {
+                "raw": sorted_score([r for r in rows if r["quote_ok"]], "raw"),
+                "shrunk": sorted_score([r for r in rows if r["quote_ok"]], "public"),
+            },
+            "fixed_snapshot_assigned_sections": {
+                section: {
+                    "raw": sorted_score(group, "raw"),
+                    "shrunk": sorted_score(group, "public"),
+                    "n_all": len(group),
+                } for section, group in sorted(by_assigned_section.items())
+            },
             "by_tour": {
                 k: {"raw": sorted_score(v, "raw"), "shrunk": sorted_score(v, "public")}
                 for k, v in sorted(by_tour.items())
@@ -279,6 +296,8 @@ def test_replay(snapshots, matches, reference=None):
         "constraints": [
             "Unpriced candidates are not counterfactually priced. This does not replay earlier odds-discovery priority.",
             "Selector replay is only valid on days where native-public arm exactly reproduces stored section assignments.",
+            "Depth below 0.80 is ineligible for TOP/PRIME; whole-universe Brier gain cannot be presumed to improve those categories.",
+            "Fixed snapshot section metrics are candidate assignments, not independently verified public issuances.",
             "Match winner historical candidates are not proof of live public issuance.",
             "Same-capacity performance only counts days with both complete outcomes; other rates cannot be compared.",
             "Paired raw/shrunk quality affects confidence scoring; winner identity is unchanged.",
