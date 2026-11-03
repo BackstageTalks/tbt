@@ -149,18 +149,31 @@ def minimize_provider_payload(
             }
 
     odds = raw.get("_tbt_tennisapi_markets")
+    provider_id = odds.get("provider_id", 1) if isinstance(odds, dict) else None
     if (isinstance(odds, dict) and odds.get("schema") == 1
             and odds.get("source") == "tennisapi1"
             and odds.get("status") in ("available", "unavailable")
+            and type(provider_id) is int and provider_id in (1, 5)
+            and odds.get("provider_identity", "unmapped_source_id") == "unmapped_source_id"
             and odds.get("provider_quote_timestamp_known") is False
             and odds.get("pre_match_asof_verified") is False
             and isinstance(odds.get("quotes"), list) and len(odds["quotes"]) <= 64):
         quoted = []
         for q in odds["quotes"]:
-            if (not isinstance(q, dict) or q.get("market_id") not in (1, 11, 12, 15)
-                    or q.get("selection") not in ("1", "2", "Over", "Under")
+            mid = q.get("market_id") if isinstance(q, dict) else None
+            allowed = (("Over", "Under") if mid == 12 else
+                       ("Yes", "No") if mid == 13 else ("1", "2"))
+            direction = q.get("provider_change_direction") if isinstance(q, dict) else None
+            if (not isinstance(q, dict) or type(mid) is not int
+                    or mid not in (1, 11, 12, 13, 15)
+                    or q.get("selection") not in allowed
+                    or (provider_id == 5 and (mid != 1 or q.get("is_live") is not False))
+                    or (mid == 13 and (q.get("market") != "tie_break_in_match"
+                                      or q.get("is_live") is not False))
                     or not isinstance(q.get("is_live"), bool)
-                    or q.get("latest_decimal") is None):
+                    or q.get("latest_decimal") is None
+                    or (direction is not None
+                        and (type(direction) is not int or direction not in (-1, 0, 1)))):
                 quoted = []
                 break
             nums = (q.get(k) for k in ("line_games", "opening_decimal", "latest_decimal"))
@@ -168,11 +181,13 @@ def minimize_provider_payload(
                                       or not math.isfinite(v) or v <= 0) for v in nums):
                 quoted = []
                 break
-            quoted.append({k: q.get(k) for k in ("market_id", "market", "is_live",
-                            "line_games", "selection", "opening_decimal",
-                            "latest_decimal", "settled_winning")})
+            keys = ("market_id", "market", "is_live", "line_games", "selection",
+                    "opening_decimal", "latest_decimal", "settled_winning")
+            if "provider_change_direction" in q:
+                keys += ("provider_change_direction",)
+            quoted.append({k: q.get(k) for k in keys})
         if quoted or odds["status"] == "unavailable":
-            out["_tbt_tennisapi_markets"] = {
+            marker = {
                 "schema": 1, "source": "tennisapi1",
                 "event_id": str(odds.get("event_id") or "")[:32],
                 "observed_at_utc": str(odds.get("observed_at_utc") or "")[:40],
@@ -180,21 +195,40 @@ def minimize_provider_payload(
                 "provider_quote_timestamp_known": False,
                 "pre_match_asof_verified": False, "quotes": quoted,
             }
+            if "provider_id" in odds:
+                marker["provider_id"] = provider_id
+            if "provider_identity" in odds:
+                marker["provider_identity"] = "unmapped_source_id"
+            out["_tbt_tennisapi_markets"] = marker
 
     pbp = raw.get("_tbt_tennisapi_pbp")
     fields = ("sets", "games", "points", "games_with_explicit_server", "games_with_explicit_winner")
+    observed = ("observed_games_with_server_and_winner", "observed_games_won_home",
+                "observed_games_won_away", "observed_server_won_games",
+                "observed_receiver_won_games")
+    extra_present = isinstance(pbp, dict) and any(key in pbp for key in observed)
+    extra_valid = (not extra_present or (
+        all(type(pbp.get(key)) is int and 0 <= pbp[key] <= 100000 for key in observed)
+        and pbp.get("game_observation_scope") == "observed_games_only"
+        and pbp["observed_games_with_server_and_winner"] <= pbp.get("games", 0)
+        and (pbp["observed_games_won_home"] + pbp["observed_games_won_away"]
+             == pbp["observed_games_with_server_and_winner"])
+        and (pbp["observed_server_won_games"] + pbp["observed_receiver_won_games"]
+             == pbp["observed_games_with_server_and_winner"])
+    ))
     if (isinstance(pbp, dict) and pbp.get("schema") == 1
             and pbp.get("source") == "tennisapi1"
             and pbp.get("status") in ("available", "unavailable", "unsupported_shape")
             and pbp.get("quality_status") in ("structural_only", "unavailable", "unsupported_shape")
             and pbp.get("eligible_for_cdb_point_features") is False
+            and extra_valid
             and all(isinstance(pbp.get(k), int) and not isinstance(pbp[k], bool)
                     and 0 <= pbp[k] <= 100000 for k in fields)):
-        out["_tbt_tennisapi_pbp"] = {
-            k: pbp[k] for k in ("schema", "source", "event_id",
-            "observed_at_utc", "status", *fields, "quality_status",
-            "eligible_for_cdb_point_features")
-        }
+        keys = ("schema", "source", "event_id", "observed_at_utc", "status",
+                *fields, "quality_status", "eligible_for_cdb_point_features")
+        if extra_present:
+            keys += (*observed, "game_observation_scope")
+        out["_tbt_tennisapi_pbp"] = {k: pbp[k] for k in keys}
     score_marker = raw.get("_tbt_score")
     if isinstance(score_marker, dict):
         out["_tbt_score"] = {k: score_marker[k] for k in
