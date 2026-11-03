@@ -254,8 +254,82 @@ def metrics(rows, field="raw"):
         bins[min(9, int(p * 10))].append((p, y))
     ece = sum(len(g)/n * abs(sum(x[0] for x in g)/len(g) -
                               sum(x[1] for x in g)/len(g)) for g in bins.values())
+    mean_p = sum(ps) / n
     return {"selected": len(rows), "settled": n, "hit_rate": hits/n,
+            "settlement_coverage": n / len(rows) if rows else None,
+            "mean_probability": mean_p, "observed_minus_predicted": hits/n - mean_p,
             "brier": brier, "log_loss": log_loss, "ece_10": ece}
+
+
+def historical_cdb_coverage(matches):
+    """Current canonical 2026 field availability, NEVER issuance-time features."""
+    groups = defaultdict(Counter)
+    for match in matches:
+        ids = {str(match.get("player1_id") or ""), str(match.get("player2_id") or "")}
+        if str(match.get("winner_id") or "") not in ids:
+            continue
+        try:
+            month = dt(match.get("scheduled_at")).strftime("%Y-%m")
+        except ValueError:
+            continue
+        if not month.startswith("2026-"):
+            continue
+        tour = str(match.get("tour") or "unknown").upper()
+        raw = match.get("stats_json") or "{}"
+        try:
+            stats = json.loads(raw) if isinstance(raw, str) else raw
+        except ValueError:
+            stats = {}
+        if not isinstance(stats, dict):
+            stats = {}
+
+        def observed(side, fields):
+            for field in fields:
+                rate = num(stats.get(side + "_" + field))
+                if rate is not None and 0 <= rate <= 1:
+                    return True
+            return False
+
+        s = [observed(side, ("service_points_won", "first_serve_win", "second_serve_win"))
+             for side in ("p1", "p2")]
+        r = [observed(side, ("return_points_won", "break_points_won"))
+             for side in ("p1", "p2")]
+        bp = [observed(side, ("break_points_won", "break_points_saved"))
+              for side in ("p1", "p2")]
+        rank = (num(match.get("player1_rank")), num(match.get("player2_rank")))
+        for key in ("all", month, "tour:" + tour, month + "|tour:" + tour):
+            counter = groups[key]
+            counter["completed_matches"] += 1
+            counter["both_service_rates"] += int(all(s))
+            counter["both_return_rates"] += int(all(r))
+            counter["both_service_return_rates"] += int(all(s) and all(r))
+            counter["both_break_point_rates"] += int(all(bp))
+            counter["both_rank_values"] += int(all(v is not None and v > 0 for v in rank))
+    return {"scope": "CURRENT_CDB_POST_MATCH_FIELD_AVAILABILITY_NOT_PIT_INFERENCE",
+            "groups": {k: dict(v) for k, v in sorted(groups.items())}}
+
+
+def paired_complete_day_comparison(baseline_days, alternative_days):
+    """Strict same betting-day capacity, all outcomes settled in BOTH arms."""
+    if len(baseline_days) != len(alternative_days):
+        raise ValueError("daily comparison not aligned")
+    complete = []
+    for (_, a), (_, b) in zip(baseline_days, alternative_days):
+        if len(a) != len(b):
+            raise ValueError("daily candidate capacity differs")
+        if not a or any(type(r["correct"]) is not bool for r in a + b):
+            continue
+        complete.append((len(a), sum(r["correct"] for r in a),
+                         sum(r["correct"] for r in b)))
+    if not complete:
+        return {"complete_days": 0, "paired_capacity": 0, "status": "NO_FULLY_SETTLED_DAYS"}
+    n = sum(x[0] for x in complete)
+    original = sum(x[1] for x in complete) / n
+    alternate = sum(x[2] for x in complete) / n
+    return {"complete_days": len(complete), "paired_capacity": n,
+            "baseline_accuracy": original, "alternative_accuracy": alternate,
+            "difference_percentage_points": 100 * (alternate - original),
+            "status": "DESCRIPTIVE_NOT_CAUSAL_OR_DEPLOYMENT_READY"}
 
 
 def eligible(record, section):
@@ -328,6 +402,7 @@ def analyze(snapshots, matches):
 
     variants = ("baseline_assignment", "confidence_first", "quality_first")
     section_results = defaultdict(lambda: defaultdict(list))
+    per_day_methods = defaultdict(lambda: defaultdict(list))
     changes = Counter()
     for day, rows in rows_by_day.items():
         for model in sorted({r["model"] for r in rows}):
@@ -352,6 +427,7 @@ def analyze(snapshots, matches):
                 group = f"{model}|{section}"
                 for name, chosen in methods.items():
                     section_results[group][name].extend(chosen)
+                    per_day_methods[group][name].append((day, chosen))
                 for name in variants[1:]:
                     changes[group + "|" + name] += len({r["event"] for r in baseline} ^
                                                         {r["event"] for r in methods[name]}) // 2
@@ -361,6 +437,12 @@ def analyze(snapshots, matches):
         baseline = entry["baseline_assignment"]
         entry["changed_selections"] = {
             name: changes[key + "|" + name] for name in variants[1:]
+        }
+        entry["paired_complete_day_replay"] = {
+            name: paired_complete_day_comparison(
+                per_day_methods[key]["baseline_assignment"],
+                per_day_methods[key][name],
+            ) for name in variants[1:]
         }
         entry["comparison_readiness"] = (
             "DESCRIPTIVE_ONLY" if baseline["settled"] >= 100 and
@@ -382,6 +464,8 @@ def analyze(snapshots, matches):
             "Stored assignment is not public issuance; results are replay of frozen candidate decisions.",
             "Unmatched or unsettled events are excluded from accuracy, never inferred as wins/losses.",
             "The available snapshot cannot establish serve/return availability or ranking timestamps.",
+            "Current canonical 2026 stat coverage is post-match storage only; not a point-in-time feature audit.",
+            "Paired full-day comparisons are descriptive only; unequal outcome coverage is not evidence of uplift.",
             "Distinct frozen model versions never share a quality denominator.",
             "One earliest generation per betting day avoids repeated scoring of daily refreshes.",
             "Quality-first is predeclared, uses no outcomes or EV, and preserves baseline section capacity.",
@@ -453,8 +537,10 @@ def main():
             raise ValueError("canonical year differs from history manifest SHA256")
     columns = ["match_id", "player1_id", "player2_id", "winner_id", "status",
                "scheduled_at", "tour", "tournament_level", "provider_context_json"]
+    columns.extend(("stats_json", "player1_rank", "player2_rank"))
     matches = pd.read_parquet(args.canonical, columns=columns).to_dict("records")
     report = analyze(load_snapshots(args.snapshots), matches)
+    report["canonical_cdb_field_coverage"] = historical_cdb_coverage(matches)
     report["evidence"] = evidence
     report["github_source_sha"] = os.getenv("GITHUB_SHA")
     args.out.parent.mkdir(parents=True, exist_ok=True)
