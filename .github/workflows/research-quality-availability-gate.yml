@@ -1,0 +1,83 @@
+name: BlinQ historical quality availability gate — read-only
+on:
+  push:
+    branches: [research/quality-availability-gate-20261103, main]
+    paths:
+      - scripts/research/quality_availability_gate_audit.py
+      - tests/test_quality_availability_gate_audit.py
+      - .github/workflows/research-quality-availability-gate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-research-quality-availability-gate
+  cancel-in-progress: false
+
+jobs:
+  older-matches:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pytest
+      - name: Verify isolation and exact aggregate regression tests
+        run: python -m pytest tests/test_quality_availability_gate_audit.py -q
+      - name: Download existing historical annual audit only, with before-and-after pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN}"
+          mkdir -p .cache/tbt/availability-gate
+          path="repos/$TBT_DATA_REPOSITORY/contents/audit/quality-walk-forward-latest.json?ref=main"
+          gh api "$path" --jq '.sha' > .cache/tbt/availability-gate/source-before.txt
+          gh api "$path" --jq '.content' | base64 --decode > .cache/tbt/availability-gate/annual-audit.json
+          gh api "$path" --jq '.sha' > .cache/tbt/availability-gate/source-after.txt
+          cmp .cache/tbt/availability-gate/source-before.txt .cache/tbt/availability-gate/source-after.txt
+          test -s .cache/tbt/availability-gate/annual-audit.json
+      - name: Evaluate historical quality gate from exact already-fitted annual scores
+        run: |
+          python scripts/research/quality_availability_gate_audit.py \
+            --source .cache/tbt/availability-gate/annual-audit.json \
+            --output .cache/tbt/availability-gate/report.json
+      - name: Report limitations, no model change
+        if: success()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          r=json.loads(Path('.cache/tbt/availability-gate/report.json').read_text())
+          lines=[
+             '### Historical matched quality-availability rule (exploratory only)',
+             f"Audit cohort = {r['cohort']['all_observations']} matches across 2023–2026",
+             f"Quality data known for both = {r['cohort']['stats_known_both']}",
+             f"Quality data not known for both = {r['cohort']['stats_not_known_both']}",
+          ]
+          for k,v in r['arms'].items():
+              lines.append(f"- {k}: accuracy={v['accuracy']:.6f}; Brier={v['brier']:.6f}; log-loss={v['log_loss']:.6f}; n={v['n']}")
+          lines.extend([
+              'NO independent gate-rule holdout: rule chosen after examining the complete cohort.',
+              'No per-year conditional accuracy in source; no claim of annual stability.',
+              'No inference retraining, CDB change, production release, EV/ROI/CLV optimization or provider requests.',
+          ])
+          print('\n'.join(lines))
+          Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('\n'.join(lines)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blinq-historical-quality-gate-${{ github.run_id }}
+          path: .cache/tbt/availability-gate/report.json
+          if-no-files-found: warn
+          retention-days: 21
