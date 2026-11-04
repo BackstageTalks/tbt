@@ -90,7 +90,7 @@ def test_hourly_workflow_rechecks_budget_and_keeps_quota_and_writer_guards():
     assert "remaining != max(0, 14500-spent)" in delayed
     assert "reset.astimezone(timezone.utc) != expected_reset" in delayed
     assert "limit = 3000 if new_day_start else (14500 if final_topup else caps[stage_hour])" in delayed
-    assert "min(3000, limit-spent, remaining, history_remaining)" in delayed
+    assert "min(5000, limit-spent, remaining, history_remaining)" in delayed
     assert "if proposed < 1:" in delayed
     assert '"hourly_autofill": "true"' in delayed
     # Lock acquisition remains with the existing governed data.yml pipeline.
