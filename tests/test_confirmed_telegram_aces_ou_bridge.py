@@ -289,7 +289,8 @@ def test_entire_20261102_confirmed_aces_reissue_grades_only_played_verified_bets
 
 def test_regular_confirmed_daily_aces_ou_receipt_bridges_exact_contract():
     """Normal 06:20 daily Telegram picks must not stay ungradable."""
-    feed, reissue_state, statuses = fixture()
+    match, reissue_state, statuses = fixture()
+    feed = {"ace_picks": [match], "results": []}
     confirmed = deepcopy(next(iter(reissue_state["reposts"].values())))
     confirmed.pop("supersedes_daily")
     state = {"schema": 1, "attempts": {"2026-11-02:daily:0620": confirmed},
@@ -307,7 +308,8 @@ def test_regular_confirmed_daily_aces_ou_receipt_bridges_exact_contract():
 
 
 def test_superseding_aces_reissue_does_not_grade_original_daily_line():
-    feed, state, _ = fixture()
+    match, state, _ = fixture()
+    feed = {"ace_picks": [match], "results": []}
     old = deepcopy(next(iter(state["reposts"].values())))
     old["sent_at"] = "2026-11-02T05:37:35+00:00"
     old.pop("supersedes_daily")
@@ -326,7 +328,8 @@ def test_superseding_aces_reissue_does_not_grade_original_daily_line():
 
 
 def test_unconfirmed_daily_aces_receipt_never_creates_published_contract():
-    feed, state, _ = fixture()
+    match, state, _ = fixture()
+    feed = {"ace_picks": [match], "results": []}
     old = deepcopy(next(iter(state["reposts"].values())))
     old.pop("supersedes_daily")
     old["message_ids"] = []
