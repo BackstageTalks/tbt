@@ -1,7 +1,7 @@
 name: BlinQ historical quality availability gate — read-only
 on:
   push:
-    branches: [research/quality-availability-gate-20261103]
+    branches: [research/quality-availability-gate-20261103, main]
     paths:
       - scripts/research/quality_availability_gate_audit.py
       - tests/test_quality_availability_gate_audit.py
