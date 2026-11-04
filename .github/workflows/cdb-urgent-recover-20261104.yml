@@ -38,7 +38,7 @@ jobs:
           from release_store import ReleaseStore
           from repair_history_bundle_integrity import repair_bundle_manifest
           from repair_missing_history_manifest import _partition_meta
-          from audit_history_data import audit_partition
+          from audit_history_data import audit_partition, _duplicate_details
           from tbt.data.history_snapshot import write_manifest
           from cdb_global_writer_lock import verify
 
@@ -58,10 +58,13 @@ jobs:
               j = json.loads((root/name).read_text())
               if j.get("created") != [] or not re.fullmatch(r"[0-9a-f]{64}", str(j.get("target_bundle_sha256",""))):
                   raise SystemExit("Unrecognized transaction journal: manual review required")
-          name = "history-2022.parquet"
-          trusted = "3062e6c58ef779791326b26b2ba1634c4f2c487493c5f7af4dbbfb1cc6fafe84"
-          if inventory.get(name, {}).get("digest") != "sha256:" + trusted:
-              raise SystemExit("Unrecognized 2022 partition: no repair")
+          trusted = {
+              "history-2022.parquet": "3062e6c58ef779791326b26b2ba1634c4f2c487493c5f7af4dbbfb1cc6fafe84",
+              "history-2026.parquet": "8198d6f5e2c1938bdbda11e1216d1cf828ee38ea0e2ce392dd1142a62bb492a3",
+          }
+          for asset, sha in trusted.items():
+              if inventory.get(asset, {}).get("digest") != "sha256:" + sha:
+                  raise SystemExit("Unrecognized changed partition: " + asset)
           store._download_asset("history_manifest.json")
           store._download_asset(store.BUNDLE_MANIFEST)
           manifest_path = root/"history_manifest.json"
@@ -72,12 +75,13 @@ jobs:
               raise SystemExit("Checksum inventory not independently verified")
           old = json.loads(manifest_path.read_text())
           years = old.get("years")
-          if not isinstance(years, dict) or "2022" not in years:
-              raise SystemExit("Missing authoritative 2022 year")
+          if not isinstance(years, dict) or not {"2022","2026"}.issubset(years):
+              raise SystemExit("Missing authoritative 2022 or 2026 year")
           bundle = json.loads(bundle_path.read_text()).get("files")
           if not isinstance(bundle, dict):
               raise SystemExit("Invalid existing checksum inventory")
           expected = set()
+          year_mismatches = []
           for year, meta in years.items():
               if not isinstance(meta, dict):
                   raise SystemExit("Invalid year metadata")
@@ -85,33 +89,49 @@ jobs:
               if not re.fullmatch(r"history-\d{4}\.parquet",asset) or asset not in inventory:
                   raise SystemExit("Missing or invalid history asset "+asset)
               expected.add(asset)
-              if asset != name and (inventory[asset].get("digest") != "sha256:"+str(meta.get("sha256","")) or int(inventory[asset].get("size") or -1) != int(meta.get("bytes") or -1)):
-                  raise SystemExit("Unrelated year mismatch: "+asset)
+              if inventory[asset].get("digest") != "sha256:"+str(meta.get("sha256","")) or int(inventory[asset].get("size") or -1) != int(meta.get("bytes") or -1):
+                  year_mismatches.append(asset)
+          if set(year_mismatches) != set(trusted):
+              raise SystemExit("Unexpected year mismatches: " + ",".join(sorted(year_mismatches)))
           actual = {n for n in inventory if re.fullmatch(r"history-\d{4}\.parquet", n)}
           if actual != expected:
               raise SystemExit("Missing or extra history years")
+          bundle_mismatches = []
           for asset, meta in bundle.items():
               if not isinstance(meta, dict) or asset not in inventory:
                   raise SystemExit("Unrelated checksum inventory missing asset: "+asset)
-              if asset != name and (inventory[asset].get("digest") != "sha256:"+str(meta.get("sha256","")) or int(inventory[asset].get("size") or -1) != int(meta.get("bytes") or -1)):
-                  raise SystemExit("Unrelated checksum mismatch: "+asset)
-          store._download_asset(name)
-          file_path = root/name
-          if store._sha256(file_path) != trusted or file_path.stat().st_size != int(inventory[name]["size"]):
-              raise SystemExit("Actual 2022 bytes failed independent SHA/size")
-          summary, issues, _ = audit_partition(file_path)
-          if summary.get("fatal") or issues:
-              raise SystemExit("2022 partition identity/schema audit failed")
-          meta = _partition_meta(file_path, 2022)
-          prior = years["2022"]
-          if type(prior.get("rows")) is not int or meta["rows"] < prior["rows"]:
-              raise SystemExit("2022 row regression: no repair")
+              if inventory[asset].get("digest") != "sha256:"+str(meta.get("sha256","")) or int(inventory[asset].get("size") or -1) != int(meta.get("bytes") or -1):
+                  bundle_mismatches.append(asset)
+          if set(bundle_mismatches) != set(trusted):
+              raise SystemExit("Unexpected checksum mismatches: " + ",".join(sorted(bundle_mismatches)))
+          verified_rows = {}
+          identities = []
+          # Both changed partitions must pass full row validity and identity audits.
+          for name, sha in trusted.items():
+              store._download_asset(name)
+              file_path = root/name
+              if store._sha256(file_path) != sha or file_path.stat().st_size != int(inventory[name]["size"]):
+                  raise SystemExit("Actual bytes failed independent SHA/size: "+name)
+              summary, issues, partition_identities = audit_partition(file_path)
+              if summary.get("fatal") or issues:
+                  raise SystemExit("Partition identity/schema audit failed: "+name)
+              identities.extend(partition_identities)
+              year = int(name.split("-")[1].split(".")[0])
+              meta = _partition_meta(file_path, year)
+              prior = years[str(year)]
+              if type(prior.get("rows")) is not int or meta["rows"] < prior["rows"]:
+                  raise SystemExit("Year row regression: "+name)
+              if meta["history_start"] > str(prior.get("history_start", meta["history_start"])) or meta["history_end"] < str(prior.get("history_end", meta["history_end"])):
+                  raise SystemExit("Year coverage regression: "+name)
+              years[str(year)] = {**prior, **{k:meta[k] for k in ("rows","history_start","history_end","sha256","bytes")}}
+              verified_rows[str(year)] = {"before":prior["rows"],"after":meta["rows"],"sha256":sha}
+          if _duplicate_details(identities, "match_id", "duplicate_match_id") or _duplicate_details(identities, "provider_event_id", "duplicate_provider_event_id"):
+              raise SystemExit("Duplicate identity in changed partitions")
           prior_path = root/"pre-repair-history_manifest.json"
           prior_path.write_bytes(manifest_path.read_bytes())
-          years["2022"] = {**prior, **{k:meta[k] for k in ("rows","history_start","history_end","sha256","bytes")}}
           old["years"] = years
           write_manifest(root, old)
-          (root/"preflight.json").write_text(json.dumps({"status":"validated","year_count":len(years),"2022_sha256":trusted,"previous_2022_rows":prior["rows"],"verified_2022_rows":meta["rows"],"journal_count":len(journals)},indent=2))
+          (root/"preflight.json").write_text(json.dumps({"status":"validated","year_count":len(years),"changed_years":verified_rows,"journal_count":len(journals)},indent=2))
           swap = None
           bundle_published = False
           try:
@@ -137,7 +157,7 @@ jobs:
                   raise SystemExit("Unexpected journal recovery result")
           # Drop checksum references to old rollback aliases and retired journal.
           repair_bundle_manifest(store)
-          print("CDB_METADATA_REPAIRED_AND_VERIFIED",meta["rows"],flush=True)
+          print("CDB_METADATA_REPAIRED_AND_VERIFIED",verified_rows,flush=True)
           PY
       - name: Independent strict full CDB readback before any paid API dispatch
         run: |
