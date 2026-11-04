@@ -29,72 +29,116 @@ jobs:
           set -euo pipefail
           test -n "$GH_TOKEN"
           python scripts/cdb_global_writer_lock.py acquire --wait-seconds 900
-      - name: Validate complete authoritative history inventory before metadata repair
+      - name: Repair only independently verified 2022 release metadata under canonical writer lock
         run: |
           set -euo pipefail
           python - <<'PY'
-          import json, re
+          import json, re, uuid
           from pathlib import Path
           from release_store import ReleaseStore
-          from cdb_global_writer_lock import verify
+          from repair_history_bundle_integrity import repair_bundle_manifest
+          from repair_missing_history_manifest import _partition_meta
           from audit_history_data import audit_partition
+          from tbt.data.history_snapshot import write_manifest
+          from cdb_global_writer_lock import verify
+
           verify("BackstageTalks/tbt-data", Path(".cdb-global-writer-lock.json"))
           root = Path(".cache/tbt/emergency-integrity-20261104")
           root.mkdir(parents=True, exist_ok=True)
           store = ReleaseStore("BackstageTalks/tbt-data", "tbt-data-v1", root)
           inventory = store._release_asset_inventory()
-          transients = [n for n in inventory if n.startswith(("blinq-rollback-", "blinq-candidate-"))]
+          rollback = [n for n in inventory if n.startswith(("blinq-rollback-", "blinq-candidate-"))]
           journals = [n for n in inventory if re.fullmatch(r"blinq-txn-[0-9a-f]{32}\.json", n)]
-          if transients or len(journals) > 1:
-              raise SystemExit(f"Unresolved CDB transaction assets: {transients}, journals={journals}")
+          if rollback or len(journals) > 1:
+              raise SystemExit(f"Unresolved CDB transaction assets: {rollback}, journals={journals}")
           for name in journals:
               store._download_asset(name)
-              p = root / name
-              if not store._verified_asset(inventory, name, p):
-                  raise SystemExit("Journal digest mismatch: stop without mutation")
-              j = json.loads(p.read_text())
+              if not store._verified_asset(inventory, name, root/name):
+                  raise SystemExit("Journal digest mismatch")
+              j = json.loads((root/name).read_text())
               if j.get("created") != [] or not re.fullmatch(r"[0-9a-f]{64}", str(j.get("target_bundle_sha256",""))):
-                  raise SystemExit("Transaction has created assets or invalid target: manual review required")
+                  raise SystemExit("Unrecognized transaction journal: manual review required")
+          name = "history-2022.parquet"
+          trusted = "3062e6c58ef779791326b26b2ba1634c4f2c487493c5f7af4dbbfb1cc6fafe84"
+          if inventory.get(name, {}).get("digest") != "sha256:" + trusted:
+              raise SystemExit("Unrecognized 2022 partition: no repair")
           store._download_asset("history_manifest.json")
-          manifest_path = root / "history_manifest.json"
+          store._download_asset(store.BUNDLE_MANIFEST)
+          manifest_path = root/"history_manifest.json"
+          bundle_path = root/store.BUNDLE_MANIFEST
           if not store._verified_asset(inventory, "history_manifest.json", manifest_path):
-              raise SystemExit("Authoritative history manifest digest mismatch")
-          years = json.loads(manifest_path.read_text()).get("years")
-          if not isinstance(years, dict) or not years or "2022" not in years:
-              raise SystemExit("Missing authoritative history years")
-          expected_names = set()
+              raise SystemExit("Manifest not independently verified")
+          if not store._verified_asset(inventory, store.BUNDLE_MANIFEST, bundle_path):
+              raise SystemExit("Checksum inventory not independently verified")
+          old = json.loads(manifest_path.read_text())
+          years = old.get("years")
+          if not isinstance(years, dict) or "2022" not in years:
+              raise SystemExit("Missing authoritative 2022 year")
+          bundle = json.loads(bundle_path.read_text()).get("files")
+          if not isinstance(bundle, dict):
+              raise SystemExit("Invalid existing checksum inventory")
+          expected = set()
           for year, meta in years.items():
-              name = str(meta.get("asset") or f"history-{int(year):04d}.parquet")
-              if not re.fullmatch(r"history-\d{4}\.parquet",name) or name not in inventory:
-                  raise SystemExit("Invalid or missing history asset "+name)
-              expected_names.add(name)
-              digest = inventory[name].get("digest")
-              if digest != "sha256:" + str(meta.get("sha256","")):
-                  raise SystemExit("History manifest/asset digest disagreement "+name)
-              if int(inventory[name].get("size") or -1) != int(meta.get("bytes") or -1):
-                  raise SystemExit("History manifest/asset bytes disagreement "+name)
-          actual_names = {n for n in inventory if re.fullmatch(r"history-\d{4}\.parquet",n)}
-          if actual_names != expected_names:
-              raise SystemExit("History manifest partitions do not match release inventory")
-          known_2022 = "3062e6c58ef779791326b26b2ba1634c4f2c487493c5f7af4dbbfb1cc6fafe84"
-          if inventory["history-2022.parquet"].get("digest") != "sha256:"+known_2022:
-              raise SystemExit("2022 differs from last independently confirmed digest")
-          store._download_asset("history-2022.parquet")
-          p = root / "history-2022.parquet"
-          if store._sha256(p) != known_2022:
-              raise SystemExit("2022 downloaded bytes failed independently verified SHA")
-          summary, issues, _ = audit_partition(p)
+              if not isinstance(meta, dict):
+                  raise SystemExit("Invalid year metadata")
+              asset = str(meta.get("asset") or f"history-{int(year):04d}.parquet")
+              if not re.fullmatch(r"history-\d{4}\.parquet",asset) or asset not in inventory:
+                  raise SystemExit("Missing or invalid history asset "+asset)
+              expected.add(asset)
+              if asset != name and (inventory[asset].get("digest") != "sha256:"+str(meta.get("sha256","")) or int(inventory[asset].get("size") or -1) != int(meta.get("bytes") or -1)):
+                  raise SystemExit("Unrelated year mismatch: "+asset)
+          actual = {n for n in inventory if re.fullmatch(r"history-\d{4}\.parquet", n)}
+          if actual != expected:
+              raise SystemExit("Missing or extra history years")
+          for asset, meta in bundle.items():
+              if not isinstance(meta, dict) or asset not in inventory:
+                  raise SystemExit("Unrelated checksum inventory missing asset: "+asset)
+              if asset != name and (inventory[asset].get("digest") != "sha256:"+str(meta.get("sha256","")) or int(inventory[asset].get("size") or -1) != int(meta.get("bytes") or -1)):
+                  raise SystemExit("Unrelated checksum mismatch: "+asset)
+          store._download_asset(name)
+          file_path = root/name
+          if store._sha256(file_path) != trusted or file_path.stat().st_size != int(inventory[name]["size"]):
+              raise SystemExit("Actual 2022 bytes failed independent SHA/size")
+          summary, issues, _ = audit_partition(file_path)
           if summary.get("fatal") or issues:
               raise SystemExit("2022 partition identity/schema audit failed")
-          (root/"preflight.json").write_text(json.dumps({"status":"verified","year_count":len(years),"year_2022_sha256":known_2022,"journal_count":len(journals)},indent=2))
-          print("VERIFIED_HISTORY_PREFLIGHT",len(years),"2022 sha256",known_2022,flush=True)
+          meta = _partition_meta(file_path, 2022)
+          prior = years["2022"]
+          if type(prior.get("rows")) is not int or meta["rows"] < prior["rows"]:
+              raise SystemExit("2022 row regression: no repair")
+          prior_path = root/"pre-repair-history_manifest.json"
+          prior_path.write_bytes(manifest_path.read_bytes())
+          years["2022"] = {**prior, **{k:meta[k] for k in ("rows","history_start","history_end","sha256","bytes")}}
+          old["years"] = years
+          write_manifest(root, old)
+          (root/"preflight.json").write_text(json.dumps({"status":"validated","year_count":len(years),"2022_sha256":trusted,"previous_2022_rows":prior["rows"],"verified_2022_rows":meta["rows"],"journal_count":len(journals)},indent=2))
+          swap = None
+          bundle_published = False
+          try:
+              swap = store._guarded_publish(manifest_path, uuid.uuid4().hex)
+              repair_bundle_manifest(store)
+              bundle_published = True
+              # A fresh independent download must verify all current history assets.
+              from tempfile import TemporaryDirectory
+              with TemporaryDirectory() as temp:
+                  reader = ReleaseStore(store.repository, store.tag, Path(temp))
+                  reader.download(require_bundle_manifest=True)
+          except Exception:
+              # A committed checksum bundle and its published manifest must stay paired.
+              if swap is not None and not bundle_published:
+                  store._rollback_guarded([swap])
+              raise
+          if swap is not None:
+              store._cleanup_guarded([swap])
+          # Only a verified committed generation can retire an old empty journal.
+          if journals:
+              recovery = store.recover_interrupted_swaps()
+              if recovery.get("pending_transactions") != 1:
+                  raise SystemExit("Unexpected journal recovery result")
+          # Drop checksum references to old rollback aliases and retired journal.
+          repair_bundle_manifest(store)
+          print("CDB_METADATA_REPAIRED_AND_VERIFIED",meta["rows"],flush=True)
           PY
-      - name: Repair metadata only via existing guarded release-store transaction
-        run: |
-          set -euo pipefail
-          python scripts/repair_history_bundle_integrity.py --data-repository BackstageTalks/tbt-data
-          python scripts/ensure_cdb_history_release.py --data-repository BackstageTalks/tbt-data
-          python scripts/repair_history_bundle_integrity.py --data-repository BackstageTalks/tbt-data
       - name: Independent strict full CDB readback before any paid API dispatch
         run: |
           set -euo pipefail
