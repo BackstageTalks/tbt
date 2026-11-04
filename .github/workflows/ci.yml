@@ -10,6 +10,8 @@ on:
       - '.github/hourly-api-gapfill-smoke.json'
       # Research-only request: avoid deploying unchanged application or feeds.
       - '.github/tennisapi-contract-probe-request.json'
+      # One-time verified Results recovery uses its own guarded workflow.
+      - '.github/telegram-20261103-recover-request.json'
       - '.github/elo-weekly-trigger.json'
       # Read-only CDB audit request is handled by its own workflow.
       # Keep write-capable CDB request triggers visible to full CI.

@@ -405,7 +405,30 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         "identity_validated_for_cdb": False,
     }
 
-    read("event_statistics", f"/api/tennis/event/{event_id}/statistics")
+    statistics_payload = read("event_statistics", f"/api/tennis/event/{event_id}/statistics")
+    # The exact provider event witness binds both player IDs to whole-match
+    # statistics. Never derive a pick's ACES result from its match winner.
+    if (report["source_event_identity"]["event_id_matches_request"]
+            and report["source_event_identity"]["singles_structure"]
+            and report["source_event_identity"]["home_id"]
+            and report["source_event_identity"]["away_id"]
+            and report["source_event_identity"]["home_id"] != report["source_event_identity"]["away_id"]
+            and report["source_event_identity"]["status"] == "finished"
+            and isinstance(statistics_payload, dict)
+            and statistics_payload.get("statistics")):
+        from tbt.providers.statistics import parse_statistics
+        verified = parse_statistics(statistics_payload, home_is_player1=True)
+        home_aces, away_aces = verified.get("p1_aces"), verified.get("p2_aces")
+        if (home_aces is not None and away_aces is not None
+                and float(home_aces).is_integer() and float(away_aces).is_integer()):
+            report["source_native_aces_evidence"] = {
+                "event_id": str(event_id),
+                "home_id": report["source_event_identity"]["home_id"],
+                "away_id": report["source_event_identity"]["away_id"],
+                "home_aces": int(home_aces), "away_aces": int(away_aces),
+                "statistics_payload_sha256": report["observations"]["event_statistics"]["payload_sha256"],
+                "provider_checked_utc": datetime.now(timezone.utc).isoformat(),
+            }
     read("point_by_point", f"/api/tennis/event/{event_id}/point-by-point")
     read("monthly_categories", "/api/tennis/calendar/11/2026/categories",
          params={"days": "1,2,3,4,5"})
