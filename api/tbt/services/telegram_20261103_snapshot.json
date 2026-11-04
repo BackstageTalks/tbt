@@ -1,0 +1,168 @@
+{
+  "schema": 1,
+  "kind": "historical_verified_match_status_snapshot",
+  "betting_day": "2026-11-03",
+  "source_repo": "BackstageTalks/tbt",
+  "source_run_id": 41775101814,
+  "source_job_id": 126393512626,
+  "source_updated_at": "2026-11-04T04:45:29.669788+00:00",
+  "source_statuses_total": 47,
+  "source_log_url": "https://github.com/BackstageTalks/tbt/actions/runs/41775101814",
+  "statuses": {
+    "17428202": {
+      "status": "win",
+      "checked_at": "2026-11-03T19:30:43.368809+00:00",
+      "winner_id": "385485",
+      "provider_status": "finished ended",
+      "provider_home_id": "385485",
+      "provider_away_id": "95935",
+      "projection_stats_p1_id": "385485",
+      "projection_stats_p2_id": "95935",
+      "projection_stats": {
+        "total_sets": 2,
+        "total_games": 19,
+        "p1_aces": 6,
+        "p2_aces": 5,
+        "p1_double_faults": 0,
+        "p2_double_faults": 1
+      },
+      "projection_stats_checked_at": "2026-11-03T19:30:49.210031+00:00",
+      "first_set_outcome": "win",
+      "first_set_score": "6:3"
+    },
+    "17446377": {
+      "status": "win",
+      "checked_at": "2026-11-03T12:15:30.241279+00:00",
+      "winner_id": "112747",
+      "provider_status": "finished ended",
+      "provider_home_id": "411652",
+      "provider_away_id": "112747",
+      "projection_stats_p1_id": "411652",
+      "projection_stats_p2_id": "112747",
+      "projection_stats": {
+        "total_sets": 2,
+        "total_games": 17,
+        "p1_aces": 1,
+        "p2_aces": 6,
+        "p1_double_faults": 2,
+        "p2_double_faults": 0
+      },
+      "projection_stats_checked_at": "2026-11-03T12:15:37.416340+00:00",
+      "first_set_outcome": "win",
+      "first_set_score": "6:1"
+    },
+    "17452315": {
+      "status": "void",
+      "checked_at": "2026-11-03T11:15:33.942814+00:00",
+      "winner_id": "",
+      "provider_status": "canceled canceled",
+      "provider_home_id": "221410",
+      "provider_away_id": "327924"
+    },
+    "17453204": {
+      "status": "win",
+      "checked_at": "2026-11-03T11:15:33.942814+00:00",
+      "winner_id": "289106",
+      "provider_status": "finished ended",
+      "provider_home_id": "289106",
+      "provider_away_id": "204330",
+      "projection_stats_p1_id": "289106",
+      "projection_stats_p2_id": "204330",
+      "projection_stats": {
+        "total_sets": 2,
+        "total_games": 13,
+        "p1_aces": 6,
+        "p2_aces": 0,
+        "p1_double_faults": 2,
+        "p2_double_faults": 4
+      },
+      "projection_stats_checked_at": "2026-11-03T11:15:40.456745+00:00",
+      "first_set_outcome": "win",
+      "first_set_score": "6:1"
+    },
+    "17475617": {
+      "status": "win",
+      "checked_at": "2026-11-03T18:31:00.186668+00:00",
+      "winner_id": "289146",
+      "provider_status": "finished ended",
+      "provider_home_id": "289146",
+      "provider_away_id": "286492",
+      "projection_stats_p1_id": "289146",
+      "projection_stats_p2_id": "286492",
+      "projection_stats": {
+        "total_sets": 2,
+        "total_games": 23,
+        "p1_aces": 11,
+        "p2_aces": 3,
+        "p1_double_faults": 2,
+        "p2_double_faults": 6
+      },
+      "projection_stats_checked_at": "2026-11-03T18:31:06.907812+00:00",
+      "first_set_outcome": "win",
+      "first_set_score": "7:6"
+    },
+    "17475619": {
+      "status": "win",
+      "checked_at": "2026-11-03T13:45:31.500902+00:00",
+      "winner_id": "309071",
+      "provider_status": "finished ended",
+      "provider_home_id": "309071",
+      "provider_away_id": "135778",
+      "projection_stats_p1_id": "309071",
+      "projection_stats_p2_id": "135778",
+      "projection_stats": {
+        "total_sets": 3,
+        "total_games": 26,
+        "p1_aces": 8,
+        "p2_aces": 1,
+        "p1_double_faults": 1,
+        "p2_double_faults": 0
+      },
+      "projection_stats_checked_at": "2026-11-03T13:45:39.483478+00:00",
+      "first_set_outcome": "loss",
+      "first_set_score": "3:6"
+    },
+    "17477378": {
+      "status": "loss",
+      "checked_at": "2026-11-03T21:30:53.168018+00:00",
+      "winner_id": "371456",
+      "provider_status": "finished ended",
+      "provider_home_id": "371456",
+      "provider_away_id": "215802",
+      "projection_stats_p1_id": "371456",
+      "projection_stats_p2_id": "215802",
+      "projection_stats": {
+        "total_sets": 3,
+        "total_games": 31,
+        "p1_aces": 1,
+        "p2_aces": 8,
+        "p1_double_faults": 0,
+        "p2_double_faults": 6
+      },
+      "projection_stats_checked_at": "2026-11-03T21:31:02.259656+00:00",
+      "first_set_outcome": "loss",
+      "first_set_score": "2:6"
+    },
+    "17479726": {
+      "status": "win",
+      "checked_at": "2026-11-03T23:00:54.675285+00:00",
+      "winner_id": "339453",
+      "provider_status": "finished ended",
+      "provider_home_id": "16311",
+      "provider_away_id": "339453",
+      "projection_stats_p1_id": "16311",
+      "projection_stats_p2_id": "339453",
+      "projection_stats": {
+        "total_sets": 2,
+        "total_games": 16,
+        "p1_aces": 0,
+        "p2_aces": 6,
+        "p1_double_faults": 4,
+        "p2_double_faults": 2
+      },
+      "projection_stats_checked_at": "2026-11-03T23:01:00.413162+00:00",
+      "first_set_outcome": "win",
+      "first_set_score": "6:1"
+    }
+  }
+}
