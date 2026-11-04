@@ -1,7 +1,7 @@
 name: BlinQ frozen probability-depth native selector ablation
 on:
   push:
-    branches: [research/probability-depth-native-replay-20261103]
+    branches: [research/probability-depth-native-replay-20261103, main]
     paths:
       - scripts/research/probability_depth_replay.py
       - tests/test_probability_depth_native_replay.py
