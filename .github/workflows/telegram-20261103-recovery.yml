@@ -1,0 +1,146 @@
+name: One-time verified 2026-11-03 Telegram Results archive and delivery
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/telegram-20261103-recover-request.json
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: blinq-telegram-20261103-one-time-recovery
+  cancel-in-progress: false
+jobs:
+  restore-and-send:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      BLINQ_BASE_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+      BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      PRIVATE_DATA_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Pin one-time explicit recovery request and fresh main
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN" && test -n "$PRIVATE_DATA_TOKEN"
+          jq -e '.schema == 1 and .betting_day == "2026-11-03" and
+            .frozen_telegram_message_ids == [730,731] and
+            .archive_write_authorized == true and
+            .telegram_delivery_authorized == true and
+            .cdb_write_authorized == false and .model_changes_authorized == false and
+            .revision == "source-native-exact-recovery-v1"' .github/telegram-20261103-recover-request.json >/dev/null
+          git fetch origin main --depth=1
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+          # Fail before provider requests if another concurrent job already sent it.
+          gh api repos/BackstageTalks/tbt-data/contents/ops/telegram-bot-state.json \
+            -f ref=telegram-bot-state -H "Authorization: token $PRIVATE_DATA_TOKEN" \
+            --jq .content | base64 -d > /tmp/tg-before.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/tg-before.json'))
+          entry=d['attempts']['2026-11-03:daily:0620']
+          assert entry['status']=='sent' and entry['message_ids']==[730,731]
+          assert len(entry['rows'])==13
+          assert not (d['attempts'].get('results:2026-11-03') or {}).get('status')=='sent'
+          assert {r['channel'] for r in entry['rows']}=={'top','value','aces','free'}
+          assert sum(r['channel']=='aces' for r in entry['rows'])==9
+          print('PRECHECK_ISSUED_3NOV_13_ROWS_AND_NOT_ALREADY_SENT_VERIFIED')
+          PY
+      - name: Run API-Pro bounded read-only dry-run
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body -sS --retry 0 --max-time 110 -X POST \
+            -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN" \
+            "${BLINQ_BASE_URL%/}/api/v1/internal/telegram/recover-20261103?mode=dry-run" \
+            -o /tmp/telegram-nov3-dry-run.json
+          jq -e '.ok == true and .status == "dry_run" and
+            .day == "2026-11-03" and .expected_ace_rows == 9 and
+            .top_value_verified == 3 and .mutation_permitted == false and
+            .net_new_ace_rows >= 0 and .net_new_ace_rows <= 9 and
+            .provider_requests <= 12' /tmp/telegram-nov3-dry-run.json >/dev/null
+          echo 'HISTORIC_3NOV_PREWRITE_DRY_RUN_VERIFIED'
+      - name: Restore verified archive through existing native Results writer
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body -sS --retry 0 --max-time 110 -X POST \
+            -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN" \
+            "${BLINQ_BASE_URL%/}/api/v1/internal/telegram/recover-20261103?mode=commit" \
+            -o /tmp/telegram-nov3-commit.json
+          jq -e '.ok == true and .status == "verified" and
+            .day == "2026-11-03" and .archived_ace_rows == 9 and
+            .top_value_verified == 3 and .mutation_permitted == true and
+            .net_new_ace_rows >= 0 and .net_new_ace_rows <= 9 and
+            .provider_requests <= 12' /tmp/telegram-nov3-commit.json >/dev/null
+          echo 'HISTORIC_3NOV_ARCHIVE_WRITE_AND_READBACK_VERIFIED'
+      - name: Independent exact issued-results read-back (13 receipt references)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body -sS --retry 0 --max-time 30 \
+            -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN" \
+            "${BLINQ_BASE_URL%/}/api/v1/internal/telegram/settled-results?day=2026-11-03" \
+            -o /tmp/telegram-nov3-archive-readback.json
+          python - <<'PY'
+          import json
+          ledger=json.load(open('/tmp/tg-before.json'))['attempts']['2026-11-03:daily:0620']['rows']
+          rows=json.load(open('/tmp/telegram-nov3-archive-readback.json'))['rows']
+          def same(a,b):
+              keys=['event_id','section','market','selection_id','publication_key','market_line','projection_direction']
+              return all(str(a.get(k) or '')==str(b.get(k) or '') for k in keys)
+          matched=[]
+          for sent in ledger:
+              copies=[r for r in rows if same(sent,r)]
+              assert len(copies)==1, ('NO_EXACT_ARCHIVE_ROW',sent.get('event_id'),sent.get('channel'))
+              result=copies[0]['result']
+              assert result['runtime_source']=='match_status_snapshot'
+              assert type(result.get('correct')) is bool or result.get('void') is True
+              matched.append((sent['channel'],result))
+          premium=[r for c,r in matched if c!='free']
+          assert len(premium)==12
+          outcome={
+              'won':sum(r.get('correct') is True for r in premium),
+              'lost':sum(r.get('correct') is False for r in premium),
+              'void':sum(r.get('void') is True for r in premium),
+          }
+          assert outcome=={'won':6,'lost':5,'void':1}, outcome
+          print('HISTORIC_3NOV_EXACT_13_REFERENCE_READBACK',outcome)
+          PY
+      - name: Dispatch only existing idempotent TG ELITE results workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run telegram-results.yml --ref main --repo BackstageTalks/tbt
+          echo '3NOV_TELEGRAM_WORKFLOW_DISPATCHED_WAIT_FOR_RECEIPT'
+      - name: Verify actual TG message ID from private ledger (not HTTP 200)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 45); do
+            gh api repos/BackstageTalks/tbt-data/contents/ops/telegram-bot-state.json \
+              -f ref=telegram-bot-state -H "Authorization: token $PRIVATE_DATA_TOKEN" \
+              --jq .content | base64 -d > /tmp/tg-after.json
+            if python - <<'PY'
+          import json
+          d=json.load(open('/tmp/tg-after.json'))
+          x=d.get('attempts',{}).get('results:2026-11-03') or {}
+          ids=x.get('message_ids') or []
+          if x.get('status')=='sent' and ids and all(type(i) is int and i>0 for i in ids) and x.get('counts')=={'won':6,'lost':5,'void':1,'pending':0}:
+              print('TELEGRAM_RESULTS_3NOV_SENT_CONFIRMED_MESSAGE_IDS='+','.join(map(str,ids)))
+          else:
+              raise SystemExit(1)
+          PY
+            then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo '::error::Actual Telegram receipt missing; do not claim delivery'
+          exit 1
