@@ -589,3 +589,52 @@ def test_implicit_azure_pace_failure_never_writes_daily_budget(monkeypatch):
     with pytest.raises(shared_rate.SharedRateUnavailable):
         shared_budget.reserve("history", now=NOW)
     assert table.version == 0
+
+
+def test_direct_runtime_busy_slot_retries_before_daily_reservation(monkeypatch):
+    from tbt.providers import shared_rate
+    from tbt.services import admin_storage
+
+    table = AtomicFakeTable()
+    attempts = []
+    waits = []
+    monkeypatch.setenv("FUNCTIONS_WORKER_RUNTIME", "python")
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    monkeypatch.setattr(shared_budget.time, "sleep", lambda delay: waits.append(delay))
+
+    def temporarily_busy(**kwargs):
+        attempts.append(table.version)
+        if len(attempts) < 3:
+            raise shared_rate.SharedRateBusy(0.18)
+        return {"pace_schema": 1, "max_rps": 6}
+
+    monkeypatch.setattr(shared_rate, "reserve_pace", temporarily_busy)
+    result = shared_budget.reserve("match", now=NOW)
+    # A busy pace slot must not consume any provider-day budget.
+    assert attempts == [0, 0, 0]
+    assert waits == [0.18, 0.18]
+    assert table.version == 1
+    assert result["global_spent"] == 1
+    assert result["spent"]["match"] == 1
+    assert result["rate_pace"] == {"schema": 1, "max_rps": 6}
+
+
+def test_direct_runtime_persistent_busy_slot_fails_closed_without_daily_spend(monkeypatch):
+    from tbt.providers import shared_rate
+    from tbt.services import admin_storage
+
+    table = AtomicFakeTable()
+    attempts = []
+    monkeypatch.setenv("FUNCTIONS_WORKER_RUNTIME", "python")
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    monkeypatch.setattr(shared_budget.time, "sleep", lambda delay: None)
+
+    def always_busy(**kwargs):
+        attempts.append(table.version)
+        raise shared_rate.SharedRateBusy(0.18)
+
+    monkeypatch.setattr(shared_rate, "reserve_pace", always_busy)
+    with pytest.raises(shared_rate.SharedRateBusy):
+        shared_budget.reserve("match", now=NOW)
+    assert attempts == [0] * 12
+    assert table.version == 0
