@@ -37,7 +37,7 @@ def test_14500_shared_budget_and_guarded_provider_headroom():
 
 
 def test_daytime_from_11_bratislava_and_two_stage_ceilings():
-    match = re.search(r"caps = (\\{[^}]+\\})", HOURLY)
+    match = re.search(r"caps = (\{[^}]+\})", HOURLY)
     assert match is not None
     caps = ast.literal_eval(match.group(1))
     assert set(caps) == set(range(11, 19))
