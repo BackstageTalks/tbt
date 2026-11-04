@@ -7,13 +7,14 @@ event+statistics witness for the missing Halys fixture. Abort on ambiguity.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
+import json
 from typing import Any
 
 from tbt.config import settings
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.providers.shared_budget import reserve as reserve_shared_api_budget
 from tbt.providers.statistics import parse_statistics
-from tbt.services.admin_storage import load_match_status_snapshot
 from tbt.services.results_archive import (
     _identity, load_settled_results_archive, save_settled_results_archive,
     settled_archive_candidates,
@@ -167,11 +168,25 @@ def _candidate_rows(snapshot: dict, event_details: dict[str, dict],
     return candidates
 
 
+def _frozen_status_witness() -> dict:
+    """Load exact provider-verified old-day evidence saved before 06:00 rollover."""
+    proof = json.loads(
+        Path(__file__).with_name("telegram_20261103_snapshot.json").read_text(encoding="utf-8")
+    )
+    expected = {entry[0] for entry in ISSUED_ACES if entry[0] != HALYS}
+    if (proof.get("schema") != 1 or proof.get("betting_day") != DAY
+            or proof.get("kind") != "historical_verified_match_status_snapshot"
+            or proof.get("source_run_id") != 41775101814
+            or proof.get("source_job_id") != 126393512626
+            or proof.get("source_updated_at") != "2026-11-04T04:45:29.669788+00:00"
+            or set(proof.get("statuses") or {}) != expected):
+        raise RuntimeError("Historic source-native snapshot provenance mismatch")
+    return {"statuses": proof["statuses"]}
+
+
 def recover(*, dry_run: bool = True) -> dict:
     """Bounded API-Pro corroboration, protected archive write and independent readback."""
-    snapshot = load_match_status_snapshot() or {}
-    if not isinstance(snapshot.get("statuses"), dict):
-        raise RuntimeError("Match-status archive unavailable")
+    snapshot = _frozen_status_witness()
     # PRECHECK: the 3 already settled TOP/VALUE selections must exist. FREE is
     # a duplicate of the lost TOP pick and does not change premium ROI.
     archive_before = load_settled_results_archive()
