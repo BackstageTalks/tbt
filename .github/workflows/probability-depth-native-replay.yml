@@ -1,0 +1,114 @@
+name: BlinQ frozen probability-depth native selector ablation
+on:
+  push:
+    branches: [research/probability-depth-native-replay-20261103, main]
+    paths:
+      - scripts/research/probability_depth_replay.py
+      - tests/test_probability_depth_native_replay.py
+      - .github/workflows/probability-depth-native-replay.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-probability-depth-readonly
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install read-only test dependencies
+        run: python -m pip install pytest pandas pyarrow
+      - name: Native synthetic selector and PIT gates
+        run: |
+          python -m pytest tests/test_probability_depth_native_replay.py tests/test_selection_reliability_replay.py -q
+      - name: Pin and download historic private release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          work=".cache/tbt/probability-depth-research"
+          mkdir -p "$work"/{pred,history}
+          gh api "repos/$TBT_DATA_REPOSITORY/releases/tags/tbt-predictions-v1" > "$work/pred-before.json"
+          gh api "repos/$TBT_DATA_REPOSITORY/releases/tags/tbt-data-v1" > "$work/history-before.json"
+          gh release download tbt-predictions-v1 --repo "$TBT_DATA_REPOSITORY" \
+            --pattern 'selection_candidates_2026-1*.json.gz' --pattern '_tbt_bundle_manifest.json' \
+            --dir "$work/pred"
+          gh release download tbt-data-v1 --repo "$TBT_DATA_REPOSITORY" \
+            --pattern 'history-2026.parquet' --pattern 'history_manifest.json' \
+            --pattern '_tbt_bundle_manifest.json' --dir "$work/history"
+          gh api "repos/$TBT_DATA_REPOSITORY/releases/tags/tbt-predictions-v1" > "$work/pred-after.json"
+          gh api "repos/$TBT_DATA_REPOSITORY/releases/tags/tbt-data-v1" > "$work/history-after.json"
+      - name: Run original canonical replay with SHA-256 and immutable release checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          work=".cache/tbt/probability-depth-research"
+          python scripts/replay_selection_reliability.py \
+            --snapshots "$work"/pred/selection_candidates_2026-1*.json.gz \
+            --canonical "$work/history/history-2026.parquet" \
+            --prediction-before "$work/pred-before.json" \
+            --prediction-after "$work/pred-after.json" \
+            --history-before "$work/history-before.json" \
+            --history-after "$work/history-after.json" \
+            --out "$work/reference.json"
+      - name: Matched raw vs public calibration and actual native selector counterfactual
+        shell: bash
+        run: |
+          set -euo pipefail
+          work=".cache/tbt/probability-depth-research"
+          python scripts/research/probability_depth_replay.py \
+            --snapshots "$work"/pred/selection_candidates_2026-1*.json.gz \
+            --canonical "$work/history/history-2026.parquet" \
+            --reference "$work/reference.json" \
+            --out "$work/probability-depth-result.json"
+      - name: Publish aggregate denominator and gate summary only
+        if: success()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path('.cache/tbt/probability-depth-research/probability-depth-result.json')
+          result=json.loads(p.read_text())
+          lines=['### Raw versus data-depth-shrunk probabilities — frozen 2026 (read-only)',
+                 'Interpretation: candidate assignments are not proof of public issuance.']
+          for version, m in result['models'].items():
+              r=m['fixed_candidate_raw']; s=m['fixed_candidate_shrunk']
+              v=m['native_selector_replay']
+              lines.extend([
+                  f"#### {version}",
+                  f"Exact settled raw and shrunk: {r['settled']}/{m['candidate_count']}; Brier {r['brier']} vs {s['brier']}; log loss {r['log_loss']} vs {s['log_loss']}",
+                  f"Day-cluster Brier public-minus-raw CI: {m['paired_day_brier']['day_bootstrap_ci95']}",
+                  f"Native-public exact reproduced days={v['exact_reproduced_days']}; mismatches={v['baseline_mismatch_days']}; missing original frozen quotes={v['baseline_missing_quoted_rows']}",
+                  f"Raw section changes only in reproduced days: {v['raw_changes']}",
+                  f"Complete same-capacity day n: {v['fully_settled_same_capacity_n']}",
+              ])
+          lines.append('No change to model, market policies, provider calls, CDB, public feed, odds, or new training.')
+          print('\n'.join(lines))
+          Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('\n'.join(lines)+'\n')
+          PY
+      - name: Persist private aggregate outputs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blinq-probability-depth-ablation-${{ github.run_id }}
+          path: |
+            .cache/tbt/probability-depth-research/probability-depth-result.json
+            .cache/tbt/probability-depth-research/reference.json
+          if-no-files-found: warn
+          retention-days: 14
