@@ -137,9 +137,13 @@ def _candidate_rows(snapshot: dict, event_details: dict[str, dict],
         }
         players = [{"id": p1, "name": n1}, {"id": p2, "name": n2}]
         players[0 if selection == p1 else 1]["name"] = name
+        category = (event.get("tournament") or {}).get("category") or {}
+        tour = {3: "atp", 6: "wta"}.get(category.get("id"))
+        if tour is None:
+            raise ValueError("Unknown source-native tournament category")
         rows.append({
             "event_id": event_id, "scheduled_at": scheduled,
-            "betting_day": DAY, "tour": "atp" if str((event.get("tournament") or {}).get("category", {}).get("id")) == "3" else "",
+            "betting_day": DAY, "tour": tour,
             "player1": players[0], "player2": players[1],
             "selection_id": selection, "betting": {"selection_id": selection},
             "projection": projection, "market_publications": [pub],
@@ -199,11 +203,14 @@ def recover(*, dry_run: bool = True) -> dict:
     now = datetime.now(timezone.utc).isoformat()
     candidates = _candidate_rows(snapshot, details, stats, now)
     before = {}
+    targeted = {_identity(row, row["market_publications"][0]) for row in candidates}
     for row in archive_before:
         for pub in row.get("market_publications") or []:
             key = _identity(row, pub)
+            if key not in targeted:
+                continue
             if key in before:
-                raise RuntimeError("Duplicate existing archive identity")
+                raise RuntimeError("Conflicting duplicate target archive identity")
             before[key] = row
     new_rows = []
     for row in candidates:
