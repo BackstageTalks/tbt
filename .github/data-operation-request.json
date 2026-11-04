@@ -3,18 +3,28 @@
   "mode": "extras",
   "start": "2026-10-15",
   "end": "2026-11-02",
-  "max_requests": 1000,
+  "max_requests": 0,
   "targeted_statistics": false,
   "promote": false,
   "model_changes": false,
-  "cdb_writes_allowed": true,
+  "cdb_writes_allowed": false,
   "source": "tennisapi1",
   "source_contract": "docs/TENNISAPI_PROVIDER_CONTRACT_2026-08-24.md",
   "pr": 1349,
   "production_commit": "7b5fce7f7df8678669278ab4b77a34ca53469194",
   "requested_on": "2026-11-03",
-  "kind": "operator-approved-postmatch-provider-extras-1000-test",
-  "purpose": "Single operator-approved at-most-1000 TennisApi extras test, 2026-10-15..2026-11-02. Keep shared API budget, provider 500 reserve, <=6/s, global CDB lock, strict identity, NULL-only canonical import, CAS and independent exact-value readback. Fail closed on missing quota/release. No model training or promotion.",
+  "kind": "completed-postmatch-provider-extras-1000-test",
+  "purpose": "Completed and independently verified one-shot TennisApi extras test. This request is disabled; new calls require a fresh explicit authorized operation.",
   "attempt": 2,
-  "gate_fix_commit": "39cc090a8ff3bf759dc3a849afe4a62ce4ad9f4a"
+  "gate_fix_commit": "39cc090a8ff3bf759dc3a849afe4a62ce4ad9f4a",
+  "closeout": {
+    "status": "verified",
+    "run_id": 41729330686,
+    "completed_at_utc": "2026-11-03T22:44:10Z",
+    "requests_including_retries": 1000,
+    "processed_matches": 500,
+    "persisted_new_markers": 1000,
+    "independent_readback_status": "VERIFIED",
+    "evidence_url": "https://github.com/BackstageTalks/tbt/actions/runs/41729330686"
+  }
 }
