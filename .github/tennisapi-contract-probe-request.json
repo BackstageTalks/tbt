@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "requested_date": "2026-11-04",
-  "reason": "One-time read-only exact source event identity and player ace statistics check for 2026-11-03 Telegram ELITE results (issue #1354); no CDB/model/Telegram write",
+  "reason": "Read-only, bounded empirical check of 2016 TennisApi1 archived event and match serve/return/break-point availability before considering 50k/day; no CDB writes",
   "provider_requests_allowed": true,
-  "max_requests": 2,
-  "event_id": 17449516,
+  "max_requests": 30,
+  "event_id": 7115726,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
-  "requested_by": "BlinQ verified Telegram settlement recovery #1354",
-  "diagnostic_attempt": 18,
-  "phase": "full",
+  "requested_by": "BlinQ CDB 50k/day quality audit",
+  "diagnostic_attempt": 19,
+  "phase": "archive_2016",
   "case": null
 }
