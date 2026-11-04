@@ -1,14 +1,14 @@
 {
   "schema": 1,
-  "requested_date": "2026-11-01",
-  "reason": "Read-only one-call source-native identity witness for archived 2016 Wimbledon event; CDB crosswalk pending",
+  "requested_date": "2026-11-04",
+  "reason": "One-time read-only exact source event identity and player ace statistics check for 2026-11-03 Telegram ELITE results (issue #1354); no CDB/model/Telegram write",
   "provider_requests_allowed": true,
-  "max_requests": 1,
-  "event_id": 7115726,
+  "max_requests": 2,
+  "event_id": 17449516,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
-  "requested_by": "BlinQ technical audit",
-  "diagnostic_attempt": 17,
+  "requested_by": "BlinQ verified Telegram settlement recovery #1354",
+  "diagnostic_attempt": 18,
   "phase": "full",
   "case": null
 }
