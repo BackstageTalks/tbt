@@ -216,8 +216,19 @@ def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
         # distributed limiter. Injected synthetic tables keep old test rules.
         paced = runtime_default_paced
     if paced:
-        from .shared_rate import reserve_pace
-        pace_proof = reserve_pace(table=pace_table)
+        from .shared_rate import SharedRateBusy, reserve_pace
+        # Runtime callers share one CAS-protected 6/s slot coordinator.
+        # Brief slot collisions are expected under concurrent LIVE/match
+        # workers, not a provider outage or an excuse to spend unmetered.
+        # No daily quota is reserved until a pace slot is confirmed.
+        for pace_attempt in range(12):
+            try:
+                pace_proof = reserve_pace(table=pace_table)
+                break
+            except SharedRateBusy as exc:
+                if pace_attempt == 11:
+                    raise
+                time.sleep(max(0.005, min(exc.retry_after_seconds, 0.25)))
     for attempt in range(MAX_RETRIES):
         try:
             entity = table.get_entity(partition_key=PARTITION, row_key=ROW)
