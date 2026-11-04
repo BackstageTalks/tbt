@@ -120,17 +120,12 @@ jobs:
       - name: Release only this run's exact canonical writer lock
         if: always()
         run: python scripts/cdb_global_writer_lock.py release --if-held
-  dispatch-statistics:
-    needs: recover
-    if: needs.recover.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 6
-    env:
-      GH_TOKEN: ${{ github.token }}
-      BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
-      WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
-    steps:
       - name: Read authoritative shared budget and dispatch one existing provider-native import
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+          WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
