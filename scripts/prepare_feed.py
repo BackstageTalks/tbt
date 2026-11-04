@@ -501,7 +501,7 @@ def _number(value: object) -> float | None:
 
 
 def overlay_confirmed_telegram_aces_ou(feed: dict, state: dict) -> dict:
-    """Attach only EXACT, PRE-START, confirmed Telegram O/U reissues to web Results.
+    """Attach exact, pre-start Telegram daily and superseding O/U receipts to Results.
 
     The private prediction ledger remains untouched. We do not derive missing
     historical thresholds from the model or from a player's opponent count.
@@ -513,9 +513,30 @@ def overlay_confirmed_telegram_aces_ou(feed: dict, state: dict) -> dict:
         return feed
     candidates: dict[tuple[str, str], tuple[dict, datetime]] = {}
     ambiguous: set[tuple[str, str]] = set()
-    for batch in (state.get("reposts") or {}).values():
+    attempts = state.get("attempts") or {}
+    reposts = state.get("reposts") or {}
+    if not isinstance(attempts, dict) or not isinstance(reposts, dict):
+        raise ValueError("Invalid confirmed Telegram delivery ledger")
+    # The normal daily send is an immutable receipt too. A later, explicitly
+    # superseding reissue takes precedence over that day's original offer.
+    superseded_days = {
+        key.split(":repost:", 1)[0]
+        for key, batch in reposts.items()
+        if isinstance(key, str) and ":repost:" in key
+        and isinstance(batch, dict) and batch.get("status") == "sent"
+        and batch.get("supersedes_daily") is True and batch.get("message_ids")
+    }
+    deliveries = [
+        batch for key, batch in sorted(attempts.items())
+        if isinstance(key, str) and key.endswith(":daily:0620")
+        and key[:10] not in superseded_days
+    ]
+    deliveries.extend(
+        batch for _, batch in sorted(reposts.items())
+        if isinstance(batch, dict) and batch.get("supersedes_daily") is True
+    )
+    for batch in deliveries:
         if (not isinstance(batch, dict) or batch.get("status") != "sent"
-                or batch.get("supersedes_daily") is not True
                 or not batch.get("message_ids")):
             continue
         sent_at = _utc(batch.get("sent_at"))
