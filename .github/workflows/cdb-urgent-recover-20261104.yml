@@ -1,0 +1,161 @@
+name: One-shot guarded CDB recovery and pre-reset statistics 2026-11-04
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/cdb-urgent-recover-20261104.yml
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: tbt-emergency-cdb-integrity-20261104
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install existing history audit dependencies
+        run: python -m pip install -r api/requirements-train.txt
+      - name: Acquire canonical cross-repository single writer
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 900
+      - name: Validate complete authoritative history inventory before metadata repair
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, re
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from cdb_global_writer_lock import verify
+          from audit_history_data import audit_partition
+          verify("BackstageTalks/tbt-data", Path(".cdb-global-writer-lock.json"))
+          root = Path(".cache/tbt/emergency-integrity-20261104")
+          root.mkdir(parents=True, exist_ok=True)
+          store = ReleaseStore("BackstageTalks/tbt-data", "tbt-data-v1", root)
+          inventory = store._release_asset_inventory()
+          transients = [n for n in inventory if n.startswith(("blinq-rollback-", "blinq-candidate-"))]
+          journals = [n for n in inventory if re.fullmatch(r"blinq-txn-[0-9a-f]{32}\.json", n)]
+          if transients or len(journals) > 1:
+              raise SystemExit(f"Unresolved CDB transaction assets: {transients}, journals={journals}")
+          for name in journals:
+              store._download_asset(name)
+              p = root / name
+              if not store._verified_asset(inventory, name, p):
+                  raise SystemExit("Journal digest mismatch: stop without mutation")
+              j = json.loads(p.read_text())
+              if j.get("created") != [] or not re.fullmatch(r"[0-9a-f]{64}", str(j.get("target_bundle_sha256",""))):
+                  raise SystemExit("Transaction has created assets or invalid target: manual review required")
+          store._download_asset("history_manifest.json")
+          manifest_path = root / "history_manifest.json"
+          if not store._verified_asset(inventory, "history_manifest.json", manifest_path):
+              raise SystemExit("Authoritative history manifest digest mismatch")
+          years = json.loads(manifest_path.read_text()).get("years")
+          if not isinstance(years, dict) or not years or "2022" not in years:
+              raise SystemExit("Missing authoritative history years")
+          expected_names = set()
+          for year, meta in years.items():
+              name = str(meta.get("asset") or f"history-{int(year):04d}.parquet")
+              if not re.fullmatch(r"history-\d{4}\.parquet",name) or name not in inventory:
+                  raise SystemExit("Invalid or missing history asset "+name)
+              expected_names.add(name)
+              digest = inventory[name].get("digest")
+              if digest != "sha256:" + str(meta.get("sha256","")):
+                  raise SystemExit("History manifest/asset digest disagreement "+name)
+              if int(inventory[name].get("size") or -1) != int(meta.get("bytes") or -1):
+                  raise SystemExit("History manifest/asset bytes disagreement "+name)
+          actual_names = {n for n in inventory if re.fullmatch(r"history-\d{4}\.parquet",n)}
+          if actual_names != expected_names:
+              raise SystemExit("History manifest partitions do not match release inventory")
+          known_2022 = "3062e6c58ef779791326b26b2ba1634c4f2c487493c5f7af4dbbfb1cc6fafe84"
+          if inventory["history-2022.parquet"].get("digest") != "sha256:"+known_2022:
+              raise SystemExit("2022 differs from last independently confirmed digest")
+          store._download_asset("history-2022.parquet")
+          p = root / "history-2022.parquet"
+          if store._sha256(p) != known_2022:
+              raise SystemExit("2022 downloaded bytes failed independently verified SHA")
+          summary, issues, _ = audit_partition(p)
+          if summary.get("fatal") or issues:
+              raise SystemExit("2022 partition identity/schema audit failed")
+          (root/"preflight.json").write_text(json.dumps({"status":"verified","year_count":len(years),"year_2022_sha256":known_2022,"journal_count":len(journals)},indent=2))
+          print("VERIFIED_HISTORY_PREFLIGHT",len(years),"2022 sha256",known_2022,flush=True)
+          PY
+      - name: Repair metadata only via existing guarded release-store transaction
+        run: |
+          set -euo pipefail
+          python scripts/repair_history_bundle_integrity.py --data-repository BackstageTalks/tbt-data
+          python scripts/ensure_cdb_history_release.py --data-repository BackstageTalks/tbt-data
+          python scripts/repair_history_bundle_integrity.py --data-repository BackstageTalks/tbt-data
+      - name: Independent strict full CDB readback before any paid API dispatch
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from cdb_global_writer_lock import verify
+          verify("BackstageTalks/tbt-data", Path(".cdb-global-writer-lock.json"))
+          store=ReleaseStore("BackstageTalks/tbt-data","tbt-data-v1",Path(".cache/tbt/emergency-independent-readback"))
+          chosen=store.download(require_bundle_manifest=True)
+          active=store._release_asset_inventory()
+          if any(n.startswith(("blinq-txn-","blinq-rollback-","blinq-candidate-")) for n in active):
+              raise SystemExit("Transaction debris remains: no API dispatch")
+          print("CDB_STRICT_READBACK_PASS",len(chosen),flush=True)
+          PY
+      - name: Preserve minimal evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdb-urgent-integrity-preflight-20261104
+          path: .cache/tbt/emergency-integrity-20261104/preflight.json
+          if-no-files-found: warn
+      - name: Release only this run's exact canonical writer lock
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
+  dispatch-statistics:
+    needs: recover
+    if: needs.recover.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+    steps:
+      - name: Read authoritative shared budget and dispatch one existing provider-native import
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, subprocess, sys, urllib.request
+          from datetime import datetime, timezone
+          cutoff=datetime(2026,11,4,17,7,tzinfo=timezone.utc)
+          if datetime.now(timezone.utc)>=cutoff:
+              print("CUTOFF_REACHED no paid dispatch"); sys.exit(0)
+          url=os.environ["BUDGET_URL"]; token=os.environ["WORKER_TOKEN"]
+          if not url.startswith("https://") or not token:
+              raise SystemExit("Budget endpoint unavailable: fail closed")
+          req=urllib.request.Request(url,headers={"X-Blinq-Worker-Token":token},method="GET")
+          with urllib.request.urlopen(req,timeout=15) as response: result=json.load(response)
+          b=result.get("budget")
+          if result.get("ok") is not True or not isinstance(b,dict) or b.get("global_limit")!=14500 or b.get("provider_plan_limit")!=15000 or b.get("reserved_provider_headroom")!=500 or b.get("window")!="provider_day_17_09_utc":
+              raise SystemExit("Shared budget contract failed")
+          spent=int(b["global_spent"])
+          allowed=max(0,min(5000,14250-spent,int(b["global_remaining"]),int(b["remaining"]["history"])))
+          print(f"QUOTA_CHECK spent={spent} target=14250 available_for_one_run={allowed}",flush=True)
+          if allowed<=0: sys.exit(0)
+          args=["gh","workflow","run","data.yml","-R","BackstageTalks/tbt","--ref","main",
+                "-f","mode=statistics","-f",f"max_requests={allowed}",
+                "-f","hourly_autofill=true","-f","autofill_stop_at_utc=2026-11-04T17:07:00Z",
+                "-f","promote=false","-f","propline_max_events=0"]
+          subprocess.run(args,check=True)
+          print(f"EXISTING_GUARDED_CDB_STATISTICS_DISPATCHED max_requests={allowed} 95pct_target=14250",flush=True)
+          PY
