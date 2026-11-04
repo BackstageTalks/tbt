@@ -38,8 +38,8 @@ jobs:
           git fetch origin main --depth=1
           test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
           # Fail before provider requests if another concurrent job already sent it.
-          gh api repos/BackstageTalks/tbt-data/contents/ops/telegram-bot-state.json \
-            -f ref=telegram-bot-state -H "Authorization: token $PRIVATE_DATA_TOKEN" \
+          GH_TOKEN="$PRIVATE_DATA_TOKEN" gh api -X GET repos/BackstageTalks/tbt-data/contents/ops/telegram-bot-state.json \
+            -f ref=telegram-bot-state \
             --jq .content | base64 -d > /tmp/tg-before.json
           python - <<'PY'
           import json
@@ -124,8 +124,8 @@ jobs:
         run: |
           set -euo pipefail
           for i in $(seq 1 45); do
-            gh api repos/BackstageTalks/tbt-data/contents/ops/telegram-bot-state.json \
-              -f ref=telegram-bot-state -H "Authorization: token $PRIVATE_DATA_TOKEN" \
+            GH_TOKEN="$PRIVATE_DATA_TOKEN" gh api -X GET repos/BackstageTalks/tbt-data/contents/ops/telegram-bot-state.json \
+              -f ref=telegram-bot-state \
               --jq .content | base64 -d > /tmp/tg-after.json
             if python - <<'PY'
           import json
