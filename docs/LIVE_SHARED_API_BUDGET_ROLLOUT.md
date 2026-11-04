@@ -13,8 +13,12 @@ also expose `next_reset_bratislava` automatically using IANA
 in summer**. UTC remains the accounting source of truth; never hardcode
 local seasonal clock times in the provider-day writer.
 ALL billable TennisAPI requests are blocked at **17:07–17:10 UTC**,
-regardless of priority. A guarded **17:10–17:13 UTC** new provider-day
-statistics startup is limited to a cumulative 3,000 requests.
+regardless of priority. Targeted hourly CDB gapfill begins at **11:00
+Europe/Bratislava**, standard daytime stages stop at **13,500 total shared
+requests (90%)**, and final pre-reset closeout may reach **14,500 (96.67%)**.
+Each hourly job is capped at **5,000 attempts including retries**.
+Legacy overnight/new-provider-day targeted gapfill dispatch is disabled;
+other provider consumers remain governed by the same shared budget.
 Usage is stored in five-minute buckets, but the accounting window is the
 current provider day, not a generic rolling 24-hour window.
 
