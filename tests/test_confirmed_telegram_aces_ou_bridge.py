@@ -285,3 +285,53 @@ def test_entire_20261102_confirmed_aces_reissue_grades_only_played_verified_bets
         assert outcome["staked_units"] == 1.0
         assert abs(outcome["profit_units"] - profit) < 1e-9
     assert "local-aces-ou-v1:17456687:372310:over:6.5" not in actual
+
+
+def test_regular_confirmed_daily_aces_ou_receipt_bridges_exact_contract():
+    """Normal 06:20 daily Telegram picks must not stay ungradable."""
+    match, reissue_state, statuses = fixture()
+    feed = {"ace_picks": [match], "results": []}
+    confirmed = deepcopy(next(iter(reissue_state["reposts"].values())))
+    confirmed.pop("supersedes_daily")
+    state = {"schema": 1, "attempts": {"2026-11-02:daily:0620": confirmed},
+             "reposts": {}}
+    before = deepcopy(feed)
+    bridged = overlay_confirmed_telegram_aces_ou(feed, state)
+    assert feed == before
+    pub = bridged["ace_picks"][0]["market_publications"][-1]
+    assert pub["publication_key"] == confirmed["rows"][0]["publication_key"]
+    assert pub["price_contract"] == "player_total_ou"
+    assert pub["market_line"] == 10.5 and pub["ou_side"] == "over"
+    graded = runtime_settled_results(bridged, statuses)
+    assert graded[0]["market_publications"][0]["result"]["correct"] is False
+    assert graded[0]["market_publications"][0]["result"]["actual_count"] == 9
+
+
+def test_superseding_aces_reissue_does_not_grade_original_daily_line():
+    match, state, _ = fixture()
+    feed = {"ace_picks": [match], "results": []}
+    old = deepcopy(next(iter(state["reposts"].values())))
+    old["sent_at"] = "2026-11-02T05:37:35+00:00"
+    old.pop("supersedes_daily")
+    old["rows"][0]["market_line"] = 11.5
+    old["rows"][0]["publication_key"] = old["rows"][0]["publication_key"].replace(
+        "over:10.5", "over:11.5"
+    )
+    state["attempts"] = {"2026-11-02:daily:0620": old}
+    bridged = overlay_confirmed_telegram_aces_ou(feed, state)
+    new_key = next(iter(state["reposts"].values()))["rows"][0]["publication_key"]
+    pubs = [p for p in bridged["ace_picks"][0]["market_publications"]
+            if p.get("price_contract") == "player_total_ou"]
+    assert len(pubs) == 1
+    assert pubs[0]["publication_key"] == new_key
+    assert pubs[0]["market_line"] == 10.5
+
+
+def test_unconfirmed_daily_aces_receipt_never_creates_published_contract():
+    match, state, _ = fixture()
+    feed = {"ace_picks": [match], "results": []}
+    old = deepcopy(next(iter(state["reposts"].values())))
+    old.pop("supersedes_daily")
+    old["message_ids"] = []
+    state = {"schema": 1, "attempts": {"2026-11-02:daily:0620": old}}
+    assert overlay_confirmed_telegram_aces_ou(feed, state) == feed
