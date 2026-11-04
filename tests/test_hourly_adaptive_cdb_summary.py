@@ -172,7 +172,7 @@ def test_hourly_closeout_starts_early_and_keeps_authoritative_limits():
                 / ".github/workflows/data-hourly-quota-gapfill.yml").read_text()
     assert "16: 13500, 17: 14500, 18: 14500" in workflow
     assert "if now >= cutoff - timedelta(minutes=15):" in workflow
-    assert "min(3000, limit-spent" in workflow
+    assert "min(5000, limit-spent" in workflow
     assert 'budget.get("global_limit") != 14500' in workflow
     assert 'budget.get("reserved_provider_headroom") != 500' in workflow
     assert "wait_for_writer(check_writers, retry_deadline)" in workflow

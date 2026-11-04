@@ -1,7 +1,7 @@
 """Pure UTC provider-day ceiling for productive, bounded post-reset statistics.
 
 The existing Azure CAS budget, provider header reserve, native writer lock,
-and 3,000-request per-run cap remain authoritative. This policy only releases
+and 5,000-request per-run cap remain authoritative. This policy only releases
 part of the *already available* shared headroom after the 17:09 UTC reset,
 leaving at least 6,000 calls below the 14,500 ceiling until daytime work.
 """

@@ -51,5 +51,5 @@ def test_workflow_preserves_existing_guards_and_uses_evening_in_both_paths():
     assert "from scripts.api_writer_wait import wait_for_writer" in workflow
     assert "or budget.get(\"global_limit\") != 14500" in workflow
     assert "or budget.get(\"reserved_provider_headroom\") != 500" in workflow
-    assert "proposed = min(3000," in workflow
+    assert workflow.count("proposed = min(5000,") == 2
     assert "Less than 15 minutes until provider cutoff" in workflow
