@@ -419,3 +419,47 @@ def test_probe_reports_unsupported_all_statistics_from_already_read_payload():
         assert "sensitive" not in str(inventory)
         assert "private" not in str(inventory)
         assert result["payload_sha256"]
+
+
+def test_exact_completed_event_exposes_native_aces_with_payload_digest():
+    class NativeAces(StubClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            self.request_count += 1
+            self.paths.append((path, params))
+            if path.endswith("/statistics"):
+                return {"statistics": [
+                    {"period": "ALL", "groups": [{"statisticsItems": [
+                        {"key": "aces", "home": "17", "away": "8"}
+                    ]}]}
+                ]}
+            return {"event": {
+                "id": 17449516, "startTimestamp": 1793700000,
+                "homeTeam": {"id": 90798, "name": "Quentin Halys"},
+                "awayTeam": {"id": 321789, "name": "Arthur Fery"},
+                "status": {"type": "finished"},
+                "tournament": {"name": "Paris, France",
+                               "category": {"id": 3, "name": "ATP"}}}}
+    result = run_probe(NativeAces(), event_id=17449516, max_requests=2)
+    evidence = result["source_native_aces_evidence"]
+    assert evidence["home_id"] == 90798 and evidence["away_id"] == 321789
+    assert evidence["home_aces"] == 17 and evidence["away_aces"] == 8
+    assert evidence["statistics_payload_sha256"] == (
+        result["observations"]["event_statistics"]["payload_sha256"])
+    assert result["request_count"] == 2
+    assert result["eligible_for_cdb_import"] is False
+
+
+def test_no_native_aces_if_the_requested_event_identity_mismatches():
+    class Mismatch(StubClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            self.request_count += 1
+            if path.endswith("/statistics"):
+                return {"statistics": [
+                    {"period": "ALL", "groups": [{"statisticsItems": [
+                        {"key": "aces", "home": "17", "away": "8"}
+                    ]}]}]}
+            return {"event": {"id": 123456, "homeTeam": {"id": 90798},
+                              "awayTeam": {"id": 321789},
+                              "status": {"type": "finished"}}}
+    result = run_probe(Mismatch(), event_id=17449516, max_requests=2)
+    assert "source_native_aces_evidence" not in result
