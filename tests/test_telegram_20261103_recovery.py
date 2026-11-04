@@ -3,7 +3,7 @@ from copy import deepcopy
 import pytest
 
 from tbt.services.telegram_20261103_recovery import (
-    ISSUED_ACES, _candidate_rows, DAY, HALYS, recover,
+    ISSUED_ACES, _candidate_rows, _frozen_status_witness, DAY, HALYS, recover,
 )
 
 
@@ -109,3 +109,11 @@ def test_original_void_is_never_inferred_as_aces_loss():
     snap["statuses"]["17452315"]["provider_status"] = "finished ended"
     with pytest.raises(ValueError, match="cancellation"):
         _candidate_rows(snap, details, stats, "2026-11-04T07:40:00+00:00")
+
+
+def test_frozen_source_statuses_cover_exactly_eight_issuer_verified_fixtures():
+    witness = _frozen_status_witness()
+    assert set(witness['statuses']) == {eid for eid, *_ in ISSUED_ACES if eid != HALYS}
+    assert witness['statuses']['17475617']['projection_stats']['p1_aces'] == 11
+    assert witness['statuses']['17446377']['projection_stats']['p2_aces'] == 6
+    assert witness['statuses']['17452315']['provider_status'] == 'canceled canceled'
