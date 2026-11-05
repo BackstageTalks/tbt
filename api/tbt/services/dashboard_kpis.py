@@ -121,7 +121,7 @@ def _result_identity(row: dict, publication: dict, index: int) -> str:
     ))))
     scheduled = str(row.get("scheduled_at") or "").strip()
     if (scheduled or players) and selection:
-        return f"{scheduled}::{players}::{market}::{scope}::{metric}::{selection}"
+        return f"{scheduled}::{players}::{market}::{scope}::{metric}::{selection}{contract}
     return str(publication.get("selection_key") or publication.get("publication_key") or f"{scheduled}::{players}::{publication.get('section') or ''}::{selection or index}")
 
 
