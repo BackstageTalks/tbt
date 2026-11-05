@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - .github/workflows/model-shadow-evaluation-readonly.yml
       - scripts/audit_model_shadow_readonly.py
       - scripts/audit_frozen_721_segments.py
       - tests/test_audit_frozen_721_segments.py
@@ -47,39 +48,64 @@ jobs:
         run: python -m pytest tests/test_audit_model_shadow_readonly.py tests/test_shadow_calibration_research.py tests/test_shadow_evaluation.py tests/test_audit_721_top_market.py tests/test_audit_711_top_value_shadow.py tests/test_audit_frozen_721_segments.py -q
       - name: Independently read current champion, challenger and private issued shadow ledger
         run: python scripts/audit_model_shadow_readonly.py --out .cache/tbt/model-shadow-audit/report.json
-      - name: Evaluate true pre-match priced TOP observations for frozen 7.2.1 (read only)
-        run: python scripts/audit_721_top_market.py --out .cache/tbt/model-shadow-audit/721-top-market.json
-      - name: Diagnose pinned frozen 7.2.1 prospective VIP confidence (raw scores only, no prices)
-        run: python scripts/audit_frozen_721_segments.py --out .cache/tbt/model-shadow-audit/frozen-721-vip-raw-confidence.json
-      - name: Publish aggregate summary only
+      - name: Independently validate model-only gate and report exact immutable pair
         run: |
           python - <<'PY'
-          import json, os
+          import json, os, re
           from pathlib import Path
-          r=json.loads(Path('.cache/tbt/model-shadow-audit/report.json').read_text())
-          top=json.loads(Path('.cache/tbt/model-shadow-audit/721-top-market.json').read_text())
-          vip=json.loads(Path('.cache/tbt/model-shadow-audit/frozen-721-vip-raw-confidence.json').read_text())['candidate_vip_raw_confidence_scorecard']
-          vip_core=vip['core_80_plus']
-          vip_fallback=vip['fallback_below_80']
-          summary=[
-            '### Current frozen champion versus challenger',
-            f"Status: {r['status']}",
-            f"Champion: {r['production_model_version']}",
-            f"Challenger: {r['challenger_model_version']}",
-            f"Matched / settled: {r['cohort']['captured']} / {r['cohort']['settled']}",
-            f"Sample gate: {r['gate']['minimum_matches_met']}; days gate: {r['gate']['minimum_days_met']}",
-            f"Full aggregate metrics: {r['overall']}",
-            f"Temporal calibration research status: {r['calibration_research']['status']}",
-            f"7.2.1 true pre-match TOP matched: {top['matched_unique']}; market review ready: {top['review_gate']['ready_for_independent_market_review']}",
-            f"PINNED older frozen-721 raw confidence >=80: {vip_core['settled']} settled, hit rate {vip_core['hit_rate']}, evidenced 80pct {vip_core['target_80_evidenced']}",
-            f"Raw 70-79pct fallback: {vip_fallback['settled']} settled, hit rate {vip_fallback['hit_rate']}",
-            f"Captured days with >=3 qualifying raw-model forecasts: {vip['days_with_3plus_raw_qualifiers']} of {vip['days_with_captured_cohort']}",
-            'Raw model shadow is not full price-qualified public VIP or latest immutable 7.2.1; no promotion.',
-            f"Out-of-time Platt research metrics: {r['calibration_research'].get('overall', {})}",
-            'No model training, production promotion, CDB write or provider calls.',
+          path=Path('.cache/tbt/model-shadow-audit/report.json')
+          r=json.loads(path.read_text())
+          source=r['sources']
+          for field in ('champion_sha256', 'challenger_sha256', 'shadow_ledger_sha256'):
+              if not re.fullmatch(r'[0-9a-f]{64}', str(source.get(field) or '')):
+                  raise ValueError('Model audit missing exact evidence digest: '+field)
+          if source['champion_sha256']==source['challenger_sha256']:
+              raise ValueError('Champion and challenger have identical artifact digests')
+          metrics=r['overall']
+          n=r['cohort']['settled']
+          if r['status']!='EVALUATED' or n < 200:
+              raise ValueError('Current same-event shadow evaluation lacks model-quality sample')
+          for field in ('champion','challenger'):
+              if metrics[field]['n']!=n:
+                  raise ValueError('Shadow models do not have identical settled population')
+          quality_pass=r['gate'].get('ready_for_promotion_review') is True
+          # Even a passing shadow is only model-quality evidence, not permission to
+          # bypass Elo, fresh PIT, operator approval or atomic release controller.
+          decision={
+              'schema': 1, 'kind': 'READ_ONLY_MODEL_QUALITY_DECISION',
+              'status': 'REVIEW_ONLY_SHADOW_QUALITY_PASS' if quality_pass else 'NO_GO_SHADOW_QUALITY',
+              'candidate_promoted': False, 'production_mutated': False,
+              'provider_requests': 0,
+              'production_version': r['production_model_version'],
+              'candidate_version': r['challenger_model_version'],
+              'settled_same_event': n, 'captured':r['cohort']['captured'],
+              'settled_utc_days':r['cohort']['settled_utc_days'],
+              'champion':metrics['champion'], 'candidate':metrics['challenger'],
+              'gate':r['gate'], 'release_screen':r['release_screen'],
+              'uncertainty':r['paired_uncertainty'], 'sources':source,
+              'blockers':[
+                  'same_event_shadow_quality_not_better' if not quality_pass else
+                  'independent_canonical_Elo_and_operator_release_gates_not_evaluated',
+                  'prospective_asof_15m_and_current_serving_readback_not_independently_verified',
+              ],
+          }
+          output=Path('.cache/tbt/model-shadow-audit/model-quality-decision.json')
+          output.write_text(json.dumps(decision,indent=2,sort_keys=True,allow_nan=False)+'\n')
+          lines=[
+              '### Immutable champion/challenger model-quality checkpoint',
+              f"Decision: {decision['status']}; promotion: NEVER by research workflow",
+              f"Champion: {decision['production_version']} ({source['champion_sha256']})",
+              f"Challenger: {decision['candidate_version']} ({source['challenger_sha256']})",
+              f"Same-event settled: {n}/{decision['captured']} across {decision['settled_utc_days']} UTC days",
+              f"Champion: {metrics['champion']}",
+              f"Challenger: {metrics['challenger']}",
+              f"Model-only shadow gate: {r['gate']}",
+              f"ATP/WTA paired uncertainty: {r['paired_uncertainty']}",
+              'Market TOP/PRIME/value research intentionally separate: no price/odds/EV promotion gate.',
+              'No CDB write, model fit, provider call, candidate/champion promotion or deploy.',
           ]
-          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
-              f.write('\n'.join(summary)+'\n')
+          print('\n'.join(lines))
+          Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('\n'.join(lines)+'\n')
           PY
       - name: Keep verified private-only aggregate report
         if: always()
@@ -88,7 +114,6 @@ jobs:
           name: blinq-model-shadow-audit-${{ github.run_id }}
           path: |
             .cache/tbt/model-shadow-audit/report.json
-            .cache/tbt/model-shadow-audit/721-top-market.json
-            .cache/tbt/model-shadow-audit/frozen-721-vip-raw-confidence.json
+            .cache/tbt/model-shadow-audit/model-quality-decision.json
           if-no-files-found: warn
           retention-days: 14
