@@ -178,6 +178,13 @@ def test_pipeline_shields_production_from_active_shadow_errors():
             and handler.type.id == "Exception"
             for handler in node.handlers
         )
+        and any(
+            isinstance(stmt, ast.Assign)
+            and any(isinstance(target, ast.Name)
+                    and target.id == "shadow_capture_now"
+                    for target in stmt.targets)
+            for stmt in node.body
+        )
     ]
     assert len(shadow_tries) == 1
     shield = shadow_tries[0]
