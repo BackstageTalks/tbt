@@ -69,3 +69,19 @@ def test_approved_local_and_winner_are_both_in_same_overall_roi():
                now=datetime(2026, 11, 5, tzinfo=timezone.utc))
     assert dashboard["stake_count"] == 2
     assert abs(dashboard["roi"] - .855) < 1e-9
+
+
+def test_separate_frozen_ou_lines_count_once_each_but_duplicate_receipt_dedupes():
+    first = _row("same", "player", True, odds=1.72,
+                 price_status="priced_projection", basis="local_aces_statistical_v1", line=4.5)
+    second = deepcopy(first)
+    second["market_publications"][0]["market_line"] = 5.5
+    duplicate = deepcopy(first)
+    for source in (betting_performance,):
+        metrics = source([first, second, duplicate])["overall"]
+        assert metrics["n"] == 2
+        assert metrics["staked_units"] == 2.0
+        assert abs(metrics["profit_units"] - 1.44) < 1e-9
+    backend = published_results_metrics({"results": [first, second, duplicate]}, "7",
+              now=datetime(2026, 11, 5, tzinfo=timezone.utc))
+    assert backend["sample"] == 2 and backend["stake_count"] == 2
