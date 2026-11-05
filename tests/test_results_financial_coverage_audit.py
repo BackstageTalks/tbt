@@ -114,7 +114,7 @@ def test_no_extra_public_results_copy_or_layout_changes():
     # All filtered financial KPIs use a comparable 1u denominator. ACES/DF
     # still use their normalized Results display quote; other markets require
     # a verified real quote and settled unit profit.
-    assert "const aceDfKpiOdds=aceDfResultKpiOdds(publication)" in app
+    assert "const aceDfKpiOdds=Number.isFinite(approvedLocalQuote)?approvedLocalQuote:aceDfResultKpiOdds(publication)" in app
     assert ":resultVisibleUnits(publication,outcome,resultVisibleOdds(publication));" in app
     assert "const aceDfCategory=!filters?.membership&&(category==='ace'||category==='double_faults')" in app
     assert "Filtered Results compare every settled quoted pick on the same 1u basis." in app
