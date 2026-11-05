@@ -909,7 +909,9 @@ def _betting_metrics(publications):
         except (KeyError, TypeError, ValueError):
             continue
         if math.isfinite(stake) and stake > 0 and math.isfinite(profit_units):
-            stakes.append((stake, profit_units))
+            # The stored gain is already normalized to 1u even when a legacy
+            # staked_units field carries a 100-unit bookkeeping scale.
+            stakes.append((1.0, profit_units))
     staked = sum(stake for stake, _ in stakes)
     profit = sum(net for _, net in stakes)
     return {
