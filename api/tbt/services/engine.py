@@ -942,8 +942,12 @@ def _result_publication_semantic_key(row, publication):
     scope = str(publication.get("projection_scope") or "").strip().lower()
     metric = str(publication.get("projection_metric") or "").strip().lower()
     selection = str(publication.get("selection_id") or publication.get("selection") or "").strip().lower()
+    contract = ()
+    if str(publication.get("price_contract") or "").lower() == "player_total_ou":
+        contract = (str(publication.get("ou_side") or "").lower(),
+                    str(publication.get("market_line") or ""))
     if event and selection:
-        return (event, market, scope, metric, selection)
+        return (event, market, scope, metric, selection) + contract
     return (str(publication.get("selection_key") or publication.get("publication_key") or ""),)
 
 
