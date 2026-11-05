@@ -7,7 +7,7 @@ INDEX=(WEB/"index.html").read_text(encoding="utf-8")
 CSS=(WEB/"blinq-mobile-unified-cards.css").read_text(encoding="utf-8")
 
 def test_mobile_card_styles_loaded_last_and_versioned():
-    assert '/blinq-mobile-unified-cards.css?v=7360&p=61&cards=20261030-2' in INDEX
+    assert '/blinq-mobile-unified-cards.css?v=7360&p=61&cards=20261105-units-1' in INDEX
     assert INDEX.index('blinq-mobile-density.css?') < INDEX.index('blinq-mobile-unified-cards.css?')
     assert '@media (max-width:600px)' in CSS
     assert ':not(.blinq-admin)' in CSS
