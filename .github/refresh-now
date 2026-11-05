@@ -1,1 +1,1 @@
-[refresh-now] 2026-10-19: retry production prediction generation after verified PropLine timeout isolation fix (PR #865, main 505e7952cd0424e81a8d436dd4671034982a68a5). Preserve API budget, canonical CDB lock, and publication validation.
+[refresh-now] [current-refresh] 2026-11-05 controlled recovery of the failed morning prediction publication after PR #1361 shadow-identity quarantine fix. Reuse current canonical CDB read-only, preserve champion, use existing shared API budget and global writer lock, no retraining or promotion; verify publication and production read-back.
