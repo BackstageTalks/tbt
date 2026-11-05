@@ -110,7 +110,7 @@ def _result_identity(row: dict, publication: dict, index: int) -> str:
         line = str(publication.get("market_line") or "")
         contract = f"::{side}::{line}"
     if event and selection:
-        return f"{event}::{market}::{scope}::{metric}::{selection}{contract}
+        return f"{event}::{market}::{scope}::{metric}::{selection}{contract}"
     def normalize_name(value: Any) -> str:
         folded = unicodedata.normalize("NFKD", str(value or ""))
         return re.sub(r"[^a-zA-Z0-9]+", " ", "".join(ch for ch in folded if not unicodedata.combining(ch))).strip().lower()
@@ -121,7 +121,7 @@ def _result_identity(row: dict, publication: dict, index: int) -> str:
     ))))
     scheduled = str(row.get("scheduled_at") or "").strip()
     if (scheduled or players) and selection:
-        return f"{scheduled}::{players}::{market}::{scope}::{metric}::{selection}{contract}
+        return f"{scheduled}::{players}::{market}::{scope}::{metric}::{selection}{contract}"
     return str(publication.get("selection_key") or publication.get("publication_key") or f"{scheduled}::{players}::{publication.get('section') or ''}::{selection or index}")
 
 
