@@ -14,6 +14,8 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from .local_ace_results import local_ace_result_odds
+
 WINDOW_DAYS = (3, 7, 14, 30, 180, 365)
 DEFAULT_CARDS = (
     {"metric": "today_picks", "period": "today"},
@@ -179,7 +181,7 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
                 issued is not None and
                 (prior["_issued"] is None or issued < prior["_issued"])
             ):
-                unique[key] = {"publication": p, "_issued": issued}
+                unique[key] = {"publication": p, "row": row, "_issued": issued}
     wins = losses = odds_count = 0
     odds_sum = 0.0
     staked = profit = 0.0
@@ -195,14 +197,20 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
             losses += 1
         else:
             continue
+        local = local_ace_result_odds(entry["row"], p)
         status = str(p.get("price_status") or "").strip().lower()
         market = str(p.get("market") or "").strip().lower()
         priced = status == "priced_projection" if market in _PROJECTION_MARKETS else status in {"", "priced", "priced_projection"}
-        quote = _finite(p.get("odds"))
-        if priced and quote is not None and quote > 1:
+        quote = local if local is not None else _finite(p.get("odds"))
+        if (priced or local is not None) and quote is not None and quote > 1:
             odds_sum += quote
             odds_count += 1
             if str(p.get("section") or "").strip().lower() == "prime":
+                continue
+            if local is not None:
+                staked += 1
+                profit += local - 1 if outcome == "win" else -1
+                stake_count += 1
                 continue
             result = p.get("result") or {}
             stake, gain = _finite(result.get("staked_units")), _finite(result.get("profit_units"))
