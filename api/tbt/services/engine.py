@@ -20,6 +20,7 @@ from .data_quality import audit_history
 from .training import _enforce_rank_provenance
 from .publication import confirm_publication
 from .countries import normalize_country_code
+from .dashboard_kpis import local_ace_financial_odds
 
 
 # Public history is reconstructed from immutable issuance evidence rather than
@@ -871,7 +872,8 @@ def _betting_metrics(publications):
     rows = [
         p for p in publications
         if isinstance(p, dict)
-        and p.get("price_status") not in {"projection_only", "model_only"}
+        and (p.get("price_status") not in {"projection_only", "model_only"}
+             or p.get("_local_ace_financial_odds") is not None)
         and isinstance(p.get("result"), dict)
         and not p.get("excluded_reason")
     ]
@@ -890,11 +892,15 @@ def _betting_metrics(publications):
     losses = sum(1 for p in graded if p["result"].get("correct") is False)
     # W/L covers every genuinely issued graded publication. Actual financial
     # ROI includes only bookmaker-priced, staked bets outside Short Odds.
-    quotes = [_genuine_publication_odds(p) for p in graded]
+    quotes = [p.get("_local_ace_financial_odds") or _genuine_publication_odds(p) for p in graded]
     odds = [quote for quote in quotes if quote is not None]
     stakes = []
     for publication, quote in zip(graded, quotes):
         if str(publication.get("section") or "").strip().lower() == "prime" or quote is None:
+            continue
+        local_ace = publication.get("_local_ace_financial_odds")
+        if local_ace is not None:
+            stakes.append((1.0, local_ace - 1.0 if publication["result"]["correct"] else -1.0))
             continue
         result = publication["result"]
         try:
@@ -953,7 +959,9 @@ def betting_performance(results):
     for row in results:
         for publication in row.get("market_publications", []) or []:
             if isinstance(publication, dict) and publication.get("issued_at"):
-                entries.append((row, publication))
+                local_ace = local_ace_financial_odds(row, publication)
+                item = {**publication, "_local_ace_financial_odds": local_ace} if local_ace is not None else publication
+                entries.append((row, item))
 
     # Semantic dedupe is intentionally independent of selection_key/publication_key.
     # Those keys changed across historical schemas and can otherwise double-count
