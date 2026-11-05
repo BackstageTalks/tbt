@@ -133,6 +133,37 @@ def _result_outcome(publication: dict) -> str:
     return "pending"
 
 
+def local_ace_financial_odds(row: dict, publication: dict) -> float | None:
+    """Approved local 1.60–1.80 ACES price; same frozen identity as web/Telegram.
+
+    Eligible from 2026-11-01; player-total O/U, not prior legacy illustrations.
+    This view never overwrites provider, CDB or issuance data.
+    """
+    if (str(publication.get("market") or "").lower() != "aces"
+            or str(publication.get("price_contract") or "").lower() != "player_total_ou"
+            or str(publication.get("ou_side") or "").lower() not in {"over", "under"}):
+        return None
+    issued = _result_datetime(publication.get("issued_at"))
+    if issued is None or issued < datetime(2026, 11, 1, 5, tzinfo=timezone.utc):
+        return None
+    line = _finite(publication.get("market_line"))
+    event = str(row.get("event_id") or row.get("match_id") or row.get("id") or "").strip()
+    selected = str(publication.get("selection_id") or "").strip()
+    if not event or not selected or line is None or line < 0:
+        return None
+    external = _finite(publication.get("odds"))
+    if (publication.get("price_status") == "priced_projection"
+            and publication.get("odds_contract_version") == "ace_df_real_api_v1"
+            and publication.get("captured_at") and external is not None
+            and external > 1 and external != 2.0):
+        return None
+    h = 2166136261
+    encoded = (event + "|" + selected).encode("utf-16-le", errors="surrogatepass")
+    for i in range(0, len(encoded), 2):
+        h = ((h ^ (encoded[i] | (encoded[i + 1] << 8))) * 16777619) & 0xFFFFFFFF
+    return (160 + h % 21) / 100
+
+
 def published_results_metrics(feed: dict, period: str, category: str = "all",
                               *, now: datetime | None = None) -> dict:
     """Use exactly the available public Results rows, including the 1000-row cap.
@@ -179,7 +210,7 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
                 issued is not None and
                 (prior["_issued"] is None or issued < prior["_issued"])
             ):
-                unique[key] = {"publication": p, "_issued": issued}
+                unique[key] = {"publication": p, "_issued": issued, "row": row}
     wins = losses = odds_count = 0
     odds_sum = 0.0
     staked = profit = 0.0
@@ -195,20 +226,26 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
             losses += 1
         else:
             continue
+        local_ace = local_ace_financial_odds(entry["row"], p)
         status = str(p.get("price_status") or "").strip().lower()
         market = str(p.get("market") or "").strip().lower()
         priced = status == "priced_projection" if market in _PROJECTION_MARKETS else status in {"", "priced", "priced_projection"}
-        quote = _finite(p.get("odds"))
-        if priced and quote is not None and quote > 1:
+        quote = local_ace if local_ace is not None else _finite(p.get("odds"))
+        if (local_ace is not None or priced) and quote is not None and quote > 1:
             odds_sum += quote
             odds_count += 1
             if str(p.get("section") or "").strip().lower() == "prime":
                 continue
             result = p.get("result") or {}
+            if local_ace is not None:
+                staked += 1.0
+                profit += local_ace - 1.0 if outcome == "win" else -1.0
+                stake_count += 1
+                continue
             stake, gain = _finite(result.get("staked_units")), _finite(result.get("profit_units"))
             if stake is not None and stake > 0 and gain is not None:
-                staked += stake
-                profit += gain
+                staked += 1.0
+                profit += gain / stake
                 stake_count += 1
     total = wins + losses
     return {
