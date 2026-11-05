@@ -90,7 +90,7 @@ jobs:
               ],
           }
           output=Path('.cache/tbt/model-shadow-audit/model-quality-decision.json')
-          output.write_text(json.dumps(decision,indent=2,sort_keys=True,allow_nan=False)+'\\n')
+          output.write_text(json.dumps(decision,indent=2,sort_keys=True,allow_nan=False)+'\n')
           lines=[
               '### Immutable champion/challenger model-quality checkpoint',
               f"Decision: {decision['status']}; promotion: NEVER by research workflow",
@@ -104,8 +104,8 @@ jobs:
               'Market TOP/PRIME/value research intentionally separate: no price/odds/EV promotion gate.',
               'No CDB write, model fit, provider call, candidate/champion promotion or deploy.',
           ]
-          print('\\n'.join(lines))
-          Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('\\n'.join(lines)+'\\n')
+          print('\n'.join(lines))
+          Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('\n'.join(lines)+'\n')
           PY
       - name: Keep verified private-only aggregate report
         if: always()
