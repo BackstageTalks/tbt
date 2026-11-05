@@ -167,10 +167,17 @@ def test_pipeline_shields_production_from_active_shadow_errors():
     shadow_tries = [
         node for node in ast.walk(tree)
         if isinstance(node, ast.Try)
-        and any(isinstance(n, ast.Call)
-                and isinstance(n.func, ast.Name)
-                and n.func.id == "update_active_shadow"
-                for n in ast.walk(node))
+        and any(
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Name)
+            and n.func.id == "update_active_shadow"
+            for statement in node.body for n in ast.walk(statement)
+        )
+        and any(
+            isinstance(handler.type, ast.Name)
+            and handler.type.id == "Exception"
+            for handler in node.handlers
+        )
     ]
     assert len(shadow_tries) == 1
     shield = shadow_tries[0]
