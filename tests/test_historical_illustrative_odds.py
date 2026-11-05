@@ -89,7 +89,7 @@ def test_ace_df_results_kpis_use_displayed_normalized_or_real_api_odds_without_r
     assert "function resultVisibleOdds(publication)" in APP
     assert "function resultVisibleUnits(publication,outcome,odds)" in APP
     assert "function aceDfResultKpiOdds(publication)" in APP
-    assert "const aceDfKpiOdds=aceDfResultKpiOdds(publication)" in APP
+    assert "const aceDfKpiOdds=Number.isFinite(approvedLocalQuote)?approvedLocalQuote:aceDfResultKpiOdds(publication)" in APP
     assert "outcome.kind==='win'?aceDfKpiOdds-1" in APP
     assert "outcome.kind==='loss'?-1" in APP
     assert "const aceDfCategory=!filters?.membership&&(category==='ace'||category==='double_faults')" in APP
@@ -97,8 +97,8 @@ def test_ace_df_results_kpis_use_displayed_normalized_or_real_api_odds_without_r
     assert "stake+=1" in APP
     assert "profit+=units" in APP
     assert "aceDfNormalizedKpis:aceDfCategory" in APP
-    assert "1u result ROI from normalized legacy / real API odds" in APP
-    assert "1u per settled Aces/DF pick" in APP
+    assert "approvedLocalAceResultOdds(publication)" in APP
+    assert "1u per settled pick with an accepted quote" in APP
     assert "const unitsText=Number.isFinite(displayUnits)?" in APP
     assert "Number.isFinite(displayUnits)&&displayUnits>0?'correct'" in APP
     assert "Number.isFinite(displayUnits)&&displayUnits<0?'wrong'" in APP
