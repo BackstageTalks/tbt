@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       pending_match_status_deploy: ${{ steps.match_status_deploy_request.outputs.pending }}
     steps:
@@ -291,6 +291,19 @@ jobs:
           print("FARJAT_VERIFIED_ACE_REISSUE_LINKED: 7 > Over 4.5, odds 1.79, +0.79u")
           PYFARJAT
 
+      - name: Audit Nov 1+ approved local Aces in private Results release (scoped PR)
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'fix/local-aces-full-roi-historical-20261105' }}
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          PYTHONPATH: api
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'No private release read token'; exit 1; }
+          mkdir -p "$RUNNER_TEMP/local-aces-roi"
+          gh release download tbt-predictions-v1 --repo BackstageTalks/tbt-data --pattern feed.json --dir "$RUNNER_TEMP/local-aces-roi" --clobber
+          python scripts/audit_recent_local_aces_roi.py "$RUNNER_TEMP/local-aces-roi/feed.json"
+
       - name: Run backend tests
         env:
           PYTHONPATH: api:scripts
@@ -304,6 +317,7 @@ jobs:
       - name: Check frontend JavaScript
         run: |
           node --check web/app.js
+          node tests/test_local_aces_results_equivalence.cjs
           node tests/live_aces_price_verification.cjs web/app.js
           node --check web/auth.js
           node --check web/responsive.js

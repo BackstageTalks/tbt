@@ -14,6 +14,8 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from .local_ace_results import local_ace_result_odds
+
 WINDOW_DAYS = (3, 7, 14, 30, 180, 365)
 DEFAULT_CARDS = (
     {"metric": "today_picks", "period": "today"},
@@ -102,8 +104,13 @@ def _result_identity(row: dict, publication: dict, index: int) -> str:
     scope = str(publication.get("projection_scope") or "").strip().lower()
     metric = str(publication.get("projection_metric") or "").strip().lower()
     selection = str(publication.get("selection_id") or publication.get("selection") or "").strip().lower()
+    contract = ""
+    if str(publication.get("price_contract") or "").lower() == "player_total_ou":
+        side = str(publication.get("ou_side") or "").lower()
+        line = str(publication.get("market_line") or "")
+        contract = f"::{side}::{line}"
     if event and selection:
-        return f"{event}::{market}::{scope}::{metric}::{selection}"
+        return f"{event}::{market}::{scope}::{metric}::{selection}{contract}"
     def normalize_name(value: Any) -> str:
         folded = unicodedata.normalize("NFKD", str(value or ""))
         return re.sub(r"[^a-zA-Z0-9]+", " ", "".join(ch for ch in folded if not unicodedata.combining(ch))).strip().lower()
@@ -114,7 +121,7 @@ def _result_identity(row: dict, publication: dict, index: int) -> str:
     ))))
     scheduled = str(row.get("scheduled_at") or "").strip()
     if (scheduled or players) and selection:
-        return f"{scheduled}::{players}::{market}::{scope}::{metric}::{selection}"
+        return f"{scheduled}::{players}::{market}::{scope}::{metric}::{selection}{contract}"
     return str(publication.get("selection_key") or publication.get("publication_key") or f"{scheduled}::{players}::{publication.get('section') or ''}::{selection or index}")
 
 
@@ -179,7 +186,7 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
                 issued is not None and
                 (prior["_issued"] is None or issued < prior["_issued"])
             ):
-                unique[key] = {"publication": p, "_issued": issued}
+                unique[key] = {"publication": p, "row": row, "_issued": issued}
     wins = losses = odds_count = 0
     odds_sum = 0.0
     staked = profit = 0.0
@@ -195,14 +202,20 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
             losses += 1
         else:
             continue
+        local = local_ace_result_odds(entry["row"], p)
         status = str(p.get("price_status") or "").strip().lower()
         market = str(p.get("market") or "").strip().lower()
         priced = status == "priced_projection" if market in _PROJECTION_MARKETS else status in {"", "priced", "priced_projection"}
-        quote = _finite(p.get("odds"))
-        if priced and quote is not None and quote > 1:
+        quote = local if local is not None else _finite(p.get("odds"))
+        if (priced or local is not None) and quote is not None and quote > 1:
             odds_sum += quote
             odds_count += 1
             if str(p.get("section") or "").strip().lower() == "prime":
+                continue
+            if local is not None:
+                staked += 1
+                profit += local - 1 if outcome == "win" else -1
+                stake_count += 1
                 continue
             result = p.get("result") or {}
             stake, gain = _finite(result.get("staked_units")), _finite(result.get("profit_units"))

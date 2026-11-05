@@ -820,6 +820,9 @@ def _projection_metrics(publications):
     }
 
 
+from .local_ace_results import local_ace_result_odds
+
+
 def _genuine_publication_odds(publication):
     """A financial quote must be an actual bookmaker snapshot, never a display
     filler or projection-only/model-only price. Legacy winner publications may
@@ -868,15 +871,20 @@ def _is_void_bet_result(result):
 
 
 def _betting_metrics(publications):
+    # Accept ordinary publication fixtures and real (row, publication) entries.
+    # Read-only local Aces pricing needs the immutable event identity.
+    pairs = [(item[0], item[1]) if isinstance(item, tuple) else ({}, item)
+             for item in publications]
     rows = [
-        p for p in publications
+        (row, p) for row, p in pairs
         if isinstance(p, dict)
-        and p.get("price_status") not in {"projection_only", "model_only"}
+        and (p.get("price_status") not in {"projection_only", "model_only"}
+             or local_ace_result_odds(row, p) is not None)
         and isinstance(p.get("result"), dict)
         and not p.get("excluded_reason")
     ]
     graded = [
-        p for p in rows
+        (row, p) for row, p in rows
         if p["result"].get("correct") in {True, False}
         and not _is_void_bet_result(p["result"])
     ]
@@ -886,15 +894,19 @@ def _betting_metrics(publications):
             "n": 0, "wins": 0, "losses": 0, "voids": 0, "hit_rate": None,
             "avg_odds": None, "staked_units": 0.0, "profit_units": 0.0, "roi": None,
         }
-    wins = sum(1 for p in graded if p["result"].get("correct") is True)
-    losses = sum(1 for p in graded if p["result"].get("correct") is False)
-    # W/L covers every genuinely issued graded publication. Actual financial
-    # ROI includes only bookmaker-priced, staked bets outside Short Odds.
-    quotes = [_genuine_publication_odds(p) for p in graded]
+    wins = sum(1 for _, p in graded if p["result"].get("correct") is True)
+    losses = sum(1 for _, p in graded if p["result"].get("correct") is False)
+    # Count approved frozen BlinQ local Aces on exactly the same 1u basis.
+    local_prices = [local_ace_result_odds(row, p) for row, p in graded]
+    quotes = [local if local is not None else _genuine_publication_odds(p)
+              for (_, p), local in zip(graded, local_prices)]
     odds = [quote for quote in quotes if quote is not None]
     stakes = []
-    for publication, quote in zip(graded, quotes):
+    for (_, publication), quote, local in zip(graded, quotes, local_prices):
         if str(publication.get("section") or "").strip().lower() == "prime" or quote is None:
+            continue
+        if local is not None:
+            stakes.append((1.0, local - 1 if publication["result"]["correct"] else -1.0))
             continue
         result = publication["result"]
         try:
@@ -930,8 +942,12 @@ def _result_publication_semantic_key(row, publication):
     scope = str(publication.get("projection_scope") or "").strip().lower()
     metric = str(publication.get("projection_metric") or "").strip().lower()
     selection = str(publication.get("selection_id") or publication.get("selection") or "").strip().lower()
+    contract = ()
+    if str(publication.get("price_contract") or "").lower() == "player_total_ou":
+        contract = (str(publication.get("ou_side") or "").lower(),
+                    str(publication.get("market_line") or ""))
     if event and selection:
-        return (event, market, scope, metric, selection)
+        return (event, market, scope, metric, selection) + contract
     return (str(publication.get("selection_key") or publication.get("publication_key") or ""),)
 
 
@@ -959,16 +975,16 @@ def betting_performance(results):
     # Those keys changed across historical schemas and can otherwise double-count
     # an identical event/market/selection after a migration.
     canonical_entries = _dedupe_result_publications(entries)
-    canonical_publications = [publication for _, publication in canonical_entries]
+    canonical_publications = canonical_entries
 
     sections = {}
     for section in ("top200", "top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"):
         section_entries = [(row, p) for row, p in canonical_entries if p.get("section") == section]
-        sections[section] = _betting_metrics([p for _, p in section_entries])
+        sections[section] = _betting_metrics(section_entries)
     markets = {}
     for market in sorted({str(p.get("market") or "") for _, p in entries if p.get("market")}):
         market_entries = _dedupe_result_publications([(row, p) for row, p in entries if p.get("market") == market])
-        markets[market] = _betting_metrics([p for _, p in market_entries])
+        markets[market] = _betting_metrics(market_entries)
     projection_entries = _dedupe_result_publications([(row, p) for row, p in entries if str(p.get("market") or "").strip().lower() in {"aces", "double_faults", "sets", "games"}])
     projection_publications = [p for _, p in projection_entries]
     return {

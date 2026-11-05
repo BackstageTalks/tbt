@@ -8,6 +8,12 @@
 - Do not overwrite the source price, immutable issuance ledger, CDB, model predictions or already frozen Telegram receipts. Do not present historical illustrations as bettable quotes.
 - Keep site, Telegram and result presentation aligned on event + frozen selection identity. Validate future betting days, the range, source retention, price precedence, and a production JS readback before calling a change deployed.
 
+## Approved Results valuation — 5 November 2026
+
+For published and verifiably settled player-Aces O/U picks **issued from 1 November 2026, 06:00 Europe/Bratislava**, the BlinQ local 1.60–1.80 price is a **full accepted 1-unit price for Results**. Treat it equally to other priced picks for profit (+odds−1 on WIN / −1 on LOSS), average odds, ROI and all time-window, membership, ELITE and monthly aggregates. A separate bookmaker quote is not a prerequisite for counting this locally priced pick. Use ordinary WIN/LOSS colors and units; do not label the user-facing Results quote as second-class or only hypothetical.
+
+Respect the frozen event, player selection, O/U direction, line, issuance timestamp and verified settlement. Distinct frozen O/U lines are distinct bets; duplicate receipts of one contract count once. Do not create a result for an unissued/ambiguous contract or change a stored selection, source quote, result or CDB. Historical Results are recomputed **read-only** from the same approved local formula/confirmed receipt; prior to the cutover, retain the previous historical rules. The technical provenance fields remain unchanged so that local versus external source can still be audited.
+
 ## Player Aces UNDER — offered-line safety buffer
 
 For **future** player-Aces UNDER selections only, require the actual offered bookmaker line to exceed the unchanged count projection by at least **1.0 ace** for projections below 4; **1.5 aces** for projections 4–8 inclusive; **2.0 aces** above 8. Prefer **2.0 / 2.0 / 3.0 aces** respectively only where the real quoted price passes the existing modeled-probability and nonnegative-EV checks. No offered, qualifying line means no UNDER selection; do not invent lines or change the projection.
