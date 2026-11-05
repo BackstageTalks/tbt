@@ -4037,7 +4037,8 @@
       const realProfit=publication?.result?.profit_units==null?NaN:Number(publication.result.profit_units);
       if(!Number.isFinite(realStake)||realStake<=0||!Number.isFinite(realProfit))continue;
       stake+=1;
-      profit+=realProfit/realStake;
+      // Ledger profit_units is already per 1u; legacy staked_units can be 100.
+      profit+=realProfit;
       unitSample++;
       roiOddsSum+=actualOdds;
       roiOddCount++;
