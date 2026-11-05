@@ -116,3 +116,19 @@ def test_frontend_matches_backend_for_filters_and_monthly_history():
     assert "return {profit:outcome==='win'?localOdds-1:-1,stake:1,priced:true,odds:localOdds}" in month
     summary = app[app.index("function resultsSummary()"):app.index("function primeDetailCard(")]
     assert "1u na každý vyhodnotený tip s platným kurzom" in summary
+
+
+def test_legacy_stake_100_is_not_divided_again_in_one_unit_roi():
+    row = winner("legacy-stake-100", 1.83, True)
+    p = row["market_publications"][0]
+    p["result"]["staked_units"] = 100.0
+    p["result"]["profit_units"] = .83  # Existing normalized unit gain.
+    before = deepcopy(row)
+    api = published_results_metrics({"results": [row]}, "all", now=DAY)
+    engine = betting_performance([row])["overall"]
+    assert api["stake_count"] == 1
+    assert api["staked_units"] == engine["staked_units"] == 1.0
+    assert api["profit_units"] == engine["profit_units"] == .83
+    assert abs(api["roi"] - .83) < 1e-9
+    assert abs(engine["roi"] - .83) < 1e-9
+    assert row == before
