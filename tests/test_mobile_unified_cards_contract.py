@@ -7,7 +7,7 @@ INDEX=(WEB/"index.html").read_text(encoding="utf-8")
 CSS=(WEB/"blinq-mobile-unified-cards.css").read_text(encoding="utf-8")
 
 def test_mobile_card_styles_loaded_last_and_versioned():
-    assert '/blinq-mobile-unified-cards.css?v=7360&p=61&cards=20261030-2' in INDEX
+    assert '/blinq-mobile-unified-cards.css?v=7360&p=61&cards=20261105-units-1' in INDEX
     assert INDEX.index('blinq-mobile-density.css?') < INDEX.index('blinq-mobile-unified-cards.css?')
     assert '@media (max-width:600px)' in CSS
     assert ':not(.blinq-admin)' in CSS
@@ -42,3 +42,20 @@ def test_results_and_predictions_premium_surface_is_shared():
     assert '.results-card-row .result-prediction strong' in CSS
     assert 'result-loss' in CSS and 'result-void' in CSS
     assert 'grid-template-areas:"date status"' in CSS
+
+
+def test_mobile_result_units_respect_win_loss_void_and_unpriced_states():
+    # Signed units are already classified by the Results renderer; the mobile
+    # CSS must not apply unconditional green to both positive and negative.
+    assert "units>=0?'correct':'wrong'" in APP
+    assert "displayUnits<0?'wrong'" in APP
+    block=CSS.split("/* Signed Results values must keep their settlement color on mobile.",1)[1]
+    block=block.split("/* Compact pick body",1)[0]
+    assert "color:#79d6ae!important;font-size:12px!important" not in block
+    for state,color in (("correct","#79d6ae"),("wrong","#e98787"),("void","#c99aff")):
+        start=block.index(f".results-card-row .result-units.{state},")
+        child=block.index(f".results-card-row .result-units .results-units-depth b.{state} {{",start)
+        declaration=block[child:].split("}",1)[0]
+        assert f"color:{color}!important;" in declaration, state
+    assert ".results-card-row .result-units.unit-excluded" in block
+    assert "color:#849b94!important;" in block

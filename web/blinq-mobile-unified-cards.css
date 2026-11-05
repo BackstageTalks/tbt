@@ -353,7 +353,31 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
   .results-card-row .result-units {
-    color:#79d6ae!important;font-size:12px!important;
+    font-size:12px!important;
+  }
+  /* Signed Results values must keep their settlement color on mobile.
+     The old unconditional green covered losses (e.g. -1.00u). */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
+  .results-card-row .result-units.correct,
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
+  .results-card-row .result-units .results-units-depth b.correct {
+    color:#79d6ae!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
+  .results-card-row .result-units.wrong,
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
+  .results-card-row .result-units .results-units-depth b.wrong {
+    color:#e98787!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
+  .results-card-row .result-units.void,
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
+  .results-card-row .result-units .results-units-depth b.void {
+    color:#c99aff!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
+  .results-card-row .result-units.unit-excluded {
+    color:#849b94!important;
   }
 }
 
