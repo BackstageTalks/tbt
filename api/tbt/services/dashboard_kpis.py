@@ -104,8 +104,13 @@ def _result_identity(row: dict, publication: dict, index: int) -> str:
     scope = str(publication.get("projection_scope") or "").strip().lower()
     metric = str(publication.get("projection_metric") or "").strip().lower()
     selection = str(publication.get("selection_id") or publication.get("selection") or "").strip().lower()
+    contract = ""
+    if str(publication.get("price_contract") or "").lower() == "player_total_ou":
+        side = str(publication.get("ou_side") or "").lower()
+        line = str(publication.get("market_line") or "")
+        contract = f"::{side}::{line}"
     if event and selection:
-        return f"{event}::{market}::{scope}::{metric}::{selection}"
+        return f"{event}::{market}::{scope}::{metric}::{selection}{contract}
     def normalize_name(value: Any) -> str:
         folded = unicodedata.normalize("NFKD", str(value or ""))
         return re.sub(r"[^a-zA-Z0-9]+", " ", "".join(ch for ch in folded if not unicodedata.combining(ch))).strip().lower()
