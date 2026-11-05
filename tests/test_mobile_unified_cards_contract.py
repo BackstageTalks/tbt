@@ -1,5 +1,6 @@
 """Scope and renderer guards for approved compact BlinQ mobile cards."""
 from pathlib import Path
+import re
 ROOT=Path(__file__).resolve().parents[1]
 WEB=ROOT/"web"
 APP=(WEB/"app.js").read_text(encoding="utf-8")
@@ -42,3 +43,20 @@ def test_results_and_predictions_premium_surface_is_shared():
     assert '.results-card-row .result-prediction strong' in CSS
     assert 'result-loss' in CSS and 'result-void' in CSS
     assert 'grid-template-areas:"date status"' in CSS
+
+
+def test_mobile_result_units_respect_win_loss_void_and_unpriced_states():
+    # Signed units are already classified by the Results renderer; the mobile
+    # CSS must not apply unconditional green to both positive and negative.
+    assert "units>=0?'correct':'wrong'" in APP
+    assert "displayUnits<0?'wrong'" in APP
+    block=CSS.split("/* Signed Results values must keep their settlement color on mobile.",1)[1]
+    block=block.split("/* Compact pick body",1)[0]
+    assert "color:#79d6ae!important;font-size:12px!important" not in block
+    for state,color in (("correct","#79d6ae"),("wrong","#e98787"),("void","#c99aff")):
+        pattern=(r"\\.results-card-row \\.result-units\\."+state
+                 +r",.*?\\.results-card-row \\.result-units \\.results-units-depth b\\."+state
+                 +r" \\{\\s*color:"+color+r"!important;")
+        assert re.search(pattern,block,re.S), state
+    assert ".results-card-row .result-units.unit-excluded" in block
+    assert "color:#849b94!important;" in block
