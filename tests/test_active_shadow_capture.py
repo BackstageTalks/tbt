@@ -110,3 +110,99 @@ def test_pipeline_passes_wall_clock_after_challenger_inference():
     assert assign.lineno < updates[0].lineno
     now = next(keyword.value for keyword in updates[0].keywords if keyword.arg == "now")
     assert isinstance(now, ast.Name) and now.id == "shadow_capture_now"
+
+
+
+def test_new_provider_event_identity_collision_is_quarantined_without_rewriting_prior(capsys):
+    """A reused native event ID must not stop daily publication or settle twice."""
+    from copy import deepcopy
+    from datetime import datetime, timezone
+    from test_shadow_evaluation import _prediction
+
+    now, payload, _ = fixture()
+    original = deepcopy(payload['rows'])
+    old = original[0]
+    scheduled = now + timedelta(hours=6)
+    new = _prediction('new-provider-collision', scheduled, .67,
+                      p1_id='foreign-a', p2_id='foreign-b')
+    new['event_id'] = old['event_id']
+    challenger = deepcopy(new)
+    challenger['player1']['probability'] = .73
+    fresh = _prediction('valid-independent', scheduled, .67)
+    good_challenger = deepcopy(fresh)
+    good_challenger['player1']['probability'] = .71
+
+    args = dict(
+        production_predictions=[new, fresh],
+        challenger_predictions=[challenger, good_challenger],
+        completed_matches=[],
+        production_model_version=old['production_model_version'],
+        challenger_model_version=old['challenger_model_version'],
+        now=now,
+    )
+    updated = update_active_shadow(original, **args)
+    by_id = {r['match_id']: r for r in updated}
+    assert by_id[old['match_id']] == old
+    assert by_id['valid-independent']['status'] == 'pending'
+    assert 'new-provider-collision' not in by_id
+    assert original == payload['rows']  # no in-place mutation
+    assert 'new_shadow_provider_identity_quarantined' in capsys.readouterr().out
+    assert update_active_shadow(updated, **args) == updated
+
+
+def test_two_new_incompatible_identities_for_one_event_are_both_rejected(capsys):
+    from copy import deepcopy
+    from datetime import datetime, timezone
+    from test_shadow_evaluation import _prediction
+
+    now = datetime(2026, 11, 5, 8, tzinfo=timezone.utc)
+    scheduled = now + timedelta(hours=5)
+    prod_a = _prediction('new-a', scheduled, .6, p1_id='a', p2_id='b')
+    prod_b = _prediction('new-b', scheduled, .6, p1_id='c', p2_id='d')
+    prod_a['event_id'] = prod_b['event_id'] = 'provider-reused'
+    challenger = [deepcopy(prod_a), deepcopy(prod_b)]
+    updated = update_active_shadow(
+        [], production_predictions=[prod_a, prod_b],
+        challenger_predictions=challenger, completed_matches=[],
+        production_model_version='champion', challenger_model_version='v7.2.1-test',
+        now=now,
+    )
+    assert updated == []
+    assert '"conflicting_events": 1' in capsys.readouterr().out
+
+
+def test_preexisting_conflicting_provider_event_id_still_fails_closed():
+    from copy import deepcopy
+    now, payload, _ = fixture()
+    original = deepcopy(payload['rows'])
+    collision = dict(original[0], match_id='prior-collision', player2_id='foreign')
+    with pytest.raises(ValueError, match='Conflicting provider event identities'):
+        update_active_shadow([*original, collision], completed_matches=[], now=now)
+    assert original == payload['rows']
+
+
+def test_same_native_id_in_different_model_pairs_is_not_false_collision():
+    from copy import deepcopy
+    from datetime import datetime, timezone
+    from test_shadow_evaluation import _prediction
+
+    now = datetime(2026, 11, 5, 8, tzinfo=timezone.utc)
+    scheduled = now + timedelta(hours=5)
+    prod = _prediction('new-722', scheduled, .64, p1_id='different', p2_id='players')
+    prod['event_id'] = 'shared-id'
+    existing = {
+        'match_id': 'prior-721', 'event_id': 'shared-id', 'tour': 'ATP',
+        'player1_id': 'a', 'player2_id': 'b',
+        'captured_at': (now-timedelta(hours=1)).isoformat(),
+        'scheduled_at': scheduled.isoformat(),
+        'production_model_version': 'champion',
+        'challenger_model_version': 'v7.2.1-test',
+        'status': 'pending',
+    }
+    result = update_active_shadow(
+        [existing], production_predictions=[prod],
+        challenger_predictions=[deepcopy(prod)], completed_matches=[],
+        production_model_version='champion', challenger_model_version='v7.2.2-test',
+        now=now,
+    )
+    assert {x['match_id'] for x in result} == {'prior-721', 'new-722'}
