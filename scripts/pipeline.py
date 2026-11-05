@@ -1449,53 +1449,64 @@ def main():
         # Only the first snapshot for a model-pair/fixture is retained. Results
         # are settled later from canonical completed history.
         if shadow_store is not None:
-            challenger_predictions = (
-                predict(
-                    challenger_model, matches, upcoming, now=prediction_now,
-                    atp_leaderboards=atp_leaderboards,
-                    atp_rank_history=atp_rank_history,
-                    wta_rank_history=wta_rank_history,
-                    wta_season_stats=wta_season_stats,
+            try:
+                challenger_predictions = (
+                    predict(
+                        challenger_model, matches, upcoming, now=prediction_now,
+                        atp_leaderboards=atp_leaderboards,
+                        atp_rank_history=atp_rank_history,
+                        wta_rank_history=wta_rank_history,
+                        wta_season_stats=wta_season_stats,
+                    )
+                    if shadow_enabled else []
                 )
-                if shadow_enabled else []
-            )
-            from active_shadow_capture import update_active_shadow
-            # Do not backdate a captured prediction to inference start: the
-            # challenger and comparator may have taken minutes to finish.
-            # A fixture which began during inference must fail the pre-match
-            # guard in update_shadow_ledger instead of entering the cohort.
-            shadow_capture_now = datetime.now(timezone.utc)
-            shadow_ledger = update_active_shadow(
-                shadow_ledger,
-                production_predictions=predictions,
-                challenger_predictions=challenger_predictions,
-                completed_matches=matches,
-                production_model_version=str(getattr(model, "version", "") or ""),
-                challenger_model_version=challenger_version if shadow_enabled else "",
-                now=shadow_capture_now,
-            )
-            if shadow_enabled:
-                shadow_report = build_shadow_report(
+                from active_shadow_capture import update_active_shadow
+                # Do not backdate a captured prediction to inference start: the
+                # challenger and comparator may have taken minutes to finish.
+                # A fixture which began during inference must fail the pre-match
+                # guard in update_shadow_ledger instead of entering the cohort.
+                shadow_capture_now = datetime.now(timezone.utc)
+                shadow_ledger = update_active_shadow(
                     shadow_ledger,
+                    production_predictions=predictions,
+                    challenger_predictions=challenger_predictions,
+                    completed_matches=matches,
                     production_model_version=str(getattr(model, "version", "") or ""),
-                    challenger_model_version=challenger_version,
+                    challenger_model_version=challenger_version if shadow_enabled else "",
+                    now=shadow_capture_now,
                 )
-                shadow_report["generated_at_utc"] = shadow_capture_now.isoformat()
-                write_json(shadow_dir / "shadow_ledger.json", shadow_ledger)
-                write_json(shadow_dir / "shadow_report.json", clean(shadow_report))
-                shadow_store.upload_bundle([
-                    shadow_dir / "shadow_ledger.json",
-                    shadow_dir / "shadow_report.json",
-                ])
+                if shadow_enabled:
+                    shadow_report = build_shadow_report(
+                        shadow_ledger,
+                        production_model_version=str(getattr(model, "version", "") or ""),
+                        challenger_model_version=challenger_version,
+                    )
+                    shadow_report["generated_at_utc"] = shadow_capture_now.isoformat()
+                    write_json(shadow_dir / "shadow_ledger.json", shadow_ledger)
+                    write_json(shadow_dir / "shadow_report.json", clean(shadow_report))
+                    shadow_store.upload_bundle([
+                        shadow_dir / "shadow_ledger.json",
+                        shadow_dir / "shadow_report.json",
+                    ])
+                    print(json.dumps({
+                        "shadow_evaluation": {
+                            "production": str(getattr(model, "version", "") or ""),
+                            "challenger": challenger_version,
+                            "captured": shadow_report.get("cohort", {}).get("captured", 0),
+                            "settled": shadow_report.get("cohort", {}).get("settled", 0),
+                            "minimum_for_review": shadow_report.get("cohort", {}).get("minimum_for_review", 200),
+                            "ready_for_promotion_review": shadow_report.get("gate", {}).get("ready_for_promotion_review", False),
+                        }
+                    }, ensure_ascii=False), flush=True)
+            except Exception as exc:
+                # Shadow is optional research: neither an identity collision
+                # nor a failed private shadow release may cancel the paid
+                # production refresh or trigger additional provider calls.
                 print(json.dumps({
-                    "shadow_evaluation": {
-                        "production": str(getattr(model, "version", "") or ""),
-                        "challenger": challenger_version,
-                        "captured": shadow_report.get("cohort", {}).get("captured", 0),
-                        "settled": shadow_report.get("cohort", {}).get("settled", 0),
-                        "minimum_for_review": shadow_report.get("cohort", {}).get("minimum_for_review", 200),
-                        "ready_for_promotion_review": shadow_report.get("gate", {}).get("ready_for_promotion_review", False),
-                    }
+                    "warning": "active_shadow_evaluation_unavailable",
+                    "detail": str(exc)[:500],
+                    "production_refresh_continues": True,
+                    "additional_provider_calls": 0,
                 }, ensure_ascii=False), flush=True)
 
         # Optional v7.2.1 shadow is isolated from the existing challenger.
