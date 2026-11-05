@@ -3943,6 +3943,25 @@
     });
     return [...unique.values()].sort((a,b)=>new Date(b.row?.scheduled_at||0)-new Date(a.row?.scheduled_at||0));
   }
+  function approvedLocalAceResultOdds(publication){
+    // Equal flat-1u Results/ROI treatment for frozen BlinQ local Aces O/U.
+    // The original source/Telegram price and settlement are never rewritten.
+    if(String(publication?.market||'').toLowerCase()!=='aces'
+      ||String(publication?.price_contract||'').toLowerCase()!=='player_total_ou'
+      ||!['over','under'].includes(String(publication?.ou_side||'').toLowerCase())
+      ||publication?.market_line==null||!Number.isFinite(Number(publication.market_line))
+      ||Number(publication.market_line)<0||!publication?.selection_id
+      ||!['priced_projection','projection_only'].includes(String(publication?.price_status||'').toLowerCase())
+      ||Number.isFinite(verifiedAceProviderOdds(publication)))return NaN;
+    const issued=Date.parse(String(publication?.issued_at||''));
+    if(!Number.isFinite(issued)||issued<Date.parse('2026-11-01T05:00:00Z'))return NaN;
+    const frozen=publication?.odds==null?NaN:Number(publication.odds);
+    if(publication?.price_basis==='local_aces_statistical_v1'
+      &&Number.isFinite(frozen)&&frozen>=1.60&&frozen<=1.80)return frozen;
+    if(publication?.price_basis&&publication.price_basis!=='local_aces_statistical_v1')return NaN;
+    const local=publication?.statistical_ace_odds==null?NaN:Number(publication.statistical_ace_odds);
+    return Number.isFinite(local)&&local>=1.60&&local<=1.80?local:NaN;
+  }
   function resultVisibleOdds(publication){
     const actual=publication?.odds==null?NaN:Number(publication.odds);
     const normalized=String(publication?.market||'').toLowerCase()==='aces'?Number(publication?.statistical_ace_odds):NaN;
@@ -3958,8 +3977,7 @@
   }
   function resultVisibleUnits(publication,outcome,odds){
     if(outcome.kind==='void')return 0;
-    const localAceOdds=String(publication?.market||'').toLowerCase()==='aces'
-      ?Number(publication?.statistical_ace_odds):NaN;
+    const localAceOdds=approvedLocalAceResultOdds(publication);
     if(Number.isFinite(localAceOdds)&&localAceOdds>=1.60&&localAceOdds<=1.80
       &&['win','loss'].includes(outcome.kind))
       return outcome.kind==='win'?localAceOdds-1:-1;
@@ -3981,6 +3999,15 @@
     const aceDfCategory=!filters?.membership&&(category==='ace'||category==='double_faults');
     let stake=0,profit=0,oddsTotal=0,oddsSample=0,unitSample=0,roiOddsSum=0,roiOddCount=0,ledgerDiscrepancies=0;
     for(const {publication} of graded){
+      const localAceQuote=approvedLocalAceResultOdds(publication);
+      if(Number.isFinite(localAceQuote)){
+        // Treat frozen BlinQ Aces quotes as ordinary 1u Results stakes in
+        // every membership/category/date filter, not just the Aces-only tab.
+        const gain=publicationOutcome(publication).kind==='win'?localAceQuote-1:-1;
+        profit+=gain;stake+=1;unitSample++;oddsTotal+=localAceQuote;
+        oddsSample++;roiOddsSum+=localAceQuote;roiOddCount++;
+        continue;
+      }
       // ACES/DF Results use the same normalized-or-real quote shown in the table.
       // This is a 1u display performance calculation and does not rewrite ledger settlement.
       if(aceDfCategory){
@@ -4002,9 +4029,7 @@
       // profit_units is already the displayed unit result; legacy staked_units can
       // carry a different scale (for example 100) and must not dilute filter ROI.
       const rawOdds=publication?.odds==null?NaN:Number(publication.odds);
-      const isNormalizedAce=String(publication?.market||'').toLowerCase()==='aces'
-        &&Number.isFinite(Number(publication?.statistical_ace_odds));
-      const actualOdds=isNormalizedAce?Number(publication.statistical_ace_odds):rawOdds;
+      const actualOdds=rawOdds;
       const status=String(publication?.price_status||'').trim().toLowerCase();
       const market=String(publication?.market||'').trim().toLowerCase();
       const projectionMarket=['aces','double_faults','sets','games'].includes(market);
@@ -4015,13 +4040,6 @@
       if(!filters?.membership&&String(publication?.section||'').toLowerCase()==='prime')continue;
       const realStake=publication?.result?.staked_units==null?NaN:Number(publication.result.staked_units);
       const realProfit=publication?.result?.profit_units==null?NaN:Number(publication.result.profit_units);
-      if(isNormalizedAce){
-        // Shared 1u statistical performance basis for every Aces results filter.
-        const outcome=publicationOutcome(publication);
-        profit+=outcome.kind==='win'?actualOdds-1:-1;
-        stake+=1;unitSample++;roiOddsSum+=actualOdds;roiOddCount++;
-        continue;
-      }
       if(!Number.isFinite(realStake)||realStake<=0||!Number.isFinite(realProfit))continue;
       stake+=1;
       profit+=realProfit;
@@ -4096,6 +4114,9 @@
   }
   function monthlyFinancialRecord(publication){
     const outcome=publicationOutcome(publication).kind;
+    const local=approvedLocalAceResultOdds(publication);
+    if(Number.isFinite(local)&&['win','loss'].includes(outcome))
+      return {profit:outcome==='win'?local-1:-1,stake:1,priced:true,odds:local};
     if(outcome==='void')return {profit:0,stake:0,priced:false};
     if(!['win','loss'].includes(outcome))return null;
     const odds=publication.odds==null?NaN:Number(publication.odds);
@@ -4226,14 +4247,16 @@
         const normalizedAceOdds=String(publication?.market||'').toLowerCase()==='aces'
           ?aceDfResultKpiOdds(publication):NaN;
         const temporaryAceDfOdds=aceDfLegacyResultDisplayOdds(publication);
-        const displayedProjectionOdds=Number.isFinite(normalizedAceOdds)?normalizedAceOdds.toFixed(2):
+        const approvedLocalQuote=approvedLocalAceResultOdds(publication);
+        const displayedProjectionOdds=Number.isFinite(approvedLocalQuote)?approvedLocalQuote.toFixed(2):
+          Number.isFinite(normalizedAceOdds)?normalizedAceOdds.toFixed(2):
           Number.isFinite(temporaryAceDfOdds)?temporaryAceDfOdds.toFixed(2):
           realProjectionOddsText!=='—'?realProjectionOddsText:
           illustrativeOnly?placeholderOdds.toFixed(2):
           Number.isFinite(estimatedProjectionOdds)?estimatedProjectionOdds.toFixed(2):'—';
         // Historical display-only prices can fill the visible Units cell,
         // but never become a settled stake, ledger profit, or genuine ROI.
-        const aceDfKpiOdds=aceDfResultKpiOdds(publication);
+        const aceDfKpiOdds=Number.isFinite(approvedLocalQuote)?approvedLocalQuote:aceDfResultKpiOdds(publication);
         const displayUnits=Number.isFinite(aceDfKpiOdds)
           ?(outcome.kind==='void'?0:outcome.kind==='win'?aceDfKpiOdds-1:outcome.kind==='loss'?-1:NaN)
           :resultVisibleUnits(publication,outcome,resultVisibleOdds(publication));
@@ -7831,8 +7854,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
       [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
-      ['ROI',m.roi==null?'—':pct(m.roi),m.aceDfNormalizedKpis?lcopy('1u result ROI from normalized legacy / real API odds','1u výsledkové ROI z normalizovaných historických / reálnych API kurzov','1u výsledkové ROI z normalizovaných historických / reálných API kurzů'):lcopy('1u per settled pick with a real quote','1u na každý vyhodnotený tip s reálnym kurzom','1u na každý vyhodnocený tip s reálným kurzem')],
-      [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',m.aceDfNormalizedKpis?lcopy('1u per settled Aces/DF pick','1u na každý vyhodnotený pick ESÁ/DF','1u na každý vyhodnocený tip ESA/DF'):lcopy('settled profit','vyhodnotený zisk','vyhodnocený zisk')],
+      ['ROI',m.roi==null?'—':pct(m.roi),lcopy('1u per settled pick with an accepted quote','1u na každý vyhodnotený tip s platným kurzom','1u na každý vyhodnocený tip s platným kurzem')],
+      [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',lcopy('settled profit','vyhodnotený zisk','vyhodnocený zisk')],
       [publicText('Sample'),sampleValue,sampleNote],
     ]);
   }
