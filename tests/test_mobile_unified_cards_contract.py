@@ -1,6 +1,5 @@
 """Scope and renderer guards for approved compact BlinQ mobile cards."""
 from pathlib import Path
-import re
 ROOT=Path(__file__).resolve().parents[1]
 WEB=ROOT/"web"
 APP=(WEB/"app.js").read_text(encoding="utf-8")
@@ -54,9 +53,9 @@ def test_mobile_result_units_respect_win_loss_void_and_unpriced_states():
     block=block.split("/* Compact pick body",1)[0]
     assert "color:#79d6ae!important;font-size:12px!important" not in block
     for state,color in (("correct","#79d6ae"),("wrong","#e98787"),("void","#c99aff")):
-        pattern=(r"\\.results-card-row \\.result-units\\."+state
-                 +r",.*?\\.results-card-row \\.result-units \\.results-units-depth b\\."+state
-                 +r" \\{\\s*color:"+color+r"!important;")
-        assert re.search(pattern,block,re.S), state
+        start=block.index(f".results-card-row .result-units.{state},")
+        child=block.index(f".results-card-row .result-units .results-units-depth b.{state} {{",start)
+        declaration=block[child:].split("}",1)[0]
+        assert f"color:{color}!important;" in declaration, state
     assert ".results-card-row .result-units.unit-excluded" in block
     assert "color:#849b94!important;" in block
