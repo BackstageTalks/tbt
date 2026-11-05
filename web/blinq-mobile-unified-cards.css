@@ -343,6 +343,12 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
     font-size:14px!important;color:#e7f4eb!important;
     font-variant-numeric:tabular-nums!important;
   }
+  /* Settled approved/bookmaker quotes are standard green odds, not neutral text.
+     This file loads after blinq-app.css and has higher specificity on mobile. */
+  body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
+  .results-card-row .result-odds.is-quoted {
+    color:#42e897!important;
+  }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
   .results-card-row .result-status {
     text-align:right!important;justify-self:end!important;
