@@ -28,7 +28,9 @@ concurrency:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    # Playwright 1.57 Chromium is unsupported on ubuntu26.04-x64.
+    # Keep browser tests mandatory on a supported GitHub runner.
+    runs-on: ubuntu-24.04
     outputs:
       pending_match_status_deploy: ${{ steps.match_status_deploy_request.outputs.pending }}
     steps:
