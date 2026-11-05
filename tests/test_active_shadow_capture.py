@@ -110,3 +110,80 @@ def test_pipeline_passes_wall_clock_after_challenger_inference():
     assert assign.lineno < updates[0].lineno
     now = next(keyword.value for keyword in updates[0].keywords if keyword.arg == "now")
     assert isinstance(now, ast.Name) and now.id == "shadow_capture_now"
+
+
+@pytest.mark.parametrize("version", ["v7.2.1-test", "v7.2.2-test"])
+def test_conflicting_provider_identity_excluded_without_settlement(version):
+    """Ambiguous provider ID must not be scored, settled or silently merged."""
+    from copy import deepcopy
+    from tbt.services.frozen_721_research import exclude_repeated_events
+
+    now, payload, match = fixture()
+    original = dict(payload["rows"][0], challenger_model_version=version)
+    collision = dict(original, match_id="different-fixture", player2_id="other")
+    rows = [original, collision]
+    untouched = deepcopy(rows)
+
+    # Strict frozen research continues to fail closed on the same records.
+    with pytest.raises(ValueError, match="Conflicting provider event identities"):
+        exclude_repeated_events(rows)
+
+    updated = update_active_shadow(rows, completed_matches=[match], now=now)
+    assert rows == untouched
+    assert {r["match_id"] for r in updated} == {
+        original["match_id"], collision["match_id"]
+    }
+    assert all(r["event_id"] == "event1" for r in updated)
+    assert all(r["status"] == "excluded" for r in updated)
+    assert all(r["excluded_reason"] == "conflicting_provider_event_identity"
+               for r in updated)
+    assert all(r["shadow_status_before_quarantine"] == "pending"
+               for r in updated)
+    assert not any(r.get("target_player1_win") is not None for r in updated)
+    assert update_active_shadow(updated, completed_matches=[match], now=now) == updated
+
+
+def test_conflicting_previously_settled_shadow_identity_removed_from_scoring():
+    now, payload, match = fixture()
+    settled = dict(payload["rows"][0], status="settled", target_player1_win=1)
+    collision = dict(payload["rows"][0], match_id="reused-event-other-players",
+                     player1_id="other")
+    updated = update_active_shadow([settled, collision], completed_matches=[match], now=now)
+    assert len(updated) == 2
+    assert all(r["status"] == "excluded" for r in updated)
+    assert next(r for r in updated if r["match_id"] == settled["match_id"])[
+        "shadow_status_before_quarantine"
+    ] == "settled"
+
+
+def test_pipeline_shields_production_from_active_shadow_errors():
+    """Shadow prediction, update, report and upload must share one exception guard."""
+    import ast
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "scripts" / "pipeline.py"
+              ).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    shadow_tries = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Try)
+        and any(isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Name)
+                and n.func.id == "update_active_shadow"
+                for n in ast.walk(node))
+    ]
+    assert len(shadow_tries) == 1
+    shield = shadow_tries[0]
+    assert any(isinstance(h.type, ast.Name) and h.type.id == "Exception"
+               for h in shield.handlers)
+    calls = [
+        n for n in ast.walk(shield)
+        if isinstance(n, ast.Call)
+    ]
+    assert any(isinstance(n.func, ast.Name) and n.func.id == "build_shadow_report"
+               for n in calls)
+    assert any(isinstance(n.func, ast.Attribute)
+               and n.func.attr == "upload_bundle"
+               for n in calls)
+    assert "active_shadow_evaluation_unavailable" in source
+    assert "production_refresh_continues" in source
