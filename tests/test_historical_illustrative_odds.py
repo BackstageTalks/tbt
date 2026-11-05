@@ -97,7 +97,7 @@ def test_ace_df_results_kpis_use_displayed_normalized_or_real_api_odds_without_r
     assert "stake+=1" in APP
     assert "profit+=units" in APP
     assert "aceDfNormalizedKpis:aceDfCategory" in APP
-    assert "1u result ROI from normalized legacy / real API odds" in APP
+    assert "1u per settled pick with an eligible price" in APP
     assert "1u per settled Aces/DF pick" in APP
     assert "const unitsText=Number.isFinite(displayUnits)?" in APP
     assert "Number.isFinite(displayUnits)&&displayUnits>0?'correct'" in APP
