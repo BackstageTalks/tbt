@@ -245,7 +245,8 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
             stake, gain = _finite(result.get("staked_units")), _finite(result.get("profit_units"))
             if stake is not None and stake > 0 and gain is not None:
                 staked += 1.0
-                profit += gain / stake
+                # profit_units is already the 1u normalized unit gain.
+                profit += gain
                 stake_count += 1
     total = wins + losses
     return {
