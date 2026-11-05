@@ -3970,6 +3970,20 @@
       return outcome.kind==='win'?odds-1:-1;
     return NaN;
   }
+  function localAceFinancialOdds(publication){
+    // Approved, equally weighted 1u ACES price for an issued player O/U.
+    // Never promote pre-November historical illustrative prices.
+    if(String(publication?.market||'').toLowerCase()!=='aces'
+      ||String(publication?.price_contract||'').toLowerCase()!=='player_total_ou'
+      ||!['over','under'].includes(String(publication?.ou_side||'').toLowerCase())
+      ||!String(publication?.selection_id||'').trim())return NaN;
+    const issued=Date.parse(String(publication?.issued_at||''));
+    const line=publication?.market_line==null?NaN:Number(publication.market_line);
+    const odds=publication?.statistical_ace_odds==null?NaN:Number(publication.statistical_ace_odds);
+    return Number.isFinite(issued)&&issued>=Date.parse('2026-11-01T05:00:00Z')
+      &&Number.isFinite(line)&&line>=0&&Number.isFinite(odds)&&odds>=1.60&&odds<=1.80
+      ?odds:NaN;
+  }
   function localResultMetrics(rows,category,filters=null){
     const entries=settledPublishedEntries(rows,category,filters);
     // Preserve the full Results sample, and recompute STATS before deduplication
@@ -4001,10 +4015,16 @@
       // Filtered Results compare every settled quoted pick on the same 1u basis.
       // profit_units is already the displayed unit result; legacy staked_units can
       // carry a different scale (for example 100) and must not dilute filter ROI.
-      const rawOdds=publication?.odds==null?NaN:Number(publication.odds);
-      const isNormalizedAce=String(publication?.market||'').toLowerCase()==='aces'
-        &&Number.isFinite(Number(publication?.statistical_ace_odds));
-      const actualOdds=isNormalizedAce?Number(publication.statistical_ace_odds):rawOdds;
+      const localAceOdds=localAceFinancialOdds(publication);
+      if(Number.isFinite(localAceOdds)){
+        // ELITE, all-markets, today and historical windows have identical 1u accounting.
+        const outcome=publicationOutcome(publication);
+        oddsTotal+=localAceOdds;oddsSample++;stake+=1;unitSample++;
+        profit+=outcome.kind==='win'?localAceOdds-1:-1;
+        roiOddsSum+=localAceOdds;roiOddCount++;
+        continue;
+      }
+      const actualOdds=publication?.odds==null?NaN:Number(publication.odds);
       const status=String(publication?.price_status||'').trim().toLowerCase();
       const market=String(publication?.market||'').trim().toLowerCase();
       const projectionMarket=['aces','double_faults','sets','games'].includes(market);
@@ -4015,16 +4035,9 @@
       if(!filters?.membership&&String(publication?.section||'').toLowerCase()==='prime')continue;
       const realStake=publication?.result?.staked_units==null?NaN:Number(publication.result.staked_units);
       const realProfit=publication?.result?.profit_units==null?NaN:Number(publication.result.profit_units);
-      if(isNormalizedAce){
-        // Shared 1u statistical performance basis for every Aces results filter.
-        const outcome=publicationOutcome(publication);
-        profit+=outcome.kind==='win'?actualOdds-1:-1;
-        stake+=1;unitSample++;roiOddsSum+=actualOdds;roiOddCount++;
-        continue;
-      }
       if(!Number.isFinite(realStake)||realStake<=0||!Number.isFinite(realProfit))continue;
       stake+=1;
-      profit+=realProfit;
+      profit+=realProfit/realStake;
       unitSample++;
       roiOddsSum+=actualOdds;
       roiOddCount++;
@@ -4098,6 +4111,8 @@
     const outcome=publicationOutcome(publication).kind;
     if(outcome==='void')return {profit:0,stake:0,priced:false};
     if(!['win','loss'].includes(outcome))return null;
+    const localOdds=localAceFinancialOdds(publication);
+    if(Number.isFinite(localOdds))return {profit:outcome==='win'?localOdds-1:-1,stake:1,priced:true,odds:localOdds};
     const odds=publication.odds==null?NaN:Number(publication.odds);
     const status=String(publication.price_status||'').toLowerCase();
     const projection=['aces','double_faults','sets','games'].includes(String(publication.market||'').toLowerCase());
@@ -4159,7 +4174,7 @@
       '<line x1="20" y1="'+zero+'" x2="740" y2="'+zero+'" stroke="#73869a" stroke-dasharray="5 5"/>'+
       '<path d="'+path+'" fill="none" stroke="#43d88c" stroke-width="3" stroke-linejoin="round"/>'+
       '<text x="20" y="190" fill="#aabed1" font-size="13">1.</text><text x="705" y="190" fill="#aabed1" font-size="13">'+days+'.</text></svg></div>'+
-      '<p style="font-size:12px;color:#aabed1;margin:12px 0 0" role="status">Vzorka: '+all.length+' unikátnych vyhodnotených tipov; '+excluded+' bez použiteľného overeného kurzu / vyúčtovania nezahrnutých do ROI. Profit je normalizovaný na 1 jednotku vkladu. VOID sa nezapočítava do menovateľa ROI. Filtre nemenia produkčné dáta ani globálne výsledky.</p></section>';
+      '<p style="font-size:12px;color:#aabed1;margin:12px 0 0" role="status">Vzorka: '+all.length+' unikátnych vyhodnotených tipov; '+excluded+' bez platného kurzu / vyúčtovania nezahrnutých do ROI. Schválené lokálne kurzy ESÁ sú rovnocenné: 1u na tip. VOID sa nezapočítava do menovateľa ROI. Filtre nemenia produkčné dáta ani globálne výsledky.</p></section>';
   }
 
   function renderResults(){
@@ -7831,7 +7846,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
       [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
-      ['ROI',m.roi==null?'—':pct(m.roi),m.aceDfNormalizedKpis?lcopy('1u result ROI from normalized legacy / real API odds','1u výsledkové ROI z normalizovaných historických / reálnych API kurzov','1u výsledkové ROI z normalizovaných historických / reálných API kurzů'):lcopy('1u per settled pick with a real quote','1u na každý vyhodnotený tip s reálnym kurzom','1u na každý vyhodnocený tip s reálným kurzem')],
+      ['ROI',m.roi==null?'—':pct(m.roi),m.aceDfNormalizedKpis?lcopy('1u per settled pick with an eligible price','1u na každý vyhodnotený tip s platným kurzom','1u na každý vyhodnocený tip s platným kurzem'):lcopy('1u per settled pick with an eligible price','1u na každý vyhodnotený tip s platným kurzom','1u na každý vyhodnocený tip s platným kurzem')],
       [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',m.aceDfNormalizedKpis?lcopy('1u per settled Aces/DF pick','1u na každý vyhodnotený pick ESÁ/DF','1u na každý vyhodnocený tip ESA/DF'):lcopy('settled profit','vyhodnotený zisk','vyhodnocený zisk')],
       [publicText('Sample'),sampleValue,sampleNote],
     ]);
