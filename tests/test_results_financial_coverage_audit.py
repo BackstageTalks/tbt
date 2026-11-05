@@ -108,7 +108,7 @@ def test_no_extra_public_results_copy_or_layout_changes():
     assert "const depthText=Number.isFinite(depth)" not in app
     assert "bez Short Odds" not in app[app.index("function resultsSummary()"):app.index("function primeDetailCard(")]
     summary = app[app.index("function resultsSummary()"):app.index("function primeDetailCard(")]
-    assert "1u per settled pick with a real quote" in summary
+    assert "1u per settled pick with an accepted quote" in summary
     assert "real settled stakes" not in summary
     assert "settled profit" in app
     # All filtered financial KPIs use a comparable 1u denominator. ACES/DF
