@@ -2,8 +2,9 @@ name: BlinQ read-only champion vs challenger shadow audit
 run-name: "Model Lab audit ${{ inputs.request_id || github.run_id }}"
 on:
   push:
-    branches: [main]
+    branches: [main, research/model-quality-evidence-20261105]
     paths:
+      - .github/workflows/model-shadow-evaluation-readonly.yml
       - scripts/audit_model_shadow_readonly.py
       - scripts/audit_frozen_721_segments.py
       - tests/test_audit_frozen_721_segments.py
