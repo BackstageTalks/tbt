@@ -113,7 +113,8 @@ def test_prepares_all_verified_results_once_without_mutating_receipts(tmp_path):
     assert info["status"] == "reserved"
     assert info["verified_issued"] == 13
     assert len(info["replayed_exact_aces"]) == 7
-    assert info["counts"] == {"won": 11, "lost": 2, "void": 0, "pending": 0}
+    # FREE duplicates a published TOP tip; it is excluded from premium ROI.
+    assert info["counts"] == {"won": 10, "lost": 2, "void": 0, "pending": 0}
     assert info["paid_provider_requests"] == 0
     assert state == original
     saved = json.loads((tmp_path / "state.json").read_text())
