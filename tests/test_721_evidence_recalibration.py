@@ -108,3 +108,59 @@ def test_721_training_profile_wires_pit_evidence_without_changing_old_champion()
     legacy = TennisEnsemble()
     assert not getattr(legacy, "smooth_calibration_only", False)
     assert legacy.evidence_calibrators == {}
+
+
+
+def test_721_tour_evidence_selection_baseline_never_trains_on_later_labels():
+    """An already refitted serving map cannot validate a nested cohort map."""
+    rng = np.random.default_rng(72109)
+    n, split = 1800, 1000
+    raw = rng.uniform(.05, .95, n)
+    targets = rng.binomial(1, raw)
+    tours = (np.arange(n) % 2).astype(float)
+    atp_early = np.flatnonzero(tours[:split] == 1.)
+    atp_all = np.flatnonzero(tours == 1.)
+    global_map = ProbabilityCalibrator()
+    # Simulate the production-ready tour map, trained on every calibration row.
+    serving_map = TennisEnsemble._fit_calibrator("platt", raw[atp_all],
+                                                  targets[atp_all])
+    approved = {"atp": serving_map}
+    before = TennisEnsemble._selection_tour_baseline(
+        raw, targets, tours, split, global_map, approved
+    )
+    revised = targets.copy()
+    revised[split:] = 1 - revised[split:]
+    after = TennisEnsemble._selection_tour_baseline(
+        raw, revised, tours, split, global_map, approved
+    )
+    # Validation-period results must not influence the benchmark probabilities.
+    np.testing.assert_allclose(before, after, atol=1e-12)
+    expected_early = TennisEnsemble._fit_calibrator(
+        "platt", raw[atp_early], targets[atp_early]
+    )
+    np.testing.assert_allclose(
+        before[tours == 1.],
+        TennisEnsemble._calibrated(expected_early, raw[tours == 1.]),
+        atol=1e-12,
+    )
+    # The unselected tour still uses the earlier global method.
+    np.testing.assert_allclose(before[tours == 0.], raw[tours == 0.], atol=1e-12)
+
+
+def test_721_tour_baseline_rejects_missing_or_non_pit_selection_evidence():
+    rng = np.random.default_rng(72110)
+    raw = rng.uniform(.05, .95, 900)
+    labels = rng.binomial(1, raw)
+    tours = (np.arange(900) % 2).astype(float)
+    selected = {"atp": TennisEnsemble._fit_calibrator(
+        "platt", raw[tours == 1.], labels[tours == 1.])}
+    with np.testing.assert_raises_regex(ValueError, "point-in-time"):
+        bad_tours = tours.copy()
+        bad_tours[2] = np.nan
+        TennisEnsemble._selection_tour_baseline(
+            raw, labels, bad_tours, 550, ProbabilityCalibrator(), selected,
+        )
+    with np.testing.assert_raises_regex(ValueError, "Insufficient earlier"):
+        TennisEnsemble._selection_tour_baseline(
+            raw, labels, tours, 100, ProbabilityCalibrator(), selected,
+        )
