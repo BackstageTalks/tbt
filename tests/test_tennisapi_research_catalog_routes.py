@@ -34,12 +34,15 @@ def test_all_four_research_routes_use_exact_guarded_provider_paths():
         "/tournament/all/category/-100")
     assert client.player_recent_tournaments(14486)["witness"].endswith(
         "/player/14486/tournaments/last")
+    assert client.calendar_days_with_events(61642, 2026)["witness"].endswith(
+        "/calendar/season/61642/2026/days-with-events")
     assert calls == [
         "/api/tennis/tournament/2473/season/67391/venue/29580/events/all/0",
         "/api/tennis/tournament/2473/scheduled-events/2025-07-21",
         "/api/tennis/tournament/all/category/3",
         "/api/tennis/tournament/all/category/-100",
         "/api/tennis/player/14486/tournaments/last",
+        "/api/calendar/season/61642/2026/days-with-events",
     ]
 
 
@@ -56,6 +59,8 @@ def test_invalid_ids_cannot_reach_provider(invalid):
         lambda: client.tournament_events_on_date(invalid, date(2025, 7, 21)),
         lambda: client.tournaments_by_category(invalid),
         lambda: client.player_recent_tournaments(invalid),
+        lambda: client.calendar_days_with_events(invalid, 2026),
+        lambda: client.calendar_days_with_events(61642, invalid),
     ):
         with pytest.raises(ValueError):
             op()
@@ -98,3 +103,24 @@ def test_grand_slam_category_exception_is_exact_not_freeform():
         with pytest.raises(ValueError):
             client.tournaments_by_category(invalid)
     assert len(calls) == 1
+
+
+def test_calendar_no_content_is_not_evidence_of_no_matches():
+    client = object.__new__(RapidTennisClient)
+    calls = []
+
+    def empty_guarded_get(path, *, enrichment=False):
+        assert enrichment is True
+        calls.append(path)
+        return {}  # HTTP 204 is mapped to {} in the established _get client.
+
+    client._get = empty_guarded_get
+    assert client.calendar_days_with_events(61642, 2026) == {}
+    assert calls == ["/api/calendar/season/61642/2026/days-with-events"]
+
+
+def test_calendar_rejects_out_of_range_year_before_provider_request():
+    client, calls = research_client()
+    with pytest.raises(ValueError):
+        client.calendar_days_with_events(61642, 10000)
+    assert calls == []
