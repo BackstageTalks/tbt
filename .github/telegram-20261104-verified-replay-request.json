@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "day": "2026-11-04",
+  "mode": "receipt-and-frozen-provider-status",
+  "source_run_id": 41969752703,
+  "paid_provider_requests": 0,
+  "cdb_write": false,
+  "results_archive_write": false,
+  "telegram_delivery_authorized": true
+}
