@@ -6195,13 +6195,13 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<p>Jeden postup: príprava dát → tréning a shadow → schválené produkčné nasadenie. Champion zostáva nedotknutý až do samostatne schváleného prepnutia.</p></div>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="calibration-refresh" '+(busy?'disabled':'')+'>Obnoviť celý stav</button></div>'+
       productionSummary+guideText+
-      '<article class="admin-calibration-panel admin-model-input-refresh" aria-label="Obnova vstupov championa">'+
+      '<details class="admin-model-factory-refresh"><summary>Obnoviť predikcie bez tréningu</summary><article class="admin-calibration-panel admin-model-input-refresh" aria-label="Obnova vstupov championa">'+
       '<small>CHAMPION · BEZ TRÉNINGU</small><h3>Aktualizácia nových dát</h3>'+
       '<p>Champion automaticky prepočítava formu, Elo, H2H a dostupné serve/return vstupy z novej CDB pri každom bežnom refreshe predikcií. Váhy a verzia modelu sa nemenia.</p>'+
       '<p><strong>Posledná publikovaná ponuka:</strong> '+escapeHtml(d?.feed_updated_at?fmtStamp(d.feed_updated_at):'neoverené')+'</p>'+
       '<button type="button" class="btn btn-primary" data-admin-action="model-lab-start" data-model-lab-operation="refresh_champion_inputs" '+(busy?'disabled':'')+'>Obnoviť vstupy a prepočítať ponuku</button>'+
       '<p class="admin-model-refresh-status" role="status">'+escapeHtml(canRefreshInputs?'Pripravené na bezpečný prepočet.':refreshBlockedReason+' Kliknutím znovu overíš stav; bez overenia sa prepočet nespustí.')+'</p>'+
-      '<p>Manuálny refresh načíta aktuálnu CDB, znovu vypočíta predikcie a použije existujúci spoločný API rozpočet. Nevykoná tréning, import do CDB ani prepnutie modelu. Publikované tipy a história zostávajú chránené.</p></article>'+
+      '<p>Manuálny refresh načíta aktuálnu CDB, znovu vypočíta predikcie a použije existujúci spoločný API rozpočet. Nevykoná tréning, import do CDB ani prepnutie modelu. Publikované tipy a história zostávajú chránené.</p></article></details>'+
       '<p role="status">'+escapeHtml(hint)+'</p>'+
       '<p class="model-factory-sync">Stav sa obnovuje každých 30 sekúnd počas otvorenia tejto karty. Posledná synchronizácia workerom: '+escapeHtml(stamp)+'. Požiadavku prevezme existujúci worker, bežne do 30 minút; kartu môžeš zavrieť.</p>'+
       '<div class="admin-calibration-grid model-factory-three-steps">'+
@@ -6221,10 +6221,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       timeline+outcomeText+
       '<p role="status">'+escapeHtml(shadowText)+'</p></article>'+
       '<article class="admin-calibration-panel"><small>FÁZA 3 · SCHVÁLENIE</small><h3>3 · Nasadiť do produkcie</h3>'+
-      '<p>Manuálny release je možný aj bez splnenej kalibrácie a shadow podmienok. Ide o vedomú výnimku, nie potvrdenie kvality. Overenie modelu, aktuálneho championa a existujúcej zálohy na návrat zostáva povinné.</p>'+
+      '<p>Manuálny release je možný aj bez splnenej kalibrácie a shadow podmienok. Ide o vedomú výnimku, nie potvrdenie kvality. Overenie modelu, aktuálneho championa a existujúcej zálohy na návrat zostáva povinné.</p>'+ 
+      '<details class="admin-model-factory-release"><summary>Manuálne nasadenie s výnimkou · otvor až po schválení</summary>'+
       '<label>Model pre produkčný release <select id="admin-production-candidate" '+(canPromote?'':'disabled')+'>'+releaseOptions+'</select></label>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-factory-promote" '+(canPromote?'':'disabled')+'>Nasadiť s výnimkou kalibrácie</button>'+
-      '<p role="status">Pred odoslaním potvrdíš presný model a dôvod. Worker overí obnovu championa a výsledný zápis; pri chybe obnoví pôvodný model. Nové predikcie použijú model pri najbližšom výpočte, staré sa neprepisujú.</p>'+
+      '<p role="status">Pred odoslaním potvrdíš presný model a dôvod. Worker overí obnovu championa a výsledný zápis; pri chybe obnoví pôvodný model. Nové predikcie použijú model pri najbližšom výpočte, staré sa neprepisujú.</p></details>'+
       '<p><strong>Shadow podmienky na posúdenie:</strong></p>'+(missingShadow?'<ul>'+missingShadow+'</ul>':'<p>Základné shadow metriky splnené. Nasadenie ešte vyžaduje kontrolu TOP/VALUE, rollbacku a samostatné schválenie.</p>')+
       (guide.action==='audit_shadow'?'':'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(canBuild?'':'disabled')+'>Vyhodnotiť shadow výsledky</button>')+
       '<p><strong>Posledný uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article></div>'+
