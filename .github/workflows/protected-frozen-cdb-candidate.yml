@@ -36,8 +36,10 @@ jobs:
       github.repository == 'BackstageTalks/tbt' &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'push' &&
-        startsWith(github.event.head_commit.message,
-        'feat(721): one-shot candidate-only tour calibration study')))
+        (startsWith(github.event.head_commit.message,
+         'feat(721): one-shot candidate-only tour calibration study') ||
+         startsWith(github.event.head_commit.message,
+         'feat(722): one-shot PIT evidence calibration study')))
     runs-on: ubuntu-latest
     # A separate read-only gate waits for prior owners; the full six-hour
     # training budget starts only AFTER this job reports observed idle.
@@ -77,7 +79,7 @@ jobs:
       # Stream long-running training logs rather than losing output on runner exit.
       PYTHONUNBUFFERED: '1'
       BLINQ_RAPIDAPI_MAX_RPS: '0'
-      BLINQ_TRAINING_PROFILE: ${{ inputs.training_profile || 'top-7.2.1' }}
+      BLINQ_TRAINING_PROFILE: ${{ inputs.training_profile || (startsWith(github.event.head_commit.message, 'feat(722): one-shot PIT evidence calibration study') && 'accuracy-7.2.2') || 'top-7.2.1' }}
     steps:
       - uses: actions/checkout@v4
         with:
