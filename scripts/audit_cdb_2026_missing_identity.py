@@ -93,11 +93,22 @@ def main() -> None:
     prewrite_file = download(
         PREWRITE, "history-2026.parquet", root / "prewrite",
         older_assets["history-2026.parquet"])
-    if sha(prewrite_manifest_path) != PREWRITE_MANIFEST_SHA:
-        raise RuntimeError("Pinned 1 Nov prewrite manifest changed")
+    # The 1 Nov restore report pinned the SHA of the BUNDLE manifest
+    # (download_stable.manifest_sha256), not the yearly history_manifest.json.
+    # Pin the correct immutable bundle and verify each enclosed asset digest.
+    prewrite_bundle = download(
+        PREWRITE, "_tbt_bundle_manifest.json", root / "prewrite",
+        older_assets["_tbt_bundle_manifest.json"])
+    if sha(prewrite_bundle) != PREWRITE_MANIFEST_SHA:
+        raise RuntimeError("Pinned 1 Nov prewrite bundle manifest changed")
+    covered = json.loads(prewrite_bundle.read_text()).get("files") or {}
+    for name in ("history_manifest.json", "history-2026.parquet"):
+        path = root / "prewrite" / name
+        if not isinstance(covered.get(name), dict) or covered[name].get("sha256") != sha(path):
+            raise RuntimeError("Pinned prewrite bundle source checksum mismatch")
     previous = json.loads(prewrite_manifest_path.read_text())
     if previous["years"]["2026"]["sha256"] != sha(prewrite_file):
-        raise RuntimeError("Pinned 1 Nov prewrite parquet changed")
+        raise RuntimeError("Pinned 1 Nov prewrite year manifest/Parquet mismatch")
 
     current = root / "current"
     cols = ["match_id", "player1_id", "player2_id", "scheduled_at", "stats_json"]
