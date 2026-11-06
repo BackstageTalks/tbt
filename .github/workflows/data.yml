@@ -1121,7 +1121,8 @@ jobs:
           set -euo pipefail
           python scripts/verify_live_serving_readback.py \
             --prepared-feed api/data/feed.json \
-            --base-url "$BLINQ_BASE_URL"
+            --base-url "$BLINQ_BASE_URL" \
+            --require-current
 
       - name: Confirm exactly deployed prediction publication
         if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
