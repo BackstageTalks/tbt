@@ -143,6 +143,32 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                 for event in typed)
         # A page cannot assert full-season completeness or CDB identity.
         result["completeness_verified"] = False
+        if result["state"] != "no_content":
+            if not isinstance(events, list):
+                result["state"] = "unrecognized_shape"
+            elif not events:
+                result["state"] = "no_content"
+            elif (len(ids) != len(events) or len(set(ids)) != len(ids)
+                  or result["rows_with_two_players"] != len(events)
+                  or result["rows_with_start_timestamp"] != len(events)):
+                result["state"] = "invalid_shape"
+    elif name == "candidate_player_singles_results":
+        events = obj.get("events")
+        if result["state"] != "no_content":
+            if not isinstance(events, list):
+                result["state"] = "unrecognized_shape"
+            elif not events:
+                result["state"] = "no_content"
+            elif not all(
+                isinstance(event, dict)
+                and type(event.get("id")) is int and event["id"] > 0
+                and isinstance(event.get("homeTeam"), dict)
+                and isinstance(event.get("awayTeam"), dict)
+                for event in events
+            ):
+                result["state"] = "invalid_shape"
+            else:
+                result["event_rows"] = len(events)
     elif name in ("point_by_point", "historical_2016_point_by_point"):
         try:
             result["inventory"] = point_by_point_inventory(payload, event_id=event_id)
@@ -157,6 +183,14 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                 str(p.get("id")) for p in providers[:20] if isinstance(p, dict)]
             result["provider_names"] = [
                 str(p.get("name")) for p in providers[:20] if isinstance(p, dict)]
+    if name == "candidate_team_year_statistics" and result["state"] != "no_content":
+        stats = obj.get("statistics")
+        if not isinstance(stats, list):
+            result["state"] = "unrecognized_shape"
+        elif not stats:
+            result["state"] = "no_content"
+        elif not all(isinstance(group, dict) for group in stats):
+            result["state"] = "invalid_shape"
     return result
 
 
