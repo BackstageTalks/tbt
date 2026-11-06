@@ -242,7 +242,7 @@ headers, reported `eligible_for_cdb_import=false`, and made zero CDB
 writes. These are provider data availability/quality witnesses, not
 production import, CLV evidence, full season coverage, or model validation.
 
-## 2026-11-06 — Four extra catalog routes (read-only research)
+## 2026-11-06 — Five extra discovery routes (read-only research)
 
 The following optional methods are now available through the existing
 shared-budget `RapidTennisClient._get(..., enrichment=True)` guard. **No
@@ -254,6 +254,7 @@ CDB importer, scheduler, model, odds, or global quota policy is changed.**
 | `tournament_events_on_date(tournament_id, scheduled_date)` | `/api/tennis/tournament/{tournamentId}/scheduled-events/{date}` | Date is strict `YYYY-MM-DD`; availability not live verified |
 | `tournaments_by_category(category_id)` | `/api/tennis/tournament/all/category/{id}` | Source-native taxonomy only, not matched CDB IDs |
 | `player_recent_tournaments(player_id)` | `/api/tennis/player/{id}/tournaments/last` | Recent tournament participation, not match stats |
+| `calendar_days_with_events(season_id, year)` | `/api/calendar/season/{seasonId}/{year}/days-with-events` | 204 for one season/year is not proof of no matches; never skip daily discovery |
 
 Inputs are strictly checked before network access. Category `-100` is a
 deliberate source-native Grand Slam exception to positive category IDs.
@@ -272,3 +273,5 @@ against the private CDB with read-only matching; report raw/linked/net-new/
 enriched separately. Unknown daily shared provider consumption is never
 treated as zero. No paid probe or canonical import during an active
 CDB statistics writer.
+
+**Operator-supplied calendar test:** `getCalendarDaysWithEvents` queried year 2026, season 61642, returned HTTP 204 with no content. Treat as unavailable for this query, not a proven empty season. The extra research method preserves the existing daily category/event pathway and never marks any day complete.
