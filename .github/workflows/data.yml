@@ -1110,6 +1110,19 @@ jobs:
           echo "::error::Deployed frontend revision differs from the verified data workflow"
           exit 1
 
+      - name: Verify signed deployed serving feed before confirmation
+        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
+        env:
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          TBT_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          PYTHONPATH: api:scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_deployed_serving_feed.py \
+            --base-url "$TBT_PRODUCTION_URL" \
+            --feed api/data/feed.json
+
       - name: Confirm exactly deployed prediction publication
         if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         shell: bash
