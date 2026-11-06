@@ -11108,3 +11108,17 @@ body#blinqPremium.blinq-route:not(.blinq-admin) .results-table .results-card-row
 body#blinqPremium.blinq-route:not(.blinq-admin) .results-table .results-card-row td.result-units b.correct{
   color:#42e897!important;
 }
+
+/* Model Factory: one guided operator action, protected side-operations. */
+.admin-model-lab .model-factory-guide{border:1px solid #366f85;border-radius:14px;background:linear-gradient(135deg,#102b39,#0b1c2e);padding:18px 20px;margin:14px 0 16px}
+.admin-model-lab .model-factory-guide>small{display:block;color:#8ae4ce;font-size:10px;font-weight:850;letter-spacing:.11em}
+.admin-model-lab .model-factory-guide h3{font-size:20px;line-height:1.25;margin:7px 0}
+.admin-model-lab .model-factory-guide>p{font-size:13px;line-height:1.5;margin:10px 0;color:#c0d6e0}
+.admin-model-lab .model-factory-guide .btn{min-height:44px;margin:10px 0 0}
+.admin-model-lab .model-factory-guide label{display:block;max-width:390px;margin-top:12px}
+.admin-model-lab .model-factory-guide-note{color:#91aab8!important;font-size:11px!important;margin-bottom:0!important}
+.admin-model-lab .admin-model-factory-refresh,.admin-model-lab .admin-model-factory-release{border:1px solid #1d465d;border-radius:10px;padding:10px 12px;margin:12px 0}
+.admin-model-lab .admin-model-factory-refresh>summary,.admin-model-lab .admin-model-factory-release>summary{cursor:pointer;font-size:12px;font-weight:750;color:#b8cddb}
+.admin-model-lab .admin-model-factory-refresh>article{margin-top:12px}
+.admin-model-lab .admin-model-factory-release label{display:block;margin-top:12px}
+@media(max-width:700px){.admin-model-lab .model-factory-guide{padding:15px}.admin-model-lab .model-factory-guide .btn{width:100%}}
