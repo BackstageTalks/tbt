@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""One-shot fail-closed repair of the pinned 2026-11-05 CDB release interruption.
+"""One-shot fail-closed cleanup of verified orphaned 2026-11-05 CDB transactions.
 
-No provider calls, model changes, row rewrites, schema changes or direct GitHub
-release deletes. The ONLY writer is ReleaseStore.upload_bundle under the existing
+No provider calls, model changes, canonical row or history metadata rewrites,
+or direct GitHub release deletes. The ONLY writer is ReleaseStore.upload_bundle under the existing
 cross-repository global lock. Unknown data or changed assets => no mutations.
 """
 from __future__ import annotations
@@ -120,7 +120,7 @@ def recover(store: ReleaseStore, *, apply: bool = False) -> dict:
     history = json.loads(history_path.read_text(encoding="utf-8"))
     bundle = json.loads((store.directory / store.BUNDLE_MANIFEST).read_text(encoding="utf-8"))
     years_count, checksums_count = verify_inventory_consistency(
-        before, history, bundle, permitted_mismatch=frozenset({YEAR_ASSET})
+        before, history, bundle, permitted_mismatch=frozenset()
     )
 
     summary, issues, identities = audit_partition(store.directory / YEAR_ASSET)
@@ -133,53 +133,43 @@ def recover(store: ReleaseStore, *, apply: bool = False) -> dict:
     old = history["years"].get("2022")
     if not isinstance(old, dict) or type(old.get("rows")) is not int:
         raise RuntimeError("Missing authoritative 2022 history inventory")
-    if actual_year["rows"] < old["rows"]:
-        raise RuntimeError("2022 canonical history row regression")
-    for field, sign in (("history_start", -1), ("history_end", 1)):
-        previous = old.get(field)
-        now = actual_year[field]
-        if isinstance(previous, str) and ((sign < 0 and now > previous) or (sign > 0 and now < previous)):
-            raise RuntimeError(f"2022 canonical history coverage regression: {field}")
+    # The first production read-only audit proved both committed manifests
+    # already match ALL remote canonical assets. Never re-accept or rewrite
+    # 2022 history when only abandoned transaction files are the problem.
+    for key in ("rows", "sha256", "bytes"):
+        if old.get(key) != actual_year[key]:
+            raise RuntimeError(f"2022 metadata unexpectedly drifted: {key}")
     if (actual_year["sha256"], actual_year["bytes"]) != (
         PINNED[YEAR_ASSET][1], PINNED[YEAR_ASSET][2]
     ):
         raise RuntimeError("Audited 2022 parquet is not pinned canonical generation")
-    # Preserve every pre-existing metadata field; only the audited year's
-    # rows/range/hash/size can be synchronized to the unchanged current parquet.
-    updated = dict(history)
-    updated["years"] = dict(history["years"])
-    updated["years"]["2022"] = {**old, **{
-        key: actual_year[key] for key in (
-            "rows", "history_start", "history_end", "sha256", "bytes"
-        )
-    }}
     report = {
         "status": "VALIDATED_NO_WRITES" if not apply else "PREPARED",
         "pin": "2026-11-05T16:15Z",
         "canonical_2022_sha256": actual_year["sha256"],
         "canonical_2022_rows": actual_year["rows"],
-        "prior_2022_rows": old["rows"],
+        "committed_2022_rows": old["rows"],
         "history_partitions_checked": years_count,
         "committed_asset_checksums_checked": checksums_count,
         "transactions_to_retire": len(TRANSIENT),
         "provider_calls": 0,
         "canonical_parquet_rewrites": 0,
+        "history_manifest_rewrites": 0,
+        "repair_mode": "orphan_cleanup_only",
     }
     if not apply:
         return report
 
-    history_path.write_text(json.dumps(updated, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                            encoding="utf-8")
     def still_same():
         verify(REPOSITORY, Path(".cdb-global-writer-lock.json"))
         if snapshot(store._release_asset_inventory()) != baseline:
             raise RuntimeError("Private CDB release changed after preflight")
     still_same()
 
-    # Use the existing guarded journal, CAS-style asset ID/digest checks,
-    # full rollback path and history-row monotonicity enforcement.
-    store.upload_bundle([store.directory / YEAR_ASSET, history_path],
-                        remove_names=TRANSIENT, before_upload=still_same)
+    # All canonical history checksums are already valid. The existing guarded
+    # writer journals/rolls back ONLY removal of three pinned orphan assets.
+    # There are NO parquet or history_manifest inputs to publish.
+    store.upload_bundle([], remove_names=TRANSIENT, before_upload=still_same)
 
     after = store._release_asset_inventory()
     if any(name in after for name in TRANSIENT):
@@ -189,7 +179,7 @@ def recover(store: ReleaseStore, *, apply: bool = False) -> dict:
     ):
         raise RuntimeError("Canonical parquet bytes/asset were unexpectedly replaced")
     for name, state in baseline.items():
-        if name in TRANSIENT or name in {"history_manifest.json", store.BUNDLE_MANIFEST}:
+        if name in TRANSIENT or name == store.BUNDLE_MANIFEST:
             continue
         if snapshot(after).get(name) != state:
             raise RuntimeError(f"Unrelated CDB release asset changed: {name}")
@@ -211,7 +201,7 @@ def recover(store: ReleaseStore, *, apply: bool = False) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--apply", action="store_true", help="Explicit one-shot metadata repair")
+    ap.add_argument("--apply", action="store_true", help="Explicit one-shot orphan cleanup")
     ap.add_argument("--work-dir", default=".cache/tbt/cdb-recovery-20261106")
     args = ap.parse_args()
     directory = Path(args.work_dir)
