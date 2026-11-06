@@ -250,7 +250,8 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
     if not 1 <= max_requests <= 30:
         raise ValueError("max_requests must be 1..30")
     if phase not in {"full", "metadata", "odds", "doubles", "quality",
-                     "historical", "identity", "archive_2016", "candidates"}:
+                     "historical", "identity", "archive_2016", "candidates",
+                     "discovery"}:
         raise ValueError("Unknown preapproved TennisApi probe phase")
     if case is not None and phase == "full":
         raise ValueError("Focused case requires a named phase")
@@ -406,6 +407,85 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
                  source_event_id=match_id)
             read("historical_2016_player_year_stats",
                  f"/api/tennis/team/{home_id}/year-statistics/2016")
+        return finish()
+
+    if phase == "discovery":
+        # Two guarded reads maximum: native event witness + one discovery
+        # endpoint. A no-content result does not justify skipping CDB dates.
+        cases = {
+            "tournament_venue_events",
+            "tournament_events_on_date",
+            "tournaments_by_category",
+            "player_recent_tournaments",
+            "calendar_days_with_events",
+        }
+        if case not in cases:
+            raise ValueError("discovery phase requires a preapproved case")
+        if max_requests < 2:
+            raise ValueError("discovery requires at least two requests")
+        detail = read("discovery_event_detail",
+                      f"/api/tennis/event/{event_id}")
+        event = _obj(_obj(detail).get("event", detail))
+        matched = str(event.get("id", event.get("eventId", ""))) == str(event_id)
+        tournament = (_nested_int(event, "tournament", "uniqueTournament", "id")
+                      or _nested_int(event, "tournament", "id"))
+        season = _nested_int(event, "season", "id")
+        player = _nested_int(event, "homeTeam", "id")
+        venue = _nested_int(event, "venue", "id")
+        category = (_nested_int(event, "tournament", "category", "id")
+                    or _nested_int(event, "tournament", "uniqueTournament",
+                                   "category", "id"))
+        stamp = event.get("startTimestamp")
+        year = None
+        day = None
+        if type(stamp) is int and stamp > 0:
+            try:
+                point = datetime.fromtimestamp(stamp, tz=timezone.utc)
+                year, day = point.year, point.date().isoformat()
+            except (ValueError, OverflowError, OSError):
+                pass
+        report["discovery_context"] = {
+            "source_event_id_matched": matched,
+            "has_native_tournament": bool(tournament),
+            "has_native_season": bool(season),
+            "has_native_player": bool(player),
+            "has_native_venue": bool(venue),
+            "has_native_category": bool(category),
+            "has_date": bool(day),
+            "identity_validated_for_import": False,
+            "cdb_overlap_verified": False,
+        }
+        if not matched:
+            report["discovery_state"] = "invalid_source_event"
+            return finish()
+        route = None
+        if case == "tournament_venue_events" and tournament and season and venue:
+            route = (f"/api/tennis/tournament/{tournament}/season/{season}"
+                     f"/venue/{venue}/events/all/0")
+        elif case == "tournament_events_on_date" and tournament and day:
+            route = f"/api/tennis/tournament/{tournament}/scheduled-events/{day}"
+        elif case == "tournaments_by_category" and category:
+            route = f"/api/tennis/tournament/all/category/{category}"
+        elif case == "player_recent_tournaments" and player:
+            route = f"/api/tennis/player/{player}/tournaments/last"
+        elif case == "calendar_days_with_events" and season and year:
+            route = f"/api/calendar/season/{season}/{year}/days-with-events"
+        if route is None:
+            report["discovery_state"] = "missing_native_context"
+            return finish()
+        payload = read("discovery_" + case, route)
+        observation = report["observations"]["discovery_" + case]
+        # Report counts without treating a metadata hit as a canonical row.
+        obj = _obj(payload)
+        for collection in ("events", "tournaments", "uniqueTournaments", "days"):
+            rows = obj.get(collection)
+            if isinstance(rows, list):
+                observation["source_rows"] = len(rows)
+                break
+        observation["cdb_overlap_verified"] = False
+        observation["eligible_for_cdb_import"] = False
+        observation["completeness_verified"] = False
+        report["discovery_state"] = "endpoint_" + str(observation["state"])
         return finish()
 
     if phase == "candidates":
