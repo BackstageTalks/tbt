@@ -1,0 +1,65 @@
+name: Safonov frozen TOP root-cause audit (read-only)
+on:
+  push:
+    branches:
+      - audit/safonov-frozen-evidence-20261106
+    paths:
+      - scripts/audit_safonov_frozen_evidence.py
+      - .github/workflows/safonov-frozen-evidence-readonly.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: top-safonov-readonly-forensics
+  cancel-in-progress: false
+jobs:
+  trace:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONDONTWRITEBYTECODE: '1'
+      BLINQ_RAPIDAPI_MAX_RPS: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify immutable read-only budget and source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test -z "${RAPIDAPI_KEY:-}"
+          test -z "${PROPL:-}"
+          test -z "${TGB:-}"
+          python -m py_compile scripts/audit_safonov_frozen_evidence.py
+      - name: Read pre-existing private release and original Telegram receipts
+        run: |
+          python scripts/audit_safonov_frozen_evidence.py \
+            --out .cache/safonov-readonly/report.json
+      - name: Assert provenance and no production mutation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          obj=json.loads(Path(".cache/safonov-readonly/report.json").read_text(encoding="utf-8"))
+          assert obj["status"] == "READ_ONLY_PINNED_EVIDENCE"
+          assert obj["provider_requests"] == 0
+          assert obj["CDB_mutated"] is False
+          assert obj["model_mutated"] is False
+          assert obj["production_mutated"] is False
+          assert obj["telegram_mutated"] is False
+          assert obj["telegram"]["status"] == "sent"
+          assert len(obj["source_pins"]) == 5
+          print("READ-ONLY AUDIT PASS; candidate snapshots:", obj["candidate"]["cohort"]["snapshots"])
+          PY
+      - name: Preserve bounded evidence artifact only
+        uses: actions/upload-artifact@v4
+        with:
+          name: safonov-frozen-forensics-${{ github.run_id }}
+          path: .cache/safonov-readonly/report.json
+          retention-days: 14
+          if-no-files-found: error
