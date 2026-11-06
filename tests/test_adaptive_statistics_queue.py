@@ -250,3 +250,75 @@ def test_low_yield_does_not_override_zero_paid_call_baseline():
         q.record(row, 0, _gain())
     assert observed == [row.match_id for row in rows]
     assert q.summary()["low_yield_baseline_deferrals"] == 0
+
+
+def test_verified_prior_zero_yield_defers_paid_misses_across_hourly_runs():
+    # Evidence from a prior CDB-verified job, not an inferred empty payload.
+    rows = []
+    for i in range(240):
+        rows.extend((
+            _match(f"old-empty-{i}", "WTA", 2026),
+            _match(f"productive-{i}", "ATP", 2023),
+        ))
+    prior = {
+        "wta:2026:serve_return": {
+            "api_requests": 64, "new_fields": 0, "full_serve_return_rows": 0,
+        },
+        "atp:2023:serve_return": {
+            "api_requests": 64, "new_fields": 1400,
+            "full_serve_return_rows": 45,
+        },
+    }
+    q = AdaptiveStatisticsQueue(rows, verified_prior=prior)
+    assert q._low_yield("wta:2026:serve_return")
+    selected = []
+    for _ in range(120):
+        row = next(q)
+        selected.append(row)
+        q.record(row, 1, _gain(12, 1) if row.tour == "ATP" else _gain())
+    report = q.summary()
+    assert report["prior_zero_yield_cohorts"] == ["wta:2026:serve_return"]
+    assert report["low_yield_baseline_deferrals"] > 0
+    assert report["low_yield_baseline_samples"] > 0
+    assert sum(row.tour == "WTA" for row in selected) <= 15
+    assert report["observed_paid_requests"] == 120
+    assert len({row.match_id for row in selected}) == len(selected)
+
+
+def test_verified_prior_zero_yield_recovers_from_paid_new_values():
+    rows = [_match(f"wta-{i}", "WTA", 2026) if i % 2 == 0
+            else _match(f"atp-{i}", "ATP", 2023) for i in range(360)]
+    prior = {
+        "wta:2026:serve_return": {
+            "api_requests": 64, "new_fields": 0, "full_serve_return_rows": 0,
+        },
+        "atp:2023:serve_return": {
+            "api_requests": 64, "new_fields": 1200,
+            "full_serve_return_rows": 40,
+        },
+    }
+    q = AdaptiveStatisticsQueue(rows, verified_prior=prior)
+    assert q._low_yield("wta:2026:serve_return")
+    recovered = False
+    for _ in range(120):
+        row = next(q)
+        if row.tour == "WTA":
+            q.record(row, 1, _gain(12, 1))
+            recovered = True
+            assert not q._low_yield("wta:2026:serve_return")
+            break
+        q.record(row, 1, _gain(12, 1))
+    assert recovered
+
+
+def test_short_or_productive_prior_cannot_suppress_exploration():
+    for prior_values in (
+        {"api_requests": 47, "new_fields": 0, "full_serve_return_rows": 0},
+        {"api_requests": 64, "new_fields": 1, "full_serve_return_rows": 0},
+    ):
+        rows = [_match("one", "WTA", 2026), _match("two", "ATP", 2023)]
+        q = AdaptiveStatisticsQueue(
+            rows, verified_prior={"wta:2026:serve_return": prior_values}
+        )
+        assert not q._low_yield("wta:2026:serve_return")
+        assert next(q) is rows[0]

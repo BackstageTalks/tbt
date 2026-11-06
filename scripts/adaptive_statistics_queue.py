@@ -81,6 +81,7 @@ class AdaptiveStatisticsQueue:
         self._verified_prior = verified_prior or {}
         self._prior_paid = Counter()
         self._prior_reward = Counter()
+        self._prior_zero_yield = set()
         for group in self._pending:
             item = self._verified_prior.get(group, {})
             if not isinstance(item, dict):
@@ -93,6 +94,12 @@ class AdaptiveStatisticsQueue:
                 scale = min(requests, self.RECENT_MATCH_WINDOW) / requests
                 self._prior_paid[group] = min(requests, self.RECENT_MATCH_WINDOW)
                 self._prior_reward[group] = scale * (16 * ready + 0.75 * fields)
+                # Persisted no-gain evidence should also suppress repeated
+                # paid misses across hourly runs, not merely lower the score.
+                # Require a substantial sample because prior reports aggregate
+                # API attempts (including retries), not unique matches.
+                if requests >= 48 and fields == 0 and ready == 0:
+                    self._prior_zero_yield.add(group)
         self._coverage = {}
         for group in self._pending:
             bucket = group.rsplit(":", 1)[0]
@@ -106,6 +113,12 @@ class AdaptiveStatisticsQueue:
     def _low_yield(self, group):
         """Use only recent paid evidence; a recovering cohort resumes normally."""
         requests = self._recent_requests[group]
+        if (group in self._prior_zero_yield
+                and self._recent_values[group] == 0
+                and self._recent_quality[group] == 0):
+            # Bounded recovery probes still run via _baseline_pick(). Any
+            # fresh paid CDB gain removes the inherited zero-yield penalty.
+            return True
         return (
             requests >= self.LOW_YIELD_MIN_REQUESTS
             and len(self._recent[group]) >= self.LOW_YIELD_MIN_MATCHES
@@ -237,6 +250,7 @@ class AdaptiveStatisticsQueue:
             "low_yield_probe_every_baseline_selections": self.LOW_YIELD_SAMPLE_EVERY,
             "low_yield_baseline_deferrals": self._low_yield_deferrals,
             "low_yield_baseline_samples": self._low_yield_samples,
+            "prior_zero_yield_cohorts": sorted(self._prior_zero_yield),
             "selection_value_policy": "quality_ready_and_new_fields_recent_paid_window",
             "recency_score_policy": "bounded_latest_three_seasons_after_paid_yield",
             "recency_reference_year": self._reference_year,
