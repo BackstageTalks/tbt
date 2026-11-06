@@ -692,6 +692,8 @@ jobs:
           GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
           TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
           TBT_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_BASE_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
@@ -714,6 +716,7 @@ jobs:
             if python scripts/confirm_prediction_publication.py \
               --data-repository "$TBT_DATA_REPOSITORY" \
               --deployed-feed api/data/feed.json \
+              --sync-serving-authority \
               "${ui_args[@]}"; then
               break
             fi

@@ -2,14 +2,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+from urllib.request import Request, urlopen
 from datetime import datetime, timezone
 from pathlib import Path
 
 from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.services.feed import empty_feed
+from tbt.services.issued_authority import build_confirmed_authority
 from tbt.services.publication import (
     build_confirmed_daily_offer_snapshot,
     confirm_market_publications,
@@ -106,6 +109,62 @@ def _is_honest_empty_feed(value) -> bool:
     return isinstance(value, dict) and all(value.get(key) == expected[key] for key in expected)
 
 
+def sync_confirmed_authority(deployed_path: Path, deployed_feed: dict, confirmed_ledger: list) -> dict:
+    """Apply confirmation to serving only after durable private ledger upload.
+
+    A failed remote sync is an unsuccessful release; the runtime fails closed
+    for all as-yet-unconfirmed candidate rows in the meantime.
+    """
+    token = str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip()
+    base = str(
+        os.getenv("TBT_PRODUCTION_URL")
+        or os.getenv("BLINQ_BASE_URL")
+        or ""
+    ).rstrip("/")
+    if not token or not base.startswith("https://"):
+        raise RuntimeError("Authenticated production issued-authority sync is not configured")
+    manifest = build_confirmed_authority(deployed_feed, confirmed_ledger)
+    digest = hashlib.sha256(deployed_path.read_bytes()).hexdigest()
+    manifest["feed_sha256"] = digest
+    endpoint = base + "/api/v1/internal/issued-offer-authority"
+    headers = {
+        "Content-Type": "application/json",
+        "X-Blinq-Worker-Token": token,
+        "Cache-Control": "no-cache",
+    }
+    request = Request(
+        endpoint,
+        data=json.dumps(manifest, separators=(",", ":")).encode("utf-8"),
+        headers=headers, method="POST",
+    )
+    with urlopen(request, timeout=25) as result:
+        accepted = json.load(result)
+    expected = set(manifest["keys"])
+    if (
+        accepted.get("ok") is not True
+        or accepted.get("betting_day") != manifest["betting_day"]
+        or accepted.get("feed_sha256") != digest
+        or not expected.issubset(set(accepted.get("keys") or []))
+    ):
+        raise RuntimeError("Durable issued authority write was not acknowledged")
+    readback = Request(endpoint, headers=headers, method="GET")
+    with urlopen(readback, timeout=25) as result:
+        observed = json.load(result)
+    if (
+        observed.get("ok") is not True
+        or observed.get("confirmed_only") is not True
+        or observed.get("betting_day") != manifest["betting_day"]
+        or not expected.issubset(set(observed.get("keys") or []))
+    ):
+        raise RuntimeError("Independent issued authority readback failed")
+    return {
+        "betting_day": manifest["betting_day"],
+        "confirmed_keys": len(expected),
+        "durable_keys": observed.get("count"),
+        "feed_sha256": digest,
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -121,6 +180,10 @@ def main(argv=None):
         "--ui-config-file",
         default=None,
         help="Effective public UI config captured at issuance; only entitlement rules are persisted.",
+    )
+    parser.add_argument(
+        "--sync-serving-authority", action="store_true",
+        help="Require authenticated issued-only member-serving readback after confirmation.",
     )
     parser.add_argument(
         "--require-prepared-evidence",
@@ -214,11 +277,18 @@ def main(argv=None):
         directory / "ledger.json",
         directory / "daily_offer_snapshot.json",
     ])
+    authority_readback = (
+        sync_confirmed_authority(Path(args.deployed_feed), deployed_feed, confirmed)
+        if args.sync_serving_authority and args.deployed_feed else None
+    )
+    if args.sync_serving_authority and authority_readback is None:
+        raise RuntimeError("Exact deployed feed required for issued authority sync")
     print(json.dumps({
         "status": "confirmed",
         "newly_confirmed": after - before,
         "market_newly_confirmed": market_new,
         "published_ids": len(published_rows),
+        "issued_authority_readback": authority_readback,
     }))
 
 

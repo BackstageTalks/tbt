@@ -1126,6 +1126,9 @@ jobs:
 
       - name: Confirm exactly deployed prediction publication
         if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
+        env:
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_BASE_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -1133,6 +1136,7 @@ jobs:
             if python scripts/confirm_prediction_publication.py \
               --data-repository "$TBT_DATA_REPOSITORY" \
               --deployed-feed api/data/feed.json \
+              --sync-serving-authority \
               --require-prepared-evidence; then
               break
             fi
