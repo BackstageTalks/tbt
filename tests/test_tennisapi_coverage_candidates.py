@@ -19,9 +19,11 @@ def test_research_client_uses_only_guarded_native_routes():
     assert client.team_year_statistics("222", 2024) == {"source": "mock"}
     assert client.tournament_season_last_matches(2363, "55443", page=0) == {
         "source": "mock"}
+    assert client.player_singles_results("222", 0) == {"source": "mock"}
     assert calls == [
         ("/api/tennis/team/222/year-statistics/2024", True),
         ("/api/tennis/tournament/2363/season/55443/events/last/0", True),
+        ("/api/tennis/player/222/events/singles/last/0", True),
     ]
 
 
@@ -36,6 +38,8 @@ def test_research_routes_reject_invalid_ids_without_requests(bad):
         client.tournament_season_last_matches(bad, 100)
     with pytest.raises(ValueError):
         client.tournament_season_last_matches(100, bad)
+    with pytest.raises(ValueError):
+        client.player_singles_results(bad)
 
 
 def test_research_routes_reject_future_year_and_negative_page():
@@ -45,6 +49,8 @@ def test_research_routes_reject_future_year_and_negative_page():
         client.team_year_statistics(222, 9999)
     with pytest.raises(ValueError):
         client.tournament_season_last_matches(2363, 55443, page=-1)
+    with pytest.raises(ValueError):
+        client.player_singles_results(222, page=-1)
 
 
 class CandidateClient:
