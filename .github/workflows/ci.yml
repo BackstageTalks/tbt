@@ -450,6 +450,7 @@ jobs:
           python scripts/prepare_feed.py
           test -s api/data/feed.json
           python scripts/verify_presentation_feed.py api/data/feed.json --summary
+          python scripts/verify_deployed_serving_feed.py --preflight-only --feed api/data/feed.json
 
       - name: Set up Node for pinned frontend optimization
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
