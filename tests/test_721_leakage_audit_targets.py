@@ -35,3 +35,16 @@ def test_leakage_audit_never_truncates_or_silently_drops_invalid_targets(targets
 
 def test_leakage_audit_rejects_missing_target_column():
     assert _binary_training_targets(pd.DataFrame({"match_id": ["m1"]})) == (False, [])
+
+
+
+def test_721_one_shot_audit_patch_retrains_only_under_existing_gates():
+    workflow = (Path(__file__).resolve().parents[1] /
+                ".github/workflows/protected-frozen-cdb-candidate.yml").read_text()
+    assert "      - scripts/audit_training_leakage.py" in workflow
+    assert "cancel-in-progress: false" in workflow
+    assert "'feat(721): one-shot candidate-only tour calibration study'" in workflow
+    assert "python scripts/audit_training_leakage.py" in workflow
+    assert "python scripts/guarded_candidate_backup.py verify" in workflow
+    assert "python scripts/cdb_global_writer_lock.py acquire" in workflow
+    assert "# No --promote." in workflow
