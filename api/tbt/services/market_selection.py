@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 
 from ..providers.budget import RequestBudgetExceeded
 from ..providers.odds_quality import odds_unavailable
+from .price_integrity import extreme_winner_price_inversion
 
 
 MATCH_WINNER_MARKET_NAMES = {
@@ -1072,11 +1073,17 @@ def select_market_sections(
     top_core: list[dict[str, Any]] = []
     top_fallback: list[dict[str, Any]] = []
 
+    extreme_inversion_quarantined = 0
     for card in cards:
         odds = _number(card.get("odds"))
         if odds is None:
             continue
         probability = _number(card.get("probability")) or 0.0
+        # A >50 percentage-point disagreement is an integrity exception,
+        # not a change to model probability or bookmaker source priority.
+        if extreme_winner_price_inversion(probability, odds):
+            extreme_inversion_quarantined += 1
+            continue
 
         if (
             odds >= float(value_min_odds)
@@ -1171,6 +1178,7 @@ def select_market_sections(
             "selection_policy": "active_value_top_prime_v16",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
+                "extreme_price_inversion_quarantined": extreme_inversion_quarantined,
                 "prime_core_68_plus": len(prime_core),
                 "top_core_80_plus_after_value_priority": len(top_core),
                 "top_core_68_plus_after_value_priority": len(top_core),  # legacy metadata key
