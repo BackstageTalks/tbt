@@ -139,8 +139,23 @@ def _slot(row: dict) -> tuple[str, str]:
     return f"{moment.date().isoformat()}-{bucket:02d}", key
 
 
+def _cas_conflict(exc: Exception) -> bool:
+    """Azure/Firestore version conflicts only; never retry unrelated failures."""
+    status = getattr(exc, "status_code", None)
+    return status in (409, 412) or type(exc).__name__.lower() in {
+        "resourceexistserror", "resourcemodifiederror", "storagerequesterror",
+    } and status in (409, 412)
+
+
 def save_settled_results_archive(rows: list[dict]) -> dict:
-    """Idempotent write + persisted readback, no provider calls or ledger edits."""
+    """CAS append/merge with bounded retry and full persisted-shard readback.
+
+    Never use a blind Azure Table upsert for an archive shard: a concurrent
+    match-status worker could otherwise erase a different verified result.
+    Only retry version conflicts after rereading the entire authoritative row.
+    """
+    from azure.core import MatchConditions
+
     groups = {}
     for row in rows:
         slot, key = _slot(row)
@@ -151,46 +166,79 @@ def save_settled_results_archive(rows: list[dict]) -> dict:
         table = _table(UI_TABLE)
         added = updated = 0
         for slot, incoming in sorted(groups.items()):
-            try:
-                previous = table.get_entity(partition_key=_PARTITION, row_key=slot)
-                old = _decode_runtime_ui_payload(str(previous.get("payload") or ""))
-                if not isinstance(old, dict) or old.get("schema") != 1 or not isinstance(old.get("rows"), dict):
-                    raise AdminStorageUnavailable("Corrupt result archive; refusing overwrite")
-                records = old["rows"]
-            except Exception as exc:
-                if isinstance(exc, AdminStorageUnavailable):
-                    raise
-                if not _storage_not_found(exc):
-                    raise
-                records = {}
-            combined = dict(records)
-            changed = False
-            for key, row in incoming.items():
-                if combined.get(key) != row:
-                    if key in combined:
-                        updated += 1
+            for attempt in range(8):
+                previous = None
+                try:
+                    previous = table.get_entity(partition_key=_PARTITION, row_key=slot)
+                    old = _decode_runtime_ui_payload(str(previous.get("payload") or ""))
+                    if not isinstance(old, dict) or old.get("schema") != 1 or not isinstance(old.get("rows"), dict):
+                        raise AdminStorageUnavailable("Corrupt result archive; refusing overwrite")
+                    records = old["rows"]
+                except Exception as exc:
+                    if isinstance(exc, AdminStorageUnavailable):
+                        raise
+                    if not _storage_not_found(exc):
+                        raise
+                    records = {}
+
+                combined = dict(records)
+                changed = False
+                slot_added = slot_updated = 0
+                for key, row in incoming.items():
+                    if combined.get(key) != row:
+                        if key in combined:
+                            slot_updated += 1
+                        else:
+                            slot_added += 1
+                        combined[key] = row
+                        changed = True
+                if not changed:
+                    break
+
+                encoded = _encode_runtime_ui_payload({"schema": 1, "rows": combined})
+                if len(encoded.encode("utf-16-le")) > _MAX_ROW_UTF16:
+                    raise AdminStorageUnavailable("Result archive shard exceeded Azure property limit")
+                entity = {
+                    "PartitionKey": _PARTITION, "RowKey": slot,
+                    "payload": encoded,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+                try:
+                    if previous is None:
+                        # Create must reject an unseen concurrent create. Using
+                        # upsert here would reintroduce lost-update races.
+                        table.create_entity(entity)
                     else:
-                        added += 1
-                    combined[key] = row
-                    changed = True
-            if not changed:
-                continue
-            encoded = _encode_runtime_ui_payload({"schema": 1, "rows": combined})
-            if len(encoded.encode("utf-16-le")) > _MAX_ROW_UTF16:
-                raise AdminStorageUnavailable("Result archive shard exceeded Azure property limit")
-            table.upsert_entity({
-                "PartitionKey": _PARTITION, "RowKey": slot,
-                "payload": encoded,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }, mode="replace")
-            # The workflow is only successful when the newly issued Results are
-            # durably readable. Silent 200s with missing rows must never pass.
-            persisted = table.get_entity(partition_key=_PARTITION, row_key=slot)
-            recovered = _decode_runtime_ui_payload(str(persisted.get("payload") or ""))
-            if not isinstance(recovered, dict) or any(
-                recovered.get("rows", {}).get(key) != row for key, row in incoming.items()
-            ):
-                raise AdminStorageUnavailable("Result archive persisted readback failed")
+                        etag = getattr(previous, "metadata", {}).get("etag")
+                        if etag is None:
+                            raise AdminStorageUnavailable("Results archive ETag unavailable; refusing unsafe overwrite")
+                        table.update_entity(
+                            entity, mode="merge", etag=etag,
+                            match_condition=MatchConditions.IfNotModified,
+                        )
+                except AdminStorageUnavailable:
+                    raise
+                except Exception as exc:
+                    if _cas_conflict(exc):
+                        if attempt < 7:
+                            continue
+                        raise AdminStorageUnavailable("Results archive CAS retry exhausted") from exc
+                    raise
+
+                # Independently reread the *whole proposed shard*, including
+                # previous third-party rows, not just the new incoming items.
+                persisted = table.get_entity(partition_key=_PARTITION, row_key=slot)
+                recovered = _decode_runtime_ui_payload(str(persisted.get("payload") or ""))
+                remote_rows = recovered.get("rows") if isinstance(recovered, dict) else None
+                if not isinstance(remote_rows, dict) or any(
+                    remote_rows.get(key) != row for key, row in combined.items()
+                ):
+                    raise AdminStorageUnavailable("Result archive persisted CAS readback failed")
+                added += slot_added
+                updated += slot_updated
+                break
+            else:
+                raise AdminStorageUnavailable("Results archive CAS retry exhausted")
         return {"eligible": len(rows), "added": added, "updated": updated, "verified": True}
     except AdminStorageUnavailable:
         raise
