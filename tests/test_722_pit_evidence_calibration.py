@@ -135,3 +135,38 @@ def test_candidate_selector_not_retrained_on_later_unseen_results():
             first[key].predict(np.array([.1, .3, .8])),
             again[key].predict(np.array([.1, .3, .8])),
         )
+
+
+
+def test_same_fixture_pit_holdout_reports_top80_accuracy_and_brier():
+    from tbt.services.training import paired_evidence_holdout_diagnostics
+
+    raw, targets, frame = fixtures(n=800)
+    frame["target"] = targets
+    baseline = raw
+    candidate = .5 + .2 * (raw - .5)
+    report = paired_evidence_holdout_diagnostics(frame, candidate, baseline)
+    assert report["status"] == "PAIRED_UNSEEN_HOLDOUT"
+    assert report["holdout_only"] and report["never_select_on_holdout"]
+    assert sum(v["n"] for v in report["cohorts"].values()) == len(frame)
+    for cohort, value in report["cohorts"].items():
+        assert value["candidate"]["n"] == value["champion"]["n"]
+        assert 0 <= value["candidate"]["top80_coverage"] <= 1
+        assert value["same_fixture_brier_delta"] == pytest.approx(
+            value["candidate"]["brier_score"] - value["champion"]["brier_score"]
+        )
+    unmatched = paired_evidence_holdout_diagnostics(frame, candidate)
+    assert unmatched["status"] == "CANDIDATE_ONLY_NOT_PROMOTION_READY"
+    assert all(v["champion"] is None for v in unmatched["cohorts"].values())
+    with pytest.raises(ValueError, match="same-fixture"):
+        paired_evidence_holdout_diagnostics(frame, candidate[:-1], baseline)
+
+
+def test_fractional_calibration_labels_are_not_coerced_to_losses():
+    raw, targets, frame = fixtures(n=400)
+    contaminated = targets.astype(float)
+    contaminated[0] = .5
+    with pytest.raises(ValueError, match="Invalid evidence"):
+        TennisEnsemble._choose_evidence_calibrators(
+            raw, contaminated, frame, 220, ProbabilityCalibrator(),
+        )
