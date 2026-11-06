@@ -15,6 +15,10 @@ vm.runInContext(src.slice(begin,end),ctx);
 
 let html=ctx.renderAdminModelLab();
 assert.match(html,/MODEL FACTORY · 3 FÁZY/);
+assert.match(html,/Nový kandidát bez GitHub príkazov/);
+assert.match(html,/data-admin-action="model-factory-next" data-factory-next="prepare_inputs" disabled/);
+assert.match(html,/<details class="admin-model-factory-controls"/);
+assert.match(html,/Podrobnosti, história a pokročilé ovládanie/);
 for(const phrase of ['1 · Pripraviť dáta','2 · Natrénovať a aktivovať kandidáta','3 · Nasadiť do produkcie']){
   assert(html.includes(phrase));
 }
@@ -30,6 +34,8 @@ state.adminModelLab={can_start:true,reason:'Pripravené',active_sha256:'a'.repea
               {tag:'bad<script>',sha256:'a'.repeat(64)}],
   operation:null,last_operation:null};
 html=ctx.renderAdminModelLab();
+assert.match(html,/data-admin-action="model-factory-next" data-factory-next="prepare_inputs"/);
+assert.doesNotMatch(html,/data-admin-action="model-factory-next" data-factory-next="prepare_inputs" disabled/);
 assert.doesNotMatch(html,/data-model-lab-operation="prepare_inputs" disabled/);
 assert.doesNotMatch(html,/data-model-lab-operation="refresh_champion_inputs" disabled/);
 assert.match(html,/Chýba overený SHA-256 posledného publikovaného feedu/);
@@ -51,6 +57,8 @@ state.adminModelLab.last_preflight={
 };
 html=ctx.renderAdminModelLab();
 assert.doesNotMatch(html,/data-admin-action="training-start" disabled/);
+assert.match(html,/data-admin-action="model-factory-next" data-factory-next="train_candidate"/);
+assert.doesNotMatch(html,/data-admin-action="model-factory-next" data-factory-next="train_candidate" disabled/);
 assert.match(html,/Audit dát overený/);
 assert.match(html,/ATP: 350/);
 assert.match(html,/WTA: 250/);
@@ -58,11 +66,13 @@ assert.match(html,/Finálne zmrazenie a zálohovanie vstupov/);
 state.adminModelLab.last_preflight.run.artifact_verified=false;
 html=ctx.renderAdminModelLab();
 assert.match(html,/data-admin-action="training-start" disabled/);
+assert.match(html,/data-admin-action="model-factory-next" data-factory-next="prepare_inputs"/);
 state.adminModelLab.last_preflight.run.artifact_verified=true;
 state.adminTraining.runs=[{id:123,status:'in_progress',html_url:'https://github.com/BackstageTalks/tbt/actions/runs/123'}];
 state.adminTraining.active_steps=['Fit separate candidate only if immutable backup gate passed'];
 html=ctx.renderAdminModelLab();
 assert.match(html,/Aktuálna fáza/);
+assert.match(html,/data-admin-action="model-factory-next" data-factory-next="train_candidate" disabled/);
 assert.match(html,/data-admin-action="training-start" disabled/);
 state.adminTraining.runs=[];
 state.adminTraining.active_steps=[];
@@ -96,6 +106,10 @@ assert.match(src,/if\(action==='model-lab-start'\)/);
 assert.match(src,/if\(action==='model-lab-acknowledge'\)/);
 assert.match(src,/state\.adminTraining=await BlinqAuth\.adminModelTraining\(\);/);
 assert.match(src,/loadAdminTraining\(true,profile\)/);
+assert.match(src,/if\(action==='model-factory-next'\)/);
+assert.match(src,/loadAdminModelLab\('prepare_inputs'\)/);
+assert.match(src,/data-factory-next/);
+assert.match(src,/factorySummary\.parentElement\.open/);
 assert.match(html,/id="admin-training-profile"/);
 console.log('Model Factory: guarded 3 phases, preflight artifact, training, shadow, production lock, XSS passed');
 
