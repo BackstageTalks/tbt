@@ -16,6 +16,8 @@ on:
       # Read-only CDB audit request is handled by its own workflow.
       # Keep write-capable CDB request triggers visible to full CI.
       - '.github/cdb-service-complements-audit-request.json'
+      # One-shot CDB 2026 full integrity readback uses its own read-only workflow.
+      - '.github/cdb-2026-current-identity-readback-request.json'
   pull_request:
   workflow_dispatch:
 
