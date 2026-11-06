@@ -76,6 +76,25 @@ def assert_history_rows_monotonic(previous, proposed):
             )
 
 
+
+def assert_history_partition_bundle_atomic(paths, remove_names=()):
+    """Fail closed when an annual Parquet changes without its year inventory.
+
+    The canonical 78-year manifest is authoritative. A partition-only upload
+    would bypass the per-year row conservation guard and could strand readers
+    on an inconsistent history snapshot. This check never writes state.
+    """
+    names = {Path(path).name for path in paths}
+    removing = set(map(str, remove_names))
+    changed = names | removing
+    annual = {name for name in changed if re.fullmatch(r"history-\d{4}\.parquet", name)}
+    if annual and "history_manifest.json" not in names:
+        raise ValueError("CDB_ANNUAL_MANIFEST_REQUIRED: canonical year mutation without history inventory")
+    if "history_manifest.json" in removing:
+        raise ValueError("CDB_HISTORY_MANIFEST_REMOVAL_BLOCKED")
+
+
+
 class ReleaseStore:
     def __init__(self, repository, tag, directory):
         if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
@@ -788,6 +807,8 @@ class ReleaseStore:
             verify(self.repository, Path(".cdb-global-writer-lock.json"))
         files = [Path(p) for p in paths]
         removals = {str(name) for name in remove_names}
+        if self.repository == "BackstageTalks/tbt-data" and self.tag == "tbt-data-v1":
+            assert_history_partition_bundle_atomic(files, removals)
         previous = self._remote_bundle_files()
         if before_upload is not None:
             before_upload()
