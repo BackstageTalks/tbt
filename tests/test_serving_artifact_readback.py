@@ -99,3 +99,19 @@ def test_protected_endpoint_never_returns_hash_or_counts_without_worker_secret(m
     result = json.loads(response.get_body())
     assert result["file_sha256"] == sha256(source.read_bytes()).hexdigest()
     assert result["ready"] is True
+
+def test_both_deploy_paths_verify_live_serving_before_issuance():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    data = (root / ".github/workflows/data.yml").read_text(encoding="utf-8")
+    ci = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    label = "Verify actual serving feed SHA and market counts from deployed Azure API"
+    assert data.count(label) == 1
+    assert data.index(label) < data.index("Confirm exactly deployed prediction publication")
+    assert "if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'" in data.split(label, 1)[1].split("Confirm exactly deployed prediction publication", 1)[0]
+    assert "Verify actual deployed serving snapshot via worker canary" in ci
+    assert ci.index("Verify actual deployed serving snapshot via worker canary") < ci.index("Replay existing TOP/VALUE CLV observations")
+    for workflow in (data, ci):
+        assert "python scripts/verify_live_serving_readback.py" in workflow
+        assert "BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}" in workflow
+
