@@ -1110,6 +1110,18 @@ jobs:
           echo "::error::Deployed frontend revision differs from the verified data workflow"
           exit 1
 
+      - name: Verify actual serving feed SHA and market counts from deployed Azure API
+        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
+        env:
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_BASE_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_live_serving_readback.py \
+            --prepared-feed api/data/feed.json \
+            --base-url "$BLINQ_BASE_URL"
+
       - name: Confirm exactly deployed prediction publication
         if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         shell: bash

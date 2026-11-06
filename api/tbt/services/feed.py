@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -209,3 +210,37 @@ def visible_feed(payload, now=None):
         )
     result["daily_offer_day"] = day
     return result
+
+
+# Worker-token-only diagnostic: never expose row identities, member access
+# allocations, selections or odds. This is independent *serving file* evidence,
+# not proof of an authenticated customer's plan-specific rendered UI.
+_SERVING_COUNT_KEYS = (
+    "upcoming", "top_daily_picks", "prime_picks", "value_picks",
+    "ace_picks", "sg_picks", "doubles_picks", "results",
+)
+
+
+def serving_artifact_readback(path, *, now=None):
+    """Read exact packaged serving bytes and a bounded, public-day projection."""
+    target = Path(path)
+    blob = target.read_bytes()  # Missing file is an error, not empty_feed().
+    payload = read_feed(target)
+    for key in _SERVING_COUNT_KEYS:
+        if key in payload and not isinstance(payload[key], list):
+            raise ValueError("Invalid serving market rows: " + key)
+    visible = visible_feed(payload, now=now)
+    raw_counts = {key: len(payload.get(key) or []) for key in _SERVING_COUNT_KEYS}
+    visible_counts = {key: len(visible.get(key) or []) for key in _SERVING_COUNT_KEYS}
+    return {
+        "ok": True,
+        "schema": 1,
+        "file_sha256": sha256(blob).hexdigest(),
+        "bytes": len(blob),
+        "ready": payload.get("ready") is True,
+        "generated_at": payload.get("generated_at"),
+        "betting_day": visible.get("daily_offer_day"),
+        "stale": visible.get("stale") is True,
+        "raw_counts": raw_counts,
+        "visible_counts": visible_counts,
+    }
