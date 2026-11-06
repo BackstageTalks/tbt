@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "mode": "read-only",
+  "audit": "current-cdb-2026-78-year-identity-union",
+  "original_restore_run": 41310504634,
+  "expected_original_backup_rows": 98994,
+  "expected_prewrite_rows": 2927,
+  "expected_current_min_rows": 100663,
+  "expected_missing_old_only": 0,
+  "provider_requests": 0,
+  "cdb_writes": 0,
+  "model_changes": false,
+  "requested_at": "2026-11-06",
+  "reason": "Independent current CDB 78-year SHA/identity conservation against pinned Nov 1 lossless restore. No writer or paid provider."
+}
