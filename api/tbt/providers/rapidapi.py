@@ -538,6 +538,51 @@ class RapidTennisClient:
                 return payload
         return {}
 
+    @staticmethod
+    def _research_positive_int(value: str | int, label: str, *, allow_zero: bool = False) -> int:
+        """Strict path segment validation for optional provider research routes."""
+        if (isinstance(value, bool)
+                or not isinstance(value, (str, int))
+                or (isinstance(value, str)
+                    and (not value.isascii() or not value.isdecimal()))):
+            raise ValueError(f"{label} must be an integer")
+        result = int(value)
+        if result < (0 if allow_zero else 1):
+            raise ValueError(f"{label} must be non-negative" if allow_zero
+                             else f"{label} must be positive")
+        return result
+
+    def team_year_statistics(self, team_id: str | int, year: int) -> Any:
+        """Research-only provider team-year aggregates, not canonical match stats.
+
+        Do not expose these as a pre-match feature without verifying the
+        covered period and point-in-time availability. No CDB writes.
+        """
+        team = self._research_positive_int(team_id, "team_id")
+        season_year = self._research_positive_int(year, "year")
+        if season_year > datetime.now(timezone.utc).year:
+            raise ValueError("year must not be in the future")
+        return self._get(
+            f"/api/tennis/team/{team}/year-statistics/{season_year}",
+            enrichment=True,
+        )
+
+    def tournament_season_last_matches(
+        self, tournament_id: str | int, season_id: str | int, page: int = 0,
+    ) -> Any:
+        """Research-only season match page; no automatic CDB import.
+
+        The source must be independently matched to exact player/event
+        identities before any canonical supplementation.
+        """
+        tournament = self._research_positive_int(tournament_id, "tournament_id")
+        season = self._research_positive_int(season_id, "season_id")
+        offset = self._research_positive_int(page, "page", allow_zero=True)
+        return self._get(
+            f"/api/tennis/tournament/{tournament}/season/{season}/events/last/{offset}",
+            enrichment=True,
+        )
+
     def previous_player_matches(self, player_id: str | int, page: int = 0) -> Any:
         """Previous matches for one player, newest first.
 
