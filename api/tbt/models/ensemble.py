@@ -326,12 +326,13 @@ class TennisEnsemble:
         the final holdout. No arbitrary bookmaker-price or ranking ban.
         """
         raw = np.asarray(raw, dtype=float)
-        labels = np.asarray(labels, dtype=int)
+        labels = np.asarray(labels, dtype=float)
         if (raw.ndim != 1 or labels.ndim != 1 or len(raw) != len(labels)
                 or len(raw) != len(frame) or not 0 < split < len(raw)
-                or not np.isfinite(raw).all()
+                or not np.isfinite(raw).all() or not np.isfinite(labels).all()
                 or not np.isin(labels, [0, 1]).all()):
             raise ValueError("Invalid evidence calibration inputs")
+        labels = labels.astype(int)
         baseline = cls._calibrated(global_selected, raw)
         selected, evidence = {}, {}
         for cohort, mask in cls._evidence_cohorts(frame).items():
