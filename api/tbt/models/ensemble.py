@@ -319,7 +319,7 @@ class TennisEnsemble:
         }
 
     @classmethod
-    def _choose_evidence_calibrators(cls, raw, labels, frame, split, global_selected):
+    def _choose_evidence_calibrators(cls, raw, labels, frame, split, global_selected, baseline_probabilities=None):
         """Approve monotone quality calibration on disjoint later days only.
 
         Match outcomes are used ONLY in the earlier calibration period, never
@@ -333,7 +333,11 @@ class TennisEnsemble:
                 or not np.isin(labels, [0, 1]).all()):
             raise ValueError("Invalid evidence calibration inputs")
         labels = labels.astype(int)
-        baseline = cls._calibrated(global_selected, raw)
+        baseline = (cls._calibrated(global_selected, raw)
+                    if baseline_probabilities is None
+                    else np.asarray(baseline_probabilities, dtype=float))
+        if baseline.shape != raw.shape or not np.isfinite(baseline).all():
+            raise ValueError("Invalid actual selection baseline probabilities")
         selected, evidence = {}, {}
         for cohort, mask in cls._evidence_cohorts(frame).items():
             fit_idx = np.flatnonzero(mask[:split])
@@ -510,9 +514,22 @@ class TennisEnsemble:
                 self.metadata["tour_calibration_validation"] = tour_evidence
             self.calibrator = self._fit_calibrator(kind, raw, y_cal)
             if getattr(self, "evidence_calibration_selection", False):
+                # Account for an already-selected ATP/WTA calibration when
+                # deciding if a quality-cohort override helps. Comparing
+                # against the pooled baseline alone can silently regress an
+                # existing validated tour-specific probability.
+                actual_baseline = self._calibrated(global_selected, raw)
+                if self.tour_calibrators:
+                    tour_values = cal["tour_atp"].to_numpy(dtype=float)
+                    for tour, tour_value in (("atp", 1.), ("wta", 0.)):
+                        tour_cal = self.tour_calibrators.get(tour)
+                        mask = np.isclose(tour_values, tour_value, atol=1e-8)
+                        if tour_cal is not None and mask.any():
+                            actual_baseline[mask] = self._calibrated(tour_cal, raw[mask])
                 self.evidence_calibrators, quality_evidence = (
                     self._choose_evidence_calibrators(
                         raw, y_cal, cal, split, global_selected,
+                        baseline_probabilities=actual_baseline,
                     )
                 )
                 self.metadata["evidence_calibration_validation"] = quality_evidence
