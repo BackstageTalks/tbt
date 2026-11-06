@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "days": [
+    "2026-11-03",
+    "2026-11-04",
+    "2026-11-05"
+  ],
+  "mode": "read-only",
+  "paid_provider_requests": 0,
+  "telegram_send": false,
+  "cdb_writes": false
+}
