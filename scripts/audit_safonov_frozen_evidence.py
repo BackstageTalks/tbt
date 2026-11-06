@@ -163,6 +163,7 @@ def read_report(root: Path, pins: dict) -> dict:
                  if isinstance(s, dict) and utc(s.get("generated_at")) is not None
                  and utc(s["generated_at"]).astimezone(TZ).date().isoformat() == "2026-11-06"]
     matched = []
+    todays_top = []
     cohort = Counter()
     for snap in snapshots:
         generated = snap["generated_at"]
@@ -173,6 +174,7 @@ def read_report(root: Path, pins: dict) -> dict:
             pub = n(row.get("blinq_probability"))
             odds = n((row.get("betting") or {}).get("odds"))
             if row.get("selected_section") == "top_daily":
+                todays_top.append(summarize(row, "monthly_selected_top", snapshot_at=generated))
                 cohort["top_snapshots_rows"] += 1
                 if pub is not None and odds and odds > 1:
                     gap = pub - 1 / odds
@@ -250,7 +252,7 @@ def read_report(root: Path, pins: dict) -> dict:
     return {
         "schema": 1, "status": "READ_ONLY_PINNED_EVIDENCE",
         "source_pins": pins,
-        "candidate": {"cohort": dict(cohort), "safonov": matched},
+        "candidate": {"cohort": dict(cohort), "safonov": matched, "top_audit": todays_top},
         "feed": feeds, "issued_publications": issued,
         "telegram": {
             "status": batch.get("status"), "sent_at": batch.get("sent_at"),
@@ -284,6 +286,15 @@ def main():
     print(json.dumps({
         "status": result["status"], "cohort": result["candidate"]["cohort"],
         "candidate_matches": len(result["candidate"]["safonov"]),
+        "today_top_price_gap_audit": [
+            {"event_id": row["event_id"], "selected_player": row["betting"]["selection"],
+             "public_probability": row["public_probability"], "odds": row["odds"],
+             "gap_pp": round(100*(row["public_probability"]-row["implied_probability"]),2)
+                       if row["public_probability"] and row["implied_probability"] else None,
+             "has_ranks": bool(row["player1"]["rank"] and row["player2"]["rank"]),
+             "quote_before_start": row["checks"]["quote_before_start"],
+             "model_version": row["model_version"]}
+            for row in result["candidate"]["top_audit"]],
         "candidate_safonov": result["candidate"]["safonov"][:15],
         "feed_safonov": result["feed"],
         "issued_publications": result["issued_publications"][:15],
