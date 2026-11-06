@@ -183,6 +183,12 @@ class AdaptiveStatisticsQueue:
             or prior_total >= self.MIN_TOTAL_REQUESTS) else []
         adaptive = (self._served % self.EXPLORE_EVERY != 0 and len(eligible) >= 2)
         if adaptive:
+            # Never exploit a cohort already proven low-yield while another
+            # sampled cohort is viable. Recovery probes remain in baseline.
+            viable = [group for group in eligible if not self._low_yield(group)]
+            if viable:
+                eligible = viable
+        if adaptive:
             # sorted eligibility makes equal-score results deterministic.
             group = max(eligible, key=self._score)
             match = self._pending[group][0]
