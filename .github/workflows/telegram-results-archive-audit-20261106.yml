@@ -1,0 +1,47 @@
+name: BlinQ Telegram results exact reference audit 20261106
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/telegram-results-archive-audit-request.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-telegram-archive-readonly-audit-20261106
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout existing confirmed private Telegram ledger read-only
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: telegram-bot-state
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: .private-telegram
+          sparse-checkout: ops
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - name: Audit exact 3–5 Nov receipts against authenticated archived settlements
+        env:
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          test -s .private-telegram/ops/telegram-bot-state.json
+          python scripts/telegram_results_archive_audit.py \
+            --state .private-telegram/ops/telegram-bot-state.json \
+            --url "$BLINQ_PRODUCTION_URL"
