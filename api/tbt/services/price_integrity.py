@@ -54,7 +54,8 @@ def post_start_winner_quote(row: object) -> bool:
 
     Missing capture evidence in legacy issued rows is deliberately not inferred
     to be post-start; this contract protects new priced rows without rewriting
-    frozen history. Both provider and local quote timestamps are respected.
+    frozen history. The selected bet quote timestamp takes precedence; an
+    unrelated provider-market refresh must not invalidate an earlier local bet.
     """
     if not isinstance(row, dict):
         return False
@@ -65,17 +66,14 @@ def post_start_winner_quote(row: object) -> bool:
         row.get("match_winner_market")
         if isinstance(row.get("match_winner_market"), dict) else {}
     )
-    captures = [
-        value for value in (betting.get("captured_at"), market.get("captured_at"))
-        if value not in (None, "")
-    ]
-    if not captures:
+    # The actionable price is betting.odds. Prefer the matching betting
+    # capture timestamp, especially when a separately refreshed provider
+    # market differs from an equally authoritative local quote.
+    captured_value = betting.get("captured_at")
+    if captured_value in (None, ""):
+        captured_value = market.get("captured_at")
+    if captured_value in (None, ""):
         return False
     start = _aware_utc_timestamp(row.get("scheduled_at"))
-    if start is None:
-        return True
-    for value in captures:
-        captured = _aware_utc_timestamp(value)
-        if captured is None or captured >= start:
-            return True
-    return False
+    captured = _aware_utc_timestamp(captured_value)
+    return start is None or captured is None or captured >= start
