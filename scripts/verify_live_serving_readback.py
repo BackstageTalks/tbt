@@ -68,11 +68,42 @@ def validate(prepared_bytes: bytes, received: dict) -> dict:
     }
 
 
+
+def preflight_serving(path: Path, *, now=None) -> dict:
+    """Refuse an unready or wrong-betting-day artifact *before* Azure upload.
+
+    Reuse the server's existing strict file+Bratislava-day validator; no new
+    writer, worker token, Telegram, CDB or provider call is necessary.
+    """
+    import sys
+
+    root = str(Path(__file__).resolve().parents[1] / "api")
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from tbt.services.feed import serving_artifact_readback
+
+    evidence = serving_artifact_readback(path, now=now)
+    if evidence["ready"] is not True or evidence["stale"] is not False:
+        raise ValueError("Pre-deploy serving feed is not ready for the current betting day")
+    return {
+        "status": "ready",
+        "file_sha256": evidence["file_sha256"],
+        "betting_day": evidence["betting_day"],
+        "raw_counts": evidence["raw_counts"],
+        "paid_provider_requests": 0,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepared-feed", default="api/data/feed.json")
-    parser.add_argument("--base-url", required=True)
+    parser.add_argument("--base-url", default="")
+    parser.add_argument("--preflight-only", action="store_true")
     args = parser.parse_args()
+    if args.preflight_only:
+        print("BLINQ_SERVING_PREFLIGHT " + json.dumps(
+            preflight_serving(Path(args.prepared_feed)), sort_keys=True), flush=True)
+        return
     token = os.getenv("BLINQ_LIVE_WORKER_TOKEN", "").strip()
     base = args.base_url.strip().rstrip("/")
     if not token or not base.startswith("https://") or "/" in base.split("://", 1)[1]:
