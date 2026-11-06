@@ -17,6 +17,7 @@ class Table:
     def __init__(self):
         self.items = {}
         self.versions = {}
+        self.upsert_calls = 0
 
     def get_entity(self, *, partition_key, row_key):
         from tbt.services.admin_storage import _VersionedStorageEntity
@@ -46,6 +47,7 @@ class Table:
         # This shared fake is also used by Admin exclusions and Match Status,
         # whose separate storage paths legitimately require upsert in tests.
         # The Results CAS tests assert the archive itself never calls here.
+        self.upsert_calls += 1
         key = entity["PartitionKey"], entity["RowKey"]
         self.items[key] = deepcopy(entity)
         self.versions[key] = self.versions.get(key, 0) + 1
