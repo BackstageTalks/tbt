@@ -29,6 +29,8 @@ def test_stale_data_deployment_has_bounded_zero_provider_handoff():
     assert "assert actual == os.environ['EXPECTED_SHA']" in handoff
     assert "RAPIDAPI_KEY:" not in handoff
     assert "PROPL:" not in handoff
+    # A deploy-only recovery cannot trigger paid CLV capture as a side effect.
+    assert "inputs.stale_handoff_run_id == ''" in workflow.split("Capture market immediately after publication", 1)[1].split("Fail closed if a no-provider", 1)[0]
 
 
 def test_no_provider_handoff_cannot_recursively_succeed_without_deploying():
