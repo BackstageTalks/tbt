@@ -322,3 +322,30 @@ def test_short_or_productive_prior_cannot_suppress_exploration():
         )
         assert not q._low_yield("wta:2026:serve_return")
         assert next(q) is rows[0]
+
+
+def test_adaptive_never_exploits_proven_low_yield_when_alternative_exists():
+    rows = []
+    for i in range(500):
+        rows.extend((_match(f"empty-{i}", "ATP", 2023),
+                     _match(f"useful-{i}", "WTA", 2022)))
+    prior = {
+        "atp:2023:serve_return": {"api_requests": 64, "new_fields": 0,
+                                  "full_serve_return_rows": 0},
+        "wta:2022:serve_return": {"api_requests": 64, "new_fields": 64,
+                                  "full_serve_return_rows": 2},
+    }
+    q = AdaptiveStatisticsQueue(rows, verified_prior=prior)
+    selected = []
+    for _ in range(200):
+        row = next(q)
+        selected.append(row)
+        q.record(row, 1, _gain() if row.tour == "ATP" else _gain(8, 1))
+    report = q.summary()
+    empty = report["cohorts"]["atp:2023:serve_return"]
+    assert empty["adaptive_choices"] == 0
+    assert empty["baseline_choices"] > 0  # recovery probes retained
+    assert empty["paid_requests"] < 30
+    assert report["baseline_choices"] >= 50
+    assert report["observed_paid_requests"] == 200
+    assert len({row.match_id for row in selected}) == 200
