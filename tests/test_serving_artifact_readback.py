@@ -183,7 +183,9 @@ def test_both_deploys_preflight_before_azure_upload():
         deploy = yml.index(deploy_name)
         preflight = yml.index("python scripts/verify_live_serving_readback.py --preflight-only")
         signed_readback = yml.index("python scripts/verify_live_serving_readback.py \\", deploy)
-        assert preflight < deploy < signed_readback
+        confirm = yml.index("Confirm deployed prediction publication" if path.endswith("ci.yml")
+                            else "Confirm exactly deployed prediction publication")
+        assert preflight < deploy < signed_readback < confirm
         assert "python scripts/prepare_feed.py" in yml[:preflight]
     source = (root / "scripts/verify_live_serving_readback.py").read_text(encoding="utf-8")
     assert "if args.preflight_only:" in source
