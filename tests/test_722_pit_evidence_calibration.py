@@ -186,3 +186,12 @@ def test_one_shot_722_training_uses_existing_backup_lock_pipeline_without_promot
     assert "python scripts/publish_frozen_candidate_evidence.py" in workflow
     assert "--training-profile \"$BLINQ_TRAINING_PROFILE\"" in workflow
     assert "# No --promote." in workflow
+    # YAML parsing alone does not validate GitHub Actions expression grammar.
+    # Ignore quoted literal commit titles while checking grouped expression.
+    import re
+    condition = workflow.split("  await-cdb-idle:", 1)[1]
+    condition = condition.split("    if: >-", 1)[1].split("    runs-on:", 1)[0]
+    expression = re.sub(r"'[^']*'", "", condition)
+    assert expression.count("(") == expression.count(")")
+    assert "github.event_name == 'workflow_dispatch'" in condition
+    assert "github.event_name == 'push'" in condition
