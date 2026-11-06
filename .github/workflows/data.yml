@@ -1040,6 +1040,7 @@ jobs:
           python scripts/prepare_feed.py
           test -s api/data/feed.json
           python scripts/verify_presentation_feed.py api/data/feed.json --summary
+          python scripts/verify_deployed_serving_feed.py --preflight-only --feed api/data/feed.json
 
       - name: Freeze immutable issuance evidence before deploy
         if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
