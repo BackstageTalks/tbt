@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from ..providers.budget import RequestBudgetExceeded
 from ..providers.odds_quality import odds_unavailable
-from .price_integrity import extreme_winner_price_inversion
+from .price_integrity import extreme_winner_price_inversion, post_start_winner_quote
 
 
 MATCH_WINNER_MARKET_NAMES = {
@@ -225,9 +225,13 @@ def _match_side(label: str, player1: str, player2: str) -> int | None:
     p2 = _normal(player2)
     aliases1 = {"1", "home", "home team", "player 1", "player1", p1}
     aliases2 = {"2", "away", "away team", "player 2", "player2", p2}
-    if text in aliases1 or (p1 and (text == p1 or p1 in text or text in p1)):
+    # No substring fallback: "Ann" must never identify "Anna", and short
+    # provider labels must not guess a player on a Match Winner quote.
+    if text in aliases1 and text in aliases2:
+        return None
+    if text in aliases1:
         return 1
-    if text in aliases2 or (p2 and (text == p2 or p2 in text or text in p2)):
+    if text in aliases2:
         return 2
     return None
 
@@ -727,9 +731,15 @@ def enrich_current_betting_day_odds(
     )
     indexed = {str(row.get("event_id") or ""): deepcopy(row) for row in predictions}
     candidates = []
+    started_predictions_skipped = 0
     for row in indexed.values():
         scheduled = _prediction_time(row)
         if scheduled is None or not start <= scheduled < end:
+            continue
+        # Never spend quote budget or attach a fresh actionable Match Winner
+        # price to an event whose scheduled start has already passed.
+        if scheduled <= now:
+            started_predictions_skipped += 1
             continue
         if not _passes_candidate_gate(
             row,
@@ -751,6 +761,7 @@ def enrich_current_betting_day_odds(
         "start_hour": int(start_hour),
         "candidates": len(candidates),
         "eligible_candidates": eligible_candidates,
+        "started_predictions_skipped": started_predictions_skipped,
         "limited_out": max(0, eligible_candidates - len(candidates)),
         "max_events": int(max_events),
         "odds_requested": 0,
@@ -1074,6 +1085,7 @@ def select_market_sections(
     top_fallback: list[dict[str, Any]] = []
 
     extreme_inversion_quarantined = 0
+    post_start_quote_quarantined = 0
     for card in cards:
         odds = _number(card.get("odds"))
         if odds is None:
@@ -1083,6 +1095,9 @@ def select_market_sections(
         # not a change to model probability or bookmaker source priority.
         if extreme_winner_price_inversion(probability, odds):
             extreme_inversion_quarantined += 1
+            continue
+        if post_start_winner_quote(card):
+            post_start_quote_quarantined += 1
             continue
 
         if (
@@ -1179,6 +1194,7 @@ def select_market_sections(
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "extreme_price_inversion_quarantined": extreme_inversion_quarantined,
+                "post_start_quote_quarantined": post_start_quote_quarantined,
                 "prime_core_68_plus": len(prime_core),
                 "top_core_80_plus_after_value_priority": len(top_core),
                 "top_core_68_plus_after_value_priority": len(top_core),  # legacy metadata key
