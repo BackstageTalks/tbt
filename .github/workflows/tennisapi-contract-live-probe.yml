@@ -51,7 +51,8 @@ jobs:
             (.phase == "full" or .phase == "metadata" or .phase == "odds" or
              .phase == "doubles" or .phase == "quality" or
              .phase == "historical" or .phase == "identity" or
-             .phase == "archive_2016" or .phase == "candidates" or\n             .phase == "discovery") and
+             .phase == "archive_2016" or .phase == "candidates" or
+             .phase == "discovery") and
             (.case == null or (.case | type == "string" and length > 0 and length < 64)) and
             (.phase != "candidates" or (.max_requests >= 2 and
              (.case == "team_year_statistics" or
