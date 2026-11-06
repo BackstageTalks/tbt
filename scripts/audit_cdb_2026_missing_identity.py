@@ -167,6 +167,76 @@ def classify_identity_drift(old, before, live) -> dict:
     )}
 
 
+
+def classify_missing_native_event_claims(old, before, current) -> dict:
+    """Check immutable native provider event IDs without guessing identity.
+
+    Only positive source-native claims from minimized provider context are
+    considered. Provider IDs may collide in ITF; same ID is a warning, never
+    sufficient evidence to merge, rekey, delete or publish a match.
+    """
+    from collections import Counter, defaultdict
+
+    cols = {"match_id", "tour", "provider_context_json"}
+    if any(not cols.issubset(set(table.column_names)) for table in (old, before, current)):
+        raise ValueError("Missing original provider provenance in canonical audit snapshot")
+
+    def evidence(table, i):
+        raw = table["provider_context_json"][i].as_py()
+        try:
+            context = json.loads(raw or "{}")
+        except (TypeError, ValueError):
+            return None, "malformed"
+        if not isinstance(context, dict):
+            return None, "malformed"
+        found = set()
+        for key in ("_tbt_event_identity", "_tbt_statistics"):
+            node = context.get(key)
+            value = node.get("event_id") if isinstance(node, dict) else None
+            if value not in (None, ""):
+                found.add(str(value))
+        if len(found) > 1:
+            return None, "conflict"
+        if not found:
+            return None, "absent"
+        return next(iter(found)), "verified"
+
+    old_idx = index(old, "original")
+    pre_idx = index(before, "prewrite")
+    cur_idx = index(current, "current")
+    used = defaultdict(set)
+    for mid, i in cur_idx.items():
+        claim, state = evidence(current, i)
+        if state == "verified":
+            used[(str(current["tour"][i].as_py()).lower(), claim)].add(mid)
+    counts = Counter()
+    for mid in (set(old_idx) | set(pre_idx)) - set(cur_idx):
+        source, original_idx = (before, pre_idx) if mid in pre_idx else (old, old_idx)
+        i = original_idx[mid]
+        claim, state = evidence(source, i)
+        if state != "verified":
+            counts["missing_source_native_provider_" + state] += 1
+            continue
+        counts["missing_source_native_provider_verified"] += 1
+        owners = used.get((str(source["tour"][i].as_py()).lower(), claim), set()) - {mid}
+        if len(owners) == 0:
+            counts["missing_native_provider_id_not_in_current"] += 1
+        elif len(owners) == 1:
+            counts["missing_native_provider_id_claimed_by_one_other_id"] += 1
+        else:
+            counts["missing_native_provider_id_ambiguous_multiple_owners"] += 1
+    return {key: int(counts[key]) for key in (
+        "missing_source_native_provider_verified",
+        "missing_source_native_provider_absent",
+        "missing_source_native_provider_malformed",
+        "missing_source_native_provider_conflict",
+        "missing_native_provider_id_not_in_current",
+        "missing_native_provider_id_claimed_by_one_other_id",
+        "missing_native_provider_id_ambiguous_multiple_owners",
+    )}
+
+
+
 def _store_report(path: Path, report: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
@@ -224,13 +294,14 @@ def main() -> None:
         raise RuntimeError("Pinned 1 Nov prewrite year manifest/Parquet mismatch")
 
     current = root / "current"
-    cols = ["match_id", "tour", "tournament_id", "player1_id", "player2_id", "scheduled_at", "stats_json"]
+    cols = ["match_id", "tour", "tournament_id", "player1_id", "player2_id", "scheduled_at", "stats_json", "provider_context_json"]
     old_table = pq.read_table(frozen, columns=cols)
     prewrite_table = pq.read_table(prewrite_file, columns=cols)
     current_table = pq.read_table(current / "history-2026.parquet", columns=cols)
     merged, counts, union = merge_preserving_live(old_table, current_table)
     origins = compare_origins(old_table, prewrite_table, current_table)
     classifications = classify_identity_drift(old_table, prewrite_table, current_table)
+    provider_claims = classify_missing_native_event_claims(old_table, prewrite_table, current_table)
     report = {
         "schema": 1, "phase": "read_only_current_snapshot_forensics",
         "state": "UNVERIFIED_UNTIL_COMPLETE",
@@ -240,7 +311,7 @@ def main() -> None:
         "model_changes": 0, "provider_requests": 0, "cdb_writes": 0,
         "recovery_candidate_not_imported": True,
         "merged_candidate_rows_only_in_memory": merged.num_rows,
-        **counts, **origins, **classifications,
+        **counts, **origins, **classifications, **provider_claims,
     }
     output = root / "drift-report.json"
     _store_report(output, report)
