@@ -1,13 +1,15 @@
 {
   "schema": 1,
-  "mode": "deploy-current",
-  "max_requests": 1,
+  "mode": "statistics",
+  "start": "2022-01-01",
+  "end": "2026-11-05",
+  "lookback_days": 1095,
+  "max_requests": 1000,
   "promote": false,
-  "targeted_statistics": false,
+  "targeted_statistics": true,
+  "high_yield_statistics": true,
   "model_changes": false,
-  "cdb_writes_allowed": false,
-  "kind": "recover-published-predictions-2026-11-05",
-  "source": "tbt-predictions-v1",
-  "recovery_source_run": 41990119127,
-  "description": "Deploy already computed and preflight-verified current prediction generation using existing no-provider deployment path. No Tennis/PropLine calls or model/CDB changes. Historical request 1349 is preserved in git history."
+  "cdb_writes_allowed": true,
+  "kind": "operator-approved-adaptive-statistics-1000-test-20261106",
+  "description": "User-authorized up-to-1000-provider-call live adaptive CDB statistics validation; existing global budget and lock, provider 500 reserve, NULL-only import and read-back required."
 }
