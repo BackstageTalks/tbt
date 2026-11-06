@@ -156,6 +156,75 @@ def summarize(row, source, *, snapshot_at=None):
     }
 
 
+
+def settled_issued_gap_cohort(ledger):
+    """Thirty-day exact issued TOP; no candidate-as-bet denominator inflation."""
+    selected = {}
+    reason = Counter()
+    for row in ledger:
+        if not isinstance(row, dict):
+            continue
+        event = str(row.get("event_id") or "")
+        scheduled = utc(row.get("scheduled_at"))
+        if not event or scheduled is None or not datetime(2026, 10, 7, tzinfo=timezone.utc) <= scheduled < datetime(2026, 11, 7, tzinfo=timezone.utc):
+            continue
+        for pub in row.get("market_publications") or []:
+            if not isinstance(pub, dict) or pub.get("section") != "top_daily" or pub.get("market") != "match_winner":
+                continue
+            if pub.get("publication_status") != "published" or not pub.get("issued_at"):
+                reason["not_issued"] += 1
+                continue
+            snap = pub.get("issued_snapshot") if isinstance(pub.get("issued_snapshot"), dict) else {}
+            prep = pub.get("prepared_snapshot") if isinstance(pub.get("prepared_snapshot"), dict) else {}
+            if (snap.get("source") != "pre_deploy_feed_confirmed" or prep.get("source") != "pre_deploy_feed"
+                or snap.get("model_version") != "v7.2.1-v201-20261022T134742452543Z"):
+                reason["missing_exact_721_frozen_snapshot"] += 1
+                continue
+            quote = utc(snap.get("market_captured_at"))
+            prepared_at = utc(snap.get("prepared_at"))
+            issued_at = utc(pub.get("issued_at"))
+            price, prob = n(snap.get("odds")), n(snap.get("blinq_probability"))
+            pair = snap.get("two_way_match_winner") if isinstance(snap.get("two_way_match_winner"), dict) else {}
+            if (not all((quote, prepared_at, issued_at, price, prob))
+                or not (quote <= prepared_at <= issued_at < scheduled)
+                or not (1 < price < 1000 and .5 <= prob < 1)
+                or not n(pair.get("player1_odds")) or not n(pair.get("player2_odds"))):
+                reason["invalid_issuance_or_market_evidence"] += 1
+                continue
+            ident = (event, str(pub.get("selection_id") or ""), str(pub.get("betting_day") or ""))
+            grade = (pub.get("result") or {}).get("correct") if isinstance(pub.get("result"), dict) else None
+            datum = {"gap": prob - 1 / price, "prob": prob, "price": price,
+                     "correct": grade if type(grade) is bool else None,
+                     "tour": str(row.get("tour") or "").upper(),
+                     "provider": str(pair.get("source") or pair.get("provider_id") or "unknown"),
+                     "rank_missing": not all((snap.get("players") or {}).get(side, {}).get("rank")
+                                             for side in ("player1", "player2"))}
+            if ident in selected and selected[ident] != datum:
+                selected[ident] = None  # conflicting frozen duplicate: no guess
+                reason["conflicting_issued_identity"] += 1
+            elif ident not in selected:
+                selected[ident] = datum
+    rows = [x for x in selected.values() if x]
+    bands = {
+        "gap_le_30pp": lambda x: x["gap"] <= .30,
+        "gap_30_to_40pp": lambda x: .30 < x["gap"] <= .40,
+        "gap_40_to_50pp": lambda x: .40 < x["gap"] <= .50,
+        "gap_over_50pp": lambda x: x["gap"] > .50,
+        "missing_ranks": lambda x: x["rank_missing"],
+        "atp": lambda x: x["tour"] == "ATP",
+        "wta": lambda x: x["tour"] == "WTA",
+    }
+    def stats(items):
+        settled = [x for x in items if x["correct"] is not None]
+        return {"issued": len(items), "settled": len(settled),
+                "wins": sum(x["correct"] for x in settled),
+                "losses": sum(not x["correct"] for x in settled),
+                "mean_public_probability": round(sum(x["prob"] for x in items)/len(items), 4) if items else None,
+                "avg_profit_per_settled": round(sum((x["price"]-1) if x["correct"] else -1 for x in settled)/len(settled), 4) if settled else None}
+    return {"scope": "v7.2.1 exact pre-deploy frozen TOP 2026-10-07 through 2026-11-06",
+            "overall": stats(rows), "groups": {k: stats([x for x in rows if f(x)]) for k,f in bands.items()},
+            "rejected": dict(reason)}
+
 def read_report(root: Path, pins: dict) -> dict:
     with gzip.open(root / ASSETS[1], "rt", encoding="utf-8") as reader:
         monthly = json.load(reader)
@@ -249,9 +318,11 @@ def read_report(root: Path, pins: dict) -> dict:
     sent = json.loads(base64.b64decode(encoded["content"]).decode("utf-8"))
     batch = (sent.get("attempts") or {}).get("2026-11-06:daily:0620") or {}
     top_rows = [x for x in batch.get("rows") or [] if x.get("channel") == "top"]
+    historical = settled_issued_gap_cohort(ledger)
     return {
         "schema": 1, "status": "READ_ONLY_PINNED_EVIDENCE",
         "source_pins": pins,
+        "exact_issued_721_gap_cohort": historical,
         "candidate": {"cohort": dict(cohort), "safonov": matched, "top_audit": todays_top},
         "feed": feeds, "issued_publications": issued,
         "telegram": {
@@ -286,6 +357,7 @@ def main():
     print(json.dumps({
         "status": result["status"], "cohort": result["candidate"]["cohort"],
         "candidate_matches": len(result["candidate"]["safonov"]),
+        "historical_issued_721_gap_cohort": result["exact_issued_721_gap_cohort"],
         "today_top_price_gap_audit": [
             {"event_id": row["event_id"], "selected_player": row["betting"]["selection"],
              "public_probability": row["public_probability"], "odds": row["odds"],
