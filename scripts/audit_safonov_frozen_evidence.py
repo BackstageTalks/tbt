@@ -148,9 +148,9 @@ def summarize(row, source, *, snapshot_at=None):
         "implied_probability": 1 / price if price and price > 1 else None,
         "market_pair": {k: market.get(k) for k in (
             "player1_odds", "player2_odds", "provider_id", "source", "source_id",
-            "source_id_known", "raw_overround", "captured_at")},
+            "source_id_known", "raw_overround", "captured_at", "bookmaker", "provider_event_id")},
         "betting": {k: bet.get(k) for k in ("provider_id", "captured_at", "betting_day", "selection")},
-        "depth": row.get("data_depth"),
+        "depth": row.get("data_depth"), "stats_available": row.get("stats_available"),
         "samples": row.get("samples") or row.get("quality"),
         "checks": derived,
     }
@@ -232,6 +232,16 @@ def read_report(root: Path, pins: dict) -> dict:
                     "two_way_match_winner": snap.get("two_way_match_winner"),
                 },
                 "prepared_snapshot_present": bool(prepared),
+                "prepared_evidence": {
+                    "prepared_at": prepared.get("prepared_at"),
+                    "market_captured_at": prepared.get("market_captured_at"),
+                    "model_version": prepared.get("model_version"),
+                    "model_probability": prepared.get("model_probability"),
+                    "provider_id": prepared.get("provider_id"),
+                    "two_way_match_winner": prepared.get("two_way_match_winner"),
+                    "players": prepared.get("players"),
+                    "quality": prepared.get("quality"),
+                } if prepared else None,
             })
     encoded = json.loads(gh("api", f"repos/{REPO}/contents/ops/telegram-bot-state.json?ref=telegram-bot-state"))
     sent = json.loads(base64.b64decode(encoded["content"]).decode("utf-8"))
