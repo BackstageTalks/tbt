@@ -583,6 +583,15 @@ class RapidTennisClient:
             enrichment=True,
         )
 
+    def player_singles_results(self, player_id: str | int, page: int = 0) -> Any:
+        """Research-only singles match history. No CDB or training mutations."""
+        player = self._research_positive_int(player_id, "player_id")
+        offset = self._research_positive_int(page, "page", allow_zero=True)
+        return self._get(
+            f"/api/tennis/player/{player}/events/singles/last/{offset}",
+            enrichment=True,
+        )
+
     def previous_player_matches(self, player_id: str | int, page: int = 0) -> Any:
         """Previous matches for one player, newest first.
 
