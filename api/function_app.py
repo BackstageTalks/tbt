@@ -116,7 +116,7 @@ from tbt.services.push_notifications import (
     delete_subscription, push_storage_diagnostics, save_subscription, sync_push_access, webpush_config,
 )
 from tbt.services.ops_storage import record_system_event, list_system_events
-from tbt.services.feed import read_feed, visible_feed, _row_betting_day
+from tbt.services.feed import read_feed, visible_feed, serving_artifact_readback, _row_betting_day
 from tbt.services.dashboard_kpis import selected_dashboard_cards
 from tbt.services.result_exclusions import (
     result_candidates, load_result_exclusions, set_result_exclusions,
@@ -562,6 +562,19 @@ def _admin_account_row(user, profile=None):
 @app.route(route="health", methods=["GET"])
 def health(req):
     return response({"ok": True, "version": API_VERSION, "release": RELEASE, "auth": auth_provider(settings)})
+
+
+@app.route(route="v1/internal/serving-readback", methods=["GET"])
+def internal_serving_readback(req):
+    # Production-only diagnostic. Authorization is a private worker secret,
+    # not user-controlled account claims; no provider calls or writes.
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    try:
+        return response(serving_artifact_readback(FEED))
+    except (OSError, ValueError, TypeError):
+        logging.exception("Private production serving artifact readback unavailable")
+        return response({"error": "serving_readback_unavailable"}, 503)
 
 
 
