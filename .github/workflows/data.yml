@@ -1040,6 +1040,7 @@ jobs:
           python scripts/prepare_feed.py
           test -s api/data/feed.json
           python scripts/verify_presentation_feed.py api/data/feed.json --summary
+          python scripts/verify_live_serving_readback.py --preflight-only --prepared-feed api/data/feed.json
 
       - name: Freeze immutable issuance evidence before deploy
         if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
@@ -1120,7 +1121,8 @@ jobs:
           set -euo pipefail
           python scripts/verify_live_serving_readback.py \
             --prepared-feed api/data/feed.json \
-            --base-url "$BLINQ_BASE_URL"
+            --base-url "$BLINQ_BASE_URL" \
+            --require-current
 
       - name: Confirm exactly deployed prediction publication
         if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
