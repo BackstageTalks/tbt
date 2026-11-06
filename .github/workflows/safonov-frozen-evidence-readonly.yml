@@ -5,6 +5,7 @@ on:
       - audit/safonov-frozen-evidence-20261106
     paths:
       - scripts/audit_safonov_frozen_evidence.py
+      - scripts/audit_safonov_model_calibration.py
       - .github/workflows/safonov-frozen-evidence-readonly.yml
   workflow_dispatch:
 permissions:
@@ -19,6 +20,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONPATH: api:scripts
       BLINQ_RAPIDAPI_MAX_RPS: '0'
     steps:
       - uses: actions/checkout@v4
@@ -35,11 +37,17 @@ jobs:
           test -z "${RAPIDAPI_KEY:-}"
           test -z "${PROPL:-}"
           test -z "${TGB:-}"
-          python -m py_compile scripts/audit_safonov_frozen_evidence.py
+          python -m py_compile scripts/audit_safonov_frozen_evidence.py scripts/audit_safonov_model_calibration.py
+      - name: Install existing offline model runtime (no fitting)
+        run: python -m pip install -r api/requirements-train.txt
       - name: Read pre-existing private release and original Telegram receipts
         run: |
           python scripts/audit_safonov_frozen_evidence.py \
             --out .cache/safonov-readonly/report.json
+      - name: Inspect frozen production calibration mapping
+        run: |
+          python scripts/audit_safonov_model_calibration.py \
+            --out .cache/safonov-readonly/model_calibration.json
       - name: Assert provenance and no production mutation
         run: |
           python - <<'PY'
@@ -54,12 +62,17 @@ jobs:
           assert obj["telegram_mutated"] is False
           assert obj["telegram"]["status"] == "sent"
           assert len(obj["source_pins"]) == 5
+          model=json.loads(Path(".cache/safonov-readonly/model_calibration.json").read_text(encoding="utf-8"))
+          assert model["model_retrained"] is False and model["model_promoted"] is False
+          assert model["CDB_mutated"] is False and model["provider_requests"] == 0
           print("READ-ONLY AUDIT PASS; candidate snapshots:", obj["candidate"]["cohort"]["snapshots"])
           PY
       - name: Preserve bounded evidence artifact only
         uses: actions/upload-artifact@v4
         with:
           name: safonov-frozen-forensics-${{ github.run_id }}
-          path: .cache/safonov-readonly/report.json
+          path: |
+            .cache/safonov-readonly/report.json
+            .cache/safonov-readonly/model_calibration.json
           retention-days: 14
           if-no-files-found: error
