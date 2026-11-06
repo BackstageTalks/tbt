@@ -498,3 +498,41 @@ def test_top_70_fallback_never_bypasses_data_depth_surface_odds():
     result = select_market_sections(rows)
     assert [x["event_id"] for x in result["top_daily_picks"]] == ["valid"]
     assert result["market_selection"]["selection_counts"]["top_below_three_after_70"] is True
+
+
+def test_provider_partial_name_cannot_guess_player_side():
+    # The older substring matcher mapped "Anna" to "Ann" and lost a side.
+    payload = {'markets': [{'marketName': 'Full time', 'choices': [
+        {'choiceName': 'Anna', 'fractionalValue': 1.55},
+        {'choiceName': 'Ann', 'fractionalValue': 2.40},
+    ]}]}
+    market = extract_match_winner_odds(payload, 'Ann', 'Anna')
+    assert market is not None
+    assert market['player1_odds'] == 2.40
+    assert market['player2_odds'] == 1.55
+
+    # Ambiguous abbreviations do not get an invented winner/side.
+    ambiguous = {'markets': [{'marketName': 'Full time', 'choices': [
+        {'choiceName': 'Ali', 'fractionalValue': 1.70},
+        {'choiceName': 'Alice', 'fractionalValue': 2.10},
+    ]}]}
+    assert extract_match_winner_odds(ambiguous, 'Alina', 'Alice') is None
+
+
+def test_new_odds_enrichment_skips_already_started_events():
+    now = datetime(2026, 9, 7, 8, tzinfo=timezone.utc)
+    old = row('already-started', .83, 1.80, 2.20, depth=1.0)
+    future = row('future', .81, 1.80, 2.20, depth=1.0)
+    old['scheduled_at'] = '2026-09-07T07:59:00+00:00'
+    for item in (old, future):
+        item.pop('betting', None)
+        item.pop('match_winner_market', None)
+    provider = _OddsProvider()
+    enriched, report = enrich_current_betting_day_odds(
+        provider, [old, future], now=now,
+    )
+    assert provider.called == [('future', 1)]
+    assert report['started_predictions_skipped'] == 1
+    assert report['eligible_candidates'] == 1
+    assert 'betting' not in enriched[0]
+    assert enriched[1]['betting']['captured_at'] == now.isoformat()
