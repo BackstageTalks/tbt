@@ -150,12 +150,13 @@ def test_two_production_paths_require_canary_before_issuance():
     ]:
         yml = (ROOT / path).read_text(encoding="utf-8")
         assert "Verify signed" in yml
-        check = yml.index("python scripts/verify_deployed_serving_feed.py")
         deploy = yml.index("Deploy BlinQ to Azure Static Web Apps" if path.endswith("ci.yml") else "Deploy refreshed feed and application")
-        issued = yml.index(confirm)
-        assert deploy < check < issued
+        # There are intentionally two calls: an offline preflight before the
+        # Azure upload and a signed live readback after it. Never conflate them.
         preflight = yml.index("python scripts/verify_deployed_serving_feed.py --preflight-only")
-        assert preflight < deploy
+        check = yml.index("python scripts/verify_deployed_serving_feed.py \\", deploy)
+        issued = yml.index(confirm)
+        assert preflight < deploy < check < issued
         assert "BLINQ_LIVE_WORKER_TOKEN:" in yml
         assert "--feed api/data/feed.json" in yml[check:issued]
     app = (ROOT / "api/function_app.py").read_text(encoding="utf-8")
