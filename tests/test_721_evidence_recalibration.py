@@ -38,6 +38,11 @@ def test_721_candidate_smooth_probability_calibration_and_symmetry():
     assert model.metadata["smooth_calibration_only"] is True
     assert model.calibrator.kind in {"identity", "platt"}
     assert "isotonic" not in model.metadata["calibration_candidates"]
+    brier = model.metadata["smooth_calibration_brier_candidates"]
+    assert set(brier) >= {"identity"}
+    assert model.calibrator.kind == "identity" or (
+        brier[model.calibrator.kind] <= brier["identity"] + 1e-12
+    )
     assert "evidence_calibration_validation" in model.metadata
     assert set(model.metadata["evidence_calibration_validation"]) == {
         "stats_0_rank_0", "stats_0_rank_1", "stats_1_rank_0", "stats_1_rank_1"
