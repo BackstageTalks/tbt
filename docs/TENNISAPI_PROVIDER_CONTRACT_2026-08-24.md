@@ -275,3 +275,22 @@ treated as zero. No paid probe or canonical import during an active
 CDB statistics writer.
 
 **Operator-supplied calendar test:** `getCalendarDaysWithEvents` queried year 2026, season 61642, returned HTTP 204 with no content. Treat as unavailable for this query, not a proven empty season. The extra research method preserves the existing daily category/event pathway and never marks any day complete.
+
+### Bounded discovery probe integration
+
+The established `.github/workflows/tennisapi-contract-live-probe.yml`
+supports `phase=discovery` with exactly one of
+`tournament_venue_events`, `tournament_events_on_date`,
+`tournaments_by_category`, `player_recent_tournaments`, or
+`calendar_days_with_events`. The configured request must point to a
+source-native event and permit exactly two provider calls: event detail
+followed by the chosen endpoint only when the required native identifiers
+exist. Any missing identifiers end after the first call. All observations
+are structural research evidence only (`eligible_for_cdb_import=false`,
+`cdb_overlap_verified=false`, `completeness_verified=false`).
+
+No probe is dispatched by this code change: workflow dispatch remains an
+explicit, separately budget-guarded operation. Empty/204 responses must
+never cause the existing daily category importer to skip a day. After
+provider confirmation, the actual CDB gain must be measured by an independent
+read-only reconciliation using the existing importer's identity rules.
