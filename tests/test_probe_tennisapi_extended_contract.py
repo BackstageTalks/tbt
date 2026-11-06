@@ -463,3 +463,95 @@ def test_no_native_aces_if_the_requested_event_identity_mismatches():
                               "status": {"type": "finished"}}}
     result = run_probe(Mismatch(), event_id=17449516, max_requests=2)
     assert "source_native_aces_evidence" not in result
+
+
+class DiscoveryClient(StubClient):
+    def __init__(self, *, no_venue=False, no_category=False, empty=False):
+        super().__init__()
+        self.no_venue = no_venue
+        self.no_category = no_category
+        self.empty = empty
+
+    def _get(self, path, params=None, *, enrichment=False):
+        assert enrichment is True
+        assert self.request_count < self.request_limit
+        self.request_count += 1
+        self.paths.append((path, params))
+        if path == "/api/tennis/event/14494928":
+            tournament = {"uniqueTournament": {"id": 2473}}
+            if not self.no_category:
+                tournament["category"] = {"id": 3}
+            event = {
+                "id": 14494928,
+                "homeTeam": {"id": 14486},
+                "awayTeam": {"id": 9999},
+                "tournament": tournament,
+                "season": {"id": 67391},
+                "startTimestamp": 1753111800,
+            }
+            if not self.no_venue:
+                event["venue"] = {"id": 29580}
+            return {"event": event}
+        if self.empty:
+            return {}
+        if "events/all/" in path or "scheduled-events" in path:
+            return {"events": [
+                {"id": 14225534, "homeTeam": {"id": 1},
+                 "awayTeam": {"id": 2}, "startTimestamp": 1753111800}]}
+        if "tournament/all/category/" in path:
+            return {"tournaments": [{"id": 2473}]}
+        if "days-with-events" in path:
+            return {"days": [21]}
+        return {"uniqueTournaments": [{"id": 2473}]}
+
+
+import pytest
+
+
+@pytest.mark.parametrize("case,suffix", [
+    ("tournament_venue_events", "/venue/29580/events/all/0"),
+    ("tournament_events_on_date", "/scheduled-events/2025-07-21"),
+    ("tournaments_by_category", "/tournament/all/category/3"),
+    ("player_recent_tournaments", "/player/14486/tournaments/last"),
+    ("calendar_days_with_events", "/calendar/season/67391/2025/days-with-events"),
+])
+def test_discovery_routes_are_bounded_source_native_and_no_write(case, suffix):
+    client = DiscoveryClient()
+    report = run_probe(client, event_id=14494928, max_requests=2,
+                       phase="discovery", case=case)
+    assert report["request_count"] == 2
+    assert len(client.paths) == 2
+    assert client.paths[1][0].endswith(suffix)
+    assert report["discovery_state"] == "endpoint_available"
+    assert report["discovery_context"]["source_event_id_matched"] is True
+    assert report["discovery_context"]["cdb_overlap_verified"] is False
+    assert report["eligible_for_cdb_import"] is False
+    assert report["observations"]["discovery_" + case]["source_rows"] == 1
+
+
+def test_discovery_missing_native_context_does_not_guess_or_pay_again():
+    client = DiscoveryClient(no_venue=True)
+    report = run_probe(client, event_id=14494928, max_requests=2,
+                       phase="discovery", case="tournament_venue_events")
+    assert report["discovery_state"] == "missing_native_context"
+    assert report["request_count"] == 1
+
+
+def test_discovery_204_does_not_mean_empty_season():
+    client = DiscoveryClient(empty=True)
+    report = run_probe(client, event_id=14494928, max_requests=2,
+                       phase="discovery", case="calendar_days_with_events")
+    assert report["discovery_state"] == "endpoint_no_content"
+    assert report["observations"]["discovery_calendar_days_with_events"][
+        "completeness_verified"] is False
+
+
+def test_discovery_requires_valid_case_and_hard_bound():
+    client = DiscoveryClient()
+    with pytest.raises(ValueError):
+        run_probe(client, event_id=14494928, max_requests=1,
+                  phase="discovery", case="player_recent_tournaments")
+    with pytest.raises(ValueError):
+        run_probe(client, event_id=14494928, max_requests=2,
+                  phase="discovery", case="unapproved")
+    assert client.request_count == 0

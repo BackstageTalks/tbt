@@ -583,6 +583,74 @@ class RapidTennisClient:
             enrichment=True,
         )
 
+    def calendar_days_with_events(self, season_id: str | int, year: int) -> Any:
+        """Research-only calendar days for one source-native season/year.
+
+        A provider 204 (mapped by the guarded client to {}) does not prove a
+        season is empty. Never use it to skip the established daily CDB path.
+        """
+        season = self._research_positive_int(season_id, "season_id")
+        calendar_year = self._research_positive_int(year, "year")
+        if calendar_year > 9999:
+            raise ValueError("year must be a valid calendar year")
+        return self._get(
+            f"/api/calendar/season/{season}/{calendar_year}/days-with-events",
+            enrichment=True,
+        )
+
+    def tournament_venue_events(
+        self, tournament_id: str | int, season_id: str | int,
+        venue_id: str | int, page: int = 0,
+    ) -> Any:
+        """Research-only event listing for one source-native tournament venue.
+
+        Results may be doubles, canceled, or partial venue-only coverage.
+        Never interpret this listing as complete ATP/WTA singles CDB history.
+        """
+        tournament = self._research_positive_int(tournament_id, "tournament_id")
+        season = self._research_positive_int(season_id, "season_id")
+        venue = self._research_positive_int(venue_id, "venue_id")
+        page_num = self._research_positive_int(page, "page", allow_zero=True)
+        return self._get(
+            f"/api/tennis/tournament/{tournament}/season/{season}"
+            f"/venue/{venue}/events/all/{page_num}",
+            enrichment=True,
+        )
+
+    def tournament_events_on_date(
+        self, tournament_id: str | int, scheduled_date: date,
+    ) -> Any:
+        """Research-only tournament calendar cross-check; no canonical writes."""
+        tournament = self._research_positive_int(tournament_id, "tournament_id")
+        if type(scheduled_date) is not date:
+            raise ValueError("scheduled_date must be a date, not a datetime or string")
+        return self._get(
+            f"/api/tennis/tournament/{tournament}"
+            f"/scheduled-events/{scheduled_date.isoformat()}",
+            enrichment=True,
+        )
+
+    def tournaments_by_category(self, category_id: str | int) -> Any:
+        """Research-only tournament catalog. Grand Slam native category is -100."""
+        if isinstance(category_id, bool):
+            raise ValueError("category_id must be source-native integer")
+        if category_id == -100 or category_id == "-100":
+            category = -100
+        else:
+            category = self._research_positive_int(category_id, "category_id")
+        return self._get(
+            f"/api/tennis/tournament/all/category/{category}",
+            enrichment=True,
+        )
+
+    def player_recent_tournaments(self, player_id: str | int) -> Any:
+        """Research-only tournament participation, not match-level statistics."""
+        player = self._research_positive_int(player_id, "player_id")
+        return self._get(
+            f"/api/tennis/player/{player}/tournaments/last",
+            enrichment=True,
+        )
+
     def player_singles_results(self, player_id: str | int, page: int = 0) -> Any:
         """Research-only singles match history. No CDB or training mutations."""
         player = self._research_positive_int(player_id, "player_id")

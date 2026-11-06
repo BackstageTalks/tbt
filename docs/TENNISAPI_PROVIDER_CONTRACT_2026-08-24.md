@@ -241,3 +241,56 @@ Each probe used 2 shared-budget-guarded requests with provider quota
 headers, reported `eligible_for_cdb_import=false`, and made zero CDB
 writes. These are provider data availability/quality witnesses, not
 production import, CLV evidence, full season coverage, or model validation.
+
+## 2026-11-06 — Five extra discovery routes (read-only research)
+
+The following optional methods are now available through the existing
+shared-budget `RapidTennisClient._get(..., enrichment=True)` guard. **No
+CDB importer, scheduler, model, odds, or global quota policy is changed.**
+
+| Client method | Provider path | Evidence boundary |
+|---|---|---|
+| `tournament_venue_events(tournament_id, season_id, venue_id, page)` | `/api/tennis/tournament/{tournamentId}/season/{seasonId}/venue/{venueId}/events/all/{page}` | One venue only; page is not a season inventory |
+| `tournament_events_on_date(tournament_id, scheduled_date)` | `/api/tennis/tournament/{tournamentId}/scheduled-events/{date}` | Date is strict `YYYY-MM-DD`; availability not live verified |
+| `tournaments_by_category(category_id)` | `/api/tennis/tournament/all/category/{id}` | Source-native taxonomy only, not matched CDB IDs |
+| `player_recent_tournaments(player_id)` | `/api/tennis/player/{id}/tournaments/last` | Recent tournament participation, not match stats |
+| `calendar_days_with_events(season_id, year)` | `/api/calendar/season/{seasonId}/{year}/days-with-events` | 204 for one season/year is not proof of no matches; never skip daily discovery |
+
+Inputs are strictly checked before network access. Category `-100` is a
+deliberate source-native Grand Slam exception to positive category IDs.
+
+**Operator-supplied JSON sample, Kitzbühel Doubles 2025:** venue ID
+`29580`, source season ID `67391`, seven source events with seven unique
+IDs, six finished and one canceled, all doubles; `hasNextPage=false`.
+All six finished results agree with the reported winner code. This sample
+supports venue-specific discovery, **not** net-new ATP/WTA singles history,
+the existence of event statistics, or any new persisted CDB values.
+No provider call was made to collect the user-supplied sample.
+
+**Next verified evidence:** Check provider status/header, native identity,
+singles/doubles and completed/canceled split; compare source-native IDs
+against the private CDB with read-only matching; report raw/linked/net-new/
+enriched separately. Unknown daily shared provider consumption is never
+treated as zero. No paid probe or canonical import during an active
+CDB statistics writer.
+
+**Operator-supplied calendar test:** `getCalendarDaysWithEvents` queried year 2026, season 61642, returned HTTP 204 with no content. Treat as unavailable for this query, not a proven empty season. The extra research method preserves the existing daily category/event pathway and never marks any day complete.
+
+### Bounded discovery probe integration
+
+The established `.github/workflows/tennisapi-contract-live-probe.yml`
+supports `phase=discovery` with exactly one of
+`tournament_venue_events`, `tournament_events_on_date`,
+`tournaments_by_category`, `player_recent_tournaments`, or
+`calendar_days_with_events`. The configured request must point to a
+source-native event and permit exactly two provider calls: event detail
+followed by the chosen endpoint only when the required native identifiers
+exist. Any missing identifiers end after the first call. All observations
+are structural research evidence only (`eligible_for_cdb_import=false`,
+`cdb_overlap_verified=false`, `completeness_verified=false`).
+
+No probe is dispatched by this code change: workflow dispatch remains an
+explicit, separately budget-guarded operation. Empty/204 responses must
+never cause the existing daily category importer to skip a day. After
+provider confirmation, the actual CDB gain must be measured by an independent
+read-only reconciliation using the existing importer's identity rules.
