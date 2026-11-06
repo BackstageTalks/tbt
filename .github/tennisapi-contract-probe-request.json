@@ -1,14 +1,14 @@
 {
   "schema": 1,
   "requested_date": "2026-11-06",
-  "reason": "Guarded read-only getTournamentLastMatches identity/shape sample; source event 17449516, 2 requests max, no CDB writes",
+  "reason": "Guarded read-only getTeamYearStatistics source-native surface/serve/break-point integrity probe, 2 requests max, no CDB writes",
   "provider_requests_allowed": true,
   "max_requests": 2,
   "event_id": 17449516,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ TennisApi endpoint QA",
-  "diagnostic_attempt": 22,
+  "diagnostic_attempt": 23,
   "phase": "candidates",
-  "case": "tournament_last_matches"
+  "case": "team_year_statistics"
 }
