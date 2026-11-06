@@ -491,6 +491,7 @@ class TennisEnsemble:
                     and split >= 350 and len(np.unique(np.round(raw[:split], 3))) >= 20):
                 kinds.append("isotonic")
             candidates = []
+            calibration_brier = {}
             for kind in kinds:
                 calibrator = self._fit_calibrator(kind, raw[:split], y_cal[:split])
                 if ((getattr(self, "accuracy_blend_selection", False)
@@ -499,7 +500,19 @@ class TennisEnsemble:
                     continue
                 p = self._calibrated(calibrator, raw[split:])
                 candidates.append((float(log_loss(y_cal[split:], p, labels=[0, 1])), kind))
+                calibration_brier[kind] = float(np.mean((p - y_cal[split:]) ** 2))
+            if getattr(self, "smooth_calibration_only", False):
+                # Do not cure isotonic plateaus by trading away Brier quality.
+                # Identity is always eligible and preserves the original raw
+                # probability when smooth Platt does not beat both scores.
+                candidates = [
+                    (loss, kind) for loss, kind in candidates
+                    if calibration_brier[kind] <= calibration_brier["identity"] + 1e-12
+                    or kind == "identity"
+                ]
             _, kind = min(candidates, key=lambda item: item[0])
+            if getattr(self, "smooth_calibration_only", False):
+                self.metadata["smooth_calibration_brier_candidates"] = calibration_brier
             # Use the same disjoint selection slice to choose a subgroup
             # calibrator; never optimize against the final test outcomes.
             global_selected = self._fit_calibrator(kind, raw[:split], y_cal[:split])
