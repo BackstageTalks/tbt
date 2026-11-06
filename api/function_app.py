@@ -117,6 +117,7 @@ from tbt.services.push_notifications import (
 )
 from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed, _row_betting_day
+from tbt.services.serving_feed_readback import serving_feed_readback
 from tbt.services.dashboard_kpis import selected_dashboard_cards
 from tbt.services.result_exclusions import (
     result_candidates, load_result_exclusions, set_result_exclusions,
@@ -563,6 +564,23 @@ def _admin_account_row(user, profile=None):
 def health(req):
     return response({"ok": True, "version": API_VERSION, "release": RELEASE, "auth": auth_provider(settings)})
 
+
+
+@app.route(route="v1/internal/serving-feed-readback", methods=["GET"])
+def internal_serving_feed_readback(req):
+    """Signed worker-only evidence of the *packaged* production serving file.
+
+    This endpoint does not return predictions, credentials, member identities
+    or internal ledger entries. It does not reserve budget or modify state.
+    """
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    try:
+        evidence = serving_feed_readback(FEED)
+    except (ValueError, OSError, TypeError):
+        logging.exception("Production serving feed readback invalid")
+        return response({"error": "serving_feed_readback_unavailable"}, 503)
+    return response(evidence, 200 if evidence["ok"] else 503)
 
 
 @app.route(route="v1/comparator/players", methods=["GET"])
