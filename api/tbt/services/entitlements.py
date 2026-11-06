@@ -15,6 +15,8 @@ import hashlib
 import re
 from zoneinfo import ZoneInfo
 
+from .price_integrity import extreme_winner_price_inversion
+
 
 SECTION_TO_FEED_KEY = {
     "top200": "top200_picks",
@@ -619,6 +621,11 @@ def _daily_rows(payload: dict) -> list[dict]:
             continue
         odds=_row_odds(row)
         if odds is None or odds < 1.50:
+            continue
+        # A published row remains immutable in the ledger and Results, but a
+        # newly discovered extreme price/probability inversion must not remain
+        # an actionable TOP recommendation in the serving board or Telegram.
+        if extreme_winner_price_inversion(_row_probability(row), odds):
             continue
         seen.add(ident)
         out.append(row)
