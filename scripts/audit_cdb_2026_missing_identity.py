@@ -22,16 +22,15 @@ from verify_cdb_2026_postrestore import (
 )
 
 
-def compare_origins(old, before, live):
+def compare_origins(old, before, live, *, expected=(98994, 2927, 1258, 97736, 1669)):
     older = index(old, "pinned_backup")
     prewrite = index(before, "prewrite")
     current = index(live, "current")
     shared = set(older) & set(prewrite)
     old_only = set(older) - set(prewrite)
     prewrite_only = set(prewrite) - set(older)
-    if not (len(older) == 98994 and len(prewrite) == 2927
-            and len(shared) == 1258 and len(old_only) == 97736
-            and len(prewrite_only) == 1669):
+    if (len(older), len(prewrite), len(shared),
+            len(old_only), len(prewrite_only)) != tuple(expected):
         raise ValueError("Original two authoritative 1 Nov CDB cohorts changed")
     prewrite_missing = set(prewrite) - set(current)
     backup_missing = set(older) - set(current)
