@@ -83,9 +83,12 @@ class CandidateClient:
             return {"events": [
                 {"id": 7, "homeTeam": {"id": 1}, "awayTeam": {"id": 2},
                  "startTimestamp": 1700000000},
-                {"id": 7, "homeTeam": {"id": 1}, "awayTeam": {"id": 2}},
+                {"id": 8, "homeTeam": {"id": 1}, "awayTeam": {"id": 2},
+                 "startTimestamp": 1700000100},
             ]}
-        return {"events": [{"id": 5}]}
+        return {"events": [
+            {"id": 5, "homeTeam": {"id": 1}, "awayTeam": {"id": 2}}
+        ]}
 
 
 @pytest.mark.parametrize("case,route", [
@@ -127,7 +130,7 @@ def test_last_matches_inventory_never_asserts_complete_season():
                        phase="candidates", case="tournament_last_matches")
     info = report["observations"]["candidate_tournament_last_matches"]
     assert info["event_rows"] == 2
-    assert info["distinct_event_ids"] == 1
+    assert info["distinct_event_ids"] == 2
     assert info["rows_with_two_players"] == 2
     assert info["completeness_verified"] is False
 
@@ -206,4 +209,54 @@ def test_candidate_blocked_provider_does_not_bypass_budget_guard():
     assert report["candidate_state"] == "endpoint_error"
     assert report["observations"]["candidate_tournament_last_matches"]["reason_code"] == (
         "provider_reserve_reached")
+    assert report["eligible_for_cdb_import"] is False
+
+
+def test_zero_rows_or_unrecognized_candidate_envelopes_not_coverage():
+    for case in ("team_year_statistics", "tournament_last_matches",
+                 "player_singles_results"):
+        class Empty(CandidateClient):
+            def _get(self, path, params=None, *, enrichment=False):
+                if path == "/api/tennis/event/98765":
+                    return super()._get(path, params=params, enrichment=enrichment)
+                self.request_count += 1
+                self.paths.append(path)
+                return {"statistics": []} if case == "team_year_statistics" else {"events": []}
+
+        result = run_probe(Empty(), event_id=98765, max_requests=2,
+                           phase="candidates", case=case)
+        assert result["candidate_state"] == "endpoint_no_content"
+        assert result["eligible_for_cdb_import"] is False
+
+        class BadEnvelope(Empty):
+            def _get(self, path, params=None, *, enrichment=False):
+                if path == "/api/tennis/event/98765":
+                    return super()._get(path, params=params, enrichment=enrichment)
+                self.request_count += 1
+                self.paths.append(path)
+                return {"unexpected": "not-usable"}
+
+        result = run_probe(BadEnvelope(), event_id=98765, max_requests=2,
+                           phase="candidates", case=case)
+        assert result["candidate_state"] == "endpoint_unrecognized_shape"
+
+
+def test_duplicate_season_page_is_not_valid_coverage():
+    class Duplicate(CandidateClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            if path == "/api/tennis/event/98765":
+                return super()._get(path, params=params, enrichment=enrichment)
+            self.request_count += 1
+            self.paths.append(path)
+            return {"events": [
+                {"id": 7, "homeTeam": {"id": 1}, "awayTeam": {"id": 2},
+                 "startTimestamp": 1700000000},
+                {"id": 7, "homeTeam": {"id": 1}, "awayTeam": {"id": 2},
+                 "startTimestamp": 1700000100},
+            ]}
+
+    report = run_probe(Duplicate(), event_id=98765, max_requests=2,
+                       phase="candidates", case="tournament_last_matches")
+    assert report["candidate_state"] == "endpoint_invalid_shape"
+    assert report["observations"]["candidate_tournament_last_matches"]["distinct_event_ids"] == 1
     assert report["eligible_for_cdb_import"] is False
