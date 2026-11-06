@@ -335,3 +335,58 @@ def test_unconfirmed_daily_aces_receipt_never_creates_published_contract():
     old["message_ids"] = []
     state = {"schema": 1, "attempts": {"2026-11-02:daily:0620": old}}
     assert overlay_confirmed_telegram_aces_ou(feed, state) == feed
+
+
+def test_confirmed_telegram_ou_survives_later_model_projection_drift():
+    """Only the frozen receipt/publication pair decides what was issued.
+
+    A later model recalculation cannot erase the already-issued Over/Under.
+    Tampered receipt/publication pairs still fail closed.
+    """
+    match, state, status = fixture()
+    original = {"ace_picks": [match], "results": []}
+    issued = overlay_confirmed_telegram_aces_ou(original, state)
+    publication = issued["ace_picks"][0]["market_publications"][-1]
+    sidecar = {"schema": 1, "issued_aces_ou": [{
+        "event_id": match["event_id"], "selection_id": match["selection_id"],
+        "scheduled_at": match["scheduled_at"],
+        "projection": match["projection"], "publication": publication,
+    }]}
+    # Daily re-training after 06:20 changes the visible MODEL projection,
+    # but it does not change the already-confirmed Telegram betting contract.
+    updated = deepcopy(original)
+    updated["ace_picks"][0]["projection"] = 12.74
+    frozen = deepcopy(updated)
+    # Preparation itself must link the original confirmed publication, without
+    # mutating the newer model prediction or deriving a new market line.
+    bridged = overlay_confirmed_telegram_aces_ou(updated, state)
+    assert updated == frozen
+    assert bridged["ace_picks"][0]["projection"] == 12.74
+    assert bridged["ace_picks"][0]["market_publications"][-1] == publication
+    assert publication["projection"] == match["projection"] == 10.9
+    served = attach_confirmed_aces_ou_sidecar(updated, sidecar)
+    assert updated == frozen
+    assert served["ace_picks"][0]["market_publications"][-1] == publication
+    assert len(served["ace_picks"][0]["market_publications"]) == 2
+    scored = runtime_settled_results(served, status)
+    assert scored[0]["market_publications"][0]["result"]["correct"] is False
+    assert scored[0]["market_publications"][0]["result"]["actual_count"] == 9
+
+    forged = deepcopy(sidecar)
+    forged["issued_aces_ou"][0]["publication"]["projection"] = 12.74
+    assert attach_confirmed_aces_ou_sidecar(updated, forged) == updated
+    forged = deepcopy(sidecar)
+    forged["issued_aces_ou"][0]["publication"]["publication_key"] = "unrelated-ou"
+    assert attach_confirmed_aces_ou_sidecar(updated, forged) == updated
+    # This cannot create a second conflicting issued O/U when an exact one exists.
+    already_issued = attach_confirmed_aces_ou_sidecar(updated, sidecar)
+    assert attach_confirmed_aces_ou_sidecar(already_issued, forged) == already_issued
+
+
+def test_telegram_receipt_rejects_same_event_player_when_start_time_changed():
+    match, state, _ = fixture()
+    original = {"ace_picks": [match], "results": []}
+    changed = deepcopy(original)
+    changed["ace_picks"][0]["scheduled_at"] = "2026-11-02T11:00:00+00:00"
+    assert overlay_confirmed_telegram_aces_ou(changed, state) == changed
+    assert original["ace_picks"][0]["scheduled_at"] == "2026-11-02T10:00:00+00:00"
