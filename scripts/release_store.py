@@ -87,7 +87,7 @@ def assert_history_partition_bundle_atomic(paths, remove_names=()):
     names = {Path(path).name for path in paths}
     removing = set(map(str, remove_names))
     changed = names | removing
-    annual = {name for name in changed if re.fullmatch(r"history-\\d{4}\\.parquet", name)}
+    annual = {name for name in changed if re.fullmatch(r"history-\d{4}\.parquet", name)}
     if annual and "history_manifest.json" not in names:
         raise ValueError("CDB_ANNUAL_MANIFEST_REQUIRED: canonical year mutation without history inventory")
     if "history_manifest.json" in removing:
