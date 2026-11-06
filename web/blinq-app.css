@@ -11108,3 +11108,78 @@ body#blinqPremium.blinq-route:not(.blinq-admin) .results-table .results-card-row
 body#blinqPremium.blinq-route:not(.blinq-admin) .results-table .results-card-row td.result-units b.correct{
   color:#42e897!important;
 }
+
+/* Model Lab: one guided primary next action, legacy controls behind disclosure. */
+body#blinqPremium.blinq-admin .model-factory-guided {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0;
+  padding: clamp(16px, 2.2vw, 26px);
+  border: 1px solid rgba(76, 185, 175, .48);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(19, 72, 77, .48), rgba(9, 34, 52, .78));
+}
+body#blinqPremium.blinq-admin .model-factory-guided-heading {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+body#blinqPremium.blinq-admin .model-factory-guided-heading h3 { margin: 4px 0 8px; font-size: clamp(17px, 2vw, 23px); }
+body#blinqPremium.blinq-admin .model-factory-guided-heading p { max-width: 75ch; }
+body#blinqPremium.blinq-admin .model-factory-guided-stages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 10px;
+}
+body#blinqPremium.blinq-admin .model-factory-guided-stages li {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid rgba(121, 188, 199, .32);
+  border-radius: 10px;
+  min-width: 0;
+}
+body#blinqPremium.blinq-admin .model-factory-guided-stages strong { font-size: 13px; }
+body#blinqPremium.blinq-admin .model-factory-guided-stages span { font-size: 12px; overflow-wrap: anywhere; }
+body#blinqPremium.blinq-admin .model-factory-guided-action {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+body#blinqPremium.blinq-admin .model-factory-guided-action label {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+body#blinqPremium.blinq-admin .model-factory-guided-action select { width: 100%; }
+body#blinqPremium.blinq-admin .model-factory-guided-action > button {
+  min-height: 46px;
+  flex: 1 1 220px;
+  white-space: normal;
+}
+body#blinqPremium.blinq-admin .model-factory-guided-reason,
+body#blinqPremium.blinq-admin .model-factory-guided-foot { font-size: 12px; line-height: 1.5; }
+body#blinqPremium.blinq-admin .admin-model-factory-controls {
+  margin: 12px 0 18px;
+  border: 1px solid rgba(100, 170, 184, .28);
+  border-radius: 12px;
+  padding: 0 16px 16px;
+}
+body#blinqPremium.blinq-admin .admin-model-factory-controls > summary {
+  cursor: pointer;
+  padding: 15px 0;
+  font-weight: 700;
+}
+body#blinqPremium.blinq-admin .admin-model-factory-controls > .admin-model-input-refresh { margin-bottom: 14px; }
+@media(max-width: 700px) {
+  body#blinqPremium.blinq-admin .model-factory-guided-stages { grid-template-columns: 1fr; }
+  body#blinqPremium.blinq-admin .model-factory-guided-heading { flex-direction: column; }
+  body#blinqPremium.blinq-admin .model-factory-guided-heading .btn { align-self: flex-start; }
+}
