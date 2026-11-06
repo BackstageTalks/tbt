@@ -122,6 +122,39 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                             violations += 1
             result["statistic_pairs_compared"] = observed
             result["statistic_bound_violations"] = violations
+            if name == "candidate_team_year_statistics":
+                surfaces = [str(group.get("groundType", "")).strip().lower()
+                            for group in groups if isinstance(group, dict)]
+                result["surface_groups_with_name"] = sum(bool(v) for v in surfaces)
+                result["distinct_surfaces"] = len({v for v in surfaces if v})
+                result["duplicate_surface_groups"] = (
+                    len([v for v in surfaces if v])
+                    - result["distinct_surfaces"])
+                matches = [group.get("matches") for group in groups
+                           if isinstance(group, dict)]
+                result["groups_with_positive_matches"] = sum(
+                    type(v) is int and v > 0 for v in matches)
+                result["total_matches"] = sum(
+                    v for v in matches if type(v) is int and v > 0)
+                equations = (
+                    ("totalServeAttempts", "firstServeTotal", "secondServeTotal"),
+                    ("secondServeTotal", "secondServePointsTotal", "doubleFaults"),
+                    ("firstServeTotal", "firstServePointsTotal",
+                     "secondServePointsTotal", "doubleFaults"),
+                )
+                checked = failed = 0
+                for group in groups:
+                    if not isinstance(group, dict):
+                        continue
+                    for names in equations:
+                        values = [group.get(key) for key in names]
+                        if not all(type(v) is int and v >= 0 for v in values):
+                            continue
+                        checked += 1
+                        if values[0] != sum(values[1:]):
+                            failed += 1
+                result["service_identity_checks"] = checked
+                result["service_identity_violations"] = failed
             # Positive results are season aggregates, NOT match-level
             # candidate cells and NOT time-valid within their own season.
             result["point_in_time_match_eligibility"] = False
@@ -191,6 +224,18 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
             result["state"] = "no_content"
         elif not all(isinstance(group, dict) for group in stats):
             result["state"] = "invalid_shape"
+        elif (result.get("groups_with_positive_matches") != len(stats)
+              or result.get("surface_groups_with_name") != len(stats)
+              or result.get("duplicate_surface_groups", 0) > 0
+              or result.get("statistic_bound_violations", 0) > 0
+              or result.get("service_identity_violations", 0) > 0
+              or not any(
+                  result.get("non_null_fields", {}).get(field, 0) > 0
+                  for field in (
+                      "firstServePointsTotal", "secondServePointsTotal",
+                      "breakPointsTotal", "opponentBreakPointsTotal"
+                  ))):
+            result["state"] = "invalid_statistics"
     return result
 
 
