@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import pyarrow as pa
 import pytest
 
-from audit_cdb_2026_missing_identity import compare_origins, classify_identity_drift
+from audit_cdb_2026_missing_identity import compare_origins, classify_identity_drift, classify_missing_native_event_claims
 
 
 def table(names):
@@ -173,3 +173,63 @@ def test_rekey_after_kickoff_time_shift_is_candidate_not_an_automatic_merge():
     assert report["missing_with_one_7day_time_shift_candidate"] == 1
     assert report["missing_without_7day_time_shift_candidate"] == 0
     assert "original-id" not in json.dumps(report)
+
+
+def test_original_native_event_claim_must_be_unique_and_not_rekeyed_implicitly():
+    when = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
+
+    def table_native(rows):
+        return pa.Table.from_pylist([
+            {
+                "match_id": mid, "tour": "itf",
+                "player1_id": p1, "player2_id": p2,
+                "scheduled_at": when,
+                "provider_context_json": json.dumps(
+                    {"_tbt_event_identity": {"event_id": source}}
+                    if source is not None else {}
+                ),
+            }
+            for mid, p1, p2, source in rows
+        ])
+
+    original = table_native([
+        ("missing-unique", "A", "B", "n-unique"),
+        ("missing-shared", "C", "D", "n-possible-collision"),
+        ("missing-no-proof", "E", "F", None),
+    ])
+    prewrite = table_native([("preserved", "G", "H", "n-preserved")])
+    current = table_native([
+        ("preserved", "G", "H", "n-preserved"),
+        ("different-native-id", "X", "Y", "n-possible-collision"),
+    ])
+    report = classify_missing_native_event_claims(original, prewrite, current)
+    assert report["missing_source_native_provider_verified"] == 2
+    assert report["missing_source_native_provider_absent"] == 1
+    assert report["missing_native_provider_id_not_in_current"] == 1
+    assert report["missing_native_provider_id_claimed_by_one_other_id"] == 1
+    assert report["missing_native_provider_id_ambiguous_multiple_owners"] == 0
+    assert "n-unique" not in json.dumps(report)
+    assert "missing-shared" not in json.dumps(report)
+
+
+def test_native_provider_id_collisions_remain_ambiguous_review():
+    when = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
+    def records(rows):
+        return pa.Table.from_pylist([
+            {"match_id": mid, "tour": "atp", "player1_id": a,
+             "player2_id": b, "scheduled_at": when,
+             "provider_context_json": json.dumps({
+                 "_tbt_event_identity": {"event_id": claim}
+             })}
+            for mid, a, b, claim in rows
+        ])
+    old = records([("old-missing", "a", "b", "evt")])
+    before = records([("existing", "c", "d", "other")])
+    current = records([
+        ("current-A", "e", "f", "evt"),
+        ("current-B", "g", "h", "evt"),
+        ("existing", "c", "d", "other"),
+    ])
+    counts = classify_missing_native_event_claims(old, before, current)
+    assert counts["missing_native_provider_id_ambiguous_multiple_owners"] == 1
+    assert counts["missing_native_provider_id_claimed_by_one_other_id"] == 0
