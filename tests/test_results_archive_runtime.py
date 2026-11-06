@@ -9,18 +9,41 @@ from tbt.services.results_archive import (
 )
 
 
+class VersionConflict(Exception):
+    status_code = 412
+
+
 class Table:
     def __init__(self):
         self.items = {}
+        self.versions = {}
 
     def get_entity(self, *, partition_key, row_key):
+        from tbt.services.admin_storage import _VersionedStorageEntity
         key = (partition_key, row_key)
         if key not in self.items:
             raise KeyError(row_key)
-        return deepcopy(self.items[key])
+        return _VersionedStorageEntity(deepcopy(self.items[key]), self.versions[key])
+
+    def create_entity(self, entity):
+        key = entity["PartitionKey"], entity["RowKey"]
+        if key in self.items:
+            raise VersionConflict()
+        self.items[key] = deepcopy(entity)
+        self.versions[key] = 1
+
+    def update_entity(self, entity, *, mode, etag, match_condition):
+        from azure.core import MatchConditions
+        assert mode == "merge"
+        assert match_condition == MatchConditions.IfNotModified
+        key = entity["PartitionKey"], entity["RowKey"]
+        if key not in self.items or self.versions[key] != etag:
+            raise VersionConflict()
+        self.items[key].update(deepcopy(entity))
+        self.versions[key] += 1
 
     def upsert_entity(self, entity, mode=None):
-        self.items[(entity["PartitionKey"], entity["RowKey"])] = deepcopy(entity)
+        raise AssertionError("Unsafe unconditional archive write")
 
     def query_entities(self, query_filter):
         partition = query_filter.split("'", 2)[1]
