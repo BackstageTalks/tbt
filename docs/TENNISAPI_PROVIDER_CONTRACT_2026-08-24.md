@@ -218,3 +218,26 @@ verification and not independent evidence that any canonical CDB NULL
 was enriched. The candidate probe now records surface, service-arithmetic,
 bounds, positive-match and nonempty-source checks; invalid/empty responses
 are not classified as usable coverage.
+
+
+## Live QA read-back 2026-11-06 — source-native research only
+
+- GitHub Actions `42274924967` / event `17449516`: player singles
+  page returned HTTP 200, 30 unique dated events, but the conservative
+  requested-player identity gate returned `endpoint_invalid_identity`.
+  This is not validated player-history coverage and must not enter CDB.
+  Source-native count-only diagnostics now distinguish missing, identical,
+  unrelated and matching participant IDs; do not log raw event rows.
+- GitHub Actions `42275281532` / event `17449516`: tournament
+  `2404`, season `82442`, first page returned HTTP 200 with 30 distinct
+  dated events and both sides; **one page does not prove season completeness**.
+- GitHub Actions `42275486679` / event `17449516`: 2026 player-year
+  statistics returned HTTP 200, four distinct surface groups, 70 match
+  aggregates, 12/12 serve-identity and 16/16 bounds checks with zero
+  violations. **Year aggregates are not match-level cells or verified
+  point-in-time features**.
+
+Each probe used 2 shared-budget-guarded requests with provider quota
+headers, reported `eligible_for_cdb_import=false`, and made zero CDB
+writes. These are provider data availability/quality witnesses, not
+production import, CLV evidence, full season coverage, or model validation.
