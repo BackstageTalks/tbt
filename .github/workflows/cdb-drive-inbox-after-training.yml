@@ -22,7 +22,12 @@ concurrency:
 
 jobs:
   retry-cdb-inbox:
+    # API-first: broad Drive auto-retry is disabled unless operators explicitly
+    # opt in. The guarded cdb-drive-inbox.yml workflow_dispatch remains usable
+    # for individually verified NULL-only imports; other CDB/API workflows
+    # (including manual MoviOdds source_mode) are not changed.
     if: >-
+      vars.BLINQ_DRIVE_AUTO_RETRY_ENABLED == 'true' &&
       github.event.workflow_run.head_repository.full_name == 'BackstageTalks/tbt' &&
       github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
