@@ -6186,7 +6186,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<button type="button" class="btn btn-primary" data-admin-action="model-lab-start" data-model-lab-operation="'+guide.action+'" '+(guideAllowed?'':'disabled')+'>'+escapeHtml(guide.button)+'</button>';
     const guideText='<section class="model-factory-guide" aria-label="Odporúčaný ďalší krok tréningu" role="region">'+
       '<small>TRÉNING Z ADMINA · ĎALŠÍ KROK</small><h3>'+escapeHtml(guide.label)+'</h3>'+
-      '<p role="status">'+escapeHtml(guide.detail)+'</p>'+guideButton+
+      '<p role="status">'+escapeHtml(guide.detail)+'</p>'+
+      (guide.action==='training-start'?renderAdminTrainingProfile(busy):'')+guideButton+
       '<p class="model-factory-guide-note">Požiadavka sa bezpečne uloží do fronty. Priebeh sa aktualizuje bez otvorenia GitHubu. Produkčný model sa neprepína.</p>'+
       '</section>';
     return '<section class="admin-ux-section admin-model-lab" aria-label="BlinQ Model Factory">'+
@@ -6206,13 +6207,13 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<div class="admin-calibration-grid model-factory-three-steps">'+
       '<article class="admin-calibration-panel"><small>FÁZA 1 · READ-ONLY</small><h3>1 · Pripraviť dáta</h3>'+
       '<p>Audit aktuálnej kanonickej CDB: ATP/WTA zápasy, historické obdobie, identity, chýbajúce rebríčky, serve/return a break points. Bez importu, API požiadaviek či kopírovania tréningových záloh.</p>'+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="prepare_inputs" '+(canBuild?'':'disabled')+'>Pripraviť a skontrolovať dáta</button>'+
+      (guide.action==='prepare_inputs'?'':'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="prepare_inputs" '+(canBuild?'':'disabled')+'>Pripraviť a skontrolovať dáta</button>')+
       '<p role="status">'+preflightText+'</p>'+tourSummary('atp')+tourSummary('wta')+'</article>'+
       '<article class="admin-calibration-panel"><small>FÁZA 2 · KANDIDÁT / SHADOW</small><h3>2 · Natrénovať a aktivovať kandidáta</h3>'+
       '<p>Chránený tréning zmrazí overené vstupy, otestuje modely ATP/WTA proti championovi a uloží kandidáta. Shadow sa aktivuje automaticky len pri splnení ďalších offline kvalitatívnych brán.</p>'+
       '<p><strong>Nový tréning 7.2.1 / 7.2.2: zápasy od 1. 1. 2024 (UTC).</strong> Staršia história slúži na výpočet predzápasových vstupov. Dni z obdobia 2024+ sa chronologicky rozdelia: 70 % učenie, 15 % kalibrácia a 15 % test. Skutočné obdobia a počty uvádza report tréningu; už použité testovacie zápasy nie sú novým nezávislým overením. Toto nastavenie nemení už aktívny model.</p>'+
-      renderAdminTrainingProfile(busy)+'<p>7.2.2: overený výber váh podľa úspešnosti a hladká kalibrácia. Zlepšenie musí potvrdiť report; produkcia sa nemení.</p>'+
-      '<button type="button" class="btn btn-ghost" data-admin-action="training-start" '+(canTrain?'':'disabled')+'>'+(['failure','timed_out','cancelled'].includes(trainRun?.conclusion)?'Zopakovať tréning a kontroly':'Natrénovať a spustiť shadow')+'</button>'+
+      (guide.action==='training-start'?'':renderAdminTrainingProfile(busy))+'<p>7.2.2: overený výber váh podľa úspešnosti a hladká kalibrácia. Zlepšenie musí potvrdiť report; produkcia sa nemení.</p>'+
+      (guide.action==='training-start'?'':'<button type="button" class="btn btn-ghost" data-admin-action="training-start" '+(canTrain?'':'disabled')+'>'+(['failure','timed_out','cancelled'].includes(trainRun?.conclusion)?'Zopakovať tréning a kontroly':'Natrénovať a spustiť shadow')+'</button>')+
       (!canTrain?'<p role="status">'+escapeHtml(!preflightFresh?'Najprv dokonči prípravu dát v kroku 1.':d?.can_start===false?d.reason:training?.reason||'Čaká sa na overený stav.')+'</p>':'')+
       '<p><strong>Tréning:</strong> '+trainingText+'</p>'+
       (trainingStep?'<p role="status"><strong>Aktuálna fáza:</strong> '+escapeHtml(readableStep(training.active_steps[0]))+'</p>':'')+
@@ -6225,7 +6226,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<button type="button" class="btn btn-ghost" data-admin-action="model-factory-promote" '+(canPromote?'':'disabled')+'>Nasadiť s výnimkou kalibrácie</button>'+
       '<p role="status">Pred odoslaním potvrdíš presný model a dôvod. Worker overí obnovu championa a výsledný zápis; pri chybe obnoví pôvodný model. Nové predikcie použijú model pri najbližšom výpočte, staré sa neprepisujú.</p>'+
       '<p><strong>Shadow podmienky na posúdenie:</strong></p>'+(missingShadow?'<ul>'+missingShadow+'</ul>':'<p>Základné shadow metriky splnené. Nasadenie ešte vyžaduje kontrolu TOP/VALUE, rollbacku a samostatné schválenie.</p>')+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(canBuild?'':'disabled')+'>Vyhodnotiť shadow výsledky</button>'+
+      (guide.action==='audit_shadow'?'':'<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(canBuild?'':'disabled')+'>Vyhodnotiť shadow výsledky</button>')+
       '<p><strong>Posledný uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article></div>'+
       '<div class="admin-calibration-bottom"><div><strong>Rozpracovaná operácia</strong><span>'+activeText+'</span></div><div><strong>Posledná kontrola</strong><span>'+lastText+'</span></div></div>'+
       (last?.note?'<p role="status">'+escapeHtml(last.note)+'</p>':'')+
