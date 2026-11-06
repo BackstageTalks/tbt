@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/protected-frozen-cdb-candidate.yml
       - api/tbt/models/ensemble.py
+      - scripts/audit_training_leakage.py  # candidate must use current fail-closed target/PIT audit
       - scripts/pipeline.py  # gated one-shot candidate-only study; no other push can train
   workflow_dispatch:
     inputs:
