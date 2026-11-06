@@ -6162,6 +6162,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const shadowText=shadowNow?
       'Podľa posledného uloženého reportu je shadow kandidát aktívny; výsledky sa overujú samostatne. Produkcia sa nemení.':
       'Po úspešnom tréningu, offline porovnaní a kontrolách sa kandidát automaticky aktivuje iba v shadow režime.';
+    const guidedFeedback=state.adminTrainingMessage||state.adminModelLabMessage||guidedReason;
     const guidedTrainingState=trainBusy?'Prebieha':trainRun?.conclusion==='success'?'Workflow dokončený · vyhodnoť kvalitu':
       ['failure','timed_out','cancelled'].includes(trainRun?.conclusion)?'Zastavený · skontroluj príčinu':'Čaká na spustenie';
     const guidedShadowState=outcome?.state==='SHADOW_ACTIVE'?'Shadow overený':
@@ -6177,7 +6178,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<div class="model-factory-guided-action">'+renderAdminTrainingProfile(busy)+
       '<button type="button" class="btn btn-primary" data-admin-action="model-factory-next" data-factory-next="'+guidedNext+'" '+
         (guidedEnabled?'':'disabled')+'>'+escapeHtml(guidedActionText)+'</button></div>'+
-      '<p class="model-factory-guided-reason" role="status">'+escapeHtml(guidedReason)+'</p>'+
+      '<p class="model-factory-guided-reason" role="status">'+escapeHtml(guidedFeedback)+'</p>'+
       '<p><strong>Aktuálny tréning:</strong> '+trainingText+'</p>'+
       (trainingStep?'<p role="status"><strong>Práve prebieha:</strong> '+escapeHtml(readableStep(training.active_steps[0]))+'</p>':'')+
       (failedSteps.length?'<p role="alert"><strong>Zastavené:</strong> '+escapeHtml(failedSteps.join(' · '))+'</p>':'')+
