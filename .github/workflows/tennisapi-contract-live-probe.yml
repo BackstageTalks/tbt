@@ -56,7 +56,9 @@ jobs:
             (.phase != "candidates" or (.max_requests >= 2 and
              (.case == "team_year_statistics" or
               .case == "tournament_last_matches" or
-              .case == "player_singles_results")))' "$request" >/dev/null
+              .case == "player_singles_results" or
+              .case == "player_singles_pagination") and
+             (.case != "player_singles_pagination" or .max_requests >= 3)))' "$request" >/dev/null
       - name: Install existing API dependencies
         run: python -m pip install -r api/requirements-train.txt
       - name: Run guarded read-only provider sample
@@ -82,7 +84,14 @@ jobs:
                  (.phase != "candidates" or
                   (.candidate_state == "endpoint_available" and
                    .candidate_context.source_event_id_matched == true and
-                   .request_count == 2))' \
+                   ((.case == "player_singles_pagination" and
+                     .request_count == 3 and
+                     .candidate_pagination.page_0_has_next_page == true and
+                     .candidate_pagination.page_1_rows > 0 and
+                     .candidate_pagination.cross_page_overlap_count == 0 and
+                     .candidate_pagination.cdb_overlap_verified == false) or
+                    (.case != "player_singles_pagination" and
+                     .request_count == 2))))' \
             .cache/tbt/tennisapi-contract/live-probe.json >/dev/null
       - name: Upload read-only evidence
         if: always()
