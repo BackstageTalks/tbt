@@ -4,6 +4,10 @@ on:
   repository_dispatch:
     types: [telegram-results-tick]
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/telegram-20261104-verified-replay-request.json'
 permissions:
   contents: read
 concurrency:
@@ -43,7 +47,19 @@ jobs:
           test -n "$BLINQ_LIVE_WORKER_TOKEN" || { echo "::error::BLINQ_LIVE_WORKER_TOKEN missing"; exit 1; }
           args=()
           if [ "$GITHUB_EVENT_NAME" = repository_dispatch ]; then args+=(--external-tick); fi
-          python scripts/telegram_daily_results.py prepare --elite-auto --api-url "$BLINQ_PRODUCTION_URL" --config-url "$BLINQ_PRODUCTION_URL/api/v1/ui-config" --state .private-telegram/ops/telegram-bot-state.json "${args[@]}"
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            # One-time operator-authorized exact receipt replay, not an ordinary tick.
+            # Reject a stale ref before any ledger reservation or Telegram request.
+            git fetch origin main --depth=1
+            test "$GITHUB_SHA" = "$(git rev-parse origin/main)"
+            python -m pip install -r api/requirements.txt
+            PYTHONPATH=api python scripts/telegram_20261104_verified_replay.py prepare \
+              --api-url "$BLINQ_PRODUCTION_URL" \
+              --config-url "$BLINQ_PRODUCTION_URL/api/v1/ui-config" \
+              --state .private-telegram/ops/telegram-bot-state.json
+          else
+            python scripts/telegram_daily_results.py prepare --elite-auto --api-url "$BLINQ_PRODUCTION_URL" --config-url "$BLINQ_PRODUCTION_URL/api/v1/ui-config" --state .private-telegram/ops/telegram-bot-state.json "${args[@]}"
+          fi
       - name: Reserve results before Telegram requests
         id: reserve
         run: |
