@@ -77,7 +77,7 @@ def read_protected(base: str, token: str, digest: str) -> dict:
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", required=True)
+    parser.add_argument("--base-url", default="")
     parser.add_argument("--feed", type=Path, default=Path("api/data/feed.json"))
     parser.add_argument("--attempts", type=int, default=8)
     parser.add_argument("--preflight-only", action="store_true")
@@ -98,6 +98,8 @@ def main(argv=None) -> None:
     token = os.getenv("BLINQ_LIVE_WORKER_TOKEN") or ""
     if not token:
         raise RuntimeError("Missing protected serving-readback worker credential")
+    if not args.base_url:
+        raise RuntimeError("Missing protected serving-readback base URL")
     failure = "not yet available"
     for attempt in range(1, args.attempts + 1):
         try:
