@@ -79,3 +79,31 @@ def test_existing_issued_daily_snapshot_is_non_actionable_if_extreme():
     offered = _daily_rows(snapshot)
     assert [x["event_id"] for x in offered] == ["Van Herck", "Nakashima", "Sahtali"]
     assert len(snapshot["top_daily_picks"]) == 4  # no mutation of issued evidence
+
+
+def test_post_start_price_is_non_actionable_in_selector_and_issued_board():
+    before = winner("Before", .83, 1.75, 2.10)
+    late = winner("Late", .83, 1.75, 2.10)
+    before["betting"]["captured_at"] = "2026-11-06T13:59:00+00:00"
+    before["match_winner_market"]["captured_at"] = before["betting"]["captured_at"]
+    late["betting"]["captured_at"] = "2026-11-06T14:01:00+00:00"
+    late["match_winner_market"]["captured_at"] = late["betting"]["captured_at"]
+
+    rows = [before, late]
+    sections = select_market_sections(rows)
+    assert [card["event_id"] for card in sections["top_daily_picks"]] == ["Before"]
+    assert sections["market_selection"]["selection_counts"]["post_start_quote_quarantined"] == 1
+
+    # The published snapshot remains immutable; only actionable serving differs.
+    issued = {"top_daily_picks": rows, "value_picks": []}
+    assert [card["event_id"] for card in _daily_rows(issued)] == ["Before"]
+    assert len(issued["top_daily_picks"]) == 2
+    assert late["betting"]["odds"] == 1.75
+
+
+def test_invalid_explicit_quote_timestamp_fails_closed_without_repricing():
+    row = winner("Unverified", .83, 1.75, 2.10)
+    row["betting"]["captured_at"] = "not-a-timestamp"
+    sections = select_market_sections([row])
+    assert sections["top_daily_picks"] == []
+    assert sections["market_selection"]["selection_counts"]["post_start_quote_quarantined"] == 1
