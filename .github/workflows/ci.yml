@@ -727,6 +727,17 @@ jobs:
           PYSMOKE
 
 
+      - name: Verify actual deployed serving snapshot via worker canary
+        env:
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_BASE_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/verify_live_serving_readback.py \
+            --prepared-feed api/data/feed.json \
+            --base-url "$BLINQ_BASE_URL"
+
       - name: Replay existing TOP/VALUE CLV observations (zero provider spend)
         # Only the scoped CLV release invokes the one-shot archive replay.
         if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[clv-detail]') }}
