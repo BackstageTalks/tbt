@@ -39,7 +39,7 @@ jobs:
         (startsWith(github.event.head_commit.message,
          'feat(721): one-shot candidate-only tour calibration study') ||
          startsWith(github.event.head_commit.message,
-         'feat(722): one-shot PIT evidence calibration study')))
+         'feat(722): one-shot PIT evidence calibration study'))))
     runs-on: ubuntu-latest
     # A separate read-only gate waits for prior owners; the full six-hour
     # training budget starts only AFTER this job reports observed idle.
