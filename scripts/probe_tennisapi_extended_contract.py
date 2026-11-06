@@ -85,7 +85,7 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                 "timestamp" in str(k).lower() or "observed" in str(k).lower()
                 for k in obj
             )
-    elif name.startswith("year_stats_") or name in ("team_year_stats_doc_example", "historical_2016_player_year_stats"):
+    elif name.startswith("year_stats_") or name in ("team_year_stats_doc_example", "historical_2016_player_year_stats", "candidate_team_year_statistics"):
         groups = obj.get("statistics")
         if isinstance(groups, list):
             known = (
@@ -125,6 +125,24 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
             # Positive results are season aggregates, NOT match-level
             # candidate cells and NOT time-valid within their own season.
             result["point_in_time_match_eligibility"] = False
+    elif name == "candidate_tournament_last_matches":
+        events = obj.get("events")
+        if isinstance(events, list):
+            typed = [event for event in events if isinstance(event, dict)]
+            ids = [str(event.get("id")) for event in typed
+                   if isinstance(event.get("id"), int) and event["id"] > 0]
+            result["event_rows"] = len(events)
+            result["valid_event_ids"] = len(ids)
+            result["distinct_event_ids"] = len(set(ids))
+            result["rows_with_two_players"] = sum(
+                isinstance(event.get("homeTeam"), dict)
+                and isinstance(event.get("awayTeam"), dict)
+                for event in typed)
+            result["rows_with_start_timestamp"] = sum(
+                isinstance(event.get("startTimestamp"), int)
+                for event in typed)
+        # A page cannot assert full-season completeness or CDB identity.
+        result["completeness_verified"] = False
     elif name in ("point_by_point", "historical_2016_point_by_point"):
         try:
             result["inventory"] = point_by_point_inventory(payload, event_id=event_id)
@@ -147,7 +165,7 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
     if not 1 <= max_requests <= 30:
         raise ValueError("max_requests must be 1..30")
     if phase not in {"full", "metadata", "odds", "doubles", "quality",
-                     "historical", "identity", "archive_2016"}:
+                     "historical", "identity", "archive_2016", "candidates"}:
         raise ValueError("Unknown preapproved TennisApi probe phase")
     if case is not None and phase == "full":
         raise ValueError("Focused case requires a named phase")
@@ -303,6 +321,63 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
                  source_event_id=match_id)
             read("historical_2016_player_year_stats",
                  f"/api/tennis/team/{home_id}/year-statistics/2016")
+        return finish()
+
+    if phase == "candidates":
+        # Exactly one source-native event witness and one optional research route.
+        # No match CDB writes or same-season pre-match features are authorized.
+        allowed_cases = {
+            "team_year_statistics", "tournament_last_matches",
+            "player_singles_results",
+        }
+        if case not in allowed_cases:
+            raise ValueError("candidates phase requires a preapproved case")
+        detail = read("candidate_event_detail", f"/api/tennis/event/{event_id}")
+        event = _obj(_obj(detail).get("event", detail))
+        matches = str(event.get("id", event.get("eventId", ""))) == str(event_id)
+        player_id = _nested_int(event, "homeTeam", "id")
+        tournament_id = (
+            _nested_int(event, "tournament", "uniqueTournament", "id")
+            or _nested_int(event, "tournament", "id"))
+        season_id = _nested_int(event, "season", "id")
+        report["candidate_context"] = {
+            "source_event_id_matched": matches,
+            "source_home_team_id": player_id,
+            "source_tournament_id": tournament_id,
+            "source_season_id": season_id,
+            "identity_validated_for_import": False,
+            "point_in_time_verified": False,
+        }
+        if not matches:
+            report["candidate_state"] = "unavailable_or_mismatched_event"
+            return finish()
+
+        if case == "team_year_statistics":
+            stamp = event.get("startTimestamp")
+            if isinstance(stamp, bool) or not isinstance(stamp, int) or stamp <= 0:
+                report["candidate_state"] = "missing_start_timestamp"
+                return finish()
+            year = datetime.fromtimestamp(stamp, tz=timezone.utc).year
+            if not player_id or year > datetime.now(timezone.utc).year:
+                report["candidate_state"] = "invalid_player_or_year"
+                return finish()
+            route = f"/api/tennis/team/{player_id}/year-statistics/{year}"
+            report["candidate_context"]["source_year"] = year
+        elif case == "tournament_last_matches":
+            if not tournament_id or not season_id:
+                report["candidate_state"] = "missing_tournament_or_season"
+                return finish()
+            route = (
+                f"/api/tennis/tournament/{tournament_id}"
+                f"/season/{season_id}/events/last/0")
+        else:
+            if not player_id:
+                report["candidate_state"] = "missing_player"
+                return finish()
+            route = f"/api/tennis/player/{player_id}/events/singles/last/0"
+
+        read("candidate_" + case, route)
+        report["candidate_state"] = "response_recorded_research_only"
         return finish()
 
     if phase != "full":
@@ -471,7 +546,7 @@ def main() -> None:
     parser.add_argument("--max-requests", type=int, default=24)
     parser.add_argument("--phase", choices=["full", "metadata", "odds", "doubles",
                                             "quality", "historical", "identity",
-                                            "archive_2016"],
+                                            "archive_2016", "candidates"],
                         default="full")
     parser.add_argument("--case", default=None)
     parser.add_argument("--out", default=".cache/tbt/tennisapi-contract/live-probe.json")
