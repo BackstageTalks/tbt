@@ -218,3 +218,24 @@ verification and not independent evidence that any canonical CDB NULL
 was enriched. The candidate probe now records surface, service-arithmetic,
 bounds, positive-match and nonempty-source checks; invalid/empty responses
 are not classified as usable coverage.
+
+## 2026-11-06 — Source-native singles pagination research
+
+A separate read-only `--phase candidates --case player_singles_pagination`
+probe is now available with a hard maximum of three provider calls, all
+through the existing shared-budget `RapidTennisClient._get(...,
+enrichment=True)`: an exact source-event witness, singles history page 0,
+and page 1 **only** if page 0 has valid source player identity and
+`hasNextPage` is the boolean `true`. It verifies the source player on
+both pages, unique event IDs per page, valid match timestamps, absence
+of overlapping IDs across pages, and non-reversed chronology.
+
+The artifact reports structural counts and payload hashes, not raw
+provider rows or canonical identities. `cdb_overlap_verified: false`
+is explicit: even two valid pages do **not** demonstrate any net-new
+CDB match or newly filled statistic cell. A later source-native identity
+comparison against the private CDB, through existing read-only mechanisms,
+is required before any raw/linked/net-new/enriched claim or import.
+Do not dispatch while the 3000-request statistics workflow holds the
+global CDB writer lock or while shared API remaining quota is unknown.
+No local odds, model, scheduler, CDB importer or budget ceilings change.
