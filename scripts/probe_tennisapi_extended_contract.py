@@ -461,8 +461,20 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
                 return finish()
             route = f"/api/tennis/player/{player_id}/events/singles/last/0"
 
-        read("candidate_" + case, route)
+        payload = read("candidate_" + case, route)
         observed = report["observations"]["candidate_" + case]
+        if case == "player_singles_results" and observed["state"] == "available":
+            # A valid-looking events list is not evidence of the requested player.
+            # Verify source-native participant IDs before claiming coverage.
+            events = _obj(payload).get("events")
+            if not isinstance(events, list) or not all(
+                (home_id := _nested_int(item, "homeTeam", "id")) is not None
+                and (away_id := _nested_int(item, "awayTeam", "id")) is not None
+                and home_id != away_id
+                and player_id in (home_id, away_id)
+                for item in events
+            ):
+                observed["state"] = "invalid_identity"
         report["candidate_state"] = "endpoint_" + str(observed["state"])
         return finish()
 
