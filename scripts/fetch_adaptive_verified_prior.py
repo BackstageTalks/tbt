@@ -1,4 +1,4 @@
-"""Reuse the newest independently verified prior hourly evidence from Actions.
+"""Reuse recent, substantial independently verified hourly evidence from Actions.
 
 Does not contact Tennis API or CDB; does not require a paid provider key.
 Only a successful completed main-branch run with a matching private report can
@@ -39,6 +39,7 @@ def locate_prior(repo, *, now=None):
         return None
     if not isinstance(rows, list):
         return None
+    fallback = None
     for row in rows:
         if not isinstance(row, dict) or not isinstance(row.get("databaseId"), int):
             continue
@@ -58,8 +59,14 @@ def locate_prior(repo, *, now=None):
                 validated_prior(data, parser_version=STATISTICS_SCHEMA_VERSION, now=now)
             except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired):
                 continue
-            return data
-    return None
+            # Tiny pre-reset jobs often contain 0-1 calls and cannot teach
+            # cohort priority. Prefer the latest sufficiently sampled report
+            # without ever accepting an unverified or stale artifact.
+            if fallback is None:
+                fallback = data
+            if data.get("requests_including_retries", 0) >= 48:
+                return data
+    return fallback
 
 
 def main():
