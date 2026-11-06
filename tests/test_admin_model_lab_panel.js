@@ -15,6 +15,8 @@ vm.runInContext(src.slice(begin,end),ctx);
 
 let html=ctx.renderAdminModelLab();
 assert.match(html,/MODEL FACTORY · 3 FÁZY/);
+assert.match(html,/Načítavam stav/);
+assert.match(html,/Odporúčaný ďalší krok tréningu/);
 for(const phrase of ['1 · Pripraviť dáta','2 · Natrénovať a aktivovať kandidáta','3 · Nasadiť do produkcie']){
   assert(html.includes(phrase));
 }
@@ -31,6 +33,8 @@ state.adminModelLab={can_start:true,reason:'Pripravené',active_sha256:'a'.repea
   operation:null,last_operation:null};
 html=ctx.renderAdminModelLab();
 assert.doesNotMatch(html,/data-model-lab-operation="prepare_inputs" disabled/);
+assert.match(html,/Krok 1 z 3 · Pripraviť dáta/);
+assert.equal((html.match(/data-model-lab-operation="prepare_inputs"/g)||[]).length,1,'duplicated prepare action');
 assert.doesNotMatch(html,/data-model-lab-operation="refresh_champion_inputs" disabled/);
 assert.match(html,/Chýba overený SHA-256 posledného publikovaného feedu/);
 state.adminModelLab.feed_sha256='f'.repeat(64);
@@ -51,6 +55,9 @@ state.adminModelLab.last_preflight={
 };
 html=ctx.renderAdminModelLab();
 assert.doesNotMatch(html,/data-admin-action="training-start" disabled/);
+assert.match(html,/Krok 2 z 3 · Natrénovať kandidáta/);
+assert.equal((html.match(/data-admin-action="training-start"/g)||[]).length,1,'duplicated training action');
+assert.equal((html.match(/id="admin-training-profile"/g)||[]).length,1,'duplicated profile selector');
 assert.match(html,/Audit dát overený/);
 assert.match(html,/ATP: 350/);
 assert.match(html,/WTA: 250/);
@@ -63,6 +70,8 @@ state.adminTraining.runs=[{id:123,status:'in_progress',html_url:'https://github.
 state.adminTraining.active_steps=['Fit separate candidate only if immutable backup gate passed'];
 html=ctx.renderAdminModelLab();
 assert.match(html,/Aktuálna fáza/);
+assert.match(html,/Prebieha operácia/);
+assert.doesNotMatch(html,/Krok 2 z 3 · Natrénovať kandidáta/);
 assert.match(html,/data-admin-action="training-start" disabled/);
 state.adminTraining.runs=[];
 state.adminTraining.active_steps=[];
@@ -75,6 +84,8 @@ state.adminCalibration={production_version:'v201',
 html=ctx.renderAdminModelLab();
 assert.doesNotMatch(html,/data-model-lab-operation="activate_shadow" disabled/);
 assert.match(html,/Nezávislý offline holdout overený/);
+assert.match(html,/Manuálne nasadenie s výnimkou/);
+assert.match(html,/<details class="admin-model-factory-release">/);
 assert.doesNotMatch(html,/data-admin-action="model-factory-promote" disabled/);
 state.adminModelLab.operation={
   id:'a'.repeat(24),action:'activate_shadow',state:'RUNNING',
@@ -123,6 +134,7 @@ html=ctx.renderAdminModelLab();
 assert.match(html,/Zopakovať tréning a kontroly/);
 assert.match(html,/Zmrazenie dát a overenie obnovy zálohy/);
 assert.match(html,/Model uložený, shadow neaktivovaný/);
+assert.match(html,/Treba skontrolovať posledný beh/);
 assert.match(html,/Chýba nezávislé overenie na predzápasových kurzoch/);
 assert.match(html,/Posledný uložený model:<\/strong> complete-model/);
 assert(!html.includes('<script>'));
