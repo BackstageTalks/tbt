@@ -370,6 +370,7 @@ def test_confirmed_telegram_ou_survives_later_model_projection_drift():
     assert attach_confirmed_aces_ou_sidecar(updated, forged) == updated
     forged = deepcopy(sidecar)
     forged["issued_aces_ou"][0]["publication"]["publication_key"] = "unrelated-ou"
+    assert attach_confirmed_aces_ou_sidecar(updated, forged) == updated
     # This cannot create a second conflicting issued O/U when an exact one exists.
     already_issued = attach_confirmed_aces_ou_sidecar(updated, sidecar)
     assert attach_confirmed_aces_ou_sidecar(already_issued, forged) == already_issued
