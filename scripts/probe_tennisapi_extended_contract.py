@@ -185,7 +185,7 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                   or result["rows_with_two_players"] != len(events)
                   or result["rows_with_start_timestamp"] != len(events)):
                 result["state"] = "invalid_shape"
-    elif name == "candidate_player_singles_results":
+    elif name in ("candidate_player_singles_results", "candidate_player_singles_results_page_1"):
         events = obj.get("events")
         if result["state"] != "no_content":
             if not isinstance(events, list):
@@ -254,6 +254,8 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         raise ValueError("Unknown preapproved TennisApi probe phase")
     if case is not None and phase == "full":
         raise ValueError("Focused case requires a named phase")
+    if phase == "candidates" and case == "player_singles_pagination" and max_requests < 3:
+        raise ValueError("pagination requires three guarded requests")
     client.request_limit = max_requests
     client.retry_attempts = 1  # deterministic bound, no surprise retries
     report = {
@@ -413,7 +415,7 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         # No match CDB writes or same-season pre-match features are authorized.
         allowed_cases = {
             "team_year_statistics", "tournament_last_matches",
-            "player_singles_results",
+            "player_singles_results", "player_singles_pagination",
         }
         if case not in allowed_cases:
             raise ValueError("candidates phase requires a preapproved case")
@@ -461,21 +463,64 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
                 return finish()
             route = f"/api/tennis/player/{player_id}/events/singles/last/0"
 
-        payload = read("candidate_" + case, route)
-        observed = report["observations"]["candidate_" + case]
-        if case == "player_singles_results" and observed["state"] == "available":
-            # A valid-looking events list is not evidence of the requested player.
-            # Verify source-native participant IDs before claiming coverage.
-            events = _obj(payload).get("events")
-            if not isinstance(events, list) or not all(
-                (home_id := _nested_int(item, "homeTeam", "id")) is not None
-                and (away_id := _nested_int(item, "awayTeam", "id")) is not None
-                and home_id != away_id
-                and player_id in (home_id, away_id)
-                for item in events
-            ):
-                observed["state"] = "invalid_identity"
-        report["candidate_state"] = "endpoint_" + str(observed["state"])
+        name = ("candidate_player_singles_results" if case == "player_singles_pagination"
+                else "candidate_" + case)
+        payload = read(name, route)
+        observed = report["observations"][name]
+
+        def matches_source_player(events: Any) -> bool:
+            return isinstance(events, list) and bool(events) and all(
+                (home := _nested_int(e, "homeTeam", "id")) is not None
+                and (away := _nested_int(e, "awayTeam", "id")) is not None
+                and home != away and player_id in (home, away)
+                for e in events
+            )
+
+        if (case in {"player_singles_results", "player_singles_pagination"}
+                and observed["state"] == "available"
+                and not matches_source_player(_obj(payload).get("events"))):
+            observed["state"] = "invalid_identity"
+        if case != "player_singles_pagination":
+            report["candidate_state"] = "endpoint_" + str(observed["state"])
+            return finish()
+
+        first = _obj(payload).get("events")
+        report["candidate_pagination"] = {
+            "page_0_rows": len(first) if isinstance(first, list) else 0,
+            "page_0_has_next_page": _obj(payload).get("hasNextPage") is True,
+            "page_1_rows": 0, "cross_page_overlap_count": None,
+            "distinct_source_events": None, "cdb_overlap_verified": False,
+        }
+        if observed["state"] != "available":
+            report["candidate_state"] = "page_0_" + str(observed["state"])
+            return finish()
+        if _obj(payload).get("hasNextPage") is not True:
+            report["candidate_state"] = "page_1_not_indicated"
+            return finish()
+
+        second_payload = read(
+            "candidate_player_singles_results_page_1",
+            f"/api/tennis/player/{player_id}/events/singles/last/1")
+        second_obs = report["observations"]["candidate_player_singles_results_page_1"]
+        second = _obj(second_payload).get("events")
+        report["candidate_pagination"]["page_1_rows"] = (
+            len(second) if isinstance(second, list) else 0)
+        if second_obs["state"] == "available":
+            if not matches_source_player(second):
+                second_obs["state"] = "invalid_identity"
+            else:
+                first_ids = {e["id"] for e in first}
+                second_ids = {e["id"] for e in second}
+                overlap = first_ids & second_ids
+                report["candidate_pagination"]["cross_page_overlap_count"] = len(overlap)
+                report["candidate_pagination"]["distinct_source_events"] = len(
+                    first_ids | second_ids)
+                if overlap:
+                    second_obs["state"] = "cross_page_overlap"
+                elif max(e["startTimestamp"] for e in second) > min(
+                        e["startTimestamp"] for e in first):
+                    second_obs["state"] = "invalid_page_chronology"
+        report["candidate_state"] = "endpoint_" + str(second_obs["state"])
         return finish()
 
     if phase != "full":
