@@ -43,6 +43,19 @@ def _posthoc_weather_training_violation(match) -> bool:
     return eligible and provenance in POSTHOC_WEATHER_MARKERS
 
 
+def _binary_training_targets(frame: pd.DataFrame) -> tuple[bool, list[float]]:
+    """Reject missing, fractional, nonfinite and out-of-range winner labels.
+
+    Never drop missing targets or truncate fractional labels to integers when
+    certifying a point-in-time training cache.
+    """
+    if "target" not in frame or frame.empty:
+        return False, []
+    targets = pd.to_numeric(frame["target"], errors="coerce")
+    distinct = sorted(targets.dropna().unique().tolist())
+    return bool(targets.isin((0, 1)).all()), distinct
+
+
 def audit(history_dir: Path, *, training_profile: str = "standard",
           feature_cache_path: Path | None = None) -> dict[str, Any]:
     raw, identity_safety = sanitize_history_identities(load_partitions(history_dir))
@@ -82,8 +95,7 @@ def audit(history_dir: Path, *, training_profile: str = "standard",
     ids_nonempty = bool(frame["match_id"].astype(str).str.strip().ne("").all()) if "match_id" in frame else False
     required_features_present = all(name in frame.columns for name in FEATURE_NAMES)
     scheduled_valid = bool(scheduled.notna().all()) if len(frame) else True
-    target_values = set(pd.to_numeric(frame.get("target"), errors="coerce").dropna().astype(int).tolist()) if "target" in frame else set()
-    target_binary = bool(target_values <= {0, 1}) and bool(target_values)
+    target_binary, target_values = _binary_training_targets(frame)
 
     checks = {
         "canonical_history_identity_unique": row_identity_unique,
