@@ -576,9 +576,12 @@ def overlay_confirmed_telegram_aces_ou(feed: dict, state: dict) -> dict:
             continue
         ref, sent_at = match
         scheduled = _utc(row.get("scheduled_at"))
-        projection = _number(row.get("projection"))
-        if (not scheduled or sent_at >= scheduled or
-                abs((projection if projection is not None else float("inf")) - ref["projection"]) > 0.011
+        # A later model refresh must not erase a PREVIOUSLY ISSUED Telegram O/U.
+        # Keep the exact event, player and scheduled time as fail-closed guards;
+        # the original frozen projection comes from the confirmed receipt.
+        receipt_scheduled = _utc(ref.get("scheduled_at"))
+        if (not scheduled or not receipt_scheduled or sent_at >= scheduled
+                or scheduled != receipt_scheduled
                 or selection not in {str((row.get("player1") or {}).get("id") or ""),
                                      str((row.get("player2") or {}).get("id") or "")}):
             updated_rows.append(row)
@@ -602,7 +605,7 @@ def overlay_confirmed_telegram_aces_ou(feed: dict, state: dict) -> dict:
             "market_line": ref["market_line"],
             "selection": f"{ref['name']} {ref['projection_direction'].title()} {ref['market_line']:.1f} Aces",
             "projection_scope": "player", "projection_metric": "aces",
-            "projection": row.get("projection"),
+            "projection": ref["projection"],
             "issued_at": sent_at.isoformat(),
             "odds": ref["odds"], "price_status": "priced_projection",
             "price_basis": ref["price_basis"],
@@ -694,7 +697,7 @@ def main() -> None:
                                 "event_id": ace_row.get("event_id"),
                                 "selection_id": str((ace_row.get("betting") or {}).get("selection_id") or ace_row.get("selection_id") or ace_row.get("winner_id") or ""),
                                 "scheduled_at": ace_row.get("scheduled_at"),
-                                "projection": ace_row.get("projection"),
+                                "projection": pub.get("projection"),
                                 "publication": pub,
                             })
                 if links:
