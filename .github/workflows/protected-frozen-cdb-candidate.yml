@@ -79,7 +79,7 @@ jobs:
       # Stream long-running training logs rather than losing output on runner exit.
       PYTHONUNBUFFERED: '1'
       BLINQ_RAPIDAPI_MAX_RPS: '0'
-      BLINQ_TRAINING_PROFILE: ${{ inputs.training_profile || (startsWith(github.event.head_commit.message, 'feat(722): one-shot PIT evidence calibration study') && 'accuracy-7.2.2') || 'top-7.2.1' }}
+      BLINQ_TRAINING_PROFILE: "${{ inputs.training_profile || (startsWith(github.event.head_commit.message, 'feat(722): one-shot PIT evidence calibration study') && 'accuracy-7.2.2') || 'top-7.2.1' }}"
     steps:
       - uses: actions/checkout@v4
         with:
