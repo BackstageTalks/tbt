@@ -99,7 +99,8 @@ class CandidateClient:
                  "startTimestamp": 1700000100},
             ]}
         return {"events": [
-            {"id": 5, "homeTeam": {"id": 1}, "awayTeam": {"id": 2}}
+            {"id": 5, "homeTeam": {"id": 1}, "awayTeam": {"id": 2},
+             "startTimestamp": 1700000000}
         ]}
 
 
@@ -312,4 +313,22 @@ def test_duplicate_surface_breakpoints_and_zero_matches_are_rejected():
         report = run_probe(BadStats(), event_id=98765, max_requests=2,
                            phase="candidates", case="team_year_statistics")
         assert report["candidate_state"] == "endpoint_invalid_statistics"
+        assert report["eligible_for_cdb_import"] is False
+
+
+def test_singles_requires_unique_dated_matches_not_just_http_success():
+    for kind in ("duplicate", "missing_date"):
+        class InvalidSingles(CandidateClient):
+            def _get(self, path, params=None, *, enrichment=False):
+                response = super()._get(path, params=params, enrichment=enrichment)
+                if path.endswith("/events/singles/last/0"):
+                    if kind == "duplicate":
+                        response["events"].append(dict(response["events"][0]))
+                    else:
+                        response["events"][0].pop("startTimestamp")
+                return response
+
+        report = run_probe(InvalidSingles(), event_id=98765, max_requests=2,
+                           phase="candidates", case="player_singles_results")
+        assert report["candidate_state"] == "endpoint_invalid_shape"
         assert report["eligible_for_cdb_import"] is False
