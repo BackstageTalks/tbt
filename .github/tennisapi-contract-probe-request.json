@@ -1,14 +1,14 @@
 {
   "schema": 1,
-  "requested_date": "2026-11-04",
-  "reason": "Cross-check HTTP 403 on known 2026 event detail/statistics after archived 2016 endpoint 403; read-only 2 requests maximum, verify provider account/route, no CDB writes",
+  "requested_date": "2026-11-06",
+  "reason": "Guarded read-only validation of listTennisSinglesResults with exact witnessed event/player identity; 2 requests max, no CDB writes",
   "provider_requests_allowed": true,
   "max_requests": 2,
   "event_id": 17449516,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
-  "requested_by": "BlinQ CDB 50k/day quality audit",
-  "diagnostic_attempt": 20,
-  "phase": "full",
-  "case": null
+  "requested_by": "BlinQ TennisApi endpoint QA",
+  "diagnostic_attempt": 21,
+  "phase": "candidates",
+  "case": "player_singles_results"
 }
