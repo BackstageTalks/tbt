@@ -165,3 +165,56 @@ secondary sources for markets outside the TennisApi contract.
 The next data run must report **actual** requests, linked events, newly
 persisted canonical values or metadata, and independent exact-value
 read-back. A passing CI check or successful dispatch is not an import.
+
+## 2026-11-06 — Optional season coverage research (no auto-import)
+
+New **research-only** RapidTennisClient methods (all through the existing
+shared-budget `_get(..., enrichment=True)` guard):
+
+- `team_year_statistics(team_id, year)` requests
+  `/api/tennis/team/{team_id}/year-statistics/{year}`.
+  Returned aggregates are **not** individual match cells and are not
+  point-in-time valid for pre-match calculations in the same season.
+- `tournament_season_last_matches(tournament_id, season_id, page=0)`
+  requests `/api/tennis/tournament/{tournament_id}/season/{season_id}/events/last/{page}`.
+  One page is not a complete season and IDs must be cross-checked independently.
+- `player_singles_results(player_id, page=0)` requests
+  `/api/tennis/player/{player_id}/events/singles/last/{page}`.
+  Rows must have unique event IDs, source-native player identities and dates.
+
+Existing `scripts/probe_tennisapi_extended_contract.py` now supports focused
+`--phase candidates --case team_year_statistics`,
+`--case tournament_last_matches` and `--case player_singles_results`.
+A probe first fetches and checks the exact source event ID and derives the
+provider-native team/tournament/season identifiers, then makes **at most one**
+optional endpoint call within the explicit `--max-requests` cap.
+The case allowlist rejects unknown routes before any API call.
+
+The candidate report stores payload hashes and structural observations;
+it does not expose raw player statistics, guarantee archive completeness,
+or permit CDB/model/odds mutations. Provider-5 fallback, local odds, serving
+champion, existing importers and scheduled ingestion remain unchanged.
+Provider availability, identity/coverage consistency and historical
+point-in-time eligibility still require live evidence, followed by explicit
+quality, deduplication, single-writer, dry-run and independent read-back
+before any canonical supplement.
+
+**Verification record:** Offline contracts are in
+`tests/test_tennisapi_coverage_candidates.py`. A merged commit or green CI
+does not establish live API availability. A live candidate run must record
+the exact GitHub Actions run/artifact, HTTP status, quota header, spent
+requests, response shape and no-CDB-write flag; HTTP 204/403/404 is not
+a successful source-coverage result.
+
+**User-provided sample (2026-11-06, not a separately billed API probe):**
+the `getTeamYearStatistics` payload has 5 named surface groups and 63
+reported match participations. Each group passes the following arithmetical
+identities: `firstServeTotal + secondServeTotal == totalServeAttempts`,
+`secondServePointsTotal + doubleFaults == secondServeTotal`, and
+`firstServePointsTotal + secondServePointsTotal + doubleFaults == firstServeTotal`.
+All 20 scored/total break-point and serve-point inequalities are within
+bounds. Those are sample integrity checks, not provenance/identity
+verification and not independent evidence that any canonical CDB NULL
+was enriched. The candidate probe now records surface, service-arithmetic,
+bounds, positive-match and nonempty-source checks; invalid/empty responses
+are not classified as usable coverage.

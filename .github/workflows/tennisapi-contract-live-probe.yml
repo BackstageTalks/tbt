@@ -51,8 +51,12 @@ jobs:
             (.phase == "full" or .phase == "metadata" or .phase == "odds" or
              .phase == "doubles" or .phase == "quality" or
              .phase == "historical" or .phase == "identity" or
-             .phase == "archive_2016") and
-            (.case == null or (.case | type == "string" and length > 0 and length < 64))' "$request" >/dev/null
+             .phase == "archive_2016" or .phase == "candidates") and
+            (.case == null or (.case | type == "string" and length > 0 and length < 64)) and
+            (.phase != "candidates" or (.max_requests >= 2 and
+             (.case == "team_year_statistics" or
+              .case == "tournament_last_matches" or
+              .case == "player_singles_results")))' "$request" >/dev/null
       - name: Install existing API dependencies
         run: python -m pip install -r api/requirements-train.txt
       - name: Run guarded read-only provider sample
@@ -74,7 +78,11 @@ jobs:
           jq -e '.eligible_for_cdb_import == false and
                  .provider_quote_timestamp_verified == false and
                  .request_count <= .max_requests and
-                 ((.counts.available // 0) + (.counts.no_content // 0)) > 0' \
+                 ((.counts.available // 0) + (.counts.no_content // 0)) > 0 and
+                 (.phase != "candidates" or
+                  (.candidate_state == "endpoint_available" and
+                   .candidate_context.source_event_id_matched == true and
+                   .request_count == 2))' \
             .cache/tbt/tennisapi-contract/live-probe.json >/dev/null
       - name: Upload read-only evidence
         if: always()
