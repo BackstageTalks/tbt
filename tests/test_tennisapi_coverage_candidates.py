@@ -360,3 +360,97 @@ def test_singles_requires_exact_source_player_in_every_match(bad_case):
     assert report["request_count"] == 2
     assert report["candidate_state"] == "endpoint_invalid_identity"
     assert report["eligible_for_cdb_import"] is False
+
+class PaginatedSinglesClient(CandidateClient):
+    def __init__(self, *, next_page=True, overlap=False, wrong_player=False,
+                 newer_page=False):
+        super().__init__()
+        self.next_page = next_page
+        self.overlap = overlap
+        self.wrong_player = wrong_player
+        self.newer_page = newer_page
+
+    def _get(self, path, params=None, *, enrichment=False):
+        response = super()._get(path, params=params, enrichment=enrichment)
+        if path.endswith("/events/singles/last/0"):
+            return {"hasNextPage": self.next_page, "events": [
+                {"id": 11, "homeTeam": {"id": 222}, "awayTeam": {"id": 333},
+                 "startTimestamp": 1700000200},
+                {"id": 12, "homeTeam": {"id": 222}, "awayTeam": {"id": 333},
+                 "startTimestamp": 1700000100},
+            ]}
+        if path.endswith("/events/singles/last/1"):
+            return {"hasNextPage": False, "events": [
+                {"id": 12 if self.overlap else 13,
+                 "homeTeam": {"id": 999 if self.wrong_player else 222},
+                 "awayTeam": {"id": 333},
+                 "startTimestamp": 1700000300 if self.newer_page else 1699999900},
+            ]}
+        return response
+
+
+def test_page_one_is_probed_only_after_source_event_and_boolean_has_next():
+    client = PaginatedSinglesClient()
+    report = run_probe(client, event_id=98765, max_requests=3,
+                       phase="candidates", case="player_singles_pagination")
+    assert client.paths == [
+        "/api/tennis/event/98765",
+        "/api/tennis/player/222/events/singles/last/0",
+        "/api/tennis/player/222/events/singles/last/1",
+    ]
+    assert report["request_count"] == 3
+    assert report["candidate_state"] == "endpoint_available"
+    assert report["candidate_pagination"] == {
+        "page_0_rows": 2, "page_0_has_next_page": True,
+        "page_1_rows": 1, "cross_page_overlap_count": 0,
+        "distinct_source_events": 3, "cdb_overlap_verified": False,
+    }
+    assert report["eligible_for_cdb_import"] is False
+
+
+@pytest.mark.parametrize("has_next", [False, None, 1, "true"])
+def test_no_strict_has_next_page_never_spends_third_request(has_next):
+    client = PaginatedSinglesClient(next_page=has_next)
+    report = run_probe(client, event_id=98765, max_requests=3,
+                       phase="candidates", case="player_singles_pagination")
+    assert report["candidate_state"] == "page_1_not_indicated"
+    assert client.request_count == 2
+    assert report["eligible_for_cdb_import"] is False
+
+
+@pytest.mark.parametrize("option,state", [
+    ("overlap", "endpoint_cross_page_overlap"),
+    ("wrong_player", "endpoint_invalid_identity"),
+    ("newer_page", "endpoint_invalid_page_chronology"),
+])
+def test_page_one_rejects_overlap_identity_and_chronology(option, state):
+    client = PaginatedSinglesClient(**{option: True})
+    report = run_probe(client, event_id=98765, max_requests=3,
+                       phase="candidates", case="player_singles_pagination")
+    assert report["candidate_state"] == state
+    assert client.request_count == 3
+    assert report["eligible_for_cdb_import"] is False
+
+
+def test_pagination_under_budget_fails_before_any_provider_request():
+    client = PaginatedSinglesClient()
+    with pytest.raises(ValueError, match="three guarded requests"):
+        run_probe(client, event_id=98765, max_requests=2,
+                  phase="candidates", case="player_singles_pagination")
+    assert client.paths == []
+
+
+def test_invalid_page_zero_never_requests_page_one():
+    class BadFirstPage(PaginatedSinglesClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            response = super()._get(path, params=params, enrichment=enrichment)
+            if path.endswith("/events/singles/last/0"):
+                response["events"][0]["homeTeam"]["id"] = 999
+            return response
+
+    client = BadFirstPage()
+    report = run_probe(client, event_id=98765, max_requests=3,
+                       phase="candidates", case="player_singles_pagination")
+    assert report["candidate_state"] == "page_0_invalid_identity"
+    assert client.request_count == 2
+    assert report["eligible_for_cdb_import"] is False
