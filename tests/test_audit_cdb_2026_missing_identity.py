@@ -150,4 +150,25 @@ def test_prewrite_identity_orientation_and_date_conflict_are_aggregate_only():
     assert report["existing_id_player_or_time_conflict"] == 3
     assert report["existing_id_swapped_orientation"] == 1
     assert report["existing_id_changed_scheduled_at"] == 1
+    assert report["existing_id_time_shift_under_24h"] == 1
     assert report["existing_id_changed_player_pair"] == 1
+
+
+def test_rekey_after_kickoff_time_shift_is_candidate_not_an_automatic_merge():
+    when = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
+    shifted = datetime(2026, 11, 3, 12, tzinfo=timezone.utc)
+    def make(rows):
+        return pa.Table.from_pylist([
+            {"match_id": mid, "tour": "atp", "tournament_id": "T-verified",
+             "player1_id": a, "player2_id": b, "scheduled_at": date}
+            for mid, a, b, date in rows
+        ])
+    old = make([("original-id", "A", "B", when)])
+    prewrite = make([("original-id", "A", "B", when)])
+    now = make([("new-id", "B", "A", shifted)])
+    report = classify_identity_drift(old, prewrite, now)
+    assert report["unique_missing_source_ids"] == 1
+    assert report["missing_with_one_strong_rekey_candidate"] == 0
+    assert report["missing_with_one_7day_time_shift_candidate"] == 1
+    assert report["missing_without_7day_time_shift_candidate"] == 0
+    assert "original-id" not in json.dumps(report)
