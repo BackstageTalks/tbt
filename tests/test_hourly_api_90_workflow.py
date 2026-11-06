@@ -1,5 +1,7 @@
 """UTC-anchored shared TennisAPI quota and staged hourly closeout contracts."""
 from datetime import datetime, timedelta, timezone
+import ast
+import re
 from pathlib import Path
 
 from tbt.providers import shared_budget
@@ -30,8 +32,24 @@ def test_14500_shared_budget_and_guarded_provider_headroom():
     assert 'remaining != max(0, 14500-spent)' in HOURLY
     assert 'budget.get("schema") != 2' in HOURLY
     assert '"provider_day_17_09_utc"' in HOURLY
-    assert 'limit = 3000 if new_day_start else (14500 if final_topup else caps[stage_hour])' in HOURLY
+    assert 'limit = 14500 if final_topup else caps[stage_hour]' in HOURLY
 
+
+
+def test_daytime_from_11_bratislava_and_two_stage_ceilings():
+    match = re.search(r"caps = (\{[^}]+\})", HOURLY)
+    assert match is not None
+    caps = ast.literal_eval(match.group(1))
+    assert set(caps) == set(range(11, 19))
+    assert caps[11] == 5700
+    assert caps[17] == caps[18] == 13500
+    assert max(caps.values()) == 13500
+    assert HOURLY.count("stage_hour = local.hour") == 2
+    assert HOURLY.count("daytime_slot = stage_hour in caps and until_reset <= 9 * 3600") == 2
+    assert HOURLY.count("limit = 14500 if final_topup else caps[stage_hour]") == 2
+    assert "new_day_start" not in HOURLY and "evening_limit" not in HOURLY
+    assert "14800" not in HOURLY and "14700" not in HOURLY
+    assert "14,800" not in HOURLY and "14,700" not in HOURLY
 
 def test_hourly_writer_and_dual_quota_guards():
     assert 'group: tbt-hourly-api-gapfill-orchestrator' in HOURLY
@@ -57,7 +75,6 @@ def test_utc_closeout_window_and_restart_season_independent():
     function_start = next(i for i, x in enumerate(lines) if x.strip() == "def next_provider_reset(instant):")
     function_body = "\n".join(x[10:] for x in lines[function_start:function_start + 5])
     closeout_line = next(x.strip() for x in lines if x.strip().startswith("final_topup = "))
-    fresh_line = next(x.strip() for x in lines if x.strip().startswith("new_day_start = "))
     namespace = {"timedelta": timedelta}
     exec(function_body, namespace)
     next_reset = namespace["next_provider_reset"]
@@ -67,15 +84,13 @@ def test_utc_closeout_window_and_restart_season_independent():
             now = day_start - timedelta(minutes=mins_before)
             until_reset = (next_reset(now) - now).total_seconds()
             scope = {"until_reset": until_reset, "now": now}
-            exec(closeout_line + "\n" + fresh_line, {}, scope)
+            exec(closeout_line, {}, scope)
             assert scope["final_topup"] is expected
-            assert not scope["new_day_start"]
         for mins_after in (1, 2, 3, 4, 5):
             now = day_start + timedelta(minutes=mins_after)
             scope = {"until_reset": (next_reset(now) - now).total_seconds(), "now": now}
-            exec(closeout_line + "\n" + fresh_line, {}, scope)
+            exec(closeout_line, {}, scope)
             assert not scope["final_topup"]
-            assert scope["new_day_start"] is (mins_after <= 4)
 
 def test_refresh_pipeline_and_standing_contract_use_shared_14500_ceiling():
     # Prevent the workflow accepting 14,500 while the inner parser rejects it.
