@@ -260,6 +260,18 @@ AUTO_DAYS = WINDOW_DAYS
 
 def _metric_window_value(feed: dict, metric: str, period: str,
                          cache: dict, *, now: datetime | None = None) -> tuple[float | None, int]:
+    if feed.get("test_result_exclusions_active") and metric in {"avg_odds", "roi", "yield_units"}:
+        # Frozen betting windows include admin-marked test bets. Recalculate
+        # only the requested public metric from already-filtered Results;
+        # retain model_success, which has a separate winner-model population.
+        category = "top_daily" if metric == "avg_odds" else "all"
+        key = (period, category)
+        if key not in cache:
+            cache[key] = published_results_metrics(feed, period, category, now=now)
+        stats = cache[key]
+        field = {"avg_odds": "avg_odds", "roi": "roi", "yield_units": "profit_units"}[metric]
+        sample = stats["odds_sample"] if metric == "avg_odds" else stats["stake_count"]
+        return (_finite(stats[field]) if sample > 0 else None), sample
     if metric in RESULTS_METRICS:
         category, field = RESULTS_METRICS[metric]
         key = (period, category)
