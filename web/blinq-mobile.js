@@ -93,8 +93,20 @@
   const dialog = document.createElement('dialog');
   dialog.id = 'bqm-dialog'; dialog.setAttribute('aria-label', 'Hlavné menu BlinQ');
   dialog.setAttribute('aria-modal', 'false');
+  // HTMLDialogElement.close() updates the open state before dispatching
+  // its asynchronous 'close' event. Reflect the actual state in ARIA and
+  // the scrim in the SAME task, including brand and avatar entry points.
+  function closeMenu() {
+    if (!dialog.open) return;
+    dialog.close();
+    scrim.hidden = true;
+    document.body.classList.remove('bqm-menu-open');
+    toggle.setAttribute('aria-expanded', 'false');
+    syncBrandMenu();
+    syncAvatarMenu();
+  }
   const top = document.createElement('div'); top.className = 'bqm-top';
-  const close = button('×', () => dialog.close()); close.setAttribute('aria-label', 'Zavrieť menu');
+  const close = button('×', () => closeMenu()); close.setAttribute('aria-label', 'Zavrieť menu');
   const logo = document.createElement('img');
   logo.src = header.querySelector('.brand img')?.getAttribute('src') || '/assets/blinq_logo.svg';
   logo.alt = 'BlinQ';
@@ -104,12 +116,12 @@
   home.setAttribute('aria-label', 'BlinQ · hlavná stránka');
   home.style.justifySelf = 'center';
   home.append(logo);
-  home.addEventListener('click', () => dialog.close());
+  home.addEventListener('click', () => closeMenu());
   top.append(close, home);
   const nav = document.createElement('nav'); nav.setAttribute('aria-label', 'Mobilná navigácia');
   const note = document.createElement('p'); note.className = 'bqm-note'; note.setAttribute('role', 'status');
   dialog.append(top, nav, note); document.body.append(scrim, dialog);
-  scrim.addEventListener('click', () => { if (dialog.open) dialog.close(); });
+  scrim.addEventListener('click', () => { if (dialog.open) closeMenu(); });
 
   // Both entry points share one dialog. The existing controls remain
   // authoritative for permissions, membership and sign-out.
@@ -170,7 +182,7 @@
     document.body.classList.toggle('bqm-unified-menu', menuEnabled());
     syncProjects();
     syncMobileIconNav();
-    if (!menuEnabled() && dialog.open) dialog.close();
+    if (!menuEnabled() && dialog.open) closeMenu();
     syncBrandMenu();
     syncAvatarMenu();
   }
@@ -178,7 +190,7 @@
   function finish(node) {
     // Resolve and use the original control: its access checks and listeners remain authoritative.
     if (!available(node)) { note.textContent = 'Táto položka momentálne nie je dostupná.'; return; }
-    dialog.close(); node.click();
+    closeMenu(); node.click();
   }
   function proxy(label, resolve) {
     if (!available(resolve())) return;
@@ -197,19 +209,19 @@
       navHeading.textContent = 'NAVIGÁCIA';
       nav.append(navHeading);
       nav.append(button('Domov', () => {
-        dialog.close();
+        closeMenu();
         document.querySelector('.reference-navigation [data-route="predictions"]')?.click();
       }));
       section('Predikcie', 'predictions');
       const compareLocked = document.querySelector('.reference-navigation [data-route="compare"]')?.classList.contains('comparator-nav-locked');
       nav.append(button('Porovnávač' + (compareLocked ? ' 🔒' : ''), () => {
-        dialog.close();
+        closeMenu();
         document.querySelector('.reference-navigation [data-route="compare"]')?.click();
       }));
       const resultsSource = document.querySelector('.reference-navigation [data-route="results"]');
       const resultsLocked = resultsSource?.classList.contains('access-nav-locked');
       nav.append(button('Výsledky' + (resultsLocked ? ' 🔒' : ''), () => {
-        dialog.close();
+        closeMenu();
         // The desktop link may be hidden by presentation settings; its original
         // route handler still enforces the account's results access.
         resultsSource?.click();
@@ -309,7 +321,7 @@
         nav.append(button(menuLabel, () => {
           const original = Array.from(document.querySelectorAll('#dailyHubTabs [data-daily-hub-tab]')).find(n => n.dataset.dailyHubTab === key);
           if (!available(original)) { render('predictions'); return; }
-          dialog.close();
+          closeMenu();
           document.querySelector('.reference-navigation [data-route="predictions"]')?.click();
           // Routing can replace the tab nodes synchronously.
           Array.from(document.querySelectorAll('#dailyHubTabs [data-daily-hub-tab]')).find(n => n.dataset.dailyHubTab === key)?.click();
@@ -348,7 +360,7 @@
   }
   function openMenu(level = 'root', expandAccount = false, opener = brand) {
     if (!menuEnabled()) return;
-    if (dialog.open) dialog.close();
+    if (dialog.open) closeMenu();
     accountExpanded = Boolean(expandAccount);
     navigationExpanded = !accountExpanded;
     lastOpener = opener || brand;
@@ -361,6 +373,9 @@
     render(level);
   }
   dialog.addEventListener('close', () => {
+    // A queued close from an earlier opening must not collapse a
+    // newer re-opened menu or steal its focus.
+    if (dialog.open) return;
     scrim.hidden = true;
     document.body.classList.remove('bqm-menu-open'); toggle.setAttribute('aria-expanded', 'false');
     syncBrandMenu();
@@ -375,9 +390,9 @@
     if (event.key !== 'Escape' || !dialog.open) return;
     event.preventDefault(); event.stopPropagation();
     if (currentLevel !== 'root') render('root');
-    else dialog.close();
+    else closeMenu();
   }, true);
-  window.addEventListener('hashchange', () => { if (dialog.open) dialog.close(); });
+  window.addEventListener('hashchange', () => { if (dialog.open) closeMenu(); });
   mq.addEventListener('change', sync);
   const groupBar = byId('projectGroupBar');
   if (groupBar) new MutationObserver(syncProjects).observe(groupBar, {childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['hidden']});
