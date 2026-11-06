@@ -95,6 +95,51 @@ def assert_history_partition_bundle_atomic(paths, remove_names=()):
 
 
 
+def assert_history_identities_conserved(previous_file, candidate_file, *, year):
+    """Fail before upload if an existing canonical match ID/identity disappears.
+
+    Row-count floors alone cannot detect a delete/rekey replaced by another
+    match. The immutable original ID and its UTC kickoff/player orientation
+    must remain; corrections require the separate reviewed repair procedure.
+    Never print match IDs, player names or canonical stat values.
+    """
+    import pyarrow.parquet as pq
+
+    fields = ("match_id", "player1_id", "player2_id", "scheduled_at")
+
+    def identities(path):
+        source = pq.ParquetFile(path)
+        if not set(fields).issubset(source.schema_arrow.names):
+            raise ValueError(f"CDB_IDENTITY_SCHEMA_MISSING year={year}")
+        rows = {}
+        for batch in source.iter_batches(columns=list(fields), batch_size=12000):
+            data = batch.to_pydict()
+            for mid, p1, p2, instant in zip(*(data[field] for field in fields)):
+                if (not mid or not p1 or not p2 or p1 == p2 or
+                        instant is None or mid in rows):
+                    raise ValueError(f"CDB_IDENTITY_INVALID_OR_DUPLICATE year={year}")
+                if instant.year != year:
+                    raise ValueError(f"CDB_IDENTITY_WRONG_UTC_YEAR year={year}")
+                rows[mid] = (p1, p2, instant)
+        if len(rows) != source.metadata.num_rows:
+            raise ValueError(f"CDB_IDENTITY_COUNT_MISMATCH year={year}")
+        return rows
+
+    original = identities(previous_file)
+    proposed = identities(candidate_file)
+    old_ids = set(original)
+    new_ids = set(proposed)
+    missing = len(old_ids - new_ids)
+    altered = sum(original[mid] != proposed[mid] for mid in old_ids & new_ids)
+    if missing or altered:
+        raise ValueError(
+            f"CDB_IDENTITY_CONSERVATION_BLOCKED year={year} "
+            f"missing_old_ids={missing} changed_original_identities={altered}"
+        )
+    return {"year": year, "existing_ids_preserved": len(old_ids),
+            "new_ids": len(new_ids - old_ids), "changed_original_identities": 0}
+
+
 class ReleaseStore:
     def __init__(self, repository, tag, directory):
         if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
@@ -847,6 +892,36 @@ class ReleaseStore:
                         json.loads(remote.read_text(encoding="utf-8")),
                         json.loads(candidate_path.read_text(encoding="utf-8")),
                     )
+
+        # The count-only manifest guard can miss an old ID silently removed
+        # while new rows make total rows increase. Compare exact live identities
+        # before any canonical upload. A provider correction of an established
+        # ID must go through separately reviewed recovery, never normal backfill.
+        if self.repository == "BackstageTalks/tbt-data" and self.tag == "tbt-data-v1":
+            year_files = [
+                path for path in files
+                if re.fullmatch(r"history-\d{4}\.parquet", path.name)
+                and path.name in previous
+            ]
+            if year_files:
+                with tempfile.TemporaryDirectory(prefix="blinq-cdb-identity-guard-") as directory:
+                    for path in year_files:
+                        gh(
+                            "release", "download", self.tag,
+                            "--repo", self.repository, "--pattern", path.name,
+                            "--dir", directory,
+                        )
+                        remote = Path(directory) / path.name
+                        expected = previous[path.name]
+                        if (not remote.is_file()
+                                or self._sha256(remote) != expected["sha256"]
+                                or remote.stat().st_size != expected["bytes"]):
+                            raise RuntimeError(
+                                "CDB_AUTHORITATIVE_YEAR_MOVED_OR_CORRUPT " + path.name
+                            )
+                        assert_history_identities_conserved(
+                            remote, path, year=int(path.stem.split("-")[-1])
+                        )
 
         guarded = (
             self.repository == "BackstageTalks/tbt-data"
