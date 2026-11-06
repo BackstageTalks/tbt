@@ -15,7 +15,10 @@ import hashlib
 import re
 from zoneinfo import ZoneInfo
 
-from .price_integrity import extreme_winner_price_inversion, post_start_winner_quote
+from .price_integrity import (
+    extreme_winner_price_inversion, post_start_winner_quote,
+    unsubstantiated_high_confidence_winner,
+)
 
 
 SECTION_TO_FEED_KEY = {
@@ -628,6 +631,8 @@ def _daily_rows(payload: dict) -> list[dict]:
         if extreme_winner_price_inversion(_row_probability(row), odds):
             continue
         if post_start_winner_quote(row):
+            continue
+        if unsubstantiated_high_confidence_winner(row):
             continue
         seen.add(ident)
         out.append(row)
