@@ -335,3 +335,41 @@ def test_unconfirmed_daily_aces_receipt_never_creates_published_contract():
     old["message_ids"] = []
     state = {"schema": 1, "attempts": {"2026-11-02:daily:0620": old}}
     assert overlay_confirmed_telegram_aces_ou(feed, state) == feed
+
+
+def test_confirmed_telegram_ou_survives_later_model_projection_drift():
+    """Only the frozen receipt/publication pair decides what was issued.
+
+    A later model recalculation cannot erase the already-issued Over/Under.
+    Tampered receipt/publication pairs still fail closed.
+    """
+    match, state, status = fixture()
+    original = {"ace_picks": [match], "results": []}
+    issued = overlay_confirmed_telegram_aces_ou(original, state)
+    publication = issued["ace_picks"][0]["market_publications"][-1]
+    sidecar = {"schema": 1, "issued_aces_ou": [{
+        "event_id": match["event_id"], "selection_id": match["selection_id"],
+        "scheduled_at": match["scheduled_at"],
+        "projection": match["projection"], "publication": publication,
+    }]}
+    # Daily re-training after 06:20 changes the visible MODEL projection,
+    # but it does not change the already-confirmed Telegram betting contract.
+    updated = deepcopy(original)
+    updated["ace_picks"][0]["projection"] = 12.74
+    frozen = deepcopy(updated)
+    served = attach_confirmed_aces_ou_sidecar(updated, sidecar)
+    assert updated == frozen
+    assert served["ace_picks"][0]["market_publications"][-1] == publication
+    assert len(served["ace_picks"][0]["market_publications"]) == 2
+    scored = runtime_settled_results(served, status)
+    assert scored[0]["market_publications"][0]["result"]["correct"] is False
+    assert scored[0]["market_publications"][0]["result"]["actual_count"] == 9
+
+    forged = deepcopy(sidecar)
+    forged["issued_aces_ou"][0]["publication"]["projection"] = 12.74
+    assert attach_confirmed_aces_ou_sidecar(updated, forged) == updated
+    forged = deepcopy(sidecar)
+    forged["issued_aces_ou"][0]["publication"]["publication_key"] = "unrelated-ou"
+    # This cannot create a second conflicting issued O/U when an exact one exists.
+    already_issued = attach_confirmed_aces_ou_sidecar(updated, sidecar)
+    assert attach_confirmed_aces_ou_sidecar(already_issued, forged) == already_issued
