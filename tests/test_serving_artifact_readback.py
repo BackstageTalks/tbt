@@ -9,7 +9,7 @@ import azure.functions as func
 import pytest
 
 from tbt.services.feed import empty_feed, serving_artifact_readback
-from verify_live_serving_readback import validate
+from verify_live_serving_readback import validate, preflight_serving, main as verify_live_main
 
 
 def fixture(tmp_path):
@@ -115,3 +115,76 @@ def test_both_deploy_paths_verify_live_serving_before_issuance():
         assert "python scripts/verify_live_serving_readback.py" in workflow
         assert "BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}" in workflow
 
+
+
+def test_predeploy_current_day_guard_reuses_exact_server_validator(tmp_path):
+    source = fixture(tmp_path)
+    now = datetime(2026, 11, 6, 8, tzinfo=timezone.utc)
+    report = preflight_serving(source, now=now)
+    assert report["status"] == "ready"
+    assert report["file_sha256"] == sha256(source.read_bytes()).hexdigest()
+    assert report["betting_day"] == "2026-11-06"
+    assert report["raw_counts"]["upcoming"] == 1
+    assert report["paid_provider_requests"] == 0
+
+    # Today can genuinely be quiet: 0 selections is not a reason to invent
+    # a minimum count or block an otherwise valid prediction generation.
+    quiet = empty_feed()
+    quiet["ready"] = True
+    quiet["generated_at"] = "2026-11-06T06:10:00Z"
+    source.write_text(json.dumps(quiet), encoding="utf-8")
+    assert all(count == 0 for count in
+               preflight_serving(source, now=now)["raw_counts"].values())
+
+    quiet["generated_at"] = "2026-11-05T06:10:00Z"
+    source.write_text(json.dumps(quiet), encoding="utf-8")
+    with pytest.raises(ValueError, match="not ready for the current betting day"):
+        preflight_serving(source, now=now)
+
+    quiet["generated_at"] = "2026-11-06T06:10:00Z"
+    quiet["ready"] = False
+    source.write_text(json.dumps(quiet), encoding="utf-8")
+    with pytest.raises(ValueError, match="not ready for the current betting day"):
+        preflight_serving(source, now=now)
+    with pytest.raises(FileNotFoundError):
+        preflight_serving(tmp_path / "absent.json", now=now)
+
+
+def test_predeploy_cli_is_offline_without_worker_token_or_api(monkeypatch, capsys, tmp_path):
+    import sys
+    import verify_live_serving_readback as runner
+
+    source = fixture(tmp_path)
+    now = datetime(2026, 11, 6, 8, tzinfo=timezone.utc)
+    original = runner.preflight_serving
+    monkeypatch.setattr(runner, "preflight_serving",
+                        lambda path: original(path, now=now))
+    monkeypatch.delenv("BLINQ_LIVE_WORKER_TOKEN", raising=False)
+    monkeypatch.setattr(runner, "urlopen",
+                        lambda *_a, **_kw: (_ for _ in ()).throw(
+                            AssertionError("Preflight must not touch HTTP")
+                        ))
+    monkeypatch.setattr(sys, "argv", [
+        "verify_live_serving_readback.py", "--preflight-only",
+        "--prepared-feed", str(source),
+    ])
+    verify_live_main()
+    assert "BLINQ_SERVING_PREFLIGHT" in capsys.readouterr().out
+
+
+def test_both_deploys_preflight_before_azure_upload():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    for path, deploy_name in (
+        (".github/workflows/ci.yml", "Deploy BlinQ to Azure Static Web Apps"),
+        (".github/workflows/data.yml", "Deploy refreshed feed and application"),
+    ):
+        yml = (root / path).read_text(encoding="utf-8")
+        deploy = yml.index(deploy_name)
+        preflight = yml.index("python scripts/verify_live_serving_readback.py --preflight-only")
+        signed_readback = yml.index("python scripts/verify_live_serving_readback.py \\", deploy)
+        assert preflight < deploy < signed_readback
+        assert "python scripts/prepare_feed.py" in yml[:preflight]
+    source = (root / "scripts/verify_live_serving_readback.py").read_text(encoding="utf-8")
+    assert "if args.preflight_only:" in source
+    assert "preflight_serving(Path(args.prepared_feed))" in source
