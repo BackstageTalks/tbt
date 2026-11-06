@@ -118,7 +118,8 @@ def assert_history_identities_conserved(previous_file, candidate_file, *, year):
                 if (not mid or not p1 or not p2 or p1 == p2 or
                         instant is None or mid in rows):
                     raise ValueError(f"CDB_IDENTITY_INVALID_OR_DUPLICATE year={year}")
-                if instant.year != year:
+                if (instant.tzinfo is None or
+                        instant.astimezone(timezone.utc).year != year):
                     raise ValueError(f"CDB_IDENTITY_WRONG_UTC_YEAR year={year}")
                 rows[mid] = (p1, p2, instant)
         if len(rows) != source.metadata.num_rows:
