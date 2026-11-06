@@ -51,12 +51,18 @@ jobs:
             (.phase == "full" or .phase == "metadata" or .phase == "odds" or
              .phase == "doubles" or .phase == "quality" or
              .phase == "historical" or .phase == "identity" or
-             .phase == "archive_2016" or .phase == "candidates") and
+             .phase == "archive_2016" or .phase == "candidates" or\n             .phase == "discovery") and
             (.case == null or (.case | type == "string" and length > 0 and length < 64)) and
             (.phase != "candidates" or (.max_requests >= 2 and
              (.case == "team_year_statistics" or
               .case == "tournament_last_matches" or
-              .case == "player_singles_results")))' "$request" >/dev/null
+              .case == "player_singles_results"))) and
+            (.phase != "discovery" or (.max_requests >= 2 and
+             (.case == "tournament_venue_events" or
+              .case == "tournament_events_on_date" or
+              .case == "tournaments_by_category" or
+              .case == "player_recent_tournaments" or
+              .case == "calendar_days_with_events")))' "$request" >/dev/null
       - name: Install existing API dependencies
         run: python -m pip install -r api/requirements-train.txt
       - name: Run guarded read-only provider sample
@@ -82,6 +88,12 @@ jobs:
                  (.phase != "candidates" or
                   (.candidate_state == "endpoint_available" and
                    .candidate_context.source_event_id_matched == true and
+                   .request_count == 2)) and
+                 (.phase != "discovery" or
+                  (.discovery_state == "endpoint_available" and
+                   .discovery_context.source_event_id_matched == true and
+                   .discovery_context.identity_validated_for_import == false and
+                   .discovery_context.cdb_overlap_verified == false and
                    .request_count == 2))' \
             .cache/tbt/tennisapi-contract/live-probe.json >/dev/null
       - name: Upload read-only evidence
