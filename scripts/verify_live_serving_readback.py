@@ -22,7 +22,7 @@ COUNTS = (
 )
 
 
-def validate(prepared_bytes: bytes, received: dict) -> dict:
+def validate(prepared_bytes: bytes, received: dict, *, require_current: bool = False) -> dict:
     if not isinstance(received, dict) or received.get("ok") is not True:
         raise ValueError("Serving readback is unavailable")
     expected = json.loads(prepared_bytes)
@@ -56,6 +56,8 @@ def validate(prepared_bytes: bytes, received: dict) -> dict:
         raise ValueError("Invalid production betting-day key")
     if type(received.get("stale")) is not bool:
         raise ValueError("Missing serving freshness status")
+    if require_current and received["stale"]:
+        raise ValueError("Production serving feed is stale for the current betting day")
     return {
         "status": "verified",
         "file_sha256": digest,
@@ -99,6 +101,7 @@ def main() -> None:
     parser.add_argument("--prepared-feed", default="api/data/feed.json")
     parser.add_argument("--base-url", default="")
     parser.add_argument("--preflight-only", action="store_true")
+    parser.add_argument("--require-current", action="store_true")
     args = parser.parse_args()
     if args.preflight_only:
         print("BLINQ_SERVING_PREFLIGHT " + json.dumps(
@@ -123,7 +126,7 @@ def main() -> None:
             )
             with urlopen(request, timeout=20) as response:
                 body = json.loads(response.read(100_000))
-            summary = validate(prepared, body)
+            summary = validate(prepared, body, require_current=args.require_current)
             print("BLINQ_SERVING_READBACK " + json.dumps(summary, sort_keys=True), flush=True)
             if summary["stale"]:
                 print("::warning::Exact serving bytes verified, but betting-day feed is stale", flush=True)
