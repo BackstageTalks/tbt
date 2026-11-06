@@ -8,6 +8,7 @@ Its very conservative boundary only quarantines an inversion larger than
 from __future__ import annotations
 
 import math
+from datetime import datetime, timezone
 
 
 def _finite_number(value: object) -> float | None:
@@ -32,3 +33,49 @@ def extreme_winner_price_inversion(probability: object, odds: object) -> bool:
     if p is None or price is None or not 0.5 <= p < 1.0 or price <= 1.0:
         return False
     return p - (1.0 / price) > 0.50 + 1e-12
+
+
+def _aware_utc_timestamp(value: object) -> datetime | None:
+    """Reject unverified or timezone-naive quote/start timestamps."""
+    try:
+        parsed = (
+            value if isinstance(value, datetime)
+            else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        )
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return None
+        return parsed.astimezone(timezone.utc)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def post_start_winner_quote(row: object) -> bool:
+    """Quarantine an explicitly timestamped winner quote not proven pre-start.
+
+    Missing capture evidence in legacy issued rows is deliberately not inferred
+    to be post-start; this contract protects new priced rows without rewriting
+    frozen history. Both provider and local quote timestamps are respected.
+    """
+    if not isinstance(row, dict):
+        return False
+    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+    if betting.get("market") not in (None, "", "match_winner"):
+        return False
+    market = (
+        row.get("match_winner_market")
+        if isinstance(row.get("match_winner_market"), dict) else {}
+    )
+    captures = [
+        value for value in (betting.get("captured_at"), market.get("captured_at"))
+        if value not in (None, "")
+    ]
+    if not captures:
+        return False
+    start = _aware_utc_timestamp(row.get("scheduled_at"))
+    if start is None:
+        return True
+    for value in captures:
+        captured = _aware_utc_timestamp(value)
+        if captured is None or captured >= start:
+            return True
+    return False
