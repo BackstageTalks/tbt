@@ -88,6 +88,7 @@ def test_private_diagnostic_workflow_is_aggregate_only_no_writer():
     assert "merge_preserving_live(" in source
     assert "raise RuntimeError(\"Current canonical identity drift detected" in source
     assert "upload_bundle" not in source
+    assert '"tour", "tournament_id", "player1_id"' in source
     # The 1 Nov logged source_manifest_sha256 is the BUNDLE manifest digest.
     # The enclosed year manifest and Parquet must be checked against its files.
     assert 'if sha(prewrite_bundle) != PREWRITE_MANIFEST_SHA:' in source
