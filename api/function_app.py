@@ -208,6 +208,17 @@ def _read_feed_with_confirmed_aces_ou():
         return base
 
 
+def _visible_issued_feed(payload):
+    """One issued-only authorization boundary for feed and match detail."""
+    public = visible_feed(payload)
+    try:
+        authority = load_authority(public["daily_offer_day"])
+    except AdminStorageUnavailable:
+        logging.exception("Publication authority unavailable; withholding active offers")
+        authority = None
+    return filter_unissued_offers(public, authority)
+
+
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
 # instance-local: durable analytics remains in Table Storage, while this only absorbs accidental
 # loops / trivial floods without keeping raw client identifiers in memory.
@@ -1246,7 +1257,7 @@ def match_intelligence(req):
         if not detail_access.get("allowed"):
             return response({"error": "match_detail_forbidden"}, 403)
         try:
-            visible = visible_feed(read_feed(FEED))
+            visible = _visible_issued_feed(read_feed(FEED))
             access_context = _access_context_with_daily_allocation(user, account_data, profile, visible, runtime_ui)
             authorized_feed, _ = filter_feed_for_access(visible, access_context, runtime_ui)
         except PermissionError:
@@ -1498,15 +1509,7 @@ def feed(req):
             return response({"error": "email_not_verified"}, 403)
         profile = _profile_for(user)
         account_data = public_account(user, cfg=settings, profile=profile)
-        source_feed = visible_feed(_read_feed_with_confirmed_aces_ou())
-        # The deployed package is a candidate. Never return active recommendations
-        # unless a durable post-deploy receipt authorizes the exact card.
-        try:
-            issued_authority = load_authority(source_feed["daily_offer_day"])
-        except AdminStorageUnavailable:
-            logging.exception("Publication authority unavailable; withholding active offers")
-            issued_authority = None
-        source_feed = filter_unissued_offers(source_feed, issued_authority)
+        source_feed = _visible_issued_feed(_read_feed_with_confirmed_aces_ou())
         try:
             source_feed = merge_settled_results(source_feed, load_settled_results_archive())
         except AdminStorageUnavailable:
