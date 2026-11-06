@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "day": "2026-11-05",
+  "mode": "receipt-and-frozen-provider-status",
+  "source_run_id": 42164364859,
+  "source_job_id": 127717246453,
+  "source_updated_at": "2026-11-06T04:45:30.742189+00:00",
+  "paid_provider_requests": 0,
+  "cdb_write": false,
+  "results_archive_write": false,
+  "telegram_delivery_authorized": true
+}
