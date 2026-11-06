@@ -302,6 +302,41 @@ class TennisEnsemble:
         return selected, evidence
 
 
+    @classmethod
+    def _selection_tour_baseline(cls, raw, labels, tour_atp, split, global_selected,
+                                 tour_calibrators):
+        """Score later selection days without fitting their outcomes.
+
+        The approved tour map in self.tour_calibrators is refitted on ALL
+        calibration rows for final serving. Reusing it to choose a second
+        evidence map would leak selection-day labels into the benchmark.
+        Refit only the approved METHOD on earlier days for this benchmark.
+        """
+        raw = np.asarray(raw, dtype=float)
+        labels = np.asarray(labels, dtype=float)
+        tour_atp = np.asarray(tour_atp, dtype=float)
+        if (raw.ndim != 1 or labels.shape != raw.shape or tour_atp.shape != raw.shape
+                or not 0 < split < len(raw) or not np.isfinite(raw).all()
+                or not np.isfinite(labels).all() or not np.isin(labels, [0, 1]).all()
+                or not np.isfinite(tour_atp).all()
+                or not np.isin(tour_atp, [0, 1]).all()):
+            raise ValueError("Invalid point-in-time tour baseline inputs")
+        baseline = cls._calibrated(global_selected, raw)
+        for tour, value in (("atp", 1.), ("wta", 0.)):
+            approved = tour_calibrators.get(tour)
+            if approved is None:
+                continue
+            if approved.kind not in {"identity", "platt", "isotonic"}:
+                raise ValueError("Invalid selected tour calibration family")
+            mask = tour_atp == value
+            fit_idx = np.flatnonzero(mask[:split])
+            if len(fit_idx) < 250 or len(np.unique(labels[fit_idx])) < 2:
+                raise ValueError("Insufficient earlier point-in-time tour evidence")
+            earlier = cls._fit_calibrator(approved.kind, raw[fit_idx],
+                                          labels[fit_idx].astype(int))
+            baseline[mask] = cls._calibrated(earlier, raw[mask])
+        return baseline
+
     @staticmethod
     def _evidence_cohorts(frame):
         """Side-symmetric pre-match feature availability, not odds or rank cutoffs."""
@@ -533,12 +568,10 @@ class TennisEnsemble:
                 # existing validated tour-specific probability.
                 actual_baseline = self._calibrated(global_selected, raw)
                 if self.tour_calibrators:
-                    tour_values = cal["tour_atp"].to_numpy(dtype=float)
-                    for tour, tour_value in (("atp", 1.), ("wta", 0.)):
-                        tour_cal = self.tour_calibrators.get(tour)
-                        mask = np.isclose(tour_values, tour_value, atol=1e-8)
-                        if tour_cal is not None and mask.any():
-                            actual_baseline[mask] = self._calibrated(tour_cal, raw[mask])
+                    actual_baseline = self._selection_tour_baseline(
+                        raw, y_cal, cal["tour_atp"].to_numpy(dtype=float),
+                        split, global_selected, self.tour_calibrators,
+                    )
                 self.evidence_calibrators, quality_evidence = (
                     self._choose_evidence_calibrators(
                         raw, y_cal, cal, split, global_selected,
