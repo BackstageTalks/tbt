@@ -564,12 +564,15 @@ def attach_confirmed_aces_ou_sidecar(feed: dict[str, Any], sidecar: Any) -> dict
         pub = item["publication"]
         scheduled = _parse_time(row.get("scheduled_at"))
         issued = _parse_time(pub.get("issued_at"))
-        projection = _finite_count(row.get("projection"))
+        # The live row's model projection can drift after the confirmed morning
+        # Telegram issue. The ORIGINAL sidecar projection must match the frozen
+        # publication, not a later model refresh of the same exact fixture.
         frozen_projection = _finite_count(item.get("projection"))
+        original_projection = _finite_count(pub.get("projection"))
         if (not scheduled or not issued or issued >= scheduled
                 or str(item.get("scheduled_at") or "") != str(row.get("scheduled_at") or "")
-                or projection is None or frozen_projection is None
-                or abs(projection - frozen_projection) > 0.011
+                or frozen_projection is None or original_projection is None
+                or abs(original_projection - frozen_projection) > 0.011
                 or str(pub.get("selection_id") or "") != key[1]
                 or key[1] not in {_player_id(row, "player1"), _player_id(row, "player2")}
                 or not verified_aces_ou_publication(pub)
