@@ -543,6 +543,7 @@ class TennisEnsemble:
         elo_weight: float,
         calibrator_kind: str,
         tour_calibrator_kinds: dict[str, str] | None = None,
+        evidence_calibrator_kinds: dict[str, str] | None = None,
         atp_blend_weight: float | None = None,
         atp_elo_weight: float | None = None,
     ):
@@ -560,6 +561,11 @@ class TennisEnsemble:
             raise ValueError("At least 300 training matches are required")
         if calibrator_kind not in {"identity", "platt", "isotonic"}:
             raise ValueError("Unsupported frozen calibrator kind")
+        cohort_kinds = evidence_calibrator_kinds or {}
+        allowed_cohorts = {f"stats_{s}_rank_{r}" for s in (0, 1) for r in (0, 1)}
+        if (set(cohort_kinds) - allowed_cohorts
+                or any(kind != "platt" for kind in cohort_kinds.values())):
+            raise ValueError("Invalid frozen evidence-calibration contract")
         if not 0.0 <= float(blend_weight) <= 1.0:
             raise ValueError("blend_weight must be 0..1")
         if not 0.0 <= float(elo_weight) <= 1.0:
@@ -612,6 +618,7 @@ class TennisEnsemble:
         self.atp_elo_weight = (None if atp_elo_weight is None else float(atp_elo_weight))
         self.calibrator = ProbabilityCalibrator()
         self.tour_calibrators = {}
+        self.evidence_calibrators = {}
         if calibrator_kind != "identity":
             raw = self._raw(cal)
             self.calibrator = self._fit_calibrator(
@@ -642,6 +649,22 @@ class TennisEnsemble:
                     kind, raw[mask], targets[mask],
                 )
 
+        if cohort_kinds:
+            # The only variables allowed to choose the frozen subgroup are
+            # point-in-time model features, not refreshed market odds or later
+            # ranks. Type and minimum-fit evidence must survive the refit.
+            raw = self._raw(cal)
+            labels = cal.target.to_numpy(dtype=int)
+            masks = self._evidence_cohorts(cal)
+            for cohort, kind in cohort_kinds.items():
+                idx = np.flatnonzero(masks[cohort])
+                if len(idx) < 250 or len(np.unique(labels[idx])) < 2:
+                    raise ValueError("Insufficient frozen evidence cohort")
+                fitted = self._fit_calibrator(kind, raw[idx], labels[idx])
+                if float(fitted.model.coef_[0, 0]) <= 0:
+                    raise ValueError("Frozen evidence calibrator lost monotonicity")
+                self.evidence_calibrators[cohort] = fitted
+
         self.metadata = {
             "objective": self.objective,
             "feature_names": self.feature_names,
@@ -655,6 +678,9 @@ class TennisEnsemble:
             "calibration_method": self.calibrator.kind,
             "tour_calibration_methods": {
                 k: v.kind for k, v in self.tour_calibrators.items()
+            },
+            "evidence_calibration_methods": {
+                k: v.kind for k, v in self.evidence_calibrators.items()
             },
             "frozen_serving_refit": True,
             "serving_calibration_matches": len(cal),
