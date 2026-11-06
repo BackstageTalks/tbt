@@ -178,6 +178,9 @@ shared-budget `_get(..., enrichment=True)` guard):
 - `tournament_season_last_matches(tournament_id, season_id, page=0)`
   requests `/api/tennis/tournament/{tournament_id}/season/{season_id}/events/last/{page}`.
   One page is not a complete season and IDs must be cross-checked independently.
+- `player_singles_results(player_id, page=0)` requests
+  `/api/tennis/player/{player_id}/events/singles/last/{page}`.
+  Rows must have unique event IDs, source-native player identities and dates.
 
 Existing `scripts/probe_tennisapi_extended_contract.py` now supports focused
 `--phase candidates --case team_year_statistics`,
@@ -202,3 +205,16 @@ does not establish live API availability. A live candidate run must record
 the exact GitHub Actions run/artifact, HTTP status, quota header, spent
 requests, response shape and no-CDB-write flag; HTTP 204/403/404 is not
 a successful source-coverage result.
+
+**User-provided sample (2026-11-06, not a separately billed API probe):**
+the `getTeamYearStatistics` payload has 5 named surface groups and 63
+reported match participations. Each group passes the following arithmetical
+identities: `firstServeTotal + secondServeTotal == totalServeAttempts`,
+`secondServePointsTotal + doubleFaults == secondServeTotal`, and
+`firstServePointsTotal + secondServePointsTotal + doubleFaults == firstServeTotal`.
+All 20 scored/total break-point and serve-point inequalities are within
+bounds. Those are sample integrity checks, not provenance/identity
+verification and not independent evidence that any canonical CDB NULL
+was enriched. The candidate probe now records surface, service-arithmetic,
+bounds, positive-match and nonempty-source checks; invalid/empty responses
+are not classified as usable coverage.
