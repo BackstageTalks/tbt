@@ -85,8 +85,11 @@ def classify_identity_drift(old, before, live) -> dict:
     # later supplies it. A missing source tournament cannot establish a
     # unique provider identity on its own; report as unresolved, not rekeyed.
     aliases = defaultdict(list)
+    near_candidates = defaultdict(list)
     for mid, j in current.items():
-        aliases[key(live, j)].append(mid)
+        k = key(live, j)
+        aliases[k].append(mid)
+        near_candidates[(k[0], k[2], k[3])].append((mid, k[1]))
 
     counts = Counter()
     missing = (set(original) | set(previous)) - set(current)
@@ -103,6 +106,22 @@ def classify_identity_drift(old, before, live) -> dict:
             counts["missing_with_ambiguous_rekey_candidates"] += 1
         else:
             counts["missing_without_strong_rekey_candidate"] += 1
+            # A corrected kickoff time changes the exact identity key. Keep
+            # near-date candidates distinct from verified rekeys: only original
+            # source-native ID/provenance and an approved repair can decide.
+            dates = near_candidates.get(
+                (candidate_key[0], candidate_key[2], candidate_key[3]), [])
+            plausible = [
+                target for target, when in dates
+                if target != mid and when is not None and candidate_key[1] is not None
+                and abs((when - candidate_key[1]).total_seconds()) <= 7 * 86400
+            ]
+            if len(plausible) == 1:
+                counts["missing_with_one_7day_time_shift_candidate"] += 1
+            elif len(plausible) > 1:
+                counts["missing_with_ambiguous_7day_time_shift_candidates"] += 1
+            else:
+                counts["missing_without_7day_time_shift_candidate"] += 1
 
     for mid in set(previous) & set(current):
         a, b = previous[mid], current[mid]
@@ -114,6 +133,15 @@ def classify_identity_drift(old, before, live) -> dict:
         swapped = (changed_pair and before_pair == after_pair[::-1])
         changed_time = before["scheduled_at"][a].as_py() != live["scheduled_at"][b].as_py()
         if changed_pair or changed_time:
+            if changed_time:
+                original_at = before["scheduled_at"][a].as_py()
+                current_at = live["scheduled_at"][b].as_py()
+                if abs((current_at - original_at).total_seconds()) <= 24 * 3600:
+                    counts["existing_id_time_shift_under_24h"] += 1
+                elif abs((current_at - original_at).total_seconds()) <= 7 * 86400:
+                    counts["existing_id_time_shift_1_to_7days"] += 1
+                else:
+                    counts["existing_id_time_shift_over_7days"] += 1
             counts["existing_id_changed_player_pair"] += int(changed_pair and not swapped)
             counts["existing_id_swapped_orientation"] += int(swapped)
             counts["existing_id_changed_scheduled_at"] += int(changed_time)
@@ -125,7 +153,13 @@ def classify_identity_drift(old, before, live) -> dict:
         "missing_with_one_strong_rekey_candidate",
         "missing_with_ambiguous_rekey_candidates",
         "missing_without_strong_rekey_candidate",
+        "missing_with_one_7day_time_shift_candidate",
+        "missing_with_ambiguous_7day_time_shift_candidates",
+        "missing_without_7day_time_shift_candidate",
         "missing_without_source_tournament_id",
+        "existing_id_time_shift_under_24h",
+        "existing_id_time_shift_1_to_7days",
+        "existing_id_time_shift_over_7days",
         "existing_id_player_or_time_conflict",
         "existing_id_changed_player_pair",
         "existing_id_swapped_orientation",
