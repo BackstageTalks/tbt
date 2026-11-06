@@ -377,7 +377,8 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
             route = f"/api/tennis/player/{player_id}/events/singles/last/0"
 
         read("candidate_" + case, route)
-        report["candidate_state"] = "response_recorded_research_only"
+        observed = report["observations"]["candidate_" + case]
+        report["candidate_state"] = "endpoint_" + str(observed["state"])
         return finish()
 
     if phase != "full":
