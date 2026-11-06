@@ -100,7 +100,7 @@ def test_candidate_research_resolves_source_ids_and_spends_two_calls(case, route
                        phase="candidates", case=case)
     assert client.paths == ["/api/tennis/event/98765", route]
     assert report["request_count"] == 2
-    assert report["candidate_state"] == "response_recorded_research_only"
+    assert report["candidate_state"] == "endpoint_available"
     assert report["candidate_context"]["source_event_id_matched"] is True
     assert report["candidate_context"]["identity_validated_for_import"] is False
     assert report["candidate_context"]["point_in_time_verified"] is False
@@ -164,4 +164,46 @@ def test_one_request_limit_stops_before_optional_endpoint():
     assert report["request_count"] == 1
     assert report["observations"]["candidate_team_year_statistics"]["state"] == (
         "budget_cap")
+    assert report["eligible_for_cdb_import"] is False
+
+
+def test_candidate_empty_response_is_no_coverage_not_success():
+    class NoCoverage(CandidateClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            if path == "/api/tennis/event/98765":
+                return super()._get(path, params=params, enrichment=enrichment)
+            assert self.request_count < self.request_limit
+            self.request_count += 1
+            self.paths.append(path)
+            return {}
+
+    client = NoCoverage()
+    report = run_probe(client, event_id=98765, max_requests=2,
+                       phase="candidates", case="team_year_statistics")
+    assert report["request_count"] == 2
+    assert report["candidate_state"] == "endpoint_no_content"
+    assert report["observations"]["candidate_team_year_statistics"]["state"] == (
+        "no_content")
+    assert report["eligible_for_cdb_import"] is False
+
+
+def test_candidate_blocked_provider_does_not_bypass_budget_guard():
+    class RequestBudgetExceeded(Exception):
+        pass
+
+    class Blocked(CandidateClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            if path == "/api/tennis/event/98765":
+                return super()._get(path, params=params, enrichment=enrichment)
+            self.request_count += 1
+            self.paths.append(path)
+            raise RequestBudgetExceeded("Provider reserve reached")
+
+    client = Blocked()
+    report = run_probe(client, event_id=98765, max_requests=2,
+                       phase="candidates", case="tournament_last_matches")
+    assert report["request_count"] == 2
+    assert report["candidate_state"] == "endpoint_error"
+    assert report["observations"]["candidate_tournament_last_matches"]["reason_code"] == (
+        "provider_reserve_reached")
     assert report["eligible_for_cdb_import"] is False
