@@ -190,7 +190,7 @@ def main() -> None:
         raise RuntimeError("Pinned 1 Nov prewrite year manifest/Parquet mismatch")
 
     current = root / "current"
-    cols = ["match_id", "player1_id", "player2_id", "scheduled_at", "stats_json"]
+    cols = ["match_id", "tour", "tournament_id", "player1_id", "player2_id", "scheduled_at", "stats_json"]
     old_table = pq.read_table(frozen, columns=cols)
     prewrite_table = pq.read_table(prewrite_file, columns=cols)
     current_table = pq.read_table(current / "history-2026.parquet", columns=cols)
