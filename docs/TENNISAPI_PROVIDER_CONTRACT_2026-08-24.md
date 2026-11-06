@@ -230,8 +230,9 @@ and page 1 **only** if page 0 has valid source player identity and
 both pages, unique event IDs per page, valid match timestamps, absence
 of overlapping IDs across pages, and non-reversed chronology.
 
-The artifact reports structural counts and payload hashes, not raw
-provider rows or canonical identities. `cdb_overlap_verified: false`
+Beyond existing source-event/player witness IDs, pagination evidence reports
+only structural counts and payload hashes, not raw page event ID lists, provider
+rows, or canonical CDB identities. `cdb_overlap_verified: false`
 is explicit: even two valid pages do **not** demonstrate any net-new
 CDB match or newly filled statistic cell. A later source-native identity
 comparison against the private CDB, through existing read-only mechanisms,
