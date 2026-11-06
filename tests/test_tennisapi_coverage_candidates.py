@@ -76,8 +76,20 @@ class CandidateClient:
             return {"event": event}
         if path.endswith("/year-statistics/2024"):
             return {"statistics": [
-                {"aces": 4, "firstServePointsScored": 10,
-                 "firstServePointsTotal": 20},
+                {"matches": 6, "groundType": "Grass", "aces": 8,
+                 "totalServeAttempts": 610, "firstServeTotal": 444,
+                 "secondServeTotal": 166, "doubleFaults": 12,
+                 "firstServePointsScored": 170, "firstServePointsTotal": 278,
+                 "secondServePointsScored": 79, "secondServePointsTotal": 154,
+                 "breakPointsScored": 18, "breakPointsTotal": 48,
+                 "opponentBreakPointsScored": 24, "opponentBreakPointsTotal": 48},
+                {"matches": 6, "groundType": "Hardcourt indoor", "aces": 8,
+                 "totalServeAttempts": 559, "firstServeTotal": 459,
+                 "secondServeTotal": 100, "doubleFaults": 8,
+                 "firstServePointsScored": 198, "firstServePointsTotal": 359,
+                 "secondServePointsScored": 49, "secondServePointsTotal": 92,
+                 "breakPointsScored": 18, "breakPointsTotal": 35,
+                 "opponentBreakPointsScored": 26, "opponentBreakPointsTotal": 52},
             ]}
         if path.endswith("/events/last/0"):
             return {"events": [
@@ -117,9 +129,14 @@ def test_year_statistics_inventory_is_aggregate_not_match_cells():
     result = run_probe(client, event_id=98765, max_requests=2,
                        phase="candidates", case="team_year_statistics")
     stats = result["observations"]["candidate_team_year_statistics"]
-    assert stats["season_stat_groups"] == 1
+    assert stats["season_stat_groups"] == 2
+    assert stats["total_matches"] == 12
+    assert stats["distinct_surfaces"] == 2
+    assert stats["groups_with_positive_matches"] == 2
+    assert stats["service_identity_checks"] == 6
+    assert stats["service_identity_violations"] == 0
     assert stats["statistic_bound_violations"] == 0
-    assert stats["non_null_fields"]["firstServePointsTotal"] == 1
+    assert stats["non_null_fields"]["firstServePointsTotal"] == 2
     assert stats["point_in_time_match_eligibility"] is False
     assert "Test P1" not in str(stats)
     assert "firstServePointsScored': 10" not in str(stats)
@@ -260,3 +277,39 @@ def test_duplicate_season_page_is_not_valid_coverage():
     assert report["candidate_state"] == "endpoint_invalid_shape"
     assert report["observations"]["candidate_tournament_last_matches"]["distinct_event_ids"] == 1
     assert report["eligible_for_cdb_import"] is False
+
+
+def test_inconsistent_service_arithmetic_is_quarantined_not_accepted():
+    class BadService(CandidateClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            response = super()._get(path, params=params, enrichment=enrichment)
+            if path.endswith("/year-statistics/2024"):
+                response["statistics"][0]["totalServeAttempts"] = 609
+            return response
+
+    report = run_probe(BadService(), event_id=98765, max_requests=2,
+                       phase="candidates", case="team_year_statistics")
+    assert report["candidate_state"] == "endpoint_invalid_statistics"
+    assert report["observations"]["candidate_team_year_statistics"][
+        "service_identity_violations"] == 1
+    assert report["eligible_for_cdb_import"] is False
+
+
+def test_duplicate_surface_breakpoints_and_zero_matches_are_rejected():
+    for issue in ("surface", "breakpoints", "matches"):
+        class BadStats(CandidateClient):
+            def _get(self, path, params=None, *, enrichment=False):
+                response = super()._get(path, params=params, enrichment=enrichment)
+                if path.endswith("/year-statistics/2024"):
+                    if issue == "surface":
+                        response["statistics"][1]["groundType"] = "Grass"
+                    elif issue == "breakpoints":
+                        response["statistics"][1]["breakPointsScored"] = 999
+                    else:
+                        response["statistics"][1]["matches"] = 0
+                return response
+
+        report = run_probe(BadStats(), event_id=98765, max_requests=2,
+                           phase="candidates", case="team_year_statistics")
+        assert report["candidate_state"] == "endpoint_invalid_statistics"
+        assert report["eligible_for_cdb_import"] is False
