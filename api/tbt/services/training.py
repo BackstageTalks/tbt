@@ -1086,9 +1086,14 @@ def train_from_matches(
     # Enabled only for new 7.2.1 research; standard and legacy fits are unchanged.
     evaluation_model.atp_blend_specialization = training_profile in {"top-7.2.1", "accuracy-7.2.2"}
     evaluation_model.accuracy_blend_selection = training_profile == "accuracy-7.2.2"
-    # 7.2.1 is frozen. New 7.2.2 research may learn smooth calibration
-    # conditional on PIT stats/rank availability, only after disjoint checks.
-    evaluation_model.evidence_calibration_selection = training_profile == "accuracy-7.2.2"
+    # New candidate only: fix current 7.2.1's coarse isotonic-plateau
+    # confidence with smooth evidence-aware calibration, subject to proper
+    # score checks on disjoint earlier calibration days. The serialized
+    # production champion is never changed in-place.
+    evaluation_model.evidence_calibration_selection = (
+        training_profile in {"top-7.2.1", "accuracy-7.2.2"}
+    )
+    evaluation_model.smooth_calibration_only = training_profile == "top-7.2.1"
     evaluation_model.fit(train, calibration)
 
     _training_progress("fit_estimators_complete", len(train))
@@ -1209,7 +1214,7 @@ def train_from_matches(
             test, test_p, production_probabilities),
         "pit_evidence_holdout": paired_evidence_holdout_diagnostics(
             test, test_p, production_probabilities,
-        ) if training_profile == "accuracy-7.2.2" else None,
+        ) if training_profile in {"top-7.2.1", "accuracy-7.2.2"} else None,
         "data_quality": quality,
         "rank_provenance": rank_provenance,
         "atp_leaderboards": {
@@ -1330,7 +1335,7 @@ def train_from_matches(
             "evidence_calibration_validation": dict(
                 (evaluation_model.metadata or {}).get("evidence_calibration_validation") or {}
             ),
-            "smooth_calibration_only": training_profile == "accuracy-7.2.2",
+            "smooth_calibration_only": training_profile in {"top-7.2.1", "accuracy-7.2.2"},
             "tour_blend_experiment": (
                 (evaluation_model.metadata or {}).get("tour_blend_experiment")
             ),
