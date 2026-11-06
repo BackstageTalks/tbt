@@ -170,3 +170,19 @@ def test_fractional_calibration_labels_are_not_coerced_to_losses():
         TennisEnsemble._choose_evidence_calibrators(
             raw, contaminated, frame, 220, ProbabilityCalibrator(),
         )
+
+
+
+def test_one_shot_722_training_uses_existing_backup_lock_pipeline_without_promotion():
+    from pathlib import Path
+
+    workflow = Path(".github/workflows/protected-frozen-cdb-candidate.yml").read_text()
+    assert "feat(722): one-shot PIT evidence calibration study" in workflow
+    assert "&& 'accuracy-7.2.2'" in workflow
+    assert "python scripts/wait_for_cdb_writer_idle.py" in workflow
+    assert "python scripts/guarded_candidate_backup.py prepare" in workflow
+    assert "python scripts/cdb_global_writer_lock.py acquire" in workflow
+    assert "python scripts/audit_training_leakage.py" in workflow
+    assert "python scripts/publish_frozen_candidate_evidence.py" in workflow
+    assert "--training-profile \"$BLINQ_TRAINING_PROFILE\"" in workflow
+    assert "# No --promote." in workflow
