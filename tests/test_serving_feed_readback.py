@@ -126,6 +126,23 @@ def test_signed_internal_route_does_not_accept_anonymous_calls(monkeypatch, tmp_
     assert function_app.internal_serving_feed_readback(None).status_code == 503
 
 
+
+def test_preflight_validates_candidate_without_token_or_http(monkeypatch, capsys, tmp_path):
+    import scripts.verify_deployed_serving_feed as verifier
+
+    monkeypatch.delenv("BLINQ_LIVE_WORKER_TOKEN", raising=False)
+    monkeypatch.setattr(verifier, "serving_feed_readback",
+                        lambda path: serving_feed_readback(path, now=NOW))
+    monkeypatch.setattr(verifier, "read_protected",
+                        lambda *_: (_ for _ in ()).throw(AssertionError("No HTTP during preflight")))
+    good = candidate(tmp_path)
+    verifier.main(["--feed", str(good), "--preflight-only"])
+    assert "BLINQ_SERVING_PREFLIGHT" in capsys.readouterr().out
+    bad = candidate(tmp_path, generated="2026-11-05T06:10:00+00:00")
+    with pytest.raises(RuntimeError, match="Refusing deployment"):
+        verifier.main(["--feed", str(bad), "--preflight-only"])
+
+
 def test_two_production_paths_require_canary_before_issuance():
     for path, confirm in [
         (".github/workflows/ci.yml", "Confirm deployed prediction publication"),
@@ -137,6 +154,8 @@ def test_two_production_paths_require_canary_before_issuance():
         deploy = yml.index("Deploy BlinQ to Azure Static Web Apps" if path.endswith("ci.yml") else "Deploy refreshed feed and application")
         issued = yml.index(confirm)
         assert deploy < check < issued
+        preflight = yml.index("python scripts/verify_deployed_serving_feed.py --preflight-only")
+        assert preflight < deploy
         assert "BLINQ_LIVE_WORKER_TOKEN:" in yml
         assert "--feed api/data/feed.json" in yml[check:issued]
     app = (ROOT / "api/function_app.py").read_text(encoding="utf-8")
