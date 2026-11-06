@@ -107,3 +107,14 @@ def test_invalid_explicit_quote_timestamp_fails_closed_without_repricing():
     sections = select_market_sections([row])
     assert sections["top_daily_picks"] == []
     assert sections["market_selection"]["selection_counts"]["post_start_quote_quarantined"] == 1
+
+
+def test_selected_local_quote_capture_wins_over_later_provider_market_refresh():
+    # Do not subordinate the user's selected local quote to an unrelated
+    # later provider refresh when judging whether that chosen bet was pre-start.
+    local = winner("LocalPrestart", .83, 1.75, 2.10)
+    local["betting"]["captured_at"] = "2026-11-06T13:55:00+00:00"
+    local["match_winner_market"]["captured_at"] = "2026-11-06T14:02:00+00:00"
+    selected = select_market_sections([local])
+    assert [pick["event_id"] for pick in selected["top_daily_picks"]] == ["LocalPrestart"]
+    assert selected["market_selection"]["selection_counts"]["post_start_quote_quarantined"] == 0
