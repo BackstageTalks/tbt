@@ -197,11 +197,17 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                 and type(event.get("id")) is int and event["id"] > 0
                 and isinstance(event.get("homeTeam"), dict)
                 and isinstance(event.get("awayTeam"), dict)
+                and type(event.get("startTimestamp")) is int
+                and event["startTimestamp"] > 0
                 for event in events
             ):
                 result["state"] = "invalid_shape"
+            elif len({event["id"] for event in events}) != len(events):
+                result["state"] = "invalid_shape"
             else:
                 result["event_rows"] = len(events)
+                result["unique_event_ids"] = len(events)
+                result["dated_event_rows"] = len(events)
     elif name in ("point_by_point", "historical_2016_point_by_point"):
         try:
             result["inventory"] = point_by_point_inventory(payload, event_id=event_id)
