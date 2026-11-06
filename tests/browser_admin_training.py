@@ -63,10 +63,14 @@ def main():
                 assert page.locator('.admin-calibration-card').first.get_by_text('BlinQ 7.2.1').is_visible()
                 assert page.get_by_text('Pre nový produkčný model zatiaľ neexistuje porovnateľná shadow vzorka', exact=False).is_visible()
                 assert page.get_by_text('Ďalší model · čaká na vyhodnotenie').is_visible()
-                button=page.locator('[data-admin-action="training-start"]')
+                guide=page.get_by_role('region',name='Odporúčaný ďalší krok tréningu')
+                assert guide.get_by_text('Krok 2 z 3 · Natrénovať kandidáta').is_visible()
+                button=guide.locator('[data-admin-action="training-start"]')
                 assert button.is_enabled(), 'New Model Factory must allow a ready guarded training'
+                assert page.locator('[data-admin-action="training-start"]').count()==1
                 assert page.get_by_text('Natrénovať a spustiť shadow').is_visible()
                 page.locator('.admin-model-factory-advanced summary').click()
+                page.locator('.admin-model-factory-release summary').click()
                 assert page.get_by_text('Aktivovať iba shadow (manuálne)').is_visible()
                 assert page.get_by_text('3 · Nasadiť do produkcie').is_visible()
                 assert page.locator('[data-admin-action="model-factory-promote"]').is_disabled()
@@ -98,6 +102,7 @@ def main():
                     document.getElementById('routePanel').innerHTML=adminTestUi.renderAdminRoute();
                     adminTestUi.wireAdmin();
                 }""")
+                page.locator('.admin-model-factory-release summary').click()
                 promote=page.locator('[data-admin-action="model-factory-promote"]')
                 assert promote.is_enabled()
                 # Native dialogs are unavailable in some embedded browsers.
