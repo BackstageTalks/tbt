@@ -432,6 +432,7 @@ class TennisEnsemble:
         self.atp_blend_weight, self.atp_elo_weight = None, None
         self.calibrator = ProbabilityCalibrator()
         self.tour_calibrators = {}
+        self.evidence_calibrators = {}
         split = calibration_split(cal) if len(cal) >= 120 else None
         self.metadata = {"objective": self.objective, "feature_names": self.feature_names,
                          "excluded_features": sorted(self.excluded_features),
@@ -504,6 +505,13 @@ class TennisEnsemble:
                 )
                 self.metadata["tour_calibration_validation"] = tour_evidence
             self.calibrator = self._fit_calibrator(kind, raw, y_cal)
+            if getattr(self, "evidence_calibration_selection", False):
+                self.evidence_calibrators, quality_evidence = (
+                    self._choose_evidence_calibrators(
+                        raw, y_cal, cal, split, global_selected,
+                    )
+                )
+                self.metadata["evidence_calibration_validation"] = quality_evidence
             if (getattr(self, "accuracy_blend_selection", False) and kind == "platt"
                     and self.calibrator.model.coef_[0, 0] <= 0):
                 self.calibrator = ProbabilityCalibrator()
@@ -512,7 +520,10 @@ class TennisEnsemble:
                                   "calibration_candidates": dict((k, v) for v, k in candidates)})
         else:
             self.metadata["calibration_fallback"] = "insufficient disjoint calendar days"
-        self.metadata.update({"blend_weight_boost": self.blend_weight,
+        self.metadata.update({"evidence_calibration_methods": {
+                                  key: cal.kind for key, cal
+                                  in self.evidence_calibrators.items()},
+                              "blend_weight_boost": self.blend_weight,
                               "elo_weight": self.elo_weight,
                               "atp_blend_weight_boost": self.atp_blend_weight,
                               "atp_elo_weight": self.atp_elo_weight,
