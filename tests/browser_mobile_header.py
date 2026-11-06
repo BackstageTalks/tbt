@@ -386,6 +386,23 @@ def main():
                     }
                 }""")
                 page.wait_for_function("!document.getElementById('bqm-dialog').open")
+                # A queued native close from a prior dialog instance must not
+                # reset ARIA/focus if the member immediately reopens the menu.
+                page.evaluate("""() => {
+                    const dialog=document.getElementById('bqm-dialog');
+                    const brand=document.querySelector('.header-top > .brand');
+                    brand.click();
+                    dialog.querySelector('button[aria-label="Zavrieť menu"]').click();
+                    brand.click();
+                    if (!dialog.open || brand.getAttribute('aria-expanded') !== 'true') {
+                        throw Error('rapid close/reopen lost expanded menu');
+                    }
+                }""")
+                page.wait_for_timeout(40)
+                assert page.locator('#bqm-dialog').is_visible()
+                assert page.locator('.header-top > .brand').get_attribute('aria-expanded')=='true'
+                page.get_by_role('button',name='Zavrieť menu').click()
+                page.wait_for_function("document.querySelector('.header-top > .brand').getAttribute('aria-expanded')==='false'")
                 page.evaluate("""() => {mobileTest.state.feed.account.plan='rookie';mobileTest.renderInsightBell();}""")
                 live_geom=page.evaluate("""() => {
                     const b=document.querySelector('#insightShortcut').getBoundingClientRect();
