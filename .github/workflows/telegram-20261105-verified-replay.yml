@@ -1,0 +1,121 @@
+name: BlinQ one-time 5 Nov source-verified Telegram Results replay
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/telegram-20261105-verified-replay-request.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-telegram-ledger
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Refuse stale or unrelated source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          test "$GITHUB_SHA" = "$(git rev-parse origin/main)"
+          test -s .github/telegram-20261105-verified-replay-request.json
+          test -s scripts/telegram_20261105_verified_statuses.json
+
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: telegram-bot-state
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: .private-telegram
+          sparse-checkout: ops
+          sparse-checkout-cone-mode: true
+          persist-credentials: true
+      - name: Install canonical results grader dependencies
+        run: python -m pip install -r api/requirements.txt
+      - name: Prepare only exact 5 Nov verified and settled Results
+        id: prepare
+        env:
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          test -s .private-telegram/ops/telegram-bot-state.json
+          PYTHONPATH=api:scripts python scripts/telegram_20261105_verified_replay.py prepare \
+            --api-url "$BLINQ_PRODUCTION_URL" \
+            --config-url "$BLINQ_PRODUCTION_URL/api/v1/ui-config" \
+            --state .private-telegram/ops/telegram-bot-state.json
+          if test -s /tmp/blinq-telegram/ready; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Results already reserved/sent. No duplicate Telegram request."
+          fi
+
+      - name: Persist exact Results reservation before any Telegram send
+        if: steps.prepare.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/blinq-telegram/state.json .private-telegram/ops/telegram-bot-state.json
+          git -C .private-telegram config user.name "github-actions[bot]"
+          git -C .private-telegram config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C .private-telegram add ops/telegram-bot-state.json
+          git -C .private-telegram commit -m "Reserve verified 5 Nov Telegram Results [skip ci]"
+          git -C .private-telegram push origin HEAD:telegram-bot-state
+          expected="$(git -C .private-telegram rev-parse HEAD)"
+          actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
+          test "$expected" = "$actual" || { echo "::error::Results reservation read-back failed"; exit 1; }
+
+      - name: Send exact ELITE Results once using existing Telegram publisher
+        if: steps.prepare.outputs.ready == 'true'
+        env:
+          TGB: ${{ secrets.TGB }}
+          TGCH: ${{ secrets.TGCH }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/telegram_offer_publisher.py send
+          test -s /tmp/blinq-telegram/receipt.json
+
+      - name: Persist and independently read back exact Telegram message IDs
+        if: steps.prepare.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/telegram_offer_publisher.py mark-sent
+          cp /tmp/blinq-telegram/state.json .private-telegram/ops/telegram-bot-state.json
+          git -C .private-telegram add ops/telegram-bot-state.json
+          git -C .private-telegram commit -m "Confirm 5 Nov Telegram Results receipt [skip ci]"
+          git -C .private-telegram push origin HEAD:telegram-bot-state
+          expected="$(git -C .private-telegram rev-parse HEAD)"
+          actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
+          test "$expected" = "$actual"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          state=json.loads(Path('.private-telegram/ops/telegram-bot-state.json').read_text())
+          done=state.get('attempts',{}).get('results:2026-11-05',{})
+          assert done.get('status') == 'sent'
+          assert done.get('counts',{}).get('pending') == 0
+          ids=done.get('message_ids') or []
+          assert len(ids) == 1 and all(type(i) is int and i > 0 for i in ids)
+          print('TELEGRAM_5NOV_RESULTS_SENT ' + json.dumps({
+              'message_ids': ids, 'counts': done.get('counts'),
+              'source_run': done.get('witness_run_id'),
+          }, sort_keys=True))
+          PY
