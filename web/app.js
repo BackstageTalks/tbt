@@ -4237,7 +4237,7 @@
     const dayRows=daysWithResults.map((day,index)=>{
       const cells=levelData.map(level=>{
         const d=level.metrics?.daily;
-        if(!d)return '<td class="monthly-cell-na" title="Pravidlá levelu nedostupné">—</td>';
+        if(!d)return '<td class="monthly-cell-na" aria-label="Pravidlá levelu nedostupné">—</td>';
         if(!d.has(day))return '<td class="monthly-cell-empty" aria-label="Bez vyúčtovaných tipov">·</td>';
         const value=d.get(day);
         return '<td class="monthly-unit'+moneyClass(value)+'">'+escapeHtml(signed(value))+' u</td>';
@@ -4258,7 +4258,7 @@
       '<div class="monthly-level-heading"><div><h3>Výkon podľa levelu</h3><p>Vyber level pre KPI a graf. Úrovne porovnávame samostatne.</p></div></div>'+
       '<div class="monthly-level-switch" role="group" aria-label="Výber levelu">'+levelData.map(level=>
         '<button type="button" data-monthly-level="'+level.id+'" class="'+selectedClass(level)+'" aria-pressed="'+
-        (level.id===currentLevel?'true':'false')+'"'+(level.available?'':' disabled title="Pravidlá levelu nie sú dostupné"')+
+        (level.id===currentLevel?'true':'false')+'"'+(level.available?'':' disabled aria-description="Pravidlá levelu nie sú dostupné"')+
         '>'+escapeHtml(level.label)+'</button>').join('')+'</div>'+
       '<div class="monthly-stats">'+cards+'</div>'+
       '<section class="monthly-chart-card"><div class="monthly-card-heading"><h3>Kumulatívny profit · '+escapeHtml(active.label)+'</h3>'+
