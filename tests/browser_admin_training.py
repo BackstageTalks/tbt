@@ -91,7 +91,7 @@ def main():
                 assert page.evaluate('trainingCalls[1]===undefined')
                 assert page.locator('[data-admin-action="training-start"]').is_disabled()
                 assert page.locator('[data-admin-action="model-factory-next"]').is_disabled()
-                assert page.get_by_text('Požiadavka uložená.', exact=True).is_visible()
+                assert page.locator('.model-factory-guided').get_by_text('Požiadavka uložená.', exact=True).is_visible()
                 assert page.locator('[data-model-lab-operation="activate_shadow"]').is_disabled()
                 assert page.locator('[data-model-lab-operation="import_drive"]').count()==1
                 page.evaluate("""() => {
