@@ -874,6 +874,68 @@ def paired_wta_holdout_diagnostics(test, candidate_p, champion_p):
             "never_select_model_on_this_holdout": True}
 
 
+def paired_evidence_holdout_diagnostics(test, candidate_p, champion_p=None):
+    """Read-only point-in-time cohort scores on the identical untouched holdout.
+
+    A candidate is not promoted by this diagnostic. The training/calibration
+    choices are frozen before the final chronological test set is scored.
+    """
+    if test.empty:
+        return {"status": "NO_ELIGIBLE_HOLDOUT", "cohorts": {}}
+    candidate = np.asarray(candidate_p, dtype=float)
+    champion = None if champion_p is None else np.asarray(champion_p, dtype=float)
+    if (len(candidate) != len(test) or not np.isfinite(candidate).all()
+            or (champion is not None and
+                (len(champion) != len(test) or not np.isfinite(champion).all()))):
+        raise ValueError("Evidence holdout requires same-fixture finite predictions")
+
+    result = {}
+    labels = test["target"].to_numpy(dtype=int)
+    for cohort, mask in TennisEnsemble._evidence_cohorts(test).items():
+        ids = np.flatnonzero(mask)
+        if not len(ids):
+            result[cohort] = {"n": 0, "candidate": None, "champion": None}
+            continue
+
+        def scored(probs):
+            p = probs[ids]
+            y = labels[ids]
+            metrics = evaluate_probabilities(y, p)
+            confident = np.maximum(p, 1 - p) >= .8
+            hits = (p >= .5) == y
+            return {
+                "n": len(ids),
+                "accuracy": metrics["accuracy"],
+                "log_loss": metrics["log_loss"],
+                "brier_score": metrics["brier_score"],
+                "mean_confidence": metrics["mean_confidence"],
+                "top80_count": int(confident.sum()),
+                "top80_win_rate": (float(hits[confident].mean())
+                                   if confident.any() else None),
+                "top80_coverage": float(confident.mean()),
+            }
+
+        candidate_stats = scored(candidate)
+        baseline_stats = scored(champion) if champion is not None else None
+        result[cohort] = {
+            "n": len(ids),
+            "candidate": candidate_stats,
+            "champion": baseline_stats,
+            "same_fixture_log_loss_delta": (
+                candidate_stats["log_loss"] - baseline_stats["log_loss"]
+                if baseline_stats else None
+            ),
+            "same_fixture_brier_delta": (
+                candidate_stats["brier_score"] - baseline_stats["brier_score"]
+                if baseline_stats else None
+            ),
+            "small_sample": len(ids) < 100,
+        }
+    return {"status": ("PAIRED_UNSEEN_HOLDOUT" if champion is not None
+                       else "CANDIDATE_ONLY_NOT_PROMOTION_READY"),
+            "cohorts": result, "holdout_only": True, "never_select_on_holdout": True}
+
+
 def train_from_matches(
     matches: Iterable[
         MatchRecord
@@ -1145,6 +1207,9 @@ def train_from_matches(
         "delta_vs_production": delta_vs_production,
         "wta_regression_diagnostics": paired_wta_holdout_diagnostics(
             test, test_p, production_probabilities),
+        "pit_evidence_holdout": paired_evidence_holdout_diagnostics(
+            test, test_p, production_probabilities,
+        ) if training_profile == "accuracy-7.2.2" else None,
         "data_quality": quality,
         "rank_provenance": rank_provenance,
         "atp_leaderboards": {
@@ -1259,6 +1324,12 @@ def train_from_matches(
         "subgroups": subgroup_report(test, test_p),
         "evaluation_model": {
             "accuracy_blend_validation": (evaluation_model.metadata or {}).get("accuracy_blend_validation"),
+            "evidence_calibration_methods": dict(
+                (evaluation_model.metadata or {}).get("evidence_calibration_methods") or {}
+            ),
+            "evidence_calibration_validation": dict(
+                (evaluation_model.metadata or {}).get("evidence_calibration_validation") or {}
+            ),
             "smooth_calibration_only": training_profile == "accuracy-7.2.2",
             "tour_blend_experiment": (
                 (evaluation_model.metadata or {}).get("tour_blend_experiment")
