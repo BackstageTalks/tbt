@@ -70,8 +70,38 @@ def test_prepare_feed_with_no_candidate_overwrites_stale_checked_in_feed(monkeyp
     monkeypatch.setattr(prepare_feed, "ROOT", tmp_path)
     monkeypatch.setattr(prepare_feed, "ReleaseStore", Store)
     monkeypatch.setenv("GH_TOKEN", "token")
+    monkeypatch.setenv("BLINQ_ALLOW_EMPTY_PREDICTION_BOOTSTRAP", "true")
     prepare_feed.main()
     assert json.loads(target.read_text()) == empty_feed()
+
+
+
+def test_prepare_feed_fails_closed_on_absent_private_candidate_in_production(monkeypatch, tmp_path):
+    target = tmp_path / "api/data/feed.json"
+    target.parent.mkdir(parents=True)
+    previous = _valid_feed("last-valid-release")
+    target.write_text(json.dumps(previous))
+
+    class Store:
+        def __init__(self, *args):
+            pass
+
+        def _asset_names(self):
+            return set()
+
+        def download(self, *args, **kwargs):
+            raise AssertionError("No verified assets should be downloaded")
+
+    monkeypatch.setattr(prepare_feed, "ROOT", tmp_path)
+    monkeypatch.setattr(prepare_feed, "ReleaseStore", Store)
+    monkeypatch.setenv("GH_TOKEN", "token")
+    monkeypatch.delenv("BLINQ_ALLOW_EMPTY_PREDICTION_BOOTSTRAP", raising=False)
+
+    with pytest.raises(RuntimeError, match="refusing an empty production feed"):
+        prepare_feed.main()
+
+    # A failed build cannot overwrite the previously verified local snapshot.
+    assert json.loads(target.read_text()) == previous
 
 
 def test_prepare_and_confirm_restore_same_issued_market_snapshot(monkeypatch, tmp_path):

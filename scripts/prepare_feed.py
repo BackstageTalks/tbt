@@ -655,6 +655,14 @@ def main() -> None:
         cache = ROOT / ".cache/tbt/deploy-predictions"
         store = ReleaseStore(repository, "tbt-predictions-v1", cache)
         state = _prediction_asset_state(store)
+        if state == "absent" and os.getenv("BLINQ_ALLOW_EMPTY_PREDICTION_BOOTSTRAP") != "true":
+            # A production release can temporarily lose its private asset
+            # listing. Never replace the last valid serving generation with
+            # an all-empty feed or mark that empty deployment as a success.
+            # A deliberate first-ever bootstrap must opt in explicitly.
+            raise RuntimeError(
+                "No private prediction candidate: refusing an empty production feed deployment"
+            )
         if state == "complete":
             assets = store._asset_names()
             optional = (COMPARATOR_ASSET,) if COMPARATOR_ASSET in assets else ()

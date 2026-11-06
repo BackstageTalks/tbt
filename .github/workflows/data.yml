@@ -1,7 +1,7 @@
 name: Tennis data and predictions
 # Only an authenticated Model Lab request carries an operation marker.
 # Preserve ordinary workflow names for all automatic/provider jobs.
-run-name: ${{ inputs.request_id && format('BlinQ inputs refresh {0}', inputs.request_id) || 'Tennis data and predictions' }}
+run-name: ${{ inputs.stale_handoff_run_id && format('BlinQ safe deploy handoff {0}', inputs.stale_handoff_run_id) || inputs.request_id && format('BlinQ inputs refresh {0}', inputs.request_id) || 'Tennis data and predictions' }}
 on:
   push:
     branches: [main]
@@ -12,6 +12,10 @@ on:
     inputs:
       request_id:
         description: Internal Model Lab correlation ID; leave blank for normal runs
+        type: string
+        default: ''
+      stale_handoff_run_id:
+        description: Internal parent Actions run ID for no-provider stale-deploy recovery
         type: string
         default: ''
       mode:
@@ -310,6 +314,16 @@ jobs:
           set -euo pipefail
           [[ "$ADMIN_REFRESH_ID" =~ ^[0-9a-f]{24}$ ]] || { echo "::error::Invalid Model Lab request ID"; exit 1; }
           [[ "$MODE" == "current-refresh" && "$PROMOTE" != "true" ]] || { echo "::error::Model Lab operation is current-refresh only, without promotion"; exit 1; }
+
+      - name: Validate zero-provider stale-deploy handoff
+        if: inputs.stale_handoff_run_id != ''
+        env:
+          HANDOFF_RUN_ID: ${{ inputs.stale_handoff_run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$MODE" == "deploy-current" ]] || { echo "::error::Handoff must be deploy-current"; exit 1; }
+          [[ "$HANDOFF_RUN_ID" =~ ^[0-9]{6,20}$ ]] || { echo "::error::Invalid handoff run ID"; exit 1; }
 
       - name: Reject training without protected backup workflow
         shell: bash
@@ -986,6 +1000,8 @@ jobs:
     concurrency:
       group: tbt-production-deploy
       cancel-in-progress: false
+    outputs:
+      stale_skip: ${{ steps.stale_preflight.outputs.stale == 'true' || steps.stale_before_upload.outputs.stale == 'true' }}
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
@@ -1000,6 +1016,7 @@ jobs:
           python-version: '3.11'
 
       - name: Guard against stale application deployment
+        id: stale_preflight
         shell: bash
         run: |
           set -euo pipefail
@@ -1009,6 +1026,7 @@ jobs:
           if [[ "$current" != "$latest" ]]; then
             echo "::notice::Skipping deployment: this data workflow started on $current but main is now $latest. The next application deploy will consume the latest private prediction generation."
             echo "BLINQ_SKIP_STALE_DEPLOY=true" >> "$GITHUB_ENV"
+            echo "stale=true" >> "$GITHUB_OUTPUT"
           else
             echo "BLINQ_SKIP_STALE_DEPLOY=false" >> "$GITHUB_ENV"
           fi
@@ -1046,6 +1064,7 @@ jobs:
         run: python scripts/clean_generated_artifacts.py
 
       - name: Recheck latest main and stamp deployed frontend
+        id: stale_before_upload
         if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         shell: bash
         run: |
@@ -1056,6 +1075,7 @@ jobs:
           if [[ "$current" != "$latest" || "$GITHUB_SHA" != "$latest" ]]; then
             echo "::warning::Skipping old data-redeploy $current: main is now $latest."
             echo "BLINQ_SKIP_STALE_DEPLOY=true" >> "$GITHUB_ENV"
+            echo "stale=true" >> "$GITHUB_OUTPUT"
           else
             python scripts/stamp_web_deployment.py --web web --sha "$GITHUB_SHA"
           fi
@@ -1110,7 +1130,9 @@ jobs:
           done
 
       - name: Capture market immediately after publication
-        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
+        # The zero-provider handoff only republishes an existing candidate.
+        # Never dispatch optional PropLine/odds CLV jobs from that rescue.
+        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true' && inputs.stale_handoff_run_id == ''
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1121,12 +1143,97 @@ jobs:
           gh workflow run the-odds-clv.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f reason=publication
 
+      # An automatic recovery must NOT report green without publishing. The
+      # parent handoff job below handles stale ordinary refreshes; the bounded
+      # deploy-current child never recursively dispatches itself.
+      - name: Fail closed if a no-provider handoff itself became stale
+        if: env.BLINQ_SKIP_STALE_DEPLOY == 'true' && inputs.mode == 'deploy-current'
+        run: |
+          echo "::error::deploy-current was superseded before publication; no verified serving release"
+          exit 1
+
+  stale_deploy_handoff:
+    name: Recover superseded prediction deploy without paid providers
+    needs: [pipeline, deploy]
+    if: >-
+      needs.pipeline.result == 'success' &&
+      needs.deploy.result == 'success' &&
+      needs.deploy.outputs.stale_skip == 'true' &&
+      inputs.mode != 'deploy-current'
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BLINQ_BASE_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+    steps:
+      - name: Dispatch or resume exact no-provider deploy-current on latest main
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          title="BlinQ safe deploy handoff $GITHUB_RUN_ID"
+          list_runs() {
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/data.yml/runs?event=workflow_dispatch&per_page=100"
+          }
+          find_child() {
+            jq -r --arg title "$title" '[.workflow_runs[] | select(.display_title == $title) | .id] | max // empty'
+          }
+          child="$(list_runs | find_child)"
+          if [[ -z "$child" ]]; then
+            echo "Stale revision: dispatching latest main with deploy-current only (zero TennisAPI/PropLine calls)."
+            gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main \
+              -f mode=deploy-current -f max_requests=1 \
+              -f stale_handoff_run_id="$GITHUB_RUN_ID"
+            for attempt in $(seq 1 45); do
+              child="$(list_runs | find_child)"
+              [[ -n "$child" ]] && break
+              sleep 2
+            done
+          fi
+          [[ "$child" =~ ^[0-9]+$ ]] || { echo "::error::Cannot verify handoff run identity"; exit 1; }
+          echo "No-provider child: https://github.com/$GITHUB_REPOSITORY/actions/runs/$child"
+          conclusion=""
+          info=""
+          for attempt in $(seq 1 220); do
+            info="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$child")"
+            status="$(jq -r '.status' <<<"$info")"
+            conclusion="$(jq -r '.conclusion // empty' <<<"$info")"
+            if [[ "$status" == completed ]]; then break; fi
+            sleep 15
+          done
+          if [[ "$(jq -r '.status' <<<"$info")" != completed || "$conclusion" != success ]]; then
+            echo "::error::No-provider handoff did not publish successfully (child=$child conclusion=$conclusion)"
+            exit 1
+          fi
+          sha="$(jq -r '.head_sha // empty' <<<"$info")"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid recovered deploy SHA"; exit 1; }
+          base="${BLINQ_BASE_URL%/}"
+          for attempt in $(seq 1 8); do
+            if curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' \
+                "$base/deployment.json?handoff=$child-$attempt" -o /tmp/blinq-deferred-deploy.json &&
+               EXPECTED_SHA="$sha" python - <<'PYVERIFY'
+          import json, os
+          with open('/tmp/blinq-deferred-deploy.json', encoding='utf-8') as file:
+              actual=json.load(file)['git_sha']
+          assert actual == os.environ['EXPECTED_SHA'], (actual, os.environ['EXPECTED_SHA'])
+          PYVERIFY
+            then
+              echo "Verified exact no-provider recovered deployment SHA=$sha child=$child"
+              echo "Handoff run $child: exact deployed revision verified" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep $((attempt * 2))
+          done
+          echo "::error::Handoff run completed but exact public deployed revision was not verified"
+          exit 1
+
   morning_presentation:
     name: Optional photos and profiles after morning publish
     needs: [pipeline, deploy]
     if: >-
       needs.pipeline.result == 'success' &&
       needs.deploy.result == 'success' &&
+      needs.deploy.outputs.stale_skip != 'true' &&
       inputs.mode == 'refresh' && inputs.morning_refresh == true
     runs-on: ubuntu-latest
     timeout-minutes: 120
