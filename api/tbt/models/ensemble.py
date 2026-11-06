@@ -77,6 +77,7 @@ class TennisEnsemble:
         self.calibrator = ProbabilityCalibrator()
         # New v7.2.1 experiment only; old models load through getattr fallback.
         self.tour_calibrators: dict[str, ProbabilityCalibrator] = {}
+        self.evidence_calibrators: dict[str, ProbabilityCalibrator] = {}
         self.version = datetime.now(timezone.utc).strftime("v201-%Y%m%dT%H%M%S%fZ")
         self.metadata: dict[str, Any] = {}
         self.fitted = False
@@ -300,21 +301,101 @@ class TennisEnsemble:
             }
         return selected, evidence
 
+
+    @staticmethod
+    def _evidence_cohorts(frame):
+        """Side-symmetric pre-match feature availability, not odds or rank cutoffs."""
+        required = {"stats_known_both", "rank_known_both"}
+        if not required.issubset(frame.columns):
+            raise ValueError("Evidence calibration requires point-in-time availability flags")
+        stats = frame["stats_known_both"].to_numpy(dtype=float)
+        ranks = frame["rank_known_both"].to_numpy(dtype=float)
+        if any(not np.isfinite(values).all() or not np.isin(values, [0., 1.]).all()
+               for values in (stats, ranks)):
+            raise ValueError("Nonbinary or missing point-in-time availability evidence")
+        return {
+            f"stats_{s}_rank_{r}": (stats == float(s)) & (ranks == float(r))
+            for s in (0, 1) for r in (0, 1)
+        }
+
+    @classmethod
+    def _choose_evidence_calibrators(cls, raw, labels, frame, split, global_selected):
+        """Approve monotone quality calibration on disjoint later days only.
+
+        Match outcomes are used ONLY in the earlier calibration period, never
+        the final holdout. No arbitrary bookmaker-price or ranking ban.
+        """
+        raw = np.asarray(raw, dtype=float)
+        labels = np.asarray(labels, dtype=float)
+        if (raw.ndim != 1 or labels.ndim != 1 or len(raw) != len(labels)
+                or len(raw) != len(frame) or not 0 < split < len(raw)
+                or not np.isfinite(raw).all() or not np.isfinite(labels).all()
+                or not np.isin(labels, [0, 1]).all()):
+            raise ValueError("Invalid evidence calibration inputs")
+        labels = labels.astype(int)
+        baseline = cls._calibrated(global_selected, raw)
+        selected, evidence = {}, {}
+        for cohort, mask in cls._evidence_cohorts(frame).items():
+            fit_idx = np.flatnonzero(mask[:split])
+            select_idx = np.flatnonzero(mask[split:]) + split
+            audit = {"fit_n": int(len(fit_idx)),
+                     "selection_n": int(len(select_idx)),
+                     "baseline_kind": global_selected.kind,
+                     "calibrator_family": "monotone_platt",
+                     "evaluation": "disjoint_calibration_days"}
+            if (len(fit_idx) < 250 or len(select_idx) < 120
+                    or len(np.unique(labels[fit_idx])) < 2
+                    or len(np.unique(labels[select_idx])) < 2):
+                evidence[cohort] = {**audit, "status": "INSUFFICIENT_DISJOINT_CALIBRATION"}
+                continue
+            original = baseline[select_idx]
+            base_loss = float(log_loss(labels[select_idx], original, labels=[0, 1]))
+            base_brier = float(np.mean((original - labels[select_idx]) ** 2))
+            fitted = cls._fit_calibrator("platt", raw[fit_idx], labels[fit_idx])
+            slope = float(fitted.model.coef_[0, 0])
+            audit.update({"global_selection_log_loss": base_loss,
+                          "global_selection_brier": base_brier})
+            if not np.isfinite(slope) or slope <= 0:
+                evidence[cohort] = {**audit, "status": "NONMONOTONE_REJECTED"}
+                continue
+            alternative = cls._calibrated(fitted, raw[select_idx])
+            loss = float(log_loss(labels[select_idx], alternative, labels=[0, 1]))
+            brier = float(np.mean((alternative - labels[select_idx]) ** 2))
+            accepted = loss + .008 < base_loss and brier <= base_brier + 1e-12
+            audit.update({"candidate_selection_log_loss": loss,
+                          "candidate_selection_brier": brier,
+                          "minimum_log_loss_improvement": .008,
+                          "brier_non_regression_required": True})
+            if accepted:
+                all_idx = np.flatnonzero(mask)
+                final = cls._fit_calibrator("platt", raw[all_idx], labels[all_idx])
+                if float(final.model.coef_[0, 0]) > 0:
+                    selected[cohort] = final
+                else:
+                    accepted = False
+            evidence[cohort] = {**audit, "status": "SELECTED" if accepted else "GLOBAL_RETAINED"}
+        return selected, evidence
+
     def _predict_with_tour_calibration(self, frame, raw):
         p = self._calibrated(self.calibrator, raw)
         tour_calibrators = getattr(self, "tour_calibrators", {}) or {}
-        if not tour_calibrators:
-            return p
-        tour_values = frame["tour_atp"].to_numpy(dtype=float)
-        if not np.isfinite(tour_values).all():
-            raise ValueError("Tour-specific calibration requires valid tour_atp")
-        for tour, value in (("atp", 1.), ("wta", 0.)):
-            calibrator = tour_calibrators.get(tour)
-            if calibrator is None:
-                continue
-            mask = np.isclose(tour_values, value, atol=1e-8)
-            if mask.any():
-                p[mask] = self._calibrated(calibrator, raw[mask])
+        if tour_calibrators:
+            tour_values = frame["tour_atp"].to_numpy(dtype=float)
+            if not np.isfinite(tour_values).all():
+                raise ValueError("Tour-specific calibration requires valid tour_atp")
+            for tour, value in (("atp", 1.), ("wta", 0.)):
+                calibrator = tour_calibrators.get(tour)
+                if calibrator is None:
+                    continue
+                mask = np.isclose(tour_values, value, atol=1e-8)
+                if mask.any():
+                    p[mask] = self._calibrated(calibrator, raw[mask])
+        conditional = getattr(self, "evidence_calibrators", {}) or {}
+        if conditional:
+            for cohort, mask in self._evidence_cohorts(frame).items():
+                calibrator = conditional.get(cohort)
+                if calibrator is not None and mask.any():
+                    p[mask] = self._calibrated(calibrator, raw[mask])
         return np.clip(p, .01, .99)
 
     def fit(self, train_frame, calibration_frame):
@@ -352,6 +433,7 @@ class TennisEnsemble:
         self.atp_blend_weight, self.atp_elo_weight = None, None
         self.calibrator = ProbabilityCalibrator()
         self.tour_calibrators = {}
+        self.evidence_calibrators = {}
         split = calibration_split(cal) if len(cal) >= 120 else None
         self.metadata = {"objective": self.objective, "feature_names": self.feature_names,
                          "excluded_features": sorted(self.excluded_features),
@@ -424,6 +506,13 @@ class TennisEnsemble:
                 )
                 self.metadata["tour_calibration_validation"] = tour_evidence
             self.calibrator = self._fit_calibrator(kind, raw, y_cal)
+            if getattr(self, "evidence_calibration_selection", False):
+                self.evidence_calibrators, quality_evidence = (
+                    self._choose_evidence_calibrators(
+                        raw, y_cal, cal, split, global_selected,
+                    )
+                )
+                self.metadata["evidence_calibration_validation"] = quality_evidence
             if (getattr(self, "accuracy_blend_selection", False) and kind == "platt"
                     and self.calibrator.model.coef_[0, 0] <= 0):
                 self.calibrator = ProbabilityCalibrator()
@@ -432,7 +521,10 @@ class TennisEnsemble:
                                   "calibration_candidates": dict((k, v) for v, k in candidates)})
         else:
             self.metadata["calibration_fallback"] = "insufficient disjoint calendar days"
-        self.metadata.update({"blend_weight_boost": self.blend_weight,
+        self.metadata.update({"evidence_calibration_methods": {
+                                  key: cal.kind for key, cal
+                                  in self.evidence_calibrators.items()},
+                              "blend_weight_boost": self.blend_weight,
                               "elo_weight": self.elo_weight,
                               "atp_blend_weight_boost": self.atp_blend_weight,
                               "atp_elo_weight": self.atp_elo_weight,
@@ -452,6 +544,7 @@ class TennisEnsemble:
         elo_weight: float,
         calibrator_kind: str,
         tour_calibrator_kinds: dict[str, str] | None = None,
+        evidence_calibrator_kinds: dict[str, str] | None = None,
         atp_blend_weight: float | None = None,
         atp_elo_weight: float | None = None,
     ):
@@ -469,6 +562,11 @@ class TennisEnsemble:
             raise ValueError("At least 300 training matches are required")
         if calibrator_kind not in {"identity", "platt", "isotonic"}:
             raise ValueError("Unsupported frozen calibrator kind")
+        cohort_kinds = evidence_calibrator_kinds or {}
+        allowed_cohorts = {f"stats_{s}_rank_{r}" for s in (0, 1) for r in (0, 1)}
+        if (set(cohort_kinds) - allowed_cohorts
+                or any(kind != "platt" for kind in cohort_kinds.values())):
+            raise ValueError("Invalid frozen evidence-calibration contract")
         if not 0.0 <= float(blend_weight) <= 1.0:
             raise ValueError("blend_weight must be 0..1")
         if not 0.0 <= float(elo_weight) <= 1.0:
@@ -521,6 +619,7 @@ class TennisEnsemble:
         self.atp_elo_weight = (None if atp_elo_weight is None else float(atp_elo_weight))
         self.calibrator = ProbabilityCalibrator()
         self.tour_calibrators = {}
+        self.evidence_calibrators = {}
         if calibrator_kind != "identity":
             raw = self._raw(cal)
             self.calibrator = self._fit_calibrator(
@@ -551,6 +650,22 @@ class TennisEnsemble:
                     kind, raw[mask], targets[mask],
                 )
 
+        if cohort_kinds:
+            # The only variables allowed to choose the frozen subgroup are
+            # point-in-time model features, not refreshed market odds or later
+            # ranks. Type and minimum-fit evidence must survive the refit.
+            raw = self._raw(cal)
+            labels = cal.target.to_numpy(dtype=int)
+            masks = self._evidence_cohorts(cal)
+            for cohort, kind in cohort_kinds.items():
+                idx = np.flatnonzero(masks[cohort])
+                if len(idx) < 250 or len(np.unique(labels[idx])) < 2:
+                    raise ValueError("Insufficient frozen evidence cohort")
+                fitted = self._fit_calibrator(kind, raw[idx], labels[idx])
+                if float(fitted.model.coef_[0, 0]) <= 0:
+                    raise ValueError("Frozen evidence calibrator lost monotonicity")
+                self.evidence_calibrators[cohort] = fitted
+
         self.metadata = {
             "objective": self.objective,
             "feature_names": self.feature_names,
@@ -564,6 +679,9 @@ class TennisEnsemble:
             "calibration_method": self.calibrator.kind,
             "tour_calibration_methods": {
                 k: v.kind for k, v in self.tour_calibrators.items()
+            },
+            "evidence_calibration_methods": {
+                k: v.kind for k, v in self.evidence_calibrators.items()
             },
             "frozen_serving_refit": True,
             "serving_calibration_matches": len(cal),
