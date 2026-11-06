@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import pyarrow as pa
 import pytest
 
-from audit_cdb_2026_missing_identity import compare_origins
+from audit_cdb_2026_missing_identity import compare_origins, classify_identity_drift
 
 
 def table(names):
@@ -93,3 +93,60 @@ def test_private_diagnostic_workflow_is_aggregate_only_no_writer():
     assert 'if sha(prewrite_bundle) != PREWRITE_MANIFEST_SHA:' in source
     assert 'covered[name].get("sha256") != sha(path)' in source
     assert 'if sha(prewrite_manifest_path) != PREWRITE_MANIFEST_SHA:' not in source
+
+
+def test_missing_identity_candidate_is_only_classified_not_recovered():
+    when = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
+    def records(rows):
+        return pa.Table.from_pylist([
+            {"match_id": id, "tour": "atp", "tournament_id": tourn,
+             "player1_id": p1, "player2_id": p2, "scheduled_at": when}
+            for id, tourn, p1, p2 in rows
+        ])
+    old = records([
+        ("old-original", "tourn-A", "player-a", "player-b"),
+        ("unresolved", "tourn-X", "player-x", "player-y"),
+        ("missing-no-tourn", "", "player-p", "player-q"),
+    ])
+    prewrite = records([("original-live", "tourn-B", "player-c", "player-d")])
+    current = records([
+        ("new-match-id", "tourn-A", "player-b", "player-a"),
+        ("original-live", "tourn-B", "player-c", "player-d"),
+        ("new-no-tourn", "", "player-p", "player-q"),
+    ])
+    report = classify_identity_drift(old, prewrite, current)
+    assert report["unique_missing_source_ids"] == 3
+    assert report["missing_with_one_strong_rekey_candidate"] == 1
+    assert report["missing_without_strong_rekey_candidate"] == 1
+    assert report["missing_without_source_tournament_id"] == 1
+    assert report["existing_id_player_or_time_conflict"] == 0
+    assert not any(term in json.dumps(report) for term in
+                   ("old-original", "player-a", "tourn-A", "new-match-id"))
+
+
+def test_prewrite_identity_orientation_and_date_conflict_are_aggregate_only():
+    when = datetime(2026, 11, 1, 12, tzinfo=timezone.utc)
+    other = datetime(2026, 11, 1, 13, tzinfo=timezone.utc)
+    def rows(items):
+        return pa.Table.from_pylist([
+            {"match_id": mid, "tour": "wta", "tournament_id": "T",
+             "player1_id": a, "player2_id": b, "scheduled_at": start}
+            for mid, a, b, start in items
+        ])
+    old = rows([("a", "x", "y", when)])
+    prewrite = rows([
+        ("a", "x", "y", when),
+        ("b", "p", "q", when),
+        ("c", "r", "s", when),
+    ])
+    current = rows([
+        ("a", "y", "x", when),
+        ("b", "p", "q", other),
+        ("c", "r", "new", when),
+    ])
+    report = classify_identity_drift(old, prewrite, current)
+    assert report["unique_missing_source_ids"] == 0
+    assert report["existing_id_player_or_time_conflict"] == 3
+    assert report["existing_id_swapped_orientation"] == 1
+    assert report["existing_id_changed_scheduled_at"] == 1
+    assert report["existing_id_changed_player_pair"] == 1
