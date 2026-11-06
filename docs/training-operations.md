@@ -1,5 +1,13 @@
 # Protected training in one command
 
+## Zjednodušené ovládanie v Model Labe (2026-11-06)
+
+V **Administrácia → Model Lab** je na začiatku jeden hlavný panel **Tréning z admina · Ďalší krok**. Z aktuálnych overených snapshotov zobrazí iba ďalší bezpečný úkon: **Pripraviť a skontrolovať dáta** alebo, po čerstvom overenom preflighte, **Natrénovať a spustiť shadow**. Profil tréningu sa pri tomto kroku vyberá priamo v paneli. Každý úkon vyžaduje existujúce potvrdenie, vytvorí iba jednu chránenú požiadavku a následne sa nezávisle synchronizuje. Nejde o nové API ani o ďalšieho workera.
+
+Pri čakajúcej požiadavke, aktívnom tréningu, obsadenom zámku, zlyhaní alebo neoverenom shadow výsledku panel **neponúka nový automatický štart**. Zobrazuje stav a dôvod; pôvodná karta fázy 2 ďalej uvádza beh, fázy, chybové kroky a overený shadow výsledok. Overenie / nový pokus sa robí iba podľa existujúcich pravidiel. Pri aktívnom shadow teste je ďalším bezpečným úkonom jeho read-only vyhodnotenie.
+
+**Obnova predikcií bez tréningu** je rozbaľovacia, samostatná operácia s vlastným API rozpočtom. **Manuálne produkčné nasadenie s výnimkou kalibrácie** je ukryté pod zvláštnym rozbalením vo fáze 3; naďalej vyžaduje presný model, dôvod, doslovné potvrdenie, zálohu/rollback a SHA guard. Žiadne automatické povýšenie championa. Pokročilé Drive/import a ručná shadow aktivácia zostávajú oddelené.
+
 ## Samostatný tréning tlačidlami v administrácii
 
 V **Administrácia → Kalibrácia modelu** postupuj zľava doprava:
