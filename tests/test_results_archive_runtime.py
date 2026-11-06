@@ -43,7 +43,12 @@ class Table:
         self.versions[key] += 1
 
     def upsert_entity(self, entity, mode=None):
-        raise AssertionError("Unsafe unconditional archive write")
+        # This shared fake is also used by Admin exclusions and Match Status,
+        # whose separate storage paths legitimately require upsert in tests.
+        # The Results CAS tests assert the archive itself never calls here.
+        key = entity["PartitionKey"], entity["RowKey"]
+        self.items[key] = deepcopy(entity)
+        self.versions[key] = self.versions.get(key, 0) + 1
 
     def query_entities(self, query_filter):
         partition = query_filter.split("'", 2)[1]
