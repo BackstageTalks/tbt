@@ -583,6 +583,21 @@ class RapidTennisClient:
             enrichment=True,
         )
 
+    def calendar_days_with_events(self, season_id: str | int, year: int) -> Any:
+        """Research-only calendar days for one source-native season/year.
+
+        A provider 204 (mapped by the guarded client to {}) does not prove a
+        season is empty. Never use it to skip the established daily CDB path.
+        """
+        season = self._research_positive_int(season_id, "season_id")
+        calendar_year = self._research_positive_int(year, "year")
+        if calendar_year > 9999:
+            raise ValueError("year must be a valid calendar year")
+        return self._get(
+            f"/api/calendar/season/{season}/{calendar_year}/days-with-events",
+            enrichment=True,
+        )
+
     def tournament_venue_events(
         self, tournament_id: str | int, season_id: str | int,
         venue_id: str | int, page: int = 0,
