@@ -1,5 +1,16 @@
 # Protected training in one command
 
+## Zjednodušené ovládanie v Admin → Model Lab
+
+Na začiatku karty je jeden hlavný panel **Nový kandidát bez GitHub príkazov**. Ukazuje stav troch krokov **Dáta → Tréning → Výsledok** a iba **jedno aktuálne povolené tlačidlo**.
+
+- Keď nie je dostupný čerstvý podpísaný audit ATP/WTA, tlačidlo znie **1 · Pripraviť dáta**. Po potvrdení zaradí existujúci read-only preflight do ochrannej fronty. Po jeho skutočnom overení workerom (vrátane artifactu, počtov a času) sa tlačidlo pri nasledujúcej synchronizácii zmení.
+- Po overení prípravy je dostupné **2 · Spustiť tréning kandidáta**. Vyber preferovaný existujúci profil, potvrď spustenie a bezpečná tréningová fronta začne s freeze/backup/leakage/holdout kontrolami. Pri profile presnosti sa shadow aktivuje iba po úspechu existujúcej brány; tréning nikdy automaticky neprepne produkčného championa.
+- Na hlavnej karte vidíš posledný run, aktuálnu fázu, zlyhaný krok a potvrdený výsledok shadow alebo dôvody blokovania. Stav pri otvorenej karte obnovuje existujúce pravidelné čítanie, nie nový job ani API poll tenisu. Panel môžeš zavrieť.
+- **Podrobnosti, história a pokročilé ovládanie** sprístupnia pôvodné samostatné operácie, manuálnu produkčnú výnimku, feed refresh a hlbší tréningový priebeh. Produkčný release zostáva samostatným potvrdeným krokom; ovládanie ho nespúšťa automaticky.
+
+Rozhranie úmyselne neodosiela dva samostatné trvalé zápisy naraz: po úspešnom read-only audite vyžaduje ďalšie potvrdenie tréningu. Neznámy dispatch, nedostupná CDB, obsadený lock alebo neaktuálny snapshot zostávajú blokáciou. Všetky guardy a limitovanie sú na serveri, nie iba v JavaScripte.
+
 ## Samostatný tréning tlačidlami v administrácii
 
 V **Administrácia → Kalibrácia modelu** postupuj zľava doprava:

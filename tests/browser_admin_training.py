@@ -63,9 +63,18 @@ def main():
                 assert page.locator('.admin-calibration-card').first.get_by_text('BlinQ 7.2.1').is_visible()
                 assert page.get_by_text('Pre nový produkčný model zatiaľ neexistuje porovnateľná shadow vzorka', exact=False).is_visible()
                 assert page.get_by_text('Ďalší model · čaká na vyhodnotenie').is_visible()
-                button=page.locator('[data-admin-action="training-start"]')
-                assert button.is_enabled(), 'New Model Factory must allow a ready guarded training'
-                assert page.get_by_text('Natrénovať a spustiť shadow').is_visible()
+                button=page.locator('[data-admin-action="model-factory-next"]')
+                assert button.is_visible(), 'The training guide must be the visible primary control'
+                assert button.is_enabled(), 'Verified preflight must enable one guarded candidate training step'
+                assert button.get_attribute('data-factory-next')=='train_candidate'
+                assert 'Spustiť tréning kandidáta' in button.inner_text()
+                assert page.get_by_text('Nový kandidát bez GitHub príkazov').is_visible()
+                # Details remain available, but do not crowd the primary workflow.
+                controls=page.locator('.admin-model-factory-controls')
+                assert not controls.evaluate('(element)=>element.open')
+                controls.locator('summary').click()
+                assert controls.evaluate('(element)=>element.open')
+                assert page.locator('[data-admin-action="training-start"]').is_enabled()
                 page.locator('.admin-model-factory-advanced summary').click()
                 assert page.get_by_text('Aktivovať iba shadow (manuálne)').is_visible()
                 assert page.get_by_text('3 · Nasadiť do produkcie').is_visible()
@@ -81,7 +90,8 @@ def main():
                 assert page.evaluate('trainingCalls[0].auto_shadow') is True
                 assert page.evaluate('trainingCalls[1]===undefined')
                 assert page.locator('[data-admin-action="training-start"]').is_disabled()
-                assert page.get_by_text('Požiadavka uložená.', exact=True).is_visible()
+                assert page.locator('[data-admin-action="model-factory-next"]').is_disabled()
+                assert page.locator('.model-factory-guided').get_by_text('Požiadavka uložená.', exact=True).is_visible()
                 assert page.locator('[data-model-lab-operation="activate_shadow"]').is_disabled()
                 assert page.locator('[data-model-lab-operation="import_drive"]').count()==1
                 page.evaluate("""() => {
