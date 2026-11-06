@@ -59,7 +59,7 @@ def test_refuse_changed_market_line_and_missing_original_six_event_manifest():
         "publication_key": "local-aces-ou-v1:17488695:273778:over:6.5",
         "scheduled_at": "2026-11-04T20:00:00+00:00",
     }
-    with pytest.raises(RuntimeError, match="immutable Telegram Aces"):
+    with pytest.raises(RuntimeError, match="Immutable Telegram Aces"):
         frozen_candidate(altered, status, "2026-11-04T05:38:38.877232+00:00")
 
 
