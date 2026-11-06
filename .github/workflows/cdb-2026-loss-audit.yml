@@ -1,6 +1,10 @@
 name: BlinQ CDB 2026 old-vs-current identity audit (read only)
 'on':
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'scripts/audit_cdb_2026_missing_identity.py'
+      - '.github/workflows/cdb-2026-loss-audit.yml'
   push:
     branches: [main]
     paths: ['.github/cdb-2026-current-identity-readback-request.json']
@@ -186,5 +190,44 @@ jobs:
           path: |
             .cache/tbt/cdb2026-current-*/report.json
             .cache/tbt/cdb2026-current-*/postrestore-readback.json
+          if-no-files-found: warn
+          retention-days: 45
+
+  current-drift-forensics:
+    # Same-repository review branch only, no merge or production deploy needed.
+    # Fork PRs do not receive the private GH token and cannot trigger this.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'BackstageTalks/tbt' && github.head_ref == 'audit/cdb-2026-missing-id-diagnostics'
+    runs-on: ubuntu-latest
+    timeout-minutes: 95
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+      - name: Validate private read-only access, never publish canonical rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api repos/BackstageTalks/tbt-data --jq .private)" = true
+      - name: Install original verified CDB reader dependencies
+        run: python -m pip install --quiet -r api/requirements-train.txt pytest
+      - name: Print only aggregate 2026 identity drift and verify 78 partitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/audit_cdb_2026_missing_identity.py \
+            --out ".cache/tbt/cdb-2026-drift-$GITHUB_RUN_ID"
+      - name: Preserve aggregate-only diagnostic, no private identities
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: blinq-cdb2026-drift-forensics-${{ github.run_id }}
+          path: .cache/tbt/cdb-2026-drift-*/drift-report.json
           if-no-files-found: warn
           retention-days: 45
