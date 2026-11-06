@@ -1130,7 +1130,9 @@ jobs:
           done
 
       - name: Capture market immediately after publication
-        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
+        # The zero-provider handoff only republishes an existing candidate.
+        # Never dispatch optional PropLine/odds CLV jobs from that rescue.
+        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true' && inputs.stale_handoff_run_id == ''
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
