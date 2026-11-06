@@ -137,6 +137,22 @@ def apply_result_exclusions(feed: dict, excluded_keys: set[str]) -> dict:
     if not excluded_keys:
         return feed
     out = dict(feed)
+    # An exclusion cannot rewrite the immutable release's precomputed betting
+    # windows. Treat them as stale rather than publishing unfiltered totals.
+    out["test_result_exclusions_active"] = True
+    out["betting_performance"] = {}
+    windows = out.get("performance_windows")
+    if isinstance(windows, dict):
+        out["performance_windows"] = {
+            key: {**value, "betting": {}}
+            if isinstance(value, dict) else value
+            for key, value in windows.items()
+        }
+    summary = out.get("performance_window_summary")
+    if isinstance(summary, dict):
+        out["performance_window_summary"] = {**summary, "categories": {}}
+    if "performance_subgroups" in out:
+        out["performance_subgroups"] = {}
     rows = []
     for source in feed.get("results") or []:
         if not isinstance(source, dict):

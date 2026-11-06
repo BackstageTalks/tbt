@@ -134,6 +134,92 @@ def test_public_results_financial_stats_exclude_test_rows():
     assert abs(final["roi"]-.5)<1e-10
 
 
+def test_test_bet_is_absent_from_all_public_betting_kpis_not_just_results():
+    from tbt.services.dashboard_kpis import selected_dashboard_cards
+
+    now = datetime(2026, 10, 12, tzinfo=timezone.utc)
+    test_bet = published("101", price=1.7)
+    other_bet = published("102", price=2.2)
+    other_result = other_bet["market_publications"][0]["result"]
+    other_result.update({"status": "miss", "correct": False, "profit_units": -1.0})
+    historical = {
+        "results": [test_bet, other_bet],
+        "betting_performance": {"overall": {"roi": .99}},
+        "performance_windows": {
+            "7": {
+                "model": {"n": 42, "accuracy": .77},
+                "betting": {
+                    "overall": {"n": 2, "staked_units": 2, "roi": .99, "profit_units": 99},
+                    "sections": {"top_daily": {"n": 2, "avg_odds": 9.99}},
+                },
+            },
+        },
+        "performance_window_summary": {
+            "best_accuracy": .77, "categories": {"top_daily": {"best_hit_rate": 1.0}},
+        },
+        "performance_subgroups": {"top_daily": {"roi": .99}},
+    }
+    original = deepcopy(historical)
+    cards = {"dashboard": {"kpi_cards": [
+        {"metric": "model_success", "period": "7"},
+        {"metric": "avg_odds", "period": "7"},
+        {"metric": "roi", "period": "7"},
+        {"metric": "yield_units", "period": "7"},
+    ]}}
+    # Before exclusion the legacy betting release still has its own numbers.
+    assert selected_dashboard_cards(historical, cards, now=now)[2]["value"] == .99
+
+    key = result_exclusions.result_bet_id(test_bet, test_bet["market_publications"][0])
+    filtered = result_exclusions.apply_result_exclusions(historical, {key})
+    assert filtered["test_result_exclusions_active"] is True
+    assert [row["event_id"] for row in filtered["results"]] == ["102"]
+    assert filtered["betting_performance"] == {}
+    assert filtered["performance_windows"]["7"]["betting"] == {}
+    assert filtered["performance_windows"]["7"]["model"] == {"n": 42, "accuracy": .77}
+    assert filtered["performance_window_summary"]["categories"] == {}
+    assert filtered["performance_subgroups"] == {}
+    values = selected_dashboard_cards(filtered, cards, now=now)
+    assert [row["value"] for row in values] == [.77, 2.2, -1.0, -1.0]
+    assert historical == original  # source remains immutable
+
+    restored = result_exclusions.apply_result_exclusions(historical, set())
+    assert "test_result_exclusions_active" not in restored
+    assert selected_dashboard_cards(restored, cards, now=now)[2]["value"] == .99
+
+
+def test_exclusion_is_consistent_for_auto_financial_kpis():
+    from tbt.services.dashboard_kpis import selected_dashboard_cards
+
+    now = datetime(2026, 10, 12, tzinfo=timezone.utc)
+    test_bet = published("101", price=1.7)
+    other_bet = published("102", price=2.2)
+    other_bet["market_publications"][0]["result"].update(
+        {"correct": False, "status": "miss", "profit_units": -1.0}
+    )
+    windows = {
+        str(days): {
+            "model": {"n": 42, "accuracy": .77},
+            "betting": {
+                "overall": {"n": 2, "staked_units": 2, "roi": .99, "profit_units": 99},
+                "sections": {"top_daily": {"n": 2, "avg_odds": 9.99}},
+            },
+        } for days in (3, 7, 14, 30, 180, 365)
+    }
+    source = {"results": [test_bet, other_bet], "performance_windows": windows}
+    key = result_exclusions.result_bet_id(test_bet, test_bet["market_publications"][0])
+    filtered = result_exclusions.apply_result_exclusions(source, {key})
+    config = {"dashboard": {"kpi_cards": [
+        {"metric": "avg_odds", "period": "auto"},
+        {"metric": "roi", "period": "auto"},
+        {"metric": "yield_units", "period": "auto"},
+        {"metric": "results_success", "period": "all"},
+    ]}}
+    values = selected_dashboard_cards(filtered, config, now=now)
+    assert [row["value"] for row in values] == [2.2, -1.0, -1.0, 0.0]
+    assert all(row["sample"] == 1 for row in values[:3])
+    assert source["performance_windows"]["7"]["betting"]["overall"]["roi"] == .99
+
+
 def test_admin_results_frontend_has_jump_and_no_50_row_hardcap():
     from pathlib import Path
     root=Path(__file__).resolve().parents[1]

@@ -5718,6 +5718,21 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const feed=state.feed||{}, windows=feed.performance_windows||{};
     const window=windows?.[period]||{}, betting=window.betting||{}, overall=betting.overall||{};
     const valueOf=v=>typeof v==='number'&&Number.isFinite(v)?v:null;
+    if(feed.test_result_exclusions_active&&['avg_odds','roi','yield_units'].includes(card.metric)){
+      // Admin preview must use the same test-filtered Results as the API
+      // instead of the now-invalid historical betting summaries.
+      const category=card.metric==='avg_odds'?'top_daily':'all';
+      const cutoff=period==='all'?null:Date.now()-Number(period)*86400000;
+      const rows=(Array.isArray(feed.results)?feed.results:[]).filter(row=>{
+        if(cutoff===null)return true;
+        const stamp=new Date(row?.scheduled_at||0).getTime();
+        return Number.isFinite(stamp)&&stamp>=cutoff;
+      });
+      const m=localResultMetrics(rows,category);
+      const field=card.metric==='avg_odds'?'avgOdds':card.metric==='roi'?'roi':'profit';
+      const sample=card.metric==='avg_odds'?m.oddsSample:m.unitSample;
+      return {value:sample>0?valueOf(m[field]):null,sample};
+    }
     const results={
       results_success:['all','hit'],results_top_success:['top_daily','hit'],
       results_avg_odds:['all','avgOdds'],winner_avg_odds:['winners','avgOdds'],
