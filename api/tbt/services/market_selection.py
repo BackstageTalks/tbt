@@ -16,7 +16,10 @@ from zoneinfo import ZoneInfo
 
 from ..providers.budget import RequestBudgetExceeded
 from ..providers.odds_quality import odds_unavailable
-from .price_integrity import extreme_winner_price_inversion, post_start_winner_quote
+from .price_integrity import (
+    extreme_winner_price_inversion, post_start_winner_quote,
+    unsubstantiated_high_confidence_winner,
+)
 
 
 MATCH_WINNER_MARKET_NAMES = {
@@ -696,6 +699,13 @@ def attach_match_winner_market(
         "model_probability": model_probability,
         "blinq_probability": blinq_probability,
         "probability_reliability": _depth(result),
+        # Freeze model-time ranks from the predictor's point-in-time row.
+        # Presentation may fill player ranks later; it is never evidence for
+        # authorizing an originally unsupported high-confidence bet.
+        "model_time_ranks": {
+            "player1": rank if (rank := _number(p1.get("rank"))) is not None and rank > 0 else None,
+            "player2": rank if (rank := _number(p2.get("rank"))) is not None and rank > 0 else None,
+        },
         "edge": edge,
         "expected_value": expected_value,
         "provider_id": int(provider_id),
@@ -1085,6 +1095,7 @@ def select_market_sections(
     top_fallback: list[dict[str, Any]] = []
 
     extreme_inversion_quarantined = 0
+    market_conflict_missing_rank_quarantined = 0
     post_start_quote_quarantined = 0
     for card in cards:
         odds = _number(card.get("odds"))
@@ -1098,6 +1109,9 @@ def select_market_sections(
             continue
         if post_start_winner_quote(card):
             post_start_quote_quarantined += 1
+            continue
+        if unsubstantiated_high_confidence_winner(card):
+            market_conflict_missing_rank_quarantined += 1
             continue
 
         if (
@@ -1194,6 +1208,7 @@ def select_market_sections(
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "extreme_price_inversion_quarantined": extreme_inversion_quarantined,
+                "market_conflict_missing_rank_quarantined": market_conflict_missing_rank_quarantined,
                 "post_start_quote_quarantined": post_start_quote_quarantined,
                 "prime_core_68_plus": len(prime_core),
                 "top_core_80_plus_after_value_priority": len(top_core),
