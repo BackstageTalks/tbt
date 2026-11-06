@@ -105,7 +105,7 @@ class CandidateClient:
                  "startTimestamp": 1700000100},
             ]}
         return {"events": [
-            {"id": 5, "homeTeam": {"id": 1}, "awayTeam": {"id": 2},
+            {"id": 5, "homeTeam": {"id": 222}, "awayTeam": {"id": 333},
              "startTimestamp": 1700000000}
         ]}
 
@@ -338,3 +338,25 @@ def test_singles_requires_unique_dated_matches_not_just_http_success():
                            phase="candidates", case="player_singles_results")
         assert report["candidate_state"] == "endpoint_invalid_shape"
         assert report["eligible_for_cdb_import"] is False
+
+
+@pytest.mark.parametrize("bad_case", ["unrelated", "same_player", "missing_player_id"])
+def test_singles_requires_exact_source_player_in_every_match(bad_case):
+    class WrongPlayer(CandidateClient):
+        def _get(self, path, params=None, *, enrichment=False):
+            payload = super()._get(path, params=params, enrichment=enrichment)
+            if path.endswith("/events/singles/last/0"):
+                event = payload["events"][0]
+                if bad_case == "unrelated":
+                    event["homeTeam"]["id"] = 999
+                elif bad_case == "same_player":
+                    event["awayTeam"]["id"] = 222
+                else:
+                    event["homeTeam"].pop("id")
+            return payload
+
+    report = run_probe(WrongPlayer(), event_id=98765, max_requests=2,
+                       phase="candidates", case="player_singles_results")
+    assert report["request_count"] == 2
+    assert report["candidate_state"] == "endpoint_invalid_identity"
+    assert report["eligible_for_cdb_import"] is False
