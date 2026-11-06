@@ -117,6 +117,9 @@ from tbt.services.push_notifications import (
 )
 from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed, serving_artifact_readback, _row_betting_day
+from tbt.services.issued_authority import (
+    filter_unissued_offers, load_authority, persist_authority, validate_authority,
+)
 from tbt.services.dashboard_kpis import selected_dashboard_cards
 from tbt.services.result_exclusions import (
     result_candidates, load_result_exclusions, set_result_exclusions,
@@ -576,6 +579,54 @@ def internal_serving_readback(req):
         logging.exception("Private production serving artifact readback unavailable")
         return response({"error": "serving_readback_unavailable"}, 503)
 
+
+
+@app.route(route="v1/internal/issued-offer-authority", methods=["GET", "POST"])
+def internal_issued_offer_authority(req):
+    """After ledger confirmation, authorize exact deployed cards for member APIs.
+
+    A missing receipt fails closed at /v1/feed. A successful Azure upload, a
+    prepared candidate, or an unverified requester can never grant visibility.
+    """
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    try:
+        now = datetime.now(timezone.utc)
+        # Betting-day rollover is defined by 06:00 Bratislava, not UTC midnight.
+        from tbt.services.feed import _betting_day_key
+        day = _betting_day_key(now)
+        if req.method == "GET":
+            observed = load_authority(day)
+            return response({
+                "ok": True, "betting_day": day,
+                "confirmed_only": bool(observed and observed.get("confirmed_only")),
+                "keys": observed.get("keys", []) if observed else [],
+                "count": len(observed.get("keys", [])) if observed else 0,
+            })
+        candidate = req.get_json()
+        if not isinstance(candidate, dict):
+            return response({"error": "invalid_authority"}, 400)
+        expected_sha = str(candidate.get("feed_sha256") or "")
+        actual_sha = hashlib.sha256(FEED.read_bytes()).hexdigest()
+        if not hmac.compare_digest(expected_sha, actual_sha):
+            return response({"error": "feed_generation_mismatch"}, 409)
+        deployed = read_feed(FEED)
+        verified = validate_authority(candidate, deployed, now=now)
+        saved = persist_authority(verified)
+        return response({
+            "ok": True, "betting_day": saved["betting_day"],
+            "confirmed_only": True, "keys": saved["keys"],
+            "count": len(saved["keys"]), "feed_sha256": actual_sha,
+        })
+    except (ValueError, TypeError, KeyError) as exc:
+        logging.warning("Rejected invalid issued authority sync: %s", type(exc).__name__)
+        return response({"error": "invalid_issued_authority"}, 409)
+    except (AdminStorageUnavailable, OSError):
+        logging.exception("Issued authority storage unavailable")
+        return response({"error": "issued_authority_unavailable"}, 503)
+    except Exception:
+        logging.exception("Issued authority synchronization failed")
+        return response({"error": "issued_authority_sync_failed"}, 503)
 
 
 @app.route(route="v1/comparator/players", methods=["GET"])
@@ -1448,6 +1499,14 @@ def feed(req):
         profile = _profile_for(user)
         account_data = public_account(user, cfg=settings, profile=profile)
         source_feed = visible_feed(_read_feed_with_confirmed_aces_ou())
+        # The deployed package is a candidate. Never return active recommendations
+        # unless a durable post-deploy receipt authorizes the exact card.
+        try:
+            issued_authority = load_authority(source_feed["daily_offer_day"])
+        except AdminStorageUnavailable:
+            logging.exception("Publication authority unavailable; withholding active offers")
+            issued_authority = None
+        source_feed = filter_unissued_offers(source_feed, issued_authority)
         try:
             source_feed = merge_settled_results(source_feed, load_settled_results_archive())
         except AdminStorageUnavailable:
