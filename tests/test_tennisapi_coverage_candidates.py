@@ -129,6 +129,12 @@ def test_candidate_research_resolves_source_ids_and_spends_two_calls(case, route
     assert report["eligible_for_cdb_import"] is False
     assert report["provider_quote_timestamp_verified"] is False
     assert report["observations"]["candidate_" + case]["state"] == "available"
+    if case == "player_singles_results":
+        inventory = report["observations"]["candidate_player_singles_results"]
+        assert inventory["source_player_match_rows"] == 1
+        assert inventory["missing_participant_identity_rows"] == 0
+        assert inventory["identical_participant_identity_rows"] == 0
+        assert inventory["unrelated_participant_rows"] == 0
 
 
 def test_year_statistics_inventory_is_aggregate_not_match_cells():
@@ -360,3 +366,11 @@ def test_singles_requires_exact_source_player_in_every_match(bad_case):
     assert report["request_count"] == 2
     assert report["candidate_state"] == "endpoint_invalid_identity"
     assert report["eligible_for_cdb_import"] is False
+    inventory = report["observations"]["candidate_player_singles_results"]
+    expected = {
+        "unrelated": "unrelated_participant_rows",
+        "same_player": "identical_participant_identity_rows",
+        "missing_player_id": "missing_participant_identity_rows",
+    }[bad_case]
+    assert inventory["source_player_match_rows"] == 0
+    assert inventory[expected] == 1

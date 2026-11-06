@@ -464,16 +464,28 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         payload = read("candidate_" + case, route)
         observed = report["observations"]["candidate_" + case]
         if case == "player_singles_results" and observed["state"] == "available":
-            # A valid-looking events list is not evidence of the requested player.
-            # Verify source-native participant IDs before claiming coverage.
+            # Source-native counts only. Never expose raw opponent IDs, accept
+            # mismatched rows or infer canonical CDB identity from a 200 reply.
             events = _obj(payload).get("events")
-            if not isinstance(events, list) or not all(
-                (home_id := _nested_int(item, "homeTeam", "id")) is not None
-                and (away_id := _nested_int(item, "awayTeam", "id")) is not None
-                and home_id != away_id
-                and player_id in (home_id, away_id)
-                for item in events
-            ):
+            matched = missing = identical = unrelated = 0
+            for item in events if isinstance(events, list) else []:
+                home_id = _nested_int(item, "homeTeam", "id")
+                away_id = _nested_int(item, "awayTeam", "id")
+                if home_id is None or away_id is None:
+                    missing += 1
+                elif home_id == away_id:
+                    identical += 1
+                elif player_id not in (home_id, away_id):
+                    unrelated += 1
+                else:
+                    matched += 1
+            observed["source_player_match_rows"] = matched
+            observed["missing_participant_identity_rows"] = missing
+            observed["identical_participant_identity_rows"] = identical
+            observed["unrelated_participant_rows"] = unrelated
+            if (not isinstance(events, list)
+                    or matched != len(events)
+                    or missing or identical or unrelated):
                 observed["state"] = "invalid_identity"
         report["candidate_state"] = "endpoint_" + str(observed["state"])
         return finish()
