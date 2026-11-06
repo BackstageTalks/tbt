@@ -77,3 +77,38 @@ def post_start_winner_quote(row: object) -> bool:
     start = _aware_utc_timestamp(row.get("scheduled_at"))
     captured = _aware_utc_timestamp(captured_value)
     return start is None or captured is None or captured >= start
+
+
+
+def unsubstantiated_high_confidence_winner(row: object) -> bool:
+    """Hold extreme model/quoted-price contradictions without point-in-time ranks.
+
+    A >=80% public winner offered at an implied probability over 40 percentage
+    points lower is a review candidate *only* when neither player's rank was
+    documented at the original prediction/price attachment. This is separate
+    from the unconditional >50pp price-integrity guard. Never substitute a
+    later presentation rank, another bookmaker's prices or a new model output.
+
+    Legacy offers without the immutable model-time rank marker are left to the
+    existing >50pp guard; we cannot safely reconstruct their original ranks.
+    """
+    if not isinstance(row, dict):
+        return False
+    betting = row.get("betting")
+    if not isinstance(betting, dict) or betting.get("market") != "match_winner":
+        return False
+    probability = _finite_number(betting.get("blinq_probability"))
+    odds = _finite_number(betting.get("odds"))
+    if probability is None or odds is None or not 0.80 <= probability < 1 or odds <= 1:
+        return False
+    if probability - 1.0 / odds <= 0.40 + 1e-12:
+        return False
+    original = betting.get("model_time_ranks")
+    if not isinstance(original, dict) or set(original) != {"player1", "player2"}:
+        return False
+    # The absence of BOTH ranks matters. One verified rank is evidence worth
+    # leaving to the normal selection and ranking rules.
+    return all(
+        (rank := _finite_number(original.get(side))) is None or rank <= 0
+        for side in ("player1", "player2")
+    )
