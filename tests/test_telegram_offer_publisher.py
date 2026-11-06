@@ -602,3 +602,30 @@ def test_new_ace_line_cushion_above_one_with_v1_frozen_compatibility():
     assert tg._eligible_local_player_aces_ou(old)
     assert not tg._eligible_local_player_aces_ou(fresh|{"market_line":10.5})
     assert not tg._eligible_local_player_aces_ou(old|{"market_line":9.5})
+
+
+def test_web_telegram_top_parity_same_cutoff():
+    """Same confirmed snapshot gives the same still-prestart TOP identities."""
+    from tbt.services.entitlements import _daily_rows
+
+    past = row(301, "Started")
+    past["scheduled_at"] = (NOW - timedelta(minutes=1)).isoformat()
+    future = row(302, "Future")
+    confirmed = {
+        "betting_day": "2026-10-31",
+        "generated_at": NOW.isoformat(),
+        "top_daily_picks": [past, future],
+        "value_picks": [],
+        "ace_picks": [],
+    }
+    website_full_day = _daily_rows(confirmed)
+    telegram = tg.select_groups(confirmed, settings(), NOW)
+    web_actionable = [
+        item for item in website_full_day
+        if tg.stamp(item["scheduled_at"]) > NOW
+    ]
+    assert {item["event_id"] for item in web_actionable} == {
+        item["event_id"] for item in telegram["top"]
+    } == {"302"}
+    # A started pick remains historical on the daily board, not a new TG bet.
+    assert {item["event_id"] for item in website_full_day} == {"301", "302"}
