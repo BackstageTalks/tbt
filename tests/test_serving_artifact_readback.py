@@ -186,7 +186,25 @@ def test_both_deploys_preflight_before_azure_upload():
         confirm = yml.index("Confirm deployed prediction publication" if path.endswith("ci.yml")
                             else "Confirm exactly deployed prediction publication")
         assert preflight < deploy < signed_readback < confirm
+        assert "--require-current" in yml[signed_readback:confirm]
         assert "python scripts/prepare_feed.py" in yml[:preflight]
     source = (root / "scripts/verify_live_serving_readback.py").read_text(encoding="utf-8")
     assert "if args.preflight_only:" in source
     assert "preflight_serving(Path(args.prepared_feed))" in source
+
+
+def test_signed_live_canary_rejects_feed_that_aged_while_azure_uploaded(tmp_path):
+    source = fixture(tmp_path)
+    tomorrow = datetime(2026, 11, 7, 8, tzinfo=timezone.utc)
+    deployed = serving_artifact_readback(source, now=tomorrow)
+    assert deployed["stale"] is True
+    # Existing read-only diagnostic deliberately remains permissive.
+    assert validate(source.read_bytes(), deployed)["stale"] is True
+    # Production issuance must NOT accept the exact same stale bytes after
+    # crossing the 06:00 Bratislava day boundary during a slow deployment.
+    with pytest.raises(ValueError, match="stale for the current betting day"):
+        validate(source.read_bytes(), deployed, require_current=True)
+    still_current = serving_artifact_readback(
+        source, now=datetime(2026, 11, 6, 8, tzinfo=timezone.utc))
+    assert validate(source.read_bytes(), still_current,
+                    require_current=True)["status"] == "verified"
