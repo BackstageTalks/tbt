@@ -5,8 +5,14 @@ ordinary high-confidence TOP candidates.  The same rule must apply to a
 new selector decision and to serving an already-issued daily snapshot.
 """
 from tbt.services.entitlements import _daily_rows
-from tbt.services.market_selection import select_market_sections
-from tbt.services.price_integrity import extreme_winner_price_inversion
+from copy import deepcopy
+from datetime import datetime, timezone
+
+from tbt.services.market_selection import attach_match_winner_market, select_market_sections
+from tbt.services.price_integrity import (
+    extreme_winner_price_inversion,
+    unsubstantiated_high_confidence_winner,
+)
 
 
 def winner(event_id, probability, odds, opponent_odds):
@@ -118,3 +124,81 @@ def test_selected_local_quote_capture_wins_over_later_provider_market_refresh():
     selected = select_market_sections([local])
     assert [pick["event_id"] for pick in selected["top_daily_picks"]] == ["LocalPrestart"]
     assert selected["market_selection"]["selection_counts"]["post_start_quote_quarantined"] == 0
+
+
+
+def test_severe_price_conflict_with_missing_frozen_rank_evidence_requires_review():
+    # Frozen 6 Nov counterexample: 90.2% at 2.18 (44.3 percentage-point gap)
+    # with *both* ranks absent at prediction time. The >50pp guard misses it.
+    base = winner("Van Herck", .902, 2.18, 1.50)
+    base["player1"]["rank"] = None
+    base["player2"]["rank"] = None
+    total = 1 / 2.18 + 1 / 1.50
+    market = {
+        "player1_odds": 2.18, "player2_odds": 1.50,
+        "player1_implied_probability": (1 / 2.18) / total,
+        "player2_implied_probability": (1 / 1.50) / total,
+    }
+    priced = attach_match_winner_market(
+        base, market, captured_at=datetime(2026, 11, 6, 13, 59, tzinfo=timezone.utc)
+    )
+    assert priced["betting"]["model_time_ranks"] == {"player1": None, "player2": None}
+    assert priced["betting"]["odds"] == 2.18
+    assert not extreme_winner_price_inversion(.902, 2.18)
+    assert unsubstantiated_high_confidence_winner(priced)
+    before = deepcopy(priced)
+    picks = select_market_sections([priced])
+    assert picks["top_daily_picks"] == []
+    assert picks["market_selection"]["selection_counts"]["market_conflict_missing_rank_quarantined"] == 1
+    assert priced == before  # no mutation or repricing
+
+    # Presentation may add a rank later; only the model-time frozen evidence
+    # may authorize this selection, not the post-model feed enrichment.
+    shown = deepcopy(priced)
+    shown["player1"]["rank"], shown["player2"]["rank"] = 10, 12
+    assert unsubstantiated_high_confidence_winner(shown)
+    assert _daily_rows({"top_daily_picks": [shown], "value_picks": []}) == []
+
+
+def test_review_guard_preserves_ordinary_top_and_any_rank_evidence():
+    normal = winner("Normal", .83, 1.75, 2.10)
+    ranked = winner("Ranked", .902, 2.18, 1.50)
+    weak = winner("Weak", .76, 2.18, 1.50)
+    for row in (normal, ranked, weak):
+        row["betting"]["model_time_ranks"] = {"player1": None, "player2": None}
+    ranked["betting"]["model_time_ranks"]["player1"] = 120
+    assert not any(unsubstantiated_high_confidence_winner(r) for r in (normal, ranked, weak))
+    cards = select_market_sections([normal, ranked, weak])
+    assert {r["event_id"] for r in cards["top_daily_picks"]} == {
+        "Normal", "Ranked", "Weak",
+    }
+    assert cards["market_selection"]["selection_counts"]["market_conflict_missing_rank_quarantined"] == 0
+
+
+def test_review_guard_respects_local_odds_and_does_not_reconstruct_legacy_ranks():
+    local = winner("Local", .92, 2.25, 1.44)
+    local["betting"]["model_time_ranks"] = {"player1": None, "player2": None}
+    local["betting"]["odds_source"] = "local"
+    # A later/different source's market pair is irrelevant; the selected local
+    # odds and original model-time ranks drive this evidence-integrity check.
+    local["match_winner_market"]["player1_odds"] = 1.10
+    assert unsubstantiated_high_confidence_winner(local)
+    assert select_market_sections([local])["top_daily_picks"] == []
+    assert local["betting"]["odds"] == 2.25
+
+    old = winner("Legacy", .92, 2.25, 1.44)
+    old["player1"]["rank"] = None
+    old["player2"]["rank"] = None
+    assert not unsubstantiated_high_confidence_winner(old)
+    assert [r["event_id"] for r in _daily_rows({
+        "top_daily_picks": [old], "value_picks": [],
+    })] == ["Legacy"]
+
+
+def test_price_guard_requires_explicit_complete_original_rank_marker():
+    row = winner("InvalidEvidence", .902, 2.18, 1.50)
+    for evidence in (None, {}, {"player1": None}, [], "missing"):
+        row["betting"]["model_time_ranks"] = evidence
+        assert not unsubstantiated_high_confidence_winner(row)
+    row["betting"]["model_time_ranks"] = {"player1": 0, "player2": None}
+    assert unsubstantiated_high_confidence_winner(row)
