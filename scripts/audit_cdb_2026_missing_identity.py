@@ -54,6 +54,85 @@ def compare_origins(old, before, live, *, expected=(98994, 2927, 1258, 97736, 16
     }
 
 
+
+def classify_identity_drift(old, before, live) -> dict:
+    """Aggregate-only, conservative evidence for potential canonical rekeys.
+
+    Classify candidates by identical tour, exact UTC scheduled_at, unordered
+    player ID pair and tournament ID (when original has one). A match is only
+    a *candidate*, not permission to migrate or suppress any original row.
+    """
+    from collections import Counter, defaultdict
+
+    original = index(old, "source")
+    previous = index(before, "prewrite")
+    current = index(live, "current")
+    required = {"tour", "tournament_id", "match_id",
+                "player1_id", "player2_id", "scheduled_at"}
+    if not required.issubset(old.column_names) or not required.issubset(live.column_names):
+        raise ValueError("Missing canonical identity evidence for rekey forensics")
+
+    def key(table, i):
+        p1, p2 = (str(table[n][i].as_py() or "") for n in ("player1_id", "player2_id"))
+        return (
+            str(table["tour"][i].as_py() or "").lower(),
+            table["scheduled_at"][i].as_py(),
+            tuple(sorted((p1, p2))),
+            str(table["tournament_id"][i].as_py() or ""),
+        )
+
+    # Some source releases have a missing tournament ID while the provider
+    # later supplies it. A missing source tournament cannot establish a
+    # unique provider identity on its own; report as unresolved, not rekeyed.
+    aliases = defaultdict(list)
+    for mid, j in current.items():
+        aliases[key(live, j)].append(mid)
+
+    counts = Counter()
+    missing = (set(original) | set(previous)) - set(current)
+    for mid in missing:
+        source, src_index = (before, previous) if mid in previous else (old, original)
+        candidate_key = key(source, src_index[mid])
+        if not candidate_key[3]:
+            counts["missing_without_source_tournament_id"] += 1
+            continue
+        targets = [ref for ref in aliases.get(candidate_key, []) if ref != mid]
+        if len(targets) == 1:
+            counts["missing_with_one_strong_rekey_candidate"] += 1
+        elif len(targets) > 1:
+            counts["missing_with_ambiguous_rekey_candidates"] += 1
+        else:
+            counts["missing_without_strong_rekey_candidate"] += 1
+
+    for mid in set(previous) & set(current):
+        a, b = previous[mid], current[mid]
+        before_pair = (before["player1_id"][a].as_py(),
+                       before["player2_id"][a].as_py())
+        after_pair = (live["player1_id"][b].as_py(),
+                      live["player2_id"][b].as_py())
+        changed_pair = before_pair != after_pair
+        swapped = (changed_pair and before_pair == after_pair[::-1])
+        changed_time = before["scheduled_at"][a].as_py() != live["scheduled_at"][b].as_py()
+        if changed_pair or changed_time:
+            counts["existing_id_changed_player_pair"] += int(changed_pair and not swapped)
+            counts["existing_id_swapped_orientation"] += int(swapped)
+            counts["existing_id_changed_scheduled_at"] += int(changed_time)
+            counts["existing_id_player_or_time_conflict"] += 1
+    counts["unique_missing_source_ids"] = len(missing)
+    # These sums never contain private match identifiers, raw values or hashes.
+    return {key: int(counts[key]) for key in (
+        "unique_missing_source_ids",
+        "missing_with_one_strong_rekey_candidate",
+        "missing_with_ambiguous_rekey_candidates",
+        "missing_without_strong_rekey_candidate",
+        "missing_without_source_tournament_id",
+        "existing_id_player_or_time_conflict",
+        "existing_id_changed_player_pair",
+        "existing_id_swapped_orientation",
+        "existing_id_changed_scheduled_at",
+    )}
+
+
 def _store_report(path: Path, report: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
@@ -117,6 +196,7 @@ def main() -> None:
     current_table = pq.read_table(current / "history-2026.parquet", columns=cols)
     merged, counts, union = merge_preserving_live(old_table, current_table)
     origins = compare_origins(old_table, prewrite_table, current_table)
+    classifications = classify_identity_drift(old_table, prewrite_table, current_table)
     report = {
         "schema": 1, "phase": "read_only_current_snapshot_forensics",
         "state": "UNVERIFIED_UNTIL_COMPLETE",
@@ -126,7 +206,7 @@ def main() -> None:
         "model_changes": 0, "provider_requests": 0, "cdb_writes": 0,
         "recovery_candidate_not_imported": True,
         "merged_candidate_rows_only_in_memory": merged.num_rows,
-        **counts, **origins,
+        **counts, **origins, **classifications,
     }
     output = root / "drift-report.json"
     _store_report(output, report)
