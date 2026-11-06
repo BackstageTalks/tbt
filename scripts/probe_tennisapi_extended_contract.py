@@ -130,7 +130,7 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
         if isinstance(events, list):
             typed = [event for event in events if isinstance(event, dict)]
             ids = [str(event.get("id")) for event in typed
-                   if isinstance(event.get("id"), int) and event["id"] > 0]
+                   if type(event.get("id")) is int and event["id"] > 0]
             result["event_rows"] = len(events)
             result["valid_event_ids"] = len(ids)
             result["distinct_event_ids"] = len(set(ids))
@@ -139,7 +139,7 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                 and isinstance(event.get("awayTeam"), dict)
                 for event in typed)
             result["rows_with_start_timestamp"] = sum(
-                isinstance(event.get("startTimestamp"), int)
+                type(event.get("startTimestamp")) is int
                 for event in typed)
         # A page cannot assert full-season completeness or CDB identity.
         result["completeness_verified"] = False
