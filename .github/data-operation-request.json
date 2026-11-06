@@ -1,15 +1,13 @@
 {
   "schema": 1,
-  "mode": "statistics",
-  "start": "2022-01-01",
-  "end": "2026-11-05",
-  "lookback_days": 1095,
-  "max_requests": 3000,
+  "mode": "deploy-current",
+  "max_requests": 1,
   "promote": false,
-  "targeted_statistics": true,
-  "high_yield_statistics": true,
+  "targeted_statistics": false,
   "model_changes": false,
-  "cdb_writes_allowed": true,
-  "kind": "operator-approved-adaptive-statistics-3000-test-20261106",
-  "description": "User-requested capped 3000-request adaptive CDB statistics test; guarded global quota, rate limit, 500 reserve, global writer lock, NULL-only provider-native import, independent read-back."
+  "cdb_writes_allowed": false,
+  "kind": "recover-published-predictions-2026-11-05",
+  "source": "tbt-predictions-v1",
+  "recovery_source_run": 41990119127,
+  "description": "Deploy already computed and preflight-verified current prediction generation using existing no-provider deployment path. No Tennis/PropLine calls or model/CDB changes. Historical request 1349 is preserved in git history."
 }
