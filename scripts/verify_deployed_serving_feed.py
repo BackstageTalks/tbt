@@ -80,15 +80,24 @@ def main(argv=None) -> None:
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--feed", type=Path, default=Path("api/data/feed.json"))
     parser.add_argument("--attempts", type=int, default=8)
+    parser.add_argument("--preflight-only", action="store_true")
     args = parser.parse_args(argv)
     if not 1 <= args.attempts <= 8:
         raise ValueError("Expected between 1 and 8 read-only verification attempts")
+    expected = serving_feed_readback(args.feed)
+    if not expected["ok"]:
+        raise RuntimeError("Refusing deployment of an unready or stale local feed")
+    # Fail *before* Azure upload, not just after a bad generation was served.
+    # Bootstrap exemption remains controlled exclusively by prepare_feed.py.
+    if args.preflight_only:
+        print("BLINQ_SERVING_PREFLIGHT " + json.dumps({
+            "status": "ready", "feed_sha256": expected["feed_sha256"],
+            "betting_day": expected["betting_day"], "provider_requests": 0,
+        }, sort_keys=True), flush=True)
+        return
     token = os.getenv("BLINQ_LIVE_WORKER_TOKEN") or ""
     if not token:
         raise RuntimeError("Missing protected serving-readback worker credential")
-    expected = serving_feed_readback(args.feed)
-    if not expected["ok"]:
-        raise RuntimeError("Refusing deployed-readback of an unready or stale local feed")
     failure = "not yet available"
     for attempt in range(1, args.attempts + 1):
         try:
