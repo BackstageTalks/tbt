@@ -86,6 +86,7 @@ def test_interleaved_conditional_update_preserves_both_workers(monkeypatch):
     saved = results_archive.save_settled_results_archive([incoming])
     assert saved == {"eligible": 1, "added": 1, "updated": 0, "verified": True}
     assert table.conflicts == 1
+    assert table.upsert_calls == 0  # Results must never use unconditional writes.
     assert keys(table) == {previous["event_id"], concurrent["event_id"], incoming["event_id"]}
     assert {x["event_id"] for x in results_archive.load_settled_results_archive()} == keys(table)
     assert results_archive.save_settled_results_archive([incoming])["added"] == 0
@@ -99,6 +100,7 @@ def test_interleaved_create_retries_after_other_worker_created_shard(monkeypatch
     saved = results_archive.save_settled_results_archive([first])
     assert saved["added"] == 1 and saved["verified"] is True
     assert table.conflicts == 1
+    assert table.upsert_calls == 0
     assert keys(table) == {first["event_id"], concurrent["event_id"]}
 
 
