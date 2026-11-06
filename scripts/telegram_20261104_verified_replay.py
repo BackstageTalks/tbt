@@ -56,7 +56,7 @@ def verified_witness(sent: list[dict], payload: dict) -> dict:
     return payload["statuses"]
 
 
-def frozen_candidate(ref: dict, status: dict, issued: str) -> dict:
+def frozen_candidate(ref: dict, status: dict, issued: str, *, betting_day: str = DAY) -> dict:
     """Use canonical Results grader; do NOT calculate winners from the projection."""
     event, sel = str(ref.get("event_id") or ""), str(ref.get("selection_id") or "")
     line, odds, proj = tg.num(ref.get("market_line")), tg.num(ref.get("odds")), tg.num(ref.get("projection"))
@@ -72,7 +72,7 @@ def frozen_candidate(ref: dict, status: dict, issued: str) -> dict:
         or odds is None or odds <= 1 or proj is None or proj < 0
         or ref.get("publication_key") != expected
         or scheduled.tzinfo is None or issued_dt >= scheduled
-        or scheduled.date().isoformat() != DAY
+        or scheduled.date().isoformat() != betting_day
         or sel not in {p1, p2} or p1 == p2
     ):
         raise RuntimeError("Immutable Telegram Aces O/U contract mismatch: " + event)
@@ -88,7 +88,7 @@ def frozen_candidate(ref: dict, status: dict, issued: str) -> dict:
     }
     row = {
         "event_id": event, "scheduled_at": ref["scheduled_at"],
-        "betting_day": DAY, "selection_id": sel,
+        "betting_day": betting_day, "selection_id": sel,
         "player1": {"id": p1, "name": ref.get("name") if sel == p1 else p1},
         "player2": {"id": p2, "name": ref.get("name") if sel == p2 else p2},
         "betting": {"selection_id": sel},
