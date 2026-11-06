@@ -170,7 +170,8 @@ def test_missing_counters_cannot_hide_independently_persisted_gain():
 def test_hourly_closeout_starts_early_and_keeps_authoritative_limits():
     workflow = (Path(__file__).resolve().parents[1]
                 / ".github/workflows/data-hourly-quota-gapfill.yml").read_text()
-    assert "16: 13500, 17: 14500, 18: 14500" in workflow
+    assert "16: 12000, 17: 13500, 18: 13500" in workflow
+    assert "limit = 14500 if final_topup else caps[stage_hour]" in workflow
     assert "if now >= cutoff - timedelta(minutes=15):" in workflow
     assert "min(5000, limit-spent" in workflow
     assert 'budget.get("global_limit") != 14500' in workflow
