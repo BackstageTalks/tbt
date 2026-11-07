@@ -123,7 +123,10 @@ def settled_archive_candidates(feed: dict, statuses: dict) -> list[dict]:
         if not row.get("runtime_result_overlay"):
             continue
         for publication in row.get("market_publications") or []:
-            stored = _archive_record(row, publication, generated_at)
+            stored = _archive_record(
+                row, publication,
+                str(row.get("_issued_rollover_generated_at") or generated_at),
+            )
             if stored is not None:
                 unique[_identity(stored, stored["market_publications"][0])] = stored
     return list(unique.values())
