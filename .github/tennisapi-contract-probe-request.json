@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "requested_date": "2026-11-07",
-  "reason": "Two guarded provider requests only: validate daily bulk odds value shape and safe event-key aggregation for maximal API yield; no canonical writes",
+  "reason": "One guarded 2-call nested daily odds shape profile after CI-approved PR 1450; aggregate structural keys only, no CDB mutation",
   "provider_requests_allowed": true,
   "max_requests": 2,
   "event_id": 17449516,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ TennisApi endpoint QA",
-  "diagnostic_attempt": 26,
+  "diagnostic_attempt": 27,
   "phase": "bulk_odds_shape"
 }
