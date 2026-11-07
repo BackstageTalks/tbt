@@ -2181,6 +2181,9 @@
   function orderedDailyHubTabs(){
     const saved=state.ui?.dashboard?.daily_hub?.tab_order;
     const order=Array.isArray(saved)?saved.filter((id,i)=>DAILY_HUB_TABS.includes(id)&&saved.indexOf(id)===i):[];
+    // Old published tab orders have no VIAC ES. Insert after ESÁ once;
+    // thereafter respect the operator's chosen ordering in Admin.
+    if(order.includes('ace')&&!order.includes('ace_winner'))order.splice(order.indexOf('ace')+1,0,'ace_winner');
     return [...order,...DAILY_HUB_TABS.filter(id=>!order.includes(id))];
   }
   // Results filters follow the configurable home tab order, including admin changes.
@@ -2229,6 +2232,7 @@
   function dailyHubConfig(){
     const cfg=state.ui?.dashboard?.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};
     const tabs={...(cfg.tabs||{})};delete tabs.top200;
+    if(!tabs.ace_winner&&tabs.ace){tabs.ace_winner=clone(tabs.ace);tabs.ace_winner.exclude_from_stats=false;}
     return {...cfg,default_tab:cfg.default_tab==='top200'?'daily':cfg.default_tab,tabs};
   }
   function previewStableRandomSlots(tab,total,count){
@@ -2451,7 +2455,7 @@
     return `<span class="hub-confidence"><strong>${escapeHtml(pct(n))}</strong><i aria-hidden="true"><b style="width:${p.toFixed(1)}%"></b></i></span>`;
   }
   function hubPredictionHtml(sourceTab,text,subLabel=''){
-    const label=subLabel||({daily:'TOP',prime:'ACCA',value:'VALUE',ace:'ACES',double_faults:'DVOJCHYBY',doubles:'DOUBLES',games:'GAMES',sets:'SETS'}[sourceTab]||String(sourceTab||'').toUpperCase());
+    const label=subLabel||({daily:'TOP',prime:'ACCA',value:'VALUE',ace:'ACES',ace_winner:'VIAC ES',double_faults:'DVOJCHYBY',doubles:'DOUBLES',games:'GAMES',sets:'SETS'}[sourceTab]||String(sourceTab||'').toUpperCase());
     return `<span class="hub-pick-stack"><small>${escapeHtml(label)}</small><strong title="${escapeHtml(text)}">${escapeHtml(text)}</strong></span>`;
   }
   function aceLeaderHintHtml(row,player,name){
@@ -3571,6 +3575,7 @@
     const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
     return ({
       aces:lcopy('ACES','ESÁ','ESA'),
+      most_aces:lcopy('MOST ACES','VIAC ES','VÍCE ES'),
       double_faults:lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'),
       sets:lcopy('SETS','SETY','SETY'),
       games:lcopy('GAMES','GAMY','GEMY'),
@@ -3579,6 +3584,7 @@
   function projectionResultSelectionText(publication,fallback='—'){
     const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
     const selection=String(publication?.selection||fallback||'—').trim();
+    if(metric==='most_aces')return `${selection} · ${lcopy('Most aces','Viac es','Více es')}`;
     const unit=projectionResultUnitLabel(publication);
     const localized=selection.replace(/Double Faults/gi,lcopy('Double Faults','dvojchyby','dvojchyby')).replace(/Aces/gi,lcopy('Aces','esá','esa')).replace(/Games/gi,lcopy('Games','gamy','gemy')).replace(/Sets/gi,lcopy('Sets','sety','sety'));
     // An archived explicit contract wins over direction inferred from a projection.
@@ -3908,7 +3914,7 @@
           .filter(p=>p&&typeof p==='object'&&String(p.publication_status||'published')==='published');
         if(pubs.length){pubs.forEach(p=>add(row,{...p,offer_position:p.offer_position||row.offer_position||rowIndex+1}));return;}
         const market=row.market||(section==='ace'?'aces':section==='sg'?'':'match_winner');
-        add(row,{...row,section:market==='double_faults'?'double_faults':market==='sets'?'sets':market==='games'?'games':section,
+        add(row,{...row,section:market==='most_aces'?'ace_winner':market==='double_faults'?'double_faults':market==='sets'?'sets':market==='games'?'games':section,
           selection_id:row.betting?.selection_id||row.selection_id||row.pick_id,
           market,offer_position:row.offer_position||rowIndex+1,
           issued_at:row.issued_at||row.published_at||row.created_at});
@@ -7051,11 +7057,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
   function adminCsvPredictionInputs(){
     // Published category tables, without their visible row/page limits.
-    return ['daily','prime','value','ace','double_faults','doubles','games','sets']
+    return ['daily','prime','value','ace','ace_winner','double_faults','doubles','games','sets']
       .flatMap(tab=>dailyHubRows(tab).map(row=>({
         row,
         category:RESULT_CATEGORY_BY_TAB[tab],
-        pick:['ace','double_faults','sets','games'].includes(tab)
+        pick:['ace','ace_winner','double_faults','sets','games'].includes(tab)
           ?projectionPickText(row,tab):modelPickName(row),
       })));
   }
@@ -7069,7 +7075,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<button type="button" class="btn btn-primary" data-admin-export-csv="results" '+(archiveReady&&resultsCount?'':'disabled')+'>↓ Export výsledkov CSV</button>'+
       (archiveReady?'':'<p role="alert">Archív alebo politika vylúčení nie sú dostupné; neúplný CSV sa neexportuje.</p>')+'</div>'+
       '<div class="admin-ux-section"><div class="admin-subsection-heading"><div><strong>Predikcie</strong><span>'+predictionCount+' publikovaných riadkov</span></div></div>'+
-      '<p>Aktuálna publikovaná ponuka TOP, ACCA, Value, Esá, Dvojchyby, Štvorhra, Sety a Gamy. Vrátane kategórie, modelového odhadu, kurzu, hranice a dostupných zdrojových polí.</p>'+
+      '<p>Aktuálna publikovaná ponuka TOP, ACCA, Value, Esá, Viac es, Dvojchyby, Štvorhra, Sety a Gamy. Vrátane kategórie, modelového odhadu, kurzu, hranice a dostupných zdrojových polí.</p>'+
       '<button type="button" class="btn btn-primary" data-admin-export-csv="predictions" '+(predictionCount?'':'disabled')+'>↓ Export predikcií CSV</button></div>'+
       '<p class="admin-detail-help">Dáta pochádzajú z publikovaného admin feedu a overeného archívu. Bez nových provider API požiadaviek, CDB zápisov alebo zmeny modelu.</p></section>';
   }
