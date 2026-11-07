@@ -164,6 +164,7 @@ from tbt.services.match_status import (
     verified_terminal_statuses,
     apply_verified_schedule_overlay,
     published_ace_statistic_targets, attach_confirmed_aces_ou_sidecar,
+    confirmed_rollover_rows, feed_with_issued_rollover,
 )
 from tbt.services.clv_market_history import (
     extract_verified_quotes, persist_quotes, attach_offer_clv,
@@ -2278,6 +2279,20 @@ def internal_match_status_worker(req):
     try:
         feed_payload = _read_feed_with_confirmed_aces_ou()
         previous = load_match_status_snapshot() or {}
+        # Capture only pre-start market commitments with durable exact-serving
+        # authority. Preserve yesterday's already confirmed receipts across
+        # 06:00 without exposing them as today's member-facing offer.
+        from tbt.services.feed import _betting_day_key
+        today = _betting_day_key(datetime.now(timezone.utc))
+        try:
+            confirmed_authority = load_authority(today)
+        except AdminStorageUnavailable:
+            logging.warning("Issued authority unavailable for rollover capture")
+            confirmed_authority = None
+        issued_rollover = confirmed_rollover_rows(
+            feed_payload, confirmed_authority, previous,
+        )
+        tracking_feed = feed_with_issued_rollover(feed_payload, issued_rollover)
         client = RapidTennisClient(
             settings, request_budget=lambda *args, **kwargs: reserve_shared_api_budget("match")
         )
@@ -2295,9 +2310,10 @@ def internal_match_status_worker(req):
         worker_started = time.monotonic()
         try:
             snapshot = scan_match_statuses(
-                feed_payload,
+                tracking_feed,
                 client,
                 previous,
+                issued_rollover_rows=issued_rollover,
                 max_checks=max(
                     1,
                     min(20, int(os.getenv("BLINQ_MATCH_STATUS_MAX_CHECKS", "20"))),
@@ -2311,7 +2327,7 @@ def internal_match_status_worker(req):
             # Only issued Aces/DF offers qualify for post-match statistics.
             # Reuse the same client/quota; never start an unbounded enrichment.
             from tbt.providers.statistics import parse_statistics
-            stat_rows = published_ace_statistic_targets(feed_payload)
+            stat_rows = published_ace_statistic_targets(tracking_feed)
             checked_stats = 0
             unavailable_stats = 0
             quota_paused = False
@@ -2414,6 +2430,7 @@ def internal_match_status_worker(req):
                     value=peak.get(key)
                     if value not in (None,""):
                         settled[key]=value
+        snapshot["rollover_issued_rows"] = issued_rollover
         saved = save_match_status_snapshot(snapshot)
         # Independent durable Azure read-back: a successful upsert alone is not
         # evidence that the provider-verified schedule overlay can be served.
@@ -2421,6 +2438,7 @@ def internal_match_status_worker(req):
         if (
             not isinstance(persisted, dict)
             or persisted.get("schedule_updates") != saved.get("schedule_updates")
+            or persisted.get("rollover_issued_rows") != saved.get("rollover_issued_rows")
         ):
             raise AdminStorageUnavailable("Verified schedule read-back mismatch")
         saved["schedule_readback_verified"] = True
@@ -2428,7 +2446,7 @@ def internal_match_status_worker(req):
         # Zero API calls: use only the provider-verified status snapshot and the
         # already deployed immutable offer. Readback is required to pass cron.
         saved["results_archive"] = save_settled_results_archive(
-            settled_archive_candidates(feed_payload, saved.get("statuses") or {})
+            settled_archive_candidates(tracking_feed, saved.get("statuses") or {})
         )
         # Trusted worker response only: verify persisted Results category coverage,
         # without names, match IDs, selections, writes or provider API calls.

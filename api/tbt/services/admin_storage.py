@@ -909,6 +909,23 @@ def save_match_status_snapshot(payload: object) -> dict:
         "degraded": bool(data.get("degraded")),
         "terminal": len(statuses),
     }
+    # Keep bounded, independently revalidated issued market receipts for the
+    # next day's settlement. The hourly worker supplies them only after the
+    # exact serving-authority receipt is checked. Never package these into the
+    # customer-facing feed or invent wager lines from today's changed model.
+    rollover = data.get("rollover_issued_rows")
+    rollover = rollover if isinstance(rollover, list) else []
+    safe["rollover_issued_rows"] = [
+        entry for entry in rollover[:180]
+        if (isinstance(entry, dict)
+            and entry.get("confirmed_only") is True
+            and entry.get("section") in {
+                "top_daily_picks", "prime_picks", "value_picks",
+                "doubles_picks", "ace_picks", "sg_picks",
+            }
+            and isinstance(entry.get("row"), dict)
+            and len(json.dumps(entry, ensure_ascii=False, separators=(",", ":"))) <= 20_000)
+    ]
     payload_json = json.dumps(safe, ensure_ascii=False, separators=(",", ":"))
     # Azure Table limits string properties to 64 KiB (UTF-16).  Most snapshots
     # fit in one row after gzip+base64.  A long-lived pending backlog can still
