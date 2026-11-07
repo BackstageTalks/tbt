@@ -9,7 +9,7 @@ from tbt.services.publication import (
 )
 
 
-def _market_row(event_id='evt', probability=.80, odds=1.90, implied=.56):
+def _market_row(event_id='evt', probability=.90, odds=1.90, implied=.56):
     return {
         'id': f'm-{event_id}',
         'event_id': event_id,
@@ -97,8 +97,8 @@ def test_market_issuance_freezes_deployed_rank_and_adjusted_probability():
     snapshot = pub["issued_snapshot"]
     assert snapshot["source"] == "deployed_feed_at_issuance"
     assert snapshot["captured_at"] == pub["issued_at"]
-    assert snapshot["model_probability"] == pub["model_probability"] == .80
-    assert abs(snapshot["blinq_probability"] - .74) < 1e-12
+    assert snapshot["model_probability"] == pub["model_probability"] == .90
+    assert abs(snapshot["blinq_probability"] - .82) < 1e-12
     assert snapshot["ranks"]["player1"] == {"id": "A", "rank": 420}
     assert snapshot["ranks"]["player2"] == {"id": "B", "rank": 1120}
     assert snapshot["rank_provenance"] == "public_card_snapshot_not_verified_historical_rank"

@@ -57,7 +57,8 @@ def row(event_id, probability, odds, opponent_odds, *, depth=.9, surface1=12, su
 
 
 def test_candidate_snapshot_keeps_selected_and_unselected_without_post_match_fields():
-    selected = row('selected-top', .72, 1.60, 2.50, depth=1.0)
+    selected = row('selected-top', .82, 1.60, 2.50, depth=1.0)
+    selected['competition'] = 'ATP250'
     unpriced = row('unpriced', .73, 1.70, 2.30, depth=.95)
     unpriced.pop('betting', None)
     unpriced.pop('match_winner_market', None)
@@ -75,7 +76,9 @@ def test_candidate_snapshot_keeps_selected_and_unselected_without_post_match_fie
     }
     rows = {item['event_id']: item for item in snap['rows']}
     assert rows['selected-top']['selected_section'] == 'top_daily'
-    assert rows['selected-top']['selection_tier'] == 'fallback'
+    assert rows['selected-top']['selection_tier'] == 'core'
+    assert rows['selected-top']['competition'] == 'ATP250'
+    assert rows['selected-top']['selector_snapshot_at'] == '2026-10-08T06:30:00+00:00'
     assert rows['unpriced']['priced'] is False
     assert rows['unpriced']['selected_section'] is None
     serialized = str(snap).lower()
@@ -152,7 +155,7 @@ def test_retired_top200_cannot_claim_ranked_picks_from_active_sections():
     rows = [
         row('ranked-short', .75, 1.30, 3.40, depth=1.0, rank1=150, rank2=420),
         row('ranked-value', .72, 1.90, 2.00, depth=1.0, rank1=360, rank2=88),
-        row('ranked-top', .70, 1.60, 2.50, depth=1.0, rank1=199, rank2=260),
+        row('ranked-top', .85, 1.60, 2.50, depth=1.0, rank1=199, rank2=260),
     ]
     sections = select_market_sections(rows)
     assert sections['top200_picks'] == []
@@ -160,42 +163,42 @@ def test_retired_top200_cannot_claim_ranked_picks_from_active_sections():
     assert [item['event_id'] for item in sections['value_picks']] == ['ranked-value']
     assert [item['event_id'] for item in sections['top_daily_picks']] == ['ranked-top']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'active_value_top_prime_v16'
+    assert meta['selection_policy'] == 'active_value_top_prime_v17'
     assert meta['exclusive_assignment']['priority'] == ['value', 'top_daily', 'prime']
     assert 'top200_rule' not in meta
 
 
 def test_retired_top200_never_caps_ranked_candidate_supply():
     rows = [
-        row(f'ranked-{i}', .80 - i * .01, 1.60, 2.50, depth=1.0, rank1=100 + i, rank2=500)
+        row(f'ranked-{i}', .90 - i * .01, 1.60, 2.50, depth=1.0, rank1=100 + i, rank2=500)
         for i in range(7)
     ]
     sections = select_market_sections(rows)
     assert sections['top200_picks'] == []
     assert [item['event_id'] for item in sections['top_daily_picks']] == [
-        f'ranked-{i}' for i in range(3)
+        f'ranked-{i}' for i in range(7)
     ]
 
 
 def test_probability_first_odds_buckets_match_product_policy():
     rows = [
         row('prime', .72, 1.30, 2.70),
-        row('top', .76, 1.50, 2.55),
+        row('top', .86, 1.50, 2.55),
         row('value', .70, 1.90, 2.05),  # symmetric gap ~7.6%, close odds
-        row('top-not-value', .74, 1.90, 2.40),  # gap >15%, remains Top
+        row('top-not-value', .84, 1.90, 2.40),  # gap >15%, remains Top
     ]
     sections = select_market_sections(rows)
     assert [x['event_id'] for x in sections['prime_picks']] == ['prime']
     assert [x['event_id'] for x in sections['value_picks']] == ['value']
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['top', 'top-not-value']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'active_value_top_prime_v16'
+    assert meta['selection_policy'] == 'active_value_top_prime_v17'
     assert meta['value_rule']['assignment_priority'] == 1
     assert meta['value_rule']['max_two_way_odds_difference'] == .15
     assert meta['top_daily_rule']['value_priority_exclusion'] is True
 
 
-def test_prime_65_and_value_65_remain_while_top_never_falls_below_70():
+def test_prime_65_and_value_65_remain_while_top_never_falls_below_80():
     rows = [
         row('p649-prime', .649, 1.40, 3.10, depth=1.0),
         row('p649-top', .649, 1.70, 2.20, depth=1.0),
@@ -211,7 +214,7 @@ def test_prime_65_and_value_65_remain_while_top_never_falls_below_70():
     assert sections['prime_picks'] == []
     assert sections['value_picks'][0]['probability'] == .65
     assert sections['market_selection']['selection_counts']['top_fallback_added'] == 0
-    assert sections['market_selection']['selection_counts']['top_below_three_after_70'] is True
+    assert sections['market_selection']['selection_counts']['top_empty_after_quality_gate'] is True
 
 
 def test_blinq_probability_shrinks_raw_confidence_by_data_depth():
@@ -260,13 +263,13 @@ def test_top_does_not_relax_when_three_core_picks_exist():
 
 
 def test_odds_150_belongs_to_top_not_prime():
-    sections = select_market_sections([row('boundary', .72, 1.50, 2.60, depth=1.0)])
+    sections = select_market_sections([row('boundary', .82, 1.50, 2.60, depth=1.0)])
     assert sections['prime_picks'] == []
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['boundary']
 
 def test_value_close_odds_uses_symmetric_15_percent_rule():
     close = row('close', .70, 1.80, 2.05, depth=1.0)   # 12.99%
-    far = row('far', .70, 1.80, 2.15, depth=1.0)      # 17.72%
+    far = row('far', .85, 1.80, 2.15, depth=1.0)      # 17.72%
     sections = select_market_sections([close, far])
     assert [x['event_id'] for x in sections['value_picks']] == ['close']
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['far']
@@ -349,25 +352,23 @@ def test_odds_enrichment_covers_all_65_percent_value_candidates_before_prices_ar
     assert next(x for x in enriched if x['event_id'] == 'eligible').get('betting')
 
 
-def test_top_dynamic_fallback_stops_at_first_tier_reaching_three():
-    rows=[
-        row('core1',.82,1.60,2.40,depth=1.0),row('core2',.81,1.55,2.50,depth=1.0),
-        row('f78',.78,1.50,3.00,depth=1.0),row('short79',.79,1.49,3.00,depth=1.0),
-        row('f75',.75,1.50,3.00,depth=1.0),row('f70',.70,1.52,3.00,depth=1.0),
-        row('below-stop',.69,1.70,3.20,depth=1.0),
-    ]
-    sections=select_market_sections(rows)
-    ids=[x['event_id'] for x in sections['top_daily_picks']]
-    assert ids==['core1','core2','f78']
-    assert 'short79' not in ids
-    assert [x['event_id'] for x in sections['prime_picks']] == ['short79']
-    assert 'below-stop' not in ids
-    meta=sections['market_selection']['selection_counts']['top_fallback_applied']
-    assert meta=={'step':1,'min_probability':.78,'min_odds':1.50}
-    assert sections['market_selection']['top_daily_rule']['fallback_min_odds']==1.50
-    assert sections['market_selection']['top_daily_rule']['fallback_only_if_core_count_below']==3
-    assert sections['market_selection']['top_daily_rule']['probability_tiers']==[.80,.78,.75,.70]
 
+def test_top_does_not_lower_confidence_to_fill_three():
+    rows = [
+        row('core1', .82, 1.60, 2.40, depth=1.0),
+        row('core2', .81, 1.55, 2.50, depth=1.0),
+        row('f78', .78, 1.50, 3.00, depth=1.0),
+        row('f75', .75, 1.50, 3.00, depth=1.0),
+        row('f70', .70, 1.52, 3.00, depth=1.0),
+    ]
+    sections = select_market_sections(rows)
+    assert [x['event_id'] for x in sections['top_daily_picks']] == ['core1', 'core2']
+    counts = sections['market_selection']['selection_counts']
+    assert counts['top_fallback_added'] == 0
+    assert counts['active_top_probability_floor'] == .80
+    assert counts['daily_minimum_target'] == 0
+    assert sections['market_selection']['top_daily_rule']['dynamic_fallback'] is False
+    assert sections['market_selection']['top_daily_rule']['probability_tiers'] == [.80]
 
 def test_value_audit_reports_filter_bottlenecks_without_changing_selection():
     good = row('value-good', .72, 1.90, 2.00, depth=.90, surface1=10, surface2=10)
@@ -456,7 +457,8 @@ def test_top_all_above_80_no_three_cap_and_true_probability_shown():
     assert section["market_selection"]["top_daily_rule"]["all_qualifying_above_active_tier"]
 
 
-def test_top_first_threshold_with_three_78s_keeps_all_above_floor():
+
+def test_top_never_fills_from_78_when_only_one_strong_candidate():
     rows = [
         row("a80", .81, 1.60, 3.00, depth=1.0),
         row("b78", .78, 1.60, 3.00, depth=1.0),
@@ -464,41 +466,42 @@ def test_top_first_threshold_with_three_78s_keeps_all_above_floor():
         row("d75", .75, 1.60, 3.00, depth=1.0),
     ]
     result = select_market_sections(rows)
-    assert [x["event_id"] for x in result["top_daily_picks"]] == ["a80","c78","b78"]
-    assert result["market_selection"]["selection_counts"]["active_top_probability_floor"] == .78
+    assert [x["event_id"] for x in result["top_daily_picks"]] == ["a80"]
+    assert result["market_selection"]["selection_counts"]["active_top_probability_floor"] == .80
 
 
-def test_top_relaxes_to_75_then_70_only_for_target_three_not_below():
+def test_zero_top_is_valid_and_value_priority_stays_intact():
     rows = [
-        row("a80", .80, 1.60, 3.00, depth=1.0),
-        row("b78", .78, 1.60, 3.00, depth=1.0),
-        row("c75", .75, 1.60, 3.00, depth=1.0),
-        row("d70", .70, 1.60, 3.00, depth=1.0),
+        row("value-priority", .85, 1.90, 2.00, depth=1.0),
+        row("below-80", .79, 1.60, 3.00, depth=1.0),
+        row("below-75", .74, 1.60, 3.00, depth=1.0),
     ]
     result = select_market_sections(rows)
-    assert [x["event_id"] for x in result["top_daily_picks"]] == ["a80","b78","c75"]
-    assert result["market_selection"]["selection_counts"]["active_top_probability_floor"] == .75
-    rows[2] = row("c69", .69, 1.60, 3.00, depth=1.0)
-    result = select_market_sections(rows)
-    assert [x["event_id"] for x in result["top_daily_picks"]] == ["a80","b78","d70"]
-    assert result["market_selection"]["selection_counts"]["active_top_probability_floor"] == .70
-    rows[3] = row("d69", .69, 1.60, 3.00, depth=1.0)
-    result = select_market_sections(rows)
-    assert [x["event_id"] for x in result["top_daily_picks"]] == ["a80","b78"]
-    assert result["market_selection"]["selection_counts"]["top_below_three_after_70"] is True
+    assert result["top_daily_picks"] == []
+    assert [x["event_id"] for x in result["value_picks"]] == ["value-priority"]
+    assert result["market_selection"]["selection_counts"]["top_empty_after_quality_gate"] is True
+    assert result["market_selection"]["top_daily_rule"]["no_forced_fill"] is True
 
 
-def test_top_70_fallback_never_bypasses_data_depth_surface_odds():
+def test_top_fixed_80_never_bypasses_data_depth_surface_odds():
     rows = [
-        row("valid", .75, 1.50, 3.00, depth=1.0, surface1=5, surface2=5),
+        row("valid", .85, 1.50, 3.00, depth=1.0, surface1=5, surface2=5),
+        row("below-80", .79, 1.60, 3.00, depth=1.0),
         row("short", .85, 1.49, 3.00, depth=1.0),
         row("shallow", .90, 1.60, 3.00, depth=.60),
         row("no-surface", .90, 1.60, 3.00, depth=1.0, surface1=3),
     ]
     result = select_market_sections(rows)
     assert [x["event_id"] for x in result["top_daily_picks"]] == ["valid"]
-    assert result["market_selection"]["selection_counts"]["top_below_three_after_70"] is True
+    assert result["market_selection"]["selection_counts"]["top_fallback_added"] == 0
 
+
+def test_above_180_without_close_gap_remains_top():
+    far = row('far-market', .85, 2.10, 3.10, depth=1.0)
+    near = row('close-market', .85, 1.90, 2.00, depth=1.0)
+    sections = select_market_sections([far, near])
+    assert [x["event_id"] for x in sections["value_picks"]] == ["close-market"]
+    assert [x["event_id"] for x in sections["top_daily_picks"]] == ["far-market"]
 
 def test_provider_partial_name_cannot_guess_player_side():
     # The older substring matcher mapped "Anna" to "Ann" and lost a side.

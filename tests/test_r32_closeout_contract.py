@@ -27,16 +27,16 @@ def test_r32_identity_background_and_loader_contract():
     assert 'url("/assets/blinq_background.webp")' in CSS
 
 
-def test_r32_top_short_odds_boundary_is_gapless_and_only_probability_relaxes():
+def test_r32_top_short_odds_boundary_is_gapless_without_probability_relaxation():
     market = (ROOT / "api" / "tbt" / "services" / "market_selection.py").read_text(encoding="utf-8")
     top = UI["market_rules"]["top_daily"]
     assert "PRIME_MAX_ODDS_EXCLUSIVE = 1.50" in market
     assert "TOP_FALLBACK_MIN_ODDS = 1.50" in market
-    assert "TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.70" in market
+    assert "TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.80" in market
     assert top["min_odds"] == 1.5
     assert top["fallback_min_odds"] == 1.5
-    assert [x["min_probability"] for x in top["dynamic_fallback_tiers"]] == [.78, .75, .70]
-    assert {x["min_odds"] for x in top["dynamic_fallback_tiers"]} == {1.5}
+    assert top["dynamic_fallback_tiers"] == []
+    assert top["minimum_dashboard_count"] == 0
     assert UI["market_rules"]["match_winner_assignment"]["exclusive"] is True
     assert UI["market_rules"]["match_winner_assignment"]["priority"][:2] == ["value", "top_daily"]
 

@@ -35,7 +35,7 @@ MATCH_WINNER_MARKET_NAMES = {
 #
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
-# PRIME keeps its current short-price fallback. TOP prioritizes >=80% and stages 78%, 75%, then 70% only until at least three picks qualify. Keep all above active tier without bypassing the odds/data-quality gates. Value keeps a 65% floor.
+# PRIME retains its existing fallback. TOP is a strict quality filter at >=80%, never filled to a daily quota. Value keeps its existing independent 65% floor and close-odds priority.
 #
 # VALUE has assignment priority because close-odds candidates are intentionally
 # scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
@@ -46,10 +46,8 @@ PUBLICATION_MIN_PROBABILITY = 0.65
 
 PRIME_TOP_CORE_PROBABILITY = 0.68
 PRIME_TOP_FALLBACK_PROBABILITY = 0.65
-TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.70
-TOP_DYNAMIC_FALLBACK_TIERS = (
-    (0.78, 1.50), (0.75, 1.50), (0.70, 1.50),
-)
+TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.80  # legacy identifier; no relaxation below 80%
+TOP_DYNAMIC_FALLBACK_TIERS = ()
 
 # PRIME: any decimal price below 1.50 (no lower odds bound).
 PRIME_MIN_PROBABILITY = PRIME_TOP_CORE_PROBABILITY
@@ -70,10 +68,10 @@ PRIME_LIMIT = 30
 TOP_PREFERRED_PROBABILITY = 0.80
 TOP_SECONDARY_PROBABILITY = 0.78
 TOP_STANDARD_PROBABILITY = 0.75
-TOP_FALLBACK_PROBABILITIES = (0.70,)
+TOP_FALLBACK_PROBABILITIES = ()
 TOP_MIN_PROBABILITY = TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY
-TOP_TARGET_COUNT = 3
-TOP_MIN_COUNT = 3
+TOP_TARGET_COUNT = 0  # quality can legitimately yield no TOP picks
+TOP_MIN_COUNT = 0
 TOP_MIN_DATA_DEPTH = 0.80
 TOP_MIN_SURFACE_MATCHES = 5
 TOP_MIN_ODDS: float | None = 1.50
@@ -990,47 +988,6 @@ def _fill_to_minimum(
     return selected, added
 
 
-def _fill_top_dynamic(
-    core: list[dict[str, Any]],
-    fallback_pool: list[dict[str, Any]],
-    *,
-    minimum_count: int,
-    rank_key,
-    minimum_probability: float = TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY,
-) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
-    """Publish ALL above the first qualifying 80/78/75/70 tier; odds >=1.50."""
-    selected = list(core)
-    selected.sort(key=rank_key, reverse=True)
-    if len(selected) >= int(minimum_count):
-        return selected, 0, {"step": 0, "min_probability": TOP_PREFERRED_PROBABILITY, "min_odds": TOP_MIN_ODDS}
-
-    used = {_selection_identity(card) for card in selected}
-    added = 0
-    applied = {"step": 0, "min_probability": TOP_PREFERRED_PROBABILITY, "min_odds": TOP_MIN_ODDS}
-    pool = sorted(fallback_pool, key=rank_key, reverse=True)
-    for step, (prob_floor, odds_floor) in enumerate(TOP_DYNAMIC_FALLBACK_TIERS, start=1):
-        if prob_floor + 1e-12 < minimum_probability:
-            continue
-        eligible = [card for card in pool if (_number(card.get("probability")) or 0.0) + 1e-12 >= prob_floor and (_number(card.get("odds")) or 0.0) + 1e-12 >= odds_floor]
-        for card in eligible:
-            identity = _selection_identity(card)
-            if not identity or identity in used:
-                continue
-            item = deepcopy(card)
-            item["selection_tier"] = "fallback"
-            item["fallback_step"] = step
-            item["fallback_min_probability"] = prob_floor
-            item["fallback_min_odds"] = odds_floor
-            selected.append(item)
-            used.add(identity)
-            added += 1
-        applied = {"step": step, "min_probability": prob_floor, "min_odds": odds_floor}
-        if len(selected) >= int(minimum_count):
-            break
-    selected.sort(key=rank_key, reverse=True)
-    return selected, added, applied
-
-
 def select_market_sections(
     predictions: list[dict[str, Any]],
     *,
@@ -1062,10 +1019,9 @@ def select_market_sections(
 
     Retired TOP200 is never evaluated or allowed to reserve candidates.
     Active VALUE -> TOP/PRIME selection uses the normal quality gates.
-    TOP starts at 80% / 1.50 and relaxes through 78%, 75%, 70% ONLY until
-    three eligible, independently priced picks exist. All picks above the
-    applied tier are kept, even when their number exceeds three; the minimum
-    is a target, not permission to invent probabilities. EV is diagnostic.
+    TOP requires >=80% BlinQ probability, >=1.50 real pre-start odds and the
+    existing data-quality gates. There is no minimum daily count or fallback.
+    VALUE's existing close-odds assignment takes priority; EV is diagnostic.
     """
     cards = [
         card for row in predictions
@@ -1077,7 +1033,7 @@ def select_market_sections(
     prime_core_floor = max(PRIME_TOP_CORE_PROBABILITY, float(prime_min_probability))
     top_core_floor = max(TOP_PREFERRED_PROBABILITY, float(top_min_probability))
     fallback_floor = PRIME_TOP_FALLBACK_PROBABILITY
-    top_fallback_floor = max(TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY, float(top_min_probability))
+    top_fallback_floor = top_core_floor  # no lower-confidence TOP cohort
     value_floor = max(PUBLICATION_MIN_PROBABILITY, float(value_min_probability))
     value_audit = _value_qualification_audit(
         predictions,
@@ -1092,7 +1048,6 @@ def select_market_sections(
     prime_core: list[dict[str, Any]] = []
     prime_fallback: list[dict[str, Any]] = []
     top_core: list[dict[str, Any]] = []
-    top_fallback: list[dict[str, Any]] = []
 
     extreme_inversion_quarantined = 0
     market_conflict_missing_rank_quarantined = 0
@@ -1132,19 +1087,15 @@ def select_market_sections(
         ):
             (prime_core if probability >= prime_core_floor else prime_fallback).append(card)
 
-        top_core_odds = float(top_min_odds or TOP_MIN_ODDS or 1.50)
-        if odds >= TOP_FALLBACK_MIN_ODDS and _passes_candidate_gate(
-            card, min_probability=top_fallback_floor,
+        top_core_odds = max(TOP_FALLBACK_MIN_ODDS, float(top_min_odds or TOP_MIN_ODDS or 1.50))
+        if odds >= top_core_odds and _passes_candidate_gate(
+            card, min_probability=top_core_floor,
             min_data_depth=top_min_data_depth,
             min_surface_matches=top_min_surface_matches,
         ):
             tagged = deepcopy(card)
-            if odds >= top_core_odds and probability >= top_core_floor:
-                tagged["selection_tier"] = "core"
-                top_core.append(tagged)
-            else:
-                tagged["selection_tier"] = "fallback"
-                top_fallback.append(tagged)
+            tagged["selection_tier"] = "core"
+            top_core.append(tagged)
 
     rank = lambda card: (
         _number(card.get("probability")) or 0.0,
@@ -1154,21 +1105,18 @@ def select_market_sections(
     )
     value_qualified.sort(key=rank, reverse=True)
 
-    # Value claims overlap with Top before the Top minimum-fill decision.
-    # TOP fallback inventory is considered only after Value priority. The
-    # probability threshold is relaxed 80 -> 78 -> 75 -> 70%; the
-    # odds threshold never moves below 1.50. No cap above the selected floor.
+    # Value has unchanged exclusive priority; TOP never relaxes its 80% floor
+    # and never fabricates inventory to meet a daily quota.
     value_ids = {_selection_identity(card) for card in value_qualified}
     top_core = [card for card in top_core if _selection_identity(card) not in value_ids]
-    top_fallback = [card for card in top_fallback if _selection_identity(card) not in value_ids]
 
     prime_qualified, prime_fallback_added = _fill_to_minimum(
         prime_core, prime_fallback, minimum_count=PRIME_MIN_COUNT, rank_key=rank
     )
-    top_qualified, top_fallback_added, top_fallback_applied = _fill_top_dynamic(
-        top_core, top_fallback, minimum_count=TOP_MIN_COUNT,
-        rank_key=rank, minimum_probability=top_fallback_floor,
-    )
+    top_qualified = sorted(top_core, key=rank, reverse=True)
+    top_fallback_added = 0
+    top_fallback_applied = {"step": 0, "min_probability": top_core_floor,
+                            "min_odds": max(TOP_FALLBACK_MIN_ODDS, float(top_min_odds or TOP_MIN_ODDS or 1.50))}
 
     selected, duplicate_removed, limited_out = _exclusive_section_assignment(
         {"value": value_qualified, "prime": prime_qualified, "top_daily": top_qualified},
@@ -1184,7 +1132,7 @@ def select_market_sections(
         raise ValueError("Market section exclusivity invariant failed")
     if any((_number(card.get("probability")) or 0.0) + 1e-12 < PRIME_TOP_FALLBACK_PROBABILITY for card in prime):
         raise ValueError("Prime fallback probability floor invariant failed")
-    if any((_number(card.get("probability")) or 0.0) + 1e-12 < TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY for card in top):
+    if any((_number(card.get("probability")) or 0.0) + 1e-12 < top_core_floor for card in top):
         raise ValueError("Top fallback probability floor invariant failed")
     if any((_number(card.get("probability")) or 0.0) + 1e-12 < PUBLICATION_MIN_PROBABILITY for card in value):
         raise ValueError("Value probability floor invariant failed")
@@ -1204,7 +1152,7 @@ def select_market_sections(
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
             "schema": 16,
-            "selection_policy": "active_value_top_prime_v16",
+            "selection_policy": "active_value_top_prime_v17",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "extreme_price_inversion_quarantined": extreme_inversion_quarantined,
@@ -1220,11 +1168,11 @@ def select_market_sections(
                 "prime": len(prime), "top_daily": len(top), "value": len(value),
                 "duplicates_removed": sum(duplicate_removed.values()),
                 "limited_out": sum(limited_out.values()),
-                "daily_minimum_target": TOP_MIN_COUNT,
+                "daily_minimum_target": 0,
                 "daily_preferred_target": TOP_MIN_COUNT,
                 "all_qualifying_above_active_tier": True,
                 "active_top_probability_floor": top_fallback_applied["min_probability"],
-                "top_below_three_after_70": len(top) < TOP_MIN_COUNT,
+                "top_empty_after_quality_gate": len(top) == 0,
                 "minimum_shortfall": {
                     "prime": max(0, PRIME_MIN_COUNT-len(prime)),
                     "top_daily": max(0, TOP_MIN_COUNT-len(top)),
@@ -1248,7 +1196,7 @@ def select_market_sections(
                 "core_probability": PRIME_TOP_CORE_PROBABILITY,
                 "prime_fallback_probability": PRIME_TOP_FALLBACK_PROBABILITY,
                 "top_fallback_probability_floor": TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY,
-                "top_probability_tiers": [0.80, 0.78, 0.75, 0.70],
+                "top_probability_tiers": [0.80],
                 "top_dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
                 ],
@@ -1279,13 +1227,13 @@ def select_market_sections(
                 "probability_basis": "blinq_probability",
                 "core_min_probability": top_core_floor,
                 "fallback_min_probability": top_fallback_floor,
-                "probability_tiers": [0.80, 0.78, 0.75, 0.70],
-                "daily_minimum_target": TOP_MIN_COUNT,
+                "probability_tiers": [0.80],
+                "daily_minimum_target": 0,
                 "all_qualifying_above_active_tier": True,
                 "no_forced_fill": True,
                 "observed_pick_count": len(top),
-                "fallback_only_if_core_count_below": TOP_MIN_COUNT,
-                "dynamic_fallback": True,
+                "fallback_only_if_core_count_below": 0,
+                "dynamic_fallback": False,
                 "dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
                 ],
@@ -1368,6 +1316,8 @@ def build_selection_candidate_snapshot(
             "scheduled_at": source.get("scheduled_at"),
             "tour": source.get("tour"),
             "tournament": source.get("tournament"),
+            "competition": source.get("competition"),  # frozen pre-match level; never infer from outcomes
+            "selector_snapshot_at": generated_at.astimezone(timezone.utc).isoformat(),
             "surface": source.get("surface"),
             "model_version": source.get("model_version"),
             "winner_id": source.get("winner_id"),
