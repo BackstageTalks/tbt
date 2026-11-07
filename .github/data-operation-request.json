@@ -3,15 +3,15 @@
   "kind": "operator-approved-tennisapi-breakpoint-null-only-v1",
   "mode": "statistics",
   "source": "tennisapi1",
-  "description": "Retry authorized 2023–2026 BP-only NULL enrichment following PR #1444 explicit false guard CI+merge; 200 paid attempts maximum, existing native importer, model unchanged",
+  "description": "User-authorized 100-request measured BP-null enrichment pilot in ATP/WTA 2023; expand to <=500 only after independent actual CDB readback and positive yield; preserve native importer, global lock and 500 reserve.",
   "start": "2023-01-01",
-  "end": "2026-11-06",
-  "max_requests": 200,
+  "end": "2023-12-31",
+  "max_requests": 100,
   "promote": false,
   "targeted_statistics": true,
   "high_yield_statistics": false,
   "break_points_focus": true,
   "cdb_writes_allowed": true,
   "model_changes": false,
-  "diagnostic_attempt": 2
+  "diagnostic_attempt": 3
 }
