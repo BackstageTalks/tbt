@@ -59,7 +59,7 @@ def main():
                     const publication=(section,market,selection,correct=true)=>({
                         section,market,selection,selection_id:selection,
                         issued_at:new Date(Date.now()-7200000).toISOString(),
-                        price_status:['aces','double_faults','sets','games'].includes(market)?'projection_only':'priced',
+                        price_status:['aces','most_aces','double_faults','sets','games'].includes(market)?'projection_only':'priced',
                         odds:market==='match_winner'?1.6:null,
                         result:{status:correct?'hit':'miss',correct,
                             staked_units:market==='match_winner'?1:null,
@@ -86,7 +86,7 @@ def main():
                     s.ui.dashboard=s.ui.dashboard||{};
                     s.ui.dashboard.daily_hub=s.ui.dashboard.daily_hub||{};
                     s.ui.dashboard.daily_hub.tab_order=[
-                        'daily','value','ace','double_faults','sets','doubles','games','prime','see_all'
+                        'daily','value','ace','ace_winner','double_faults','sets','doubles','games','prime','see_all'
                     ];
                     s.resultsFilters={category:'all',tour:'',surface:'',window:'1',
                                       dateFrom:'',dateTo:'',bettingDay:true};
@@ -105,7 +105,7 @@ def main():
                 }""")
                 table = page.locator(".results-table tbody tr")
                 assert table.count() == 7, (scenario, table.count())
-                expected_order = ['all', 'top_daily', 'value', 'ace', 'double_faults',
+                expected_order = ['all', 'top_daily', 'value', 'ace', 'ace_winner', 'double_faults',
                                   'sets', 'doubles', 'games', 'prime']
                 rendered_order = page.locator('.results-category-picker [data-result-category]').evaluate_all(
                     '(nodes) => nodes.map(node => node.dataset.resultCategory)'
@@ -166,6 +166,34 @@ def main():
                 assert table.count() == 7
                 assert page.locator('input[data-result-category="all"]').is_checked()
                 assert not errors, (width, errors)
+                # VIAC ES is a real Results category after ESÁ, with its
+                # own graded record/KPI sample even without bookmaker odds.
+                page.evaluate("""() => {
+                    const s=resultsMultiTest.state;
+                    s.feed.results.push({
+                        event_id:'ace-winner-qa',tour:'ATP',surface:'hard',
+                        scheduled_at:new Date().toISOString(),tournament:'QA',
+                        player1:{id:'a1',name:'Winner candidate'},
+                        player2:{id:'a2',name:'Opponent'},
+                        market_publications:[{
+                          section:'ace_winner',market:'most_aces',
+                          projection_metric:'most_aces',projection_scope:'player',
+                          projection_subject:'Winner candidate',
+                          selection:'Winner candidate',selection_id:'a1',
+                          projection:8.0,opponent_projection:5.0,
+                          price_status:'projection_only',price_contract:'player_superiority',
+                          odds:null,issued_at:new Date(Date.now()-3600000).toISOString(),
+                          result:{status:'hit',correct:true,actual_count:10,opponent_actual_count:3}
+                        }]
+                    });
+                    s.resultsFilters.category='ace_winner';
+                    s.resultsPage=0;
+                    resultsMultiTest.renderRoute('results');
+                }""")
+                assert table.count() == 1, (scenario, "VIAC ES own Results row", table.count())
+                assert "VIAC ES" in page.locator(".results-table tbody").inner_text().upper()
+                assert page.locator(".metric-card strong").last.inner_text() == "1"
+                assert not errors, (scenario, errors)
                 context.close()
             print("Results category multi-select including Android Desktop site and 24h: PASS")
         finally:
