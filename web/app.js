@@ -2458,7 +2458,7 @@
     // published player's Over/Under line, W/L, odds and financial settlement.
     if(String(publication?.market||publication?.projection_metric||'').toLowerCase()!=='aces')return '';
     const result=publication?.result;
-    if(!result||typeof result!=='object'||result.void===true||result.is_void===true)return '';
+    if(!result||typeof result!=='object')return '';
     const status=String(result.status||'').trim().toLowerCase();
     const reason=String(result.reason||'').trim().toLowerCase();
     if(['retired','ret','walkover','walk over','w/o','abandoned','cancelled','canceled','postponed','interrupted','suspended'].includes(status)
