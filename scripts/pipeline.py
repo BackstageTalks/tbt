@@ -539,12 +539,14 @@ def _projection_presentation_integrity(feed, *, ace_picks=None, sg_picks=None,
                                        quarantined=None):
     expected = {
         "aces": sum(1 for row in (ace_picks or []) if str(row.get("market") or "").lower() == "aces"),
+        "most_aces": sum(1 for row in (ace_picks or []) if str(row.get("market") or "").lower() == "most_aces"),
         "double_faults": sum(1 for row in (ace_picks or []) if str(row.get("market") or "").lower() == "double_faults"),
         "sets": sum(1 for row in (sg_picks or []) if str(row.get("market") or "").lower() == "sets"),
         "games": sum(1 for row in (sg_picks or []) if str(row.get("market") or "").lower() == "games"),
     }
     actual = {
         "aces": sum(1 for row in (feed.get("ace_picks") or []) if str(row.get("market") or "").lower() == "aces"),
+        "most_aces": sum(1 for row in (feed.get("ace_picks") or []) if str(row.get("market") or "").lower() == "most_aces"),
         "double_faults": sum(1 for row in (feed.get("ace_picks") or []) if str(row.get("market") or "").lower() == "double_faults"),
         "sets": sum(1 for row in (feed.get("sg_picks") or []) if str(row.get("market") or "").lower() == "sets"),
         "games": sum(1 for row in (feed.get("sg_picks") or []) if str(row.get("market") or "").lower() == "games"),
