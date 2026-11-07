@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import math
 
 from tbt.services.results_archive import (
-    _identity, load_settled_results_archive, save_settled_results_archive,
+    _archive_record, _identity, load_settled_results_archive, save_settled_results_archive,
 )
 
 DAY = "2026-11-06"
@@ -115,7 +115,9 @@ def _top_readback(archive: list[dict]) -> int:
             selection = str(pub.get("selection_id") or "")
             result = pub.get("result") or {}
             if (event, selection) in FROZEN_TOP_REFS and (
-                str(pub.get("section") or "") == "top_daily"
+                str(row.get("scheduled_at") or "").startswith(DAY + "T")
+                and pub.get("publication_status", "published") == "published"
+                and str(pub.get("section") or "") == "top_daily"
                 and str(pub.get("market") or "") == "match_winner"
                 and result.get("runtime_source") == "match_status_snapshot"
                 and (type(result.get("correct")) is bool
@@ -189,7 +191,10 @@ def exact_candidates(archive: list[dict]) -> list[dict]:
             runtime_result_overlay=True,
             archive_source="verified_match_status_snapshot",
         )
-        candidates.append(row)
+        native = _archive_record(row, row["market_publications"][0], ISSUED_AT)
+        if native is None:
+            raise ValueError("Native archive rejected original frozen Aces contract")
+        candidates.append(native)
     return candidates
 
 
