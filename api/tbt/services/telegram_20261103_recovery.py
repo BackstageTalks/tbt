@@ -139,7 +139,10 @@ def _candidate_rows(snapshot: dict, event_details: dict[str, dict],
         players = [{"id": p1, "name": n1}, {"id": p2, "name": n2}]
         players[0 if selection == p1 else 1]["name"] = name
         category = (event.get("tournament") or {}).get("category") or {}
-        tour = {3: "atp", 6: "wta"}.get(category.get("id"))
+        # The provider already defines verified category IDs for ATP/WTA,
+        # Challenger, ITF men/women and WTA125. Reuse that native mapping;
+        # a two-ID subset wrongly rejected valid 3 Nov issued fixtures.
+        tour = RapidTennisClient._category_tour(category)
         if tour is None:
             raise ValueError("Unknown source-native tournament category")
         rows.append({
