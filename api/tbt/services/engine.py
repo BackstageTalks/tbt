@@ -693,6 +693,8 @@ def _settle_projection_publications(row, match, now):
             "settled_at": (existing or {}).get("settled_at") or now.isoformat(),
             "scheduled_at": match.scheduled_at.isoformat(),
         }
+        if market == "most_aces" and status == "void":
+            settled["reason"] = "aces_equal"
         if price_units:
             settled.update(price_units)
         if existing is not None and (
