@@ -128,3 +128,29 @@ def test_protected_nov3_evidence_diagnostics_are_bounded_and_non_identifying():
     assert safe_recovery_reason(ValueError(
         "Unexpected actual ACE count: 17449516")) == "provider_player_aces_mismatch"
     assert safe_recovery_reason(RuntimeError("secret player name 123")) == "unclassified_evidence_conflict"
+
+
+def test_nov3_recovery_reuses_provider_native_tour_categories():
+    from tbt.providers.rapidapi import RapidTennisClient
+    snap, details, stats = fixture()
+    assignments = {
+        "17453204": (RapidTennisClient.CATEGORY_CHALLENGER, "atp"),
+        "17452315": (RapidTennisClient.CATEGORY_ITF_WOMEN, "wta"),
+        "17475617": (RapidTennisClient.CATEGORY_ITF_MEN, "atp"),
+        "17428202": (RapidTennisClient.CATEGORY_WTA125, "wta"),
+    }
+    for event_id, (category_id, _) in assignments.items():
+        details[event_id]["event"]["tournament"]["category"] = {"id": category_id}
+    candidates = _candidate_rows(snap, details, stats, "2026-11-07T11:00:00Z")
+    tours = {row["event_id"]: row["tour"] for row in candidates}
+    for event_id, (_, expected) in assignments.items():
+        assert tours[event_id] == expected
+
+
+def test_nov3_unknown_category_still_quarantines_instead_of_guessing():
+    snap, details, stats = fixture()
+    details["17453204"]["event"]["tournament"]["category"] = {
+        "id": 999999, "name": "Unidentified youth tour"
+    }
+    with pytest.raises(ValueError, match="source-native tournament category"):
+        _candidate_rows(snap, details, stats, "2026-11-07T11:00:00Z")
