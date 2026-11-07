@@ -4182,6 +4182,7 @@
     const m=active.metrics;
     const reportMode=s.view==='report'&&active.id!=='all'&&active.available;
     const fullscreen=reportMode&&s.fullscreen===true;
+    const showAdvanced=s.filtersExpanded===true||(s.filtersExpanded==null&&!reportMode);
     const daysWithResults=Array.from({length:days},(_,index)=>month+'-'+String(index+1).padStart(2,'0'));
     let running=0;
     const values=daysWithResults.map(date=>{
@@ -4322,7 +4323,7 @@
       '<label>Povrch <select id="monthlySurface">'+option('','Všetky',s.surface)+surfaces.map(v=>option(v,v,s.surface)).join('')+'</select></label>'+
       '<label>Kurz od <input type="number" id="monthlyMinOdds" min="1.01" step="0.01" placeholder="Bez limitu" value="'+escapeHtml(s.minOdds)+'"></label>'+
       '<label>Kurz do <input type="number" id="monthlyMaxOdds" min="1.01" step="0.01" placeholder="Bez limitu" value="'+escapeHtml(s.maxOdds)+'"></label></div>'+
-      '<details class="monthly-advanced-filters"'+(reportMode?'':' open')+'><summary>Ďalšie filtre · kategórie a výsledky</summary>'+
+      '<details class="monthly-advanced-filters"'+(showAdvanced?' open':'')+'><summary>Ďalšie filtre · kategórie a výsledky</summary>'+
       '<div class="monthly-filter-groups"><fieldset><legend>Kategórie vstupujúce do výpočtu</legend><div class="monthly-checks">'+categories+'</div></fieldset>'+
       '<fieldset><legend>Výsledky</legend><div class="monthly-checks">'+outcomes+'</div></fieldset></div></details>'+
       '<div class="monthly-selected-head"><div><small>'+escapeHtml(month)+' · '+escapeHtml(periodText)+'</small>'+
@@ -7101,6 +7102,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         rerenderAdmin();
         if(monthly.fullscreen)document.querySelector('.monthly-performance')?.focus();
       };
+      const advancedFilters=document.querySelector('.monthly-advanced-filters');
+      if(advancedFilters)advancedFilters.ontoggle=()=>{monthly.filtersExpanded=advancedFilters.open;};
       const monthlyPanel=document.querySelector('.monthly-performance');
       if(monthlyPanel)monthlyPanel.onkeydown=event=>{
         if(event.key==='Escape'&&monthly.fullscreen){
