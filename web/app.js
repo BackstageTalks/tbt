@@ -4659,7 +4659,7 @@
     orderedDailyHubTabs().forEach(tab=>{
       const cfg=hub.tabs?.[tab]||{};
       if(cfg.enabled===false)return;
-      let previous=null;
+      let bestLower=null;
       levels.forEach(plan=>{
         const rule=cfg.plans?.[plan]||{},state=stateOf(rule),count=unlocked(rule);
         if(state==='active'&&count===0&&rule.blur_remaining===false){
@@ -4668,10 +4668,10 @@
         if(rule.see_all===true&&state!=='active'){
           issues.push({tab,plan,kind:'contradiction',text:`${accessLabel(plan)} / ${dailyHubTabLabel(tab)}: Celá ponuka je zapnutá, no panel je ${state==='blurred'?'ZAMKNUTÝ':'SKRYTÝ'}.`});
         }
-        if(previous&&count<previous.count){
-          issues.push({tab,plan,kind:'hierarchy',text:`${accessLabel(plan)} / ${dailyHubTabLabel(tab)}: ${count===11?'VŠETKY':count} riadkov, menej než ${accessLabel(previous.plan)} (${previous.count===11?'VŠETKY':previous.count}).`});
+        if(bestLower&&count<bestLower.count){
+          issues.push({tab,plan,kind:'hierarchy',text:`${accessLabel(plan)} / ${dailyHubTabLabel(tab)}: ${count===11?'VŠETKY':count} riadkov, menej než ${accessLabel(bestLower.plan)} (${bestLower.count===11?'VŠETKY':bestLower.count}).`});
         }
-        previous={plan,count};
+        if(!bestLower||count>bestLower.count)bestLower={plan,count};
       });
     });
     return issues;
