@@ -471,6 +471,7 @@ def main():
             # publication and exact two final counts remain authoritative.
             ace_outcomes = page.evaluate("""() => {
                 const t=bettingDayTest,s=t.state;
+                const savedFeed=s.feed,savedFilters=s.resultsFilters,savedPage=s.resultsPage;
                 const mk=(id,actual,opponent,correct,market='aces',status=correct?'hit':'miss')=>({
                     event_id:id,tour:'ATP',surface:'hard',
                     scheduled_at:'2026-11-02T15:00:00Z',tournament:'Test',
@@ -503,7 +504,7 @@ def main():
                 const body=document.createElement('div');
                 body.innerHTML=t.renderResults();
                 const rows=[...body.querySelectorAll('tr.results-card-row')];
-                return Object.fromEntries(rows.map(row=>{
+                const outcomeRows=Object.fromEntries(rows.map(row=>{
                     const label=row.querySelector('.result-prediction strong')?.textContent.trim();
                     return [label,{
                       balls:row.querySelectorAll('.ace-leader-ball').length,
@@ -512,6 +513,8 @@ def main():
                       units:row.querySelector('.result-units')?.textContent.trim()
                     }];
                 }));
+                s.feed=savedFeed;s.resultsFilters=savedFilters;s.resultsPage=savedPage;
+                return outcomeRows;
             }""")
             assert ace_outcomes == {
                 "CASE-hit-leader-loss-ou": {"balls":1,"win":False,"loss":True,"units":"-1.00u"},
