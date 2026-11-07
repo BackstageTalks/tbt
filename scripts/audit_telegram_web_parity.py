@@ -120,6 +120,7 @@ def reconcile_day(day: str, sent: list[dict], archived: list[dict],
     counts = Counter()
     reasons = Counter()
     site_gaps = Counter()  # Only broad market and verification class, never identifiers.
+    site_absence = Counter()  # Cohort-level structural diagnostics, no raw IDs.
     fingerprints: dict[str, list[str]] = {}
     premium = Counter()
     site_rows = site["rows"]
@@ -147,6 +148,21 @@ def reconcile_day(day: str, sent: list[dict], archived: list[dict],
             market = market if market in {"aces", "match_winner", "double_faults"} else "other"
             kind = site_reason if site_reason in {"no_exact_contract", "no_verified_final"} else "other"
             site_gaps[market + ":" + kind] += 1
+            if kind == "no_exact_contract":
+                same_event = [row for row in site_rows if (
+                    str(row.get("event_id") or "") == str(ref.get("event_id") or "")
+                )]
+                if not same_event:
+                    site_absence[market + ":event_absent"] += 1
+                elif any(
+                    str(row.get("section") or "") == str(ref.get("section") or "")
+                    and str(row.get("market") or "") == str(ref.get("market") or "")
+                    and str(row.get("selection_id") or "") == str(ref.get("selection_id") or "")
+                    for row in same_event
+                ):
+                    site_absence[market + ":selection_present_other_contract"] += 1
+                else:
+                    site_absence[market + ":event_present_other_selection"] += 1
         elif a in ("won", "lost", "void") and b not in (a, "pending"):
             issues.append("site_terminal_outcome_conflict")
         if ar is not None and br is not None:
@@ -196,6 +212,7 @@ def reconcile_day(day: str, sent: list[dict], archived: list[dict],
         "parity": "mismatch" if reasons else "verified_same_contract",
         "mismatch_reasons": dict(sorted(reasons.items())),
         "site_gap_breakdown": dict(sorted(site_gaps.items())),
+        "site_absence_breakdown": dict(sorted(site_absence.items())),
         "private_fingerprints": {k: sorted(v)[:20] for k, v in sorted(fingerprints.items())},
         "scope": "telegram_issued_vs_website_pre_entitlement",
         "member_account_render_verified": False,
