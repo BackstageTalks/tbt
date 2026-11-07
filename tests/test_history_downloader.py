@@ -68,7 +68,7 @@ def test_incomplete_day_is_retried_without_duplicate_rows(match_factory):
     assert provider.request_count == calls
 
 
-def test_cross_year_provider_correction_checkpoints_both_partitions(match_factory):
+def test_cross_year_provider_correction_preserves_frozen_original(match_factory):
     old_time = datetime(2024, 12, 31, 23, tzinfo=timezone.utc)
     new_time = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
     old = replace(
@@ -101,10 +101,13 @@ def test_cross_year_provider_correction_checkpoints_both_partitions(match_factor
         lambda years, publish=False: checkpoints.append((set(years), publish)),
     )
 
-    assert checkpoints[0][0] == {2024, 2025}
-    assert len(matches) == 1
+    # An incoming rekey/reschedule is not a correction that may mutate the
+    # original CDB identity. There must be no dirty canonical partitions.
+    # The completed-day progress callback can checkpoint with zero dirty years.
+    assert checkpoints == [(set(), False)]
+    assert list(matches) == ["old"]
     only = next(iter(matches.values()))
-    assert only.scheduled_at == new_time
+    assert only.scheduled_at == old_time
     assert progress["completed_days"] == ["2025-01-01"]
 
 

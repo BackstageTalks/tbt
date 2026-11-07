@@ -208,7 +208,7 @@ def test_refresh_checkpoints_before_next_day_failure(match_factory, tmp_path):
         ),
     ],
 )
-def test_refresh_moves_provider_event_across_year_without_stale_partition(
+def test_refresh_quarantines_cross_year_provider_correction_without_cdb_mutation(
     match_factory, tmp_path, old_time, new_time
 ):
     old = replace(
@@ -251,20 +251,23 @@ def test_refresh_moves_provider_event_across_year_without_stale_partition(
         new_time.date(),
     )
 
+    # Normal refresh must never shift a frozen match into another year, even
+    # when the provider supplies a matching event ID. No asset is republished.
     assert len(merged) == 1
-    assert merged[0].scheduled_at == new_time
-    assert not (tmp_path / f"history-{old_time.year}.parquet").exists()
-    assert (tmp_path / f"history-{new_time.year}.parquet").is_file()
+    assert merged[0].match_id == old.match_id
+    assert merged[0].scheduled_at == old_time
+    assert merged[0].player1_id == old.player1_id
+    assert merged[0].player2_id == old.player2_id
+    assert uploads == []
+    assert (tmp_path / f"history-{old_time.year}.parquet").is_file()
+    assert not (tmp_path / f"history-{new_time.year}.parquet").exists()
     reloaded = load_partitions(tmp_path)
     assert len(reloaded) == 1
-    assert reloaded[0].scheduled_at == new_time
+    assert reloaded[0].match_id == old.match_id
+    assert reloaded[0].scheduled_at == old_time
     manifest = load_manifest(tmp_path)
-    assert str(old_time.year) not in manifest["years"]
-    assert str(new_time.year) in manifest["years"]
-    assert any(
-        f"history-{old_time.year}.parquet" in removed
-        for _, removed in uploads
-    )
+    assert str(old_time.year) in manifest["years"]
+    assert str(new_time.year) not in manifest["years"]
 
 
 def fake_release(monkeypatch, tmp_path):
