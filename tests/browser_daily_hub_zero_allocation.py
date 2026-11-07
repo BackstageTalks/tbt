@@ -139,6 +139,11 @@ def main():
                         throw Error('Admin audit missed PRO double faults');
                       if(!app.adminDailyHubAccessAuditHtml().includes('Prístupy na kontrolu'))
                         throw Error('Admin diagnostics are not rendered');
+                      // Disabled panels must not be reported as visible empty panels.
+                      tabs.double_faults.plans.pro.tab_enabled=false;
+                      const disabledIssues=app.adminDailyHubAccessAudit();
+                      if(disabledIssues.some(item=>item.tab==='double_faults'&&item.plan==='pro'&&item.kind==='empty'))
+                        throw Error('Disabled PRO panel was incorrectly flagged as visible');
                     }finally{
                       Object.assign(tabs.double_faults.plans.pro,originalDf);
                       Object.assign(tabs.double_faults.plans.elite,originalElite);
