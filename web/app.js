@@ -4084,7 +4084,7 @@
   function monthlyPerformanceState(){
     if(!state.monthlyPerformance){
       const thisMonth=bratislavaBettingDayKey(Date.now(),0).slice(0,7);
-      state.monthlyPerformance={month:thisMonth,level:'all',sections:MONTHLY_SECTIONS.map(([key])=>key),
+      state.monthlyPerformance={month:thisMonth,level:'all',view:'overview',fullscreen:false,sections:MONTHLY_SECTIONS.map(([key])=>key),
         tour:'',surface:'',minOdds:'',maxOdds:'',outcomes:['win','loss','void']};
     }
     return state.monthlyPerformance;
@@ -4180,6 +4180,8 @@
     }));
     const active=levelData.find(item=>item.id===currentLevel)||levelData[0];
     const m=active.metrics;
+    const reportMode=s.view==='report'&&active.id!=='all'&&active.available;
+    const fullscreen=reportMode&&s.fullscreen===true;
     const daysWithResults=Array.from({length:days},(_,index)=>month+'-'+String(index+1).padStart(2,'0'));
     let running=0;
     const values=daysWithResults.map(date=>{
@@ -4187,20 +4189,33 @@
       return running;
     });
     const low=Math.min(0,...values),high=Math.max(0,...values);
-    const span=Math.max(1,high-low),zero=(169-(0-low)/span*140).toFixed(1);
+    const span=Math.max(1,high-low),chartY=v=>163-(v-low)/span*137;
+    const zero=chartY(0).toFixed(1);
     const positions=values.map((v,index)=>[
-      days===1?380:24+(index/(days-1))*712,
-      169-(v-low)/span*140
+      days===1?48:48+(index/(days-1))*682,chartY(v)
     ]);
     const path=positions.map(([x,y],index)=>(index?'L':'M')+x.toFixed(1)+' '+y.toFixed(1)).join(' ');
     const lastPoint=positions[positions.length-1];
+    const area=positions.length?path+' L'+lastPoint[0].toFixed(1)+' '+zero+' L48 '+zero+' Z':'';
+    const gridLines=Array.from({length:5},(_,index)=>{
+      const value=low+span*index/4,y=chartY(value).toFixed(1);
+      return '<line x1="48" y1="'+y+'" x2="730" y2="'+y+'" class="monthly-chart-grid"/>'+
+        '<text x="36" y="'+(Number(y)+3).toFixed(1)+'" text-anchor="end" class="monthly-axis-label">'+
+        escapeHtml(fmt(value,1))+'</text>';
+    }).join('');
+    const middleDay=days>4?Math.ceil(days/2):0;
     const chart=m&&m.n&&days
       ?'<svg viewBox="0 0 760 194" role="img" aria-label="Kumulatívny profit od prvého dňa po '+escapeHtml(days+'. deň')+'">'+
-        '<line x1="24" x2="736" y1="'+zero+'" y2="'+zero+'" class="monthly-zero-line"/>'+
+        '<defs><linearGradient id="monthlyProfitArea" x1="0" y1="0" x2="0" y2="1">'+
+        '<stop offset="0%" stop-color="#2df2ad" stop-opacity=".32"/>'+
+        '<stop offset="100%" stop-color="#2df2ad" stop-opacity=".015"/></linearGradient></defs>'+
+        gridLines+'<line x1="48" x2="730" y1="'+zero+'" y2="'+zero+'" class="monthly-zero-line"/>'+
+        '<path d="'+area+'" class="monthly-profit-area"/>'+
         '<path d="'+path+'" class="monthly-profit-line"/>'+
         '<circle cx="'+lastPoint[0].toFixed(1)+'" cy="'+lastPoint[1].toFixed(1)+'" r="4.5" class="monthly-last-point"/>'+
-        '<text x="24" y="190" class="monthly-axis-label">1.</text>'+
-        (days>1?'<text x="736" y="190" text-anchor="end" class="monthly-axis-label">'+days+'.</text>':'')+'</svg>'
+        '<text x="48" y="189" class="monthly-axis-label">1.</text>'+
+        (middleDay?'<text x="'+(48+(middleDay-1)/(days-1)*682).toFixed(1)+'" y="189" text-anchor="middle" class="monthly-axis-label">'+middleDay+'.</text>':'')+
+        (days>1?'<text x="730" y="189" text-anchor="end" class="monthly-axis-label">'+days+'.</text>':'')+'</svg>'
       :'<div class="monthly-chart-empty">'+(days?'Pre tento výber nie sú dostupné vyúčtované jednotky.':'Zvolený mesiac ešte nezačal.')+'</div>';
     const categories=MONTHLY_SECTIONS.map(([key,label])=>
       '<label><input type="checkbox" data-monthly-section="'+key+'"'+(s.sections.includes(key)?' checked':'')+
@@ -4244,34 +4259,79 @@
       }).join('');
       return '<tr><th scope="row">'+String(index+1)+'.</th>'+cells+'</tr>';
     }).join('');
-    return '<section class="monthly-performance" aria-label="Mesačná výkonnosť">'+
-      '<header class="monthly-header"><div><small class="monthly-eyebrow">BLINQ ANALYTICS · ADMIN</small>'+
-      '<h2>Mesačné výsledky</h2><p>Analýza tipov a jednotiek podľa členských levelov</p></div>'+
-      '<label class="monthly-month-field">Mesiac <input type="month" id="monthlyMonth" value="'+escapeHtml(month)+'"></label></header>'+
+    // A screenshot-ready focused report contains only the selected membership
+    // cohort. The comparison matrix remains available in overview mode.
+    const dailyOutcomes=new Map();
+    (m?.all||[]).forEach(item=>{
+      const day=bratislavaBettingDayKey(item.row.scheduled_at||item.row.date||0,0);
+      if(!dailyOutcomes.has(day))dailyOutcomes.set(day,{win:0,loss:0,void:0});
+      const counts=dailyOutcomes.get(day);
+      if(Object.prototype.hasOwnProperty.call(counts,item.outcome))counts[item.outcome]++;
+    });
+    let dailyRunning=0;
+    const focusedRows=daysWithResults.map((date,index)=>{
+      const settled=dailyOutcomes.get(date)||{win:0,loss:0,void:0};
+      const dayProfit=m?.daily.get(date);
+      dailyRunning+=dayProfit||0;
+      return '<tr><th scope="row">'+(index+1)+'.</th>'+
+        '<td>'+settled.win+' / '+settled.loss+' / '+settled.void+'</td>'+
+        '<td class="monthly-unit'+(dayProfit==null?' monthly-cell-empty':moneyClass(dayProfit))+'">'+
+        (dayProfit==null?'·':escapeHtml(signed(dayProfit))+' u')+'</td>'+
+        '<td class="monthly-unit'+moneyClass(dailyRunning)+'">'+escapeHtml(signed(dailyRunning))+' u</td></tr>';
+    }).join('');
+    const periodText=days?('1. – '+days+'. deň'):'bez dát';
+    const viewButton=(view,label)=>'<button type="button" data-monthly-view="'+view+'" aria-pressed="'+
+      (reportMode===(view==='report')?'true':'false')+'" class="'+
+      (reportMode===(view==='report')?'is-active':'')+'">'+label+'</button>';
+    const levelSwitcher='<div class="monthly-level-switch" role="group" aria-label="Výber levelu">'+levelData.map(level=>
+      '<button type="button" data-monthly-level="'+level.id+'" class="'+selectedClass(level)+'" aria-pressed="'+
+      (level.id===currentLevel?'true':'false')+'"'+(level.available?'':' disabled aria-description="Pravidlá levelu nie sú dostupné"')+
+      '>'+escapeHtml(level.label)+'</button>').join('')+'</div>';
+    const comparison='<section class="monthly-table-card"><div class="monthly-card-heading"><h3>Prehľad levelov</h3><span>Jednotky (u)</span></div>'+
+      '<div class="monthly-table-scroll"><table class="monthly-grid-table"><thead><tr><th>Level</th><th>Tipy</th><th>WIN</th><th>LOSS</th><th>VOID</th><th>ROI vzorka</th><th>Profit</th><th>ROI</th></tr></thead>'+
+      '<tbody>'+levelRows+'</tbody></table></div></section>'+
+      '<section class="monthly-table-card"><div class="monthly-card-heading"><h3>Denná mriežka · profit (u)</h3><span>'+escapeHtml(month)+' · '+days+' dní</span></div>'+
+      '<div class="monthly-table-scroll"><table class="monthly-grid-table monthly-daily-table"><thead><tr><th>Deň</th>'+
+      levelData.map(level=>'<th>'+escapeHtml(level.label)+'</th>').join('')+'</tr></thead>'+
+      '<tbody>'+(days?dayRows:'<tr><td colspan="7" class="monthly-chart-empty">Zvolený mesiac ešte nezačal.</td></tr>')+
+      '</tbody></table></div></section>';
+    const focused='<section class="monthly-table-card monthly-focused-card"><div class="monthly-card-heading">'+
+      '<h3>Denný report · '+escapeHtml(active.label)+'</h3><span>Profit normalizovaný na 1 u / tip</span></div>'+
+      '<div class="monthly-table-scroll"><table class="monthly-grid-table monthly-focused-table">'+
+      '<thead><tr><th>Deň</th><th>WIN / LOSS / VOID</th><th>Profit</th><th>Kumulatívne</th></tr></thead>'+
+      '<tbody>'+(days?focusedRows:'<tr><td colspan="4" class="monthly-chart-empty">Zvolený mesiac ešte nezačal.</td></tr>')+
+      '</tbody></table></div></section>';
+    return '<section class="monthly-performance'+(reportMode?' is-report-mode':'')+
+      (fullscreen?' is-monthly-fullscreen':'')+'" aria-label="Mesačná výkonnosť" tabindex="-1">'+
+      '<header class="monthly-header"><div class="monthly-brand-head">'+
+      '<span class="monthly-brand-icon" aria-hidden="true"><i></i><i></i><i></i></span>'+
+      '<div><small class="monthly-eyebrow">BlinQ · ADMIN / ANALYTIKA</small>'+
+      '<h2>Mesačný výkon</h2><p>'+escapeHtml(month)+(reportMode?' · report '+escapeHtml(active.label):' · porovnanie levelov')+'</p></div></div>'+
+      '<div class="monthly-header-actions"><label class="monthly-month-field">Mesiac '+
+      '<input type="month" id="monthlyMonth" value="'+escapeHtml(month)+'"></label>'+
+      (reportMode?'<button type="button" class="monthly-screen-button" data-monthly-fullscreen aria-pressed="'+
+        (fullscreen?'true':'false')+'">'+(fullscreen?'Zavrieť fullscreen':'Režim screenshotu')+'</button>':'')+
+      '</div></header>'+
+      '<div class="monthly-mode-bar"><div class="monthly-view-switch" role="group" aria-label="Režim reportu">'+
+      viewButton('overview','Prehľad všetkých levelov')+
+      viewButton('report','Report pre vybraný level')+'</div>'+
+      '<p>'+(reportMode?'Vybraný level · pripravené na screenshot':'Vyber level pre samostatný report')+'</p></div>'+
+      levelSwitcher+
       '<div class="monthly-controls">'+
       '<label>Okruh <select id="monthlyTour">'+option('','ATP + WTA',s.tour)+tours.map(v=>option(v,v,s.tour)).join('')+'</select></label>'+
       '<label>Povrch <select id="monthlySurface">'+option('','Všetky',s.surface)+surfaces.map(v=>option(v,v,s.surface)).join('')+'</select></label>'+
       '<label>Kurz od <input type="number" id="monthlyMinOdds" min="1.01" step="0.01" placeholder="Bez limitu" value="'+escapeHtml(s.minOdds)+'"></label>'+
       '<label>Kurz do <input type="number" id="monthlyMaxOdds" min="1.01" step="0.01" placeholder="Bez limitu" value="'+escapeHtml(s.maxOdds)+'"></label></div>'+
+      '<details class="monthly-advanced-filters"'+(reportMode?'':' open')+'><summary>Ďalšie filtre · kategórie a výsledky</summary>'+
       '<div class="monthly-filter-groups"><fieldset><legend>Kategórie vstupujúce do výpočtu</legend><div class="monthly-checks">'+categories+'</div></fieldset>'+
-      '<fieldset><legend>Výsledky</legend><div class="monthly-checks">'+outcomes+'</div></fieldset></div>'+
-      '<div class="monthly-level-heading"><div><h3>Výkon podľa levelu</h3><p>Vyber level pre KPI a graf. Úrovne porovnávame samostatne.</p></div></div>'+
-      '<div class="monthly-level-switch" role="group" aria-label="Výber levelu">'+levelData.map(level=>
-        '<button type="button" data-monthly-level="'+level.id+'" class="'+selectedClass(level)+'" aria-pressed="'+
-        (level.id===currentLevel?'true':'false')+'"'+(level.available?'':' disabled aria-description="Pravidlá levelu nie sú dostupné"')+
-        '>'+escapeHtml(level.label)+'</button>').join('')+'</div>'+
+      '<fieldset><legend>Výsledky</legend><div class="monthly-checks">'+outcomes+'</div></fieldset></div></details>'+
+      '<div class="monthly-selected-head"><div><small>'+escapeHtml(month)+' · '+escapeHtml(periodText)+'</small>'+
+      '<h3>'+(reportMode?'Report – ':'Kumulatívny výkon – ')+escapeHtml(active.label)+'</h3></div>'+
+      '<span>Overené vyhodnotenia · 1 u / tip</span></div>'+
       '<div class="monthly-stats">'+cards+'</div>'+
       '<section class="monthly-chart-card"><div class="monthly-card-heading"><h3>Kumulatívny profit · '+escapeHtml(active.label)+'</h3>'+
-      '<span>1 u / tip · '+(days?('1.–'+days+'. deň'):'bez dát')+'</span></div>'+chart+'</section>'+
-      '<section class="monthly-table-card"><div class="monthly-card-heading"><h3>Prehľad levelov</h3><span>Jednotky (u)</span></div>'+
-      '<div class="monthly-table-scroll"><table class="monthly-grid-table"><thead><tr><th>Level</th><th>Tipy</th><th>WIN</th><th>LOSS</th><th>VOID</th><th>ROI vzorka</th><th>Profit</th><th>ROI</th></tr></thead>'+
-      '<tbody>'+levelRows+'</tbody></table></div></section>'+
-      '<section class="monthly-table-card"><div class="monthly-card-heading"><h3>Denná mriežka · profit (u)</h3>'+
-      '<span>'+escapeHtml(month)+' · '+days+' dní</span></div>'+
-      '<div class="monthly-table-scroll"><table class="monthly-grid-table monthly-daily-table"><thead><tr><th>Deň</th>'+
-      levelData.map(level=>'<th>'+escapeHtml(level.label)+'</th>').join('')+'</tr></thead>'+
-      '<tbody>'+(days?dayRows:'<tr><td colspan="7" class="monthly-chart-empty">Zvolený mesiac ešte nezačal.</td></tr>')+
-      '</tbody></table></div></section>'+
+      '<span>1 u / tip · '+escapeHtml(periodText)+'</span></div>'+chart+'</section>'+
+      (reportMode?focused:'<div class="monthly-tables-pair">'+comparison+'</div>')+
       '<p class="monthly-report-note" role="status">Vzorka '+(m?m.all.length:0)+' unikátnych vyhodnotených tipov'+
       (m?'; '+m.excluded+' bez overeného kurzu alebo vyúčtovania nezahrnutých do ROI':'')+
       '. Profit je normalizovaný na vklad 1 u, VOID sa do ROI nezapočítava. '+
@@ -7017,7 +7077,36 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     if(state.adminTab==='monthlyresults'){
       const monthly=monthlyPerformanceState();
       const updateMonthly=(field,value)=>{monthly[field]=value;rerenderAdmin();};
-      document.querySelectorAll('[data-monthly-level]').forEach(el=>el.onclick=()=>updateMonthly('level',el.dataset.monthlyLevel||'all'));
+      document.querySelectorAll('[data-monthly-level]').forEach(el=>el.onclick=()=>{
+        const level=el.dataset.monthlyLevel||'all';
+        monthly.level=level;
+        monthly.view=level==='all'?'overview':'report';
+        if(level==='all')monthly.fullscreen=false;
+        rerenderAdmin();
+      });
+      document.querySelectorAll('[data-monthly-view]').forEach(el=>el.onclick=()=>{
+        const view=el.dataset.monthlyView==='report'?'report':'overview';
+        if(view==='report'&&(!monthly.level||monthly.level==='all')){
+          const available=MONTHLY_LEVELS.find(([id])=>id!=='all'&&state.feed?.member_result_rules?.[id]);
+          if(!available){showStatus('Pravidlá členských levelov nie sú dostupné.');return;}
+          monthly.level=available[0];
+        }
+        monthly.view=view;
+        if(view!=='report')monthly.fullscreen=false;
+        rerenderAdmin();
+      });
+      const screenButton=document.querySelector('[data-monthly-fullscreen]');
+      if(screenButton)screenButton.onclick=()=>{
+        monthly.fullscreen=!Boolean(monthly.fullscreen);
+        rerenderAdmin();
+        if(monthly.fullscreen)document.querySelector('.monthly-performance')?.focus();
+      };
+      const monthlyPanel=document.querySelector('.monthly-performance');
+      if(monthlyPanel)monthlyPanel.onkeydown=event=>{
+        if(event.key==='Escape'&&monthly.fullscreen){
+          monthly.fullscreen=false;rerenderAdmin();
+        }
+      };
       [['monthlyMonth','month'],['monthlyTour','tour'],['monthlySurface','surface'],
         ['monthlyMinOdds','minOdds'],['monthlyMaxOdds','maxOdds']].forEach(([id,field])=>{
         const el=$(id);if(el)el.onchange=()=>updateMonthly(field,el.value);
