@@ -329,24 +329,27 @@ def test_odds_errors_are_classified_without_publishing_exception_body():
     assert 'private response' not in str(report)
 
 
-def test_odds_enrichment_covers_all_65_percent_value_candidates_before_prices_are_known():
+def test_morning_odds_discovery_prices_entire_new_top_60pct_slate_with_existing_budget():
     provider = _OddsProvider()
     rows = [
         row('eligible', .70, 1.60, 2.20, depth=.80, surface1=5, surface2=5),
-        row('weak', .64, 1.60, 2.20, depth=1.0, surface1=20, surface2=20),
+        row('top60', .60, 1.60, 2.20, depth=.80, surface1=5, surface2=5),
+        row('weak', .59, 1.60, 2.20, depth=1.0, surface1=20, surface2=20),
         row('shallow', .80, 1.60, 2.20, depth=.74, surface1=20, surface2=20),
         row('surface', .80, 1.60, 2.20, depth=1.0, surface1=2, surface2=20),
     ]
     for item in rows:
         item.pop('betting', None); item.pop('match_winner_market', None)
-    enriched, report = enrich_current_betting_day_odds(provider, rows, now=datetime(2026,9,7,8,0,tzinfo=timezone.utc))
-    assert provider.called == [('eligible', 1)]
-    assert report['candidate_gate']['min_probability'] == .65
+    enriched, report = enrich_current_betting_day_odds(
+        provider, rows, now=datetime(2026,9,7,8,0,tzinfo=timezone.utc))
+    assert provider.called == [('eligible', 1), ('top60', 1)]
+    assert report['candidate_gate']['min_probability'] == .60
     assert report['candidate_gate']['min_data_depth'] == .75
     assert report['candidate_gate']['min_surface_matches_each'] == 3
-    assert next(x for x in enriched if x['event_id'] == 'eligible').get('betting')
-
-
+    assert report['odds_available'] == 2
+    assert all(next(x for x in enriched if x['event_id'] == k).get('betting')
+               for k in ('eligible', 'top60'))
+    assert not next(x for x in enriched if x['event_id'] == 'weak').get('betting')
 
 def test_ranked_top_uses_only_real_pre_start_prices_and_target_three():
     rows = [row(f'core{i}', .80-i*.02, 1.60, 2.60, depth=1.0) for i in range(7)]
