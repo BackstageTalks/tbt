@@ -58,6 +58,7 @@ def row(event_id, probability, odds, opponent_odds, *, depth=.9, surface1=12, su
 
 def test_candidate_snapshot_keeps_selected_and_unselected_without_post_match_fields():
     selected = row('selected-top', .82, 1.60, 2.50, depth=1.0)
+    selected['competition'] = 'ATP250'
     unpriced = row('unpriced', .73, 1.70, 2.30, depth=.95)
     unpriced.pop('betting', None)
     unpriced.pop('match_winner_market', None)
@@ -76,6 +77,8 @@ def test_candidate_snapshot_keeps_selected_and_unselected_without_post_match_fie
     rows = {item['event_id']: item for item in snap['rows']}
     assert rows['selected-top']['selected_section'] == 'top_daily'
     assert rows['selected-top']['selection_tier'] == 'core'
+    assert rows['selected-top']['competition'] == 'ATP250'
+    assert rows['selected-top']['selector_snapshot_at'] == '2026-10-08T06:30:00+00:00'
     assert rows['unpriced']['priced'] is False
     assert rows['unpriced']['selected_section'] is None
     serialized = str(snap).lower()
