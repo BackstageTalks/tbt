@@ -233,3 +233,30 @@ def test_daily_bulk_odds_nested_provider_shapes_are_aggregated_not_leaked():
     report=json.dumps(r)
     for forbidden in ("101", "102", "2.25", "1.70", "4.70", "privateOdd"):
         assert forbidden not in report
+
+
+def test_daily_bulk_choice_list_profile_counts_both_sides_without_prices():
+    import json
+    sample = {"odds": {
+        "101": {"choices": [
+            {"name": "1", "fractionalValue": "3/2", "timestamp": 12345},
+            {"name": "2", "fractionalValue": "2/3"}]},
+        "102": {"choices": [
+            {"name": "Home", "decimalValue": 2.22},
+            {"name": "Other", "value": 2.32}]},
+        "103": {"choices": []},
+    }}
+    profile = summarize("daily_match_winner_odds", sample, event_id=101)[
+        "daily_odds_value_profile"]["choice_shape"]
+    assert profile["entries_with_choices_list"] == 3
+    assert profile["choice_rows_total"] == profile["choice_rows_dictionary"] == 4
+    assert profile["choice_rows_with_price_shaped_field"] == 4
+    assert profile["choice_rows_with_explicit_clock_field"] == 1
+    assert profile["choice_rows_with_home_away_label"] == 3
+    assert profile["entries_with_both_home_away_labels"] == 1
+    assert profile["known_choice_fields"]["fractionalValue"] == 2
+    assert profile["verified_complete_match_winner_quotes"] == 0
+    assert profile["pre_match_timestamp_eligible"] is False
+    report = json.dumps(summarize("daily_match_winner_odds", sample, event_id=101))
+    for secret in ("3/2", "2/3", "2.22", "2.32", "12345", '"101"', '"102"'):
+        assert secret not in report

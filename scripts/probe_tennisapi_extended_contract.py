@@ -117,7 +117,58 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                     for nested_key in inner:
                         if nested_key in known:
                             nested_names[nested_key] += 1
+            # The real bulk map carries a `choices` member per event.
+            # Count usable selection structures without disclosing one quote,
+            # event ID, bookmaker label, or potentially sensitive raw value.
+            entries_with_choice_list = dict_choices = 0
+            choice_rows_total = choice_rows_with_price_shape = 0
+            choice_rows_with_time_shape = choice_rows_with_label = 0
+            complete_pair_entries = 0
+            safe_choice_keys = {
+                "name", "value", "price", "decimalValue", "fractionalValue",
+                "initialFractionalValue", "isLive", "suspended", "change",
+                "winning", "timestamp", "quotedAt", "observedAt",
+            }
+            seen_choice_fields = Counter()
+            for _, event_value in entries:
+                if not isinstance(event_value, dict):
+                    continue
+                choices = event_value.get("choices")
+                if not isinstance(choices, list):
+                    continue
+                entries_with_choice_list += 1
+                selected = set()
+                for choice in choices:
+                    choice_rows_total += 1
+                    if not isinstance(choice, dict):
+                        continue
+                    dict_choices += 1
+                    seen_choice_fields.update(k for k in choice if k in safe_choice_keys)
+                    choice_rows_with_price_shape += any(
+                        choice.get(k) is not None for k in (
+                            "fractionalValue", "decimalValue", "price", "value"))
+                    choice_rows_with_time_shape += any(
+                        choice.get(k) is not None for k in (
+                            "timestamp", "quotedAt", "observedAt"))
+                    label = str(choice.get("name") or "").strip().lower()
+                    if label in {"1", "2", "home", "away"}:
+                        choice_rows_with_label += 1
+                        selected.add("home" if label in {"1", "home"} else "away")
+                complete_pair_entries += selected == {"home", "away"}
+            choice_shape = {
+                "entries_with_choices_list": entries_with_choice_list,
+                "choice_rows_total": choice_rows_total,
+                "choice_rows_dictionary": dict_choices,
+                "choice_rows_with_price_shaped_field": choice_rows_with_price_shape,
+                "choice_rows_with_explicit_clock_field": choice_rows_with_time_shape,
+                "choice_rows_with_home_away_label": choice_rows_with_label,
+                "entries_with_both_home_away_labels": complete_pair_entries,
+                "known_choice_fields": dict(sorted(seen_choice_fields.items())),
+                "verified_complete_match_winner_quotes": 0,
+                "pre_match_timestamp_eligible": False,
+            }
             result["daily_odds_value_profile"] = {
+                "choice_shape": choice_shape,
                 "first_level_numeric_key_memberships": first_level_numeric_keys,
                 "first_level_known_fields": dict(sorted(first_level_names.items())),
                 "nested_dict_nodes": nested_dicts,
