@@ -20,7 +20,7 @@ from .admin_storage import (
 from .match_status import runtime_settled_results, verified_terminal_statuses
 
 _PARTITION = "settled-results-archive-v1"
-_PUBLIC_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
+_PUBLIC_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "ace_winner", "double_faults", "sets", "games"}
 _SHARDS = 4
 _MAX_ROW_UTF16 = 60_000
 _MAX_ARCHIVED_ROWS = 12_000
@@ -55,7 +55,7 @@ def _identity(row: dict, publication: dict) -> str:
     if not (event and section and market and selection):
         return ""
     base = "|".join((event, section, market, scope, metric, selection))
-    if market in {"aces", "double_faults", "sets", "games"}:
+    if market in {"aces", "most_aces", "double_faults", "sets", "games"}:
         # An immutable O/U market line is part of the bet identity. The
         # selection alone cannot distinguish Over 4.5 from Under 5.5.
         contract = str(publication.get("publication_key") or "").strip()
@@ -76,8 +76,8 @@ def _archive_record(row: dict, publication: dict, generated_at: str) -> dict | N
     market = str(publication.get("market") or "match_winner").lower()
     section = str(publication.get("section") or "").lower()
     if market != "match_winner" and not (
-        market in {"aces", "double_faults", "sets", "games"}
-        and section == {"aces":"ace", "double_faults":"double_faults", "sets":"sets", "games":"games"}[market]
+        market in {"aces", "most_aces", "double_faults", "sets", "games"}
+        and section == {"aces":"ace", "most_aces":"ace_winner", "double_faults":"double_faults", "sets":"sets", "games":"games"}[market]
     ):
         return None
     result = publication.get("result")
@@ -296,7 +296,7 @@ def read_only_archive_category_counts(
     by_section: Counter = Counter()
     all_sections: Counter = Counter()
     current_rows = selected_rows = mismatch = 0
-    selected = {"top_daily", "value", "ace", "double_faults", "sets", "games"}
+    selected = {"top_daily", "value", "ace", "ace_winner", "double_faults", "sets", "games"}
     for row in archived:
         if not isinstance(row, dict):
             continue
@@ -313,7 +313,7 @@ def read_only_archive_category_counts(
                 continue
             market = str(publication.get("market") or "").lower()
             section = {
-                "aces": "ace", "double_faults": "double_faults",
+                "aces": "ace", "most_aces": "ace_winner", "double_faults": "double_faults",
                 "sets": "sets", "games": "games",
             }.get(market, str(publication.get("section") or "").lower())
             if not section:
