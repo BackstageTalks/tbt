@@ -62,6 +62,49 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                 "kind": "dict", "keys": sorted(map(str, value))[:22],
                 "count": len(value),
             }
+    if name == "daily_match_winner_odds":
+        # The provider returns an event-ID indexed odds map. Measure the value
+        # structure from the EXISTING paid response, never a second request.
+        # No raw quotes or per-event IDs leave this aggregate research report.
+        price_map = obj.get("odds")
+        if isinstance(price_map, dict):
+            entries = list(price_map.items())
+            valid_keys = [
+                key for key, _ in entries
+                if isinstance(key, str) and key.isascii() and key.isdecimal()
+                and int(key) > 0
+            ]
+            value_kinds = Counter(type(value).__name__ for _, value in entries)
+            with_markets = with_pair = with_event_echo = with_quote_clock = 0
+            for key, value in entries:
+                if not isinstance(value, dict):
+                    continue
+                with_markets += isinstance(value.get("markets"), list)
+                with_pair += isinstance(value.get("home"), dict) and isinstance(
+                    value.get("away"), dict)
+                with_event_echo += str(value.get("eventId", value.get("event_id", ""))) == key
+                with_quote_clock += any(
+                    value.get(field) is not None
+                    for field in ("quoteTimestamp", "quotedAt", "asOf", "observedAt")
+                )
+            result["daily_odds_value_profile"] = {
+                "map_entries": len(entries),
+                "valid_native_id_keys": len(valid_keys),
+                "value_kinds": dict(sorted(value_kinds.items())),
+                "entries_with_market_list": with_markets,
+                "entries_with_home_away_objects": with_pair,
+                "entries_with_matching_event_id_echo": with_event_echo,
+                "entries_with_clock_like_field": with_quote_clock,
+                "individual_event_market_replacement_authorized": False,
+                "historical_pre_match_quote_time_verified": False,
+                "cdb_import_authorized": False,
+            }
+        else:
+            result["daily_odds_value_profile"] = {
+                "recognized_id_map": False,
+                "individual_event_market_replacement_authorized": False,
+                "cdb_import_authorized": False,
+            }
     if name in ("event_statistics", "historical_2016_match_statistics"):
         result["statistics_key_inventory"] = inventory_statistics_keys(payload)
     if name == "event_odds":
