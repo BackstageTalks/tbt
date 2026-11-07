@@ -136,3 +136,71 @@ def test_conflicting_new_native_event_is_quarantined_without_2026_row_loss(match
     assert report["quarantined_rows"] == 1
     assert report["protected_existing_rows"] == 2
     assert report["rows"][0]["reason"] == "incoming_hits_preexisting_cdb_identity_quarantine"
+
+
+def test_refresh_quarantines_provider_reschedule_without_changing_frozen_cdb_identity(match_factory):
+    """Regression: morning refresh may not rewrite a stored 2026 kickoff."""
+    from datetime import timedelta
+    from tbt.data.history_safety import merge_trusted_history_batch
+
+    original = match_factory("frozen-id", "A", "B", "A")
+    original.provider_payload = {"_tbt_provider_event_id": "stable-event"}
+    corrected = replace(original, scheduled_at=original.scheduled_at + timedelta(hours=2))
+    unrelated = match_factory("new-event", "C", "D", "C")
+    unrelated.provider_payload = {"_tbt_provider_event_id": "unrelated-event"}
+
+    merged, accepted, report = merge_trusted_history_batch(
+        [original], [corrected, unrelated]
+    )
+    assert {item.match_id for item in merged} == {"frozen-id", "new-event"}
+    frozen = next(item for item in merged if item.match_id == "frozen-id")
+    assert (frozen.player1_id, frozen.player2_id, frozen.scheduled_at) == (
+        original.player1_id, original.player2_id, original.scheduled_at
+    )
+    assert [item.match_id for item in accepted] == ["new-event"]
+    assert report["quarantined_rows"] == 1
+    assert report["original_identity_corrections_rejected"] == 1
+    assert report["rows"][0]["reason"] == "incoming_changes_original_cdb_identity"
+
+
+def test_refresh_quarantines_reoriented_original_even_when_provider_id_agrees(match_factory):
+    from tbt.data.history_safety import merge_trusted_history_batch
+
+    original = match_factory("frozen", "A", "B", "A")
+    original.provider_payload = {"_tbt_provider_event_id": "same-event"}
+    reversed_provider = original.swapped()
+    merged, accepted, report = merge_trusted_history_batch(
+        [original], [reversed_provider]
+    )
+    assert [(m.match_id, m.player1_id, m.player2_id) for m in merged] == [
+        ("frozen", original.player1_id, original.player2_id)
+    ]
+    assert accepted == []
+    assert report["quarantined_rows"] == 1
+
+
+def test_refresh_quarantines_provider_rekey_of_original_match(match_factory):
+    from tbt.data.history_safety import merge_trusted_history_batch
+
+    original = match_factory("immutable-id", "A", "B", "A")
+    original.provider_payload = {"_tbt_provider_event_id": "same-event"}
+    rekeyed = replace(original, match_id="provider-new-id")
+    merged, accepted, report = merge_trusted_history_batch([original], [rekeyed])
+    assert [m.match_id for m in merged] == ["immutable-id"]
+    assert accepted == []
+    assert report["quarantined_rows"] == 1
+
+
+def test_refresh_still_accepts_matching_original_identity_without_quarantine(match_factory):
+    from tbt.data.history_safety import merge_trusted_history_batch
+
+    original = match_factory("immutable-id", "A", "B", "A")
+    original.provider_payload = {"_tbt_provider_event_id": "same-event"}
+    observed = replace(original, stats={**original.stats, "p1_aces": 3})
+    merged, accepted, report = merge_trusted_history_batch([original], [observed])
+    assert len(merged) == 1
+    assert merged[0].match_id == original.match_id
+    assert merged[0].scheduled_at == original.scheduled_at
+    assert merged[0].stats["p1_aces"] == 3
+    assert len(accepted) == 1
+    assert report["quarantined_rows"] == 0
