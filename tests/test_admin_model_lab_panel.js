@@ -29,7 +29,7 @@ assert.match(html,/data-admin-action="training-start" disabled/);
 assert.match(html,/data-admin-action="model-factory-promote" disabled/);
 assert.match(html,/data-model-lab-operation="activate_shadow" disabled/);
 state.adminTraining={can_start:true,runs:[],candidates:[{tag:'blinq-candidate-frozen-123-1'}]};
-state.adminModelLab={can_start:true,reason:'Pripravené',active_sha256:'a'.repeat(64),
+state.adminModelLab={can_start:true,reason:'Pripravené',active_sha256:'a'.repeat(64),champion_sha256:'c'.repeat(64),
   candidates:[{tag:'blinq-candidate-frozen-123-1',sha256:'b'.repeat(64)},
               {tag:'bad<script>',sha256:'a'.repeat(64)}],
   operation:null,last_operation:null};
@@ -47,7 +47,7 @@ assert.match(html,/bez tréningu/i);
 assert.match(html,/automaticky prepočítava/i);
 assert.match(html,/data-admin-action="training-start" disabled/);
 state.adminModelLab.last_preflight={
-  state:'WORKFLOW_VERIFIED', verified_at:new Date().toISOString(),
+  state:'WORKFLOW_VERIFIED', verified_at:new Date().toISOString(),approval:{expected_champion_sha256:'c'.repeat(64)},
   run:{id:123,html_url:'https://github.com/BackstageTalks/tbt/actions/runs/123',
        conclusion:'success',artifact_verified:true,
        preflight_report:{eligible_rows:600000,tours:{
@@ -63,6 +63,16 @@ assert.match(html,/Audit dát overený/);
 assert.match(html,/ATP: 350/);
 assert.match(html,/WTA: 250/);
 assert.match(html,/Finálne zmrazenie a zálohovanie vstupov/);
+state.adminModelLab.champion_sha256='d'.repeat(64);
+html=ctx.renderAdminModelLab();
+assert.match(html,/data-admin-action="training-start" disabled/);
+assert.match(html,/data-factory-next="prepare_inputs"/);
+state.adminModelLab.last_promotion={state:'WORKFLOW_VERIFIED',
+  approval:{source_sha256:'d'.repeat(64)},run:{conclusion:'success'}};
+html=ctx.renderAdminModelLab();
+assert.match(html,/Pripraviť dáta pre ďalšieho kandidáta/);
+state.adminModelLab.champion_sha256='c'.repeat(64);
+state.adminModelLab.last_promotion=null;
 state.adminModelLab.last_preflight.run.artifact_verified=false;
 html=ctx.renderAdminModelLab();
 assert.match(html,/data-admin-action="training-start" disabled/);
