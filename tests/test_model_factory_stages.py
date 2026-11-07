@@ -182,8 +182,10 @@ def test_server_rejects_shadow_training_without_verified_preflight():
         with pytest.raises(model_training.TrainingBlocked, match="overený audit"):
             model_training.start({"profile": "top-7.2.1", "auto_shadow": True}, "admin")
         assert (model_training.PARTITION, "request-7") not in table.rows
+        lab._put("snapshot", source_snapshot())
         lab._put("last_preflight", {
             "state": "WORKFLOW_VERIFIED", "verified_at": now,
+            "approval": {"expected_champion_sha256": "b" * 64},
             "run": {"status": "completed", "conclusion": "success",
                     "artifact_verified": True,
                     "preflight_report": {"eligible_rows": 600000}},
@@ -191,6 +193,36 @@ def test_server_rejects_shadow_training_without_verified_preflight():
         response = model_training.start({"profile": "top-7.2.1", "auto_shadow": True}, "admin")
         assert response["state"] == "QUEUED"
         assert table.rows[(model_training.PARTITION, "request-7")]["auto_shadow"] is True
+
+
+def test_changed_champion_invalidates_old_preflight_and_blocks_722_until_verified_release():
+    now = datetime.now(timezone.utc).isoformat()
+    table = Table()
+    with patch.object(lab, "_table", return_value=table), \
+         patch.object(model_training, "_table", return_value=table), \
+         patch.object(model_training, "status", return_value={"can_start": True, "base": "9"}):
+        lab._put("snapshot", source_snapshot())
+        lab._put("last_preflight", {
+            "state": "WORKFLOW_VERIFIED", "verified_at": now,
+            "approval": {"expected_champion_sha256": "b" * 64},
+            "run": {"status": "completed", "conclusion": "success",
+                    "artifact_verified": True,
+                    "preflight_report": {"eligible_rows": 600000}},
+        })
+        changed = source_snapshot()
+        changed["champion_sha256"] = "c" * 64
+        lab._put("snapshot", changed)
+        with pytest.raises(model_training.TrainingBlocked, match="aktuálneho championa"):
+            model_training.start({"profile": "top-7.2.1", "auto_shadow": True}, "admin")
+        with pytest.raises(model_training.TrainingBlocked, match="P0"):
+            model_training.start({"profile": "accuracy-7.2.2"}, "admin")
+        assert (model_training.PARTITION, "request-9") not in table.rows
+        lab._put("last_promotion", {
+            "state": "WORKFLOW_VERIFIED",
+            "approval": {"source_sha256": "c" * 64},
+            "run": {"status": "completed", "conclusion": "success"},
+        })
+        assert model_training.start({"profile": "accuracy-7.2.2"}, "admin")["state"] == "QUEUED"
 
 
 def test_legacy_manual_training_never_implies_shadow():
