@@ -1408,7 +1408,17 @@
     const markets=state.feed?.markets;if(markets&&Array.isArray(markets[key]))return ['ace','sg'].includes(key)?markets[key].filter(row=>authenticMarketSectionRow(row,key)):markets[key];
     return [];
   }
-  function marketProbability(row){const raw=row?.blinq_probability??row?.probability??row?.win_probability??row?.model_probability??row?.confidence_probability;const value=Number(raw);return Number.isFinite(value)?(value>1?value/100:value):null;}
+  function marketProbability(row){
+    // A player-superiority prediction is distinct from the match winner model.
+    // The existing match-winner probability must never be reused as its confidence.
+    if(String(row?.market||'').toLowerCase()==='most_aces'){
+      const confidence=row?.projection_confidence;
+      const value=confidence==null?NaN:Number(confidence);
+      return Number.isFinite(value)&&value>=0&&value<=1?value:null;
+    }
+    const raw=row?.blinq_probability??row?.probability??row?.win_probability??row?.model_probability??row?.confidence_probability;
+    const value=raw==null?NaN:Number(raw);return Number.isFinite(value)?(value>1?value/100:value):null;
+  }
   function surfaceSampleLabel(row){const q=row?.quality||{},s1=Number(q?.player1?.surface_matches),s2=Number(q?.player2?.surface_matches);return Number.isFinite(s1)&&Number.isFinite(s2)?`${Math.min(s1,s2)}+`:'—';}
   function dataDepthMetric(row){const depth=Number(row?.data_depth);return Number.isFinite(depth)?`${Math.round(Math.max(0,Math.min(1,depth))*100)}%`:'—';}
   function explicitTournamentCountry(row){
@@ -2476,7 +2486,13 @@
   function aceSettledLeaderBallHtml(publication,player,name){
     // Separate read-only grading of the issued 'most Aces' insight from the
     // published player's Over/Under line, W/L, odds and financial settlement.
-    if(String(publication?.market||publication?.projection_metric||'').toLowerCase()!=='aces')return '';
+    const market=String(publication?.market||publication?.projection_metric||'').toLowerCase();
+    if(market==='most_aces'){
+      // This ball identifies the frozen prediction, including losses and ties.
+      if(!publication?.issued_at||String(publication?.selection_id||'')!==String(player?.id||''))return '';
+      return aceLeaderHintHtml({...publication,aces_superiority_hint:publication?.projection_subject||name},player,name);
+    }
+    if(market!=='aces')return '';
     const result=publication?.result;
     if(!result||typeof result!=='object')return '';
     const status=String(result.status||'').trim().toLowerCase();
