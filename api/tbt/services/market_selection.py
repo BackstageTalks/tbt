@@ -35,7 +35,7 @@ MATCH_WINNER_MARKET_NAMES = {
 #
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
-# PRIME keeps its current short-price fallback. TOP prioritizes >=80% and stages 78%, 75%, then 70% only until at least three picks qualify. Keep all above active tier without bypassing the odds/data-quality gates. Value keeps a 65% floor.
+# PRIME retains its own policy. TOP is a ranked full-slate choice (up to 5), not a confidence cascade. VALUE keeps the existing 65% floor and 15% odds gap.
 #
 # VALUE has assignment priority because close-odds candidates are intentionally
 # scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
@@ -46,10 +46,8 @@ PUBLICATION_MIN_PROBABILITY = 0.65
 
 PRIME_TOP_CORE_PROBABILITY = 0.68
 PRIME_TOP_FALLBACK_PROBABILITY = 0.65
-TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.70
-TOP_DYNAMIC_FALLBACK_TIERS = (
-    (0.78, 1.50), (0.75, 1.50), (0.70, 1.50),
-)
+TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.60
+TOP_DYNAMIC_FALLBACK_TIERS = ()
 
 # PRIME: any decimal price below 1.50 (no lower odds bound).
 PRIME_MIN_PROBABILITY = PRIME_TOP_CORE_PROBABILITY
@@ -70,7 +68,7 @@ PRIME_LIMIT = 30
 TOP_PREFERRED_PROBABILITY = 0.80
 TOP_SECONDARY_PROBABILITY = 0.78
 TOP_STANDARD_PROBABILITY = 0.75
-TOP_FALLBACK_PROBABILITIES = (0.70,)
+TOP_FALLBACK_PROBABILITIES = ()
 TOP_MIN_PROBABILITY = TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY
 TOP_TARGET_COUNT = 3
 TOP_MIN_COUNT = 3
@@ -80,7 +78,9 @@ TOP_MIN_ODDS: float | None = 1.50
 TOP_FALLBACK_MIN_ODDS = 1.50
 TOP_MIN_EDGE: float | None = None
 TOP_MIN_EXPECTED_VALUE: float | None = None
-TOP_LIMIT: int | None = None
+TOP_LIMIT: int | None = 3
+TOP_BACKUP_MIN_DATA_DEPTH = 0.75
+TOP_BACKUP_MIN_SURFACE_MATCHES = 3
 
 # VALUE: >=1.80 and a close two-way market. "15% odds difference" is measured
 # symmetrically as abs(o1-o2) / mean(o1,o2), avoiding home/away asymmetry.
@@ -724,7 +724,7 @@ def enrich_current_betting_day_odds(
     provider_id: int = 1,
     timezone_name: str = "Europe/Bratislava",
     start_hour: int = 6,
-    candidate_min_probability: float = VALUE_MIN_PROBABILITY,
+    candidate_min_probability: float = min(VALUE_MIN_PROBABILITY, TOP_MIN_PROBABILITY),
     candidate_min_data_depth: float = VALUE_MIN_DATA_DEPTH,
     candidate_min_surface_matches: int = VALUE_MIN_SURFACE_MATCHES,
     prefetched_payloads: dict[str, Any] | None = None,
@@ -732,9 +732,10 @@ def enrich_current_betting_day_odds(
     """Fetch provider-1 odds only for plausible published betting candidates.
 
     Odds calls are intentionally *not* spent on the entire upcoming board.
-    The broad Value floor is used for pre-price discovery so odds calls can cover
-    every currently supported Match Winner branch. Final Prime/Top/Value rules
-    remain stricter and are applied after prices are attached.
+    Discovery uses the lower TOP/Value probability floor so morning TOP can
+    rank the entire eligible slate rather than leaving its 60–65% candidates
+    unpriced. The existing provider quota, 6/s throttle and common budget
+    guard remain the only paid API path. Final market gates stay independent.
     """
     start, end, day_key = betting_day_bounds(
         now, timezone_name=timezone_name, start_hour=start_hour
@@ -990,6 +991,52 @@ def _fill_to_minimum(
     return selected, added
 
 
+def _top_quality_rank(card: dict[str, Any]) -> tuple:
+    """Conservative model/bookmaker agreement, not a calibrated success claim."""
+    p = float(_number(card.get("probability")) or 0.0)
+    odds = float(_number(card.get("odds")) or 0.0)
+    fair = _number(card.get("fair_implied_probability"))
+    paired = fair is not None and 0.0 < fair < 1.0
+    market = float(fair) if paired else (1.0 / odds if odds > 1.0 else 0.0)
+    agreement = 2.0 * p * market / (p + market) if p + market > 0.0 else 0.0
+    return (agreement, int(paired), _depth(card),
+            min(_surface_samples(card)), min(_overall_samples(card)),
+            _selection_identity(card))
+
+
+def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]],
+                         *, target: int = TOP_TARGET_COUNT,
+                         minimum: int = TOP_MIN_COUNT) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
+    """One TOP offer: three highest-ranked real priced, evidence-qualified picks.
+
+    Backup uses a controlled 0.75 depth / 3 surface matches floor if the
+    standard 0.80 / 5 pool cannot supply three. Never creates a quote.
+    """
+    selected = sorted(core, key=_top_quality_rank, reverse=True)[:target]
+    appended = 0
+    seen = {_selection_identity(item) for item in selected}
+    if len(selected) < minimum:
+        for item in sorted(backup, key=_top_quality_rank, reverse=True):
+            if len(selected) >= minimum or len(selected) >= target:
+                break
+            key = _selection_identity(item)
+            if not key or key in seen:
+                continue
+            selected.append(deepcopy(item))
+            seen.add(key)
+            appended += 1
+        selected.sort(key=_top_quality_rank, reverse=True)
+    return selected, appended, {
+        "step": 1 if appended else 0,
+        "min_probability": TOP_MIN_PROBABILITY,
+        "min_odds": TOP_FALLBACK_MIN_ODDS,
+        "target": target, "minimum": minimum,
+        "core_pool": len(core), "backup_pool": len(backup),
+        "backup_selected": appended, "shortfall": max(0, minimum-len(selected)),
+        "rank": "harmonic_model_market_consensus_evidence",
+    }
+
+
 def _fill_top_dynamic(
     core: list[dict[str, Any]],
     fallback_pool: list[dict[str, Any]],
@@ -1058,14 +1105,10 @@ def select_market_sections(
     sg_picks: list[dict[str, Any]] | None = None,
     doubles_picks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Split priced Match Winner predictions by BlinQ Probability and odds.
+    """Publish existing TOP/PRIME/VALUE with unchanged markets and price contracts.
 
-    Retired TOP200 is never evaluated or allowed to reserve candidates.
-    Active VALUE -> TOP/PRIME selection uses the normal quality gates.
-    TOP starts at 80% / 1.50 and relaxes through 78%, 75%, 70% ONLY until
-    three eligible, independently priced picks exist. All picks above the
-    applied tier are kept, even when their number exceeds three; the minimum
-    is a target, not permission to invent probabilities. EV is diagnostic.
+    TOP ranks the entire safe priced Match Winner slate, aiming for three
+    quality-qualified picks. VALUE remains higher priority; ACES is untouched.
     """
     cards = [
         card for row in predictions
@@ -1075,7 +1118,7 @@ def select_market_sections(
     ]
 
     prime_core_floor = max(PRIME_TOP_CORE_PROBABILITY, float(prime_min_probability))
-    top_core_floor = max(TOP_PREFERRED_PROBABILITY, float(top_min_probability))
+    top_core_floor = max(TOP_MIN_PROBABILITY, float(top_min_probability))
     fallback_floor = PRIME_TOP_FALLBACK_PROBABILITY
     top_fallback_floor = max(TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY, float(top_min_probability))
     value_floor = max(PUBLICATION_MIN_PROBABILITY, float(value_min_probability))
@@ -1132,19 +1175,23 @@ def select_market_sections(
         ):
             (prime_core if probability >= prime_core_floor else prime_fallback).append(card)
 
-        top_core_odds = float(top_min_odds or TOP_MIN_ODDS or 1.50)
-        if odds >= TOP_FALLBACK_MIN_ODDS and _passes_candidate_gate(
-            card, min_probability=top_fallback_floor,
+        top_core_odds = max(TOP_FALLBACK_MIN_ODDS, float(top_min_odds or TOP_MIN_ODDS or 1.50))
+        if odds >= top_core_odds and _passes_candidate_gate(
+            card, min_probability=top_core_floor,
             min_data_depth=top_min_data_depth,
             min_surface_matches=top_min_surface_matches,
         ):
             tagged = deepcopy(card)
-            if odds >= top_core_odds and probability >= top_core_floor:
-                tagged["selection_tier"] = "core"
-                top_core.append(tagged)
-            else:
-                tagged["selection_tier"] = "fallback"
-                top_fallback.append(tagged)
+            tagged["selection_tier"] = "ranked_core"
+            top_core.append(tagged)
+        elif odds >= top_core_odds and _passes_candidate_gate(
+            card, min_probability=top_core_floor,
+            min_data_depth=min(float(top_min_data_depth), TOP_BACKUP_MIN_DATA_DEPTH),
+            min_surface_matches=min(int(top_min_surface_matches), TOP_BACKUP_MIN_SURFACE_MATCHES),
+        ):
+            tagged = deepcopy(card)
+            tagged["selection_tier"] = "ranked_backup"
+            top_fallback.append(tagged)
 
     rank = lambda card: (
         _number(card.get("probability")) or 0.0,
@@ -1154,10 +1201,7 @@ def select_market_sections(
     )
     value_qualified.sort(key=rank, reverse=True)
 
-    # Value claims overlap with Top before the Top minimum-fill decision.
-    # TOP fallback inventory is considered only after Value priority. The
-    # probability threshold is relaxed 80 -> 78 -> 75 -> 70%; the
-    # odds threshold never moves below 1.50. No cap above the selected floor.
+    # VALUE retains exclusive priority. TOP ranks the remaining full priced slate.
     value_ids = {_selection_identity(card) for card in value_qualified}
     top_core = [card for card in top_core if _selection_identity(card) not in value_ids]
     top_fallback = [card for card in top_fallback if _selection_identity(card) not in value_ids]
@@ -1165,9 +1209,8 @@ def select_market_sections(
     prime_qualified, prime_fallback_added = _fill_to_minimum(
         prime_core, prime_fallback, minimum_count=PRIME_MIN_COUNT, rank_key=rank
     )
-    top_qualified, top_fallback_added, top_fallback_applied = _fill_top_dynamic(
-        top_core, top_fallback, minimum_count=TOP_MIN_COUNT,
-        rank_key=rank, minimum_probability=top_fallback_floor,
+    top_qualified, top_fallback_added, top_fallback_applied = _rank_full_slate_top(
+        top_core, top_fallback, target=TOP_TARGET_COUNT, minimum=TOP_MIN_COUNT,
     )
 
     selected, duplicate_removed, limited_out = _exclusive_section_assignment(
@@ -1184,7 +1227,7 @@ def select_market_sections(
         raise ValueError("Market section exclusivity invariant failed")
     if any((_number(card.get("probability")) or 0.0) + 1e-12 < PRIME_TOP_FALLBACK_PROBABILITY for card in prime):
         raise ValueError("Prime fallback probability floor invariant failed")
-    if any((_number(card.get("probability")) or 0.0) + 1e-12 < TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY for card in top):
+    if any((_number(card.get("probability")) or 0.0) + 1e-12 < top_core_floor for card in top):
         raise ValueError("Top fallback probability floor invariant failed")
     if any((_number(card.get("probability")) or 0.0) + 1e-12 < PUBLICATION_MIN_PROBABILITY for card in value):
         raise ValueError("Value probability floor invariant failed")
@@ -1204,14 +1247,14 @@ def select_market_sections(
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
             "schema": 16,
-            "selection_policy": "active_value_top_prime_v16",
+            "selection_policy": "active_value_top_prime_rank_v18",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "extreme_price_inversion_quarantined": extreme_inversion_quarantined,
                 "market_conflict_missing_rank_quarantined": market_conflict_missing_rank_quarantined,
                 "post_start_quote_quarantined": post_start_quote_quarantined,
                 "prime_core_68_plus": len(prime_core),
-                "top_core_80_plus_after_value_priority": len(top_core),
+                "top_core_80_plus_after_value_priority": sum((_number(c.get("probability")) or 0.0) >= 0.80 for c in top_core),
                 "top_core_68_plus_after_value_priority": len(top_core),  # legacy metadata key
                 "prime_fallback_65_679_added": prime_fallback_added,
                 "top_fallback_added": top_fallback_added,
@@ -1222,9 +1265,9 @@ def select_market_sections(
                 "limited_out": sum(limited_out.values()),
                 "daily_minimum_target": TOP_MIN_COUNT,
                 "daily_preferred_target": TOP_MIN_COUNT,
-                "all_qualifying_above_active_tier": True,
+                "all_qualifying_above_active_tier": False,
                 "active_top_probability_floor": top_fallback_applied["min_probability"],
-                "top_below_three_after_70": len(top) < TOP_MIN_COUNT,
+                "top_daily_shortfall": max(0, TOP_MIN_COUNT-len(top)),
                 "minimum_shortfall": {
                     "prime": max(0, PRIME_MIN_COUNT-len(prime)),
                     "top_daily": max(0, TOP_MIN_COUNT-len(top)),
@@ -1247,8 +1290,8 @@ def select_market_sections(
             "main_candidate_rule": {
                 "core_probability": PRIME_TOP_CORE_PROBABILITY,
                 "prime_fallback_probability": PRIME_TOP_FALLBACK_PROBABILITY,
-                "top_fallback_probability_floor": TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY,
-                "top_probability_tiers": [0.80, 0.78, 0.75, 0.70],
+                "top_fallback_probability_floor": TOP_MIN_PROBABILITY,
+                "top_probability_tiers": [TOP_MIN_PROBABILITY],
                 "top_dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
                 ],
@@ -1275,17 +1318,17 @@ def select_market_sections(
             },
             "top_daily_rule": {
                 "product_label": "Top Bets",
-                "objective": "probability_first",
+                "objective": "ranked_market_model_consensus",
                 "probability_basis": "blinq_probability",
                 "core_min_probability": top_core_floor,
                 "fallback_min_probability": top_fallback_floor,
-                "probability_tiers": [0.80, 0.78, 0.75, 0.70],
+                "probability_tiers": [TOP_MIN_PROBABILITY],
                 "daily_minimum_target": TOP_MIN_COUNT,
-                "all_qualifying_above_active_tier": True,
+                "all_qualifying_above_active_tier": False,
                 "no_forced_fill": True,
                 "observed_pick_count": len(top),
                 "fallback_only_if_core_count_below": TOP_MIN_COUNT,
-                "dynamic_fallback": True,
+                "dynamic_fallback": False,
                 "dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
                 ],
@@ -1299,7 +1342,11 @@ def select_market_sections(
                 "value_priority_exclusion": True,
                 "edge_ev_role": "diagnostic_only",
                 "limit": top_limit,
-                "sort": "probability_desc_then_data_depth_then_sample_depth",
+                "sort": "quality_consensus_then_evidence",
+                "ranked_full_slate": True,
+                "daily_preferred_count": TOP_TARGET_COUNT,
+                "backup_min_data_depth": TOP_BACKUP_MIN_DATA_DEPTH,
+                "backup_min_surface_matches_each": TOP_BACKUP_MIN_SURFACE_MATCHES,
             },
             "doubles_rule": {
                 "model": "DOUBLES-ELO-v1",
