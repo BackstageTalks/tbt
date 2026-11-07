@@ -153,10 +153,12 @@ def main():
                         throw Error('Override-hidden PRO panel escaped audit');
                       const beforePlan=s.adminPlan;s.adminPlan='pro';
                       try{
-                        if(!app.renderAdminLayout().includes('0 efektívne odomknutých riadkov'))
+                        const dfAdminCard=()=>app.renderAdminLayout().split('data-admin-hub-tab-card="double_faults"')[1]?.split('data-admin-hub-global-field="enabled"')[0]||'';
+                        if(!dfAdminCard().includes('0 efektívne odomknutých riadkov'))
                           throw Error('Inline warning missed effective zero rows');
                         tabs.double_faults.plans.pro.row_overrides={'1':'active','2':'hidden'};
-                        if(app.adminDailyHubAccessAudit().some(item=>item.tab==='double_faults'&&item.plan==='pro'&&item.kind==='empty'))
+                        if(app.adminDailyHubAccessAudit().some(item=>item.tab==='double_faults'&&item.plan==='pro'&&item.kind==='empty')
+                           ||dfAdminCard().includes('0 efektívne odomknutých riadkov'))
                           throw Error('Inline audit falsely flags one unlocked row');
                       }finally{s.adminPlan=beforePlan;}
                       // Disabled panels must not be reported as visible empty panels.
