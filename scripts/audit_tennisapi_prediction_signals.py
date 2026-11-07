@@ -69,7 +69,8 @@ def source_event(event: Any) -> tuple[dict | None, str]:
     if uid is None:
         return None, "missing_native_tournament"
     sides = (event.get("homeTeam"), event.get("awayTeam"))
-    if any(not isinstance(side, dict) or side.get("type") != 1 for side in sides):
+    if any(not isinstance(side, dict) or type(side.get("type")) is not int
+           or side.get("type") != 1 for side in sides):
         return None, "discipline_unconfirmed_or_doubles"
     ids = tuple(_positive(side.get("id")) for side in sides)
     if ids[0] is None or ids[1] is None or ids[0] == ids[1]:
@@ -239,7 +240,57 @@ def reconcile(rows: list[dict], history: list[Any] | None) -> dict:
     }
 
 
-def audit(paths: list[Path], *, history: list[Any] | None = None) -> tuple[list[dict], dict]:
+
+def check_monthly_tournaments(rows: list[dict], calendar_path: Path | None) -> dict:
+    """Optional index cross-check only: calendar days are never import completeness."""
+    if calendar_path is None:
+        return {"status": "NOT_CHECKED", "verified_complete_days": 0}
+    if (calendar_path.is_symlink() or not calendar_path.is_file()
+            or calendar_path.stat().st_size > MAX_SOURCE_BYTES):
+        raise ValueError("Unsafe or oversized calendar file")
+    payload = json.loads(calendar_path.read_text(encoding="utf-8"))
+    dates = payload.get("dailyUniqueTournaments") if isinstance(payload, dict) else None
+    if not isinstance(dates, list) or len(dates) > 31:
+        raise ValueError("Invalid provider monthly calendar envelope")
+    seen: dict[str, set[int]] = {}
+    for item in dates:
+        if not isinstance(item, dict):
+            raise ValueError("Invalid monthly index row")
+        day, ids = item.get("date"), item.get("uniqueTournamentIds")
+        try:
+            dt = datetime.fromisoformat(day).date()
+        except (ValueError, TypeError):
+            raise ValueError("Invalid monthly day") from None
+        if day != dt.isoformat() or day in seen or not isinstance(ids, list):
+            raise ValueError("Duplicate or malformed monthly day")
+        if any(_positive(x) is None for x in ids) or len(set(ids)) != len(ids):
+            raise ValueError("Ambiguous tournament IDs for day")
+        seen[day] = set(ids)
+    if len({day[:7] for day in seen}) > 1:
+        raise ValueError("Expected one exact calendar month")
+    matched = missing = outside = 0
+    for row in rows:
+        day = row["utc_day"]
+        if day not in seen:
+            outside += 1
+        elif row["unique_tournament_id"] in seen[day]:
+            matched += 1
+        else:
+            missing += 1
+    return {
+        "status": "READ_ONLY_MONTHLY_INDEX",
+        "index_days": len(seen),
+        "unique_tournament_ids": len(set().union(*seen.values())) if seen else 0,
+        "index_tournament_day_links": sum(map(len, seen.values())),
+        "matched_source_events": matched,
+        "missing_tournament_in_index": missing,
+        "source_events_outside_index_days": outside,
+        "verified_complete_days": 0,
+        "skip_daily_category_import": False,
+    }
+
+def audit(paths: list[Path], *, history: list[Any] | None = None,
+          calendar: Path | None = None) -> tuple[list[dict], dict]:
     source_rows, inventory = load_samples(paths)
     signals = pre_match_signals(source_rows)
     reconciliation = reconcile(signals, history)
@@ -255,6 +306,7 @@ def audit(paths: list[Path], *, history: list[Any] | None = None) -> tuple[list[
         "provider_requests": 0, "cdb_writes": 0, "model_changes": 0,
         "history_scope": "ATP_WTA_finished_singles",
         "source": inventory,
+        "monthly_index": check_monthly_tournaments(signals, calendar),
         "signals": dict(counts), "reconciliation": reconciliation,
         "model_training_eligible_rows": 0,
         "reason": ("No verified complete as-of history window, no pre-match seed "
@@ -267,6 +319,8 @@ def main() -> None:
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True, action="append")
+    parser.add_argument("--calendar", type=Path,
+                        help="Optional read-only monthly unique-tournament index")
     parser.add_argument("--history-dir", type=Path,
                         help="Optional read-only canonical history; never imports")
     parser.add_argument("--out", type=Path,
@@ -276,7 +330,7 @@ def main() -> None:
     if args.history_dir is not None:
         from tbt.data.history_snapshot import load_partitions
         history = load_partitions(args.history_dir)
-    rows, report = audit(args.source, history=history)
+    rows, report = audit(args.source, history=history, calendar=args.calendar)
     args.out.mkdir(parents=True, exist_ok=True)
     dest = args.out / "source-native-signals.jsonl"
     dest.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
