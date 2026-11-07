@@ -9,6 +9,7 @@ excluded from model/prediction input and must be reported to the operator.
 """
 
 from collections import Counter
+from datetime import timezone
 from typing import Iterable
 
 from tbt.schemas import MatchRecord
@@ -180,6 +181,66 @@ def merge_trusted_history_batch(
 
     trusted = list(existing)
     additions = list(incoming)
+
+    # The canonical release pins each original match ID, player orientation and
+    # UTC start. Provider corrections of an already-known match must use a
+    # separately reviewed identity-repair workflow, never a routine refresh.
+    # This also prevents merge_matches() from selecting an incoming match_id
+    # when the provider event stays constant but its fallback ID has changed.
+    match_counts = Counter(str(row.match_id or "") for row in trusted)
+    provider_counts = Counter(str(_provider_event_id(row) or "") for row in trusted)
+    by_match = {
+        str(row.match_id): row for row in trusted
+        if match_counts[str(row.match_id or "")] == 1
+    }
+    by_provider = {
+        str(_provider_event_id(row)): row for row in trusted
+        if _provider_event_id(row) and
+        provider_counts[str(_provider_event_id(row))] == 1
+    }
+    identity_rejected = []
+    eligible_additions = []
+    for incoming_row in additions:
+        mid = str(incoming_row.match_id or "")
+        pid = str(_provider_event_id(incoming_row) or "")
+        established = [row for row in (by_match.get(mid), by_provider.get(pid))
+                       if row is not None]
+        frozen = (
+            mid,
+            str(incoming_row.player1_id or ""),
+            str(incoming_row.player2_id or ""),
+            incoming_row.scheduled_at.astimezone(timezone.utc),
+        )
+        if any(
+            (
+                str(row.match_id or ""),
+                str(row.player1_id or ""),
+                str(row.player2_id or ""),
+                row.scheduled_at.astimezone(timezone.utc),
+            ) != frozen
+            for row in established
+        ):
+            identity_rejected.append(incoming_row)
+        else:
+            eligible_additions.append(incoming_row)
+    additions = eligible_additions
+
+    def with_identity_quarantine(merged, accepted, report):
+        if not identity_rejected:
+            return merged, accepted, report
+        details = [{
+            "match_id": str(row.match_id or ""),
+            "provider_event_id": str(_provider_event_id(row) or ""),
+            "reason": "incoming_changes_original_cdb_identity",
+        } for row in identity_rejected]
+        return merged, accepted, {
+            **report,
+            "quarantined_rows": int(report.get("quarantined_rows") or 0)
+                                + len(details),
+            "rows": list(report.get("rows") or []) + details,
+            "original_identity_corrections_rejected": len(details),
+        }
+
     # The private canonical release can already contain conflicting claims
     # about one provider event ID (e.g. three 2026 ITF pairs). Preserve their
     # exact original rows and isolate them from the provider merge. Do NOT
@@ -230,7 +291,7 @@ def merge_trusted_history_batch(
             "player2_id": str(m.player2_id or ""),
             "reason": "incoming_hits_preexisting_cdb_identity_quarantine",
         } for m in rejected]
-        return result, accepted, {
+        return with_identity_quarantine(result, accepted, {
             "schema": 1,
             "quarantined_rows": len(details) + int(incoming_report["quarantined_rows"]),
             "rows": details + list(incoming_report.get("rows") or []),
@@ -241,16 +302,16 @@ def merge_trusted_history_batch(
                 "existing_duplicate_provider_event_ids": sorted(protected_provider_ids),
                 "incoming": incoming_report.get("collision"),
             },
-        }
+        })
     merged = merge_matches(trusted, additions)
     safe, report = sanitize_history_identities(merged)
     if not report.get("quarantined_rows"):
-        return safe, additions, {
+        return with_identity_quarantine(safe, additions, {
             "schema": 1,
             "quarantined_rows": 0,
             "rows": [],
             "collision": report,
-        }
+        })
 
     duplicate_match_ids = set(report.get("duplicate_match_ids") or [])
     duplicate_provider_ids = set(report.get("duplicate_provider_event_ids") or [])
@@ -284,7 +345,7 @@ def merge_trusted_history_batch(
         }
         for match in quarantined_incoming
     ]
-    return rebuilt, accepted_incoming, {
+    return with_identity_quarantine(rebuilt, accepted_incoming, {
         "schema": 1,
         "quarantined_rows": len(details),
         "rows": details,
@@ -292,4 +353,4 @@ def merge_trusted_history_batch(
             "duplicate_match_ids": sorted(duplicate_match_ids),
             "duplicate_provider_event_ids": sorted(duplicate_provider_ids),
         },
-    }
+    })
