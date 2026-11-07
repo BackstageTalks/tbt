@@ -6992,7 +6992,43 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   function adminCsvResultsEntries(){
     if(state.feed?.results_archive_unavailable||state.feed?.results_exclusions_unavailable)
       throw new Error('Úplný archív výsledkov teraz nie je dostupný. Export je zastavený.');
-    return settledPublishedEntries(state.feed?.results||[],'all',null);
+    return settledPublishedEntries(state.feed?.results||[],'all',null).map(entry=>{
+      const row=entry.row||{},p=entry.publication||{},outcome=publicationOutcome(p);
+      const projection=isProjectionPublication(p),identity=resultPickIdentity(p,row);
+      const rawOdds=p.odds==null?NaN:Number(p.odds);
+      const pick=projection?projectionResultSelectionText(p,identity.name):identity.name;
+      if(!projection){
+        const rawUnits=p?.result?.profit_units==null?NaN:Number(p.result.profit_units);
+        return {...entry,pick,outcome,displayPrediction:p?.model_probability==null?'':pct(Number(p.model_probability)),
+          displayOdds:Number.isFinite(rawOdds)?rawOdds.toFixed(2):'',
+          displayOddsType:Number.isFinite(rawOdds)&&rawOdds>1?'publikovany_kurz':'bez_kurzu',
+          displayUnits:outcome.kind==='void'?0:Number.isFinite(rawUnits)?rawUnits:''};
+      }
+      // Keep the exported presentation fields aligned with the projection Results
+      // table while retaining real vs illustrative/indicative price provenance.
+      const local=approvedLocalAceResultOdds(p),normalized=aceDfResultKpiOdds(p);
+      const temporary=aceDfLegacyResultDisplayOdds(p);
+      const indicative=Number.isFinite(rawOdds)&&rawOdds>1?NaN:projectionIndicativeOdds(p);
+      const placeholder=p.historical_display_placeholder_odds==null?NaN:Number(p.historical_display_placeholder_odds);
+      const legacyAces=String(p.market||'').toLowerCase()==='aces';
+      const issued=Date.parse(String(p.issued_at||row.scheduled_at||row.date||''));
+      const historicEligible=!legacyAces||(Number.isFinite(issued)&&issued<Date.parse('2026-11-01T05:00:00Z'));
+      const illustrative=historicEligible&&p.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
+        &&Number.isFinite(placeholder)&&placeholder>=1.50&&placeholder<=1.70;
+      let displayOdds='',displayOddsType='bez_kurzu';
+      if(Number.isFinite(local)){displayOdds=local.toFixed(2);displayOddsType='schvaleny_lokalny_kurz';}
+      else if(Number.isFinite(normalized)){displayOdds=normalized.toFixed(2);displayOddsType='statisticky_kurz';}
+      else if(Number.isFinite(temporary)){displayOdds=temporary.toFixed(2);displayOddsType='docasny_zobrazovaci_kurz';}
+      else if(Number.isFinite(rawOdds)&&rawOdds>1){displayOdds=rawOdds.toFixed(2);displayOddsType='publikovany_kurz';}
+      else if(illustrative){displayOdds=placeholder.toFixed(2);displayOddsType='historicky_ilustracny_kurz';}
+      else if(Number.isFinite(indicative)){displayOdds=indicative.toFixed(2);displayOddsType='indikativny_odhad';}
+      const kpiOdds=Number.isFinite(local)?local:normalized;
+      const units=Number.isFinite(kpiOdds)
+        ?(outcome.kind==='void'?0:outcome.kind==='win'?kpiOdds-1:outcome.kind==='loss'?-1:NaN)
+        :resultVisibleUnits(p,outcome,resultVisibleOdds(p));
+      return {...entry,pick,outcome,displayPrediction:projectionResultProjectionText(p),
+        displayOdds,displayOddsType,displayUnits:Number.isFinite(units)?units:''};
+    });
   }
   function adminCsvPredictionInputs(){
     // Published category tables, without their visible row/page limits.
