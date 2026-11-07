@@ -103,7 +103,8 @@ def test_cross_year_provider_correction_preserves_frozen_original(match_factory)
 
     # An incoming rekey/reschedule is not a correction that may mutate the
     # original CDB identity. There must be no dirty canonical partitions.
-    assert checkpoints == []
+    # The completed-day progress callback can checkpoint with zero dirty years.
+    assert checkpoints == [(set(), False)]
     assert list(matches) == ["old"]
     only = next(iter(matches.values()))
     assert only.scheduled_at == old_time
