@@ -274,6 +274,7 @@ _MARKET_SECTION_KEYS = {
     # Projection-only markets are frozen at deploy time so Results can later
     # grade the exact projection that users actually saw.
     "ace": "ace_picks",
+    "ace_winner": "ace_picks",
     "double_faults": "ace_picks",
     "sets": "sg_picks",
     "games": "sg_picks",
@@ -286,8 +287,8 @@ def _section_feed_rows(feed, section, key):
         return []
     if not isinstance(rows, list):
         raise ValueError(f"Invalid market section: {key}")
-    if section in {"ace", "double_faults", "sets", "games"}:
-        expected_market = "aces" if section == "ace" else section
+    if section in {"ace", "ace_winner", "double_faults", "sets", "games"}:
+        expected_market = "aces" if section == "ace" else "most_aces" if section == "ace_winner" else section
         return [
             row for row in rows
             if isinstance(row, dict)
@@ -536,7 +537,7 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
                 same_day = stored[8] == commitment[8]
                 # Projection scope + metric are part of the semantic identity.
                 # They disambiguate e.g. player aces from any future totals.
-                if section in {"ace", "double_faults", "sets", "games"}:
+                if section in {"ace", "ace_winner", "double_faults", "sets", "games"}:
                     same_identity = (
                         same_identity
                         and stored[11] == commitment[11]
@@ -577,7 +578,7 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
                 matches = list(unique.values())
 
             if len(matches) != 1:
-                if section in {"ace", "double_faults", "sets", "games"}:
+                if section in {"ace", "ace_winner", "double_faults", "sets", "games"}:
                     # Legacy conflicting publications must never be guessed.
                     # Make deliberate card-level suppression explicit so the
                     # pipeline integrity check can distinguish it from a
@@ -585,7 +586,7 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
                     if quarantine_report is not None:
                         quarantine_report.append({
                             "event_id": commitment[0],
-                            "market": "aces" if section == "ace" else section,
+                            "market": "aces" if section == "ace" else "most_aces" if section == "ace_winner" else section,
                             "reason": (
                                 "ambiguous_issued_legacy_snapshots"
                                 if len(matches) > 1 else
@@ -667,7 +668,7 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
                     for player in players:
                         player["probability"] = probability if player is selected[0] else 1 - probability
                     row["confidence"] = max(probability, 1 - probability)
-            if section in {"ace", "double_faults", "sets", "games"}:
+            if section in {"ace", "ace_winner", "double_faults", "sets", "games"}:
                 for field in (
                     "projection", "opponent_projection", "reference_projection", "market_line",
                     "projection_gap", "projection_scope", "projection_metric",
@@ -684,7 +685,7 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
 
         if key_present:
             if key in {"sg_picks", "ace_picks"}:
-                expected_market = "aces" if section == "ace" else section
+                expected_market = "aces" if section == "ace" else "most_aces" if section == "ace_winner" else section
                 untouched = [
                     item for item in result.get(key, []) or []
                     if not isinstance(item, dict)
@@ -744,7 +745,7 @@ def _market_row_section(key, row):
         row.get("market") or row.get("projection_metric") or ""
     ).strip().lower()
     if key == "ace_picks":
-        return "double_faults" if market == "double_faults" else "ace" if market == "aces" else ""
+        return "double_faults" if market == "double_faults" else "ace_winner" if market == "most_aces" else "ace" if market == "aces" else ""
     if key == "sg_picks":
         return market if market in {"games", "sets"} else ""
     return {
