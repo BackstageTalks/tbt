@@ -2143,6 +2143,49 @@ def internal_telegram_recover_20261103(req):
         return response({"error": "recovery_failed", "reason_class": type(exc).__name__}, 503)
 
 
+@app.route(route="v1/internal/telegram/reconcile-daily-aces", methods=["POST"])
+def internal_telegram_reconcile_daily_aces(req):
+    """Existing verified Results CAS append for exact SENT Telegram player O/U.
+
+    No added provider requests, CDB writers, price changes or Telegram sends.
+    Requires a private worker token, dry-run digest and native archive readback.
+    """
+    if not str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip():
+        return response({"error": "worker_not_configured"}, 503)
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    mode = str((getattr(req, "params", {}) or {}).get("mode") or "dry-run")
+    if mode not in {"dry-run", "commit"}:
+        return response({"error": "invalid_reconciliation_mode"}, 400)
+    try:
+        payload = req.get_json()
+        if (not isinstance(payload, dict) or payload.get("schema") != 1
+                or len(json.dumps(payload, ensure_ascii=False)) > 100_000):
+            return response({"error": "invalid_reconciliation_receipt"}, 400)
+        from tbt.services.telegram_daily_aces_reconcile import reconcile
+        result = reconcile(
+            str(payload.get("day") or ""),
+            payload.get("receipt"),
+            _read_feed_with_confirmed_aces_ou(),
+            load_match_status_snapshot() or {},
+            dry_run=(mode != "commit"),
+            expected_digest=payload.get("expected_digest"))
+        return response({"ok": True, **result})
+    except AdminStorageUnavailable:
+        logging.exception("Daily Telegram native Results archive unavailable")
+        return response({"error": "reconciliation_archive_unavailable"}, 503)
+    except (ValueError, TypeError) as exc:
+        logging.warning("Daily Telegram exact Aces reconciliation rejected: %s",
+                        type(exc).__name__)
+        return response({"error": "original_aces_evidence_mismatch"}, 409)
+    except RuntimeError as exc:
+        logging.warning("Daily Telegram Results readback rejected: %s", type(exc).__name__)
+        return response({"error": "results_archive_integrity_failure"}, 503)
+    except Exception:
+        logging.exception("Daily Telegram Aces reconciliation failed")
+        return response({"error": "daily_aces_reconciliation_failed"}, 503)
+
+
 @app.route(route="v1/internal/telegram/recover-20261106", methods=["POST"])
 def internal_telegram_recover_20261106(req):
     """One-time exact source-count archive restore. No Telegram/provider/CDB calls.
