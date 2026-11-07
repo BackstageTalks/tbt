@@ -974,7 +974,7 @@
     "top_daily": {
       "label": "TOP Predictions",
       "internal_key": "top_daily",
-      "limit": 5,
+      "limit": 3,
       "markets": [
         "match_winner"
       ],
@@ -994,9 +994,9 @@
       "edge_ev_role": "diagnostic_only",
       "secondary_probability": null,
       "standard_probability": null,
-      "target_count": 5,
+      "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "Full-day ranked priced slate: 3–5 TOP goal (max 5), preserve >=1.50 odds, VALUE priority, no automatic confidence cascade; evidence backup depth >=0.75 and 3 matches/surface only if fewer than 3 standard candidates",
+      "cascade": "Full-day ranked priced slate: three TOP target (max 3), preserve >=1.50 odds, VALUE priority, no automatic confidence cascade; evidence backup depth >=0.75 and 3 matches/surface only if fewer than 3 standard candidates",
       "confidence_tiers": [
         0.6
       ],
