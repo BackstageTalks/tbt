@@ -333,7 +333,7 @@ def test_morning_odds_discovery_prices_entire_new_top_60pct_slate_with_existing_
     provider = _OddsProvider()
     rows = [
         row('eligible', .70, 1.60, 2.20, depth=.80, surface1=5, surface2=5),
-        row('top60', .60, 1.60, 2.20, depth=.80, surface1=5, surface2=5),
+        row('top60', .63, 1.60, 2.20, depth=.80, surface1=5, surface2=5)  # adjusted BlinQ p=.604,
         row('weak', .59, 1.60, 2.20, depth=1.0, surface1=20, surface2=20),
         row('shallow', .80, 1.60, 2.20, depth=.74, surface1=20, surface2=20),
         row('surface', .80, 1.60, 2.20, depth=1.0, surface1=2, surface2=20),
