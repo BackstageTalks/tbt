@@ -62,6 +62,126 @@ _PUBLIC_PROJECTION_KEYS = ("ace_picks", "sg_picks")
 _PROJECTION_MARKETS = {"aces", "double_faults", "sets", "games"}
 LEGACY_PENDING_CARRY_HOURS = 48
 
+# Only confirmed public market rows are retained across the 06:00 boundary.
+# Never carry generic model-board predictions, historical Results or stale prices.
+ISSUED_ROLLOVER_SECTIONS = (
+    "top_daily_picks", "prime_picks", "value_picks",
+    "doubles_picks", "ace_picks", "sg_picks",
+)
+ISSUED_ROLLOVER_HOURS = 72
+ISSUED_ROLLOVER_LIMIT = 180
+
+
+def confirmed_rollover_rows(
+    feed: dict[str, Any], authority: dict[str, Any] | None,
+    prior: dict[str, Any] | None = None, *, now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Preserve ONLY exact serving-authorized market commitments for late settlement.
+
+    The immutable serving receipt is checked at capture time, then each compact
+    saved row is identity-checked again on read. Never construct an O/U threshold
+    or an odds value from the changed next-day feed.
+    """
+    import json
+    from .feed import _betting_day_key
+    from .issued_authority import row_authority_key
+
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    lower = now - timedelta(hours=ISSUED_ROLLOVER_HOURS)
+    upper = now + timedelta(hours=36)
+    current_day = _betting_day_key(now)
+    exact: dict[tuple[str, str], dict[str, Any]] = {}
+
+    def include(entry: Any) -> None:
+        if not isinstance(entry, dict) or entry.get("confirmed_only") is not True:
+            return
+        section = str(entry.get("section") or "")
+        row = entry.get("row")
+        day = str(entry.get("betting_day") or "")
+        receipt = str(entry.get("receipt_key") or "")
+        generated = _parse_time(entry.get("generated_at"))
+        if section not in ISSUED_ROLLOVER_SECTIONS or not isinstance(row, dict):
+            return
+        scheduled = _parse_time(row.get("scheduled_at") or row.get("date"))
+        if (scheduled is None or generated is None or not (lower <= scheduled <= upper)
+                or generated >= scheduled):
+            return
+        if _betting_day_key(scheduled) != day or _betting_day_key(generated) != day:
+            return
+        eid = _event_id(row)
+        p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
+        if not eid or not p1 or not p2 or p1 == p2:
+            return
+        try:
+            if row_authority_key(row, section) != receipt:
+                return
+        except (ValueError, TypeError):
+            return
+        if len(json.dumps(entry, ensure_ascii=False, separators=(",", ":"))) > 20_000:
+            return
+        identity = (section, receipt)
+        if identity in exact and exact[identity] != entry:
+            # Conflicting supposed receipts are not merged or scored.
+            exact.pop(identity)
+            return
+        exact[identity] = deepcopy(entry)
+
+    for stored in (prior or {}).get("rollover_issued_rows") or []:
+        include(stored)
+    authorized = (
+        isinstance(authority, dict)
+        and authority.get("confirmed_only") is True
+        and authority.get("betting_day") == current_day
+        and isinstance(authority.get("keys"), list)
+    )
+    generated_at = _parse_time(feed.get("generated_at"))
+    if authorized and generated_at and _betting_day_key(generated_at) == current_day:
+        approved = set(authority["keys"])
+        for section in ISSUED_ROLLOVER_SECTIONS:
+            for row in feed.get(section) or []:
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    receipt = row_authority_key(row, section)
+                except (ValueError, TypeError):
+                    continue
+                if receipt in approved:
+                    include({
+                        "confirmed_only": True,
+                        "receipt_key": receipt,
+                        "betting_day": current_day,
+                        "generated_at": str(feed["generated_at"]),
+                        "section": section,
+                        "row": row,
+                    })
+    if len(exact) > ISSUED_ROLLOVER_LIMIT:
+        raise ValueError("Confirmed rollover issuance exceeds safe row limit")
+    return [exact[key] for key in sorted(exact)]
+
+
+def feed_with_issued_rollover(
+    feed: dict[str, Any], entries: list[dict[str, Any]], *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Worker-only, never served as tomorrow's member offers."""
+    from .feed import _betting_day_key
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    day = _betting_day_key(now)
+    combined = dict(feed)
+    for entry in entries:
+        if entry["betting_day"] == day:
+            continue
+        section = entry["section"]
+        row = deepcopy(entry["row"])
+        existing = combined.get(section) or []
+        # A reused provider event ID with changed identity must not be merged.
+        if any(_event_id(other) == _event_id(row) for other in existing):
+            continue
+        row["_issued_rollover_generated_at"] = entry["generated_at"]
+        combined[section] = [*existing, row]
+    return combined
+
+
 
 def _current_betting_day_bounds(now: datetime) -> tuple[datetime, datetime]:
     """Return the active 06:00 Europe/Bratislava betting-day UTC bounds."""
@@ -1361,6 +1481,7 @@ def scan_match_statuses(
     max_checks: int = 30,
     max_near_checks: int = 30,
     max_wall_seconds: float | None = None,
+    issued_rollover_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Settle verified events without trusting a consistently 404ing history route.
 
@@ -1375,6 +1496,24 @@ def scan_match_statuses(
     time_budget_exhausted = False
     public_contract_present = any(key in feed for key in (_PUBLIC_MATCH_WINNER_KEYS + _PUBLIC_PROJECTION_KEYS))
     rows = prediction_rows(feed, now=now)
+    # The worker supplies only revalidated, serving-confirmed prior-day rows.
+    # Ignore fresh/untrusted board history; cap the time horizon and never
+    # replace a current-day event with an older identity.
+    from .feed import _betting_day_key
+    for entry in issued_rollover_rows or []:
+        if not isinstance(entry, dict) or entry.get("confirmed_only") is not True:
+            continue
+        if entry.get("betting_day") == _betting_day_key(now):
+            continue
+        row = entry.get("row")
+        if not isinstance(row, dict):
+            continue
+        scheduled = _parse_time(row.get("scheduled_at") or row.get("date"))
+        if scheduled is None or not (now - timedelta(hours=ISSUED_ROLLOVER_HOURS) <= scheduled < now):
+            continue
+        eid = _event_id(row)
+        if eid and eid not in rows:
+            rows[eid] = row
     prior = previous_snapshot if isinstance(previous_snapshot, dict) else {}
     prior_pending = prior.get("pending")
     prior_pending = prior_pending if isinstance(prior_pending, dict) else {}
