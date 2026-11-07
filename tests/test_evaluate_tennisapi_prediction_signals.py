@@ -68,7 +68,8 @@ def test_past_model_quotes_do_not_become_historical_market_truth():
 def test_source_id_orientation_reverses_seed_signal():
     from scripts.evaluate_tennisapi_prediction_signals import _oriented_signals
     signal = {"home_id": 11, "away_id": 22, "home_seed": 2,
-              "away_seed": 6, "historical_duration_window_complete": False}
+              "away_seed": 6, "historical_duration_window_complete": False,
+              "source_prematch_seed_temporal_attestation": True}
     home = _oriented_signals(signal, "11", "22")
     away = _oriented_signals(signal, "22", "11")
     assert home[1] == -away[1]
@@ -90,6 +91,8 @@ def test_no_postmatch_duration_for_own_match():
 
 def test_linked_chronological_ablation_no_model_write_or_promotion():
     base, signal = inputs()
+    for item in signal:
+        item["source_prematch_seed_temporal_attestation"] = True  # synthetic proof fixture
     report = evaluate(base, signal)
     assert report["status"] == "RESEARCH_ABLATION_COMPLETE"
     assert report["train"] > report["holdout"] >= 50
@@ -99,7 +102,7 @@ def test_linked_chronological_ablation_no_model_write_or_promotion():
     assert report["promotable"] is False
     assert set(report["variants"]) == {
         "baseline_recalibrated", "baseline_plus_research_signals"}
-    assert report["seed_source_temporally_attested_rows"] == 0
+    assert report["seed_source_temporally_attested_rows"] == len(signal)
 
 
 def test_duplicate_linked_or_baseline_identity_fails_closed():
@@ -120,3 +123,13 @@ def test_unmatched_canonical_rows_are_not_labeled_net_new():
     assert report["linked_baseline_with_candidate"] == 0
     assert report["unmatched_reasons"]["missing_exact_link"] == 1
     assert report["cdb_writes"] == 0
+
+
+
+def test_unverified_seed_must_not_fit_candidate_even_with_valid_targets():
+    base, signal = inputs()
+    report = evaluate(base, signal)
+    assert report["status"] == "INSUFFICIENT_CHRONOLOGICAL_DATA"
+    assert report["linked_baseline_with_candidate"] == 0
+    assert report["unmatched_reasons"]["no_candidate_signal"] == len(base)
+    assert report["promotable"] is False
