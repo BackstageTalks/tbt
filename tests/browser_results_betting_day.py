@@ -466,6 +466,60 @@ def main():
                 "legendCohort": 9, "goatCohort": 9
             }, morning
 
+            # Browser: Aces leader icon independent of its O/U contract.
+            # A parent result row may have stale match-level hints; the issued
+            # publication and exact two final counts remain authoritative.
+            ace_outcomes = page.evaluate("""() => {
+                const t=bettingDayTest,s=t.state;
+                const mk=(id,actual,opponent,correct,market='aces',status=correct?'hit':'miss')=>({
+                    event_id:id,tour:'ATP',surface:'hard',
+                    scheduled_at:'2026-11-02T15:00:00Z',tournament:'Test',
+                    market:'match_winner',aces_superiority_hint:'Musetti',
+                    player1:{id:'p1',name:'Hurkacz'},player2:{id:'p2',name:'Musetti'},
+                    market_publications:[{
+                        section:market==='aces'?'ace':'double_faults',
+                        market,projection_metric:market,projection_scope:'player',
+                        selection:'CASE-'+id,selection_id:'p1',
+                        projection_subject:'Hurkacz',projection:11.3,
+                        opponent_projection:6.2,
+                        price_contract:'player_total_ou',ou_side:'over',
+                        market_line:10.5,odds:1.8,price_status:'priced_projection',
+                        issued_at:'2026-11-02T08:00:00Z',publication_status:'published',
+                        result:{status,correct,actual_count:actual,
+                                opponent_actual_count:opponent,
+                                staked_units:1,profit_units:correct?0.8:-1}
+                    }]
+                });
+                s.feed={account:{is_admin:true,role:'admin',plan:'admin'},
+                  results:[
+                    mk('hit-leader-loss-ou',9,5,false),
+                    mk('miss-leader-win-ou',5,9,true),
+                    mk('tie',5,5,false),
+                    mk('missing',9,null,false),
+                    mk('not-aces',9,5,false,'double_faults')
+                  ]};
+                s.resultsFilters={category:'all',tour:'',surface:'',window:'all',
+                    dateFrom:'',dateTo:'',bettingDay:true};
+                const body=document.createElement('div');
+                body.innerHTML=t.renderResults();
+                const rows=[...body.querySelectorAll('tr.results-card-row')];
+                return Object.fromEntries(rows.map(row=>{
+                    const label=row.querySelector('.result-prediction strong')?.textContent.trim();
+                    return [label,{
+                      balls:row.querySelectorAll('.ace-leader-ball').length,
+                      result:row.querySelector('.result-status')?.textContent.trim(),
+                      units:row.querySelector('.result-units')?.textContent.trim()
+                    }];
+                }));
+            }""")
+            assert ace_outcomes == {
+                "CASE-hit-leader-loss-ou": {"balls":1,"result":"× PREHRA9 · súper 5","units":"-1.00u"},
+                "CASE-miss-leader-win-ou": {"balls":0,"result":"✓ VÝHRA5 · súper 9","units":"+0.80u"},
+                "CASE-tie": {"balls":0,"result":"× PREHRA5 · súper 5","units":"-1.00u"},
+                "CASE-missing": {"balls":0,"result":"× PREHRA9","units":"-1.00u"},
+                "CASE-not-aces": {"balls":0,"result":"× PREHRA9 · súper 5","units":"-1.00u"}
+            }, ace_outcomes
+
             # ALL means no second membership-cohort restriction in Admin.
             # Some settled Aces from the verified ledger lack legacy offer IDs,
             # but they must not disappear from an unrestricted ELITE preview.
