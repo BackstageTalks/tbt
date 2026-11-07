@@ -3,6 +3,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 
 import pytest
+import hashlib
+import json
 
 from tbt.services.issued_authority import (
     build_confirmed_authority,
@@ -148,3 +150,77 @@ def test_sync_fails_on_forged_authority_or_other_generation():
     fake["confirmed_only"] = False
     with pytest.raises(ValueError, match="Unconfirmed"):
         validate_authority(fake, feed, now=NOW)
+
+
+class _Utf16LimitedAuthorityTable:
+    """Simulate Azure Table's 64 KiB UTF-16 string-property constraint."""
+
+    def __init__(self):
+        self.rows = {}
+
+    def get_entity(self, *, partition_key, row_key):
+        key = (partition_key, row_key)
+        if key not in self.rows:
+            raise KeyError(row_key)
+        class Entity(dict):
+            metadata = {"etag": "known-version"}
+        return Entity(self.rows[key])
+
+    def _save(self, entity):
+        # Exactly the property that was rejected in production: 64-char SHA
+        # identifiers can exceed the Azure Edm.String limit as plain JSON.
+        assert len(entity["manifest_json"].encode("utf-16-le")) <= 65536
+        self.rows[(entity["PartitionKey"], entity["RowKey"])] = dict(entity)
+
+    def create_entity(self, entity):
+        self._save(entity)
+
+    def update_entity(self, entity, *, mode, etag, match_condition):
+        assert etag == "known-version"
+        assert mode == "merge"
+        self._save(entity)
+
+
+def test_issued_authority_large_daily_receipt_survives_azure_string_limit(monkeypatch):
+    from tbt.services import admin_storage
+    from tbt.services.issued_authority import load_authority, persist_authority
+
+    table = _Utf16LimitedAuthorityTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    day = "2026-11-07"
+    keys = sorted(hashlib.sha256(str(i).encode()).hexdigest() for i in range(495))
+    manifest = {"schema": 1, "confirmed_only": True, "betting_day": day, "keys": keys}
+    # Show that the original uncompressed storage would fail the real limit.
+    assert len(json.dumps(manifest, separators=(",", ":")).encode("utf-16-le")) > 65536
+
+    first = persist_authority(manifest)
+    assert first["keys"] == keys
+    assert load_authority(day)["keys"] == keys
+    assert table.rows[("issued", day)]["manifest_json"].startswith("gzip:")
+
+    # Subsequent CAS merge must preserve all issued identities.
+    extra = hashlib.sha256(b"one-more-exact-issued-key").hexdigest()
+    merged = persist_authority({**manifest, "keys": [extra]})
+    assert sorted(merged["keys"]) == sorted(keys + [extra])
+    assert load_authority(day)["keys"] == sorted(keys + [extra])
+
+
+def test_issued_authority_legacy_plain_json_remains_readable_and_migrates(monkeypatch):
+    from tbt.services import admin_storage
+    from tbt.services.issued_authority import load_authority, persist_authority
+
+    table = _Utf16LimitedAuthorityTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    day = "2026-11-06"
+    legacy_key = hashlib.sha256(b"old-identity").hexdigest()
+    legacy = {"schema": 1, "confirmed_only": True,
+              "betting_day": day, "keys": [legacy_key]}
+    table.rows[("issued", day)] = {
+        "PartitionKey": "issued", "RowKey": day,
+        "manifest_json": json.dumps(legacy),
+    }
+    assert load_authority(day)["keys"] == [legacy_key]
+    new_key = hashlib.sha256(b"new-identity").hexdigest()
+    saved = persist_authority({**legacy, "keys": [new_key]})
+    assert sorted(saved["keys"]) == sorted([legacy_key, new_key])
+    assert table.rows[("issued", day)]["manifest_json"].startswith("gzip:")
