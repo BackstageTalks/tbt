@@ -2132,9 +2132,12 @@ def internal_telegram_recover_20261103(req):
     except (SharedBudgetUnavailable, SharedRateUnavailable, AdminStorageUnavailable):
         return response({"error": "verified_evidence_or_storage_unavailable"}, 503)
     except (ValueError, RuntimeError) as exc:
-        logging.warning("One-time TG archive repair blocked by evidence: %s", type(exc).__name__)
+        from tbt.services.telegram_20261103_recovery import safe_recovery_reason
+        reason_code = safe_recovery_reason(exc)
+        logging.warning("One-time TG archive repair blocked: %s", reason_code)
         return response({"error": "recovery_evidence_mismatch",
-                         "reason_class": type(exc).__name__}, 409)
+                         "reason_class": type(exc).__name__,
+                         "reason_code": reason_code}, 409)
     except Exception as exc:
         logging.exception("One-time TG archive repair failed")
         return response({"error": "recovery_failed", "reason_class": type(exc).__name__}, 503)
