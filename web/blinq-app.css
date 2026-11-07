@@ -11377,3 +11377,325 @@ body#blinqPremium.blinq-admin .monthly-report-note{
   body#blinqPremium.blinq-admin .monthly-month-field{width:100%}
   body#blinqPremium.blinq-admin .monthly-stats{gap:7px}
 }
+
+
+/* BlinQ monthly analytics: native glass look and focused member report. */
+body#blinqPremium.blinq-admin .monthly-performance{
+  --monthly-bg:rgba(2,23,18,.89);
+  --monthly-panel:rgba(9,40,31,.64);
+  --monthly-card:rgba(17,62,47,.52);
+  --monthly-edge:rgba(65,188,139,.25);
+  --monthly-fg:#edfdf4;
+  --monthly-muted:#a4c6b5;
+  --monthly-accent:#2df2ad;
+  isolation:isolate;position:relative;overflow:visible;
+  margin:10px 0 0;padding:18px;gap:14px;
+  background:
+    radial-gradient(ellipse at 94% 0%,rgba(37,199,137,.115),transparent 44%),
+    linear-gradient(165deg,rgba(4,29,23,.93),rgba(3,22,17,.90));
+  border:1px solid rgba(72,176,133,.28);
+  border-radius:16px;
+  box-shadow:0 18px 54px rgba(0,0,0,.16),inset 0 1px rgba(157,246,199,.035);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+body#blinqPremium.blinq-admin .monthly-brand-head{
+  display:flex;align-items:center;gap:12px;min-width:0
+}
+body#blinqPremium.blinq-admin .monthly-brand-icon{
+  width:44px;height:44px;flex-shrink:0;display:flex;align-items:flex-end;
+  justify-content:center;gap:4px;padding:11px 9px;
+  border:1px solid rgba(62,229,158,.42);border-radius:12px;
+  background:linear-gradient(145deg,rgba(24,110,79,.6),rgba(13,57,43,.65));
+  box-shadow:inset 0 1px rgba(130,255,195,.15)
+}
+body#blinqPremium.blinq-admin .monthly-brand-icon i{
+  width:6px;height:40%;border-radius:2px 2px 0 0;background:#34e6a7;
+  box-shadow:0 0 10px rgba(45,242,173,.24)
+}
+body#blinqPremium.blinq-admin .monthly-brand-icon i:nth-child(2){height:68%}
+body#blinqPremium.blinq-admin .monthly-brand-icon i:nth-child(3){height:95%}
+body#blinqPremium.blinq-admin .monthly-header h2{
+  font-size:22px!important;letter-spacing:-.025em;font-weight:820
+}
+body#blinqPremium.blinq-admin .monthly-eyebrow{
+  color:#7ce8b9!important;letter-spacing:.10em;font-size:9px!important
+}
+body#blinqPremium.blinq-admin .monthly-header-actions{
+  display:flex;align-items:end;flex-wrap:wrap;gap:9px
+}
+body#blinqPremium.blinq-admin .monthly-header-actions label{
+  font-size:10px!important;color:var(--monthly-muted)!important
+}
+body#blinqPremium.blinq-admin .monthly-month-field input{min-width:170px}
+body#blinqPremium.blinq-admin .monthly-performance input[type=month],
+body#blinqPremium.blinq-admin .monthly-performance input[type=number],
+body#blinqPremium.blinq-admin .monthly-performance select{
+  border:1px solid rgba(71,176,132,.30)!important;
+  background:rgba(2,23,19,.6)!important;
+  border-radius:9px!important;
+  min-height:39px!important;
+  color:#e9fbf0!important
+}
+body#blinqPremium.blinq-admin .monthly-mode-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;flex-wrap:wrap
+}
+body#blinqPremium.blinq-admin .monthly-view-switch{
+  display:inline-flex;gap:4px;flex-wrap:wrap;padding:4px;
+  border:1px solid rgba(71,176,132,.25);border-radius:11px;
+  background:rgba(3,33,25,.64)
+}
+body#blinqPremium.blinq-admin .monthly-view-switch button,
+body#blinqPremium.blinq-admin .monthly-screen-button{
+  cursor:pointer;border:1px solid transparent;
+  background:transparent;color:#a5c9b6;
+  font-size:12px!important;font-weight:750!important;
+  min-height:36px;padding:8px 12px;border-radius:8px
+}
+body#blinqPremium.blinq-admin .monthly-view-switch button.is-active{
+  border-color:rgba(60,233,164,.68);
+  background:linear-gradient(135deg,rgba(23,112,78,.8),rgba(12,81,57,.75));
+  color:#f4fff9;
+  box-shadow:0 0 0 1px rgba(45,242,173,.09) inset
+}
+body#blinqPremium.blinq-admin .monthly-view-switch button:hover,
+body#blinqPremium.blinq-admin .monthly-screen-button:hover{
+  border-color:rgba(45,242,173,.55);color:#f3fff8
+}
+body#blinqPremium.blinq-admin .monthly-screen-button{
+  border-color:rgba(45,242,173,.42);
+  background:rgba(12,72,53,.45);color:#d5f7e6
+}
+body#blinqPremium.blinq-admin .monthly-mode-bar p{
+  margin:0;font-size:11px;color:var(--monthly-muted)
+}
+body#blinqPremium.blinq-admin .monthly-level-switch{
+  display:grid;grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:7px;padding:9px;
+  border:1px solid rgba(68,180,132,.25);
+  border-radius:11px;background:rgba(12,59,43,.33)
+}
+body#blinqPremium.blinq-admin .monthly-level-switch button{
+  min-width:0;min-height:36px;padding:8px 9px;
+  border:1px solid rgba(91,171,134,.34);
+  background:rgba(7,43,32,.58);color:#bdd7c8;
+  font-size:11px!important;font-weight:840!important;
+  border-radius:9px;
+  transition:background .13s,border-color .13s
+}
+body#blinqPremium.blinq-admin .monthly-level-switch button:hover:not(:disabled){
+  border-color:#2df2ad;background:rgba(20,91,65,.65)
+}
+body#blinqPremium.blinq-admin .monthly-level-switch button.is-active{
+  color:#04251a!important;border-color:#38f5b0!important;
+  background:linear-gradient(130deg,#36edac,#19d997)!important;
+  box-shadow:0 3px 20px rgba(44,244,166,.15)!important
+}
+body#blinqPremium.blinq-admin .monthly-controls{
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  padding:12px;border-radius:11px;
+  border:1px solid rgba(60,150,111,.21);
+  background:rgba(3,34,27,.46);
+  gap:10px!important
+}
+body#blinqPremium.blinq-admin .monthly-controls label{
+  color:#b4d6c3!important;font-size:10px!important
+}
+body#blinqPremium.blinq-admin .monthly-advanced-filters{
+  border:1px solid rgba(65,156,113,.22);
+  border-radius:10px;background:rgba(6,43,32,.36);
+  overflow:hidden
+}
+body#blinqPremium.blinq-admin .monthly-advanced-filters summary{
+  cursor:pointer;list-style-position:inside;
+  padding:10px 13px;color:#bce1cb;font-size:11px;font-weight:700
+}
+body#blinqPremium.blinq-admin .monthly-advanced-filters[open] summary{
+  border-bottom:1px solid rgba(65,156,113,.20)
+}
+body#blinqPremium.blinq-admin .monthly-filter-groups{
+  margin:0;padding:10px;gap:8px
+}
+body#blinqPremium.blinq-admin .monthly-filter-groups fieldset{
+  background:rgba(2,23,17,.28);
+  border-color:rgba(74,152,115,.25)
+}
+body#blinqPremium.blinq-admin .monthly-checks label{font-size:11px}
+body#blinqPremium.blinq-admin .monthly-selected-head{
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:10px;padding:0 2px
+}
+body#blinqPremium.blinq-admin .monthly-selected-head small{
+  display:block;margin-bottom:3px;
+  font-size:10px;color:#75d7ab;letter-spacing:.035em
+}
+body#blinqPremium.blinq-admin .monthly-selected-head h3{
+  margin:0;font-size:17px;font-weight:850;color:var(--monthly-fg)
+}
+body#blinqPremium.blinq-admin .monthly-selected-head>span{
+  font-size:11px;color:var(--monthly-muted)
+}
+body#blinqPremium.blinq-admin .monthly-stats{
+  gap:8px;
+  grid-template-columns:repeat(6,minmax(0,1fr))
+}
+body#blinqPremium.blinq-admin .monthly-stat{
+  min-height:76px;padding:11px;gap:8px;
+  background:linear-gradient(155deg,rgba(30,102,76,.37),rgba(8,49,35,.49));
+  border:1px solid rgba(78,167,122,.25);
+  border-radius:11px;
+  box-shadow:inset 0 1px rgba(165,251,211,.035)
+}
+body#blinqPremium.blinq-admin .monthly-stat small{
+  font-size:10px!important;color:#b2d1c0!important
+}
+body#blinqPremium.blinq-admin .monthly-stat strong{
+  font-size:20px!important;letter-spacing:-.02em
+}
+body#blinqPremium.blinq-admin .monthly-chart-card,
+body#blinqPremium.blinq-admin .monthly-table-card{
+  background:
+    radial-gradient(ellipse at 100% 100%,rgba(42,175,115,.055),transparent 47%),
+    linear-gradient(155deg,rgba(14,64,47,.52),rgba(4,39,29,.66));
+  border:1px solid rgba(68,162,115,.32);
+  border-radius:13px;box-shadow:inset 0 1px rgba(124,242,185,.035)
+}
+body#blinqPremium.blinq-admin .monthly-chart-card{
+  padding:15px!important;gap:8px!important
+}
+body#blinqPremium.blinq-admin .monthly-chart-card svg{
+  max-height:230px
+}
+body#blinqPremium.blinq-admin .monthly-chart-grid{
+  stroke:rgba(110,182,146,.12);stroke-width:.85
+}
+body#blinqPremium.blinq-admin .monthly-profit-area{
+  fill:url(#monthlyProfitArea)
+}
+body#blinqPremium.blinq-admin .monthly-profit-line{
+  stroke:#39efac;stroke-width:2.7;
+  filter:drop-shadow(0 0 3px rgba(45,242,173,.26))
+}
+body#blinqPremium.blinq-admin .monthly-last-point{
+  fill:#e6fff4;stroke:#20d997;stroke-width:2.8
+}
+body#blinqPremium.blinq-admin .monthly-tables-pair{
+  display:grid;grid-template-columns:1fr;gap:12px;min-width:0
+}
+body#blinqPremium.blinq-admin .monthly-grid-table{
+  background:rgba(0,23,17,.30)
+}
+body#blinqPremium.blinq-admin .monthly-grid-table thead th{
+  background:rgba(22,75,54,.78)!important;
+  border-color:rgba(79,157,116,.28)!important;
+  color:#c7ecd8!important
+}
+body#blinqPremium.blinq-admin .monthly-grid-table tbody th,
+body#blinqPremium.blinq-admin .monthly-grid-table td{
+  border-color:rgba(86,151,119,.23)!important
+}
+body#blinqPremium.blinq-admin .monthly-grid-table th:first-child{
+  background:#0e3225
+}
+body#blinqPremium.blinq-admin .monthly-grid-table tr.is-selected{
+  background:rgba(34,194,122,.14)!important
+}
+body#blinqPremium.blinq-admin .monthly-grid-table tr.is-selected th button{
+  color:#baffdb!important;border-color:#36e8a2!important;
+  background:rgba(23,121,77,.45)!important
+}
+body#blinqPremium.blinq-admin .monthly-focused-card{
+  max-width:100%;width:100%
+}
+body#blinqPremium.blinq-admin .monthly-focused-table{
+  min-width:480px!important;table-layout:fixed
+}
+body#blinqPremium.blinq-admin .monthly-focused-table th,
+body#blinqPremium.blinq-admin .monthly-focused-table td{
+  text-align:left!important;padding:9px 12px!important
+}
+body#blinqPremium.blinq-admin .monthly-focused-table th:first-child{width:20%}
+body#blinqPremium.blinq-admin .monthly-focused-table td:last-child{font-weight:850}
+body#blinqPremium.blinq-admin .monthly-performance.is-monthly-fullscreen{
+  position:fixed!important;inset:0!important;z-index:99999!important;
+  width:100vw!important;height:100dvh!important;max-height:100dvh!important;
+  margin:0!important;padding:16px max(18px,calc((100vw - 1250px)/2))!important;
+  overflow-y:auto!important;overscroll-behavior:contain;
+  border:0!important;border-radius:0!important;
+  background:
+    radial-gradient(ellipse at 84% 5%,rgba(30,145,92,.25),transparent 45%),
+    linear-gradient(140deg,#021b14,#052d22 62%,#031a13)!important;
+  backdrop-filter:none!important
+}
+body#blinqPremium.blinq-admin .monthly-performance.is-monthly-fullscreen .monthly-controls,
+body#blinqPremium.blinq-admin .monthly-performance.is-monthly-fullscreen .monthly-advanced-filters,
+body#blinqPremium.blinq-admin .monthly-performance.is-monthly-fullscreen .monthly-report-note{
+  display:none!important
+}
+body#blinqPremium.blinq-admin .monthly-performance.is-monthly-fullscreen .monthly-chart-card svg{
+  max-height:205px
+}
+body#blinqPremium.blinq-admin .monthly-performance.is-monthly-fullscreen .monthly-focused-table{
+  min-width:0!important
+}
+@media(min-width:1500px){
+  body#blinqPremium.blinq-admin .monthly-tables-pair{
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr)
+  }
+  body#blinqPremium.blinq-admin .monthly-tables-pair .monthly-grid-table{
+    min-width:560px
+  }
+  body#blinqPremium.blinq-admin .monthly-tables-pair .monthly-grid-table th,
+  body#blinqPremium.blinq-admin .monthly-tables-pair .monthly-grid-table td{
+    padding:9px 7px!important
+  }
+}
+@media(max-width:1200px){
+  body#blinqPremium.blinq-admin .monthly-stats{
+    grid-template-columns:repeat(3,minmax(0,1fr))
+  }
+}
+@media(max-width:760px){
+  body#blinqPremium.blinq-admin .monthly-performance{
+    padding:12px!important;gap:12px
+  }
+  body#blinqPremium.blinq-admin .monthly-header-actions{
+    width:100%
+  }
+  body#blinqPremium.blinq-admin .monthly-level-switch{
+    grid-template-columns:repeat(3,minmax(0,1fr));padding:7px
+  }
+  body#blinqPremium.blinq-admin .monthly-controls{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important
+  }
+  body#blinqPremium.blinq-admin .monthly-mode-bar p{display:none}
+  body#blinqPremium.blinq-admin .monthly-view-switch{
+    width:100%
+  }
+  body#blinqPremium.blinq-admin .monthly-view-switch button{
+    flex:1;min-width:130px
+  }
+  body#blinqPremium.blinq-admin .monthly-stats{
+    grid-template-columns:repeat(2,minmax(0,1fr))
+  }
+  body#blinqPremium.blinq-admin .monthly-stat strong{font-size:18px!important}
+  body#blinqPremium.blinq-admin .monthly-chart-card svg{max-height:190px}
+}
+@media(max-width:480px){
+  body#blinqPremium.blinq-admin .monthly-controls{
+    grid-template-columns:minmax(0,1fr)!important
+  }
+  body#blinqPremium.blinq-admin .monthly-header h2{font-size:19px!important}
+  body#blinqPremium.blinq-admin .monthly-brand-icon{width:38px;height:38px}
+  body#blinqPremium.blinq-admin .monthly-performance.is-monthly-fullscreen{
+    padding:10px!important
+  }
+  body#blinqPremium.blinq-admin .monthly-focused-table{
+    min-width:430px!important
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  body#blinqPremium.blinq-admin .monthly-level-switch button{
+    transition:none!important
+  }
+}
