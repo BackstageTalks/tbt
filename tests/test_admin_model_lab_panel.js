@@ -27,6 +27,8 @@ assert.doesNotMatch(html,/data-model-lab-operation="refresh_champion_inputs" dis
 assert.match(html,/Stav Model Labu nie je načítaný/);
 assert.match(html,/data-admin-action="training-start" disabled/);
 assert.match(html,/data-admin-action="model-factory-promote" disabled/);
+assert(html.indexOf('id="admin-production-candidate"')<html.indexOf('<details class="admin-model-factory-controls"'));
+assert.equal(html.split('id="admin-production-candidate"').length-1,1);
 assert.match(html,/data-model-lab-operation="activate_shadow" disabled/);
 state.adminTraining={can_start:true,runs:[],candidates:[{tag:'blinq-candidate-frozen-123-1'}]};
 state.adminModelLab={can_start:true,reason:'Pripravené',active_sha256:'a'.repeat(64),champion_sha256:'c'.repeat(64),
